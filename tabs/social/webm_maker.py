@@ -96,6 +96,18 @@ def _resolve_pixfmt(user_choice: str, source_pixfmt: str, codec: str):
             f"falling back to yuv420p.")
 
 
+def _effective_vp9_deadline(deadline: str, two_pass: bool) -> str:
+    """Return the libvpx-vp9 ``-deadline`` value to actually use.
+
+    libvpx-vp9 in ``realtime`` mode skips first-pass analysis, so the stats
+    file stays empty and pass 2 fails with ``rc_twopass_stats_in.buf not set``.
+    Force ``good`` when two-pass is on so the encode actually completes.
+    """
+    if two_pass and deadline == "realtime":
+        return "good"
+    return deadline
+
+
 class WebMTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -907,6 +919,12 @@ class WebMTab(BaseTab):
         #                                   within ±2% on its own.)
         #   CQ  (quality-only): -b:v 0 -crf X   (bitrate disabled, quality target)
         if codec == "VP9":
+            effective_deadline = _effective_vp9_deadline(vp9_deadline, two_pass)
+            if effective_deadline != vp9_deadline:
+                self._log(
+                    f"⚠ '{vp9_deadline}' deadline disables first-pass analysis; "
+                    f"using '{effective_deadline}' so two-pass works."
+                )
             vcodec_args = [t("dynamics.c_v"), "libvpx-vp9"]
             if size_limited:
                 vcodec_args += [t("webm_maker.b_v"), video_br]
@@ -915,7 +933,7 @@ class WebMTab(BaseTab):
                                 "-crf", str(crf_value)]
             vcodec_args += [
                 "-cpu-used", str(vp9_cpu),
-                "-deadline", vp9_deadline,
+                "-deadline", effective_deadline,
                 "-tile-columns", self.tile_col_var.get(),
                 "-row-mt", "1" if self.rowmt_var.get() else "0",
                 "-pix_fmt", pixfmt,

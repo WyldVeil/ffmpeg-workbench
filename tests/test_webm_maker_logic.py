@@ -60,3 +60,24 @@ def test_resolve_pixfmt_source_unknown_falls_back_silently():
     pf, warn = _resolve_pixfmt("source", "", "VP9")
     assert pf == "yuv420p"
     assert warn is None
+
+
+def test_effective_vp9_deadline_realtime_two_pass_overridden():
+    """libvpx-vp9 'realtime' skips first-pass analysis — must downgrade to 'good'."""
+    from tabs.social.webm_maker import _effective_vp9_deadline
+    assert _effective_vp9_deadline("realtime", True) == "good"
+
+
+def test_effective_vp9_deadline_realtime_single_pass_kept():
+    """Single-pass realtime is fine — no override."""
+    from tabs.social.webm_maker import _effective_vp9_deadline
+    assert _effective_vp9_deadline("realtime", False) == "realtime"
+
+
+def test_effective_vp9_deadline_good_and_best_unchanged():
+    """Non-realtime deadlines are never overridden."""
+    from tabs.social.webm_maker import _effective_vp9_deadline
+    assert _effective_vp9_deadline("good", True) == "good"
+    assert _effective_vp9_deadline("good", False) == "good"
+    assert _effective_vp9_deadline("best", True) == "best"
+    assert _effective_vp9_deadline("best", False) == "best"
