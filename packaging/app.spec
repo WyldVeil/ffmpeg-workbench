@@ -12,7 +12,7 @@ The third-party tools must first be downloaded into bin/<platform>/ with
 import os
 import sys
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 sys.path.insert(0, ROOT)
@@ -44,7 +44,7 @@ if not os.path.isdir(bin_src):
     raise SystemExit(f"{bin_src} is missing - run scripts/fetch_binaries.py --platform {PLAT}")
 tools_tree = Tree(bin_src, prefix=os.path.join("bin", PLAT), typecode="DATA")
 
-datas += collect_data_files("tkinterdnd2")
+# tkinterdnd2 ships its own PyInstaller hook (collects only this platform's tkdnd).
 
 hiddenimports = (collect_submodules("tabs") + collect_submodules("core")
                  + ["tkinterdnd2"])

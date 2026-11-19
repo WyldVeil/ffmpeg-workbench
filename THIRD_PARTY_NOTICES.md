@@ -12,8 +12,8 @@ The exact versions and download checksums for each release are recorded in
 
 | Component | Version | Licence | Upstream |
 |-----------|---------|---------|----------|
-| FFmpeg (`ffmpeg`, `ffprobe`, `ffplay`), BtbN "gpl-shared" build | 9.0.2 (release/9.0 branch, `n9.0.2-57-gd838f9f9ae`) | GPL-3.0-or-later | https://ffmpeg.org · builds: https://github.com/BtbN/FFmpeg-Builds |
-| yt-dlp (stand-alone executable) | 2026.10.26 | Unlicense; bundled Python runtime and libraries under their own licences (see `THIRD_PARTY_LICENSES.txt`) | https://github.com/yt-dlp/yt-dlp |
+| FFmpeg (`ffmpeg`, `ffprobe`, `ffplay`), BtbN "gpl-shared" build | 9.0.2 (release/9.0 branch, `n9.0.2-39-g7adfbe40dc`) | GPL-3.0-or-later | https://ffmpeg.org · builds: https://github.com/FFmpeg-Builds/FFmpeg-Builds |
+| yt-dlp (stand-alone executable) | 2026.10.26 | Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work (see `THIRD_PARTY_LICENSES.txt`) | https://github.com/yt-dlp/yt-dlp |
 | Deno (JavaScript runtime that yt-dlp needs for YouTube) | 2.9.8 | MIT | https://deno.com |
 | FluidSynth (Windows build only; Linux uses the system package) | 2.6.2 | LGPL-2.1-or-later; bundled SDL3 (zlib) and libsndfile (LGPL-2.1-or-later) | https://www.fluidsynth.org |
 
@@ -26,10 +26,11 @@ These FFmpeg builds are licensed under the GNU General Public License,
 version 3 or later. You can get the complete corresponding source code here:
 
 * FFmpeg source at the exact commit:
-  https://github.com/FFmpeg/FFmpeg/commit/d838f9f9ae
-  (tarball: https://github.com/FFmpeg/FFmpeg/archive/d838f9f9ae.tar.gz)
+  https://github.com/FFmpeg/FFmpeg/commit/7adfbe40dc
+  (tarball: https://github.com/FFmpeg/FFmpeg/archive/7adfbe40dc.tar.gz)
 * Build scripts, including every library version and configure option:
-  https://github.com/BtbN/FFmpeg-Builds (release `autobuild-2026-11-18-12-39`)
+  https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d
+  (release `autobuild-2026-10-31-12-59`)
 * Each GitHub release of this editor also attaches the FFmpeg source tarball
   as a download.
 

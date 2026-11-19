@@ -1,29 +1,29 @@
 {
-  "generated": "2026-11-19T00:41:37Z",
+  "generated": "2026-11-19T01:41:41Z",
   "tools": {
     "ffmpeg": {
-      "version": "9.0.2-57-gd838f9f9ae",
-      "release": "autobuild-2026-11-18-12-39",
-      "source": "https://github.com/FFmpeg/FFmpeg/commit/d838f9f9ae",
-      "source_tarball": "https://github.com/FFmpeg/FFmpeg/archive/d838f9f9ae.tar.gz",
-      "build_scripts": "https://github.com/BtbN/FFmpeg-Builds/tree/master",
+      "version": "9.0.2-39-g7adfbe40dc",
+      "release": "autobuild-2026-10-31-12-59",
+      "source": "https://github.com/FFmpeg/FFmpeg/commit/7adfbe40dc",
+      "source_tarball": "https://github.com/FFmpeg/FFmpeg/archive/7adfbe40dc.tar.gz",
+      "build_scripts": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
       "license": "GPL-3.0-or-later",
       "assets": {
         "linux-x64": {
-          "name": "ffmpeg-n9.0.2-57-gd838f9f9ae-linux64-gpl-shared-9.0.tar.xz",
-          "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-18-12-39/ffmpeg-n9.0.2-57-gd838f9f9ae-linux64-gpl-shared-9.0.tar.xz",
-          "sha256": "92047843d5b454c893fca09a840e59a654e6c43c933fe56f4d5407bff33bef90"
+          "name": "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-gpl-shared-9.0.tar.xz",
+          "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-gpl-shared-9.0.tar.xz",
+          "sha256": "90a42a7d9689c031beacc3d03b139fd8243351d616988e8a74188df949fe5d08"
         },
         "windows-x64": {
-          "name": "ffmpeg-n9.0.2-57-gd838f9f9ae-win64-gpl-shared-9.0.zip",
-          "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-18-12-39/ffmpeg-n9.0.2-57-gd838f9f9ae-win64-gpl-shared-9.0.zip",
-          "sha256": "42359d70f065f253b3cdc5ae930bc56477e4bc2b7dc43047f0692ea8ca997718"
+          "name": "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-gpl-shared-9.0.zip",
+          "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-gpl-shared-9.0.zip",
+          "sha256": "1d9823c35c7a7e2f54d1438cf61030d6efabe3278de01c191309d1e828bb74df"
         }
       }
     },
     "yt-dlp": {
       "version": "2026.10.26",
-      "license": "Unlicense (bundled third-party components: see THIRD_PARTY_LICENSES.txt)",
+      "license": "Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work (see THIRD_PARTY_LICENSES.txt)",
       "license_urls": [
         "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE",
         "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt"
@@ -64,7 +64,9 @@
       "version": "2.6.2",
       "license": "LGPL-2.1-or-later (bundled DLLs: SDL3 - zlib licence; libsndfile - LGPL-2.1-or-later)",
       "license_urls": [
-        "https://raw.githubusercontent.com/FluidSynth/fluidsynth/v2.6.2/LICENSE"
+        "https://raw.githubusercontent.com/FluidSynth/fluidsynth/v2.6.2/LICENSE",
+        "https://raw.githubusercontent.com/libsndfile/libsndfile/1.2.2/COPYING",
+        "https://raw.githubusercontent.com/libsdl-org/SDL/release-3.2.10/LICENSE.txt"
       ],
       "assets": {
         "windows-x64": {

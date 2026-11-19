@@ -153,39 +153,63 @@ def _parse_sums(text: str) -> dict:
     return out
 
 
+_BUILDS_REPO = "FFmpeg-Builds/FFmpeg-Builds"     # formerly BtbN/FFmpeg-Builds
+
+
+def _month_end_release() -> dict:
+    """The newest *month-end* autobuild.  Daily builds are deleted after 14
+    days; the last build of each month is kept for two years, so pinning one
+    keeps the lock file reproducible."""
+    releases = []
+    for page in (1, 2, 3):
+        batch = get_json(f"https://api.github.com/repos/{_BUILDS_REPO}/releases?per_page=100&page={page}")
+        if not batch:
+            break
+        releases += [r for r in batch if r["tag_name"].startswith("autobuild-")]
+    if not releases:
+        raise SystemExit("No FFmpeg autobuild releases found")
+    by_month = {}
+    for r in releases:
+        month = r["tag_name"][len("autobuild-"):len("autobuild-") + 7]       # YYYY-MM
+        if month not in by_month or r["tag_name"] > by_month[month]["tag_name"]:
+            by_month[month] = r
+    months = sorted(by_month)
+    current = max(r["tag_name"] for r in releases)[len("autobuild-"):len("autobuild-") + 7]
+    complete = [m for m in months if m < current] or months
+    return by_month[complete[-1]]
+
+
 def resolve_ffmpeg() -> dict:
-    releases = get_json("https://api.github.com/repos/BtbN/FFmpeg-Builds/releases?per_page=10")
+    rel = _month_end_release()
     pattern = re.compile(r"^ffmpeg-(n" + re.escape(FFMPEG_LINE) + r"[^-]*-\d+-g[0-9a-f]+)-(.+)-"
                          + re.escape(FFMPEG_LINE) + r"\.(zip|tar\.xz)$")
-    for rel in releases:
-        if not rel["tag_name"].startswith("autobuild-"):
+    assets = {a["name"]: a for a in rel["assets"]}
+    found, version = {}, None
+    for name, a in assets.items():
+        m = pattern.match(name)
+        if not m:
             continue
-        assets = {a["name"]: a["browser_download_url"] for a in rel["assets"]}
-        found = {}
-        version = None
-        for name, url in assets.items():
-            m = pattern.match(name)
-            if not m:
-                continue
-            version = m.group(1)
-            for plat, variant in FFMPEG_VARIANT.items():
-                if m.group(2) == variant:
-                    found[plat] = {"name": name, "url": url}
-        if len(found) == len(FFMPEG_VARIANT) and "checksums.sha256" in assets:
-            sums = _parse_sums(get_text(assets["checksums.sha256"]))
-            for plat in found:
-                found[plat]["sha256"] = sums[found[plat]["name"]]
-            commit = version.rsplit("-g", 1)[-1] if version else ""
-            return {
-                "version": version.lstrip("n") if version else "",
-                "release": rel["tag_name"],
-                "source": f"https://github.com/FFmpeg/FFmpeg/commit/{commit}",
-                "source_tarball": f"https://github.com/FFmpeg/FFmpeg/archive/{commit}.tar.gz",
-                "build_scripts": f"https://github.com/BtbN/FFmpeg-Builds/tree/{rel.get('target_commitish', 'master')}",
-                "license": "GPL-3.0-or-later",
-                "assets": found,
-            }
-    raise SystemExit("Could not find a BtbN autobuild with FFmpeg " + FFMPEG_LINE)
+        version = m.group(1)
+        for plat, variant in FFMPEG_VARIANT.items():
+            if m.group(2) == variant:
+                found[plat] = {"name": name, "url": a["browser_download_url"]}
+    if len(found) != len(FFMPEG_VARIANT):
+        raise SystemExit(f"{rel['tag_name']} lacks FFmpeg {FFMPEG_LINE} builds for every platform")
+    sums = _parse_sums(get_text(assets["checksums.sha256"]["browser_download_url"]))
+    for plat in found:
+        found[plat]["sha256"] = sums[found[plat]["name"]]
+    commit = version.rsplit("-g", 1)[-1]
+    ref = get_json(f"https://api.github.com/repos/{_BUILDS_REPO}/git/ref/tags/{rel['tag_name']}")
+    scripts_sha = ref.get("object", {}).get("sha", rel["tag_name"])
+    return {
+        "version": version.lstrip("n"),
+        "release": rel["tag_name"],
+        "source": f"https://github.com/FFmpeg/FFmpeg/commit/{commit}",
+        "source_tarball": f"https://github.com/FFmpeg/FFmpeg/archive/{commit}.tar.gz",
+        "build_scripts": f"https://github.com/{_BUILDS_REPO}/tree/{scripts_sha}",
+        "license": "GPL-3.0-or-later",
+        "assets": found,
+    }
 
 
 def resolve_ytdlp() -> dict:
@@ -196,7 +220,8 @@ def resolve_ytdlp() -> dict:
     want = {"windows-x64": "yt-dlp.exe", "linux-x64": "yt-dlp_linux"}
     return {
         "version": tag,
-        "license": "Unlicense (bundled third-party components: see THIRD_PARTY_LICENSES.txt)",
+        "license": "Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work "
+                   "(see THIRD_PARTY_LICENSES.txt)",
         "license_urls": [f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/LICENSE",
                          f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/THIRD_PARTY_LICENSES.txt"],
         "assets": {p: {"name": n, "url": assets[n], "sha256": sums[n]} for p, n in want.items()},
@@ -226,14 +251,18 @@ def resolve_fluidsynth(cache: str) -> dict:
     rel = get_json("https://api.github.com/repos/FluidSynth/fluidsynth/releases/latest")
     tag = rel["tag_name"]
     asset = next(a for a in rel["assets"] if re.search(r"win10-x64.*\.zip$", a["name"]))
-    # FluidSynth publishes no checksums: pin the hash of what we download now.
-    dest = download(asset["browser_download_url"], os.path.join(cache, asset["name"]))
+    digest = (asset.get("digest") or "").split(":", 1)[-1]
+    if not re.fullmatch(r"[0-9a-f]{64}", digest or ""):
+        # older API responses have no digest: pin the hash of what we download now
+        digest = sha256_file(download(asset["browser_download_url"], os.path.join(cache, asset["name"])))
     return {
         "version": tag.lstrip("v"),
         "license": "LGPL-2.1-or-later (bundled DLLs: SDL3 - zlib licence; libsndfile - LGPL-2.1-or-later)",
-        "license_urls": [f"https://raw.githubusercontent.com/FluidSynth/fluidsynth/{tag}/LICENSE"],
+        "license_urls": [f"https://raw.githubusercontent.com/FluidSynth/fluidsynth/{tag}/LICENSE",
+                         "https://raw.githubusercontent.com/libsndfile/libsndfile/1.2.2/COPYING",
+                         "https://raw.githubusercontent.com/libsdl-org/SDL/release-3.2.10/LICENSE.txt"],
         "assets": {"windows-x64": {"name": asset["name"], "url": asset["browser_download_url"],
-                                   "sha256": sha256_file(dest)}},
+                                   "sha256": digest}},
     }
 
 
@@ -366,7 +395,10 @@ def fetch_licence_texts(tool: str, urls: list, out: str) -> None:
             if exc.code == 404:
                 continue
             raise
-        _write(os.path.join(out, "licenses", tool, os.path.basename(url)), text.encode("utf-8"))
+        parts = url.split("/")
+        repo = parts[4] if len(parts) > 4 and "raw.githubusercontent.com" in url else tool
+        name = os.path.basename(url) if repo == tool or repo.lower() in tool.lower() else f"{repo}-{os.path.basename(url)}"
+        _write(os.path.join(out, "licenses", tool, name), text.encode("utf-8"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
