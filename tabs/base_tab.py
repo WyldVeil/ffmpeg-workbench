@@ -749,9 +749,12 @@ class BaseTab(ttk.Frame):
             last = cmds[-1][-1]
             output = last if last not in ("-", "pipe:", "pipe:1") and not last.startswith("-") else ""
         self.log_debug("Queuing: " + " | ".join(ff.format_cmd(c) for c in cmds))
-        state = {"task": None, "orig_cmd": None, "t0": time.time()}
+        state = {"task": None, "orig_cmd": None, "t0": time.time(), "clicked": time.monotonic()}
 
         def _cancel_click():
+            # Ignore the second half of an accidental double-click on Render.
+            if time.monotonic() - state["clicked"] < 0.8:
+                return
             if state["task"]:
                 self.cancel_render(state["task"])
 

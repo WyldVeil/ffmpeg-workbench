@@ -145,7 +145,7 @@ class FramePreview(tk.Frame):
             self._placeholder(_tr("preview.failed", "Could not decode a frame here"))
             return
         try:
-            photo = tk.PhotoImage(data=base64.b64encode(png).decode("ascii"))
+            photo = tk.PhotoImage(master=self, data=base64.b64encode(png).decode("ascii"))
         except tk.TclError:
             self._placeholder(_tr("preview.failed", "Could not decode a frame here"))
             return

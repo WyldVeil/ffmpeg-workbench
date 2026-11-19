@@ -465,7 +465,7 @@ class LaughTrackRemoverTab(BaseTab):
         
         if self._export_mode.get() == "video":
             # Added -vsync 0 to safely pass through VFR timestamps
-            cmd += ["-c:v", "copy", "-vsync", "0", "-c:a", "aac", "-b:a", "192k"]
+            cmd += ["-c:v", "copy", "-fps_mode", "passthrough", "-c:a", "aac", "-b:a", "192k"]
         else:
             cmd += ["-vn"]
             
@@ -547,7 +547,7 @@ class LaughTrackRemoverTab(BaseTab):
             
             if self._export_mode.get() == "video":
                 # Map original video, map new AI audio
-                cmd_mux += ["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-vsync", "0", "-c:a", "aac", "-b:a", "192k"]
+                cmd_mux += ["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-fps_mode", "passthrough", "-c:a", "aac", "-b:a", "192k"]
             else:
                 cmd_mux += ["-map", "1:a:0", "-c:a", "pcm_s16le"]
                 

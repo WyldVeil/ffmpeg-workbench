@@ -246,7 +246,7 @@ class SceneDetectTab(BaseTab):
             cmd = [
                 ffmpeg, "-i", self.file_path,
                 "-vf", f"select='gt(scene,{thresh})',showinfo",
-                "-vsync", "vfr", "-f", "null", "-"
+                "-fps_mode", "vfr", "-f", "null", "-"
             ]
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

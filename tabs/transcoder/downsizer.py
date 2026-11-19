@@ -302,12 +302,8 @@ class UniversalDownsizerTab(BaseTab):
             self.log(self.console, f"\n✅ Finished! Final File Size: {final_mb:.2f} MB")
 
     def _stop_render(self):
-        proc = getattr(self, "proc", getattr(self, "_proc", getattr(self, "current_process", None)))
-        if proc and hasattr(proc, "terminate"):
-            try: proc.terminate()
-            except Exception: pass
-        else:
-            if os.name == 'nt': os.system("taskkill /F /IM ffmpeg.exe /T >nul 2>&1")
+        """Cancel this tab's queued/running jobs (kills only their own FFmpeg)."""
+        self.cancel_render()
 
         self.log(self.console, t("log.all_in_one.render_forcibly_stopped_by_user"))
         self._btn_stop.config(state="disabled")

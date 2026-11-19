@@ -341,7 +341,7 @@ class FrameExtractorTab(BaseTab):
         ffmpeg = get_binary_path("ffmpeg.exe")
         vf = (f"select='gt(scene,{thresh:.2f})',setpts=N/FRAME_RATE/TB")
         cmd = [ffmpeg, "-i", self.file_path,
-               "-vf", vf, "-vsync", "vfr",
+               "-vf", vf, "-fps_mode", "vfr",
                "-frames:v", "999", out_pat, "-y"]
 
         self.log(self.console, f"Detecting scenes (threshold={thresh:.2f})…")

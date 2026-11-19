@@ -7,6 +7,7 @@ tabs.system  -  System-level and application tools
 import importlib
 
 _EXPORTS = {
+    "MediaInspectorTab": "tabs.system.media_inspector",
     "ScreenRecorderTab": "tabs.system.screen_recorder",
     "BatchTab": "tabs.system.batch",
     "AdvancedSettingsTab": "tabs.system.advanced_settings",

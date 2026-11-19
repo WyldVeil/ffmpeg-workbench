@@ -133,6 +133,7 @@ TOOLS = {
         ("Transition Studio",     _lazy("tabs.visuals.transitions", "TransitionStudioTab")),
     ],
     "🛠  SYSTEM": [
+        ("Media Inspector",   _lazy("tabs.system.media_inspector", "MediaInspectorTab")),
         ("Screen Recorder",   _lazy("tabs.system.screen_recorder", "ScreenRecorderTab")),
         ("Batch Processor",   _lazy("tabs.system.batch", "BatchTab")),
         ("Advanced Settings", _lazy("tabs.system.advanced_settings", "AdvancedSettingsTab")),

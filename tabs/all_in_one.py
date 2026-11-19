@@ -1256,19 +1256,8 @@ class AllInOneTab(BaseTab):
         )
 
     def _stop_render(self):
-        """Safely stops the active FFmpeg thread running in the BaseTab worker."""
-        # Attempt to kill process properly if base_tab bound it to typical identifiers
-        proc = getattr(self, "proc", getattr(self, "_proc", getattr(self, "current_process", None)))
-        
-        if proc and hasattr(proc, "terminate"):
-            try:
-                proc.terminate()
-            except Exception:
-                pass
-        else:
-            # Absolute fallback if we can't find the thread: execute a system kill order
-            if os.name == 'nt':
-                os.system("taskkill /F /IM ffmpeg.exe /T >nul 2>&1")
+        """Cancel this tab's queued/running jobs (kills only their own FFmpeg)."""
+        self.cancel_render()
 
         self.log(self.console, t("log.all_in_one.render_forcibly_stopped_by_user"))
         self._btn_stop.config(state="disabled")

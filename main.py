@@ -1,5 +1,5 @@
 """
-main.py  -  Quintessential Video Editor  ·  Version 1.14
+main.py  -  WyldVeil's Media Editor: application shell
 Application entry point. Builds the professional dark sidebar, registers
 every tab, and manages page navigation, search, and preview cleanup.
 """
@@ -11,6 +11,7 @@ import os
 import subprocess
 import threading
 import platform
+import re
 
 from core import APP_NAME, APP_VERSION
 from core.state import state as _app_state
@@ -83,7 +84,16 @@ class PlaceholderTab(ttk.Frame):
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__()
+        # className sets WM_CLASS so Linux desktops match the .desktop file.
+        super().__init__(className="wyldveil-media-editor")
+        self._apply_ui_scale()
+        try:
+            from core.paths import resource_path
+            self._icons = [tk.PhotoImage(master=self, file=resource_path("assets", "icons", f"app_{n}.png"))
+                           for n in (256, 128, 64, 48, 32, 16)]
+            self.iconphoto(True, *self._icons)
+        except tk.TclError:
+            pass
 
         # Thread-safe UI dispatch, logging and crash reporting come first so
         # that everything constructed below can rely on them.
@@ -224,8 +234,10 @@ class App(tk.Tk):
         # ── Probe FFmpeg in background ────────────────────────────────────────
         threading.Thread(target=self._check_ffmpeg, daemon=True).start()
 
-        # ── Startup chime ─────────────────────────────────────────────────────
-        threading.Thread(target=self._play_intro_sound, daemon=True).start()
+        # ── Startup chime (optional) ──────────────────────────────────────────
+        from core import settings as _settings
+        if _settings.get("play_startup_sound", True) and not os.environ.get("CROSSFADER_NO_SOUND"):
+            threading.Thread(target=self._play_intro_sound, daemon=True).start()
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Status bar & Updates
@@ -363,249 +375,266 @@ class App(tk.Tk):
             pass
 
     # ── Version helpers (network) ────────────────────────────────────────────
+    # ── Tool versions & updates ──────────────────────────────────────────────
     @staticmethod
-    def _fetch_latest_ffmpeg_version():
-        """Return the latest FFmpeg release tag from gyan.dev, or None on failure."""
-        try:
-            from core import network as _net
-            with _net.urlopen(
-                "https://www.gyan.dev/ffmpeg/builds/release-version",
-                timeout=4) as r:
-                txt = r.read().decode("utf-8").strip()
-                return txt.split("-")[0] or None
-        except Exception:
-            return None
+    def _vtuple(v):
+        """'9.0.2' / '2026.10.26' -> (9, 0, 2) / (2026, 10, 26); None if not a release."""
+        m = re.match(r"^v?(\d+(?:\.\d+)+)", str(v or "").strip())
+        return tuple(int(x) for x in m.group(1).split(".")) if m else None
 
-    @staticmethod
-    def _fetch_latest_ytdlp_version():
-        """Return the latest yt-dlp release tag from GitHub, or None on failure."""
-        import json as _json
-        try:
-            from core import network as _net
-            with _net.urlopen(
-                "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
-                timeout=4,
-                headers={"User-Agent": "QVE-update-check"}) as r:
-                data = _json.loads(r.read().decode("utf-8"))
-                tag = (data.get("tag_name") or "").lstrip("v").strip()
-                return tag or None
-        except Exception:
-            return None
+    def _ui(self, fn, *args, **kwargs):
+        from core import ui as _ui
+        _ui.call_soon(fn, *args, **kwargs)
 
-    # ── FFmpeg status / update ───────────────────────────────────────────────
-    def _check_ffmpeg(self):
-        """Read local FFmpeg version, then asynchronously compare with latest."""
-        local = None
+    def _apply_ui_scale(self):
+        """Honour HiDPI scaling on Linux, where Tk ignores the desktop's scale
+        factor (Windows uses per-monitor DPI awareness).  The ``ui_scale``
+        setting (e.g. 1.5) overrides detection."""
+        from core import settings as _settings
+        scale = None
         try:
-            ffmpeg = get_binary_path("ffmpeg.exe")
-            r = subprocess.run([ffmpeg, "-version"], capture_output=True,
-                               text=True, timeout=5, creationflags=CREATE_NO_WINDOW)
-            for part in (r.stdout or "").split():
-                if part and (part[0].isdigit() or part.startswith("n")):
-                    local = part.lstrip("n").split("-")[0]
+            scale = float(_settings.get("ui_scale", "auto"))
+        except (TypeError, ValueError):
+            scale = None
+        if scale is None and sys.platform.startswith("linux"):
+            for var in ("GDK_SCALE", "QT_SCALE_FACTOR"):
+                try:
+                    val = float(os.environ.get(var, ""))
+                except ValueError:
+                    continue
+                if val > 1.0:
+                    scale = val
                     break
-        except Exception:
-            local = None
-
-        if not local:
-            self._ffmpeg_local_version = None
-            self.after(0, lambda: self._status_ffmpeg.config(
-                text=t("app.status.ffmpeg_missing_click_install"),
-                fg=self._skin_data["red"], cursor="hand2"))
-            return
-
-        self._ffmpeg_local_version = local
-        # Show local version with "checking..." while we hit the network.
-        self.after(0, lambda v=local: self._status_ffmpeg.config(
-            text=f"FFmpeg {v} (checking…)",
-            fg=self._skin_data["fgdim"], cursor="watch"))
-        threading.Thread(
-            target=self._compare_ffmpeg_versions,
-            args=(local,), daemon=True).start()
-
-    def _compare_ffmpeg_versions(self, local: str):
-        latest = self._fetch_latest_ffmpeg_version()
-        self._ffmpeg_latest_version = latest
-        skin = self._skin_data
-
-        if latest is None:
-            # Offline / fetch failed - leave click-to-update available so the
-            # user can still try to refresh manually.
-            self.after(0, lambda v=local: self._status_ffmpeg.config(
-                text=f"FFmpeg {v} (offline)",
-                fg=skin["fgdim"], cursor="hand2"))
-            return
-
-        if latest == local:
-            self.after(0, lambda v=local: self._status_ffmpeg.config(
-                text=f"FFmpeg {v} (up to date)",
-                fg=skin["green"], cursor="arrow"))
+            if scale is None:
+                try:
+                    out = subprocess.run(["xrdb", "-query"], capture_output=True, text=True,
+                                         timeout=3).stdout
+                    m = re.search(r"Xft\.dpi:\s*([\d.]+)", out)
+                    if m and float(m.group(1)) > 100:
+                        scale = float(m.group(1)) / 96.0
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+        if scale and 0.75 <= scale <= 4 and abs(scale - 1.0) > 0.01:
+            self.tk.call("tk", "scaling", 96.0 * scale / 72.0)
+            self._ui_scale = scale
         else:
-            self.after(0, lambda v=local, n=latest: self._status_ffmpeg.config(
-                text=f"FFmpeg {v} → {n} (Click to Update)",
-                fg=skin["orange"], cursor="hand2"))
+            self._ui_scale = 1.0
+
+    def _check_ffmpeg(self):
+        """Background: describe the active FFmpeg and look for updates."""
+        from core import updater
+        from core.ffmpeg import version_of
+        from core.hardware import find_binary
+        skin = self._skin_data
+        path = find_binary("ffmpeg")
+        if not path:
+            self._ffmpeg_local_version = None
+            self._ffmpeg_managed = True
+            self._ui(self._status_ffmpeg.config, text=t("app.status.ffmpeg_missing_click_install"),
+                     fg=skin["red"], cursor="hand2")
+            return
+        local = version_of(path)
+        managed = updater.is_app_managed(path)
+        self._ffmpeg_local_version, self._ffmpeg_managed = local, managed
+        local_t = self._vtuple(local)
+        if not managed:
+            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} (system)",
+                     fg=skin["fgdim"], cursor="hand2")
+            return
+        if local_t is None:
+            self._ui(self._status_ffmpeg.config, text="FFmpeg (development build)",
+                     fg=skin["fgdim"], cursor="arrow")
+            return
+        self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} (checking…)",
+                 fg=skin["fgdim"], cursor="watch")
+        latest = updater.latest_ffmpeg_release()
+        self._ffmpeg_latest_version = latest
+        latest_t = self._vtuple(latest)
+        if latest_t is None:
+            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local}", fg=skin["fgdim"], cursor="arrow")
+        elif latest_t > local_t:
+            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} → {latest} (click to update)",
+                     fg=skin["orange"], cursor="hand2")
+        else:
+            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} (up to date)",
+                     fg=skin["green"], cursor="arrow")
 
     def _prompt_ffmpeg_update(self):
-        # If we already know the local copy is current, just confirm and bail
-        # out instead of triggering a pointless re-download.
-        if (self._ffmpeg_latest_version
-                and self._ffmpeg_local_version
-                and self._ffmpeg_latest_version == self._ffmpeg_local_version):
+        if self._ffmpeg_local_version and not getattr(self, "_ffmpeg_managed", True):
             messagebox.showinfo(
                 t("msg.ffmpeg_update_title"),
-                f"FFmpeg {self._ffmpeg_local_version} is already up to date.")
+                "This copy of FFmpeg ({v}) belongs to your system.\n\nUpdate it with your package "
+                "manager, or choose 'Bundled' under Advanced Settings › FFmpeg.".format(
+                    v=self._ffmpeg_local_version), parent=self)
             return
-        if not messagebox.askyesno(t("msg.ffmpeg_update_title"), t("msg.ffmpeg_update_confirm")):
+        local_t = self._vtuple(self._ffmpeg_local_version)
+        latest_t = self._vtuple(self._ffmpeg_latest_version)
+        if self._ffmpeg_local_version and (latest_t is None or (local_t and latest_t <= local_t)):
+            messagebox.showinfo(t("msg.ffmpeg_update_title"),
+                                f"FFmpeg {self._ffmpeg_local_version} is already up to date.", parent=self)
+            return
+        if not messagebox.askyesno(t("msg.ffmpeg_update_title"), t("msg.ffmpeg_update_confirm"), parent=self):
             return
         self._status_ffmpeg.config(text=t("app.status.ffmpeg_downloading"), fg=self._skin_data["orange"])
 
         def _task():
-            def log_redirect(msg):
-                self.set_status(msg)
-            ok = download_and_extract_ffmpeg(log_redirect)
-            self.after(0, self._check_ffmpeg)
+            from core import updater
+            ok = updater.install_ffmpeg(lambda msg: self._ui(self.set_status, msg))
+            threading.Thread(target=self._check_ffmpeg, daemon=True).start()
             if ok:
-                self.after(0, lambda: messagebox.showinfo(t("msg.ffmpeg_update_success_title"), t("msg.ffmpeg_update_success")))
+                self._ui(messagebox.showinfo, t("msg.ffmpeg_update_success_title"),
+                         t("msg.ffmpeg_update_success"))
             else:
-                self.after(0, lambda: messagebox.showerror(t("msg.ffmpeg_update_failed_title"), t("msg.ffmpeg_update_failed")))
+                self._ui(messagebox.showerror, t("msg.ffmpeg_update_failed_title"),
+                         t("msg.ffmpeg_update_failed"))
 
         threading.Thread(target=_task, daemon=True).start()
 
     # ── yt-dlp status / update ───────────────────────────────────────────────
     def set_ytdlp_status(self, version: str, bin_path: str):
-        """Called by the YouTube tab once it's resolved a yt-dlp binary."""
+        """Called by the Video Downloader once it has resolved a yt-dlp binary."""
         self._ytdlp_path = bin_path
         self._ytdlp_local_version = version
-        # Show "checking..." while we ask GitHub for the latest tag.
-        self._status_ytdlp.config(
-            text=f"yt-dlp v{version} (checking…)",
-            fg=self._skin_data["fgdim"], cursor="watch")
-        threading.Thread(
-            target=self._compare_ytdlp_versions,
-            args=(version,), daemon=True).start()
+        self._status_ytdlp.config(text=f"yt-dlp {version} (checking…)",
+                                  fg=self._skin_data["fgdim"], cursor="watch")
+        threading.Thread(target=self._compare_ytdlp_versions, args=(version,), daemon=True).start()
 
     def _compare_ytdlp_versions(self, local: str):
-        latest = self._fetch_latest_ytdlp_version()
-        self._ytdlp_latest_version = latest
+        from core import updater
         skin = self._skin_data
-
-        if latest is None:
-            self.after(0, lambda v=local: self._status_ytdlp.config(
-                text=f"yt-dlp v{v} (offline)",
-                fg=skin["fgdim"], cursor="hand2"))
-            return
-
-        if latest == local:
-            self.after(0, lambda v=local: self._status_ytdlp.config(
-                text=f"yt-dlp v{v} (up to date)",
-                fg=skin["green"], cursor="arrow"))
+        latest = updater.latest_ytdlp_release()
+        self._ytdlp_latest_version = latest
+        lt, nt = self._vtuple(local), self._vtuple(latest)
+        if nt is None or lt is None:
+            self._ui(self._status_ytdlp.config, text=f"yt-dlp {local}", fg=skin["fgdim"], cursor="hand2")
+        elif nt > lt:
+            self._ui(self._status_ytdlp.config, text=f"yt-dlp {local} → {latest} (click to update)",
+                     fg=skin["orange"], cursor="hand2")
         else:
-            self.after(0, lambda v=local, n=latest: self._status_ytdlp.config(
-                text=f"yt-dlp v{v} → v{n} (Click to Update)",
-                fg=skin["orange"], cursor="hand2"))
+            self._ui(self._status_ytdlp.config, text=f"yt-dlp {local} (up to date)",
+                     fg=skin["green"], cursor="arrow")
 
     def _update_ytdlp_process(self):
-        if not self._ytdlp_path:
+        from core import updater
+        lt = self._vtuple(self._ytdlp_local_version)
+        nt = self._vtuple(self._ytdlp_latest_version)
+        if lt and nt and nt <= lt:
+            messagebox.showinfo(t("msg.ytdlp_update_title"),
+                                f"yt-dlp {self._ytdlp_local_version} is already up to date.", parent=self)
             return
-        # Already current? Don't run -U; just confirm.
-        if (self._ytdlp_latest_version
-                and self._ytdlp_local_version
-                and self._ytdlp_latest_version == self._ytdlp_local_version):
-            messagebox.showinfo(
-                t("msg.ytdlp_update_title"),
-                f"yt-dlp v{self._ytdlp_local_version} is already up to date.")
+        if self._ytdlp_path and not updater.is_app_managed(self._ytdlp_path):
+            if not messagebox.askyesno(
+                    t("msg.ytdlp_update_title"),
+                    "This yt-dlp ({p}) was installed by your system.\n\nDownload the latest official "
+                    "yt-dlp for this app instead? (Your system copy is left untouched.)".format(
+                        p=self._ytdlp_path), parent=self):
+                return
+        elif not messagebox.askyesno(t("msg.ytdlp_update_title"), t("msg.ytdlp_update_confirm"), parent=self):
             return
-        if not messagebox.askyesno(t("msg.ytdlp_update_title"), t("msg.ytdlp_update_confirm")):
-            return
-
         self._status_ytdlp.config(text=t("app.status.ytdlp_updating"), fg=self._skin_data["orange"])
         self.set_status(t("app.status.ytdlp_updating"))
 
         def _task():
-            try:
-                r = subprocess.run([self._ytdlp_path, "-U"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-                # Re-check version
-                ver_check = subprocess.run([self._ytdlp_path, "--version"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-                new_ver = ver_check.stdout.strip()
-                self.after(0, lambda: self.set_ytdlp_status(new_ver, self._ytdlp_path))
-                self.after(0, lambda: self.set_status(t("msg.ytdlp_update_complete"), color=self._skin_data["green"]))
-                self.after(0, lambda: messagebox.showinfo(t("msg.ytdlp_update_title2"), r.stdout))
-            except Exception:
-                self.after(0, lambda: self.set_status(t("msg.ytdlp_update_failed"), color=self._skin_data["red"]))
-                self.after(0, lambda: self._status_ytdlp.config(text=t("app.status.ytdlp_update_failed")))
+            ok = updater.install_ytdlp(lambda msg: self._ui(self.set_status, msg))
+            if ok:
+                from core.hardware import find_binary
+                from core.ffmpeg import capture
+                path = find_binary("yt-dlp")
+                try:
+                    ver = capture([path, "--version"], timeout=60).stdout.strip()
+                except Exception:
+                    ver = "?"
+                self._ui(self.set_ytdlp_status, ver, path)
+                self._ui(self.set_status, t("msg.ytdlp_update_complete"), self._skin_data["green"])
+            else:
+                self._ui(self.set_status, t("msg.ytdlp_update_failed"), self._skin_data["red"])
+                self._ui(self._status_ytdlp.config, text=t("app.status.ytdlp_update_failed"))
 
         threading.Thread(target=_task, daemon=True).start()
 
     def _update_queue_status(self):
-        """Refresh the queue status label and progress bar in the status bar."""
+        """Refresh the queue label, progress bar and ETA from the render queue."""
         try:
             from core.queue_manager import RenderQueueManager
-            active, pending, done, failed = RenderQueueManager.get_instance().get_stats()
+            q = RenderQueueManager.get_instance()
+            tasks = q.get_all_tasks()
             skin = self._skin_data
-            if active > 0 or pending > 0:
+            active = [x for x in tasks if x.status == "active"]
+            pending = [x for x in tasks if x.status == "pending"]
+            done = sum(1 for x in tasks if x.status == "done")
+            failed = sum(1 for x in tasks if x.status == "failed")
+            cancelled = sum(1 for x in tasks if x.status == "cancelled")
+            if active or pending:
                 parts = []
                 if active:
-                    parts.append(f"{active} active")
+                    parts.append(f"{len(active)} active")
                 if pending:
-                    parts.append(f"{pending} pending")
-                self._queue_status_lbl.config(
-                    text=t("app.queue.busy", n=" | ".join(parts)),
-                    fg=skin["orange"])
-                # Show progress bar during active renders
+                    parts.append(f"{len(pending)} pending")
+                self._queue_status_lbl.config(text=t("app.queue.busy", n=" | ".join(parts)), fg=skin["orange"])
                 self._progress_frame.pack(side="left", padx=(4, 0))
-            elif failed > 0:
-                self._queue_status_lbl.config(
-                    text=f"Queue: {done} done | {failed} failed",
-                    fg=skin["red"])
-                self._hide_progress()
-            elif done > 0:
-                self._queue_status_lbl.config(
-                    text=f"Queue: {done} done \u2713",
-                    fg=skin["green"])
-                self._hide_progress()
+                frac = q.overall_progress()
+                if frac is None:
+                    self._progress_bar.config(mode="indeterminate")
+                    if not getattr(self, "_indeterminate", False):
+                        self._progress_bar.start(12)
+                        self._indeterminate = True
+                    self._progress_pct.config(text="")
+                else:
+                    if getattr(self, "_indeterminate", False):
+                        self._progress_bar.stop()
+                        self._indeterminate = False
+                    self._progress_bar.config(mode="determinate")
+                    self._progress_bar["value"] = frac * 100
+                    eta = max((x.eta or 0) for x in active) if active else 0
+                    eta_txt = ""
+                    if eta and eta > 1:
+                        m, sec = divmod(int(eta), 60)
+                        eta_txt = f"  ≈{m}:{sec:02d} left" if m else f"  ≈{sec}s left"
+                    self._progress_pct.config(text=f"{frac * 100:.0f}%{eta_txt}")
+                self._schedule_queue_refresh()
             else:
-                self._queue_status_lbl.config(
-                    text=t("app.queue.idle"),
-                    fg=skin["fgdim"])
                 self._hide_progress()
+                bits = []
+                if done:
+                    bits.append(f"{done} done ✓")
+                if failed:
+                    bits.append(f"{failed} failed")
+                if cancelled:
+                    bits.append(f"{cancelled} cancelled")
+                if bits:
+                    self._queue_status_lbl.config(text="Queue: " + " | ".join(bits),
+                                                  fg=skin["red"] if failed else skin["green"])
+                else:
+                    self._queue_status_lbl.config(text=t("app.queue.idle"), fg=skin["fgdim"])
         except Exception:
-            pass
+            import logging
+            logging.getLogger("crossfader.shell").exception("queue status refresh failed")
+
+    def _schedule_queue_refresh(self):
+        """While jobs run, refresh the bar a few times a second (ETA ticks down)."""
+        if getattr(self, "_queue_refresh_pending", False):
+            return
+        self._queue_refresh_pending = True
+
+        def _tick():
+            self._queue_refresh_pending = False
+            self._update_queue_status()
+        self.after(400, _tick)
 
     def _hide_progress(self):
-        """Hide the progress bar and reset it."""
         try:
+            if getattr(self, "_indeterminate", False):
+                self._progress_bar.stop()
+                self._indeterminate = False
             self._progress_frame.pack_forget()
             self._progress_bar["value"] = 0
             self._progress_pct.config(text="")
-            self._render_duration = 0.0
         except Exception:
             pass
 
     def update_render_progress(self, line):
-        """Parse FFmpeg output line for time= and update the progress bar.
-
-        Called from queue_manager progress callbacks.
-        """
-        import re
-        try:
-            # Extract duration from 'Duration: HH:MM:SS.xx' lines
-            dur_m = re.search(r'Duration:\s*(\d+):(\d+):([\d.]+)', line)
-            if dur_m:
-                self._render_duration = (float(dur_m.group(1)) * 3600
-                                         + float(dur_m.group(2)) * 60
-                                         + float(dur_m.group(3)))
-
-            # Extract current time from 'time=HH:MM:SS.xx' or 'time=SS.xx'
-            time_m = re.search(r'time=\s*(\d+):(\d+):([\d.]+)', line)
-            if time_m and self._render_duration > 0:
-                current = (float(time_m.group(1)) * 3600
-                          + float(time_m.group(2)) * 60
-                          + float(time_m.group(3)))
-                pct = min(100.0, (current / self._render_duration) * 100)
-                self._progress_bar["value"] = pct
-                self._progress_pct.config(text=f"{pct:.0f}%")
-        except Exception:
-            pass
+        """Kept for older tabs; progress now comes from the render queue."""
+        return None
 
     def set_status(self, message, color=None):
         skin = self._skin_data
@@ -744,49 +773,12 @@ class App(tk.Tk):
         m_edit.add_separator()
         m_edit.add_checkbutton(label="Debug mode", variable=self.debug_mode)
 
-        m_cut = _mksub()
-        mb.add_cascade(label="Cutting Room", menu=m_cut)
-        for n in ["Crossfader", "Quick Trimmer", "Manual Multi-Splitter", "The Splicer", "Batch Joiner",
-                  "Rotate & Flip", "Side-by-Side", "Beat Sync Cutter",
-                  "Smart Reframe", "Manual Crop", "Video Reverser",
-                  "Freeze Frame", "Clip Looper", "Multi-Clip Sequencer",
-                  "Scene Detector"]:
-            m_cut.add_command(label=n, command=lambda n=n: self.show_page(n))
-
-        m_social = _mksub()
-        mb.add_cascade(label="Social", menu=m_social)
-        for n in ["The Shortifier", "Auto-Cropper", "Pro GIF Maker",
-                  "WebM Maker", "Watermarker", "Image Watermark", "Hard-Subber",
-                  "Auto-Subtitles", "Animated Titles", "Frame Extractor",
-                  "Intro/Outro Maker", "Slideshow Maker", "Chapter Markers",
-                  "Thumbnail Maker", "Video Collage", "Video Downloader"]:
-            m_social.add_command(label=n, command=lambda n=n: self.show_page(n))
-
-        m_audio = _mksub()
-        mb.add_cascade(label="Audio", menu=m_audio)
-        for n in ["Silence Remover", "Audio Extractor", "Audio Replacer",
-                  "Loudness Normalizer", "Audio Sync Shifter", "The Muter",
-                  "Audio Dynamics", "Audio Mixer", "Voice Isolation",
-                  "Voice Changer", "TTS Voice-Over", "Waveform Editor",
-                  "Laugh Track Remover", "Music Ducker", "Karaoke Generator",
-                  "Audio Converter", "MIDIfier"]:
-            m_audio.add_command(label=n, command=lambda n=n: self.show_page(n))
-
-        m_trans = _mksub()
-        mb.add_cascade(label="Transcoder", menu=m_trans)
-        for n in ["Universal Downsizer", "Proxy Generator", "Codec Cruncher",
-                  "Format Converter", "Resolution Scaler",
-                  "Framerate Interpolator", "Encode Queue", "Preset Manager"]:
-            m_trans.add_command(label=n, command=lambda n=n: self.show_page(n))
-
-        m_color = _mksub()
-        mb.add_cascade(label="Color", menu=m_color)
-        for n in ["Media Generator", "Special Effects", "LUT Applicator", "Basic Color Corrector",
-                  "Colour Match", "Video Scopes", "Speed Ramper",
-                  "Deshaker", "Green Screen Keyer", "Denoise",
-                  "Deinterlace", "Sharpen", "Picture-in-Picture",
-                  "Privacy Blur", "Animated Zoom", "Transition Studio"]:
-            m_color.add_command(label=n, command=lambda n=n: self.show_page(n))
+        # Tool menus are generated from the registry (translated, always complete).
+        for category, items in TOOLS.items():
+            m_cat = _mksub()
+            mb.add_cascade(label=_cat_label(category).title(), menu=m_cat)
+            for name, _cls in items:
+                m_cat.add_command(label=_tab_label(name), command=lambda n=name: self.show_page(n))
 
         m_view = _mksub()
         mb.add_cascade(label="View", menu=m_view)
@@ -816,9 +808,10 @@ class App(tk.Tk):
         mb.add_cascade(label="Help", menu=m_help)
         m_help.add_command(label="Keyboard Shortcuts", command=self._menu_shortcuts)
         m_help.add_command(label="System Info", command=self._menu_system_info)
+        m_help.add_command(label="Check for tool updates", command=self._menu_check_updates)
+        m_help.add_command(label="Open log folder", command=self._menu_open_logs)
         m_help.add_separator()
-        m_help.add_command(label="About Quintessential Video Editor",
-                           command=self._menu_about)
+        m_help.add_command(label=f"About {APP_NAME}", command=self._menu_about)
 
         self._menubar = mb
         self.bind("<Control-o>", lambda e: self._menu_open_file())
@@ -837,9 +830,15 @@ class App(tk.Tk):
     # ── Keyboard shortcut handlers ───────────────────────────────────────────
 
     def _kb_focused_on_entry(self):
-        """Return True if focus is on a text entry (don't hijack typing)."""
-        w = self.focus_get()
-        return isinstance(w, (tk.Entry, tk.Text, ttk.Entry))
+        """True when focus is in a text input or on a button (don't hijack typing
+        or Space-to-press)."""
+        try:
+            w = self.focus_get()
+        except (KeyError, tk.TclError):
+            return False
+        return isinstance(w, (tk.Entry, tk.Text, tk.Spinbox, tk.Listbox, ttk.Entry, ttk.Combobox,
+                              ttk.Spinbox, tk.Button, ttk.Button, tk.Checkbutton, ttk.Checkbutton,
+                              tk.Radiobutton, ttk.Radiobutton, tk.Scale, ttk.Scale))
 
     def _kb_play_pause(self, event=None):
         if self._kb_focused_on_entry():
@@ -976,49 +975,38 @@ class App(tk.Tk):
 
     # ── Menu callbacks ────────────────────────────────────────────────────────
     def _menu_open_file(self):
-        from tkinter import filedialog
-        path = filedialog.askopenfilename(
-            title="Open video file",
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                        ("All files", "*.*")])
-        if not path:
-            return
-        self._add_recent_file(path)
+        from core import dialogs
+        paths = dialogs.ask_open_many("media", title="Open media files", parent=self)
+        if paths:
+            self.open_paths(paths)
+
+    def open_paths(self, paths):
+        """Load files into the current tool (drag-and-drop, File > Open, Recent
+        files, command line).  Tools that can't take them hand over to the
+        Media Inspector."""
+        import logging
+        paths = [os.path.abspath(p) for p in paths if p and os.path.isfile(p)]
+        if not paths:
+            return False
+        for p in paths:
+            self._add_recent_file(p)
         page = self.pages.get(self.current_page)
-        if page is None:
-            return
-        loaded = False
-        for attr in ("_src_var", "src_var"):
-            if hasattr(page, attr):
+        accepted = False
+        if page is not None and self.current_page not in ("Home", "Settings") and hasattr(page, "load_file"):
+            for p in paths:
                 try:
-                    getattr(page, attr).set(path)
-                    page.file_path = path
-                    if hasattr(page, "duration"):
-                        from core.hardware import get_video_duration
-                        page.duration = get_video_duration(path)
-                        for a in ("_scrub_sc", "_scrub"):
-                            if hasattr(page, a):
-                                getattr(page, a).config(to=max(page.duration, 1))
-                        if hasattr(page, "_draw"):
-                            page._draw()
-                    base = os.path.splitext(path)[0]
-                    for oa in ("_out_var", "out_var"):
-                        if hasattr(page, oa) and not getattr(page, oa).get():
-                            getattr(page, oa).set(base + "_output.mp4")
-                    loaded = True
-                    break
+                    accepted = bool(page.load_file(p)) or accepted
                 except Exception:
-                    pass
-        if not loaded and hasattr(page, "file_path"):
-            page.file_path = path
-            loaded = True
-        if loaded:
-            self.title("Quintessential Video Editor  ·  {}  ·  {}".format(
-                self.current_page, os.path.basename(path)))
-        else:
-            messagebox.showinfo("File opened",
-                "Use the Browse button within '{}' to load files.\n\n"
-                "Path:\n{}".format(self.current_page, path))
+                    logging.getLogger("crossfader.shell").exception("load_file failed in %s", self.current_page)
+        if not accepted:
+            self.show_page("Media Inspector")
+            insp = self.pages.get("Media Inspector")
+            if insp is not None and hasattr(insp, "load_file"):
+                accepted = bool(insp.load_file(paths[0]))
+        if accepted:
+            self.title(f"{APP_NAME}  \u00b7  {_tab_label(self.current_page)}  \u00b7  {os.path.basename(paths[0])}")
+            self.set_status("Loaded: {}".format(os.path.basename(paths[0])), color=self._skin_data["green"])
+        return accepted
 
     def _menu_open_output_folder(self):
         from core.hardware import open_in_explorer
@@ -1110,14 +1098,37 @@ class App(tk.Tk):
             "  Ctrl+O         Open file\n"
             "  Drag & Drop    Drop files onto window\n")
 
+    def _menu_open_logs(self):
+        from core.hardware import open_in_explorer
+        from core.paths import log_dir
+        open_in_explorer(log_dir())
+
+    def _menu_check_updates(self):
+        threading.Thread(target=self._check_ffmpeg, daemon=True).start()
+        from core.hardware import find_binary
+        yt = find_binary("yt-dlp")
+        if yt:
+            def _ver():
+                from core.ffmpeg import capture
+                try:
+                    v = capture([yt, "--version"], timeout=60).stdout.strip()
+                except Exception:
+                    return
+                self._ui(self.set_ytdlp_status, v, yt)
+                self._ui(self._status_ytdlp.pack, side="right", padx=(0, 6), before=self._status_ffmpeg)
+            threading.Thread(target=_ver, daemon=True).start()
+
     def _menu_about(self):
-        messagebox.showinfo("About Quintessential Video Editor",
-            "Quintessential Video Editor  ·  Version 1.14\n"
-            "Version {}\n\n"
-            "A self-contained video and audio processing suite\n"
-            "powered by FFmpeg.\n\n"
-            "71 tools  ·  6 themes  ·  Windows / Linux / macOS".format(
-                APP_VERSION))
+        from core.ffmpeg import version_of
+        n_tools = sum(len(v) for v in TOOLS.values()) + 1
+        messagebox.showinfo(
+            f"About {APP_NAME}",
+            f"{APP_NAME}  \u00b7  version {APP_VERSION}\n\n"
+            "A free, self-contained video and audio toolkit powered by FFmpeg.\n\n"
+            f"{n_tools} tools  \u00b7  FFmpeg {version_of()}  \u00b7  "
+            f"{platform.system()} {platform.machine()}\n\n"
+            "https://github.com/WyldVeil/wyldveils-media-editor\n"
+            "Third-party licences: see THIRD_PARTY_NOTICES.md", parent=self)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Sidebar
@@ -1139,13 +1150,16 @@ class App(tk.Tk):
         badge = tk.Canvas(logo_f, width=38, height=34, bg=SB_BG,
                            highlightthickness=0)
         badge.pack(side="left", padx=(0, 12))
-        badge.create_rectangle(0, 0, 38, 34, fill=ACCENT, outline="")
-        badge.create_text(19, 17, text="QV", fill="#FFFFFF",
-                           font=(UI_FONT, 13, "bold"))
+        try:
+            from core.paths import resource_path
+            self._badge_img = tk.PhotoImage(master=self, file=resource_path("assets", "icons", "app_32.png"))
+            badge.create_image(19, 17, image=self._badge_img)
+        except tk.TclError:
+            badge.create_rectangle(0, 0, 38, 34, fill=ACCENT, outline="")
 
         nf = tk.Frame(logo_f, bg=SB_BG)
         nf.pack(side="left", anchor="w")
-        tk.Label(nf, text="QUINTESSENTIAL",
+        tk.Label(nf, text="WYLDVEIL",
                  font=(UI_FONT, 11, "bold"),
                  bg=SB_BG, fg="#CCCCCC").pack(anchor="w")
         tk.Label(nf, text=t("app.subtitle"),
@@ -1334,7 +1348,7 @@ class App(tk.Tk):
 
                 self._btn_refs[name]       = btn
                 self._indicator_refs[name] = ind
-                self._tool_rows.append((name.lower(), row_f))
+                self._tool_rows.append((name.casefold() + " " + _tab_label(name).casefold(), row_f))
 
         tk.Frame(inner, bg=SB_BG, height=20).pack()
 
@@ -1344,7 +1358,7 @@ class App(tk.Tk):
         tk.Frame(footer, bg=BORDER, height=1).pack(fill="x")
         fi = tk.Frame(footer, bg=SB_BG)
         fi.pack(fill="x", padx=14, pady=7)
-        tk.Label(fi, text="v{}  Version 1.14".format(APP_VERSION),
+        tk.Label(fi, text="v{}".format(APP_VERSION),
                  bg=SB_BG, fg="#343434",
                  font=(UI_FONT, 8)).pack(side="left")
         self.debug_cb = tk.Checkbutton(
@@ -1443,6 +1457,10 @@ class App(tk.Tk):
     def show_page(self, page_name):
         self._stop_active_previews(closing=False)
         skin = self._skin_data
+        stale = self.pages.get(page_name)
+        if isinstance(stale, PlaceholderTab) and page_name != self.current_page:
+            stale.destroy()
+            self.pages[page_name] = None      # retry loading the tool
 
         if self.pages.get(page_name) is None and page_name in self._tab_classes:
             try:
@@ -1493,7 +1511,7 @@ class App(tk.Tk):
             try: self._indicator_refs[page_name].config(bg=skin["accent"])
             except Exception: pass
 
-        self.title("Quintessential Video Editor  ·  {}".format(_tab_label(page_name)))
+        self.title(f"{APP_NAME}  \u00b7  {_tab_label(page_name)}")
         try: self._status_tool.config(text=_tab_label(page_name))
         except Exception: pass
 
@@ -1563,84 +1581,31 @@ class App(tk.Tk):
     #  Drag-and-drop
     # ─────────────────────────────────────────────────────────────────────────
     def _init_drag_drop(self):
-        """Set up file drag-and-drop using windnd (auto-installed) on Windows."""
-        if sys.platform != "win32":
-            return
+        """Drag-and-drop of files onto the window (Windows, Linux X11/XWayland, macOS)."""
+        import logging
+        self._dnd_ok = False
         try:
-            from core.deps import require
-            windnd = require("windnd", import_name="windnd")
-            if windnd is None:
-                return
-            windnd.hook_dropfiles(self, func=self._handle_drop)
-            self.log_debug("Drag-and-drop enabled")
-        except Exception as e:
-            self.log_debug(f"Drag-and-drop init failed: {e}")
+            from tkinterdnd2 import DND_FILES, TkinterDnD
+            TkinterDnD._require(self)
+            for widget in (self, self.content_container, self._content_area):
+                widget.drop_target_register(DND_FILES)
+                widget.dnd_bind("<<Drop>>", self._on_drop)
+            self._dnd_ok = True
+        except Exception as exc:
+            logging.getLogger("crossfader.shell").info("Drag-and-drop unavailable: %s", exc)
+
+    def _on_drop(self, event):
+        try:
+            paths = list(self.tk.splitlist(event.data))
+        except tk.TclError:
+            paths = [event.data]
+        paths = [p[7:] if p.startswith("file://") else p for p in paths]
+        self.after(10, lambda: self.open_paths(paths))
+        return getattr(event, "action", "copy")
 
     def _handle_drop(self, file_list):
-        """Handle files dropped onto the app window."""
-        if not file_list:
-            return
-        # windnd passes bytes paths on Windows
-        paths = []
-        for f in file_list:
-            if isinstance(f, bytes):
-                paths.append(f.decode("utf-8", errors="replace"))
-            else:
-                paths.append(str(f))
-
-        if not paths:
-            return
-
-        path = paths[0]  # use first file
-        if not os.path.isfile(path):
-            return
-
-        # Add to recent files
-        self._add_recent_file(path)
-
-        # Load into current tab
-        page = self.pages.get(self.current_page)
-        if page is None:
-            return
-
-        loaded = False
-        for attr in ("_src_var", "src_var"):
-            if hasattr(page, attr):
-                try:
-                    getattr(page, attr).set(path)
-                    if hasattr(page, "file_path"):
-                        page.file_path = path
-                    if hasattr(page, "duration"):
-                        from core.hardware import get_video_duration
-                        page.duration = get_video_duration(path)
-                        if hasattr(page, "_timeline"):
-                            page._timeline.set_duration(page.duration)
-                        for a in ("_scrub_sc", "_scrub"):
-                            if hasattr(page, a):
-                                getattr(page, a).config(to=max(page.duration, 1))
-                        if hasattr(page, "_draw"):
-                            page._draw()
-                    # Auto-fill output path
-                    base = os.path.splitext(path)[0]
-                    for oa in ("_out_var", "out_var"):
-                        if hasattr(page, oa) and not getattr(page, oa).get():
-                            getattr(page, oa).set(base + "_output.mp4")
-                    loaded = True
-                    break
-                except Exception:
-                    pass
-        if not loaded and hasattr(page, "file_path"):
-            page.file_path = path
-            loaded = True
-
-        if loaded:
-            self.title("Quintessential Video Editor  ·  {}  ·  {}".format(
-                self.current_page, os.path.basename(path)))
-            self.set_status("Loaded: {}".format(os.path.basename(path)),
-                           color=self._skin_data["green"])
-        else:
-            self.set_status("Drop: use Browse in '{}' to load files".format(
-                self.current_page))
+        """Backwards-compatible entry point (list of str/bytes paths)."""
+        self.open_paths([f.decode("utf-8", "replace") if isinstance(f, bytes) else str(f) for f in file_list])
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Recent files
@@ -1652,17 +1617,11 @@ class App(tk.Tk):
         return load_settings().get("recent_files", [])
 
     def _add_recent_file(self, path):
-        from core.settings import load_settings, save_settings
-        settings = load_settings()
-        recent = settings.get("recent_files", [])
-        # Normalise path
+        from core import settings as _settings
         path = os.path.normpath(path)
-        # Remove if already present (will re-add at top)
-        recent = [r for r in recent if os.path.normpath(r) != path]
-        recent.insert(0, path)
-        recent = recent[:self._MAX_RECENT]
-        settings["recent_files"] = recent
-        save_settings(settings)
+        with _settings.transaction() as data:
+            recent = [r for r in data.get("recent_files", []) if os.path.normpath(r) != path]
+            data["recent_files"] = ([path] + recent)[:self._MAX_RECENT]
         self._rebuild_recent_menu()
 
     def _rebuild_recent_menu(self):
@@ -1685,58 +1644,101 @@ class App(tk.Tk):
 
     def _open_recent(self, path):
         if not os.path.isfile(path):
-            messagebox.showwarning("File Not Found",
-                                   f"File no longer exists:\n{path}")
+            messagebox.showwarning("File Not Found", f"File no longer exists:\n{path}", parent=self)
             return
-        self._add_recent_file(path)
-        # Reuse the menu open logic
-        page = self.pages.get(self.current_page)
-        if page is None:
-            return
-        for attr in ("_src_var", "src_var"):
-            if hasattr(page, attr):
-                try:
-                    getattr(page, attr).set(path)
-                    if hasattr(page, "file_path"):
-                        page.file_path = path
-                    if hasattr(page, "duration"):
-                        from core.hardware import get_video_duration
-                        page.duration = get_video_duration(path)
-                        if hasattr(page, "_timeline"):
-                            page._timeline.set_duration(page.duration)
-                    base = os.path.splitext(path)[0]
-                    for oa in ("_out_var", "out_var"):
-                        if hasattr(page, oa) and not getattr(page, oa).get():
-                            getattr(page, oa).set(base + "_output.mp4")
-                except Exception:
-                    pass
-                break
-        self.title("Quintessential Video Editor  ·  {}  ·  {}".format(
-            self.current_page, os.path.basename(path)))
-        self.set_status("Loaded: {}".format(os.path.basename(path)),
-                       color=self._skin_data["green"])
+        self.open_paths([path])
 
     def _clear_recent_files(self):
-        from core.settings import load_settings, save_settings
-        settings = load_settings()
-        settings["recent_files"] = []
-        save_settings(settings)
+        from core import settings as _settings
+        _settings.set("recent_files", [])
         self._rebuild_recent_menu()
 
     def _on_closing(self):
+        """Confirm before abandoning running jobs; never leave FFmpeg orphaned."""
+        from core import ffmpeg as _ff
+        from core.queue_manager import RenderQueueManager
+        q = RenderQueueManager.get_instance()
+        busy = q.active_tasks()
+        if busy:
+            if not messagebox.askyesno(
+                    "Jobs still running",
+                    f"{len(busy)} render job(s) are still running or waiting.\n\n"
+                    "Stop them and quit? Unfinished files will be removed.", parent=self):
+                return
+            q.cancel_all()
+        for page in self.pages.values():
+            hook = getattr(page, "on_app_closing", None)
+            if callable(hook):
+                try:
+                    hook()
+                except Exception:
+                    pass
         self._stop_active_previews(closing=True)
+        _ff.kill_all()
         self.destroy()
+
+
+def _self_test(app) -> int:
+    """Smoke-test an installation: tools resolve and run, every tool page loads."""
+    import tempfile
+    from core import ffmpeg as _ff
+    from core.hardware import find_binary
+    problems = []
+    for tool in ("ffmpeg", "ffprobe"):
+        path = find_binary(tool)
+        print(f"{tool:8} {path} -> {_ff.version_of(path) if path else 'MISSING'}")
+        if not path:
+            problems.append(f"{tool} missing")
+    out = os.path.join(tempfile.mkdtemp(prefix="selftest_"), "t.mp4")
+    res = _ff.run([_ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25:d=1",
+                   "-f", "lavfi", "-i", "sine=d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-shortest", out])
+    info = _ff.try_probe(out)
+    ok = res.ok and info is not None and info.has_video and info.has_audio
+    print("encode  ", "ok" if ok else res.error_summary)
+    if not ok:
+        problems.append("test encode failed")
+    for name in list(app._tab_classes):
+        try:
+            app.show_page(name)
+            app.update()
+            if isinstance(app.pages.get(name), PlaceholderTab):
+                problems.append(f"tool failed to load: {name}")
+        except Exception as exc:
+            problems.append(f"{name}: {exc}")
+    print(f"pages    {len(app._tab_classes)} checked")
+    for prob in problems:
+        print("PROBLEM:", prob)
+    return 1 if problems else 0
+
+
+def main(argv=None) -> int:
+    import argparse
+    import multiprocessing
+    multiprocessing.freeze_support()      # PyInstaller on Windows
+    parser = argparse.ArgumentParser(prog="wyldveil-media-editor", description=APP_NAME)
+    parser.add_argument("files", nargs="*", help="media files to open")
+    parser.add_argument("--debug", action="store_true", help="verbose logging to the console")
+    parser.add_argument("--self-test", action="store_true", help="check the installation and exit")
+    parser.add_argument("--no-ai", action="store_true", help=argparse.SUPPRESS)
+    args, _unknown = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
+    if args.no_ai:
+        os.environ["CROSSFADER_NO_AI_TEST"] = "1"
+    if args.self_test:
+        os.environ.setdefault("CROSSFADER_NO_SOUND", "1")
+        os.environ.setdefault("CROSSFADER_NO_NETWORK", "1")
+    app = App()
+    if args.self_test:
+        app.withdraw()
+        code = _self_test(app)
+        app.destroy()
+        return code
+    if args.files:
+        app.after(400, lambda: app.open_paths(args.files))
+    app.mainloop()
+    return 0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import multiprocessing
-
-    # CRITICAL: This line prevents the infinite opening of .exe windows
-    # when using PyInstaller/cx_Freeze on Windows!
-    multiprocessing.freeze_support()
-
-    if "--no-ai" in sys.argv:
-        os.environ["CROSSFADER_NO_AI_TEST"] = "1"
-
-    app = App()
-    app.mainloop()
+    sys.exit(main())
