@@ -288,9 +288,9 @@ class ImageWatermarkTab(BaseTab):
             "-i", src,
             "-i", img,
             "-filter_complex", fc,
-            t("dynamics.c_v"), "libx264", "-crf", "18", "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
 

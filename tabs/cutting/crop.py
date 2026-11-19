@@ -472,9 +472,9 @@ class ManualCropTab(BaseTab):
 
         cmd = [ffmpeg, "-i", self.file_path,
                "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-               t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-               "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+               "-c:a", "aac", "-b:a", "192k",
+               "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Cropping: {cw}×{ch} at ({cx},{cy})")
         self.run_ffmpeg(cmd, self.console,

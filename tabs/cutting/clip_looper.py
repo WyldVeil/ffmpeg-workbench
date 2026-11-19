@@ -289,8 +289,8 @@ class ClipLooperTab(BaseTab):
                     return -1
                 pre = os.path.join(tmp_dir, "pre.mp4")
                 cmd = [ffmpeg, "-i", self.file_path, "-t", str(ss),
-                       t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                       t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", pre, "-y"]
+                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                       "-c:a", "aac", "-b:a", "192k", pre, "-y"]
                 subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
                 if os.path.exists(pre):
                     parts.append(pre)
@@ -302,8 +302,8 @@ class ClipLooperTab(BaseTab):
                 if mode == "simple":
                     cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
                            "-t", str(segment_dur),
-                           t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                           t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", seg_out, "-y"]
+                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
 
                 elif mode == "stutter":
                     try:
@@ -313,8 +313,8 @@ class ClipLooperTab(BaseTab):
                     # Each stutter is a tiny slice from the start of the range
                     cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
                            "-t", str(stut_dur),
-                           t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                           t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", seg_out, "-y"]
+                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
 
                 elif mode == "accel":
                     factor = self._accel_factor.get()
@@ -336,8 +336,8 @@ class ClipLooperTab(BaseTab):
                            "-t", str(segment_dur),
                            "-vf", f"setpts={pts_mult:.4f}*PTS",
                            "-af", af,
-                           t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                           t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", seg_out, "-y"]
+                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
 
                 elif mode == "echo":
                     # Reduce volume progressively
@@ -345,13 +345,13 @@ class ClipLooperTab(BaseTab):
                     cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
                            "-t", str(segment_dur),
                            "-af", f"volume={vol_db}dB",
-                           t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                           t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", seg_out, "-y"]
+                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
                 else:
                     cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
                            "-t", str(segment_dur),
-                           t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                           t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", seg_out, "-y"]
+                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
 
                 if cancel_fn():
                     return -1
@@ -367,8 +367,8 @@ class ClipLooperTab(BaseTab):
                     return -1
                 post = os.path.join(tmp_dir, "post.mp4")
                 cmd = [ffmpeg, "-ss", str(ee), "-i", self.file_path,
-                       t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                       t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", post, "-y"]
+                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                       "-c:a", "aac", "-b:a", "192k", post, "-y"]
                 subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
                 if os.path.exists(post):
                     parts.append(post)
@@ -381,9 +381,9 @@ class ClipLooperTab(BaseTab):
 
             cmd = [ffmpeg, "-f", "concat", "-safe", "0",
                    "-i", list_file,
-                   t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                   t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                   "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                   "-c:a", "aac", "-b:a", "192k",
+                   "-movflags", "+faststart", out, "-y"]
             progress_cb("Concatenating all parts…")
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True,

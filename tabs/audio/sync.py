@@ -142,27 +142,27 @@ class AudioSyncTab(BaseTab):
                 cmd = [ffmpeg, "-i", self.file_path,
                        "-itsoffset", str(offset), "-i", self.file_path,
                        "-map", t("sync.1_v_0"), "-map", t("sync.0_a_0"),
-                       "-c", "copy", "-shortest", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c", "copy", "-shortest", "-movflags", "+faststart", out, "-y"]
             else:
                 # Advance audio: offset the video
                 cmd = [ffmpeg,
                        "-itsoffset", str(-offset), "-i", self.file_path,
                        "-i", self.file_path,
                        "-map", t("muter.0_v_0"), "-map", t("sync.1_a_0"),
-                       "-c", "copy", "-shortest", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c", "copy", "-shortest", "-movflags", "+faststart", out, "-y"]
         else:
             # adelay filter - positive ms only; advance done by trim
             ms = int(offset * 1000)
             if ms >= 0:
                 af = f"adelay={ms}|{ms}"
                 cmd = [ffmpeg, "-i", self.file_path, "-af", af,
-                       t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "256k", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", out, "-y"]
             else:
                 # trim audio
                 af = f"atrim=start={-offset}"
                 cmd = [ffmpeg, "-i", self.file_path, "-af", af,
-                       t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "256k",
-                       "-shortest", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+                       "-shortest", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Shifting audio by {offset:+.3f}s")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),

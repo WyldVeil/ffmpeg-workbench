@@ -399,14 +399,14 @@ class AudioMixerTab(BaseTab):
 
         # Codec args
         if "MP3" in fmt:
-            acodec = [t("dynamics.c_a"),"libmp3lame",t("dynamics.b_a"),"320k"]
+            acodec = ["-c:a","libmp3lame","-b:a","320k"]
         elif "WAV" in fmt:
-            acodec = [t("dynamics.c_a"),"pcm_s16le"]
+            acodec = ["-c:a","pcm_s16le"]
         elif "FLAC" in fmt:
-            acodec = [t("dynamics.c_a"),"flac"]
+            acodec = ["-c:a","flac"]
         else:
             bitrate = "320k" if "320" in fmt else "256k"
-            acodec  = [t("dynamics.c_a"),"aac",t("dynamics.b_a"),bitrate]
+            acodec  = ["-c:a","aac","-b:a",bitrate]
 
         cmd += ["-filter_complex", fc]
 

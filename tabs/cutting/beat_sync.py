@@ -425,7 +425,7 @@ class BeatSyncCutterTab(BaseTab):
 
             self.log(self.console, t("log.beat_sync.joining_clips"))
             cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-i", list_path, "-c", "copy", "-movflags", "+faststart", out, "-y"]
             r = subprocess.run(cmd_cat, capture_output=True, creationflags=CREATE_NO_WINDOW)
 
             try: shutil.rmtree(tmp)

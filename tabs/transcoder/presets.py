@@ -26,13 +26,13 @@ BUILT_IN = [
         "name": t("presets.instagram_reel_1080_1920_h_264"),
         "category": "Social",
         "description": t("presets.vertical_9_16_for_instagram_reels_and_tiktok"),
-        "cmd": '-i {INPUT} -vf t("presets.scale_1080_1920_force_original_aspect_ratio_decr") -c:v libx264 -crf 20 -preset fast -c:a aac -b:a 192k {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -crf 20 -preset fast -c:a aac -b:a 192k {OUTPUT}',
     },
     {
         "name": t("presets.youtube_upload_1080p_h_264_high_quality"),
         "category": "Web",
         "description": "Optimised for YouTube's recommended settings.",
-        "cmd": '-i {INPUT} -vf t("presets.scale_1920_1080_force_original_aspect_ratio_decr") -c:v libx264 -crf 16 -preset slow -c:a aac -b:a 320k {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -crf 16 -preset slow -c:a aac -b:a 320k {OUTPUT}',
     },
     {
         "name": t("presets.quick_compress_h_265_crf_28"),
@@ -50,7 +50,7 @@ BUILT_IN = [
         "name": t("presets.streaming_proxy_low_bitrate_h_264"),
         "category": "Proxy",
         "description": t("presets.fast_tiny_proxy_for_editing_on_slow_machines"),
-        "cmd": '-i {INPUT} -vf t("presets.scale_iw_4_ih_4") -c:v libx264 -crf 28 -preset ultrafast -c:a aac -b:a 96k {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=iw/4:ih/4" -c:v libx264 -crf 28 -preset ultrafast -c:a aac -b:a 96k {OUTPUT}',
     },
     {
         "name": t("presets.audio_only_hq_aac"),
@@ -68,7 +68,7 @@ BUILT_IN = [
         "name": t("presets.4k_downscale_to_1080p_lanczos"),
         "category": "Compression",
         "description": t("presets.downscale_4k_footage_to_1080p_with_best_quality"),
-        "cmd": '-i {INPUT} -vf t("presets.scale_1920_1080_flags_lanczos") -c:v libx264 -crf 18 -preset medium -c:a copy {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=1920:1080:flags=lanczos" -c:v libx264 -crf 18 -preset medium -c:a copy {OUTPUT}',
     },
 ]
 
@@ -227,11 +227,11 @@ class PresetManagerTab(BaseTab):
         help_lf = tk.LabelFrame(ef, text=f"  {t('presets.quick_insert_section')}  ", padx=8, pady=4)
         help_lf.pack(fill="x", pady=4)
         snippets = [
-            ("H.264",      t("presets.c_v_libx264_crf_18_preset_fast")),
-            ("H.265",      t("presets.c_v_libx265_crf_22_preset_fast")),
-            (t("presets.scale_1080"), '-vf t("presets.scale_1920_1080")'),
-            ("AAC audio",  t("presets.c_a_aac_b_a_192k")),
-            ("Copy all",   t("presets.c_copy")),
+            ("H.264",      "-c:v libx264 -crf 18 -preset fast"),
+            ("H.265",      "-c:v libx265 -crf 22 -preset fast"),
+            (t("presets.scale_1080"), '-vf "scale=1920:1080"'),
+            ("AAC audio",  "-c:a aac -b:a 192k"),
+            ("Copy all",   "-c copy"),
             (t("presets.strip_audio"),"-an"),
         ]
         for label, snippet in snippets:

@@ -394,8 +394,8 @@ class PIPTab(BaseTab):
 
         cmd = [ffmpeg, "-i", self.bg_path, "-i", self.fg_path,
                "-filter_complex", fc,
-               t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(), "-preset", "fast",
-               t("dynamics.c_a"), "copy", "-shortest", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", self.crf_var.get(), "-preset", "fast",
+               "-c:a", "copy", "-shortest", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, t("log.pip.building_pip_composite"))
         self.run_ffmpeg(cmd, self.console,

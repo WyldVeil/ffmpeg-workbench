@@ -170,7 +170,7 @@ class CodecCruncherTab(BaseTab):
         elif self.hwaccel_var.get() and self.gpu == "nvidia" and vcodec == "libx264":
             vcodec = "h264_nvenc"
 
-        cmd = [ffmpeg, "-i", self.file_path, t("dynamics.c_v"), vcodec]
+        cmd = [ffmpeg, "-i", self.file_path, "-c:v", vcodec]
 
         if info["has_crf"]:
             cmd += ["-crf", self.crf_var.get()]

@@ -200,14 +200,14 @@ class SpeedRamperTab(BaseTab):
                 af = ",".join(atempo_chain)
                 cmd = [ffmpeg, "-i", self.file_path,
                        "-vf", vf, "-af", af,
-                       t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
-                       "-preset", "fast", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                       "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c:v", "libx264", "-crf", self.crf_var.get(),
+                       "-preset", "fast", "-c:a", "aac", "-b:a", "192k",
+                       "-movflags", "+faststart", out, "-y"]
             else:
                 cmd = [ffmpeg, "-i", self.file_path,
                        "-vf", vf, "-an",
-                       t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
-                       "-preset", "fast", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c:v", "libx264", "-crf", self.crf_var.get(),
+                       "-preset", "fast", "-movflags", "+faststart", out, "-y"]
             self.log(self.console, f"Speed: {speed:.2f}× ({pts_mult:.4f}×PTS)")
             
             self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
@@ -271,8 +271,8 @@ class SpeedRamperTab(BaseTab):
                                    "-t", str(seg_dur),
                                    "-vf", f"setpts={pts_mult:.4f}*PTS",
                                    "-af", af,
-                                   t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
-                                   "-preset", "fast", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
+                                   "-c:v", "libx264", "-crf", self.crf_var.get(),
+                                   "-preset", "fast", "-c:a", "aac", "-b:a", "192k",
                                    "-avoid_negative_ts", "make_zero",
                                    "-reset_timestamps", "1", tmp, "-y"]
                     else:
@@ -280,7 +280,7 @@ class SpeedRamperTab(BaseTab):
                                    "-ss", str(t0), "-i", self.file_path,
                                    "-t", str(seg_dur),
                                    "-vf", f"setpts={pts_mult:.4f}*PTS",
-                                   t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
+                                   "-c:v", "libx264", "-crf", self.crf_var.get(),
                                    "-preset", "fast", "-an",
                                    "-avoid_negative_ts", "make_zero",
                                    "-reset_timestamps", "1", tmp, "-y"]
@@ -302,7 +302,7 @@ class SpeedRamperTab(BaseTab):
 
                 cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
                            "-i", list_path, "-c", "copy",
-                           "-movflags", t("dynamics.faststart"), out, "-y"]
+                           "-movflags", "+faststart", out, "-y"]
                 self.after(0, lambda: self.log(self.console, t("log.speed_ramp.concatenating_segments")))
                 rc_proc = subprocess.run(cmd_cat, capture_output=True, text=True,
                                  creationflags=CREATE_NO_WINDOW)

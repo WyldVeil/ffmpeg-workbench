@@ -467,7 +467,7 @@ class AnimatedZoomTab(BaseTab):
             return
 
         cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast"]
+               "-c:v", "libx264", "-crf", crf, "-preset", "fast"]
 
         if self._keep_audio.get():
             cmd += ["-c:a", "aac", "-b:a", "192k"]

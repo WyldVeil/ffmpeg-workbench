@@ -350,9 +350,9 @@ class SceneDetectTab(BaseTab):
                 else:
                     cmd = [ffmpeg, "-ss", str(ss), "-to", str(to),
                            "-i", self.file_path,
-                           t("dynamics.c_v"), "libx264", "-crf", "18", "-preset", "fast",
-                           t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                           "-movflags", t("dynamics.faststart"), out, "-y"]
+                           "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                           "-c:a", "aac", "-b:a", "192k",
+                           "-movflags", "+faststart", out, "-y"]
 
                 progress_cb(f"  [{i + 1}/{total}] {_fmt(ss)} → {_fmt(to)}")
                 proc = subprocess.Popen(

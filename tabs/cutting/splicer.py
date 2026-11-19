@@ -283,7 +283,7 @@ class SplicerTab(BaseTab):
                     f.write(f"file '{p}'\n")
 
             cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-i", list_path, "-c", "copy", "-movflags", "+faststart", out, "-y"]
             self.log(self.console, t("log.splicer.concatenating"))
             proc = subprocess.run(cmd_cat, capture_output=True, text=True,
                                   creationflags=CREATE_NO_WINDOW)
@@ -338,7 +338,7 @@ class SplicerTab(BaseTab):
                     f.write(f"file '{p}'\n")
 
             cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-i", list_path, "-c", "copy", "-movflags", "+faststart", out, "-y"]
             self.log(self.console, t("log.splicer.final_concat"))
             proc = subprocess.run(cmd_cat, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
             for p in tmp_files:

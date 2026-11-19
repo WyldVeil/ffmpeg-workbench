@@ -152,15 +152,15 @@ class FormatConverterTab(BaseTab):
                     cmd = [ffmpeg, "-i", src, "-c", "copy", out, "-y"]
                 else:
                     if fmt in ("mp3",):
-                        cmd = [ffmpeg, "-i", src, "-vn", t("dynamics.c_a"), "libmp3lame",
-                               t("dynamics.b_a"), "320k", out, "-y"]
+                        cmd = [ffmpeg, "-i", src, "-vn", "-c:a", "libmp3lame",
+                               "-b:a", "320k", out, "-y"]
                     elif fmt in ("wav",):
-                        cmd = [ffmpeg, "-i", src, "-vn", t("dynamics.c_a"), "pcm_s16le", out, "-y"]
+                        cmd = [ffmpeg, "-i", src, "-vn", "-c:a", "pcm_s16le", out, "-y"]
                     elif fmt in ("flac",):
-                        cmd = [ffmpeg, "-i", src, "-vn", t("dynamics.c_a"), "flac", out, "-y"]
+                        cmd = [ffmpeg, "-i", src, "-vn", "-c:a", "flac", out, "-y"]
                     else:
-                        cmd = [ffmpeg, "-i", src, t("dynamics.c_v"), "libx264", "-crf", "18",
-                               t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", out, "-y"]
+                        cmd = [ffmpeg, "-i", src, "-c:v", "libx264", "-crf", "18",
+                               "-c:a", "aac", "-b:a", "192k", out, "-y"]
 
                 self.after(0, lambda i=i, n=len(paths): self.prog_lbl.config(
                     text=f"File {i+1} of {n}…"))

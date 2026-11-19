@@ -535,9 +535,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -961,8 +961,8 @@ class SpecialEffectsTab(BaseTab):
             _ffmpeg(), "-y", "-i", src,
             "-vf", "fade=type=out:st={st}:d={dur}".format(st=start, dur=dur),
             "-af", "afade=type=out:st={st}:d={dur}".format(st=start, dur=dur),
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -1161,8 +1161,8 @@ class SpecialEffectsTab(BaseTab):
             _ffmpeg(), "-y", "-i", src,
             "-vf", filter_str,
             "-af", "afade=type=out:st={st}:d={dur}".format(st=start, dur=dur),
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -1315,9 +1315,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -1451,9 +1451,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -1569,9 +1569,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -1661,9 +1661,9 @@ class SpecialEffectsTab(BaseTab):
         cmd = [
             _ffmpeg(), "-y", "-i", src,
             "-vf", filter_str,
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -1756,9 +1756,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -2035,9 +2035,9 @@ class SpecialEffectsTab(BaseTab):
         cmd = [
             _ffmpeg(), "-y", "-i", src,
             "-vf", "noise=alls={amt}:allf=t+u".format(amt=amount),
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -2094,9 +2094,9 @@ class SpecialEffectsTab(BaseTab):
         cmd   = [
             _ffmpeg(), "-y", "-i", src,
             "-vf", "vignette=angle={a}".format(a=angle),
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -2204,9 +2204,9 @@ class SpecialEffectsTab(BaseTab):
         cmd = [
             _ffmpeg(), "-y", "-i", src,
             "-vf", filter_str,
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -2328,9 +2328,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -2434,9 +2434,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -2537,9 +2537,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -2772,9 +2772,9 @@ class SpecialEffectsTab(BaseTab):
         cmd = [
             _ffmpeg(), "-y", "-i", src,
             "-vf", ",".join(filters),
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(
@@ -2880,9 +2880,9 @@ class SpecialEffectsTab(BaseTab):
             cmd = [
                 _ffmpeg(), "-y", "-i", src,
                 "-vf", filter_str,
-                t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                t("dynamics.c_a"), "copy",
-                "-movflags", t("dynamics.faststart"),
+                "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
                 out,
             ]
             self.run_ffmpeg(
@@ -2993,9 +2993,9 @@ class SpecialEffectsTab(BaseTab):
         cmd = [
             _ffmpeg(), "-y", "-i", src,
             "-vf", filter_str,
-            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-            t("dynamics.c_a"), "copy",
-            "-movflags", t("dynamics.faststart"),
+            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
             out,
         ]
         self.run_ffmpeg(

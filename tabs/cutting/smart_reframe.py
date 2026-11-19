@@ -226,7 +226,7 @@ class SmartReframeTab(BaseTab):
         ffprobe = get_binary_path("ffprobe.exe")
         cmd = [
             ffprobe, "-v", "error", "-select_streams", t("freeze_frame.v_0"),
-            "-show_entries", t("smart_reframe.stream_pix_fmt"), "-of", "json", file_path
+            "-show_entries", "stream=pix_fmt", "-of", "json", file_path
         ]
         try:
             result = subprocess.check_output(cmd, creationflags=CREATE_NO_WINDOW)

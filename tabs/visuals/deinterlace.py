@@ -232,10 +232,10 @@ class DeinterlaceTab(BaseTab):
         vf = self._build_filter()
         cmd = [ffmpeg, "-i", self.file_path,
                "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
+               "-c:v", "libx264", "-crf", self.crf_var.get(),
                "-preset", self.preset_var.get(),
                "-pix_fmt", self.pixfmt_var.get(),
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
         self.log(self.console, f"Algorithm: {self.algo_var.get()}")
         self.log(self.console, f"Filter:    {vf}")
         self.run_ffmpeg(cmd, self.console,

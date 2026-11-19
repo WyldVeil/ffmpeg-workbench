@@ -309,8 +309,8 @@ class TextBurnerTab(BaseTab):
         if not out: return
         cmd = [get_binary_path("ffmpeg.exe"), "-i", self.file_path,
                "-vf", f"format=yuv420p,{f_str}",
-               t("dynamics.c_v"), "libx264", "-crf", "18", t("dynamics.c_a"), "copy",
-               "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", "18", "-c:a", "copy",
+               "-movflags", "+faststart", out, "-y"]
         self.log(self.console, f"Rendering → {os.path.basename(out)}")
         self.run_ffmpeg(cmd, self.console,
                         on_done=lambda rc: self.show_result(rc, out),

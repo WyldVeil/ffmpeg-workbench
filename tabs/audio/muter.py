@@ -180,8 +180,8 @@ class MuterTab(BaseTab):
         # ── Mode: Mute Entire Video (Fast stream-copy) ──
         if self.mute_mode.get() == "all":
             cmd = [ffmpeg, "-i", self.file_path, 
-                   t("dynamics.c_v"), "copy", "-an", 
-                   "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "copy", "-an", 
+                   "-movflags", "+faststart", out, "-y"]
             self.log(self.console, t("log.muter.muting_entire_video_fast_stream_copy"))
             self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                             btn=self.btn_render, btn_label=t("muter.apply_button"))
@@ -225,8 +225,8 @@ class MuterTab(BaseTab):
                          for s, e in valid_ranges]
             af = ",".join(vol_parts)
             cmd = [ffmpeg, "-i", self.file_path, "-af", af,
-                   t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "256k",
-                   "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+                   "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Muting {len(valid_ranges)} specific range(s)…")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),

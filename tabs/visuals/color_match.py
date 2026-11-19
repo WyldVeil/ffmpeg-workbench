@@ -37,8 +37,8 @@ def _get_frame_stats(ffmpeg_path, video_path, timestamp="0"):
         ffmpeg_path,
         "-ss", str(timestamp),
         "-i", video_path,
-        "-vf", t("color_match.signalstats_stat_tout_brng_vrep"),
-        t("smart_reframe.frames_v"), "30",   # analyse 30 frames for better average
+        "-vf", "signalstats=stat=tout+brng+vrep",
+        "-frames:v", "30",   # analyse 30 frames for better average
         "-f", "null", "-",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True,
@@ -340,8 +340,8 @@ class ColorMatchTab(BaseTab):
 
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.src_path, "-vf", filt,
-               t("dynamics.c_v"), "libx264", "-crf", "18", "-preset", "fast",
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Applying colour match (strength {int(strength*100)}%)…")
         self.run_ffmpeg(cmd, self.console,

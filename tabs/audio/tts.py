@@ -883,10 +883,10 @@ class TTSVoiceOverTab(BaseTab):
             # Video codec
             vid_fmt = self.vid_fmt_var.get()
             if "copy" in vid_fmt.lower():
-                v_codec = [t("dynamics.c_v"), "copy"]
+                v_codec = ["-c:v", "copy"]
             else:
                 crf = "18" if "18" in vid_fmt else "23"
-                v_codec = [t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast"]
+                v_codec = ["-c:v", "libx264", "-crf", crf, "-preset", "fast"]
 
             cmd += ["-filter_complex", fc,
                     "-map", "0:v", "-map", map_audio]

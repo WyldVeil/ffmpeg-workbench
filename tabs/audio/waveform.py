@@ -436,9 +436,9 @@ class WaveformEditorTab(BaseTab):
 
         if self._export_mode.get() == "video":
             cmd = [ffmpeg, "-i", self.file_path,
-                   "-af", af, t("dynamics.c_v"), "copy",
-                   t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                   "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-af", af, "-c:v", "copy",
+                   "-c:a", "aac", "-b:a", "192k",
+                   "-movflags", "+faststart", out, "-y"]
         else:
             cmd = [ffmpeg, "-i", self.file_path,
                    "-af", af, "-vn", out, "-y"]

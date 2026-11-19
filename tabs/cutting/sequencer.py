@@ -397,13 +397,13 @@ class SequencerTab(BaseTab):
             if copy:
                 cmd = [ffmpeg, "-f", "concat", "-safe", "0",
                        "-i", list_file, "-c", "copy",
-                       "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-movflags", "+faststart", out, "-y"]
             else:
                 cmd = [ffmpeg, "-f", "concat", "-safe", "0",
                        "-i", list_file,
-                       t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                       t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                       "-movflags", t("dynamics.faststart"), out, "-y"]
+                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                       "-c:a", "aac", "-b:a", "192k",
+                       "-movflags", "+faststart", out, "-y"]
 
             progress_cb("Concatenating clips…")
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,

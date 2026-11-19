@@ -142,8 +142,8 @@ class DeshakerTab(BaseTab):
             cmd2 = [ffmpeg, "-i", self.file_path,
                     "-vf", (f"vidstabtransform=smoothing={smooth}:zoom={zoom}"
                             f":crop={crop_mode}:input={tmp_trf}"),
-                    t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(), "-preset", "fast",
-                    t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                    "-c:v", "libx264", "-crf", self.crf_var.get(), "-preset", "fast",
+                    "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
             r2 = subprocess.run(cmd2, capture_output=True, text=True,
                                 creationflags=CREATE_NO_WINDOW)
             try: os.remove(tmp_trf)

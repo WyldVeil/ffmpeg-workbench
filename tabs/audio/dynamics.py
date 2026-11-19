@@ -335,7 +335,7 @@ class AudioDynamicsTab(BaseTab):
         filt = self._build_filter()
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.file_path, "-t", "10",
-               "-af", filt, t("dynamics.c_a"), "libmp3lame", t("dynamics.b_a"), "192k",
+               "-af", filt, "-c:a", "libmp3lame", "-b:a", "192k",
                "-vn", tmp, "-y"]
         self.log(self.console, t("log.dynamics.rendering_10s_preview"))
 
@@ -363,13 +363,13 @@ class AudioDynamicsTab(BaseTab):
 
         if ext in (".mp3",):
             cmd = [ffmpeg, "-i", self.file_path, "-af", filt,
-                   "-vn", t("dynamics.c_a"), "libmp3lame", t("dynamics.b_a"), "320k", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-vn", "-c:a", "libmp3lame", "-b:a", "320k", "-movflags", "+faststart", out, "-y"]
         elif ext in (".wav",):
             cmd = [ffmpeg, "-i", self.file_path, "-af", filt,
-                   "-vn", t("dynamics.c_a"), "pcm_s16le", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-vn", "-c:a", "pcm_s16le", "-movflags", "+faststart", out, "-y"]
         else:
             cmd = [ffmpeg, "-i", self.file_path, "-af", filt,
-                   t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "256k", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, t("log.dynamics.applying_audio_dynamics_chain"))
         self.run_ffmpeg(cmd, self.console,

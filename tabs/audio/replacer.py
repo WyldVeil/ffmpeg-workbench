@@ -132,7 +132,7 @@ class AudioReplacerTab(BaseTab):
         offset = self.offset_var.get()
 
         if mode == t("replacer.mode_strip"):
-            cmd = [ffmpeg, "-i", self.video_path, t("dynamics.c_v"), "copy", "-an", "-movflags", t("dynamics.faststart"), out, "-y"]
+            cmd = [ffmpeg, "-i", self.video_path, "-c:v", "copy", "-an", "-movflags", "+faststart", out, "-y"]
         elif mode == t("replacer.mode_replace") or not self.audio_path:
             if not self.audio_path:
                 messagebox.showwarning(t("replacer.no_audio_title"), t("replacer.no_audio_message"))

@@ -642,7 +642,7 @@ class ScreenRecorderTab(BaseTab):
             inputs = ["-f", "pulse", "-i", src]
             
         # Audio encode flags + Explicit mapping
-        maps = [t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k", "-map", t("screen_recorder.0_v"), "-map", t("screen_recorder.1_a")]
+        maps = ["-c:a", "aac", "-b:a", "192k", "-map", t("screen_recorder.0_v"), "-map", t("screen_recorder.1_a")]
         return inputs, maps
 
     def _start_express(self):

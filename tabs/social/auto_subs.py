@@ -449,8 +449,8 @@ class AutoSubsTab(BaseTab):
         vf = f"subtitles='{safe_srt}':force_style='{style}'"
 
         cmd = [ffmpeg, "-i", src, "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
 
         self._log(f"\nBurning subtitles → {os.path.basename(out)}")
         self.progress.start(10)

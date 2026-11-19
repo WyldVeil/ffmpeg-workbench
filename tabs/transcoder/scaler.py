@@ -157,9 +157,9 @@ class ResolutionScalerTab(BaseTab):
 
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.file_path, "-vf", scale_f,
-               t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
+               "-c:v", "libx264", "-crf", self.crf_var.get(),
                "-preset", self.preset_var.get(),
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Scaling to {w}×{h} with {self.algo_var.get()}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
@@ -314,8 +314,8 @@ class FPSInterpolatorTab(BaseTab):
             vf = f"minterpolate=fps={fps}:mi_mode={mi}"
 
         cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(), "-preset", self.preset_var.get(),
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", self.crf_var.get(), "-preset", self.preset_var.get(),
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Interpolating to {fps} fps using {method}…")
         self.log(self.console, t("log.scaler.minterpolate_modes_can_be_slow_be_patient"))

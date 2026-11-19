@@ -206,9 +206,9 @@ class HardSubberTab(BaseTab):
             vf = f"subtitles='{safe_sub}':force_style='{style}'"
 
         cmd = [ffmpeg, "-i", self.video_path, "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
+               "-c:v", "libx264", "-crf", self.crf_var.get(),
                "-preset", self.preset_var.get(),
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Burning subtitles ({ext}) → {os.path.basename(out)}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),

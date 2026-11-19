@@ -456,7 +456,7 @@ class SlideshowMakerTab(BaseTab):
 
                 cmd = [ffmpeg, "-loop", "1", "-i", img_path,
                        "-vf", vf, "-t", str(dur),
-                       t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
+                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
                        "-pix_fmt", "yuv420p", "-an", clip_path, "-y"]
                 r = subprocess.run(cmd, capture_output=True,
                                    creationflags=CREATE_NO_WINDOW)
@@ -499,7 +499,7 @@ class SlideshowMakerTab(BaseTab):
                         f.write(f"file '{c}'\n")
                 cmd_join = [ffmpeg, "-f", "concat", "-safe", "0",
                             "-i", list_path,
-                            t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
+                            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
                             "-pix_fmt", "yuv420p"]
 
             tmp_vid = os.path.join(tmp_dir, "video_only.mp4")
@@ -533,11 +533,11 @@ class SlideshowMakerTab(BaseTab):
                 cmd_mux = [ffmpeg, "-i", tmp_vid,
                            "-stream_loop", "-1", "-i", self.music_path,
                            "-af", af,
-                           t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                           "-shortest", "-movflags", t("dynamics.faststart"), out, "-y"]
+                           "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                           "-shortest", "-movflags", "+faststart", out, "-y"]
             else:
                 cmd_mux = [ffmpeg, "-i", tmp_vid,
-                           "-c", "copy", "-an", "-movflags", t("dynamics.faststart"), out, "-y"]
+                           "-c", "copy", "-an", "-movflags", "+faststart", out, "-y"]
 
             r_final = subprocess.run(cmd_mux, capture_output=True,
                                      creationflags=CREATE_NO_WINDOW)

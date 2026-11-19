@@ -292,9 +292,9 @@ class FrameExtractorTab(BaseTab):
         out = os.path.join(out_dir, f"frame_{safe_ts}.{ext}")
 
         ffmpeg = get_binary_path("ffmpeg.exe")
-        q_args = [t("frame_extractor.q_v"), self.quality_var.get()] if ext in ("jpg","webp") else []
+        q_args = ["-q:v", self.quality_var.get()] if ext in ("jpg","webp") else []
         cmd = [ffmpeg, "-ss", ts, "-i", self.file_path,
-               t("smart_reframe.frames_v"), "1"] + q_args + [out, "-y"]
+               "-frames:v", "1"] + q_args + [out, "-y"]
 
         self.log(self.console, f"Extracting frame at {ts}s…")
         self.run_ffmpeg(cmd, self.console,
@@ -322,7 +322,7 @@ class FrameExtractorTab(BaseTab):
         cmd += ["-i", self.file_path, "-vf", f"fps={fps}"]
         if maxf and maxf != "0":
             cmd += ["-frames:v", maxf]
-        q_args = [t("frame_extractor.q_v"), self.quality_var.get()] if ext in ("jpg","webp") else []
+        q_args = ["-q:v", self.quality_var.get()] if ext in ("jpg","webp") else []
         cmd += q_args + [out_pat, "-y"]
 
         self.log(self.console, f"Extracting {fps} fps frames…")
@@ -342,7 +342,7 @@ class FrameExtractorTab(BaseTab):
         vf = (f"select='gt(scene,{thresh:.2f})',setpts=N/FRAME_RATE/TB")
         cmd = [ffmpeg, "-i", self.file_path,
                "-vf", vf, "-vsync", "vfr",
-               t("smart_reframe.frames_v"), "999", out_pat, "-y"]
+               "-frames:v", "999", out_pat, "-y"]
 
         self.log(self.console, f"Detecting scenes (threshold={thresh:.2f})…")
         self.run_ffmpeg(cmd, self.console,
@@ -381,9 +381,9 @@ class FrameExtractorTab(BaseTab):
               f"scale={fw}:-1{ts_filter},"
               f"tile={cols}x{rows}:padding={pad}:margin={pad}")
 
-        q_args = [t("frame_extractor.q_v"), self.quality_var.get()] if ext in ("jpg","webp") else []
+        q_args = ["-q:v", self.quality_var.get()] if ext in ("jpg","webp") else []
         cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               t("smart_reframe.frames_v"), "1"] + q_args + [out, "-y"]
+               "-frames:v", "1"] + q_args + [out, "-y"]
 
         self.log(self.console, f"Building {cols}×{rows} contact sheet ({total} frames)…")
         self.run_ffmpeg(cmd, self.console,

@@ -138,7 +138,7 @@ class LoudnessNormTab(BaseTab):
             return
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.file_path, "-af",
-               t("loudness.loudnorm_i_23_tp_1_lra_11_print_format_summary"),
+               "loudnorm=I=-23:TP=-1:LRA=11:print_format=summary",
                "-f", "null", "-"]
         self.log(self.console, t("log.loudness.analysing_loudness"))
         self.btn_scan.config(state="disabled", text=t("loudness.analysing"))
@@ -184,7 +184,7 @@ class LoudnessNormTab(BaseTab):
         if self.mode_var.get() == t("loudness.simple_peak_option"):
             af = f"loudnorm=I={lufs}:TP={tp}:LRA={lra}"
             cmd = [ffmpeg, "-i", self.file_path, "-af", af,
-                   t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "256k", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", out, "-y"]
             self.log(self.console, f"Normalizing (simple) → {lufs} LUFS")
             self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                             btn=self.btn_render, btn_label=t("loudness.normalize_button"))
@@ -232,8 +232,8 @@ class LoudnessNormTab(BaseTab):
 
                 self.after(0, lambda: self.log(self.console, t("log.loudness.pass_2_applying_normalization")))
                 cmd_p2 = [ffmpeg, "-i", self.file_path, "-af", af_p2,
-                          t("dynamics.c_v"), "copy", t("dynamics.c_a"), "aac", t("dynamics.b_a"), "256k",
-                          "-movflags", t("dynamics.faststart"), out, "-y"]
+                          "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+                          "-movflags", "+faststart", out, "-y"]
                 self.after(0, lambda: self.btn_render.config(
                     state="normal", text=t("loudness.normalize_button")))
                 self.after(0, lambda: self.run_ffmpeg(

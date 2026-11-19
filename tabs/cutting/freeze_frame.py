@@ -256,8 +256,8 @@ class FreezeFrameTab(BaseTab):
             # Use trim to split, then tpad to insert freeze
             fps_cmd = [get_binary_path("ffprobe"), "-v", "error",
                        "-select_streams", t("freeze_frame.v_0"),
-                       "-show_entries", t("freeze_frame.stream_r_frame_rate"),
-                       "-of", t("freeze_frame.csv_p_0"), self.file_path]
+                       "-show_entries", "stream=r_frame_rate",
+                       "-of", "csv=p=0", self.file_path]
             try:
                 r = subprocess.run(fps_cmd, capture_output=True, text=True,
                                    creationflags=CREATE_NO_WINDOW, timeout=10)
@@ -289,9 +289,9 @@ class FreezeFrameTab(BaseTab):
             # tpad to repeat the last frame
             cmd = [ffmpeg, "-i", self.file_path,
                    "-vf", f"tpad=stop_mode=clone:stop_duration={fd}",
-                   t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
-                   t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                   "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
+                   "-c:a", "aac", "-b:a", "192k",
+                   "-movflags", "+faststart", out, "-y"]
             self.log(self.console, f"Freeze extend: hold last frame for {fd}s")
 
         elif mode == "only":
@@ -299,9 +299,9 @@ class FreezeFrameTab(BaseTab):
             cmd = [ffmpeg, "-ss", str(ft), "-i", self.file_path,
                    "-vframes", "1", "-vf",
                    f"loop=loop={int(fd * 30)}:size=1:start=0,fps=30",
-                   t("dynamics.c_v"), "libx264", "-crf", crf, "-preset", "fast",
+                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
                    "-t", str(fd), "-an",
-                   "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-movflags", "+faststart", out, "-y"]
             self.log(self.console, f"Freeze only: frame at {_fmt(ft)} for {fd}s")
 
         else:

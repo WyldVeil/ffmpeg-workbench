@@ -254,19 +254,19 @@ class RotateFlipTab(BaseTab):
             # Ultrafast re-encode: near-lossless speed, fully seekable output
             cmd = [ffmpeg, "-i", self.file_path,
                    "-vf", vf,
-                   t("dynamics.c_v"), "libx264", "-crf", "0", "-preset", "ultrafast",
-                   t("dynamics.c_a"), "copy",
-                   "-movflags", t("dynamics.faststart"),
+                   "-c:v", "libx264", "-crf", "0", "-preset", "ultrafast",
+                   "-c:a", "copy",
+                   "-movflags", "+faststart",
                    "-g", "30",
                    out, "-y"]
         else:
             cmd = [ffmpeg, "-i", self.file_path,
                    "-vf", vf,
-                   t("dynamics.c_v"), "libx264",
+                   "-c:v", "libx264",
                    "-crf", self.crf_var.get(),
                    "-preset", self.preset_var.get(),
-                   t("dynamics.c_a"), "copy",
-                   "-movflags", t("dynamics.faststart"),
+                   "-c:a", "copy",
+                   "-movflags", "+faststart",
                    "-g", "30",
                    out, "-y"]
 

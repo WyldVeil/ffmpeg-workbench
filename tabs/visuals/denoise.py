@@ -292,9 +292,9 @@ class DenoiseTab(BaseTab):
             self.log(self.console, t("log.denoise.nlmeans_is_slow_this_will_take_a_while"))
 
         cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
+               "-c:v", "libx264", "-crf", self.crf_var.get(),
                "-preset", self.preset_enc_var.get(),
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
         self.log(self.console, f"Filter: {vf}")
         self.run_ffmpeg(cmd, self.console,
                         on_done=lambda rc: self.show_result(rc, out),

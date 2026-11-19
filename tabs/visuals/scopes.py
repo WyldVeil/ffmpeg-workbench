@@ -242,8 +242,8 @@ class VideoScopesTab(BaseTab):
             out_img = os.path.join(tmp_dir, f"scope_{name[:12].replace(' ','_')}.png")
             cmd = [ffmpeg, "-ss", ts, "-i", self.file_path,
                    "-vf", vf,
-                   t("smart_reframe.frames_v"), "1",
-                   t("frame_extractor.q_v"), "2", out_img, "-y"]
+                   "-frames:v", "1",
+                   "-q:v", "2", out_img, "-y"]
             self.log(self.console, f"Rendering: {name}")
             r = subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
             if r.returncode == 0 and os.path.exists(out_img):
@@ -323,8 +323,8 @@ class VideoScopesTab(BaseTab):
         if layout == "scope_only":
             cmd = [ffmpeg, "-i", self.file_path,
                    "-vf", vf_scope,
-                   t("dynamics.c_v"), "libx264", "-crf", "18", "-preset", "fast",
-                   t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                   "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
         elif layout == "hstack":
             fc = (f"[0:v]split=2[src][scopein];"
                   f"[scopein]{vf_scope}[scope];"

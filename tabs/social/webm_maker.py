@@ -926,11 +926,11 @@ class WebMTab(BaseTab):
                     f"⚠ '{vp9_deadline}' deadline disables first-pass analysis; "
                     f"using '{effective_deadline}' so two-pass works."
                 )
-            vcodec_args = [t("dynamics.c_v"), "libvpx-vp9"]
+            vcodec_args = ["-c:v", "libvpx-vp9"]
             if size_limited:
-                vcodec_args += [t("webm_maker.b_v"), video_br]
+                vcodec_args += ["-b:v", video_br]
             else:
-                vcodec_args += [t("webm_maker.b_v"), "0",
+                vcodec_args += ["-b:v", "0",
                                 "-crf", str(crf_value)]
             vcodec_args += [
                 "-cpu-used", str(vp9_cpu),
@@ -940,11 +940,11 @@ class WebMTab(BaseTab):
                 "-pix_fmt", pixfmt,
             ]
         else:  # VP8
-            vcodec_args = [t("dynamics.c_v"), "libvpx"]
+            vcodec_args = ["-c:v", "libvpx"]
             if size_limited:
-                vcodec_args += [t("webm_maker.b_v"), video_br]
+                vcodec_args += ["-b:v", video_br]
             else:
-                vcodec_args += [t("webm_maker.b_v"), "0",
+                vcodec_args += ["-b:v", "0",
                                 "-crf", str(crf_value)]
             vcodec_args += [
                 "-cpu-used", str(vp8_cpu),
@@ -956,7 +956,7 @@ class WebMTab(BaseTab):
 
         # ── Audio args ──────────────────────────────────────────────────
         if audio_lib:
-            acodec_args = [t("dynamics.c_a"), audio_lib, t("dynamics.b_a"), self.audio_br_var.get()]
+            acodec_args = ["-c:a", audio_lib, "-b:a", self.audio_br_var.get()]
         else:
             acodec_args = ["-an"]
 

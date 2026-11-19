@@ -148,7 +148,7 @@ class ProxyGenTab(BaseTab):
 
                 ffmpeg = get_binary_path("ffmpeg.exe")
                 vf = f"scale=iw*{scale}:ih*{scale}"
-                cmd = [ffmpeg, "-i", src, "-vf", vf, t("dynamics.c_v"), codec] + extra
+                cmd = [ffmpeg, "-i", src, "-vf", vf, "-c:v", codec] + extra
                 if self.audio_var.get():
                     cmd += ["-c:a", "aac", "-b:a", "96k"]
                 else:

@@ -158,12 +158,12 @@ class LUTApplicatorTab(BaseTab):
             # Complex filter
             cmd = [ffmpeg, "-i", self.video_path,
                    "-filter_complex", vf,
-                   t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
-                   "-preset", "fast", t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "libx264", "-crf", self.crf_var.get(),
+                   "-preset", "fast", "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
         else:
             cmd = [ffmpeg, "-i", self.video_path, "-vf", vf,
-                   t("dynamics.c_v"), "libx264", "-crf", self.crf_var.get(),
-                   "-preset", "fast", t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+                   "-c:v", "libx264", "-crf", self.crf_var.get(),
+                   "-preset", "fast", "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
 
         self.log(self.console, f"Applying LUT at {int(intensity*100)}% intensity…")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),

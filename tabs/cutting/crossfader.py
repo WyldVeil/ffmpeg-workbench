@@ -701,7 +701,7 @@ class CrossfaderTab(BaseTab):
             target_acodec = clips[0][1].get("a_codec") or "aac"
             target_encoder = codec_map.get(target_acodec, "aac")
             
-            audio_args = [t("dynamics.c_a"), target_encoder, t("dynamics.b_a"), brate]
+            audio_args = ["-c:a", target_encoder, "-b:a", brate]
 
         vcodec = self._get_video_codec(pix_fmt).split()
 
@@ -771,9 +771,9 @@ class CrossfaderTab(BaseTab):
                     if not do_audio:
                         body_a_args = ["-an"]
                     elif clip_acodec == target_acodec:
-                        body_a_args = [t("dynamics.c_a"), "copy"]
+                        body_a_args = ["-c:a", "copy"]
                     else:
-                        body_a_args = [t("dynamics.c_a"), target_aencoder, t("dynamics.b_a"), brate]
+                        body_a_args = ["-c:a", target_aencoder, "-b:a", brate]
 
                     body_start = T if i > 0 else 0.0
                     body_end   = dur_i - T if i < len(clips) - 1 else dur_i
@@ -831,7 +831,7 @@ class CrossfaderTab(BaseTab):
                             fc      += (f";[0:a][1:a]acrossfade=d={T}:"
                                         f"curve1={audio_curve}:curve2={audio_curve}[aout]")
                             x_map   += ["-map", "[aout]"]
-                            x_audio  = [t("dynamics.c_a"), target_aencoder, t("dynamics.b_a"), brate]
+                            x_audio  = ["-c:a", target_aencoder, "-b:a", brate]
 
                         self._run_cmd_queued(
                             [ffmpeg, "-i", tail_p, "-i", head_p,

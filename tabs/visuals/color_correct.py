@@ -216,8 +216,8 @@ class ColorCorrectorTab(BaseTab):
         ffmpeg = get_binary_path("ffmpeg.exe")
         vf = self._build_vf()
         cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               t("dynamics.c_v"), "libx264", "-crf", "18", "-preset", "fast",
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
         self.log(self.console, t("log.color_correct.rendering_colour_grade"))
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                         btn=self.btn_render, btn_label="🌈  RENDER GRADE")

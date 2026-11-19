@@ -113,7 +113,7 @@ class AutoCropperTab(BaseTab):
             return
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.file_path, "-vf",
-               t("auto_cropper.cropdetect_24_16_0"), t("smart_reframe.frames_v"), "300",
+               "cropdetect=24:16:0", "-frames:v", "300",
                "-f", "null", "-"]
         self.detect_result.config(text=t("auto_cropper.lbl_scanning"))
 
@@ -150,8 +150,8 @@ class AutoCropperTab(BaseTab):
         filt = f"crop={w}:{h}:{x}:{y}"
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.file_path, "-vf", filt,
-               t("dynamics.c_v"), "libx264", "-crf", "18", "-preset", "fast",
-               t("dynamics.c_a"), "copy", "-movflags", t("dynamics.faststart"), out, "-y"]
+               "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
         self.log(self.console, f"Cropping → {filt}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                         btn=self.btn_render, btn_label=t("auto_cropper.btn_crop_export"))

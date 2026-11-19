@@ -208,7 +208,7 @@ class BatchJoinerTab(BaseTab):
         self.log(self.console, f"Joining {len(self.file_paths)} files (stream-copy)…")
         cmd = [ffmpeg, "-f", "concat", "-safe", "0",
                "-i", list_path, "-c", "copy",
-               "-movflags", t("dynamics.faststart"),
+               "-movflags", "+faststart",
                out, "-y"]
 
         def done(rc):

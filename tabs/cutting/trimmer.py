@@ -511,15 +511,15 @@ class TrimmerTab(BaseTab):
             cmd = [ffmpeg, "-i", self.file_path,
                    "-ss", str(ss), "-t", str(dur), "-c", "copy",
                    "-avoid_negative_ts", "make_zero",
-                   "-movflags", t("dynamics.faststart"),
+                   "-movflags", "+faststart",
                    out, "-y"]
             self.log(self.console, f"Stream-copy trim: {fmt_time(ss)} – {fmt_time(end)}  ({fmt_time(dur)})")
         else:
             cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
                    "-t", str(dur),
-                   t("dynamics.c_v"), "libx264", "-crf", self._crf_var.get(), "-preset", "fast",
-                   t("dynamics.c_a"), "aac", t("dynamics.b_a"), "192k",
-                   "-movflags", t("dynamics.faststart"),
+                   "-c:v", "libx264", "-crf", self._crf_var.get(), "-preset", "fast",
+                   "-c:a", "aac", "-b:a", "192k",
+                   "-movflags", "+faststart",
                    out, "-y"]
             self.log(self.console, f"Re-encode trim: {fmt_time(ss)} – {fmt_time(end)}  CRF={self._crf_var.get()}")
 
