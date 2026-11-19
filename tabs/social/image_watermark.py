@@ -1,305 +1,189 @@
 """
-tab_imagewatermark.py  ─  Image / Logo Watermark
-Overlay a PNG, JPG, or GIF image (channel logo, sponsor badge, bug, etc.)
-onto a video with full control over position, size, opacity, and timing.
+tabs/social/image_watermark.py  -  Image Watermark
 
-This is different from the text Watermarker tab - this burns a real image file
-onto the video, which is what most users expect when they say "add a watermark."
+Put a logo (PNG with transparency, JPG, SVG-rendered PNG, or an animated
+GIF/WebP) on a video: any corner or a custom spot, sized as a percentage of
+the video's width, with opacity and an optional time range with fades.
+Animated logos keep looping for the whole video.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import os
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
-
-# Position label → (x_expr, y_expr) using FFmpeg overlay variables
-# W/H = video dimensions, w/h = overlay dimensions
 POSITIONS = {
-    "Top-Left":      ("MARGIN",          "MARGIN"),
-    "Top-Centre":    ("(W-w)/2",         "MARGIN"),
-    "Top-Right":     ("W-w-MARGIN",      "MARGIN"),
-    "Middle-Left":   ("MARGIN",          "(H-h)/2"),
-    "Centre":        ("(W-w)/2",         "(H-h)/2"),
-    "Middle-Right":  ("W-w-MARGIN",      "(H-h)/2"),
-    "Bottom-Left":   ("MARGIN",          "H-h-MARGIN"),
-    "Bottom-Centre": ("(W-w)/2",         "H-h-MARGIN"),
-    "Bottom-Right":  ("W-w-MARGIN",      "H-h-MARGIN"),
-    "Custom":        ("CUSTOM_X",        "CUSTOM_Y"),
+    "tl": ("Top left", "M", "M"), "tc": ("Top centre", "(W-w)/2", "M"), "tr": ("Top right", "W-w-M", "M"),
+    "ml": ("Middle left", "M", "(H-h)/2"), "c": ("Centre", "(W-w)/2", "(H-h)/2"),
+    "mr": ("Middle right", "W-w-M", "(H-h)/2"), "bl": ("Bottom left", "M", "H-h-M"),
+    "bc": ("Bottom centre", "(W-w)/2", "H-h-M"), "br": ("Bottom right", "W-w-M", "H-h-M"),
+    "custom": ("Custom spot (%)", "", ""),
 }
+
+
+def logo_graph(video_w: int, video_h: int, *, pct: float, opacity: float, place: str,
+               margin_pct: float = 3.0, custom=(50.0, 50.0), window=None, fade: float = 0.0,
+               logo_input: str = "[1:v]") -> str:
+    """filter_complex: [0:v] + logo -> [v]."""
+    lw = max(2, int(video_w * pct / 100) // 2 * 2)
+    m = int(min(video_w, video_h) * margin_pct / 100)
+    _label, x, y = POSITIONS.get(place, POSITIONS["br"])
+    if place == "custom":
+        x = f"(W-w)*{custom[0] / 100:.4f}"
+        y = f"(H-h)*{custom[1] / 100:.4f}"
+    x, y = x.replace("M", str(m)), y.replace("M", str(m))
+    logo = f"{logo_input}scale={lw}:-1:flags=lanczos,format=rgba"
+    if opacity < 0.999:
+        logo += f",colorchannelmixer=aa={opacity:.3f}"
+    if window and fade > 0:
+        a, b = window
+        logo += (f",fade=t=in:st={a:.3f}:d={fade:.2f}:alpha=1,"
+                 f"fade=t=out:st={max(a, b - fade):.3f}:d={fade:.2f}:alpha=1")
+    enable = f":enable='between(t,{window[0]:.3f},{window[1]:.3f})'" if window else ""
+    return (f"{logo}[logo];[0:v][logo]overlay=x='{x}':y='{y}':shortest=1:format=auto{enable},"
+            f"format=yuv420p[v]")
 
 
 class ImageWatermarkTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
+        self.src_var = tk.StringVar()
+        self._info = None
+        self._job = None
         self._build_ui()
 
-    # ─── UI ───────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # Header
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🖼  " + t("tab.image_watermark"),
-                 font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner,
-                 text=t("watermark.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.image_watermark"), "Add a logo or badge on top of a video.",
+                         icon="🖼")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.logo_row = FileRow(body, "Logo image:", kind="image", on_change=lambda _p: self._changed())
+        self.logo_row.pack(fill="x", padx=20, pady=2)
+        self.compare = CompareView(body, 400, 225, after_label="With logo")
+        self.compare.pack(pady=4)
 
-        # ── Source video ──────────────────────────────────────────────────────
-        r1 = tk.Frame(self)
-        r1.pack(fill="x", padx=16, pady=8)
-        tk.Label(r1, text=t("common.source_video"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(r1, textvariable=self._src_var, width=58,
-                 relief="flat").pack(side="left", padx=8)
-        tk.Button(r1, text=t("btn.browse"), command=self._browse_src,
-                  cursor="hand2", relief="flat").pack(side="left")
+        opt = tk.LabelFrame(body, text="  Placement  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.place_var = tk.StringVar(value=POSITIONS["br"][0])
+        pb = ttk.Combobox(opt, textvariable=self.place_var, values=[v[0] for v in POSITIONS.values()],
+                          state="readonly", width=20)
+        pb.grid(row=0, column=0, sticky="w")
+        pb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+        self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
+        r = tk.Frame(opt)
+        r.grid(row=0, column=1, sticky="w", padx=10)
+        for label, var in (("X %", self.cx_var), ("Y %", self.cy_var)):
+            tk.Label(r, text=label).pack(side="left", padx=(4, 2))
+            tk.Entry(r, textvariable=var, width=5).pack(side="left")
+            var.trace_add("write", lambda *_a: self._changed())
+        self.size_var = tk.DoubleVar(value=15)
+        tk.Scale(opt, variable=self.size_var, from_=2, to=80, orient="horizontal", length=180,
+                 label="Width (% of video)", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w")
+        self.opacity_var = tk.DoubleVar(value=0.85)
+        tk.Scale(opt, variable=self.opacity_var, from_=0.05, to=1.0, resolution=0.05, orient="horizontal",
+                 length=160, label="Opacity", command=lambda _v: self._changed()).grid(row=1, column=1, sticky="w")
+        self.margin_var = tk.DoubleVar(value=3)
+        tk.Scale(opt, variable=self.margin_var, from_=0, to=15, resolution=0.5, orient="horizontal",
+                 length=140, label="Margin (%)", command=lambda _v: self._changed()).grid(row=1, column=2, sticky="w")
+        tr = tk.Frame(opt)
+        tr.grid(row=2, column=0, columnspan=3, sticky="w", pady=4)
+        self.window_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(tr, text="Only from", variable=self.window_var, command=self._changed).pack(side="left")
+        self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="10")
+        tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=2)
+        tk.Label(tr, text="to").pack(side="left")
+        tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=2)
+        tk.Label(tr, text="  Fade (s):").pack(side="left")
+        self.fade_var = tk.StringVar(value="0.5")
+        tk.Entry(tr, textvariable=self.fade_var, width=5).pack(side="left")
 
-        # ── Image / logo ──────────────────────────────────────────────────────
-        r2 = tk.Frame(self)
-        r2.pack(fill="x", padx=16, pady=4)
-        tk.Label(r2, text=t("watermark.logo_label"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
-        self._img_var = tk.StringVar()
-        tk.Entry(r2, textvariable=self._img_var, width=58,
-                 relief="flat").pack(side="left", padx=8)
-        tk.Button(r2, text=t("btn.browse"), command=self._browse_img,
-                  cursor="hand2", relief="flat").pack(side="left")
-
-        # ── Settings ──────────────────────────────────────────────────────────
-        sf = tk.LabelFrame(self, text=f"  {t('watermark.settings_section')}  ", padx=16, pady=10)
-        sf.pack(fill="x", padx=20, pady=10)
-
-        # Row A: position + margin
-        ra = tk.Frame(sf)
-        ra.pack(fill="x", pady=4)
-        tk.Label(ra, text=t("watermark.position_label"), width=16, anchor="e").pack(side="left")
-        self._pos_var = tk.StringVar(value="Bottom-Right")
-        pos_cb = ttk.Combobox(ra, textvariable=self._pos_var,
-                               values=list(POSITIONS.keys()),
-                               state="readonly", width=18)
-        pos_cb.pack(side="left", padx=8)
-        pos_cb.bind("<<ComboboxSelected>>", self._on_pos_change)
-
-        tk.Label(ra, text=f"   {t('watermark.margin_label')}").pack(side="left")
-        self._margin = tk.StringVar(value="20")
-        tk.Entry(ra, textvariable=self._margin, width=5,
-                 relief="flat").pack(side="left", padx=6)
-
-        # Custom X/Y (shown only when Position = Custom)
-        self._custom_frame = tk.Frame(ra)
-        self._custom_frame.pack(side="left", padx=8)
-        tk.Label(self._custom_frame, text="X:").pack(side="left")
-        self._custom_x = tk.StringVar(value="50")
-        tk.Entry(self._custom_frame, textvariable=self._custom_x,
-                 width=5, relief="flat").pack(side="left", padx=4)
-        tk.Label(self._custom_frame, text="Y:").pack(side="left")
-        self._custom_y = tk.StringVar(value="50")
-        tk.Entry(self._custom_frame, textvariable=self._custom_y,
-                 width=5, relief="flat").pack(side="left", padx=4)
-        self._custom_frame.pack_forget()   # hidden by default
-
-        # Row B: size + opacity
-        rb = tk.Frame(sf)
-        rb.pack(fill="x", pady=4)
-        tk.Label(rb, text=t("watermark.size_label"), width=16, anchor="e").pack(side="left")
-        self._size_pct = tk.IntVar(value=15)
-        size_scale = tk.Scale(rb, variable=self._size_pct, from_=2, to=80,
-                               orient="horizontal", length=180)
-        size_scale.pack(side="left", padx=8)
-        self._size_lbl = tk.Label(rb, text="15%", width=5, fg=CLR["accent"])
-        self._size_lbl.pack(side="left")
-        self._size_pct.trace_add("write", lambda *_: self._size_lbl.config(
-            text=t("ducker.item").format(self._size_pct.get())))
-
-        tk.Label(rb, text=f"   {t('watermark.opacity_label')}", padx=8).pack(side="left")
-        self._opacity = tk.DoubleVar(value=1.0)
-        tk.Scale(rb, variable=self._opacity, from_=0.05, to=1.0,
-                 resolution=0.05, orient="horizontal",
-                 length=160).pack(side="left", padx=4)
-        self._opacity_lbl = tk.Label(rb, text="100%", width=5, fg=CLR["accent"])
-        self._opacity_lbl.pack(side="left")
-        self._opacity.trace_add("write", lambda *_: self._opacity_lbl.config(
-            text=t("ducker.item").format(int(self._opacity.get() * 100))))
-
-        # Row C: time range (optional)
-        rc = tk.Frame(sf)
-        rc.pack(fill="x", pady=4)
-        self._use_timerange = tk.BooleanVar(value=False)
-        tk.Checkbutton(rc, text=t("watermark.time_range_checkbox"),
-                       variable=self._use_timerange,
-                       command=self._on_timerange_toggle).pack(side="left")
-        self._time_start = tk.StringVar(value="0")
-        self._t_start_entry = tk.Entry(rc, textvariable=self._time_start,
-                                        width=6, relief="flat", state="disabled")
-        self._t_start_entry.pack(side="left", padx=4)
-        tk.Label(rc, text=t("image_watermark.s_and")).pack(side="left")
-        self._time_end = tk.StringVar(value="10")
-        self._t_end_entry = tk.Entry(rc, textvariable=self._time_end,
-                                      width=6, relief="flat", state="disabled")
-        self._t_end_entry.pack(side="left", padx=4)
-        tk.Label(rc, text="s").pack(side="left")
-        tk.Label(rc, text=f"  {t('watermark.time_range_hint')}",
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=8)
-
-        # ── Output ────────────────────────────────────────────────────────────
-        ro = tk.Frame(self)
-        ro.pack(fill="x", padx=16, pady=6)
-        tk.Label(ro, text=t("common.output_file"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(ro, textvariable=self._out_var, width=58,
-                 relief="flat").pack(side="left", padx=8)
-        tk.Button(ro, text=t("common.save_as"), command=self._browse_out,
-                  cursor="hand2", relief="flat").pack(side="left")
-
-        # ── Render button ──────────────────────────────────────────────────────
-        self._btn_render = tk.Button(
-            self, text=t("watermark.burn_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["orange"], fg="white",
-            height=2, width=28,
-            command=self._render)
-        self._btn_render.pack(pady=10)
-
-        # ── Console ───────────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=16, pady=4)
-        self.console, csb = self.make_console(cf, height=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "logo"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🖼  ADD LOGO", font=(UI_FONT, 12, "bold"), bg="#E91E63",
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ─── Callbacks ────────────────────────────────────────────────────────────
-    def _on_pos_change(self, _event=None):
-        if self._pos_var.get() == "Custom":
-            self._custom_frame.pack(side="left", padx=8)
-        else:
-            self._custom_frame.pack_forget()
+    def graph(self, info, logo_input="[1:v]"):
+        w, h = common.even_size(info)
+        place = next((k for k, v in POSITIONS.items() if v[0] == self.place_var.get()), "br")
+        window = None
+        if self.window_var.get():
+            a = ff.parse_time(self.from_var.get() or "0")
+            b = ff.parse_time(self.to_var.get())
+            if b <= a:
+                raise ValueError("'to' must be after 'from'.")
+            window = (a, b)
+        return logo_graph(w, h, pct=float(self.size_var.get()), opacity=float(self.opacity_var.get()),
+                          place=place, margin_pct=float(self.margin_var.get()),
+                          custom=(common.number(self.cx_var.get() or "50", "X %", 0, 100),
+                                  common.number(self.cy_var.get() or "50", "Y %", 0, 100)),
+                          window=window, fade=common.number(self.fade_var.get() or "0", "Fade", 0, 10),
+                          logo_input=logo_input)
 
-    def _on_timerange_toggle(self):
-        state = "normal" if self._use_timerange.get() else "disabled"
-        self._t_start_entry.config(state=state)
-        self._t_end_entry.config(state=state)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        self.compare.load(path)
+        self._changed()
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "logo"))
 
-    def _browse_src(self):
-        p = dialogs.askopenfilename(
-            title="Select source video",
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self._src_var.set(p)
-            if not self._out_var.get():
-                self._out_var.set(os.path.splitext(p)[0] + "_watermarked.mp4")
+    def _changed(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(250, self._refresh)
 
-    def _browse_img(self):
-        p = dialogs.askopenfilename(
-            title="Select logo / watermark image",
-            filetypes=[("Image", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
-                        ("All", t("ducker.item_2"))])
-        if p:
-            self._img_var.set(p)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
-        if p:
-            self._out_var.set(p)
-
-    # ─── Render ───────────────────────────────────────────────────────────────
-    def _render(self):
-        src = self._src_var.get().strip()
-        img = self._img_var.get().strip()
-        out = self._out_var.get().strip()
-
-        if not src or not os.path.exists(src):
-            messagebox.showwarning(t("common.warning"), t("watermark.no_source_message"))
+    def _refresh(self):
+        self._job = None
+        logo = self.logo_row.path
+        if self._info is None or not logo:
             return
-        if not img or not os.path.exists(img):
-            messagebox.showwarning(t("common.warning"), t("watermark.no_image_message"))
-            return
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out:
-            return
-        self._out_var.set(out)
-
         try:
-            margin  = int(self._margin.get())
-            size_pct = int(self._size_pct.get())
-            opacity  = float(self._opacity.get())
+            g = self.graph(self._info, logo_input=f"movie=filename={fl.filter_path(logo)},")
         except ValueError:
-            messagebox.showwarning(t("common.warning"), "Margin must be a whole number.")
             return
+        self.compare.set_filter(g.replace("[0:v]", "[in]").replace("[v]", ""), keep_time=True)
 
-        # Resolve position expression - substitute MARGIN and CUSTOM values
-        pos_key = self._pos_var.get()
-        x_tmpl, y_tmpl = POSITIONS[pos_key]
-        x_expr = x_tmpl.replace("MARGIN", str(margin)) \
-                        .replace("CUSTOM_X", self._custom_x.get())
-        y_expr = y_tmpl.replace("MARGIN", str(margin)) \
-                        .replace("CUSTOM_Y", self._custom_y.get())
-
-        # Logo width = size_pct% of the video width (iw refers to INPUT video)
-        # scale=W*PCT:-1 scales width proportionally, height is auto
-        logo_w = "iw*{}/100".format(size_pct)
-
-        # Build filter chain for the logo stream
-        # 1. Scale to desired width
-        # 2. Convert to RGBA so opacity works even on opaque JPGs
-        # 3. Apply opacity via colorchannelmixer (multiplies alpha channel)
-        logo_filter = (
-            "[1:v]scale={w}:-1,"
-            "format=rgba,"
-            "colorchannelmixer=aa={op:.2f}"
-            "[logo]"
-        ).format(w=logo_w, op=opacity)
-
-        # Build overlay expression with optional time range
-        if self._use_timerange.get():
-            try:
-                t0 = float(self._time_start.get())
-                t1 = float(self._time_end.get())
-            except ValueError:
-                messagebox.showwarning(t("common.warning"),
-                                       "Start/End times must be numbers.")
-                return
-            enable = ":enable='between(t,{},{})'"  .format(t0, t1)
+    def _render(self):
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
+            return
+        logo = self.logo_row.path
+        linfo = common.check_source(self, logo, what="Logo image")
+        if linfo is None:
+            return
+        try:
+            graph = self.graph(info)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "logo", inputs=[logo])
+        if not out:
+            return
+        animated = logo.lower().endswith((".gif", ".webp", ".apng")) and (linfo.video.nb_frames or 0) != 1
+        if animated:
+            logo_in = (["-ignore_loop", "0", "-i", logo] if logo.lower().endswith(".gif")
+                       else ["-stream_loop", "-1", "-i", logo])
         else:
-            enable = ""
-
-        overlay_filter = "[0:v][logo]overlay={}:{}{}".format(
-            x_expr, y_expr, enable)
-
-        fc = "{};{}".format(logo_filter, overlay_filter)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [
-            ffmpeg, "-y",
-            "-i", src,
-            "-i", img,
-            "-filter_complex", fc,
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-            "-c:a", "copy",
-            "-movflags", "+faststart",
-            out,
-        ]
-
-        self.log(self.console,
-                 "▶ Burning {} onto video at {} ({}%, opacity {:.0%})".format(
-                     os.path.basename(img), pos_key, size_pct, opacity))
-        self.run_ffmpeg(
-            cmd, self.console,
-            on_done=lambda rc: self.show_result(rc, out),
-            btn=self._btn_render,
-            btn_label=t("watermark.burn_button"),
-        )
+            logo_in = ["-loop", "1", "-i", logo]
+        common.render(self, src=src, info=info, out=out, graph=graph, extra_inputs=logo_in,
+                      encoder=self.encoder, console=self.console, btn=self.btn_render,
+                      btn_label="🖼  ADD LOGO", name="Image Watermark", inputs=[logo])

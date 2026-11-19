@@ -1,177 +1,176 @@
 """
-tab_gifmaker.py  ─  Pro GIF Maker
-Two-pass FFmpeg GIF generation with palette optimisation.
-Produces the smallest, highest-quality GIF possible.
+tabs/social/gif_maker.py  -  Pro GIF Maker
+
+High-quality GIFs (or animated WebP) from any clip: a palette made for the
+clip itself (palettegen/paletteuse in one pass), proper dithering choices,
+frame rate, width, loop count and an optional size target - the GIF is
+re-made smaller automatically until it fits.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
+from __future__ import annotations
+
 import os
-import tempfile
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import FileRow, FramePreview, scroll_body
+
+DITHERS = {"sierra2_4a": "Sierra (smooth, recommended)", "floyd_steinberg": "Floyd-Steinberg (detailed)",
+           "bayer2": "Bayer pattern - fine", "bayer4": "Bayer pattern - coarse (smaller files)",
+           "none": "None (posterised, smallest)"}
+
+
+def gif_graph(fps: float, width: int, colours: int, dither: str) -> str:
+    """One-pass palette graph from [0:v] to [v]."""
+    if dither.startswith("bayer"):
+        use = f"paletteuse=dither=bayer:bayer_scale={dither[-1]}:diff_mode=rectangle"
+    else:
+        use = f"paletteuse=dither={dither}:diff_mode=rectangle"
+    return (f"[0:v]fps={fps:g},scale={width}:-2:flags=lanczos,split[a][b];"
+            f"[a]palettegen=max_colors={colours}:stats_mode=diff[p];[b][p]{use}[v]")
 
 
 class GIFMakerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
+        self.src_var = tk.StringVar()
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🎞  " + t("tab.pro_gif_maker"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("gif_maker.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.pro_gif_maker"), t("gif_maker.subtitle"), icon="🎞")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        pv = tk.Frame(body)
+        pv.pack(pady=4)
+        self.preview = FramePreview(pv, 400, 225)
+        self.preview.pack()
+        self.pos_var = tk.DoubleVar(value=0)
+        bar = tk.Frame(pv)
+        bar.pack(fill="x")
+        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var,
+                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider.pack(side="left", fill="x", expand=True)
+        tk.Button(bar, text="Start here", relief="flat",
+                  command=lambda: self.start_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=10)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=55, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
-        self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
-        self.dur_lbl.pack(side="left", padx=8)
+        opt = tk.LabelFrame(body, text="  GIF  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
 
-        # Options
-        opts = tk.LabelFrame(self, text=f"  {t('gif_maker.gif_options_section')}  ", padx=15, pady=10)
-        opts.pack(fill="x", padx=20, pady=6)
+        def row(r, label, *widgets):
+            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
+            for i, w in enumerate(widgets):
+                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=2)
 
-        r0 = tk.Frame(opts); r0.pack(fill="x", pady=3)
-        tk.Label(r0, text=t("common.start_s")).pack(side="left")
-        self.start_var = tk.StringVar(value="0")
-        tk.Entry(r0, textvariable=self.start_var, width=7, relief="flat").pack(side="left", padx=4)
-        tk.Label(r0, text=t("gif_maker.duration_label")).pack(side="left", padx=(15, 0))
-        self.dur_var = tk.StringVar(value="5")
-        tk.Entry(r0, textvariable=self.dur_var, width=7, relief="flat").pack(side="left", padx=4)
-        tk.Label(r0, text=t("gif_maker.fps_label")).pack(side="left", padx=(15, 0))
-        self.fps_var = tk.StringVar(value="15")
-        ttk.Combobox(r0, textvariable=self.fps_var, values=["8", "10", "12", "15", "20", "24"],
-                     state="readonly", width=5).pack(side="left", padx=4)
+        self.start_var, self.dur_var = tk.StringVar(value="0"), tk.StringVar(value="4")
+        row(0, "Start:", tk.Entry(opt, textvariable=self.start_var, width=11), tk.Label(opt, text="Length (s):"),
+            tk.Entry(opt, textvariable=self.dur_var, width=6))
+        self.fps_var, self.width_var = tk.StringVar(value="15"), tk.StringVar(value="480")
+        row(1, "Frame rate:", ttk.Combobox(opt, textvariable=self.fps_var, values=["8", "10", "12", "15", "20", "24", "30"],
+                                           width=5), tk.Label(opt, text="Width (px):"),
+            ttk.Combobox(opt, textvariable=self.width_var, values=["240", "320", "400", "480", "640", "800"], width=6))
+        self.colours_var = tk.StringVar(value="256")
+        self.dither_var = tk.StringVar(value=DITHERS["sierra2_4a"])
+        row(2, "Colours:", ttk.Combobox(opt, textvariable=self.colours_var, values=["32", "64", "128", "256"],
+                                        state="readonly", width=5), tk.Label(opt, text="Dither:"),
+            ttk.Combobox(opt, textvariable=self.dither_var, values=list(DITHERS.values()), state="readonly",
+                         width=34))
+        self.loop_var = tk.StringVar(value="forever")
+        self.limit_var = tk.StringVar(value="")
+        row(3, "Loop:", ttk.Combobox(opt, textvariable=self.loop_var, values=["forever", "once", "twice", "3 times"],
+                                     state="readonly", width=8), tk.Label(opt, text="Max size (MB, optional):"),
+            tk.Entry(opt, textvariable=self.limit_var, width=6))
+        self.format_var = tk.StringVar(value="GIF")
+        row(4, "Format:", ttk.Combobox(opt, textvariable=self.format_var, values=["GIF", "Animated WebP"],
+                                       state="readonly", width=16))
 
-        r1 = tk.Frame(opts); r1.pack(fill="x", pady=3)
-        tk.Label(r1, text=t("gif_maker.width_label")).pack(side="left")
-        self.width_var = tk.StringVar(value="640")
-        tk.Entry(r1, textvariable=self.width_var, width=6, relief="flat").pack(side="left", padx=4)
-        tk.Label(r1, text=t("gif_maker.palette_size_label")).pack(side="left", padx=(15, 0))
-        self.palsize_var = tk.StringVar(value="256")
-        ttk.Combobox(r1, textvariable=self.palsize_var, values=["64", "128", "256"],
-                     state="readonly", width=5).pack(side="left", padx=4)
-        tk.Label(r1, text=t("gif_maker.dither_label")).pack(side="left", padx=(15, 0))
-        self.dither_var = tk.StringVar(value="sierra2_4a")
-        ttk.Combobox(r1, textvariable=self.dither_var,
-                     values=["none", t("gif_maker.gif_maker_bayer_bayer_scale_1"), t("gif_maker.gif_maker_bayer_bayer_scale_2"),
-                             "floyd_steinberg", "sierra2", "sierra2_4a"],
-                     state="readonly", width=18).pack(side="left", padx=4)
-
-        r2 = tk.Frame(opts); r2.pack(fill="x", pady=3)
-        self.loop_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r2, text=t("gif_maker.loop_checkbox"), variable=self.loop_var).pack(side="left")
-        tk.Label(r2, text=f"  {t('gif_maker.crop_label')}").pack(side="left", padx=10)
-        self.crop_var = tk.StringVar(value="")
-        tk.Entry(r2, textvariable=self.crop_var, width=18, relief="flat").pack(side="left", padx=4)
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-        self.size_lbl = tk.Label(of, text="", fg=CLR["fgdim"])
-        self.size_lbl.pack(side="left", padx=8)
-
-        # Render
-        self.btn_render = tk.Button(
-            self, text=t("gif_maker.create_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["pink"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=7)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="image", ext=".gif",
+                               suggest=self._suggest)
+        self.out_row.pack(fill="x")
+        self.size_lbl = tk.Label(out_lf, text="", fg=CLR["accent"])
+        self.size_lbl.pack(anchor="w")
+        self.btn_render = tk.Button(body, text=t("gif_maker.create_button"), font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            dur = get_video_duration(p)
-            m, s = divmod(int(dur), 60)
-            self.dur_lbl.config(text=f"{m}m {s}s")
+    def _suggest(self):
+        src = self.src_row.path
+        ext = ".webp" if self.format_var.get().startswith("Animated") else ".gif"
+        return self.suggest_output(src, "anim", ext) if src else ""
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".gif",
-                                         filetypes=[("GIF", "*.gif")])
-        if p:
-            self.out_var.set(p)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        dur = self._info.duration if self._info else 0.0
+        self.slider.configure(to=max(dur, 0.01))
+        self.preview.load(path, dur, 0.0)
+        if not self.out_row.path:
+            self.out_row.set(self._suggest())
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".gif",
-                                               filetypes=[("GIF", "*.gif")])
+        try:
+            start = ff.parse_time(self.start_var.get() or "0")
+            dur = common.number(self.dur_var.get(), "Length", 0.1, 600)
+            fps = common.number(self.fps_var.get(), "Frame rate", 1, 60)
+            width = int(common.number(self.width_var.get(), "Width", 16, 4096)) // 2 * 2
+            limit = common.number(self.limit_var.get(), "Max size", 0.05, 500) if self.limit_var.get().strip() else 0
+            if start >= info.duration:
+                raise ValueError("The start time is past the end of the clip.")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        dur = min(dur, info.duration - start)
+        webp = self.format_var.get().startswith("Animated")
+        out = self.out_row.path or self._suggest()
+        want = ".webp" if webp else ".gif"
+        if not out.lower().endswith(want):
+            out = os.path.splitext(out)[0] + want
+        out = self.confirm_output(out, [src], default_ext=want)
         if not out:
             return
-        self.out_var.set(out)
+        self.out_row.set(out)
+        dither = next((k for k, v in DITHERS.items() if v == self.dither_var.get()), "sierra2_4a")
+        colours = int(self.colours_var.get())
+        loops = {"forever": 0, "once": -1, "twice": 1, "3 times": 2}[self.loop_var.get()]
+        cap = int(limit * 1024 * 1024) if limit else 0
 
-        ffmpeg  = get_binary_path("ffmpeg.exe")
-        ss      = self.start_var.get()
-        dur     = self.dur_var.get()
-        fps     = self.fps_var.get()
-        width   = self.width_var.get()
-        palsize = self.palsize_var.get()
-        dither  = self.dither_var.get()
-        loop    = 0 if self.loop_var.get() else -1
-        crop    = self.crop_var.get().strip()
+        def work(_p, _c, ctx):
+            final = ctx.output()
+            w_now, fps_now = width, fps
+            for attempt in range(6):
+                inp = [ff.ffmpeg_path(), "-y", "-ss", ff.ts(start), "-t", ff.ts(dur), "-i", src]
+                if webp:
+                    cmd = inp + ["-vf", f"fps={fps_now:g},scale={w_now}:-2:flags=lanczos", "-an", "-c:v", "libwebp",
+                                 "-lossless", "0", "-quality", "75", "-loop", str(max(loops, 0)), "-f", "webp", final]
+                else:
+                    cmd = inp + ["-filter_complex", gif_graph(fps_now, w_now, colours, dither), "-map", "[v]",
+                                 "-an", "-loop", str(loops), "-f", "gif", final]
+                ctx.span(attempt / 6, (attempt + 1) / 6 if cap else 1.0).run(cmd, duration=dur)
+                size = os.path.getsize(final)
+                ctx.log(f"{w_now}px @ {fps_now:g} fps → {size / 1024 / 1024:.2f} MB")
+                if not cap or size <= cap:
+                    return 0
+                shrink = (cap / size) ** 0.5 * 0.95
+                w_now = max(64, int(w_now * shrink) // 2 * 2)
+                if fps_now > 10:
+                    fps_now = max(10, round(fps_now * 0.85))
+            raise RuntimeError("Could not reach the size limit - shorten the clip or lower the limit.")
 
-        # Build scale/crop filter chain
-        vf_parts = []
-        if crop:
-            vf_parts.append(f"crop={crop}")
-        vf_parts.append(f"fps={fps},scale={width}:-1:flags=lanczos")
-        vf = ",".join(vf_parts)
-
-        tmp_pal = tempfile.mktemp(suffix=".png")
-
-        def _work():
-            # Pass 1: generate palette
-            cmd1 = [ffmpeg, "-ss", ss, "-t", dur, "-i", self.file_path,
-                    "-vf", f"{vf},palettegen=max_colors={palsize}:stats_mode=diff",
-                    "-y", tmp_pal]
-            self.log(self.console, t("log.gif_maker.pass_1_generating_palette"))
-            r1 = subprocess.run(cmd1, capture_output=True, creationflags=CREATE_NO_WINDOW)
-            if r1.returncode != 0:
-                self.log(self.console, t("log.gif_maker.palette_generation_failed"))
-                return
-
-            # Pass 2: render GIF using palette
-            cmd2 = [ffmpeg, "-ss", ss, "-t", dur, "-i", self.file_path,
-                    "-i", tmp_pal,
-                    "-filter_complex", f"{vf}[x];[x][1:v]paletteuse=dither={dither}",
-                    "-loop", str(loop), "-y", out]
-            self.log(self.console, t("log.gif_maker.pass_2_rendering_gif"))
-            r2 = subprocess.run(cmd2, capture_output=True, creationflags=CREATE_NO_WINDOW)
-
-            try: os.remove(tmp_pal)
-            except Exception: pass
-
-            if r2.returncode == 0 and os.path.exists(out):
-                size_kb = os.path.getsize(out) / 1024
-                self.after(0, lambda: self.size_lbl.config(
-                    text=f"✅ {size_kb:.0f} KB", fg=CLR["green"]))
-            self.after(0, lambda: self.show_result(r2.returncode, out))
-
-        self.run_in_thread(_work)
+        common.queue_job(self, name="GIF", out=out, work=work, btn=self.btn_render,
+                         btn_label=t("gif_maker.create_button"), console=self.console, duration=dur,
+                         inputs=[src])

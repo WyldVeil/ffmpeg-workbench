@@ -7,19 +7,15 @@ Quality presets map to cpu-used + deadline settings for VP8/VP9.
 Resolution sliders lock to original aspect ratio if desired.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import threading
+from tkinter import messagebox, ttk
 import os
-import re
 import math
-import json
-import tempfile
+from dataclasses import dataclass
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs.widgets import FileRow, scroll_body
 
 
 # ─── Quality preset definitions ──────────────────────────────────────────────
@@ -109,60 +105,212 @@ def _effective_vp9_deadline(deadline: str, two_pass: bool) -> str:
     return deadline
 
 
+
+# ─── Simple mode: auto-compute engine (spec 2026-05-10) ──────────────────────
+@dataclass(frozen=True)
+class SimpleEncodeSettings:
+    audio_bitrate_kbps: int      # 0 == silent profile (drives -an)
+    force_mono: bool             # adds -ac 1 when True; only meaningful if audio_bitrate_kbps > 0
+    dynaudnorm: bool             # adds -af dynaudnorm; tied to force_mono
+    fps_cap: float
+    target_max_dim: int          # cap for the larger axis (W if landscape, H if portrait)
+    video_bitrate_kbps: int
+
+
+_PROFILE_SIZE_BYTES = {"6mb_audio": 6 * 1024 * 1024,
+                       "4mb_audio": 4 * 1024 * 1024,
+                       "4mb_silent": 4 * 1024 * 1024}
+_PROFILE_DURATION_CAP_S = {"6mb_audio": 399.92,
+                           "4mb_audio": 300.0,
+                           "4mb_silent": 120.0}
+_PROFILE_HAS_AUDIO = {"6mb_audio": True,
+                      "4mb_audio": True,
+                      "4mb_silent": False}
+_PROFILE_LABELS = {"6mb_audio": "6 MB · audio · up to 6m 40s",
+                   "4mb_audio": "4 MB · audio · up to 5m 00s",
+                   "4mb_silent": "4 MB · silent · up to 2m 00s"}
+
+# duration → audio bitrate (kbps)
+_AUDIO_MAP_6MB = {15: 128, 30: 120, 45: 112, 95: 96, 120: 80, 240: 64, 300: 56, 360: 48, 400: 32}
+_AUDIO_MAP_4MB = {10: 96, 20: 64, 40: 56, 60: 48, 120: 32}
+_AUDIO_MAP_MUSIC = {15: 320, 45: 256, 100: 192, 220: 160, 285: 128, 300: 120, 330: 112, 400: 96}
+
+_FPS_MAP = {150.0: 60.0, 200.0: 30.0, 400.0: 24.0}
+_BITRATE_COMP_MAP = {240.0: 0, 300.0: 2, 360.0: 3, 380.0: 4, 400.0: 6}
+_RESOLUTION_TABLE = (480, 576, 640, 736, 854, 960, 1024, 1280, 1440, 1600, 1920, 2048)
+
+_VIDEO_BITRATE_FLOOR = 50      # kbps; below this, quality is unwatchable
+_VIDEO_BITRATE_CEIL = 2800     # kbps cap (matches reference)
+_LOG_A = 0.2311
+_LOG_B = 35.47
+
+
+def _lookup_threshold_map(duration_s: float, table: dict):
+    """First value whose key is >= duration (keys ascending), else the last one."""
+    keys = sorted(table)
+    for k in keys:
+        if duration_s <= k:
+            return table[k]
+    return table[keys[-1]]
+
+
+def _simple_compute_settings(profile: str, duration_s: float, source_w: int, source_h: int,
+                             source_fps: float, music_mode: bool) -> SimpleEncodeSettings:
+    """Pure: everything the Simple encoder needs from a profile and the duration."""
+    duration_s = max(0.1, float(duration_s))
+    # 1. audio bitrate
+    if not _PROFILE_HAS_AUDIO[profile]:
+        audio_kbps = 0
+    else:
+        table = (_AUDIO_MAP_MUSIC if music_mode else
+                 _AUDIO_MAP_6MB if profile == "6mb_audio" else _AUDIO_MAP_4MB)
+        audio_kbps = int(_lookup_threshold_map(duration_s, table))
+    # 2. mixdown
+    force_mono = dynaudnorm = 0 < audio_kbps <= 64
+    # 3. fps cap
+    fps_map = float(_lookup_threshold_map(duration_s, _FPS_MAP))
+    fps_cap = min(fps_map, source_fps) if source_fps and source_fps > 0 else fps_map
+    # 4. video bitrate
+    total_bits = _PROFILE_SIZE_BYTES[profile] * 8
+    audio_bits = audio_kbps * 1000 * duration_s
+    comp = _lookup_threshold_map(duration_s, _BITRATE_COMP_MAP)
+    raw = (total_bits - audio_bits) / duration_s / 1000 - comp
+    video_kbps = max(_VIDEO_BITRATE_FLOOR, min(_VIDEO_BITRATE_CEIL, int(raw)))
+    # 5. target resolution (logarithmic curve, normalised to a 1080 short side)
+    source_w, source_h = max(2, int(source_w or 1920)), max(2, int(source_h or 1080))
+    short = min(source_w, source_h)
+    norm_w, norm_h = source_w * 1080.0 / short, source_h * 1080.0 / short
+    scale_factor = _LOG_A * math.log(video_kbps / _LOG_B) if video_kbps > _LOG_B else 0.0
+    if scale_factor <= 0:
+        nearest = _RESOLUTION_TABLE[0]
+    else:
+        scaled_px = norm_w * norm_h * scale_factor
+        max_dim_target = max(scaled_px / norm_h, scaled_px / norm_w)
+        nearest = _RESOLUTION_TABLE[0]
+        for r in _RESOLUTION_TABLE:
+            if max_dim_target >= r:
+                nearest = r
+            else:
+                break
+    source_max = max(source_w, source_h)
+    target = source_max if source_max <= nearest else nearest
+    return SimpleEncodeSettings(audio_kbps, force_mono, dynaudnorm, fps_cap, target, video_kbps)
+
+
+def _size_retry_bitrate(video_kbps: int, cap_bytes: int, actual_bytes: int) -> int:
+    """Lower bitrate for another pass 2 when the file came out over the cap."""
+    return max(_VIDEO_BITRATE_FLOOR // 2, int(video_kbps * cap_bytes / max(actual_bytes, 1) * 0.97))
+
+
 class WebMTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-
-        # Source metadata (populated on file load)
-        self._src_w      = 0
-        self._src_h      = 0
-        self._src_dur    = 0.0
-        self._src_fps    = 0.0
-        self._src_pixfmt = ""        # set by _load_metadata
-        self._aspect     = 1.0       # w/h ratio
-        self._lock_updating = False  # prevents slider feedback loops
-
-        self._cancel_flag = threading.Event()
-        self._queue_cancel_fn = None   # set during active queue task
+        # Source metadata (populated when a file is chosen, typed, dropped…)
+        self._src_path = ""
+        self._src_w = 0
+        self._src_h = 0
+        self._src_dur = 0.0
+        self._src_fps = 0.0
+        self._src_pixfmt = ""
+        self._src_has_audio = False
+        self._aspect = 1.0
+        self._lock_updating = False      # prevents slider feedback loops
+        self._task_id = None
         self._build_ui()
 
     # ═════════════════════════════════════════════════════════════════════════
     #  UI
     # ═════════════════════════════════════════════════════════════════════════
     def _build_ui(self):
-        # ── Header ────────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🌐  " + t("tab.webm_maker"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("webm_maker.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.webm_maker"), t("webm_maker.subtitle"), icon="🌐")
+        outer = scroll_body(self)
 
-        # ── Outer scroll canvas (so the whole tab scrolls on small screens) ─
-        outer = tk.Frame(self)
-        outer.pack(fill="both", expand=True)
-
-        # ── Source file ───────────────────────────────────────────────────
         src_lf = tk.LabelFrame(outer, text=t("section.source_file"), padx=14, pady=8)
         src_lf.pack(fill="x", padx=18, pady=(10, 4))
-
-        src_row = tk.Frame(src_lf); src_row.pack(fill="x")
-        tk.Label(src_row, text=t("webm_maker.input"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
-        tk.Entry(src_row, textvariable=self.src_var, width=62, relief="flat").pack(side="left", padx=8)
-        tk.Button(src_row, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat").pack(side="left")
-
+        self.src_row = FileRow(src_lf, t("webm_maker.input"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x")
         self.src_info_lbl = tk.Label(src_lf, text=t("common.no_file_loaded"),
-                                      fg=CLR["fgdim"], font=(MONO_FONT, 9))
+                                     fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self.src_info_lbl.pack(anchor="w", pady=(4, 0))
 
+        self.notebook = ttk.Notebook(outer)
+        self.notebook.pack(fill="x", padx=18, pady=4)
+        simple = tk.Frame(self.notebook)
+        advanced = tk.Frame(self.notebook)
+        self.notebook.add(simple, text="Simple")
+        self.notebook.add(advanced, text="Advanced")
+        self._build_simple_tab(simple)
+        self._build_advanced_tab(advanced)
+        self.notebook.bind("<<NotebookTabChanged>>", lambda _e: self._tab_changed())
+
+        out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=14, pady=8)
+        out_lf.pack(fill="x", padx=18, pady=(2, 6))
+        self.out_var = tk.StringVar()
+        self.out_row = FileRow(out_lf, t("webm_maker.save_as"), self.out_var, save=True,
+                               kind="video", ext=".webm", suggest=self._suggest_out)
+        self.out_row.pack(fill="x")
+
+        render_row = tk.Frame(outer)
+        render_row.pack(pady=8)
+        self.btn_render = tk.Button(render_row, text="▶ ENCODE (Simple)", font=(UI_FONT, 12, "bold"),
+                                    bg="#5C6BC0", fg="white", height=2, width=26,
+                                    command=self._start_render)
+        self.btn_render.pack(side="left", padx=8)
+        self.btn_cancel = tk.Button(render_row, text=t("webm_maker.cancel"), font=(UI_FONT, 10),
+                                    bg=CLR["red"], fg="white", height=2, width=10, state="disabled",
+                                    command=self._cancel)
+        self.btn_cancel.pack(side="left", padx=4)
+        self.status_var = tk.StringVar(value="Ready.")
+        tk.Label(outer, textvariable=self.status_var, fg=CLR["accent"],
+                 font=(UI_FONT, 10, "bold")).pack()
+        self.progress = ttk.Progressbar(outer, mode="determinate", length=600, maximum=100)
+        self.progress.pack(pady=(2, 6))
+        con_f = tk.Frame(outer)
+        con_f.pack(fill="both", expand=True, padx=18, pady=(0, 8))
+        self.console, csb = self.make_console(con_f, height=9)
+        self.console.pack(side="left", fill="both", expand=True)
+        csb.pack(side="right", fill="y")
+        self._on_use_source_res_toggle()
+        self._update_simple_estimate()
+
+    def _build_simple_tab(self, parent):
+        prof = tk.LabelFrame(parent, text="  Profile (size · audio · max duration)  ", padx=14, pady=8)
+        prof.pack(fill="x", padx=8, pady=(8, 4))
+        self.simple_profile_var = tk.StringVar(value="6mb_audio")
+        for key, label in _PROFILE_LABELS.items():
+            tk.Radiobutton(prof, text=label, value=key, variable=self.simple_profile_var,
+                           command=self._update_simple_estimate).pack(anchor="w")
+        self.simple_music_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(parent, text="Prioritize audio quality (music mode)",
+                       variable=self.simple_music_var,
+                       command=self._update_simple_estimate).pack(anchor="w", padx=14)
+        tk.Label(parent, text="     Boosts audio bitrate; video quality drops.", fg=CLR["fgdim"],
+                 font=(UI_FONT, 8)).pack(anchor="w", padx=14)
+        trim = tk.LabelFrame(parent, text="  Trim (optional)  ", padx=14, pady=6)
+        trim.pack(fill="x", padx=8, pady=4)
+        row = tk.Frame(trim)
+        row.pack(fill="x")
+        tk.Label(row, text="Start").pack(side="left")
+        self.simple_start_var = tk.StringVar(value="0")
+        e1 = tk.Entry(row, textvariable=self.simple_start_var, width=10)
+        e1.pack(side="left", padx=4)
+        tk.Label(row, text="s    End").pack(side="left")
+        self.simple_end_var = tk.StringVar(value="0")
+        e2 = tk.Entry(row, textvariable=self.simple_end_var, width=10)
+        e2.pack(side="left", padx=4)
+        tk.Label(row, text="(0 = full) s").pack(side="left")
+        for e in (e1, e2):
+            e.bind("<KeyRelease>", lambda _e: self._update_simple_estimate())
+        self.simple_est_lbl = tk.Label(parent, text="", fg=CLR["accent"], font=(MONO_FONT, 10),
+                                       justify="left")
+        self.simple_est_lbl.pack(anchor="w", padx=14, pady=(4, 8))
+
+    def _build_advanced_tab(self, parent):
         # ── Two-column layout for the main controls ───────────────────────
-        cols = tk.Frame(outer)
-        cols.pack(fill="x", padx=18, pady=4)
+        cols = tk.Frame(parent)
+        cols.pack(fill="x", padx=8, pady=4)
         left  = tk.Frame(cols); left.pack(side="left", fill="both", expand=True, padx=(0, 6))
         right = tk.Frame(cols); right.pack(side="left", fill="both", expand=True, padx=(6, 0))
 
@@ -414,116 +562,94 @@ class WebMTab(BaseTab):
 
         self.vp9_extra_widgets = [ex3]   # hide for VP8
 
-        # ── Output ────────────────────────────────────────────────────────
-        out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=14, pady=8)
-        out_lf.pack(fill="x", padx=18, pady=(2, 6))
-        out_row = tk.Frame(out_lf); out_row.pack(fill="x")
-        tk.Label(out_row, text=t("webm_maker.save_as"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(out_row, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(out_row, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        # ── Render controls ───────────────────────────────────────────────
-        render_row = tk.Frame(outer)
-        render_row.pack(pady=8)
-
-        self.btn_render = tk.Button(
-            render_row, text=t("webm_maker.encode_webm"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#5C6BC0", fg="white",
-            height=2, width=26,
-            command=self._start_render)
-        self.btn_render.pack(side="left", padx=8)
-
-        self.btn_cancel = tk.Button(
-            render_row, text=t("webm_maker.cancel"),
-            font=(UI_FONT, 10), bg=CLR["red"], fg="white",
-            height=2, width=10,
-            state="disabled",
-            command=self._cancel)
-        self.btn_cancel.pack(side="left", padx=4)
-
-        # Progress / status
-        self.status_var = tk.StringVar(value="Ready.")
-        self.status_lbl = tk.Label(outer, textvariable=self.status_var,
-                                    fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
-        self.status_lbl.pack()
-
-        self.progress = ttk.Progressbar(outer, mode="indeterminate", length=600)
-        self.progress.pack(pady=(2, 6))
-
-        # ── Console ───────────────────────────────────────────────────────
-        con_f = tk.Frame(outer)
-        con_f.pack(fill="both", expand=True, padx=18, pady=(0, 8))
-        self.console, csb = self.make_console(con_f, height=9)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
-
-        # Apply the initial locked state (checkbox starts checked)
-        self._on_use_source_res_toggle()
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  File loading
+    #  Source
     # ═════════════════════════════════════════════════════════════════════════
-    def _browse_src(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.src_var.set(p)
-            self.run_in_thread(self._load_metadata, p)
+    def _suggest_out(self):
+        src = self.src_row.path
+        return self.suggest_output(src, "web", ".webm") if src else ""
 
-    def _load_metadata(self, path):
-        """Read width, height, duration, fps via ffprobe."""
-        ffprobe = get_binary_path("ffprobe.exe")
-        if not os.path.exists(ffprobe):
+    def load_file(self, path):
+        self.src_var.set(path)
+        return True
+
+    def _source_changed(self, path):
+        """Re-probe on every change (browse, typing, paste, drag-and-drop, recent files)."""
+        from core import ui
+        ui.run_in_thread(ff.try_probe, path, on_done=lambda info: self._apply_probe(path, info),
+                         name="WebMProbe")
+
+    def _apply_probe(self, path, info):
+        if path != self.src_row.path:
             return
-        cmd = [ffprobe, "-v", "error",
-               "-show_entries",
-               "format=duration:stream=width,height,r_frame_rate,codec_type,pix_fmt",
-               "-of", "json", path]
+        if info is None or not info.has_video:
+            self._src_path, self._src_dur = "", 0.0
+            self.src_info_lbl.config(text="Not a readable video.", fg=CLR["red"])
+            self._update_simple_estimate()
+            return
+        v = info.video
+        w, h = v.display_size
+        self._src_path = path
+        self._src_w, self._src_h = w, h
+        self._src_dur = info.duration
+        self._src_fps = round(v.fps or 0.0, 3)
+        self._src_pixfmt = v.pix_fmt or ""
+        self._src_has_audio = info.has_audio
+        self._aspect = w / h if h else 1.0
+        mins, secs = divmod(int(info.duration), 60)
+        size_mb = os.path.getsize(path) / 1024 / 1024 if os.path.isfile(path) else 0
+        self.src_info_lbl.config(text=f"{w}×{h}  |  {self._src_fps:g} fps  |  {mins}m {secs}s  |  "
+                                      f"{size_mb:.1f} MB", fg=CLR["accent"])
+        self._seed_resolution(w, h)
+        self._refresh_pixfmt_dropdown()
+        self._update_budget_label()
+        self._update_simple_estimate()
+        if not self.out_row.path:
+            self.out_row.set(self._suggest_out())
+
+    def _tab_changed(self):
+        self.btn_render.config(text=f"▶ ENCODE ({self._mode().title()})")
+
+    def _mode(self) -> str:
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True,
-                               creationflags=CREATE_NO_WINDOW)
-            data = json.loads(r.stdout)
-            streams = data.get("streams", [])
-            vid = next((s for s in streams if s.get("codec_type") == "video"), {})
-            fmt  = data.get("format", {})
-
-            w    = int(vid.get("width",  1920))
-            h    = int(vid.get("height", 1080))
-            dur  = float(fmt.get("duration", 0))
-            fps_str = vid.get("r_frame_rate", "30/1")
-            num, den = map(int, fps_str.split("/"))
-            fps  = round(num / den, 3) if den else 30.0
-            pix_fmt = vid.get("pix_fmt", "") or ""
-
-            self._src_w      = w
-            self._src_h      = h
-            self._src_dur    = dur
-            self._src_fps    = fps
-            self._src_pixfmt = pix_fmt
-            self._aspect     = w / h if h else 1.0
-
-            mins, secs = divmod(int(dur), 60)
-            info = (f"{w}×{h}  |  {fps} fps  |  {mins}m {secs}s  "
-                    f"|  {os.path.getsize(path)/1024/1024:.1f} MB")
-
-            self.after(0, lambda: self.src_info_lbl.config(text=info, fg=CLR["accent"]))
-            self.after(0, lambda: self._seed_resolution(w, h))
-            self.after(0, self._refresh_pixfmt_dropdown)
-            self.after(0, self._update_budget_label)
-
-            # Auto-name output
-            base = os.path.splitext(path)[0]
-            self.after(0, lambda: self.out_var.set(base + "_studio.webm"))
-        except Exception as e:
-            self.after(0, lambda: self.src_info_lbl.config(
-                text=f"Could not read metadata: {e}", fg=CLR["red"]))
+            return "simple" if self.notebook.index(self.notebook.select()) == 0 else "advanced"
+        except tk.TclError:
+            return "simple"
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  Resolution logic
+    #  Simple estimate
     # ═════════════════════════════════════════════════════════════════════════
+    def _simple_trim(self):
+        start = ff.parse_time(self.simple_start_var.get() or "0")
+        end_txt = (self.simple_end_var.get() or "0").strip()
+        end = ff.parse_time(end_txt) if end_txt not in ("", "0") else 0.0
+        eff = (end if end > start else self._src_dur) - start
+        return start, end, eff
+
+    def _update_simple_estimate(self):
+        if not hasattr(self, "simple_est_lbl"):
+            return
+        if not self._src_dur:
+            self.simple_est_lbl.config(text="Estimated:  load a source file")
+            return
+        try:
+            _s, _e, eff = self._simple_trim()
+        except ValueError:
+            self.simple_est_lbl.config(text="Estimated:  (check the trim times)")
+            return
+        st = _simple_compute_settings(self.simple_profile_var.get(), max(eff, 0.1), self._src_w,
+                                      self._src_h, self._src_fps, self.simple_music_var.get())
+        portrait = self._src_h > self._src_w
+        if portrait:
+            short = int(st.target_max_dim * self._src_w / self._src_h) // 2 * 2
+            res = f"~{short}×{st.target_max_dim}"
+        else:
+            res = f"~{int(st.target_max_dim * self._src_h / self._src_w) // 2 * 2}p"
+        audio = f" · {st.audio_bitrate_kbps} kbps audio" if st.audio_bitrate_kbps else ""
+        self.simple_est_lbl.config(text=f"Estimated:  ~{st.video_bitrate_kbps} kbps video{audio} · "
+                                        f"{res} · {st.fps_cap:g} fps")
+
     def _seed_resolution(self, w, h):
         self._lock_updating = True
         try:
@@ -752,329 +878,230 @@ class WebMTab(BaseTab):
         preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
         self.crf_var.set(preset[4])   # crf_hint
 
-    # ═════════════════════════════════════════════════════════════════════════
-    #  Browse output
-    # ═════════════════════════════════════════════════════════════════════════
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".webm",
-            filetypes=[("WebM", "*.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.out_var.set(p)
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  Cancel
+    #  Render
     # ═════════════════════════════════════════════════════════════════════════
     def _cancel(self):
-        self._cancel_flag.set()
-        self.status_var.set("Cancelling…")
+        if self._task_id:
+            self.cancel_render(self._task_id)
+            self.status_var.set("Cancelling…")
 
-    # ═════════════════════════════════════════════════════════════════════════
-    #  Main render entry
-    # ═════════════════════════════════════════════════════════════════════════
+    def _ensure_probe(self, src) -> bool:
+        """Make sure metadata belongs to *src* (typed paths can be newer than the probe)."""
+        if self._src_path != src or not self._src_dur:
+            self._apply_probe(src, ff.try_probe(src))
+        return bool(self._src_dur)
+
     def _start_render(self):
-        src = self.src_var.get().strip()
+        src = self.src_row.path
         if not src or not os.path.exists(src):
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+            messagebox.showwarning(t("common.warning"), "Load a source file first.", parent=self)
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".webm",
-                                               filetypes=[("WebM", "*.webm")])
-        if not out:
+        if not self._ensure_probe(src):
+            messagebox.showwarning(t("common.warning"), "Load a source file first.", parent=self)
             return
-        self.out_var.set(out)
-
         try:
-            size_mb = float(self.size_limit_var.get())
-            assert size_mb > 0
-        except Exception:
-            messagebox.showerror(t("common.error"), "Enter a valid positive file-size target.")
+            job = self._simple_job(src) if self._mode() == "simple" else self._advanced_job(src)
+        except ValueError as exc:
+            messagebox.showerror(t("common.error"), str(exc), parent=self)
             return
+        if job is None:
+            return
+        out = self.confirm_output(self.out_row.path or self._suggest_out(), [src], default_ext=".webm")
+        if not out:
+            return
+        self.out_row.set(out)
+        self._run_job(src, out, job)
 
-        self._cancel_flag.clear()
-        self._queue_cancel_fn = None       # set by worker_fn below
-        self.btn_render.config(state="disabled", text=t("app.status.queued_btn"))
-        self.btn_cancel.config(state="normal")
-        self.progress.start(12)
-        self.console.delete("1.0", tk.END)
-        self.status_var.set("Queued…")
+    # ── settings snapshots (Tk thread) ───────────────────────────────────────
 
-        _src, _out, _size_mb = src, out, size_mb
+    def _simple_job(self, src):
+        start, _end, eff = self._simple_trim()
+        profile = self.simple_profile_var.get()
+        label = _PROFILE_LABELS[profile]
+        if start >= self._src_dur:
+            raise ValueError(f"Trim start ({start:g}s) is past the end of the clip ({self._src_dur:.1f}s).")
+        if eff < 2.0:
+            raise ValueError("Clip is too short to encode (< 2s).")
+        cap = _PROFILE_DURATION_CAP_S[profile]
+        if eff > cap:
+            raise ValueError(f"Clip is {ff.format_time(eff, ms=False)} after trim, but the {label} profile "
+                             f"caps at {ff.format_time(cap, ms=False)}. Trim further or pick a smaller "
+                             f"profile.")
+        st = _simple_compute_settings(profile, eff, self._src_w, self._src_h, self._src_fps,
+                                      self.simple_music_var.get())
+        if st.video_bitrate_kbps == _VIDEO_BITRATE_FLOOR:
+            self._log("⚠ Video bitrate floored at 50 kbps; quality will be very poor.")
+        pixfmt, warn = _resolve_pixfmt("source", self._src_pixfmt, "VP9")
+        if warn:
+            self._log(warn)
+        portrait = self._src_h > self._src_w
+        vf = []
+        if st.target_max_dim < max(self._src_w, self._src_h):
+            vf.append(f"scale=-2:{st.target_max_dim}:flags=lanczos" if portrait
+                      else f"scale={st.target_max_dim}:-2:flags=lanczos")
+        if st.fps_cap and (not self._src_fps or st.fps_cap < self._src_fps - 0.01):
+            vf.append(f"fps={st.fps_cap:g}")
+        video = ["-c:v", "libvpx-vp9", "-b:v", "{BITRATE}k", "-cpu-used", "1", "-deadline",
+                 _effective_vp9_deadline("good", True), "-tile-columns", "2", "-row-mt", "1",
+                 "-undershoot-pct", "0", "-overshoot-pct", "0", "-pix_fmt", pixfmt]
+        if vf:
+            video += ["-vf", ",".join(vf)]
+        if st.audio_bitrate_kbps and self._src_has_audio:
+            audio = ["-c:a", "libopus", "-b:a", f"{st.audio_bitrate_kbps}k"]
+            if st.force_mono:
+                audio += ["-ac", "1"]
+            if st.dynaudnorm:
+                audio += ["-af", "dynaudnorm"]
+        else:
+            audio = ["-an"]
+        self._log(f"Simple · {label} · ~{st.video_bitrate_kbps} kbps video · "
+                  f"{st.audio_bitrate_kbps} kbps audio · max {st.target_max_dim}px · {st.fps_cap:g} fps")
+        return {"start": start, "dur": eff, "video": video, "audio": audio, "extra": ["-map_metadata", "-1"],
+                "two_pass": True, "bitrate": st.video_bitrate_kbps,
+                "cap_bytes": _PROFILE_SIZE_BYTES[profile], "format": "webm"}
 
-        def _worker_fn(progress_cb, cancel_fn):
-            # Bridge the queue's cancel signal to the existing _cancel_flag
-            self._queue_cancel_fn = cancel_fn
-            self.after(0, lambda: self.status_var.set("Encoding…"))
-            self.after(0, lambda: self.btn_render.config(text=t("webm_maker.encoding")))
-            self._encode_worker(_src, _out, _size_mb)
-            self._queue_cancel_fn = None
-            return 1 if self._cancel_flag.is_set() else 0
-
-        self.enqueue_render("WebM Encode", output_path=_out, worker_fn=_worker_fn)
-
-    # ═════════════════════════════════════════════════════════════════════════
-    #  Encoding worker (runs in background thread)
-    # ═════════════════════════════════════════════════════════════════════════
-    def _encode_worker(self, src, out, size_mb):
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        codec  = self.codec_var.get()       # "VP9" or "VP8"
+    def _advanced_job(self, src):
+        codec = self.codec_var.get()
         two_pass = self.twopass_var.get()
         size_limited = self.size_limit_enabled_var.get()
-
-        # ── Quality preset ─────────────────────────────────────────────
-        quality_label = self.quality_var.get()
-        preset = next(p for p in QUALITY_PRESETS if p[0] == quality_label)
+        preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
         _, vp9_cpu, vp9_deadline, vp8_cpu, crf_hint = preset
-
-        # ── Determine effective duration ────────────────────────────────
-        t_start = float(self.trim_start_var.get() or 0)
-        t_end   = float(self.trim_end_var.get()   or 0)
-        duration = self._src_dur
-
-        if t_end > t_start:
-            effective_dur = t_end - t_start
-        elif t_end == 0 and t_start > 0:
-            effective_dur = max(1.0, duration - t_start)
-        else:
-            effective_dur = max(1.0, duration)
-
-        # ── Audio bitrate (used for budget math + encoder args) ─────────
-        audio_codec_key = self.audio_codec_var.get()
-        audio_lib       = AUDIO_OPTIONS.get(audio_codec_key)
-        audio_kbps = 0
-        if audio_lib:
+        t_start = ff.parse_time(self.trim_start_var.get() or "0")
+        t_end_txt = (self.trim_end_var.get() or "0").strip()
+        t_end = ff.parse_time(t_end_txt) if t_end_txt not in ("", "0") else 0.0
+        if t_start >= self._src_dur:
+            raise ValueError(f"Trim start ({t_start:g}s) is past the end of the clip.")
+        eff = (t_end if t_end > t_start else self._src_dur) - t_start
+        if eff <= 0.05:
+            raise ValueError("The trimmed clip is empty.")
+        audio_lib = AUDIO_OPTIONS.get(self.audio_codec_var.get())
+        audio_kbps = int(self.audio_br_var.get().replace("k", "") or 128) if audio_lib else 0
+        cap_bytes, bitrate = None, 0
+        if size_limited:
             try:
-                audio_kbps = int(self.audio_br_var.get().replace("k", ""))
-            except Exception:
-                audio_kbps = 128
-
-        # ── Bitrate calculation (size-limited mode only) ───────────────
-        if size_limited:
-            # 96% undershoot margin handles Opus VBR variance without
-            # underbudgeting too aggressively. libvpx-vp9 two-pass ABR is
-            # accurate within ±2% on its own, so we don't need maxrate/bufsize.
-            SAFETY = 0.96
-            total_bits = size_mb * 1024 * 1024 * 8 * SAFETY
-            audio_bits = audio_kbps * 1000 * effective_dur
-            video_bits = max(10_000, total_bits - audio_bits)
-            video_kbps = int(video_bits / effective_dur / 1000)
-            video_kbps = max(50, min(video_kbps, 100_000))
-            video_br   = f"{video_kbps}k"
+                size_mb = float(self.size_limit_var.get())
+                assert size_mb > 0
+            except (ValueError, AssertionError):
+                raise ValueError("Enter a valid positive file-size target.") from None
+            cap_bytes = int(size_mb * 1024 * 1024)
+            budget = cap_bytes * 8 * 0.985 - audio_kbps * 1000 * eff     # ~1.5% container overhead
+            bitrate = max(50, min(int(budget / eff / 1000), 100_000))
         else:
-            video_kbps = 0
-            video_br   = "0"   # libvpx CQ mode requires -b:v 0
-
-        # ── Effective CRF (used in CQ mode only) ───────────────────────
-        crf_value = self.crf_var.get() if not size_limited else crf_hint
-
-        self._log(f"━━━ WebM Maker ━━━")
-        self._log(f"Codec:          {codec}")
-        self._log(f"Mode:           {'Size-limited ABR' if size_limited else 'Constant Quality (CRF)'}")
-        if size_limited:
-            self._log(f"Target size:    {size_mb} MB  (encoder targets {size_mb*0.96:.2f} MB for safety)")
-            self._log(f"Video bitrate:  {video_kbps} kbps")
-        else:
-            self._log(f"CRF:            {crf_value}")
-        self._log(f"Duration:       {effective_dur:.2f}s")
-        self._log(f"Audio:          {audio_codec_key}  {audio_kbps if audio_lib else 0} kbps")
-        self._log(f"Quality preset: {quality_label.strip()}")
-        self._log("")
-
-        # ── Build filter string ─────────────────────────────────────────
-        vf_parts = []
+            try:
+                crf = int(self.crf_var.get())
+            except (ValueError, tk.TclError):
+                raise ValueError("CRF must be a whole number between 0 and 63.") from None
+        vf = []
         if not self.use_source_res_var.get():
-            out_w = self.res_w_var.get()
-            out_h = self.res_h_var.get()
-            if out_w != self._src_w or out_h != self._src_h:
-                vf_parts.append(f"scale={out_w}:{out_h}:flags=lanczos")
-
-        fps_setting = self.fps_var.get().strip()
-        if fps_setting and fps_setting != "0":
-            vf_parts.append(f"fps={fps_setting}")
-
-        vf = ",".join(vf_parts) if vf_parts else None
-
-        # ── Pixel format ───────────────────────────────────────────────
-        # First token is either "Source" or an explicit pix_fmt name like "yuv420p".
-        # _resolve_pixfmt converts "Source" to the detected source pix_fmt and
-        # validates it against the codec's supported set, falling back with a
-        # warning if necessary.
-        raw_choice = self.pixfmt_var.get().split(" ")[0]
-        pixfmt, pixfmt_warning = _resolve_pixfmt(raw_choice, self._src_pixfmt, codec)
-        if pixfmt_warning:
-            self._log(pixfmt_warning)
-
-        # ── Common input args ───────────────────────────────────────────
-        input_args = [ffmpeg]
-        if t_start > 0:
-            input_args += ["-ss", str(t_start)]
-        input_args += ["-i", src]
-        if t_end > t_start:
-            input_args += ["-t", str(effective_dur)]
-
-        # ── Codec-specific args ─────────────────────────────────────────
-        # Two correct rate-control modes for libvpx — never mix them:
-        #   ABR (size-limited): -b:v X      (no -crf, no maxrate, no bufsize —
-        #                                   libvpx-vp9 two-pass ABR is accurate
-        #                                   within ±2% on its own.)
-        #   CQ  (quality-only): -b:v 0 -crf X   (bitrate disabled, quality target)
+            ow, oh = self.res_w_var.get(), self.res_h_var.get()
+            if (ow, oh) != (self._src_w, self._src_h):
+                vf.append(f"scale={ow}:{oh}:flags=lanczos")
+        fps = (self.fps_var.get() or "0").strip()
+        if fps and fps != "0":
+            try:
+                float(fps)
+            except ValueError:
+                raise ValueError("FPS must be a number (0 = keep).") from None
+            vf.append(f"fps={fps}")
+        pixfmt, warn = _resolve_pixfmt(self.pixfmt_var.get().split(" ")[0], self._src_pixfmt, codec)
+        if warn:
+            self._log(warn)
+        rate = ["-b:v", "{BITRATE}k"] if size_limited else ["-b:v", "0", "-crf", str(crf)]
         if codec == "VP9":
-            effective_deadline = _effective_vp9_deadline(vp9_deadline, two_pass)
-            if effective_deadline != vp9_deadline:
-                self._log(
-                    f"⚠ '{vp9_deadline}' deadline disables first-pass analysis; "
-                    f"using '{effective_deadline}' so two-pass works."
-                )
-            vcodec_args = ["-c:v", "libvpx-vp9"]
+            deadline = _effective_vp9_deadline(vp9_deadline, two_pass)
+            video = ["-c:v", "libvpx-vp9", *rate, "-cpu-used", str(vp9_cpu), "-deadline", deadline,
+                     "-tile-columns", self.tile_col_var.get(), "-row-mt", "1" if self.rowmt_var.get() else "0",
+                     "-pix_fmt", pixfmt]
             if size_limited:
-                vcodec_args += ["-b:v", video_br]
-            else:
-                vcodec_args += ["-b:v", "0",
-                                "-crf", str(crf_value)]
-            vcodec_args += [
-                "-cpu-used", str(vp9_cpu),
-                "-deadline", effective_deadline,
-                "-tile-columns", self.tile_col_var.get(),
-                "-row-mt", "1" if self.rowmt_var.get() else "0",
-                "-pix_fmt", pixfmt,
-            ]
-        else:  # VP8
-            vcodec_args = ["-c:v", "libvpx"]
-            if size_limited:
-                vcodec_args += ["-b:v", video_br]
-            else:
-                vcodec_args += ["-b:v", "0",
-                                "-crf", str(crf_value)]
-            vcodec_args += [
-                "-cpu-used", str(vp8_cpu),
-                "-pix_fmt", pixfmt,
-            ]
-
+                video += ["-undershoot-pct", "0", "-overshoot-pct", "0"]
+        else:
+            video = ["-c:v", "libvpx", *rate, "-cpu-used", str(vp8_cpu), "-pix_fmt", pixfmt]
         if vf:
-            vcodec_args += ["-vf", vf]
-
-        # ── Audio args ──────────────────────────────────────────────────
-        if audio_lib:
-            acodec_args = ["-c:a", audio_lib, "-b:a", self.audio_br_var.get()]
-        else:
-            acodec_args = ["-an"]
-
-        # ── Metadata / loop ─────────────────────────────────────────────
-        extra_args = []
-        if self.strip_meta_var.get():
-            extra_args += ["-map_metadata", "-1"]
+            video += ["-vf", ",".join(vf)]
+        audio = (["-c:a", audio_lib, "-b:a", self.audio_br_var.get()] if audio_lib and self._src_has_audio
+                 else ["-an"])
+        extra = (["-map_metadata", "-1"] if self.strip_meta_var.get() else [])
         if self.loop_var.get():
-            extra_args += ["-loop", "0"]
+            extra += ["-loop", "0"]
+        self._log(f"Advanced · {codec} · " + (f"{bitrate} kbps for {size_mb:g} MB" if size_limited
+                                               else f"CRF {crf}") + f" · {eff:.1f}s")
+        return {"start": t_start, "dur": eff, "video": video, "audio": audio, "extra": extra,
+                "two_pass": two_pass, "bitrate": bitrate, "cap_bytes": cap_bytes, "format": "webm"}
 
-        # ── Two-pass or single-pass ─────────────────────────────────────
-        if two_pass:
-            pass_log = tempfile.mktemp()   # ffmpeg appends -0.log etc.
+    # ── the queued job ───────────────────────────────────────────────────────
 
-            # Pass 1
-            self._status("Pass 1 of 2: Analysing…")
-            self._log(t("log.webm_maker.pass_1"))
-            pass1_cmd = (input_args
-                         + vcodec_args
-                         + ["-pass", "1", "-passlogfile", pass_log]
-                         + ["-an", "-f", "webm", os.devnull, "-y"])
-            ok = self._run_cmd(pass1_cmd)
-            if not ok or self._cancel_flag.is_set():
-                self._finish(False, out, pass_log)
-                return
+    def _run_job(self, src, out, job):
+        def fill(args, bitrate):
+            return [a.replace("{BITRATE}", str(bitrate)) for a in args]
 
-            # Pass 2
-            self._status("Pass 2 of 2: Encoding…")
-            self._log(t("log.webm_maker.pass_2"))
-            pass2_cmd = (input_args
-                         + vcodec_args
-                         + ["-pass", "2", "-passlogfile", pass_log]
-                         + acodec_args + extra_args
-                         + ["-movflags", "+faststart", out, "-y"])
-            ok = self._run_cmd(pass2_cmd)
-            self._finish(ok, out, pass_log)
-        else:
-            # Single pass
-            self._status("Encoding (single-pass)…")
-            cmd = input_args + vcodec_args + acodec_args + extra_args + ["-movflags", "+faststart", out, "-y"]
-            ok  = self._run_cmd(cmd)
-            self._finish(ok, out)
-
-    # ─── Helpers ─────────────────────────────────────────────────────────────
-    def _run_cmd(self, cmd) -> bool:
-        """Run a command, stream to console. Returns True on success."""
-        self.log_debug(f"CMD: {' '.join(str(c) for c in cmd)}")
-        self._log(f"$ {' '.join(str(c) for c in cmd)}\n")
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        # Parse FFmpeg progress lines for live status
-        time_re = re.compile(r"time=(\d+):(\d+):([\d.]+)")
-        for line in iter(proc.stdout.readline, ""):
-            if self._cancel_flag.is_set() or (
-                    self._queue_cancel_fn and self._queue_cancel_fn()):
-                self._cancel_flag.set()
-                proc.terminate()
-                return False
-            line = line.rstrip()
-            self._log(line)
-            m = time_re.search(line)
-            if m:
-                h, mi, s = m.groups()
-                elapsed = int(h)*3600 + int(mi)*60 + float(s)
-                total   = self._src_dur or 1
-                pct     = min(100, int(elapsed / total * 100))
-                self._status(f"Encoding… {pct}%  ({elapsed:.1f}s / {total:.1f}s)")
-        proc.stdout.close()
-        proc.wait()
-        return proc.returncode == 0
-
-    def _finish(self, ok: bool, out: str, pass_log: str = None):
-        """Clean up temp files, update UI, report result."""
-        # Remove pass-log files
-        if pass_log:
-            for suffix in ["-0.log", "-0.log.mbtree", ""]:
-                p = pass_log + suffix
-                try:
-                    if os.path.exists(p):
-                        os.remove(p)
-                except Exception:
-                    pass
-
-        def _ui():
-            self.btn_render.config(state="normal", text=t("webm_maker.encode_webm"))
-            self.btn_cancel.config(state="disabled")
-            self.progress.stop()
-            self.progress.config(value=0)
-
-            if self._cancel_flag.is_set():
-                self.status_var.set("Cancelled.")
-                return
-
-            if ok and os.path.exists(out):
-                actual_mb = os.path.getsize(out) / 1024 / 1024
-                self.status_var.set(
-                    f"✅  Done!  →  {actual_mb:.2f} MB  ({out})")
-                messagebox.showinfo("WebM Complete",
-                                    f"Encode finished!\n\n"
-                                    f"Output:  {os.path.basename(out)}\n"
-                                    f"Size:    {actual_mb:.2f} MB")
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            inp = [ff.ffmpeg_path(), "-y"]
+            if job["start"] > 0:
+                inp += ["-ss", ff.ts(job["start"])]
+            inp += ["-t", ff.ts(job["dur"]), "-i", src, "-map", "0:v:0"]
+            amap = ["-map", "0:a:0"] if job["audio"] != ["-an"] else []
+            bitrate = job["bitrate"]
+            final = ctx.output()
+            log = os.path.join(tmp, "pass")
+            if job["two_pass"]:
+                ctx.log("Pass 1 of 2: analysing…")
+                ctx.span(0.0, 0.4).run(inp + fill(job["video"], bitrate) +
+                                       ["-pass", "1", "-passlogfile", log, "-an", "-f", "null", "-"],
+                                       duration=job["dur"])
+            for attempt in range(4):
+                ctx.log("Encoding…" if attempt == 0 else f"Over the size limit - re-encoding at {bitrate} kbps…")
+                passes = ["-pass", "2", "-passlogfile", log] if job["two_pass"] else []
+                lo = 0.4 if job["two_pass"] else 0.0
+                ctx.span(lo + (1 - lo) * attempt / 4, lo + (1 - lo) * (attempt + 1) / 4 if attempt else 1.0)
+                ctx.run(inp + fill(job["video"], bitrate) + passes + amap + job["audio"] + job["extra"] +
+                        ["-f", job["format"], final], duration=job["dur"])
+                cap = job["cap_bytes"]
+                if not cap or os.path.getsize(final) <= cap:
+                    break
+                bitrate = _size_retry_bitrate(bitrate, cap, os.path.getsize(final))
             else:
-                self.status_var.set("❌  Encode failed. Check console for details.")
-                messagebox.showerror(t("common.error"),
-                                     "FFmpeg returned an error.\n"
-                                     "Check the console for details.")
-        self.after(0, _ui)
+                raise RuntimeError("Could not get the file under the size limit - try a shorter "
+                                   "trim or a lower resolution.")
+            ctx.log(f"Final size: {os.path.getsize(final) / 1024 / 1024:.2f} MB")
+            return 0
+
+        self.btn_cancel.config(state="normal")
+        self.btn_render.config(state="disabled")
+        self.progress.config(value=0)
+        self.status_var.set("Queued…")
+
+        def on_progress(tid, line):
+            self._log(line)
+            task = self.task(tid)
+            if task is not None and task.fraction is not None:
+                self.progress.config(value=task.fraction * 100)
+                self.status_var.set(f"Encoding… {task.fraction * 100:.0f}%")
+
+        def on_complete(tid, rc):
+            self._task_id = None
+            self.btn_render.config(state="normal")
+            self.btn_cancel.config(state="disabled")
+            self.progress.config(value=100 if rc == 0 else 0)
+            task = self.task(tid)
+            self._last_task = task
+            if rc == 0 and os.path.exists(out):
+                mb = os.path.getsize(out) / 1024 / 1024
+                self.status_var.set(f"✅  Done  →  {mb:.2f} MB  ({out})")
+            elif rc == -1:
+                self.status_var.set("Cancelled.")
+            else:
+                self.status_var.set("❌  Encode failed.")
+            self.show_result(rc, out)
+
+        self._task_id = self.enqueue_render("WebM Encode", out, worker_fn=work, on_progress=on_progress,
+                                            on_complete=on_complete, expected_duration=job["dur"],
+                                            inputs=[src])
 
     def _log(self, msg: str):
-        self.after(0, lambda m=msg: [
-            self.console.insert(tk.END, m + "\n"),
-            self.console.see(tk.END)])
+        self.log(self.console, msg)
 
     def _status(self, msg: str):
-        self.after(0, lambda m=msg: self.status_var.set(m))
+        self.call_ui(self.status_var.set, msg)

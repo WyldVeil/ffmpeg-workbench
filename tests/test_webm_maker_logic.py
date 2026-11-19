@@ -81,3 +81,62 @@ def test_effective_vp9_deadline_good_and_best_unchanged():
     assert _effective_vp9_deadline("good", False) == "good"
     assert _effective_vp9_deadline("best", True) == "best"
     assert _effective_vp9_deadline("best", False) == "best"
+
+
+# ─── Simple mode (spec 2026-05-10) ───────────────────────────────────────────
+
+def test_lookup_threshold_map_boundaries():
+    from tabs.social.webm_maker import _lookup_threshold_map, _AUDIO_MAP_6MB
+    assert _lookup_threshold_map(10, _AUDIO_MAP_6MB) == 128
+    assert _lookup_threshold_map(15, _AUDIO_MAP_6MB) == 128      # key is inclusive
+    assert _lookup_threshold_map(15.01, _AUDIO_MAP_6MB) == 120
+    assert _lookup_threshold_map(10_000, _AUDIO_MAP_6MB) == 32    # past the end: last value
+
+
+def test_simple_silent_profile_has_no_audio():
+    from tabs.social.webm_maker import _simple_compute_settings
+    st = _simple_compute_settings("4mb_silent", 60, 1920, 1080, 30, False)
+    assert st.audio_bitrate_kbps == 0 and not st.force_mono and not st.dynaudnorm
+
+
+def test_simple_low_audio_bitrate_forces_mono_and_dynaudnorm():
+    from tabs.social.webm_maker import _simple_compute_settings
+    st = _simple_compute_settings("6mb_audio", 250, 1920, 1080, 30, False)
+    assert st.audio_bitrate_kbps == 56 and st.force_mono and st.dynaudnorm
+    st = _simple_compute_settings("6mb_audio", 20, 1920, 1080, 30, False)
+    assert st.audio_bitrate_kbps == 120 and not st.force_mono
+
+
+def test_simple_music_mode_boosts_audio():
+    from tabs.social.webm_maker import _simple_compute_settings
+    plain = _simple_compute_settings("6mb_audio", 60, 1920, 1080, 30, False)
+    music = _simple_compute_settings("6mb_audio", 60, 1920, 1080, 30, True)
+    assert music.audio_bitrate_kbps > plain.audio_bitrate_kbps
+    assert music.video_bitrate_kbps < plain.video_bitrate_kbps
+
+
+def test_simple_fps_cap_never_exceeds_source():
+    from tabs.social.webm_maker import _simple_compute_settings
+    assert _simple_compute_settings("6mb_audio", 30, 1920, 1080, 25, False).fps_cap == 25
+    assert _simple_compute_settings("6mb_audio", 300, 1920, 1080, 60, False).fps_cap == 24.0
+    assert _simple_compute_settings("6mb_audio", 30, 1920, 1080, 0, False).fps_cap == 60.0
+
+
+def test_simple_budget_fits_the_cap_and_never_upscales():
+    from tabs.social.webm_maker import (_simple_compute_settings, _PROFILE_SIZE_BYTES,
+                                        _VIDEO_BITRATE_FLOOR, _RESOLUTION_TABLE)
+    for profile, size in _PROFILE_SIZE_BYTES.items():
+        for dur in (5, 30, 90, 119):
+            st = _simple_compute_settings(profile, dur, 1920, 1080, 30, False)
+            total = (st.video_bitrate_kbps + st.audio_bitrate_kbps) * 1000 * dur / 8
+            assert total <= size or st.video_bitrate_kbps == _VIDEO_BITRATE_FLOOR
+            assert st.target_max_dim in _RESOLUTION_TABLE or st.target_max_dim == 1920
+    small = _simple_compute_settings("6mb_audio", 10, 640, 360, 30, False)
+    assert small.target_max_dim <= 640                     # never upscale
+    portrait = _simple_compute_settings("6mb_audio", 60, 1080, 1920, 30, False)
+    assert portrait.target_max_dim <= 1920
+
+
+def test_size_retry_bitrate_shrinks():
+    from tabs.social.webm_maker import _size_retry_bitrate
+    assert _size_retry_bitrate(1000, 4_000_000, 5_000_000) < 800

@@ -1,157 +1,127 @@
 """
-tab_autocropper.py  ─  Auto-Cropper
-Manual crop with live coordinate preview, aspect-ratio presets,
-and optional black bar (letterbox/pillarbox) auto-detection.
+tabs/social/auto_cropper.py  -  Auto-Cropper
+
+Remove black bars (letterboxing / pillarboxing) automatically.  Several
+points across the video are sampled with FFmpeg's cropdetect (threshold
+relative to the bit depth, so 10-bit HDR works too); the largest picture
+area seen is kept so bright scenes never get over-cropped.  Before/after
+preview, then render.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
+from __future__ import annotations
+
 import re
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+import tkinter as tk
+from tkinter import messagebox
+
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 
-ASPECT_PRESETS = {
-    t("crop.free_custom"):  None,
-    t("auto_cropper.16_9_widescreen"): (16, 9),
-    t("auto_cropper.9_16_vertical"):   (9, 16),
-    "4:3":                (4, 3),
-    t("auto_cropper.1_1_square"):     (1, 1),
-    t("auto_cropper.2_35_1_cinematic"): (2.35, 1),
-    t("auto_cropper.21_9_ultra_wide"): (21, 9),
-}
+def detect_bars(path: str, duration: float, samples: int = 6) -> tuple | None:
+    """(x, y, w, h) of the picture area, or None when there are no bars."""
+    boxes = []
+    for i in range(samples):
+        at = duration * (i + 0.5) / samples
+        r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-ss", ff.ts(at), "-t", "1.5",
+                        "-i", path, "-an", "-sn", "-vf", "cropdetect=limit=0.094:round=2:reset=0",
+                        "-f", "null", "-"], timeout=60)
+        found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", r.stderr or "")
+        if found:
+            w, h, x, y = (int(v) for v in found[-1])
+            boxes.append((x, y, x + w, y + h))
+    if not boxes:
+        return None
+    # union of what each sample considered picture: never cut into a bright scene
+    x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+    return x0 // 2 * 2, y0 // 2 * 2, (x1 - x0) // 2 * 2, (y1 - y0) // 2 * 2
 
 
 class AutoCropperTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
+        self.src_var = tk.StringVar()
+        self._info = None
+        self.box = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🖼  " + t("tab.auto_cropper"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("auto_cropper.desc"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.auto_cropper"), "Find and remove black bars automatically.",
+                         icon="✂")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.result_lbl = tk.Label(body, text="", fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
+        self.result_lbl.pack(anchor="w", padx=24)
+        self.compare = CompareView(body, 400, 225, after_label="Cropped")
+        self.compare.pack(pady=4)
+        self.btn_detect = tk.Button(body, text="🔍 Detect again", relief="flat", command=self._detect)
+        self.btn_detect.pack()
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=8)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
-
-        # Crop options
-        cf = tk.LabelFrame(self, text=t("auto_cropper.sect_crop_settings"), padx=15, pady=10)
-        cf.pack(fill="x", padx=20, pady=6)
-
-        tk.Label(cf, text=t("auto_cropper.lbl_aspect_ratio"), font=(UI_FONT, 10, "bold")).grid(row=0, column=0, sticky="w")
-        self.aspect_var = tk.StringVar(value=list(ASPECT_PRESETS.keys())[0])
-        ttk.Combobox(cf, textvariable=self.aspect_var, values=list(ASPECT_PRESETS.keys()),
-                     state="readonly", width=26).grid(row=0, column=1, sticky="w", pady=5)
-
-        for lbl, var_name, default, col in [
-            ("X (crop start px):", "x_var", "0",    0),
-            ("Y (crop start px):", "y_var", "0",    2),
-            ("Width (px):",        "w_var", "1920", 4),
-            ("Height (px):",       "h_var", "1080", 6),
-        ]:
-            tk.Label(cf, text=lbl).grid(row=1, column=col, sticky="e", padx=(10, 0))
-            var = tk.StringVar(value=default)
-            setattr(self, var_name, var)
-            tk.Entry(cf, textvariable=var, width=7, relief="flat").grid(row=1, column=col+1, padx=4, pady=5)
-
-        self.autodetect_btn = tk.Button(cf, text=t("auto_cropper.btn_autodetect"),
-                                        command=self._autodetect, bg="#333",
-                                        fg=CLR["accent"], font=(UI_FONT, 9, "bold"))
-        self.autodetect_btn.grid(row=2, column=0, columnspan=3, sticky="w", pady=5)
-        self.detect_result = tk.Label(cf, text="", fg=CLR["fgdim"])
-        self.detect_result.grid(row=2, column=3, columnspan=4, sticky="w")
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self, text=t("auto_cropper.btn_crop_export"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["orange"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
-
-        cf2 = tk.Frame(self); cf2.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf2, height=7)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "nobars"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="✂  REMOVE BARS", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        self.box = None
+        self.compare.load(path)
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "nobars"))
+        self._detect()
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self.out_var.set(p)
-
-    def _autodetect(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+    def _detect(self):
+        path, info = self.src_row.path, self._info
+        if not path or info is None or not info.has_video:
             return
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-i", self.file_path, "-vf",
-               "cropdetect=24:16:0", "-frames:v", "300",
-               "-f", "null", "-"]
-        self.detect_result.config(text=t("auto_cropper.lbl_scanning"))
+        self.result_lbl.config(text="Looking for black bars…")
+        self.btn_detect.config(state="disabled")
 
-        def do_detect():
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                                    creationflags=CREATE_NO_WINDOW)
-            matches = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", result.stderr)
-            if matches:
-                w, h, x, y = matches[-1]
-                self.after(0, lambda: (
-                    self.w_var.set(w), self.h_var.set(h),
-                    self.x_var.set(x), self.y_var.set(y),
-                    self.detect_result.config(
-                        text=f"Detected: crop={w}:{h}:{x}:{y}", fg=CLR["green"])))
-            else:
-                self.after(0, lambda: self.detect_result.config(
-                    text=t("auto_cropper.lbl_no_bars"), fg=CLR["fgdim"]))
+        def done(box):
+            self.btn_detect.config(state="normal")
+            w, h = info.video.display_size
+            if not box or (box[2] >= w - 2 and box[3] >= h - 2):
+                self.box = None
+                self.result_lbl.config(text="No black bars found - nothing to crop.")
+                self.compare.set_filter("")
+                return
+            self.box = box
+            x, y, bw, bh = box
+            self.result_lbl.config(text=f"Picture is {bw}×{bh} at ({x}, {y}) inside {w}×{h}.")
+            self.compare.set_filter(f"crop={bw}:{bh}:{x}:{y}")
 
-        self.run_in_thread(do_detect)
+        from core import ui
+        ui.run_in_thread(detect_bars, path, info.duration, on_done=done,
+                         on_error=lambda _e: done(None), name="AutoCrop")
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        if not self.box:
+            messagebox.showinfo(t("common.warning"), "No black bars were found in this video.", parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "nobars")
         if not out:
             return
-        self.out_var.set(out)
-        w = self.w_var.get(); h = self.h_var.get()
-        x = self.x_var.get(); y = self.y_var.get()
-        filt = f"crop={w}:{h}:{x}:{y}"
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-i", self.file_path, "-vf", filt,
-               "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-        self.log(self.console, f"Cropping → {filt}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("auto_cropper.btn_crop_export"))
+        x, y, w, h = self.box
+        common.render(self, src=src, info=info, out=out, chain=f"crop={w}:{h}:{x}:{y},setsar=1",
+                      encoder=self.encoder, console=self.console, btn=self.btn_render,
+                      btn_label="✂  REMOVE BARS", name="Auto-Cropper")

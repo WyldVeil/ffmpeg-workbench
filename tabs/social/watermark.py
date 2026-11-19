@@ -1,317 +1,309 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, colorchooser
-from core import dialogs
-import subprocess
+"""
+tabs/social/watermark.py  -  Watermarker (text)
+
+Burn a text watermark: any corner, centre or a custom spot, rotated if you
+like, or moving - bouncing around like the DVD logo, or hopping to a new
+place every few seconds.  Show it all the time or only at chosen times,
+with soft fades.  Rendered by libass (core/ass.py), so any text works and
+sizes scale with the video.
+"""
+from __future__ import annotations
+
 import os
-import math
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path
+import random
+import shutil
+import tkinter as tk
+from tkinter import colorchooser, messagebox, ttk
+
+from core import ass
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+
+PLACES = {"tl": "Top left", "tc": "Top centre", "tr": "Top right", "ml": "Middle left",
+          "center": "Centre", "mr": "Middle right", "bl": "Bottom left", "bc": "Bottom centre",
+          "br": "Bottom right", "custom": "Custom spot (%)", "bounce": "Bouncing (DVD style)",
+          "jump": "Jumping around"}
+_ANCHOR = {"tl": (7, 0, 0), "tc": (8, 0.5, 0), "tr": (9, 1, 0), "ml": (4, 0, 0.5), "center": (5, 0.5, 0.5),
+           "mr": (6, 1, 0.5), "bl": (1, 0, 1), "bc": (2, 0.5, 1), "br": (3, 1, 1)}
+
+
+def parse_ranges(text: str) -> list:
+    """'0-5, 20-25.5, 1:00-1:10' -> [(0, 5), (20, 25.5), (60, 70)]."""
+    out = []
+    for part in (text or "").replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        a, sep, b = part.partition("-")
+        if not sep:
+            raise ValueError(f"'{part}' is not a range like 5-10.")
+        start, end = ff.parse_time(a.strip()), ff.parse_time(b.strip())
+        if end <= start:
+            raise ValueError(f"In '{part}' the end must be after the start.")
+        out.append((start, end))
+    return sorted(out)
+
+
+def anchor_xy(key: str, w: int, h: int, margin: float) -> tuple:
+    an, fx, fy = _ANCHOR[key]
+    x = margin + (w - 2 * margin) * fx
+    y = margin + (h - 2 * margin) * fy
+    return an, x, y
+
+
+def bounce_path(duration: float, w: int, h: int, tw: float, th: float, speed: float, seed: int = 3):
+    """[(t0, t1, x0, y0, x1, y1)] straight segments of a box bouncing off the edges (top-left coords)."""
+    rng = random.Random(seed)
+    tw, th = min(tw, w * 0.9), min(th, h * 0.9)
+    x, y = rng.uniform(0, max(w - tw, 1)), rng.uniform(0, max(h - th, 1))
+    vx, vy = speed * 0.8, speed * 0.6
+    tm, segs = 0.0, []
+    while tm < duration and len(segs) < 5000:
+        tx = ((w - tw - x) / vx if vx > 0 else -x / vx) if vx else float("inf")
+        ty = ((h - th - y) / vy if vy > 0 else -y / vy) if vy else float("inf")
+        dt = max(min(tx, ty, duration - tm), 0.001)
+        nx, ny = x + vx * dt, y + vy * dt
+        segs.append((tm, tm + dt, x, y, nx, ny))
+        x, y, tm = nx, ny, tm + dt
+        if abs(dt - tx) < 1e-6:
+            vx = -vx
+        if abs(dt - ty) < 1e-6:
+            vy = -vy
+    return segs
+
+
+def build_script(*, text, w, h, duration, place, font="Montserrat", size=64, colour="#FFFFFF",
+                 opacity=1.0, bold=True, italic=False, shadow=True, outline=True, angle=0.0,
+                 custom=(50.0, 50.0), every=3.0, random_every=None, ranges=None, fade=True,
+                 speed=180.0, seed=7) -> ass.Script:
+    sc = ass.Script(w, h)
+    u = min(w, h) / 1080
+    px = max(8, round(size * u))
+    sc.style(ass.Style("WM", font=font, size=px, colour=colour, bold=bold, italic=italic,
+                       outline=(2.5 * u if outline else 0), shadow=(2 * u if shadow else 0),
+                       back_alpha=0.5))
+    body = ass.escape(text)
+    alpha = f"\\alpha{ass.alpha_tag(1 - opacity)}"
+    windows = ranges or [(0.0, duration)]
+    fade_tag = "\\fad(300,300)" if fade else ""
+    margin = 30 * u
+    tw, th = ass.text_width(text, px, bold=bold), px * 1.2
+
+    def add(a, b, tags):
+        for ra, rb in windows:
+            s, e = max(a, ra), min(b, rb)
+            if e - s > 0.04:
+                fades = fade_tag if (s == ra or e == rb) and fade else ""
+                sc.add(s, e, f"{{{tags}{alpha}{fades}}}{body}", "WM")
+
+    rot = f"\\frz{-angle:g}" if angle else ""
+    if place == "bounce":
+        for a, b, x0, y0, x1, y1 in bounce_path(duration, w, h, tw, th, speed * u, seed):
+            add(a, b, f"\\an7\\move({x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f})")
+    elif place == "jump":
+        rng = random.Random(seed)
+        spots = [k for k in _ANCHOR if k != "center"]
+        tm, last = 0.0, None
+        while tm < duration:
+            step = rng.uniform(*random_every) if random_every else every
+            key = rng.choice([k for k in spots if k != last])
+            last = key
+            an, x, y = anchor_xy(key, w, h, margin)
+            add(tm, min(tm + step, duration), f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")
+            tm += step
+    elif place == "custom":
+        x, y = w * custom[0] / 100, h * custom[1] / 100
+        add(0, duration, f"\\an5\\pos({x:.0f},{y:.0f}){rot}")
+    else:
+        an, x, y = anchor_xy(place, w, h, margin)
+        add(0, duration, f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")
+    return sc
+
 
 class TextBurnerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.preview_proc = None
-        
-        # --- Variables ---
-        self.text_var = tk.StringVar(value="STUDIO PRO")
-        self.font_size = tk.StringVar(value="64")
-        
-        # Typography
+        self.src_var = tk.StringVar()
+        self.colour = "#FFFFFF"
+        self._info = None
+        self._job = None
+        self._pdir = None
+        self._pn = 0
+        self._build_ui()
+
+    def _build_ui(self):
+        self.make_header(self, t("tab.watermarker"), "Burn a text watermark - fixed, rotated, "
+                         "bouncing or jumping, all the time or only at chosen moments.", icon="©")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.compare = CompareView(body, 400, 225, after_label="With watermark")
+        self.compare.pack(pady=4)
+
+        ty = tk.LabelFrame(body, text="  Text  ", padx=12, pady=6)
+        ty.pack(fill="x", padx=20, pady=4)
+        self.text_var = tk.StringVar(value="© My Channel")
+        tk.Entry(ty, textvariable=self.text_var, width=40).grid(row=0, column=0, columnspan=3, sticky="w")
         self.font_var = tk.StringVar(value="Montserrat")
-        self.color_var = tk.StringVar(value="#FFFFFF")
-        self.opacity_var = tk.DoubleVar(value=1.0)
-        self.is_bold = tk.BooleanVar(value=False)
-        self.is_italic = tk.BooleanVar(value=False)
-        self.shadow_var = tk.BooleanVar(value=True)
-        self.outline_var = tk.BooleanVar(value=True)
-        
-        # Position & Motion
-        self.pos_var = tk.StringVar(value="Center")
-        self.custom_x = tk.StringVar(value="100")
-        self.custom_y = tk.StringVar(value="100")
-        self.angle_var = tk.StringVar(value="45")
-        
-        # Random Jumper Settings
-        self.jump_freq = tk.StringVar(value="3") # Jump every X seconds
-        self.rand_timing = tk.BooleanVar(value=False)
-        self.jump_min = tk.StringVar(value="1")
-        self.jump_max = tk.StringVar(value="5")
-        
-        # Timing Variables
-        self.timing_mode = tk.StringVar(value="Always") 
-        self.time_ranges = tk.StringVar(value="0-5, 20-25")
+        ttk.Combobox(ty, textvariable=self.font_var, values=ass.families(), state="readonly",
+                     width=16).grid(row=1, column=0, sticky="w", pady=4)
+        self.size_var = tk.IntVar(value=48)
+        tk.Scale(ty, variable=self.size_var, from_=12, to=200, orient="horizontal", length=160,
+                 label="Size", command=lambda _v: self._changed()).grid(row=1, column=1, sticky="w")
+        self.opacity_var = tk.DoubleVar(value=0.8)
+        tk.Scale(ty, variable=self.opacity_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
+                 length=140, label="Opacity", command=lambda _v: self._changed()).grid(row=1, column=2, sticky="w")
+        flags = tk.Frame(ty)
+        flags.grid(row=2, column=0, columnspan=3, sticky="w")
+        self.bold_var, self.italic_var = tk.BooleanVar(value=True), tk.BooleanVar(value=False)
+        self.shadow_var, self.outline_var = tk.BooleanVar(value=True), tk.BooleanVar(value=True)
+        for text, var in (("Bold", self.bold_var), ("Italic", self.italic_var), ("Shadow", self.shadow_var),
+                          ("Outline", self.outline_var)):
+            tk.Checkbutton(flags, text=text, variable=var, command=self._changed).pack(side="left")
+        self.col_btn = tk.Button(flags, text="Colour…", relief="flat", bg=self.colour, command=self._pick)
+        self.col_btn.pack(side="left", padx=8)
+
+        pos = tk.LabelFrame(body, text="  Position & motion  ", padx=12, pady=6)
+        pos.pack(fill="x", padx=20, pady=4)
+        self.place_var = tk.StringVar(value=PLACES["br"])
+        pb = ttk.Combobox(pos, textvariable=self.place_var, values=list(PLACES.values()), state="readonly",
+                          width=24)
+        pb.grid(row=0, column=0, sticky="w")
+        pb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+        self.angle_var = tk.StringVar(value="0")
+        self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
+        self.every_var, self.rand_var = tk.StringVar(value="3"), tk.BooleanVar(value=False)
+        row = tk.Frame(pos)
+        row.grid(row=1, column=0, sticky="w", pady=4)
+        for label, var, w in (("Angle°", self.angle_var, 5), ("X %", self.cx_var, 5), ("Y %", self.cy_var, 5),
+                              ("Jump every (s)", self.every_var, 5)):
+            tk.Label(row, text=label).pack(side="left", padx=(6, 2))
+            tk.Entry(row, textvariable=var, width=w).pack(side="left")
+            var.trace_add("write", lambda *_a: self._changed())
+        tk.Checkbutton(row, text="random (1-2× that)", variable=self.rand_var,
+                       command=self._changed).pack(side="left", padx=6)
+
+        tm = tk.LabelFrame(body, text="  When  ", padx=12, pady=6)
+        tm.pack(fill="x", padx=20, pady=4)
+        self.always_var = tk.BooleanVar(value=True)
+        tk.Radiobutton(tm, text="The whole video", value=True, variable=self.always_var,
+                       command=self._changed).grid(row=0, column=0, sticky="w")
+        tk.Radiobutton(tm, text="Only at:", value=False, variable=self.always_var,
+                       command=self._changed).grid(row=1, column=0, sticky="w")
+        self.ranges_var = tk.StringVar(value="0-5, 20-25")
+        tk.Entry(tm, textvariable=self.ranges_var, width=30).grid(row=1, column=1, sticky="w")
+        tk.Label(tm, text="e.g. 0-5, 1:20-1:30", fg=CLR["fgdim"], font=(UI_FONT, 8)).grid(row=1, column=2)
         self.fade_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(tm, text="Fade in and out", variable=self.fade_var,
+                       command=self._changed).grid(row=2, column=0, sticky="w")
+        for var in (self.text_var, self.font_var, self.ranges_var):
+            var.trace_add("write", lambda *_a: self._changed())
 
-        self.build_ui()
-        
-        # Listener to dynamically show/hide inputs when dropdown changes
-        self.pos_var.trace_add("write", self.on_pos_change)
-        self.rand_timing.trace_add("write", self.on_pos_change)
-
-    def build_ui(self):
-        top_f = tk.Frame(self); top_f.pack(pady=10)
-        tk.Label(top_f, text=t("common.source_video")).pack(side="left")
-        self.ent_path = tk.Entry(top_f, width=50, relief="flat")
-        self.ent_path.pack(side="left", padx=5)
-        tk.Button(top_f, text=t("btn.browse"), command=self.load_file, cursor="hand2", relief="flat").pack(side="left")
-
-        # --- STYLE PANEL ---
-        style_f = tk.LabelFrame(self, text=f" {t('watermark.typography_section')} ", padx=15, pady=10)
-        style_f.pack(pady=5, padx=20, fill="x")
-
-        tk.Label(style_f, text=t("intro_maker.text_label")).grid(row=0, column=0, sticky="w")
-        tk.Entry(style_f, textvariable=self.text_var, width=30, relief="flat").grid(row=0, column=1, columnspan=2, sticky="w", pady=5)
-
-        # Updated to exactly match your downloaded font folder!
-        font_list = [
-            "Anton", "Bangers", "BebasNeue", "Bungee", "Impact", 
-            "Inter", "Lato", "LuckiestGuy", "Montserrat", "OpenSans", 
-            "Poppins", "Raleway", "RobotoBlack", "TheBoldFont"
-        ]
-        
-        tk.Label(style_f, text=t("hard_subber.font_label")).grid(row=1, column=0, sticky="w")
-        ttk.Combobox(style_f, textvariable=self.font_var, values=font_list, state="readonly", width=15).grid(row=1, column=1, sticky="w")
-
-        tk.Button(style_f, text=t("watermark.pick_color"), command=self.pick_color, cursor="hand2", relief="flat").grid(row=0, column=3, padx=10)
-        
-        tk.Checkbutton(style_f, text="Bold", variable=self.is_bold).grid(row=1, column=2, sticky="w")
-        tk.Checkbutton(style_f, text="Italic", variable=self.is_italic).grid(row=1, column=3, sticky="w")
-        
-        # New FX
-        fx_frame = tk.Frame(style_f)
-        fx_frame.grid(row=2, column=1, columnspan=3, sticky="w", pady=5)
-        tk.Checkbutton(fx_frame, text=t("watermark.drop_shadow"), variable=self.shadow_var).pack(side="left", padx=5)
-        tk.Checkbutton(fx_frame, text=t("watermark.black_outline"), variable=self.outline_var).pack(side="left", padx=5)
-        
-        tk.Label(style_f, text=t("watermark.opacity_label")).grid(row=2, column=4, sticky="w")
-        tk.Scale(style_f, from_=0.1, to=1.0, resolution=0.1, orient="horizontal", variable=self.opacity_var).grid(row=2, column=5)
-
-        # --- ANIMATION & POSITION PANEL ---
-        anim_f = tk.LabelFrame(self, text=f" {t('watermark.position_section')} ", padx=15, pady=10)
-        anim_f.pack(pady=5, padx=20, fill="x")
-
-        pos_options = [
-            t("watermark.top_left"), t("watermark.top_right"), t("watermark.top_center"), 
-            t("hard_subber.bottom_left"), t("hard_subber.bottom_right"), t("watermark.bottom_center"), 
-            "Center", t("watermark.custom_coordinates"), 
-            t("watermark.bouncing_dvd_mode"), t("watermark.random_jumps")
-        ]
-        ttk.Combobox(anim_f, textvariable=self.pos_var, values=pos_options, state="readonly", width=20).grid(row=0, column=0, padx=5)
-        
-        tk.Label(anim_f, text=t("hard_subber.size_label")).grid(row=0, column=1, padx=5)
-        tk.Entry(anim_f, textvariable=self.font_size, width=5, relief="flat").grid(row=0, column=2)
-
-        # Dynamic Options Frame (This changes based on dropdown)
-        self.dyn_f = tk.Frame(anim_f)
-        self.dyn_f.grid(row=1, column=0, columnspan=5, sticky="w", pady=10)
-
-        # --- TIMING PANEL ---
-        time_f = tk.LabelFrame(self, text=f" {t('watermark.timing_section')} ", padx=15, pady=10)
-        time_f.pack(pady=5, padx=20, fill="x")
-
-        tk.Radiobutton(time_f, text=t("watermark.always_visible"), variable=self.timing_mode, value="Always").grid(row=0, column=0, sticky="w")
-        tk.Radiobutton(time_f, text=t("watermark.specific_seconds"), variable=self.timing_mode, value="Specific").grid(row=1, column=0, sticky="w")
-        
-        tk.Entry(time_f, textvariable=self.time_ranges, width=20, relief="flat").grid(row=1, column=1, padx=5)
-        tk.Label(time_f, text=t("watermark.e_g_0_5_15_20"), font=(UI_FONT, 8)).grid(row=1, column=2)
-
-        tk.Checkbutton(time_f, text=t("watermark.smooth_fade_in_out"), variable=self.fade_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=5)
-
-        # Action Buttons
-        btn_f = tk.Frame(self); btn_f.pack(pady=20)
-        tk.Button(btn_f, text=t("watermark.preview"), bg=CLR["accent"], fg="white", width=15, command=self.preview_text, cursor="hand2", relief="flat").pack(side="left", padx=10)
-        self.btn_render = tk.Button(btn_f, text=t("watermark.render"), bg="#E91E63", fg="white", width=15, font=(UI_FONT, 10, "bold"), command=self.run_render, cursor="hand2", relief="flat")
-        self.btn_render.pack(side="left", padx=10)
-
-        # Console
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="©  BURN WATERMARK", font=(UI_FONT, 12, "bold"), bg="#E91E63",
+                                    fg="white", width=24, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-        # Initialize dynamic frame state
-        self.on_pos_change()
+    def _pick(self):
+        res = colorchooser.askcolor(self.colour, parent=self)
+        if res and res[1]:
+            self.colour = res[1].upper()
+            self.col_btn.config(bg=self.colour)
+            self._changed()
 
-    def on_pos_change(self, *args):
-        """Clears and rebuilds the dynamic input frame based on Position selection."""
-        for widget in self.dyn_f.winfo_children():
-            widget.destroy()
+    def script(self, w, h, duration) -> ass.Script:
+        place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
+        every = common.number(self.every_var.get() or "3", "Jump every", 0.2, 3600)
+        return build_script(
+            text=self.text_var.get(), w=w, h=h, duration=duration, place=place, font=self.font_var.get(),
+            size=int(self.size_var.get()), colour=self.colour, opacity=float(self.opacity_var.get()),
+            bold=self.bold_var.get(), italic=self.italic_var.get(), shadow=self.shadow_var.get(),
+            outline=self.outline_var.get(), angle=common.number(self.angle_var.get() or "0", "Angle", -360, 360),
+            custom=(common.number(self.cx_var.get() or "50", "X %", 0, 100),
+                    common.number(self.cy_var.get() or "50", "Y %", 0, 100)),
+            every=every, random_every=(every, every * 2) if self.rand_var.get() else None,
+            ranges=None if self.always_var.get() else parse_ranges(self.ranges_var.get()),
+            fade=self.fade_var.get())
 
-        mode = self.pos_var.get()
-        if mode == t("watermark.custom_coordinates"):
-            tk.Label(self.dyn_f, text=t("watermark.x_pos")).pack(side="left")
-            tk.Entry(self.dyn_f, textvariable=self.custom_x, width=6, relief="flat").pack(side="left", padx=5)
-            tk.Label(self.dyn_f, text=t("watermark.y_pos")).pack(side="left")
-            tk.Entry(self.dyn_f, textvariable=self.custom_y, width=6, relief="flat").pack(side="left", padx=5)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        self.compare.load(path)
+        self._changed()
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "watermarked"))
 
-        elif mode == t("watermark.bouncing_dvd_mode"):
-            tk.Label(self.dyn_f, text=t("watermark.bounce_angle_deg")).pack(side="left")
-            tk.Entry(self.dyn_f, textvariable=self.angle_var, width=6, relief="flat").pack(side="left", padx=5)
+    def _changed(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(250, self._refresh)
 
-        elif mode == t("watermark.random_jumps"):
-            tk.Label(self.dyn_f, text=t("watermark.jump_every")).pack(side="left")
-            tk.Entry(self.dyn_f, textvariable=self.jump_freq, width=4, relief="flat").pack(side="left", padx=2)
-            tk.Label(self.dyn_f, text="secs").pack(side="left", padx=(0, 15))
-            
-            tk.Checkbutton(self.dyn_f, text=t("watermark.randomize_interval"), variable=self.rand_timing).pack(side="left")
-            
-            if self.rand_timing.get():
-                tk.Label(self.dyn_f, text=t("watermark.min")).pack(side="left")
-                tk.Entry(self.dyn_f, textvariable=self.jump_min, width=4, relief="flat").pack(side="left")
-                tk.Label(self.dyn_f, text=t("watermark.max")).pack(side="left")
-                tk.Entry(self.dyn_f, textvariable=self.jump_max, width=4, relief="flat").pack(side="left")
+    def _refresh(self):
+        self._job = None
+        info = self._info
+        if info is None or not info.has_video or not self.text_var.get().strip():
+            return
+        try:
+            w, h = common.even_size(info)
+            sc = self.script(w, h, info.duration)
+        except ValueError:
+            return
+        if self._pdir is None:
+            from core.paths import temp_dir
+            self._pdir = temp_dir("wm_preview_")
+        self._pn += 1
+        path = sc.write(os.path.join(self._pdir, f"p{self._pn}.ass"))
+        self.compare.set_filter(ass.subtitles_filter(path), keep_time=True)
 
-    def pick_color(self):
-        color = colorchooser.askcolor(title="Select Watermark Color")[1]
-        if color: self.color_var.set(color)
+    def _render(self):
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
+            return
+        if not self.text_var.get().strip():
+            messagebox.showwarning(t("common.warning"), "Type the watermark text.", parent=self)
+            return
+        w, h = common.even_size(info)
+        try:
+            sc = self.script(w, h, info.duration)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "watermarked")
+        if not out:
+            return
+        from core.paths import temp_dir
+        work = temp_dir("wm_")
+        path = sc.write(os.path.join(work, "watermark.ass"))
 
-    def get_font_path(self):
-        # This file lives at tabs/social/watermark.py — go up THREE levels to reach project root
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        def done(rc):
+            shutil.rmtree(work, ignore_errors=True)
+            self.show_result(rc, out)
 
-        # Get the base name from the dropdown (e.g. "BebasNeue")
-        font_base = self.font_var.get().replace(" ", "")
-        
-        # Check if Bold is requested
-        if self.is_bold.get():
-            # Try to find the specific bold version (e.g. "Montserrat-Bold.ttf")
-            bold_path = os.path.join(base_dir, "assets", "fonts", f"{font_base}-Bold.ttf")
-            if os.path.exists(bold_path):
-                return bold_path
-                
-        # If not bold, or if the bold version doesn't exist, try the standard name
-        normal_path = os.path.join(base_dir, "assets", "fonts", f"{font_base}.ttf")
-        if os.path.exists(normal_path):
-            return normal_path
-            
-        # Ultimate Fallback if someone deletes a file by accident
-        fallback = os.path.join(base_dir, "assets", "fonts", "Montserrat.ttf")
-        return fallback if os.path.exists(fallback) else None
+        common.render(self, src=src, info=info, out=out, chain=ass.subtitles_filter(path),
+                      encoder=self.encoder, console=self.console, btn=self.btn_render,
+                      btn_label="©  BURN WATERMARK", name="Watermarker", on_done=done)
 
-    def get_filter_string(self):
-        font_p = self.get_font_path()
-        if not font_p: return None
-        safe_p = font_p.replace("\\", "/").replace(":", "\\:")
-        
-        txt = self.text_var.get().replace("'", "")
-        size = self.font_size.get()
-        pos = self.pos_var.get()
-        
-        color_val = self.color_var.get().replace("#", "")
-        base_alpha = self.opacity_var.get()
-
-        # 1. Coordinate Logic
-        x, y = "(w-text_w)/2", "(h-text_h)-50"
-        
-        if pos == t("watermark.top_left"): x, y = "50", "50"
-        elif pos == t("watermark.top_right"): x, y = "(w-text_w)-50", "50"
-        elif pos == t("hard_subber.bottom_left"): x, y = "50", "(h-text_h)-50"
-        elif pos == t("hard_subber.bottom_right"): x, y = "(w-text_w)-50", "(h-text_h)-50"
-
-        elif pos == t("watermark.custom_coordinates"):
-            x, y = self.custom_x.get(), self.custom_y.get()
-
-        elif pos == t("watermark.bouncing_dvd_mode"):
-            angle = float(self.angle_var.get() or 45)
-            vx, vy = 300 * math.cos(math.radians(angle)), 300 * math.sin(math.radians(angle))
-            x = f"'(abs(mod({vx}*t, 2*(w-text_w))-(w-text_w)))'"
-            y = f"'(abs(mod({vy}*t, 2*(h-text_h))-(h-text_h)))'"
-
-        elif pos == t("watermark.random_jumps"):
-            # The insane math for pseudo-random jumping
-            if self.rand_timing.get():
-                min_v = float(self.jump_min.get() or 1)
-                max_v = float(self.jump_max.get() or 5)
-                # Uses a sine wave to smoothly oscillate the jump interval between min and max
-                freq = f"({min_v}+abs(sin(t/10))*({max_v}-{min_v}))"
-            else:
-                freq = str(float(self.jump_freq.get() or 3))
-                
-            # THE FIX: Deterministic Sine-Wave Hashing
-            # mod(abs(sin(SEED)*43758), 1) generates a stable random number between 0.0 and 1.0
-            # It ONLY generates a new number when trunc(t/freq) increments to the next integer.
-            x = f"'(mod(abs(sin((trunc(t/{freq})+11)*12.9898)*43758.5453),1)*(w-text_w))'"
-            y = f"'(mod(abs(sin((trunc(t/{freq})+17)*78.233)*43758.5453),1)*(h-text_h))'"
-
-        # 2. Styling (Shadow / Outline)
-        style_str = ""
-        if self.shadow_var.get():
-            style_str += ":shadowcolor=black@0.8:shadowx=4:shadowy=4"
-        if self.outline_var.get():
-            style_str += ":bordercolor=black@0.9:borderw=3"
-
-        # 3. Alpha Math Logic
-        if self.timing_mode.get() == "Specific":
-            ranges = self.time_ranges.get().replace(" ", "").split(",")
-            logic_parts = []
-            for r in ranges:
-                if "-" in r:
-                    start, end = r.split("-")
-                    if self.fade_var.get():
-                        logic_parts.append(f"between(t,{start},{end})*min(min(t-{start},1),min({end}-t,1))")
-                    else:
-                        logic_parts.append(f"between(t,{start},{end})")
-            
-            combined_logic = " + ".join(logic_parts)
-            alpha_val = f"'{base_alpha}*({combined_logic})'"
-        else:
-            alpha_val = str(base_alpha)
-
-        return (f"drawtext=fontfile='{safe_p}':text='{txt}':fontsize={size}:"
-                f"x={x}:y={y}:fontcolor=0x{color_val}:alpha={alpha_val}{style_str}")
-
-    def load_file(self):
-        path = dialogs.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi")])
+    def load_file(self, path=None):
         if path:
-            self.file_path = path
-            self.ent_path.delete(0, tk.END)
-            self.ent_path.insert(0, path)
+            self.src_var.set(path)
+            return True
+        return False
 
-    def preview_text(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("watermark.no_source_message"))
-            return
-        f_str = self.get_filter_string()
-        if not f_str:
-            messagebox.showerror(t("common.warning"),
-                                 "Font file not found in assets/fonts/. Pick a different font or restore the missing TTF.")
-            return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-
-        ffplay = get_binary_path("ffplay.exe")
-        cmd = [
-            ffplay, "-i", os.path.normpath(self.file_path), 
-            "-vf", f"format=yuv420p,{f_str}", 
-            "-window_title", "Preview", "-x", "800", "-autoexit"
-        ]
-        
-        app = self.winfo_toplevel()
-        if hasattr(app, "log_debug"):
-            app.log_debug(f"RUNNING: {' '.join(cmd)}")
-            
-        self.preview_proc = subprocess.Popen(cmd)
-
-    def run_render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("watermark.no_source_message"))
-            return
-        f_str = self.get_filter_string()
-        if not f_str:
-            messagebox.showerror(t("common.warning"),
-                                 "Font file not found in assets/fonts/. Pick a different font or restore the missing TTF.")
-            return
-        out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                           filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        cmd = [get_binary_path("ffmpeg.exe"), "-i", self.file_path,
-               "-vf", f"format=yuv420p,{f_str}",
-               "-c:v", "libx264", "-crf", "18", "-c:a", "copy",
-               "-movflags", "+faststart", out, "-y"]
-        self.log(self.console, f"Rendering → {os.path.basename(out)}")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label="🔥 RENDER")
+    def on_app_closing(self):
+        if self._pdir:
+            shutil.rmtree(self._pdir, ignore_errors=True)
