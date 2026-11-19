@@ -6,6 +6,12 @@ every tab, and manages page navigation, search, and preview cleanup.
 import os
 import sys
 
+# The embeddable Python used by the Windows installer runs with a ._pth file,
+# which leaves the script's own folder off sys.path: put it back first.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
 # ── Command line, no window: ``main.py --cli ...`` or the ``...-cli`` executable ──
 if __name__ == "__main__" and (sys.argv[1:2] == ["--cli"] or os.path.splitext(
         os.path.basename(sys.executable))[0].lower().endswith("-cli")):
@@ -1578,6 +1584,7 @@ class App(tk.Tk):
         import logging
         self._dnd_ok = False
         try:
+            from core import deps as _deps      # noqa: F401 - puts the bundled libs/ folder on sys.path
             from tkinterdnd2 import DND_FILES, TkinterDnD
             TkinterDnD._require(self)
             for widget in (self, self.content_container, self._content_area):

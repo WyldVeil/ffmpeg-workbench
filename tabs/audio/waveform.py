@@ -229,7 +229,7 @@ class WaveformEditorTab(BaseTab):
         self._mark_out = self.duration
         self._view = (0.0, self.duration)
         a = info.audio
-        self._info_lbl.config(text=f"{_fmt(self.duration)}   {a.codec_name}  {a.sample_rate} Hz  "
+        self._info_lbl.config(text=f"{_fmt(self.duration)}   {a.codec}  {a.sample_rate} Hz  "
                                    f"{a.channel_layout or str(a.channels) + ' ch'}")
         self._sync_marks()
         if not self.out_row.path:

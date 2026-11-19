@@ -5,14 +5,13 @@ inline ffplay preview, and lossless or re-encoded export.
 """
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox
 from core import dialogs
 import subprocess
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT, add_tooltip
-from core.hardware import (    get_binary_path, get_video_duration,
-    launch_preview, CREATE_NO_WINDOW,
+from core.hardware import (    get_binary_path, launch_preview, CREATE_NO_WINDOW,
 )
 from core.i18n import t
 from core import ffmpeg as ff
@@ -348,7 +347,6 @@ class TrimmerTab(BaseTab):
 
     def _on_press(self, ev):
         w   = self._canvas.winfo_width()
-        cy  = self._canvas.winfo_height() // 2
         
         s_sec = self._tv(self._start_var, 0.0)
         e_sec = self._tv(self._end_var, self.duration)

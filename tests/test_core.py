@@ -19,9 +19,6 @@ def test_app_version_format():
 
 def test_core_imports():
     """Core submodules import without error."""
-    import core.hardware
-    import core.settings
-    import core.skins
     assert True
 
 

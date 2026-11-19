@@ -30,12 +30,36 @@ _HERE     = os.path.dirname(os.path.abspath(__file__))
 _LIBS_DIR = os.path.join(os.path.dirname(_HERE), "libs")
 
 
+def _user_libs_dir():
+    """Per-user place for add-ons when the app folder is read-only (installed
+    under /opt or Program Files); one per Python version, because some
+    packages contain compiled code."""
+    try:
+        from core.paths import _base             # the path only - nothing is created here
+        base = _base("data")
+    except Exception:
+        base = os.path.join(os.path.expanduser("~"), ".local", "share", "wyldveil-media-editor")
+    return os.path.join(base, "python-libs", "py{}.{}".format(*sys.version_info[:2]))
+
+
+def _install_dir():
+    """libs/ next to the app when it can be written to, else the per-user folder."""
+    try:
+        os.makedirs(_LIBS_DIR, exist_ok=True)
+        if os.access(_LIBS_DIR, os.W_OK):
+            return _LIBS_DIR
+    except OSError:
+        pass
+    return _user_libs_dir()
+
+
 def _ensure_libs_on_path():
-    """Make libs/ importable without creating anything (the app folder can be
-    read-only) and *after* the interpreter's own packages, so a stray copy
-    in libs/ can never shadow them."""
-    if os.path.isdir(_LIBS_DIR) and _LIBS_DIR not in sys.path:
-        sys.path.append(_LIBS_DIR)
+    """Make libs/ (and the per-user add-on folder) importable without creating
+    anything, *after* the interpreter's own packages, so a stray copy can never
+    shadow them."""
+    for folder in (_LIBS_DIR, _user_libs_dir()):
+        if os.path.isdir(folder) and folder not in sys.path:
+            sys.path.append(folder)
 
 
 _ensure_libs_on_path()
@@ -64,12 +88,17 @@ def _pip_install(pip_name):
         env = _net.subprocess_env()
     except Exception:
         env = None
+    target = _install_dir()
+    try:
+        os.makedirs(target, exist_ok=True)
+    except OSError:
+        return False
     try:
         result = subprocess.run(
             [
                 sys.executable, "-m", "pip", "install",
                 pip_name,
-                "--target={}".format(_LIBS_DIR),
+                "--target={}".format(target),
                 "--quiet",
                 "--disable-pip-version-check",
                 "--no-warn-script-location",
@@ -79,6 +108,8 @@ def _pip_install(pip_name):
             timeout=120,
             env=env,
         )
+        if result.returncode == 0:
+            _ensure_libs_on_path()
         return result.returncode == 0
     except Exception:
         return False

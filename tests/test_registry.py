@@ -7,7 +7,6 @@ without launching any GUI (no Tk required).
 import sys
 import os
 import importlib
-import pytest
 
 # Ensure project root is on path when running with pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -1260,7 +1260,7 @@ def entry(argv: list) -> int:
     """Called by main.py before any window code is imported."""
     _ensure_streams()
     os.environ.setdefault("CROSSFADER_NO_NOTIFY", "1")
-    if argv[:1] == ["--cli"]:
+    while argv[:1] == ["--cli"]:          # wme-cli.bat adds it too; typing it again is harmless
         argv = argv[1:]
     try:
         return main(argv)

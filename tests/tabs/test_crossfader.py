@@ -1,5 +1,4 @@
 """Crossfader: command builder verified by real renders, plus the tab end to end."""
-import os
 
 import pytest
 

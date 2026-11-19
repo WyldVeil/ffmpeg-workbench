@@ -1,6 +1,5 @@
 """Metadata Cleaner: finds personal metadata and removes it without re-encoding."""
 
-import os
 import subprocess
 
 import pytest

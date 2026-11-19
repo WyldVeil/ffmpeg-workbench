@@ -121,3 +121,46 @@ def test_preview_serves_a_reload_that_arrives_mid_grab(ui, monkeypatch):
         assert view._photo is not None and view.path == "second.mp4"
     finally:
         top.destroy()
+
+
+@pytest.mark.gui
+def test_skin_options_reach_new_widgets(ui):
+    """Tk option names are case-sensitive: misspelt entries (TroughColor, SelectBackground...) were
+    silently ignored, leaving sliders without a visible trough and hover colours wrong."""
+    import tkinter as tk
+    skin = ui.app._skin_data
+    top = tk.Toplevel(ui.app)
+    try:
+        entry, scale, button, radio = tk.Entry(top), tk.Scale(top), tk.Button(top), tk.Radiobutton(top)
+        assert entry.cget("selectbackground").lower() == skin["accent"].lower()
+        assert scale.cget("troughcolor").lower() != scale.cget("background").lower()
+        assert button.cget("activebackground").lower() == skin["sb_hover"].lower()
+        assert radio.cget("selectcolor").lower() == skin["accent"].lower()
+    finally:
+        top.destroy()
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_every_tool_takes_a_file_without_errors(ui, media):
+    """Load a file into every tool that accepts one: no callback may fail afterwards
+    (the Waveform Editor and Downsizer once crashed half-way through loading)."""
+    from tabs.registry import TOOLS
+    audio_tools = {name for name, _c in TOOLS.get(next(k for k in TOOLS if "AUDIO" in k), [])}
+    failed = []
+    for name in [n for items in TOOLS.values() for n, _c in items]:
+        page = ui.open(name)
+        if not hasattr(page, "load_file"):
+            continue
+        ui.callback_errors.clear()
+        try:
+            page.load_file(media["mp3"] if name in audio_tools else media["h264"])
+        except Exception as exc:
+            failed.append(f"{name}: load_file raised {exc!r}")
+            continue
+        ui.pump(1.5)
+        ui.wait_idle(60)
+        if ui.callback_errors:
+            failed.append(f"{name}: " + ui.callback_errors[0].splitlines()[-1])
+        ui.callback_errors.clear()
+    assert not failed, "\n".join(failed)

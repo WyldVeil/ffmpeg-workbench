@@ -965,17 +965,11 @@ class SpecialEffectsTab(BaseTab):
             x_px = int(w * xpct)
             y_px = int(h * ypct)
 
-            # Pop-in scale: over 0.2s the text scales from 0 → 1 then holds
-            # Achieved via fontsize with a time-based multiplier
-            pop_frames  = 6   # ~0.2s at 30fps - used in scale expression
-            scale_expr  = (
-                "if(lt(t-{st},0.2),"
-                "{sz}*(t-{st})/0.2,"
-                "{sz})"
-            ).format(st=start, sz=size)
+            # Pop-in: over the first 0.2 s the emoji grows from nothing to full size
+            scale_expr = f"if(lt(t-{start},0.2),max(1,{size}*(t-{start})/0.2),{size})"
 
             filter_str = fl.drawtext_filter(
-                textfile=fl.drawtext_text_file(text), font="emoji", fontsize=size,
+                textfile=fl.drawtext_text_file(text), font="emoji", fontsize=scale_expr,
                 fontcolor="white", x=f"{x_px}-text_w/2", y=f"{y_px}-text_h/2",
                 shadowx=3, shadowy=3, shadowcolor="black@0.7",
                 enable=f"between(t,{start},{end})")

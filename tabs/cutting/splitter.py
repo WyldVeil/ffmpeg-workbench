@@ -3,14 +3,12 @@ tab_multisplitter.py  ─  Manual Multi-Splitter
 Extract multiple different segments from a single video into separate files.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox
 from core import dialogs
-import subprocess
 import os
-import threading
 
 from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
+from core.hardware import get_video_duration
 from core.i18n import t
 from core import encoders as enc
 from core import ffmpeg as ff

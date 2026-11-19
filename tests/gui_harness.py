@@ -263,6 +263,18 @@ class Harness:
             self.callback_errors.append(
                 "".join(traceback.format_exception(exc, val, tb)))
         self.app.report_callback_exception = _report
+
+        # Callbacks queued from worker threads (core.ui.call_soon) log their
+        # exceptions instead of raising: count those as callback errors too,
+        # or a tool can half-fail after loading a file without any test noticing.
+        import logging
+
+        class _Collect(logging.Handler):
+            def emit(handler, record):          # noqa: N805 - 'self' is the harness
+                if record.levelno >= logging.ERROR:
+                    self.callback_errors.append(handler.format(record) + (
+                        "\n" + logging.Formatter().formatException(record.exc_info) if record.exc_info else ""))
+        logging.getLogger("crossfader.ui").addHandler(_Collect())
         self.pump(0.2)
 
     # ── event loop ───────────────────────────────────────────────────────────

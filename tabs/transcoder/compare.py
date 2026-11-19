@@ -310,11 +310,14 @@ class CompareQualityTab(BaseTab):
             x = pad_l + (t - t0) / max(1e-6, t1 - t0) * (w - pad_l - pad_r)
             y = pad_y + (hi - min(hi, max(lo, v))) / (hi - lo) * (h - 2 * pad_y)
             return x, y
+        last_label = -100.0
         for g in ((95, 90, 80, 70) if is_vmaf else (0.99, 0.98, 0.95)):
             if lo < g < hi:
                 _x, y = xy(t0, g)
                 c.create_line(pad_l, y, w - pad_r, y, fill="#333333", dash=(2, 3))
-                c.create_text(pad_l - 4, y, text=f"{g:g}", fill="#888888", anchor="e", font=(UI_FONT, 8))
+                if y - last_label >= 11:                # labels too close together would overlap
+                    c.create_text(pad_l - 4, y, text=f"{g:g}", fill="#888888", anchor="e", font=(UI_FONT, 8))
+                    last_label = y
         pts = [xy(t, v) for t, v in zip(series.times, series.values) if math.isfinite(v)]
         if len(pts) > 1:
             step = max(1, len(pts) // 2000)

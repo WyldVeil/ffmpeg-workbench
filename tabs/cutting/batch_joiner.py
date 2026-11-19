@@ -4,13 +4,10 @@ Drag-and-drop queue of video files, optionally re-encode to a uniform
 spec, then concatenate them all in order into a single output file.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
-import subprocess
 import os
-import tempfile
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
 from core.i18n import t
 from core import concat
 from core import encoders as enc

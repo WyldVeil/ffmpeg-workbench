@@ -1,7 +1,6 @@
 """Animated Titles, Intro/Outro Maker, Frame Extractor, Hard-Subber and
 Slideshow Maker: pure helpers plus real renders through the GUI."""
 import os
-import shutil
 
 import pytest
 

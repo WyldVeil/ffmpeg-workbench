@@ -106,9 +106,13 @@ class ResolutionScalerTab(BaseTab):
         opt.pack(fill="x", padx=20, pady=6)
 
         def row(r, label, *widgets):
+            # each row lays out on its own, so a wide widget in one row can't push another row's apart
             tk.Label(opt, text=label, width=10, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=3)
+            holder = tk.Frame(opt)
+            holder.grid(row=r, column=1, sticky="w", pady=3)
+            for w in widgets:
+                w.pack(in_=holder, side="left", padx=(0, 6))
+                w.lift(holder)
 
         self.size_var = tk.StringVar(value=SIZES[3][0])
         sb = ttk.Combobox(opt, textvariable=self.size_var, values=[s[0] for s in SIZES], state="readonly", width=24)
@@ -127,8 +131,7 @@ class ResolutionScalerTab(BaseTab):
         self.sharpen_var = tk.DoubleVar(value=0.3)
         row(3, "Sharpen:", tk.Scale(opt, variable=self.sharpen_var, from_=0, to=1, resolution=0.05,
                                     orient="horizontal", length=200),
-            tk.Label(opt, text="(upscaling with Lanczos/Bicubic/GPU; FSR, NIS and the AI shaders sharpen "
-                               "already)", fg=CLR["fgdim"]))
+            tk.Label(opt, text="(when upscaling with Lanczos, Bicubic or GPU)", fg=CLR["fgdim"]))
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
         self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=(4, 0))
         for v in (self.size_var, self.shape_var, self.w_var, self.h_var):

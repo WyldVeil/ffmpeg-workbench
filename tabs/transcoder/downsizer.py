@@ -224,7 +224,7 @@ class UniversalDownsizerTab(BaseTab):
             size_mb = os.path.getsize(path) / 1e6 if os.path.isfile(path) else 0
             hdr = "  HDR" if v.is_hdr else ""
             self.info_lbl.config(text=f"{ff.format_time(info.duration)}  ·  {v.width}×{v.height}  ·  "
-                                      f"{v.fps:.3g} fps  ·  {v.codec_name}{hdr}  ·  {size_mb:.1f} MB now")
+                                      f"{v.fps:.3g} fps  ·  {v.codec}{hdr}  ·  {size_mb:.1f} MB now")
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "small", ".mp4"))
         self._changed()

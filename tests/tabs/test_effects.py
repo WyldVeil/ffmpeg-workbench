@@ -1,5 +1,4 @@
 """Special Effects: every effect renders a valid, playable file from varied sources."""
-import os
 
 import pytest
 

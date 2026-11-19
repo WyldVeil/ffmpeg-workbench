@@ -448,16 +448,15 @@ def apply_default_options(app: tk.Tk, skin: dict):
         app.option_add("*LabelFrame.Foreground",       skin["fgdim"], P)
         app.option_add("*LabelFrame.Relief",           "solid", P)
         app.option_add("*LabelFrame.BorderWidth",      "1",   P)
-        app.option_add("*LabelFrame.Bd",               "1",   P)
         app.option_add("*LabelFrame.Font",
                        f"{{{UI_FONT}}} 9 bold", P)
 
         # Entry
         app.option_add("*Entry.Background",            i_bg,  P)
         app.option_add("*Entry.Foreground",            i_fg,  P)
-        app.option_add("*Entry.InsertBackground",      i_fg,  P)
-        app.option_add("*Entry.SelectBackground",      acc,   P)
-        app.option_add("*Entry.SelectForeground",      "#FFFFFF", P)
+        app.option_add("*Entry.insertBackground",      i_fg,  P)
+        app.option_add("*Entry.selectBackground",      acc,   P)
+        app.option_add("*Entry.selectForeground",      "#FFFFFF", P)
         app.option_add("*Entry.Relief",                "flat", P)
         app.option_add("*Entry.BorderWidth",           "1",   P)
         app.option_add("*Entry.HighlightThickness",    "0",   P)
@@ -465,45 +464,46 @@ def apply_default_options(app: tk.Tk, skin: dict):
         # Spinbox
         app.option_add("*Spinbox.Background",          i_bg,  P)
         app.option_add("*Spinbox.Foreground",          i_fg,  P)
-        app.option_add("*Spinbox.InsertBackground",    i_fg,  P)
-        app.option_add("*Spinbox.SelectBackground",    acc,   P)
+        app.option_add("*Spinbox.insertBackground",    i_fg,  P)
+        app.option_add("*Spinbox.selectBackground",    acc,   P)
         app.option_add("*Spinbox.Relief",              "flat", P)
-        app.option_add("*Spinbox.ButtonBackground",    pnl,   P)
+        app.option_add("*Spinbox.buttonBackground",    pnl,   P)
         app.option_add("*Spinbox.HighlightThickness",  "0",   P)
 
         # Button
         app.option_add("*Button.Background",           pnl,   P)
         app.option_add("*Button.Foreground",           fg,    P)
-        app.option_add("*Button.ActiveBackground",     skin["sb_hover"], P)
-        app.option_add("*Button.ActiveForeground",     "#FFFFFF", P)
+        app.option_add("*Button.activeBackground",     skin["sb_hover"], P)
+        app.option_add("*Button.activeForeground",     "#FFFFFF", P)
         app.option_add("*Button.Relief",               "flat", P)
         app.option_add("*Button.BorderWidth",          "0",   P)
         app.option_add("*Button.Cursor",               "hand2", P)
         app.option_add("*Button.HighlightThickness",   "0",   P)
-        app.option_add("*Button.PadX",                 "10",  P)
-        app.option_add("*Button.PadY",                 "5",   P)
 
         # Checkbutton
         app.option_add("*Checkbutton.Background",      c,     P)
         app.option_add("*Checkbutton.Foreground",      fg,    P)
-        app.option_add("*Checkbutton.SelectColor",     pnl,   P)
-        app.option_add("*Checkbutton.ActiveBackground",c,     P)
-        app.option_add("*Checkbutton.ActiveForeground",acc,   P)
+        app.option_add("*Checkbutton.selectColor",     pnl,   P)
+        app.option_add("*Checkbutton.activeBackground",c,     P)
+        app.option_add("*Checkbutton.activeForeground",acc,   P)
         app.option_add("*Checkbutton.HighlightThickness","0", P)
 
         # Radiobutton
         app.option_add("*Radiobutton.Background",      c,     P)
         app.option_add("*Radiobutton.Foreground",      fg,    P)
-        app.option_add("*Radiobutton.SelectColor",     acc,   P)
-        app.option_add("*Radiobutton.ActiveBackground",c,     P)
-        app.option_add("*Radiobutton.ActiveForeground",acc,   P)
+        app.option_add("*Radiobutton.selectColor",     acc,   P)
+        app.option_add("*Radiobutton.activeBackground",c,     P)
+        app.option_add("*Radiobutton.activeForeground",acc,   P)
         app.option_add("*Radiobutton.HighlightThickness","0", P)
 
-        # Scale (slider)
+        # Scale (slider).  Tk draws the slider in the background colour, so the
+        # trough must be clearly lighter for the slider to show at all.
         app.option_add("*Scale.Background",            c,     P)
         app.option_add("*Scale.Foreground",            fg,    P)
-        app.option_add("*Scale.TroughColor",           bdr,   P)
-        app.option_add("*Scale.ActiveBackground",      acc,   P)
+        # option *names* are case-sensitive ("troughColor"); its class is
+        # "Background", so without this the trough took the background colour
+        app.option_add("*Scale.troughColor",           _blend(bdr, fg, 0.35), P)
+        app.option_add("*Scale.activeBackground",      acc,   P)
         app.option_add("*Scale.SliderRelief",          "flat", P)
         app.option_add("*Scale.HighlightThickness",    "0",   P)
         app.option_add("*Scale.BorderWidth",           "0",   P)
@@ -511,8 +511,8 @@ def apply_default_options(app: tk.Tk, skin: dict):
         # Listbox
         app.option_add("*Listbox.Background",          i_bg,  P)
         app.option_add("*Listbox.Foreground",          i_fg,  P)
-        app.option_add("*Listbox.SelectBackground",    acc,   P)
-        app.option_add("*Listbox.SelectForeground",    "#FFFFFF", P)
+        app.option_add("*Listbox.selectBackground",    acc,   P)
+        app.option_add("*Listbox.selectForeground",    "#FFFFFF", P)
         app.option_add("*Listbox.Relief",              "flat", P)
         app.option_add("*Listbox.BorderWidth",         "0",   P)
         app.option_add("*Listbox.HighlightThickness",  "0",   P)
@@ -520,8 +520,8 @@ def apply_default_options(app: tk.Tk, skin: dict):
         # Text (used for console log areas)
         app.option_add("*Text.Background",             skin["console_bg"], P)
         app.option_add("*Text.Foreground",             skin["console_fg"], P)
-        app.option_add("*Text.InsertBackground",       skin["console_fg"], P)
-        app.option_add("*Text.SelectBackground",       acc,   P)
+        app.option_add("*Text.insertBackground",       skin["console_fg"], P)
+        app.option_add("*Text.selectBackground",       acc,   P)
         app.option_add("*Text.Relief",                 "flat", P)
         app.option_add("*Text.BorderWidth",            "0",   P)
         app.option_add("*Text.HighlightThickness",     "0",   P)
@@ -533,8 +533,8 @@ def apply_default_options(app: tk.Tk, skin: dict):
         # Menu
         app.option_add("*Menu.Background",             pnl,   P)
         app.option_add("*Menu.Foreground",             fg,    P)
-        app.option_add("*Menu.ActiveBackground",       acc,   P)
-        app.option_add("*Menu.ActiveForeground",       "#FFFFFF", P)
+        app.option_add("*Menu.activeBackground",       acc,   P)
+        app.option_add("*Menu.activeForeground",       "#FFFFFF", P)
         app.option_add("*Menu.Relief",                 "flat", P)
         app.option_add("*Menu.BorderWidth",            "1",   P)
         app.option_add("*Menu.TearOff",                "0",   P)
@@ -544,6 +544,16 @@ def apply_default_options(app: tk.Tk, skin: dict):
 
 
 # ── Main entry point ─────────────────────────────────────────────────────────
+
+def _blend(a: str, b: str, amount: float) -> str:
+    """Colour *a* moved *amount* (0..1) of the way towards *b* (#rrggbb)."""
+    try:
+        ca = [int(a[i:i + 2], 16) for i in (1, 3, 5)]
+        cb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
+    except (ValueError, IndexError, TypeError):
+        return a
+    return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb))
+
 
 def apply_skin(app: tk.Tk, sidebar_container: tk.Frame,
                content_container: tk.Frame,
@@ -749,8 +759,6 @@ def _recolour_widget_tree(widget, skin: dict):
     try:
         cls = widget.winfo_class()
         c   = skin["content"]
-        pnl = skin["panel"]
-        i_bg = skin.get("input_bg", "#1E1E1E")
 
         if cls == "Frame":
             try: widget.config(bg=c)
