@@ -8,14 +8,14 @@ Left panel  - queue treeview (all tasks, live-refreshed)
 Right panel - job settings editor for queueing new encode jobs from here
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, scrolledtext
+from tkinter import messagebox, ttk, scrolledtext
 from core import dialogs
 import os
-import uuid
 import time
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
+from core import ffmpeg as ff
 from core.i18n import t
 
 
@@ -56,46 +56,70 @@ class Job:
         self.extra_args = ""
 
     def build_cmd(self, ffmpeg):
-        cmd = [ffmpeg, "-i", self.src]
-
-        if self.vcodec != "copy":
-            cmd += ["-c:v", self.vcodec]
-            if self.vcodec not in ("prores_ks", "dnxhd", "libvpx", "libvpx-vp9"):
-                cmd += ["-crf", self.crf, "-preset", self.preset]
-            elif self.vcodec in ("libvpx", "libvpx-vp9"):
-                cmd += ["-b:v", "0", "-crf", self.crf]
-        else:
-            cmd += ["-c:v", "copy"]
-
-        vf_parts = []
+        """Argument list for this job; ValueError with a readable reason when
+        the choices can't work together."""
+        from tabs.transcoder.presets import split_args
+        from tabs.transcoder.scaler import rate_fraction
+        ext = os.path.splitext(self.out)[1].lower().lstrip(".")
+        if ext not in OK_VIDEO.get(self.vcodec, (ext,)):
+            raise ValueError(f"{self.vcodec} can't be saved as .{ext} - use "
+                             + " / ".join("." + e for e in OK_VIDEO[self.vcodec]) + ".")
+        if self.acodec not in ("none", "copy") and ext not in OK_AUDIO.get(self.acodec, (ext,)):
+            raise ValueError(f"{self.acodec} audio can't go into .{ext}.")
+        filters = []
         if self.resolution != "Source":
-            w, h = self.resolution.split("x")
-            vf_parts.append(
-                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2")
+            w, h = (int(x) for x in self.resolution.split("x"))
+            filters.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+                           f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1")
         if self.fps not in ("Source", "0", ""):
-            vf_parts.append(f"fps={self.fps}")
+            r = rate_fraction(self.fps)
+            filters.append(f"fps={r.numerator}/{r.denominator}")
         if self.extra_vf.strip():
-            vf_parts.append(self.extra_vf.strip())
-        if vf_parts:
-            cmd += ["-vf", ",".join(vf_parts)]
-
+            filters.append(self.extra_vf.strip())
+        if self.vcodec == "copy" and filters:
+            raise ValueError("The video can't be resized or filtered while it is copied - choose a codec.")
+        cmd = [ffmpeg, "-hide_banner", "-nostdin", "-y", "-i", self.src, "-map", "0:v:0", "-map", "0:a?"]
+        if filters:
+            cmd += ["-vf", ",".join(filters)]
+        v = self.vcodec
+        cmd += ["-c:v", v]
+        if v in ("libx264", "libx265"):
+            cmd += ["-crf", self.crf, "-preset", self.preset, "-pix_fmt", "yuv420p"]
+            if v == "libx265":
+                cmd += ["-x265-params", "log-level=error"] + (["-tag:v", "hvc1"] if ext in ("mp4", "mov") else [])
+        elif v == "libvpx-vp9":
+            cmd += ["-crf", self.crf, "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "2"]
+        elif v == "libvpx":
+            cmd += ["-crf", self.crf, "-b:v", "20M", "-deadline", "good", "-cpu-used", "2"]
+        elif v == "prores_ks":
+            cmd += ["-profile:v", "3", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"]
+        elif v == "dnxhd":
+            cmd += ["-profile:v", "dnxhr_hq", "-pix_fmt", "yuv422p"]
         if self.acodec == "none":
             cmd += ["-an"]
         elif self.acodec == "copy":
             cmd += ["-c:a", "copy"]
+        elif self.acodec in ("flac", "pcm_s16le"):
+            cmd += ["-c:a", self.acodec]
         else:
             cmd += ["-c:a", self.acodec, "-b:a", self.abitrate]
-
         if self.extra_args.strip():
-            import shlex
             try:
-                cmd += shlex.split(self.extra_args)
-            except Exception:
-                pass
+                cmd += split_args(self.extra_args)
+            except ValueError as exc:
+                raise ValueError(f"The extra arguments have an unclosed quote ({exc}).") from None
+        if ext in ("mp4", "mov", "m4v"):
+            cmd += ["-movflags", "+faststart"]
+        return cmd + [self.out]
 
-        cmd += [self.out, "-y"]
-        return cmd
+
+OK_VIDEO = {"libx264": ("mp4", "mkv", "mov", "m4v", "ts"), "libx265": ("mp4", "mkv", "mov", "m4v", "ts"),
+            "libvpx-vp9": ("webm", "mkv", "mp4"), "libvpx": ("webm", "mkv"), "prores_ks": ("mov", "mkv"),
+            "dnxhd": ("mov", "mkv", "mxf")}
+OK_AUDIO = {"aac": ("mp4", "mkv", "mov", "m4v", "ts"), "libmp3lame": ("mp4", "mkv", "mov", "ts", "avi"),
+            "libopus": ("webm", "mkv", "mp4"), "libvorbis": ("webm", "mkv"), "flac": ("mkv", "mp4", "mov"),
+            "pcm_s16le": ("mov", "mkv", "avi", "mxf")}
+DEFAULT_EXT = {"libvpx-vp9": ".webm", "libvpx": ".webm", "prores_ks": ".mov", "dnxhd": ".mov"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -295,19 +319,19 @@ class EncodeQueueTab(BaseTab):
         sel_id = self._selected_task_id
 
         self.tree.delete(*self.tree.get_children())
-        for t in tasks:
+        for task in tasks:
             elapsed = ""
-            if t.started_at:
-                end = t.finished_at or time.time()
-                elapsed = _fmt_elapsed(end - t.started_at)
+            if task.started_at:
+                end = task.finished_at or time.time()
+                elapsed = _fmt_elapsed(end - task.started_at)
 
-            progress = t.progress[:60] if t.progress else ""
-            out_name = os.path.basename(t.output_path) if t.output_path else "-"
+            progress = task.progress[:60] if task.progress else ""
+            out_name = os.path.basename(task.output_path) if task.output_path else "-"
 
             self.tree.insert(
-                "", tk.END, iid=t.id,
-                values=(t.status.upper(), t.name, out_name, elapsed, progress),
-                tags=(t.status,),
+                "", tk.END, iid=task.id,
+                values=(task.status.upper(), task.name, out_name, elapsed, progress),
+                tags=(task.status,),
             )
 
         # Re-select
@@ -331,11 +355,11 @@ class EncodeQueueTab(BaseTab):
         self._selected_task_id = sel[0]
         # Show latest progress in console
         tasks = self._qmgr.get_all_tasks()
-        for t in tasks:
-            if t.id == self._selected_task_id:
-                if t.progress:
+        for task in tasks:
+            if task.id == self._selected_task_id:
+                if task.progress:
                     self.console.delete("1.0", tk.END)
-                    self.console.insert(tk.END, f"[{t.name}]\n{t.progress}\n")
+                    self.console.insert(tk.END, f"[{task.name}]\n{task.progress}\n")
                 break
 
     def _cancel_selected(self):
@@ -366,63 +390,59 @@ class EncodeQueueTab(BaseTab):
         if p:
             self.ed_out_var.set(p)
 
+    def _queue_job(self, src, out) -> bool:
+        j = self._read_editor()
+        j.src, j.out = src, out
+        try:
+            cmd = j.build_cmd(get_binary_path("ffmpeg"))
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), f"{os.path.basename(src)}:\n{exc}", parent=self)
+            return False
+        self.enqueue_render(os.path.basename(src), output_path=out, cmd=cmd, inputs=[src],
+                            expected_duration=ff.duration_of(src) or None,
+                            on_progress=lambda tid, line: self._on_task_progress(tid, line),
+                            on_complete=lambda tid, rc, out=out: self._on_task_complete(tid, rc, out))
+        return True
+
+    def _default_ext(self):
+        return DEFAULT_EXT.get(self.ed_vcodec_var.get(), ".mp4")
+
     def _add_to_queue(self):
         src = self.ed_src_var.get().strip()
-        out = self.ed_out_var.get().strip()
-        if not src:
-            messagebox.showwarning(t("encode_queue.no_source_title"), t("encode_queue.no_source_message"))
+        if not src or not os.path.isfile(src):
+            messagebox.showwarning(t("encode_queue.no_source_title"), t("encode_queue.no_source_message"), parent=self)
             return
+        out = self.ed_out_var.get().strip() or self.suggest_output(src, "encoded", self._default_ext())
+        out = self.confirm_output(out, [src], default_ext=self._default_ext())
         if not out:
-            out = os.path.splitext(src)[0] + "_encoded.mp4"
-            self.ed_out_var.set(out)
-
-        j = self._read_editor()
-        j.src = src
-        j.out = out
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        try:
-            os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-        except Exception:
-            pass
-
-        cmd = j.build_cmd(ffmpeg)
-        task_name = os.path.basename(src)
-
-        self.enqueue_render(
-            task_name,
-            output_path=out,
-            cmd=cmd,
-            on_progress=lambda tid, line: self._on_task_progress(tid, line),
-            on_complete=lambda tid, rc: self._on_task_complete(tid, rc, out),
-        )
+            return
+        self.ed_out_var.set(out)
+        self._queue_job(src, out)
 
     def _add_folder(self):
+        from tabs.transcoder.converter import free_name
         folder = dialogs.askdirectory()
         if not folder:
             return
-        exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v"}
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        count = 0
+        exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v", ".mts", ".m2ts", ".mxf"}
+        ext = self._default_ext()
+        count, taken = 0, set()
         for fn in sorted(os.listdir(folder)):
-            if os.path.splitext(fn)[1].lower() not in exts:
-                continue
+            stem, e = os.path.splitext(fn)
             src = os.path.join(folder, fn)
-            out = os.path.join(folder, os.path.splitext(fn)[0] + "_encoded.mp4")
-            j = self._read_editor()
-            j.src = src
-            j.out = out
-            cmd = j.build_cmd(ffmpeg)
-            self.enqueue_render(
-                fn, output_path=out, cmd=cmd,
-                on_progress=lambda tid, line: self._on_task_progress(tid, line),
-                on_complete=lambda tid, rc: self._on_task_complete(tid, rc, out),
-            )
-            count += 1
+            if (e.lower() not in exts or stem.endswith("_encoded") or ".part" in stem
+                    or not os.path.isfile(src) or os.path.getsize(src) == 0):
+                continue                     # not a video, or one of this tool's own outputs
+            out = free_name(os.path.join(folder, stem + "_encoded" + ext), taken)
+            taken.add(os.path.normcase(out))
+            if self._queue_job(src, out):
+                count += 1
+            else:
+                break
         if count:
-            messagebox.showinfo("Queued", f"{count} files added to the render queue.")
+            messagebox.showinfo("Queued", f"{count} file(s) added to the render queue.", parent=self)
         else:
-            messagebox.showwarning(t("common.warning"), "No supported video files found.")
+            messagebox.showwarning(t("common.warning"), "No video files to add were found.", parent=self)
 
     def _read_editor(self) -> Job:
         j = Job()

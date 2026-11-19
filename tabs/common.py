@@ -90,7 +90,7 @@ def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn
            btn_label: str, name: str, chain: str = "", graph: str = "",
            extra_inputs: Sequence[str] = (), audio: Optional[Sequence[str]] = None,
            duration: Optional[float] = None, extra_args: Sequence[str] = (),
-           inputs: Sequence[str] = (), on_done=None) -> None:
+           inputs: Sequence[str] = (), on_done=None, pre_input: Sequence[str] = ()) -> None:
     """Queue ``ffmpeg -i src [extra inputs] <chain|graph> <audio> <encoder> out``.
 
     *chain* is a simple ``-vf`` chain; *graph* a ``-filter_complex`` graph
@@ -98,7 +98,7 @@ def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn
     a ready :class:`core.encoders.VideoEncode`."""
     container = container_of(out)
     venc = encoder.video_encode(container) if hasattr(encoder, "video_encode") else encoder
-    cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input, "-i", src, *extra_inputs]
+    cmd = [ff.ffmpeg_path(), "-y", *pre_input, *venc.pre_input, "-i", src, *extra_inputs]
     if graph:
         if venc.filter_suffix:
             graph = f"{graph};[v]{venc.filter_suffix}[venc]"

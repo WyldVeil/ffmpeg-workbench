@@ -1,111 +1,191 @@
 """
-tab_presetmanager.py  ─  Preset Manager
-Save, load, and manage named encoding presets.
-Presets store the full FFmpeg command template with placeholders
-{INPUT} and {OUTPUT}. Can be exported/imported as JSON.
+tabs/transcoder/presets.py  -  Preset Manager
+
+Named FFmpeg option templates with {INPUT} and {OUTPUT} placeholders: save,
+organise, import/export as JSON and run on a file.
+
+Templates are split into arguments and run directly - never through a shell -
+so file names can't inject commands; shell operators (&&, |, >) are refused.
+User presets live in the app's config folder.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, scrolledtext
-from core import dialogs
 import json
 import os
-import subprocess
-import threading
+import shlex
+import time
+import tkinter as tk
+from tkinter import messagebox, ttk, scrolledtext
 
+from core import dialogs
+from core import ffmpeg as ff
+from core import filters as fl
+from core.paths import config_dir
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
 from core.i18n import t
 
-PRESETS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "encode_presets.json")
+#: where presets were kept before 2.0 (inside the program folder - read once, never written)
+LEGACY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "encode_presets.json")
+SHELL_TOKENS = {"&&", "||", "|", ";", "&", ">", ">>", "<", "2>", "2>&1", "1>", "&>"}
 
-# Built-in starter presets
+
+def presets_file() -> str:
+    return os.path.join(config_dir(), "encode_presets.json")
+
+
+# Built-in starter presets ("ext" = default output type)
 BUILT_IN = [
     {
         "name": t("presets.instagram_reel_1080_1920_h_264"),
         "category": "Social",
         "description": t("presets.vertical_9_16_for_instagram_reels_and_tiktok"),
-        "cmd": '-i {INPUT} -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -crf 20 -preset fast -c:a aac -b:a 192k {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -crf 20 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart {OUTPUT}',
+        "ext": ".mp4",
     },
     {
         "name": t("presets.youtube_upload_1080p_h_264_high_quality"),
         "category": "Web",
         "description": "Optimised for YouTube's recommended settings.",
-        "cmd": '-i {INPUT} -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -crf 16 -preset slow -c:a aac -b:a 320k {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -c:a aac -b:a 320k -movflags +faststart {OUTPUT}',
+        "ext": ".mp4",
     },
     {
         "name": t("presets.quick_compress_h_265_crf_28"),
         "category": "Compression",
         "description": t("presets.shrink_file_size_fast_half_the_size_of_h_264_at"),
-        "cmd": "-i {INPUT} -c:v libx265 -crf 28 -preset fast -c:a aac -b:a 128k {OUTPUT}",
+        "cmd": "-i {INPUT} -c:v libx265 -crf 28 -preset fast -tag:v hvc1 -c:a aac -b:a 128k -movflags +faststart {OUTPUT}",
+        "ext": ".mp4",
     },
     {
         "name": t("presets.archive_master_lossless_h_265"),
         "category": "Archive",
         "description": t("presets.lossless_encode_for_long_term_archival_storage"),
-        "cmd": "-i {INPUT} -c:v libx265 -x265-params lossless=1 -c:a flac {OUTPUT}",
+        "cmd": "-i {INPUT} -map 0 -c:v libx265 -x265-params lossless=1:log-level=error -c:a flac -c:s copy {OUTPUT}",
+        "ext": ".mkv",
     },
     {
         "name": t("presets.streaming_proxy_low_bitrate_h_264"),
         "category": "Proxy",
         "description": t("presets.fast_tiny_proxy_for_editing_on_slow_machines"),
-        "cmd": '-i {INPUT} -vf "scale=iw/4:ih/4" -c:v libx264 -crf 28 -preset ultrafast -c:a aac -b:a 96k {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=trunc(iw/8)*2:trunc(ih/8)*2" -c:v libx264 -crf 28 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 96k {OUTPUT}',
+        "ext": ".mp4",
     },
     {
         "name": t("presets.audio_only_hq_aac"),
         "category": "Audio",
         "description": t("presets.strip_video_keep_audio_as_high_quality_aac"),
         "cmd": "-i {INPUT} -vn -c:a aac -b:a 320k {OUTPUT}",
+        "ext": ".m4a",
     },
     {
-        "name": t("presets.webm_for_web_vp9_2_pass"),
+        "name": "WebM for the web (VP9, constant quality)",
         "category": "Web",
         "description": t("presets.efficient_vp9_webm_for_web_embedding"),
-        "cmd": "-i {INPUT} -c:v libvpx-vp9 -b:v 1M -pass 1 -an -f webm /dev/null && ffmpeg -i {INPUT} -c:v libvpx-vp9 -b:v 1M -pass 2 -c:a libopus -b:a 128k {OUTPUT}",
+        "cmd": "-i {INPUT} -c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -deadline good -cpu-used 2 -c:a libopus -b:a 128k {OUTPUT}",
+        "ext": ".webm",
     },
     {
         "name": t("presets.4k_downscale_to_1080p_lanczos"),
         "category": "Compression",
         "description": t("presets.downscale_4k_footage_to_1080p_with_best_quality"),
-        "cmd": '-i {INPUT} -vf "scale=1920:1080:flags=lanczos" -c:v libx264 -crf 18 -preset medium -c:a copy {OUTPUT}',
+        "cmd": '-i {INPUT} -vf "scale=-2:1080:flags=lanczos" -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a copy {OUTPUT}',
+        "ext": ".mp4",
     },
 ]
 
 
-def _load_presets():
-    presets = list(BUILT_IN)
+def split_args(template: str) -> list:
+    """Split like a shell would (quotes group words) but keep backslashes,
+    so Windows paths survive."""
+    lex = shlex.shlex(template, posix=True)
+    lex.whitespace_split = True
+    lex.escape = ""
+    lex.commenters = ""
+    return list(lex)
+
+
+def check_template(template: str) -> list:
+    """Arguments of *template*; ValueError if it isn't a plain FFmpeg option list."""
     try:
-        if os.path.exists(PRESETS_FILE):
-            with open(PRESETS_FILE) as f:
-                custom = json.load(f)
-            # Merge: built-ins first, then user presets
-            bi_names = {p["name"] for p in BUILT_IN}
-            presets += [p for p in custom if p.get("name") not in bi_names]
-    except Exception:
-        pass
-    return presets
+        args = split_args(template.replace("\n", " ").replace("\r", " "))
+    except ValueError as exc:
+        raise ValueError(f"The command has an unclosed quote ({exc}).") from None
+    if args and os.path.splitext(os.path.basename(args[0]))[0].lower() == "ffmpeg":
+        args = args[1:]                                   # a pasted "ffmpeg ..." line
+    if any(a in SHELL_TOKENS or a[:1] in ("|", ">", "<") or a.endswith(("&&", "||", ";")) for a in args):
+        raise ValueError("A preset holds FFmpeg options only - shell operators such as '&&', '|' or "
+                         "'>' are not allowed.")
+    joined = " ".join(args)
+    if "{INPUT}" not in joined:
+        raise ValueError("The command needs {INPUT} where the source file goes.")
+    if args.count("{OUTPUT}") != 1:
+        raise ValueError("The command needs {OUTPUT} once, as its own word, where the result goes.")
+    return args
 
 
-def _save_user_presets(presets):
-    # Save only non-built-in presets
+def build_command(template: str, src: str, out: str) -> list:
+    """Final argument list - no shell involved."""
+    final = []
+    for a in check_template(template):
+        if a == "{INPUT}":
+            final.append(src)
+        elif a == "{OUTPUT}":
+            final.append(out)
+        elif "{INPUT}" in a:                               # e.g. subtitles={INPUT} inside a filter
+            final.append(a.replace("{INPUT}", fl.filter_path(src)))
+        elif a not in ("-y", "-n"):
+            final.append(a)
+    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"] + final
+
+
+def _load_presets():
+    """(presets, warning).  A file that can't be read is set aside, never overwritten."""
+    presets = list(BUILT_IN)
+    path = presets_file()
+    src = path if os.path.exists(path) else (LEGACY_FILE if os.path.exists(LEGACY_FILE) else None)
+    if not src:
+        return presets, ""
+    try:
+        with open(src, encoding="utf-8") as f:
+            custom = json.load(f)
+        if not isinstance(custom, list):
+            raise ValueError("it is not a list of presets")
+    except (OSError, ValueError) as exc:
+        backup = f"{src}.unreadable-{time.strftime('%Y%m%d-%H%M%S')}"
+        try:
+            os.replace(src, backup)
+        except OSError:
+            backup = ""
+        return presets, (f"Your saved presets could not be read ({exc})."
+                         + (f"\nThe file was kept as:\n{backup}" if backup else ""))
+    bi_names = {p["name"] for p in BUILT_IN}
+    presets += [p for p in custom if isinstance(p, dict) and isinstance(p.get("name"), str)
+                and isinstance(p.get("cmd"), str) and p["name"] not in bi_names]
+    return presets, ""
+
+
+def _save_user_presets(presets) -> str:
+    """Write the user's presets (atomically).  Returns "" or an error message."""
     bi_names = {p["name"] for p in BUILT_IN}
     user_only = [p for p in presets if p.get("name") not in bi_names]
+    path = presets_file()
     try:
-        with open(PRESETS_FILE, "w") as f:
-            json.dump(user_only, f, indent=2)
-        return True
-    except Exception as e:
-        print(f"Preset save error: {e}")
-        return False
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(user_only, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, path)
+        return ""
+    except OSError as exc:
+        return str(exc)
 
 
 class PresetManagerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.presets = _load_presets()
+        self.presets, warning = _load_presets()
         self._selected_idx = None
         self._build_ui()
+        if warning:
+            self.after(300, lambda: messagebox.showwarning(t("common.warning"), warning, parent=self))
 
     def _build_ui(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
@@ -229,10 +309,10 @@ class PresetManagerTab(BaseTab):
         snippets = [
             ("H.264",      "-c:v libx264 -crf 18 -preset fast"),
             ("H.265",      "-c:v libx265 -crf 22 -preset fast"),
-            (t("presets.scale_1080"), '-vf "scale=1920:1080"'),
+            ("Scale 1080p", '-vf "scale=-2:1080,setsar=1" -pix_fmt yuv420p'),
             ("AAC audio",  "-c:a aac -b:a 192k"),
-            ("Copy all",   "-c copy"),
-            (t("presets.strip_audio"),"-an"),
+            ("Copy all",   "-map 0 -c copy"),
+            ("No audio", "-an"),
         ]
         for label, snippet in snippets:
             tk.Button(help_lf, text=label, bg="#333", fg=CLR["fg"],
@@ -340,7 +420,12 @@ class PresetManagerTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Enter a preset name.")
             return
         if not cmd:
-            messagebox.showwarning(t("common.warning"), "Enter an FFmpeg command template.")
+            messagebox.showwarning(t("common.warning"), "Enter an FFmpeg command template.", parent=self)
+            return
+        try:
+            check_template(cmd)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
 
         entry = {
@@ -365,9 +450,12 @@ class PresetManagerTab(BaseTab):
         else:
             self.presets.append(entry)
 
-        _save_user_presets(self.presets)
+        err = _save_user_presets(self.presets)
         self._refresh_list()
-        messagebox.showinfo("Saved", f'Preset "{name}" saved.')
+        if err:
+            messagebox.showerror(t("common.error"), f"The preset could not be saved:\n{err}", parent=self)
+        else:
+            messagebox.showinfo("Saved", f'Preset "{name}" saved.', parent=self)
 
     def _delete_selected(self):
         if self._selected_idx is None: return
@@ -379,42 +467,75 @@ class PresetManagerTab(BaseTab):
         if messagebox.askyesno("Delete", f'Delete preset "{p["name"]}"?'):
             del self.presets[self._selected_idx]
             self._selected_idx = None
-            _save_user_presets(self.presets)
+            err = _save_user_presets(self.presets)
             self._refresh_list()
+            if err:
+                messagebox.showerror(t("common.error"), f"Could not save the change:\n{err}", parent=self)
 
     def _duplicate(self):
         if self._selected_idx is None: return
         p = dict(self.presets[self._selected_idx])
-        p["name"] = p["name"] + " (copy)"
+        names = {x["name"] for x in self.presets}
+        base, n = p["name"] + " (copy)", 2
+        p["name"] = base
+        while p["name"] in names:
+            p["name"] = f"{base} {n}"
+            n += 1
         self.presets.append(p)
-        _save_user_presets(self.presets)
+        err = _save_user_presets(self.presets)
         self._refresh_list()
+        if err:
+            messagebox.showerror(t("common.error"), f"Could not save the change:\n{err}", parent=self)
 
     def _export_presets(self):
-        path = dialogs.asksaveasfilename(defaultextension=".json",
-                                            filetypes=[("JSON", t("chapter_markers.json"))])
-        if path:
-            with open(path, "w") as f:
-                json.dump(self.presets, f, indent=2)
-            messagebox.showinfo("Exported", f"Presets exported to {os.path.basename(path)}")
+        path = dialogs.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
+        if not path:
+            return
+        bi_names = {p["name"] for p in BUILT_IN}
+        mine = [p for p in self.presets if p["name"] not in bi_names] or self.presets
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(mine, f, indent=2, ensure_ascii=False)
+        except OSError as exc:
+            messagebox.showerror(t("common.error"), str(exc), parent=self)
+            return
+        messagebox.showinfo("Exported", f"{len(mine)} preset(s) exported to {os.path.basename(path)}", parent=self)
 
     def _import_presets(self):
-        path = dialogs.askopenfilename(filetypes=[("JSON", t("chapter_markers.json"))])
-        if not path: return
+        path = dialogs.askopenfilename(filetypes=[("JSON", "*.json")])
+        if not path:
+            return
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 imported = json.load(f)
-            added = 0
-            existing_names = {p["name"] for p in self.presets}
-            for p in imported:
-                if p.get("name") and p["name"] not in existing_names:
-                    self.presets.append(p)
-                    added += 1
-            _save_user_presets(self.presets)
-            self._refresh_list()
-            messagebox.showinfo("Imported", f"Added {added} new preset(s).")
-        except Exception as e:
-            messagebox.showerror(t("common.error"), str(e))
+            if not isinstance(imported, list):
+                raise ValueError("the file does not contain a list of presets")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(t("common.error"), f"Could not read the file:\n{exc}", parent=self)
+            return
+        added, skipped = 0, []
+        existing = {p["name"] for p in self.presets}
+        for p in imported:
+            if not (isinstance(p, dict) and isinstance(p.get("name"), str) and isinstance(p.get("cmd"), str)):
+                continue
+            try:
+                check_template(p["cmd"])
+            except ValueError:
+                skipped.append(p["name"])
+                continue
+            if p["name"] not in existing:
+                self.presets.append({k: str(p.get(k, "")) for k in ("name", "category", "description", "cmd", "ext")})
+                existing.add(p["name"])
+                added += 1
+        err = _save_user_presets(self.presets)
+        self._refresh_list()
+        msg = f"Added {added} new preset(s)."
+        if skipped:
+            msg += f"\n\nSkipped {len(skipped)} that contain shell commands or no {{INPUT}}/{{OUTPUT}}:\n" + \
+                   "\n".join(skipped[:10])
+        if err:
+            msg += f"\n\nBut they could not be saved:\n{err}"
+        messagebox.showinfo("Imported", msg, parent=self)
 
     # ── Quick run ─────────────────────────────────────────────────────────
     def _browse_run_src(self):
@@ -422,8 +543,10 @@ class PresetManagerTab(BaseTab):
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.run_src_var.set(p)
-            base = os.path.splitext(p)[0]
-            self.run_out_var.set(base + "_preset.mp4")
+            ext = ".mp4"
+            if self._selected_idx is not None:
+                ext = self.presets[self._selected_idx].get("ext") or ".mp4"
+            self.run_out_var.set(self.suggest_output(p, "preset", ext))
 
     def _browse_run_out(self):
         p = dialogs.asksaveasfilename(defaultextension=".mp4",
@@ -432,78 +555,35 @@ class PresetManagerTab(BaseTab):
 
     def _quick_run(self):
         if self._selected_idx is None:
-            messagebox.showinfo(t("msg.no_preset_title"), t("msg.select_preset"))
+            messagebox.showinfo(t("msg.no_preset_title"), t("msg.select_preset"), parent=self)
             return
+        p = self.presets[self._selected_idx]
         src = self.run_src_var.get().strip()
-        out = self.run_out_var.get().strip()
         if not src:
-            src = dialogs.askopenfilename(
-                filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi"), ("All", t("ducker.item_2"))])
-        if not src: return
+            src = dialogs.askopenfilename(filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm")])
+        if not src:
+            return
+        if not os.path.isfile(src):
+            messagebox.showwarning(t("common.warning"), f"File not found:\n{src}", parent=self)
+            return
+        ext = p.get("ext") or ".mp4"
+        out = self.run_out_var.get().strip() or self.suggest_output(src, "preset", ext)
+        out = self.confirm_output(out, [src], default_ext=ext)
         if not out:
-            base = os.path.splitext(src)[0]
-            out  = base + "_preset.mp4"
+            return
         self.run_src_var.set(src)
         self.run_out_var.set(out)
-
-        p = self.presets[self._selected_idx]
-        cmd_template = p.get("cmd","")
-        if not cmd_template:
-            messagebox.showwarning(t("common.warning"), "This preset has no command.")
+        try:
+            cmd = build_command(p.get("cmd", ""), src, out)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        # Build full command
-        full = f'"{ffmpeg}" ' + cmd_template.replace("{INPUT}", f'"{src}"') \
-                                             .replace("{OUTPUT}", f'"{out}" -y')
-
-        self.console.insert(tk.END, f"\n▶ Running preset: {p['name']}\n")
-        self.console.insert(tk.END, f"$ {full}\n\n")
+        self.console.insert(tk.END, f"\n▶ Running preset: {p['name']}\n$ {' '.join(map(_quote, cmd))}\n\n")
         self.console.see(tk.END)
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_run,
+                        btn_label=t("presets.run_now_button"), duration=ff.duration_of(src) or None,
+                        output=out, inputs=[src], name=f"Preset: {p['name']}")
 
-        self.btn_run.config(state="disabled", text=t("app.status.queued_btn"))
 
-        import platform as _platform
-        if _platform.system() == "Windows":
-            shell_cmd = ["cmd.exe", "/c", full]
-        else:
-            shell_cmd = [t("presets.bin_sh"), "-c", full]
-
-        _out = out
-
-        def _worker_fn(progress_cb, cancel_fn):
-            proc = subprocess.Popen(
-                shell_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, creationflags=CREATE_NO_WINDOW)
-            for line in iter(proc.stdout.readline, ""):
-                if cancel_fn():
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
-                    break
-                progress_cb(line.rstrip())
-            proc.stdout.close()
-            proc.wait()
-            return proc.returncode
-
-        def _on_start(tid):
-            self.btn_run.config(text=t("presets.running"))
-
-        def _on_progress(tid, line):
-            self.after(0, lambda l=line: [
-                self.console.insert(tk.END, l + "\n"),
-                self.console.see(tk.END)])
-
-        def _on_complete(tid, rc):
-            self.btn_run.config(state="normal", text=t("presets.run_now_button"))
-            self.show_result(rc, _out)
-
-        self.enqueue_render(
-            f"Preset: {p['name']}",
-            output_path=_out,
-            worker_fn=_worker_fn,
-            on_start=_on_start,
-            on_progress=_on_progress,
-            on_complete=_on_complete,
-        )
+def _quote(arg: str) -> str:
+    return f'"{arg}"' if (" " in arg or not arg) else arg

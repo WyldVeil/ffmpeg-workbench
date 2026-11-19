@@ -1,310 +1,360 @@
 """
-tab_universal_downsizer.py  ─  Universal Downsizer
-Target a specific file size (MB) and let the app calculate the bitrates,
-codecs, and scaling required to hit that target optimally.
+tabs/transcoder/downsizer.py  -  Universal Downsizer
+
+Make any video fit a file-size limit (Discord, email, upload caps...) at the
+best quality that fits.
+
+* The bitrate budget comes from the target size and the length (with a
+  margin for the container); audio gets a share that suits the budget.
+* Resolution and frame rate are lowered only as far as needed - judged by
+  bits per pixel for the chosen codec - and only when allowed.
+* "Best quality" encodes two-pass on the CPU (accurate size); "Fast" uses the
+  GPU encoder when there is one.  If the file still comes out over the
+  limit it is re-encoded at a lower bitrate automatically, so the result is
+  never over the limit.
+* HDR sources are tone-mapped to SDR for H.264 (and kept HDR for HEVC/AV1).
+* Optional start/end trim for clips that are too long to fit nicely.
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from core import dialogs
 import os
-import shlex
-import subprocess
-import threading
+import tkinter as tk
+from dataclasses import dataclass
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW, get_audio_bitrate_kbps
+from core import encoders as enc
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import FileRow, scroll_body
+
+TARGETS = [("8 MB", 8), ("10 MB - Discord", 10), ("18 MB - safe for email", 18), ("25 MB", 25),
+           ("50 MB - Discord Nitro Basic", 50), ("100 MB", 100), ("500 MB - Discord Nitro", 500),
+           ("Custom size", 0)]
+CODECS = {"h264": "H.264 - plays everywhere (recommended)", "hevc": "HEVC (H.265) - smaller, newer devices",
+          "av1": "AV1 - smallest, newest devices"}
+AUDIO_MODES = {"auto": "Re-encode to fit (AAC)", "copy": "Keep the original audio", "none": "Remove the audio"}
+#: acceptable bits per pixel per frame - below this the picture falls apart
+MIN_BPP = {"h264": 0.045, "hevc": 0.03, "av1": 0.025}
+LADDER = (2160, 1440, 1080, 900, 720, 540, 480, 360, 240, 180)
+MARGIN = 0.97          # container overhead + encoder slack
+
+
+@dataclass
+class Plan:
+    video_kbps: int
+    audio_kbps: int
+    mono: bool
+    width: int
+    height: int
+    fps: float
+    notes: list
+
+
+def plan(duration: float, target_bytes: int, size: tuple, fps: float, *, codec: str = "h264",
+         has_audio: bool = True, audio_mode: str = "auto", audio_src_kbps: int = 0,
+         allow_res: bool = True, allow_fps: bool = True) -> Plan:
+    """Work out bitrates, size and frame rate for *target_bytes*.  Raises
+    ValueError when the target cannot hold a watchable video."""
+    if duration <= 0:
+        raise ValueError("The video's length is unknown.")
+    budget = target_bytes * 8 / 1000 / duration * MARGIN            # kbit/s for everything
+    notes = []
+    mono = False
+    if not has_audio or audio_mode == "none":
+        a_kbps = 0
+    elif audio_mode == "copy":
+        a_kbps = audio_src_kbps or 320
+        if not audio_src_kbps:
+            notes.append("The original audio bitrate is unknown - 320 kb/s is reserved for it.")
+    else:
+        a_kbps = 128 if budget >= 2000 else 96 if budget >= 800 else 64 if budget >= 350 else 48
+        mono = a_kbps <= 48
+    v_kbps = int(budget - a_kbps)
+    if v_kbps < 40:
+        raise ValueError(f"{target_bytes / 1e6:g} MB is too small for {ff.format_time(duration)} of video "
+                         f"(only {max(0, v_kbps)} kb/s would be left for the picture). Trim the video, "
+                         "remove the audio or choose a bigger size.")
+    w, h = size
+    out_fps = fps if fps and fps > 0 else 30.0
+    min_bpp = MIN_BPP.get(codec, 0.045)
+
+    def bpp(ww, hh, ff_):
+        return v_kbps * 1000 / max(1, ww * hh * ff_)
+
+    if allow_fps and out_fps > 31 and bpp(w, h, out_fps) < min_bpp * 1.5:
+        out_fps = out_fps / 2 if out_fps / 2 >= 23.9 else 30.0
+        notes.append(f"Frame rate lowered to {out_fps:g} fps.")
+    out_w, out_h = w, h
+    if allow_res and bpp(w, h, out_fps) < min_bpp:
+        short = min(w, h)
+        for rung in LADDER:
+            if rung >= short:
+                continue
+            scale = rung / short
+            cw, ch = max(2, round(w * scale / 2) * 2), max(2, round(h * scale / 2) * 2)
+            out_w, out_h = cw, ch
+            if bpp(cw, ch, out_fps) >= min_bpp:
+                break
+        if (out_w, out_h) != (w, h):
+            notes.append(f"Resolution lowered to {out_w}×{out_h} so the picture stays clean.")
+    if bpp(out_w, out_h, out_fps) < min_bpp * 0.6:
+        notes.append("Expect visible blockiness - a shorter clip or a bigger size would look better.")
+    return Plan(v_kbps, a_kbps, mono, out_w, out_h, out_fps, notes)
+
+
+def retry_kbps(v_kbps: int, target_bytes: int, actual_bytes: int, audio_bytes: int = 0) -> int:
+    """Lower video bitrate after an attempt came out over the limit."""
+    video_room = max(1, target_bytes - audio_bytes)
+    video_used = max(1, actual_bytes - audio_bytes)
+    return max(20, int(v_kbps * video_room / video_used * 0.96))
+
 
 class UniversalDownsizerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self._duration = 0.0
-        self._hw_encoders = {"h264": "libx264", "hevc": "libx265"} # Safe defaults
-        
-        # Probe hardware encoders in the background so UI doesn't freeze
-        threading.Thread(target=self._probe_hardware_encoders, daemon=True).start()
-        
+        self._info = None
+        self._job = None
         self._build_ui()
 
-    def _probe_hardware_encoders(self):
-        """Silently queries FFmpeg for available hardware encoders."""
-        try:
-            ff = get_binary_path("ffmpeg")
-            result = subprocess.check_output(
-                [ff, "-encoders"], 
-                creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8"
-            )
-            
-            # Check HEVC (H.265) Hardware
-            if "hevc_nvenc" in result: self._hw_encoders["hevc"] = "hevc_nvenc"
-            elif "hevc_amf" in result: self._hw_encoders["hevc"] = "hevc_amf"
-            elif "hevc_qsv" in result: self._hw_encoders["hevc"] = "hevc_qsv"
-            elif "hevc_videotoolbox" in result: self._hw_encoders["hevc"] = "hevc_videotoolbox"
-
-            # Check AVC (H.264) Hardware
-            if "h264_nvenc" in result: self._hw_encoders["h264"] = "h264_nvenc"
-            elif "h264_amf" in result: self._hw_encoders["h264"] = "h264_amf"
-            elif "h264_qsv" in result: self._hw_encoders["h264"] = "h264_qsv"
-            elif "h264_videotoolbox" in result: self._hw_encoders["h264"] = "h264_videotoolbox"
-            
-        except Exception:
-            pass # Stick to CPU defaults if probe fails
-
     def _build_ui(self):
-        # ── Header ────────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(hdr, text="🗜️  " + t("tab.universal_downsizer"),
-                 font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=20, pady=12)
-        tk.Label(hdr,
-                 text=t("downsizer.subtitle"),
-                 bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
+        self.make_header(self, t("tab.universal_downsizer"), "Shrink a video to fit a size limit, at the best "
+                         "quality that fits.", icon="🗜")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self._src_var = self.src_row.var
+        self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
+        self.info_lbl.pack(fill="x", padx=20)
 
-        # ── Main Content Container ────────────────────────────────────────
-        content = tk.Frame(self, bg=CLR["bg"], padx=20, pady=20)
-        content.pack(fill="both", expand=True)
+        opt = tk.LabelFrame(body, text="  Target  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=6)
 
-        # 1. File I/O
-        self._src_var = tk.StringVar()
-        self._out_var = tk.StringVar()
-        self._src_var.trace_add("write", self._on_src_changed)
+        def row(r, label, *widgets):
+            tk.Label(opt, text=label, width=14, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+            for i, w in enumerate(widgets):
+                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=3)
 
-        r1 = tk.Frame(content, bg=CLR["bg"])
-        r1.pack(fill="x", pady=4)
-        tk.Label(r1, text=t("common.source_video"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"], width=18, anchor="e").pack(side="left")
-        tk.Entry(r1, textvariable=self._src_var, width=65, bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"], relief="flat", bd=4).pack(side="left", padx=8)
-        tk.Button(r1, text=t("btn.browse"), bg=CLR["panel"], fg=CLR["fg"], command=self._browse_src, cursor="hand2", relief="flat").pack(side="left")
-
-        r2 = tk.Frame(content, bg=CLR["bg"])
-        r2.pack(fill="x", pady=4)
-        tk.Label(r2, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"], width=18, anchor="e").pack(side="left")
-        tk.Entry(r2, textvariable=self._out_var, width=65, bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"], relief="flat", bd=4).pack(side="left", padx=8)
-        tk.Button(r2, text=t("common.save_as"), bg=CLR["panel"], fg=CLR["fg"], command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        # Duration & Analysis Label
-        self._analysis_lbl = tk.Label(content, text=t("downsizer.ready_select_a_video_to_analyze"), font=(MONO_FONT, 10), bg=CLR["bg"], fg=CLR["accent"], pady=10)
-        self._analysis_lbl.pack(fill="x")
-
-        tk.Frame(content, bg=CLR["panel"], height=2).pack(fill="x", pady=10)
-
-        # 2. Target Size
-        r3 = tk.Frame(content, bg=CLR["bg"])
-        r3.pack(fill="x", pady=10)
-        tk.Label(r3, text=t("downsizer.target_size_label"), font=(UI_FONT, 12, "bold"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=(10, 5))
-        
-        self._target_mb = tk.StringVar(value="25.0")
-        mb_entry = tk.Entry(r3, textvariable=self._target_mb, width=8, font=(UI_FONT, 12, "bold"), bg=CLR["panel"], fg="#00FF88", insertbackground=CLR["fg"], relief="flat", bd=4, justify="center")
-        mb_entry.pack(side="left", padx=5)
-        tk.Label(r3, text=t("downsizer.mb_label"), font=(UI_FONT, 11), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
-
-        # 3. Permissions (Checkboxes)
-        perms_frame = tk.LabelFrame(content, text=t("downsizer.permissions_section"), bg=CLR["bg"], fg=CLR["accent"], font=(UI_FONT, 10, "bold"), padx=15, pady=10)
-        perms_frame.pack(fill="x", pady=15, padx=10)
-        tk.Label(perms_frame, text=t("downsizer.permissions_intro"), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", pady=(0, 10))
-
+        self.target_var = tk.StringVar(value=TARGETS[1][0])
+        tb = ttk.Combobox(opt, textvariable=self.target_var, values=[x[0] for x in TARGETS], state="readonly",
+                          width=28)
+        self._target_mb = tk.StringVar(value="10")
+        self.custom_entry = tk.Entry(opt, textvariable=self._target_mb, width=7)
+        row(0, "Size limit:", tb, self.custom_entry, tk.Label(opt, text="MB"))
+        self.codec_var = tk.StringVar(value=CODECS["h264"])
+        cb = ttk.Combobox(opt, textvariable=self.codec_var, values=list(CODECS.values()), state="readonly", width=40)
+        row(1, "Codec:", cb)
+        self.speed_var = tk.StringVar(value="quality")
+        sp = tk.Frame(opt)
+        tk.Radiobutton(sp, text="Best quality (two-pass, CPU)", variable=self.speed_var, value="quality",
+                       command=self._changed).pack(side="left")
+        tk.Radiobutton(sp, text="Fast (GPU when available)", variable=self.speed_var, value="fast",
+                       command=self._changed).pack(side="left", padx=10)
+        row(2, "Encoding:", sp)
+        self.audio_var = tk.StringVar(value=AUDIO_MODES["auto"])
+        ab = ttk.Combobox(opt, textvariable=self.audio_var, values=list(AUDIO_MODES.values()), state="readonly",
+                          width=28)
+        row(3, "Audio:", ab)
         self._allow_res = tk.BooleanVar(value=True)
         self._allow_fps = tk.BooleanVar(value=True)
-        self._allow_codec = tk.BooleanVar(value=True)
-        self._allow_audio = tk.BooleanVar(value=True)
+        perm = tk.Frame(opt)
+        tk.Checkbutton(perm, text="May lower the resolution", variable=self._allow_res,
+                       command=self._changed).pack(side="left")
+        tk.Checkbutton(perm, text="May lower the frame rate (above 30 fps only)", variable=self._allow_fps,
+                       command=self._changed).pack(side="left", padx=10)
+        row(4, "Allowed:", perm)
+        self.start_var, self.end_var = tk.StringVar(), tk.StringVar()
+        tr = tk.Frame(opt)
+        tk.Entry(tr, textvariable=self.start_var, width=10).pack(side="left")
+        tk.Label(tr, text=" to ").pack(side="left")
+        tk.Entry(tr, textvariable=self.end_var, width=10).pack(side="left")
+        tk.Label(tr, text="  (optional - leave empty for the whole video)", fg=CLR["fgdim"]).pack(side="left")
+        row(5, "Trim:", tr)
+        for w in (tb, cb, ab):
+            w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+        for v in (self._target_mb, self.start_var, self.end_var):
+            v.trace_add("write", lambda *_a: self._changed())
+        self.plan_lbl = tk.Label(opt, text="", fg=CLR["accent"], justify="left", anchor="w", wraplength=640)
+        self.plan_lbl.grid(row=6, column=0, columnspan=6, sticky="w", pady=(6, 0))
 
-        tk.Checkbutton(perms_frame, text=t("downsizer.permission_resolution"), variable=self._allow_res, bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"], activebackground=CLR["bg"]).pack(anchor="w", pady=2)
-        tk.Checkbutton(perms_frame, text=t("downsizer.permission_framerate"), variable=self._allow_fps, bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"], activebackground=CLR["bg"]).pack(anchor="w", pady=2)
-        tk.Checkbutton(perms_frame, text=t("downsizer.permission_codec"), variable=self._allow_codec, bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"], activebackground=CLR["bg"]).pack(anchor="w", pady=2)
-        tk.Checkbutton(perms_frame, text=t("downsizer.permission_audio"), variable=self._allow_audio, bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"], activebackground=CLR["bg"]).pack(anchor="w", pady=2)
-
-        # 4. Controls
-        btn_frame = tk.Frame(content, bg=CLR["bg"])
-        btn_frame.pack(fill="x", pady=20)
-
-        self._btn_render = tk.Button(btn_frame, text=t("downsizer.render_button"), font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="black", height=2, width=30, cursor="hand2", command=self._start_render, relief="flat", bd=0)
-        self._btn_render.pack(side="left", padx=10)
-
-        self._btn_stop = tk.Button(btn_frame, text=t("downsizer.stop_button"), font=(UI_FONT, 12, "bold"), bg="#D32F2F", fg="white", height=2, width=10, cursor="hand2", state="disabled", command=self._stop_render, relief="flat", bd=0)
-        self._btn_stop.pack(side="left")
-
-        # Console
-        self.console, csb = self.make_console(content, height=8)
-        self.console.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, ext=".mp4",
+                               suggest=lambda: self.suggest_output(self.src_row.path, "small", ".mp4"))
+        self.out_row.pack(fill="x")
+        self._out_var = self.out_row.var
+        self._btn_render = tk.Button(body, text=t("downsizer.render_button"), font=(UI_FONT, 12, "bold"),
+                                     bg=CLR["green"], fg="white", width=30, cursor="hand2", command=self._start_render)
+        self._btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=7)
+        self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
+        self._changed()
 
-    def _browse_src(self):
-        p = dialogs.askopenfilename(filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.m4v"), ("All", t("ducker.item_2"))])
-        if p:
-            self._src_var.set(p)
-            ext = os.path.splitext(p)[1]
-            if not self._out_var.get():
-                self._out_var.set(os.path.splitext(p)[0] + f"_downsized{ext}")
+    # ── State ─────────────────────────────────────────────────────────
+    def _key(self, table, var, default):
+        return next((k for k, v in table.items() if v == var.get()), default)
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4", filetypes=[("Video", "*.mp4 *.mkv *.mov"), ("All", t("ducker.item_2"))])
-        if p: self._out_var.set(p)
+    def _target_bytes(self) -> int:
+        mb = dict(TARGETS).get(self.target_var.get(), 0)
+        if not mb:
+            mb = common.number(self._target_mb.get(), "Size limit", 0.1, 100000)
+        return int(mb * 1_000_000)          # decimal MB: also fits limits counted in MiB
 
-    def _on_src_changed(self, *_):
-        path = self._src_var.get()
-        if os.path.exists(path):
-            threading.Thread(target=self._analyze_file, args=(path,), daemon=True).start()
+    def _trim(self, info):
+        a = ff.parse_time(self.start_var.get()) if self.start_var.get().strip() else 0.0
+        b = ff.parse_time(self.end_var.get()) if self.end_var.get().strip() else info.duration
+        b = min(b, info.duration)
+        if b - a < 0.5:
+            raise ValueError("The trimmed part must be at least half a second long.")
+        return a, b
 
-    def _analyze_file(self, path):
-        dur = get_video_duration(path)
-        self._duration = dur
-        if dur:
-            file_size_mb = os.path.getsize(path) / (1024 * 1024)
-            self.after(0, lambda: self._analysis_lbl.config(
-                text=f"Loaded: {os.path.basename(path)}  |  Duration: {dur:.2f}s  |  Current Size: {file_size_mb:.1f} MB"
-            ))
-
-    def _start_render(self):
-        src = self._src_var.get().strip()
-        out = self._out_var.get().strip()
-        
-        if not src or not os.path.exists(src):
-            messagebox.showwarning(t("common.warning"), "Valid source file required.")
-            return
-
-        try:
-            target_mb = float(self._target_mb.get().strip())
-        except ValueError:
-            messagebox.showwarning(t("common.warning"), "Target size must be a valid number.")
-            return
-
-        if self._duration <= 0:
-            self._duration = get_video_duration(src)
-            if self._duration <= 0:
-                messagebox.showerror(t("common.error"), "Could not read video duration. Cannot calculate bitrate.")
-                return
-
-        # --- NEW: PROBE SOURCE FILE FOR AUDIO, 10-BIT, AND HDR ---
-        ff = get_binary_path("ffmpeg")
-        has_audio = False
-        is_10bit = False
-        is_hdr = False
-        
-        try:
-            # ffmpeg -i returns exit code 1 when no output is specified
-            subprocess.check_output(
-                [ff, "-hide_banner", "-i", src],
-                creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0,
-                stderr=subprocess.STDOUT, text=True, encoding="utf-8"
-            )
-        except subprocess.CalledProcessError as e:
-            probe_out = e.output
-            has_audio = " Audio:" in probe_out
-            is_10bit = "10le" in probe_out or "Main 10" in probe_out or "10-bit" in probe_out
-            is_hdr = "bt2020" in probe_out or "smpte2084" in probe_out
-
-        # --- THE MATH ---
-        # 1 MB = 8192 kilobits. We target 95% of the requested size to ensure we don't accidentally overshoot.
-        target_kbits = target_mb * 8192 * 0.95
-        total_bitrate_kbps = target_kbits / self._duration
-
-        # Determine Audio Bitrate
-        audio_bitrate = 128
-        if not has_audio:
-            audio_bitrate = 0
-            self.log(self.console, t("log.downsizer.no_audio_stream_detected_dedicating_100_of_bitrat"))
-        elif self._allow_audio.get():
-            if total_bitrate_kbps < 1000: audio_bitrate = 96
-            if total_bitrate_kbps < 500: audio_bitrate = 64
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        info = self._info
+        if info is None or not info.has_video:
+            self.info_lbl.config(text="")
         else:
-            # Query the actual source audio bitrate since we are copying it
-            actual_audio_kbps = get_audio_bitrate_kbps(src)
-            if actual_audio_kbps > 0:
-                audio_bitrate = int(actual_audio_kbps)
-            else:
-                # Fallback: MKV files sometimes hide bitrates. Assume a massive 1500 kbps 
-                # to prevent file size blowouts if it's an uncompressed DTS/TrueHD track.
-                self.log(self.console, t("log.downsizer.could_not_read_exact_source_audio_bitrate_reservi"))
-                audio_bitrate = 1500
-            
-        video_bitrate = int(total_bitrate_kbps - audio_bitrate)
+            v = info.video
+            size_mb = os.path.getsize(path) / 1e6 if os.path.isfile(path) else 0
+            hdr = "  HDR" if v.is_hdr else ""
+            self.info_lbl.config(text=f"{ff.format_time(info.duration)}  ·  {v.width}×{v.height}  ·  "
+                                      f"{v.fps:.3g} fps  ·  {v.codec_name}{hdr}  ·  {size_mb:.1f} MB now")
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "small", ".mp4"))
+        self._changed()
 
-        if video_bitrate < 50:
-            messagebox.showerror(t("downsizer.impossible_title"), f"Target is too small. Calculated video bitrate is {video_bitrate} kbps, which will look like abstract art or fail completely.")
+    def _plan(self) -> tuple:
+        info = self._info
+        if info is None or not info.has_video:
+            raise ValueError("Choose a video first.")
+        a, b = self._trim(info)
+        codec = self._key(CODECS, self.codec_var, "h264")
+        audio_mode = self._key(AUDIO_MODES, self.audio_var, "auto")
+        src_kbps = int((info.audio.bit_rate or 0) / 1000) if info.has_audio else 0
+        p = plan(b - a, self._target_bytes(), common.even_size(info), info.video.fps, codec=codec,
+                 has_audio=info.has_audio, audio_mode=audio_mode, audio_src_kbps=src_kbps,
+                 allow_res=self._allow_res.get(), allow_fps=self._allow_fps.get())
+        return p, (a, b), codec, audio_mode
+
+    def _changed(self):
+        self.custom_entry.config(state="normal" if dict(TARGETS).get(self.target_var.get(), 0) == 0
+                                 else "disabled")
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(150, self._show_plan)
+
+    def _show_plan(self):
+        self._job = None
+        if self._info is None:
+            self.plan_lbl.config(text="")
             return
+        try:
+            p, (a, b), _codec, _am = self._plan()
+        except ValueError as exc:
+            self.plan_lbl.config(text=f"⚠  {exc}", fg=CLR["orange"])
+            return
+        cur = os.path.getsize(self.src_row.path) if os.path.isfile(self.src_row.path) else 0
+        if cur and cur <= self._target_bytes() and (a, b) == (0.0, self._info.duration):
+            msg = "The file is already under this size - it will still be re-encoded."
+        else:
+            audio = f" + audio {p.audio_kbps} kb/s{' mono' if p.mono else ''}" if p.audio_kbps else ""
+            msg = (f"Plan: {p.width}×{p.height} at {p.fps:.3g} fps, video {p.video_kbps:,} kb/s{audio}"
+                   + ("\n" + "\n".join(p.notes) if p.notes else ""))
+        self.plan_lbl.config(text=msg, fg=CLR["accent"])
 
-        # Determine Codec (Hardware accelerated where possible)
-        vcodec = self._hw_encoders["h264"]
-        if is_10bit:
-            # NEW: Force HEVC for 10-bit sources as H.264 doesn't support it well on hardware
-            vcodec = self._hw_encoders.get("hevc", "libx265")
-            self.log(self.console, t("log.downsizer.10_bit_source_detected_upgrading_to_hevc_to_prese"))
-        elif self._allow_codec.get() and video_bitrate < 2000:
-            vcodec = self._hw_encoders["hevc"] # Upgrade to HEVC for better low-bitrate quality
-            
-        # Determine Filters (Degradation)
-        vf = []
-        # Increased threshold from 2500 to 3000 to catch more high-bitrate edge cases
-        if self._allow_res.get() and video_bitrate < 3000: 
-            # Scale down to 720p maximum, keeping aspect ratio. If already smaller, it does nothing.
-            vf.append("scale='min(1280,iw)':'-2'")
-        if self._allow_fps.get() and video_bitrate < 1500:
-            # Drop to 30fps maximum to save bandwidth for individual frames
-            vf.append("fps=30")
+    # ── Render ────────────────────────────────────────────────────────
+    def _start_render(self):
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
+            return
+        self._info = info
+        try:
+            p, (start, end), codec, audio_mode = self._plan()
+            target = self._target_bytes()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = self.out_row.path or self.suggest_output(src, "small", ".mp4")
+        if not out.lower().endswith((".mp4", ".mkv", ".mov")):
+            out = os.path.splitext(out)[0] + ".mp4"
+        out = self.confirm_output(out, [src], default_ext=".mp4")
+        if not out:
+            return
+        self.out_row.set(out)
+        length = end - start
+        v = info.video
+        hdr = v.is_hdr
+        ten_bit = codec != "h264" and (v.bit_depth > 8 or hdr)
+        chain = []
+        if hdr and codec == "h264":
+            chain.append(fl.hdr_to_sdr_chain())
+        sw, sh = common.even_size(info)
+        if (p.width, p.height) != (sw, sh) or (v.sar and v.sar not in ("1:1", "0:1")):
+            chain.append(f"scale={p.width}:{p.height}:flags=lanczos,setsar=1")
+        if v.fps and abs(p.fps - v.fps) > 0.01:
+            chain.append(f"fps={p.fps:g}")
+        fast = self.speed_var.get() == "fast"
+        container = os.path.splitext(out)[1].lstrip(".").lower()
 
-        # Build Command
-        cmd = [ff, "-y", "-i", src]
-        
-        if vf:
-            cmd.extend(["-vf", ",".join(vf)])
+        def video_args(kbps):
+            ve = enc.video(codec, "high", speed="balanced", hw="auto" if fast else "off", ten_bit=ten_bit,
+                           container=container, bitrate=f"{kbps}k",
+                           maxrate=f"{int(kbps * 1.5)}k" if fast else None,
+                           gop_seconds=4, fps=p.fps)
+            return ve
 
-        cmd.extend([
-            "-c:v", vcodec,
-            "-b:v", f"{video_bitrate}k",
-            "-maxrate", f"{int(video_bitrate * 1.2)}k", # Buffer constraint for accurate sizing
-            "-bufsize", f"{int(video_bitrate * 2)}k",
-        ])
+        if audio_mode == "none" or not info.has_audio:
+            audio = ["-an"]
+        elif audio_mode == "copy":
+            audio = ["-map", "0:a:0", "-c:a", "copy"]
+        else:
+            audio = ["-map", "0:a:0", "-c:a", "aac", "-b:a", f"{p.audio_kbps}k"] + (["-ac", "1"] if p.mono else [])
+        self.log(self.console, f"Target {target / 1e6:g} MB · {p.width}×{p.height} @ {p.fps:.3g} fps · "
+                               f"video {p.video_kbps} kb/s · audio {p.audio_kbps} kb/s")
+        for note in p.notes:
+            self.log(self.console, "  " + note)
 
-        # --- NEW: Inject 10-bit and HDR flags if required ---
-        if is_10bit:
-            # NVIDIA requires 'p010le' for 10-bit hardware encoding. CPU requires 'yuv420p10le'.
-            pix_fmt = "p010le" if "nvenc" in vcodec else "yuv420p10le"
-            cmd.extend(["-pix_fmt", pix_fmt, "-profile:v", "main10"])
-            
-        if is_hdr:
-            cmd.extend([
-                "-color_primaries", "bt2020",
-                "-color_trc", "smpte2084",
-                "-colorspace", "bt2020nc"
-            ])
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            final = ctx.output()
+            inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
+            if start > 0:
+                inp += ["-ss", f"{start:.3f}"]
+            if end < info.duration - 0.01:
+                inp += ["-to", f"{end:.3f}"]
+            kbps = p.video_kbps
+            ve = video_args(kbps)
+            two_pass = not fast and ve.hw is None and enc.two_pass_args(ve.encoder, 1, "x")
+            passlog = os.path.join(tmp, "pass")
+            vf = ve.vf_args(",".join(chain) if chain else None)
+            if two_pass:
+                ctx.log(f"Pass 1 of 2 ({ve.label})…")
+                ctx.span(0.0, 0.4).run(ve.pre_input + inp + ["-i", src, "-map", "0:v:0"] + vf + ve.args +
+                                       enc.two_pass_args(ve.encoder, 1, passlog) + ["-an", "-f", "null", "-"],
+                                       duration=length)
+            lo = 0.4 if two_pass else 0.0
+            for attempt in range(4):
+                ve = video_args(kbps)
+                ctx.log(f"Encoding with {ve.label}…" if attempt == 0 else
+                        f"Still over the limit - re-encoding at {kbps} kb/s…")
+                ctx.span(lo + (1 - lo) * attempt / 4, 1.0 if attempt == 0 else lo + (1 - lo) * (attempt + 1) / 4)
+                ctx.run(ve.pre_input + inp + ["-i", src, "-map", "0:v:0"] + ve.vf_args(",".join(chain) or None)
+                        + ve.args + (enc.two_pass_args(ve.encoder, 2, passlog) if two_pass else [])
+                        + audio + ["-map_metadata", "0", "-map_chapters", "0", final], duration=length)
+                size = os.path.getsize(final)
+                ctx.log(f"  {size / 1e6:.2f} MB")
+                if size <= target:
+                    return 0
+                kbps = retry_kbps(kbps, target, size, int(p.audio_kbps * 1000 / 8 * length))
+            raise RuntimeError("Could not get the video under the size limit - choose a bigger size, "
+                               "trim it, or allow a lower resolution.")
 
-        # Hardware-specific preset overrides for efficiency
-        if "nvenc" in vcodec: cmd.extend(["-preset", "p6"]) # High quality NVENC preset
-        elif "libx" in vcodec: cmd.extend(["-preset", "medium"])
-
-        # MODIFIED: Only process audio if the file actually has it
-        if has_audio:
-            if self._allow_audio.get():
-                cmd.extend(["-c:a", "aac", "-b:a", f"{audio_bitrate}k"])
-            else:
-                cmd.extend(["-c:a", "copy"])
-
-        cmd.extend(["-movflags", "+faststart", out, "-y"])
-
-        self.log(self.console, f"▶ Targeting {target_mb}MB limit...")
-        self.log(self.console, f"  Calculated Video Bitrate: {video_bitrate} kbps | Audio: {audio_bitrate} kbps")
-        self.log(self.console, f"  Using Encoder: {vcodec} (Auto-detected hardware)")
-        
-        self._btn_stop.config(state="normal")
-        self.run_ffmpeg(cmd, self.console, on_done=self._on_done, btn=self._btn_render, btn_label=t("downsizer.render_button"))
-
-    def _on_done(self, rc):
-        self._btn_stop.config(state="disabled")
-        out = self._out_var.get().strip()
-        self.show_result(rc, out)
-        
-        if rc == 0 and os.path.exists(out):
-            final_mb = os.path.getsize(out) / (1024 * 1024)
-            self.log(self.console, f"\n✅ Finished! Final File Size: {final_mb:.2f} MB")
-
-    def _stop_render(self):
-        """Cancel this tab's queued/running jobs (kills only their own FFmpeg)."""
-        self.cancel_render()
-
-        self.log(self.console, t("log.all_in_one.render_forcibly_stopped_by_user"))
-        self._btn_stop.config(state="disabled")
-        self._btn_render.config(state="normal", text=t("downsizer.render_button"))
+        common.queue_job(self, name="Downsizer", out=out, work=work, btn=self._btn_render,
+                         btn_label=t("downsizer.render_button"), console=self.console, duration=length,
+                         inputs=[src])

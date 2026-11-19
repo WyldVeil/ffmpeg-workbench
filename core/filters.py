@@ -375,3 +375,33 @@ def find_font(name: str = "sans") -> Optional[str]:
         result = bundled.get("inter") or next(iter(bundled.values()), None)
     _FONT_CACHE[key] = result
     return result
+
+
+def hdr_to_sdr_chain(*, method: str = "hable", peak_nits: float = 100.0, out_fmt: str = "yuv420p") -> str:
+    """CPU tone-mapping of HDR10 / HLG video to SDR BT.709 (zscale + tonemap).
+
+    The input transfer/primaries are taken from the frames, so PQ and HLG both
+    work.  *method*: hable (filmic, default), mobius (keeps saturation),
+    reinhard, clip."""
+    return (f"zscale=t=linear:npl={peak_nits:g},format=gbrpf32le,zscale=p=bt709,"
+            f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt}")
+
+
+_VULKAN_OK = None
+
+
+def vulkan_ok() -> bool:
+    """True when FFmpeg's libplacebo filter runs on a Vulkan GPU here (tested once)."""
+    global _VULKAN_OK
+    if _VULKAN_OK is None:
+        _VULKAN_OK = False
+        try:
+            from core import ffmpeg as ff
+            if ff.has_filter("libplacebo"):
+                r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
+                                "-init_hw_device", "vulkan", "-f", "lavfi", "-i", "color=s=64x64:d=0.1",
+                                "-vf", "libplacebo=w=128:h=128:format=yuv420p", "-f", "null", "-"], timeout=30)
+                _VULKAN_OK = r.returncode == 0
+        except Exception:
+            _VULKAN_OK = False
+    return _VULKAN_OK
