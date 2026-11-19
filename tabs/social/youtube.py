@@ -46,17 +46,14 @@ from core.i18n import t
 
 def _find_ytdlp() -> str | None:
     """Return the path to the yt-dlp executable, or None if not found."""
-    try:
-        p = get_binary_path("yt-dlp")
-        if os.path.isfile(p):
-            return p
-    except Exception:
-        pass
-    for name in ("yt-dlp", "yt-dlp.exe"):
-        p = shutil.which(name)
-        if p:
-            return p
-    return None
+    from core.ytdlp import ytdlp_path
+    return ytdlp_path()
+
+
+def _yt(ytdlp, net_args=None):
+    """yt-dlp argv prefix: JS runtime, FFmpeg location, network settings."""
+    from core.ytdlp import base_argv
+    return base_argv(ytdlp)
 
 
 def _ffmpeg_dir() -> str:
@@ -1174,12 +1171,8 @@ class YouTubeDownloaderTab(BaseTab):
         if p:
             folder = os.path.dirname(p) if not os.path.isdir(p) else p
             if os.path.isdir(folder):
-                try:
-                    from core.hardware import open_in_explorer
-                    open_in_explorer(folder)
-                except Exception:
-                    import subprocess as sp
-                    sp.Popen(["explorer", folder])
+                from core.hardware import open_in_explorer
+                open_in_explorer(folder)
 
     def _on_paste(self, event):
         self.after(200, self._auto_fetch_after_paste)
@@ -1531,7 +1524,7 @@ class YouTubeDownloaderTab(BaseTab):
                 from core import network as _net
                 playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
                 r = subprocess.run(
-                    [ytdlp] + _net.build_yt_dlp_args() + [playlist_flag, "-g",
+                    _yt(ytdlp) + [playlist_flag, "-g",
                      "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
                      url],
                     capture_output=True, text=True, timeout=25,
@@ -1548,7 +1541,8 @@ class YouTubeDownloaderTab(BaseTab):
                     ffplay = get_binary_path("ffplay")
                 except Exception:
                     ffplay = shutil.which("ffplay") or "ffplay"
-                self.preview_proc = subprocess.Popen(
+                from core import ffmpeg as _ff
+                self.preview_proc = _ff.popen(
                     [ffplay, "-autoexit",
                      "-window_title", "Video Preview - Quintessential Video Editor",
                      stream_url],
@@ -1583,7 +1577,7 @@ class YouTubeDownloaderTab(BaseTab):
         out_template = os.path.join(out_dir, f"recording_{ts}.%(ext)s")
 
         from core import network as _net
-        cmd = [ytdlp] + _net.build_yt_dlp_args() + [
+        cmd = _yt(ytdlp) + [
                "-f", "best", "--live-from-start",
                "-o", out_template, url]
 
@@ -1597,7 +1591,8 @@ class YouTubeDownloaderTab(BaseTab):
 
         def _worker():
             try:
-                self._record_proc = subprocess.Popen(
+                from core import ffmpeg as _ff
+                self._record_proc = _ff.popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1, creationflags=CREATE_NO_WINDOW,
                     env=_net.subprocess_env())
@@ -1630,11 +1625,13 @@ class YouTubeDownloaderTab(BaseTab):
                       on_line=None, on_progress=None, on_done=None):
         """Run yt-dlp; parse progress lines; call callbacks. Blocks until done."""
         from core import network as _net
-        self.after(0, lambda: self.log(self.console, "CMD: " + " ".join(str(c) for c in cmd)))
+        from core.ytdlp import redact
+        self.after(0, lambda: self.log(self.console, "CMD: " + " ".join(str(c) for c in redact(cmd))))
         try:
-            self._active_proc = subprocess.Popen(
+            from core import ffmpeg as _ff
+            self._active_proc = _ff.popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, creationflags=CREATE_NO_WINDOW,
+                text=True, encoding="utf-8", errors="replace", bufsize=1,
                 env=_net.subprocess_env())
             for line in iter(self._active_proc.stdout.readline, ""):
                 stripped = line.rstrip()
@@ -1688,36 +1685,10 @@ class YouTubeDownloaderTab(BaseTab):
         self._reset_download_ui()
 
     def _kill_process_tree(self, proc):
-        """Best-effort kill of *proc* and all of its descendants."""
-        if proc is None or proc.poll() is not None:
-            return
-        pid = proc.pid
-        import sys as _sys
-        if _sys.platform == "win32":
-            # taskkill /F /T kills the process tree forcefully.
-            try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(pid)],
-                    capture_output=True, timeout=5,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-            except Exception:
-                # Fallback to plain terminate if taskkill is unavailable.
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
-        else:
-            # POSIX: signal the whole process group.
-            try:
-                import os as _os
-                import signal as _signal
-                _os.killpg(_os.getpgid(pid), _signal.SIGTERM)
-            except Exception:
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
+        """Stop *proc* and every child it started (never our own process
+        group - the old killpg() on POSIX terminated the whole app)."""
+        from core import ffmpeg as _ff
+        _ff.kill_tree(proc)
 
     def _reset_download_ui(self):
         self._btn_dl.config(state="normal", text=t("youtube.download"))
@@ -1821,6 +1792,10 @@ class YouTubeDownloaderTab(BaseTab):
                     "-deadline", "good", "-cpu-used", "2"]
         else:
             cmd += ["-c:v", vcodec, "-crf", str(crf), "-preset", preset]
+        if vcodec in ("libx264", "libx265", "libsvtav1", "libvpx-vp9"):
+            cmd += ["-pix_fmt", "yuv420p"]          # 10-bit sources -> playable 8-bit
+        if vcodec == "libx265" and container.lower() in ("mp4", "mov", "m4v"):
+            cmd += ["-tag:v", "hvc1"]
 
         # Resolution scaling
         if res != "Original":
@@ -1835,19 +1810,19 @@ class YouTubeDownloaderTab(BaseTab):
             else:
                 res_clean = res.replace("×", "x")
                 parts = res_clean.split("x")
-                if len(parts) == 2:
-                    cmd += ["-vf", f"scale={parts[0]}:{parts[1]}"]
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                    cmd += ["-vf", f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease"
+                                   f":force_divisible_by=2,setsar=1"]
 
         # Subtitle burn-in (overrides plain vf, append to filter chain)
         if sub_path and os.path.isfile(sub_path):
-            escaped = sub_path.replace("\\", "/").replace(":", "\\:")
-            # Check if we already added -vf
+            from core.filters import subtitles_filter
+            sub_filter = subtitles_filter(sub_path)
             if "-vf" in cmd:
                 vi = cmd.index("-vf")
-                existing = cmd[vi + 1]
-                cmd[vi + 1] = f"{existing},subtitles={escaped}"
+                cmd[vi + 1] = f"{cmd[vi + 1]},{sub_filter}"
             else:
-                cmd += ["-vf", f"subtitles={escaped}"]
+                cmd += ["-vf", sub_filter]
 
         # Audio codec
         if acodec == "copy":
@@ -1930,7 +1905,7 @@ class YouTubeDownloaderTab(BaseTab):
         cmd = [ytdlp, playlist_flag,
                "-f", fmt_str,
                "--merge-output-format", container,
-               "--force-overwrites"]
+               "--no-overwrites"]
         if ff_dir:
             cmd += ["--ffmpeg-location", ff_dir]
 
@@ -1970,7 +1945,7 @@ class YouTubeDownloaderTab(BaseTab):
         cmd = [ytdlp, playlist_flag, "-x",
                "--audio-format", audio_fmt,
                "--audio-quality", quality,
-               "--force-overwrites"]
+               "--no-overwrites"]
         if ff_dir:
             cmd += ["--ffmpeg-location", ff_dir]
         if self._embed_thumb_var.get():
@@ -2003,9 +1978,9 @@ class YouTubeDownloaderTab(BaseTab):
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
         cmd = [ytdlp, playlist_flag,
-               "-f", t("youtube.bestvideo_bestaudio_best"),
+               "-f", "bv*+ba/b",
                "--merge-output-format", "mkv",
-               "--force-overwrites"]
+               "--no-overwrites"]
         if ff_dir:
             cmd += ["--ffmpeg-location", ff_dir]
         cmd += self._build_common_ytdlp_args()
@@ -2052,7 +2027,7 @@ class YouTubeDownloaderTab(BaseTab):
         
         from core import network as _net
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [ytdlp] + _net.build_yt_dlp_args() + [playlist_flag, "--write-sub",
+        cmd = _yt(ytdlp) + [playlist_flag, "--write-sub",
                "--skip-download",
                "--sub-lang", lang,
                "--sub-format", sub_fmt,
@@ -2077,7 +2052,8 @@ class YouTubeDownloaderTab(BaseTab):
 
         def _worker(progress_cb, cancel_fn):
             try:
-                proc = subprocess.Popen(
+                from core import ffmpeg as _ff
+                proc = _ff.popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1, creationflags=CREATE_NO_WINDOW)
                 self._active_proc = proc
@@ -2219,9 +2195,9 @@ class YouTubeDownloaderTab(BaseTab):
             ff_dir   = _ffmpeg_dir()
 
             cmd = [ytdlp, "--yes-playlist",
-                   "-f", t("youtube.bestvideo_bestaudio_best"),
+                   "-f", "bv*+ba/b",
                    "--merge-output-format", self._container_var.get(),
-                   "--force-overwrites"]
+                   "--no-overwrites"]
             if ff_dir:
                 cmd += ["--ffmpeg-location", ff_dir]
             cmd += self._build_common_ytdlp_args()
@@ -2242,7 +2218,8 @@ class YouTubeDownloaderTab(BaseTab):
         from core import network as _net
         self.after(0, lambda: self.log(self.console, "BATCH CMD: " + " ".join(cmd)))
         try:
-            proc = subprocess.Popen(
+            from core import ffmpeg as _ff
+            proc = _ff.popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1, creationflags=CREATE_NO_WINDOW,
                 env=_net.subprocess_env())
@@ -2311,14 +2288,11 @@ class YouTubeDownloaderTab(BaseTab):
         fpath = vals[3] if vals and len(vals) > 3 else ""
         if not fpath:
             return
-        folder = os.path.dirname(fpath) if os.path.isfile(fpath) else fpath
-        if os.path.isdir(folder):
-            try:
-                from core.hardware import open_in_explorer
-                open_in_explorer(folder)
-            except Exception:
-                import subprocess as sp
-                sp.Popen(["explorer", folder])
+        from core.hardware import open_in_explorer, reveal_file
+        if os.path.isfile(fpath):
+            reveal_file(fpath)
+        elif os.path.isdir(fpath):
+            open_in_explorer(fpath)
 
     def _clear_history(self):
         if messagebox.askyesno(t("msg.clear_history_title"), t("msg.delete_all_history")):

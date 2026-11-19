@@ -154,20 +154,55 @@ def proxy_url(cfg=None):
 
 
 # ── urllib opener ─────────────────────────────────────────────────────────────
-def _make_opener(cfg):
+class SocksUnavailable(OSError):
+    """A SOCKS proxy is configured but this build cannot speak SOCKS."""
+
+
+def _socks_handler(pu):
+    """urllib handler routing through a SOCKS proxy (needs PySocks).
+    Returns None when PySocks is not installed."""
+    try:
+        import socks  # PySocks
+        from sockshandler import SocksiPyHandler
+    except ImportError:
+        return None
+    from urllib.parse import urlsplit
+    u = urlsplit(pu)
+    kind = socks.SOCKS4 if u.scheme.startswith("socks4") else socks.SOCKS5
+    return SocksiPyHandler(kind, u.hostname, u.port or 1080, rdns=u.scheme.endswith("h"),
+                           username=u.username, password=u.password)
+
+
+def _bypasses_proxy(url, cfg) -> bool:
+    from urllib.parse import urlsplit
+    host = (urlsplit(url if isinstance(url, str) else url.full_url).hostname or "").lower()
+    for item in (cfg.get("network.no_proxy") or "").split(","):
+        item = item.strip().lower().lstrip(".")
+        if item and (host == item or host.endswith("." + item)):
+            return True
+    return False
+
+
+def _make_opener(cfg, url=None):
     handlers = []
     pu = proxy_url(cfg)
     scheme = (cfg.get("network.proxy_scheme") or "http").lower()
+    if pu and url is not None and _bypasses_proxy(url, cfg):
+        pu = None
     if pu and not scheme.startswith("socks"):
-        handlers.append(urllib.request.ProxyHandler({
-            "http":  pu,
-            "https": pu,
-        }))
-    # SOCKS proxies aren't natively supported by urllib. We don't monkey-
-    # patch the global socket because that would have surprising side
-    # effects elsewhere in the app. SOCKS still works for yt-dlp and
-    # ffmpeg via their own --proxy / env-var paths; the helper just
-    # falls back to a direct connection for in-app urllib calls.
+        handlers.append(urllib.request.ProxyHandler({"http": pu, "https": pu}))
+    elif pu:
+        handler = _socks_handler(pu)
+        if handler is None:
+            # Fail closed: never fall back to a direct connection when the
+            # user asked for SOCKS (e.g. Tor) - that would leak their address.
+            raise SocksUnavailable(
+                "A SOCKS proxy is configured, but in-app downloads can't use SOCKS "
+                "in this build. Nothing was sent. Use an HTTP proxy, or disable the "
+                "proxy for this request.")
+        handlers.append(handler)
+    else:
+        handlers.append(urllib.request.ProxyHandler({}))      # ignore env proxies when 'direct'
 
     if cfg.get("network.verify_ssl", True) is False:
         ctx = ssl.create_default_context()
@@ -216,7 +251,7 @@ def urlopen(url, timeout=None, headers=None, cfg=None, data=None):
     else:
         req = urllib.request.Request(url, headers=req_headers, data=data)
 
-    opener = _make_opener(cfg)
+    opener = _make_opener(cfg, req)
     return opener.open(req, timeout=timeout)
 
 
@@ -270,7 +305,8 @@ def subprocess_env(extra=None, cfg=None):
     look for different cases.
     """
     cfg = cfg if cfg is not None else get()
-    env = dict(os.environ)
+    from core.procenv import child_env
+    env = child_env()
     if extra:
         env.update(extra)
 
