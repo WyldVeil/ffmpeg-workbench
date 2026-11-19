@@ -13,13 +13,11 @@ This is the DaVinci Resolve Fairlight use case for creators:
 The result is the original video re-encoded with the new mixed audio.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
-import subprocess
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
 from core.i18n import t
 
 
@@ -185,79 +183,79 @@ class AudioMixerTab(BaseTab):
             messagebox.showinfo("Max tracks",
                                 f"Maximum {MAX_TRACKS} tracks supported.")
             return
-        t = Track(len(self.tracks))
-        self.tracks.append(t)
-        self._draw_track_row(t)
+        trk = Track(len(self.tracks))
+        self.tracks.append(trk)
+        self._draw_track_row(trk)
         self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
 
-    def _draw_track_row(self, t: Track):
+    def _draw_track_row(self, trk: Track):
         row = tk.Frame(self.track_frame, relief="groove", bd=1)
         row.pack(fill="x", pady=2)
-        t.row = row
+        trk.row = row
 
         # Track number + enable
         head = tk.Frame(row, width=140); head.pack(side="left")
-        tk.Label(head, text=f"T{t.idx+1}", width=3,
+        tk.Label(head, text=f"T{trk.idx+1}", width=3,
                  font=(UI_FONT, 9, "bold"), fg=CLR["accent"]).pack(side="left")
-        tk.Checkbutton(head, variable=t.enabled).pack(side="left")
+        tk.Checkbutton(head, variable=trk.enabled).pack(side="left")
 
         # File browse
-        file_entry = tk.Entry(row, textvariable=t.path_var, width=22,
+        file_entry = tk.Entry(row, textvariable=trk.path_var, width=22,
                               font=(MONO_FONT, 8))
         file_entry.pack(side="left", padx=2)
 
-        def _browse(tr=t):
+        def _browse(tr=trk):
             p = dialogs.askopenfilename(
                 filetypes=[(t("mixer.audio_video"),
                             "*.mp3 *.wav *.aac *.flac *.ogg *.mp4 *.mov"),
                            ("All",t("ducker.item_2"))])
             if p:
                 tr.path = p
-                tr.path_var.set(os.path.basename(p))
+                tr.path_var.set(p)
                 tr._full_path = p
         tk.Button(row, text="…", width=2, command=_browse, cursor="hand2", relief="flat").pack(side="left", padx=1)
 
         # Type
-        ttk.Combobox(row, textvariable=t.type_var,
+        ttk.Combobox(row, textvariable=trk.type_var,
                      values=TRACK_TYPES, state="readonly",
                      width=16).pack(side="left", padx=2)
 
         # Volume fader (the centrepiece)
         vol_f = tk.Frame(row); vol_f.pack(side="left", padx=2)
-        tk.Scale(vol_f, variable=t.vol_var, from_=0, to=2,
+        tk.Scale(vol_f, variable=trk.vol_var, from_=0, to=2,
                  resolution=0.05, orient="horizontal", length=90).pack()
         vol_lbl = tk.Label(vol_f, text="100%", width=4, fg=CLR["accent"],
                            font=(UI_FONT, 7))
         vol_lbl.pack()
-        t.vol_var.trace_add("write", lambda *_, l=vol_lbl, v=t.vol_var:
+        trk.vol_var.trace_add("write", lambda *_, l=vol_lbl, v=trk.vol_var:
                             l.config(text=f"{int(v.get()*100)}%"))
 
         # Pan
         pan_f = tk.Frame(row); pan_f.pack(side="left", padx=2)
-        tk.Scale(pan_f, variable=t.pan_var, from_=-1, to=1,
+        tk.Scale(pan_f, variable=trk.pan_var, from_=-1, to=1,
                  resolution=0.05, orient="horizontal", length=80).pack()
         pan_lbl = tk.Label(pan_f, text="C", width=3, fg=CLR["fgdim"],
                            font=(UI_FONT, 7))
         pan_lbl.pack()
-        t.pan_var.trace_add("write", lambda *_, l=pan_lbl, v=t.pan_var: l.config(
+        trk.pan_var.trace_add("write", lambda *_, l=pan_lbl, v=trk.pan_var: l.config(
             text="L" if v.get() < -0.1 else ("R" if v.get() > 0.1 else "C")))
 
         # Offset, fade in, fade out
-        for var, w in [(t.offset_var, 6), (t.fadein_var, 4), (t.fadeout_var, 4)]:
+        for var, w in [(trk.offset_var, 6), (trk.fadein_var, 4), (trk.fadeout_var, 4)]:
             tk.Entry(row, textvariable=var, width=w,
                      font=(MONO_FONT, 8)).pack(side="left", padx=2)
 
         # Loop, Mute
-        tk.Checkbutton(row, variable=t.loop_var, text="↻",
+        tk.Checkbutton(row, variable=trk.loop_var, text="↻",
                        font=(UI_FONT, 8)).pack(side="left")
-        tk.Checkbutton(row, variable=t.mute_var, text="M",
+        tk.Checkbutton(row, variable=trk.mute_var, text="M",
                        font=(UI_FONT, 8, "bold"),
                        fg=CLR["red"]).pack(side="left")
 
     def _remove_last_track(self):
         if self.tracks:
-            t = self.tracks.pop()
-            t.row.destroy()
+            trk = self.tracks.pop()
+            trk.row.destroy()
             self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
 
     def _browse_video(self):
@@ -286,141 +284,96 @@ class AudioMixerTab(BaseTab):
 
     # ── Render ────────────────────────────────────────────────────────────
     def _render(self):
-        if not self.video_path:
-            messagebox.showwarning(t("mixer.no_video_title"), t("mixer.no_video_message"))
+        from core import ffmpeg as ff
+        from tabs import common
+        video = (self.vid_var.get() or getattr(self, "video_path", "")).strip()
+        info = common.check_source(self, video)
+        if info is None:
             return
+        def track_path(trk):
+            typed = trk.path_var.get().strip()
+            return typed if os.path.isfile(typed) else getattr(trk, "_full_path", trk.path)
 
-        active = [t for t in self.tracks
-                  if t.enabled.get() and not t.mute_var.get()
-                  and (t.path or getattr(t, "_full_path", ""))]
+        active = [trk for trk in self.tracks
+                  if trk.enabled.get() and not trk.mute_var.get() and track_path(trk)]
         if not active and not self.keep_vid_audio_var.get():
-            messagebox.showwarning(t("mixer.no_tracks_title"), t("mixer.no_tracks_message"))
+            messagebox.showwarning(t("mixer.no_tracks_title"), t("mixer.no_tracks_message"), parent=self)
             return
-
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4","*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        ffmpeg   = get_binary_path("ffmpeg.exe")
-        fmt      = self.out_fmt_var.get()
-        audio_only = "audio only" in fmt.lower()
-
-        # Build inputs
-        cmd = [ffmpeg, "-i", self.video_path]
-        n_audio_inputs = 0
-
-        # Original video audio
-        orig_audio_idx = None
-        if self.keep_vid_audio_var.get():
-            # video is input 0; its audio stream is [0:a]
-            orig_audio_idx = 0
-
-        # Add track audio inputs
-        track_input_map = {}  # track → ffmpeg input index
-        for t in active:
-            path = getattr(t, "_full_path", t.path)
-            if not path or not os.path.exists(path):
-                continue
-            inp_idx = 1 + n_audio_inputs
-            if t.loop_var.get():
+        dur = info.duration
+        st = "aformat=sample_rates=48000:channel_layouts=stereo"
+        cmd = [ff.ffmpeg_path(), "-y", "-i", video]
+        parts, mix = [], []
+        if self.keep_vid_audio_var.get() and info.has_audio:
+            parts.append(f"[0:a:0]{st},volume={float(self.vid_audio_vol_var.get()):.3f},apad,"
+                         f"atrim=duration={dur:.3f}[orig]")
+            mix.append("[orig]")
+        idx = 1
+        for trk in active:
+            path = track_path(trk)
+            tinfo = ff.try_probe(path)
+            if tinfo is None or not tinfo.has_audio:
+                messagebox.showwarning(t("common.warning"), f"Track {trk.idx + 1} has no readable audio:\n{path}",
+                                       parent=self)
+                return
+            try:
+                offset = ff.parse_time(trk.offset_var.get() or "0")
+                fade_in = float(trk.fadein_var.get() or 0)
+                fade_out = float(trk.fadeout_var.get() or 0)
+            except ValueError:
+                messagebox.showwarning(t("common.warning"), f"Track {trk.idx + 1}: start and fades must be "
+                                       "numbers of seconds.", parent=self)
+                return
+            loop = trk.loop_var.get()
+            if loop:
                 cmd += ["-stream_loop", "-1"]
-            offset = t.offset_var.get().strip()
-            if offset and float(offset) > 0:
-                cmd += ["-itsoffset", offset]
             cmd += ["-i", path]
-            track_input_map[t] = inp_idx
-            n_audio_inputs += 1
-
-        if not track_input_map and orig_audio_idx is None:
-            messagebox.showwarning(t("mixer.no_tracks_title"),
-                                   t("mixer.no_tracks_message"))
+            clip_len = max(0.01, (dur - offset) if loop else min(tinfo.duration, dur - offset))
+            chain = [f"[{idx}:a:0]{st}", "asetpts=PTS-STARTPTS", f"atrim=duration={clip_len:.3f}",
+                     f"volume={float(trk.vol_var.get()):.3f}"]
+            if fade_in > 0:
+                chain.append(f"afade=t=in:st=0:d={fade_in:.2f}")
+            if fade_out > 0:
+                chain.append(f"afade=t=out:st={max(0.0, clip_len - fade_out):.3f}:d={fade_out:.2f}")
+            pan = float(trk.pan_var.get())
+            if abs(pan) > 0.02:
+                chain.append(f"pan=stereo|c0={min(1.0, 1.0 - pan):.3f}*c0|c1={min(1.0, 1.0 + pan):.3f}*c1")
+            if offset > 0:
+                chain.append(f"adelay=delays={round(offset * 1000)}:all=1")
+            chain += ["apad", f"atrim=duration={dur:.3f}"]
+            parts.append(",".join(chain) + f"[t{idx}]")
+            mix.append(f"[t{idx}]")
+            idx += 1
+        if not mix:
+            messagebox.showwarning(t("mixer.no_tracks_title"), t("mixer.no_tracks_message"), parent=self)
             return
-
-        # Build filter_complex
-        filter_parts = []
-        mix_inputs   = []
-
-        if orig_audio_idx is not None:
-            vol = self.vid_audio_vol_var.get()
-            filter_parts.append(f"[0:a]volume={vol:.3f}[orig_a]")
-            mix_inputs.append("[orig_a]")
-
-        for t, inp_idx in track_input_map.items():
-            tag  = f"ta{inp_idx}"
-            vol  = t.vol_var.get()
-            pan  = t.pan_var.get()
-            fi   = t.fadein_var.get().strip() or "0"
-            fo   = t.fadeout_var.get().strip() or "0"
-            parts_chain = [f"[{inp_idx}:a]volume={vol:.3f}"]
-
-            if abs(pan) > 0.05:
-                # Stereo pan: pan=-1→full left (l=1,r=0), pan=+1→full right (l=0,r=1)
-                l_gain = min(1.0, 1.0 - pan)
-                r_gain = min(1.0, 1.0 + pan)
-                parts_chain.append(
-                    f"pan=stereo|FL={l_gain:.3f}*FL|FR={r_gain:.3f}*FR")
-
-            if float(fi) > 0:
-                parts_chain.append(f"afade=t=in:st=0:d={fi}")
-            if float(fo) > 0:
-                from core.hardware import get_video_duration
-                track_dur = get_video_duration(getattr(t, "_full_path", t.path))
-                if track_dur > 0:
-                    fade_st = max(0.0, track_dur - float(fo))
-                    parts_chain.append(f"afade=t=out:st={fade_st:.3f}:d={fo}")
-                else:
-                    parts_chain.append(f"afade=t=out:st=0:d={fo}")
-
-            chain = ",".join(parts_chain)
-            filter_parts.append(f"{chain}[{tag}]")
-            mix_inputs.append(f"[{tag}]")
-
-        n_mix = len(mix_inputs)
-        if n_mix == 1:
-            # No amix needed
-            filter_parts.append(f"{mix_inputs[0]}volume={self.master_vol_var.get():.3f}[aout]")
+        master = f"volume={float(self.master_vol_var.get()):.3f}"
+        if len(mix) == 1:
+            parts.append(f"{mix[0]}{master}")
         else:
-            mix_str = "".join(mix_inputs)
-            filter_parts.append(
-                f"{mix_str}amix=inputs={n_mix}:duration=first[mixed];"
-                f"[mixed]volume={self.master_vol_var.get():.3f}[aout]")
-
+            parts.append("".join(mix) + f"amix=inputs={len(mix)}:duration=longest:normalize=0,{master}")
         if self.normalize_var.get():
-            filter_parts.append(
-                "[aout]loudnorm=I=-16:TP=-1.5:LRA=11[final_a]")
-            final_tag = "[final_a]"
-        else:
-            final_tag = "[aout]"
-
-        fc = ";".join(filter_parts)
-
-        # Codec args
-        if "MP3" in fmt:
-            acodec = ["-c:a","libmp3lame","-b:a","320k"]
-        elif "WAV" in fmt:
-            acodec = ["-c:a","pcm_s16le"]
-        elif "FLAC" in fmt:
-            acodec = ["-c:a","flac"]
-        else:
-            bitrate = "320k" if "320" in fmt else "256k"
-            acodec  = ["-c:a","aac","-b:a",bitrate]
-
-        cmd += ["-filter_complex", fc]
-
+            parts[-1] += ",loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,asetnsamples=n=4096:p=0"
+        parts[-1] += ",alimiter=limit=0.97[aout]"
+        fmt = self.out_fmt_var.get()
+        audio_only = "audio only" in fmt.lower()
+        out = self.out_var.get().strip() or self.suggest_output(video, "mixed", ".mp4")
+        if audio_only and not out.lower().endswith(common.AUDIO_ONLY_EXTS):
+            out = os.path.splitext(out)[0] + (".mp3" if "MP3" in fmt else ".wav" if "WAV" in fmt else
+                                              ".flac" if "FLAC" in fmt else ".m4a")
+        out = self.confirm_output(out, [video] + [track_path(x) for x in active])
+        if not out:
+            return
+        self.out_var.set(out)
+        cmd += ["-filter_complex", ";".join(parts)]
         if audio_only:
-            cmd += ["-map", final_tag, "-vn"] + acodec
+            cmd += ["-map", "[aout]", "-vn", *common.audio_encoder_args(out)]
         else:
-            cmd += ["-map", "0:v", "-map", final_tag,
-                    "-c:v", "copy"] + acodec + ["-shortest"]
-
-        cmd += ["-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console,
-                 f"Mixing {n_mix} source(s) → {os.path.basename(out)}")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render,
-                        btn_label=t("mixer.mix_button"))
+            cmd += ["-map", "0:v:0", "-c:v", "copy", "-map", "[aout]",
+                    "-c:a", "aac", "-b:a", "320k" if "320" in fmt else "256k"]
+            if out.lower().endswith((".mp4", ".mov", ".m4v")):
+                cmd += ["-movflags", "+faststart"]
+        cmd += ["-t", f"{dur:.3f}", out]
+        self.log(self.console, f"Mixing {len(mix)} source(s) → {os.path.basename(out)}")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
+                        btn_label=t("mixer.mix_button"), duration=dur, output=out,
+                        inputs=[video] + [track_path(x) for x in active], name="Audio Mixer")

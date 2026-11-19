@@ -1,102 +1,26 @@
 """
-tab_midifier.py  ─  MIDIfier
+tabs/audio/midifier.py  -  MIDIfier
 
-Three-stage audio pipeline:
-  1. Audio → MIDI   (librosa pitch detection + pretty_midi)
-  2. MIDI  → WAV    (FluidSynth + GeneralUser GS SoundFont)
-  3. WAV   → MP3    (FFmpeg 256 kbps)
+Three-stage audio pipeline (no Python packages needed - see core/midi.py):
+  1. Audio -> MIDI   FFmpeg semitone filter bank + piano-roll note picking
+  2. MIDI  -> WAV    FluidSynth + a General MIDI SoundFont (GeneralUser GS bundled)
+  3. WAV   -> MP3    FFmpeg (or WAV / FLAC / M4A by the output name)
+A .mid/.midi source skips stage 1 (plain MIDI rendering).
 
 Produces a high-quality MIDI re-render of any song.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
 import os
-import sys
-import threading
-import shutil
-import tempfile
-import platform
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+from core import dialogs
+from core import ffmpeg as ff
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT, add_tooltip
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
 from core.i18n import t
 
 
-# ── Paths ────────────────────────────────────────────────────────────────────
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_SOUNDFONTS_DIR = os.path.join(_ROOT, "soundfonts")
-_GENERALUSER_SF2 = os.path.join(_SOUNDFONTS_DIR, "GeneralUser_GS.sf2")
-
-# FluidSynth Windows binary (bundled)
-_FLUIDSYNTH_DIR = os.path.join(_ROOT, "bin", "fluidsynth")
-_FLUIDSYNTH_EXE = os.path.join(_FLUIDSYNTH_DIR, "bin", "fluidsynth.exe")
-_FLUIDSYNTH_URL = (
-    "https://github.com/FluidSynth/fluidsynth/releases/download/v2.4.1/"
-    "fluidsynth-2.4.1-win10-x64.zip"
-)
-
-# Well-known install locations to search for FluidSynth + SF2
-_SEARCH_PATHS_FS = [
-    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs",
-                 "Microsoft Music Producer", "FluidSynth"),
-    os.path.join(os.environ.get("PROGRAMFILES", ""), "FluidSynth", "bin"),
-    os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "FluidSynth", "bin"),
-]
-_SEARCH_PATHS_SF2 = [
-    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs",
-                 "Microsoft Music Producer", "FluidSynth"),
-    os.path.join(os.environ.get("USERPROFILE", ""), ".fluidsynth"),
-    os.path.join(os.environ.get("LOCALAPPDATA", ""), "soundfonts"),
-]
-
-
-def _find_fluidsynth():
-    """Search for fluidsynth executable in known locations."""
-    # 1. Bundled
-    if os.path.isfile(_FLUIDSYNTH_EXE):
-        return _FLUIDSYNTH_EXE
-    # 2. Known install paths
-    for d in _SEARCH_PATHS_FS:
-        for name in ("fluidsynth.exe", "fluidsynth"):
-            cand = os.path.join(d, name)
-            if os.path.isfile(cand):
-                return cand
-    # 3. System PATH
-    return shutil.which("fluidsynth")
-
-
-def _find_soundfont():
-    """Search for GeneralUser GS .sf2 in known locations."""
-    # 1. Bundled
-    if os.path.isfile(_GENERALUSER_SF2):
-        return _GENERALUSER_SF2
-    # 2. Known install paths
-    for d in _SEARCH_PATHS_SF2:
-        if not os.path.isdir(d):
-            continue
-        for f in os.listdir(d):
-            if f.lower().endswith(".sf2") and "general" in f.lower():
-                return os.path.join(d, f)
-    # 3. Any .sf2 in known paths
-    for d in _SEARCH_PATHS_SF2:
-        if not os.path.isdir(d):
-            continue
-        for f in os.listdir(d):
-            if f.lower().endswith(".sf2"):
-                return os.path.join(d, f)
-    # 4. pretty_midi bundled TimGM6mb (fallback, lower quality)
-    try:
-        import pretty_midi
-        pm_sf2 = os.path.join(os.path.dirname(pretty_midi.__file__),
-                               "TimGM6mb.sf2")
-        if os.path.isfile(pm_sf2):
-            return pm_sf2
-    except Exception:
-        pass
-    return None
-
+from core import midi
 
 class MIDIfierTab(BaseTab):
     def __init__(self, parent):
@@ -142,12 +66,12 @@ class MIDIfierTab(BaseTab):
             bg=CLR["bg"], fg=CLR["fgdim"])
         self._dep_lbl.pack(fill="x", padx=4, pady=2)
         self._dep_btn = tk.Button(
-            dep_sec, text=t("midifier.install_btn"),
+            dep_sec, text="Choose SoundFont…",
             font=(UI_FONT, 9, "bold"),
             bg=CLR["accent"], fg="white",
             relief="flat", cursor="hand2",
-            command=self._install_deps)
-        add_tooltip(self._dep_btn, t("midifier.install_tooltip"))
+            command=self._choose_soundfont)
+        add_tooltip(self._dep_btn, "Use any General MIDI SoundFont (.sf2 / .sf3) you have.")
 
         # ── Source ───────────────────────────────────────────────────────
         src_sec = self.make_section(self._inner, title=t("midifier.section.source"))
@@ -295,8 +219,8 @@ class MIDIfierTab(BaseTab):
         p = dialogs.askopenfilename(
             title="Open audio file",
             filetypes=[
-                ("Audio files", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg "
-                                "*.opus *.wma *.aiff *.mp4 *.mkv *.mov"),
+                ("Audio, video or MIDI", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma *.aiff "
+                                         "*.mp4 *.mkv *.mov *.mid *.midi"),
                 ("All files", "*.*"),
             ])
         if p:
@@ -313,428 +237,120 @@ class MIDIfierTab(BaseTab):
         if p:
             self.out_var.set(p)
 
-    # ── Dependency management ────────────────────────────────────────────
+    # ── Dependency check ─────────────────────────────────────────────────
 
     def _check_deps(self):
-        """Check if all dependencies are available."""
-        status = []
-        ok = True
-
-        # 1. librosa + pretty_midi
-        try:
-            import librosa       # noqa: F401
-            import pretty_midi   # noqa: F401
-            status.append("  \u2713  librosa + pretty_midi (audio \u2192 MIDI)")
-        except ImportError:
-            status.append("  \u2717  librosa + pretty_midi (not installed)")
-            ok = False
-
-        # 2. FluidSynth binary
-        self._fs_path = _find_fluidsynth()
+        """Find FluidSynth and a SoundFont (worker thread)."""
+        status = ["  ✓  Audio → MIDI: built in (FFmpeg filter bank)"]
+        self._fs_path = midi.find_fluidsynth()
         if self._fs_path:
-            status.append(f"  \u2713  FluidSynth ({os.path.dirname(self._fs_path)})")
+            status.append(f"  ✓  FluidSynth: {self._fs_path}")
         else:
-            status.append("  \u2717  FluidSynth (not found)")
-            ok = False
-
-        # 3. SoundFont
-        self._sf2_path = _find_soundfont()
+            status.append("  ✗  FluidSynth not found - on Linux install the 'fluidsynth' package")
+        if not (self._sf2_path and os.path.isfile(self._sf2_path)):
+            fonts = midi.find_soundfonts()
+            self._sf2_path = fonts[0] if fonts else None
         if self._sf2_path:
-            name = os.path.basename(self._sf2_path)
-            status.append(f"  \u2713  SoundFont: {name}")
+            status.append(f"  ✓  SoundFont: {os.path.basename(self._sf2_path)}")
         else:
-            status.append("  \u2717  SoundFont .sf2 (not found)")
-            ok = False
-
-        # 4. FFmpeg
-        ffmpeg = get_binary_path("ffmpeg")
-        if os.path.isfile(ffmpeg):
-            status.append("  \u2713  FFmpeg (WAV \u2192 MP3)")
-        else:
-            status.append("  \u2717  FFmpeg (not found)")
-            ok = False
-
+            status.append("  ✗  No SoundFont found - choose a .sf2 file")
+        ok = bool(self._fs_path and self._sf2_path)
         self._deps_ok = ok
         info = "\n".join(status)
 
         def _update():
-            self._dep_lbl.config(
-                text=info,
-                fg=CLR["green"] if ok else CLR["orange"])
-            if not ok:
-                self._dep_btn.pack(fill="x", padx=4, pady=(6, 4))
-            else:
-                self._dep_btn.pack_forget()
+            self._dep_lbl.config(text=info, fg=CLR["green"] if ok else CLR["orange"])
+            self._dep_btn.pack(fill="x", padx=4, pady=(6, 4))
         self.after(0, _update)
 
-    def _install_deps(self):
-        """Install missing dependencies in background."""
-        self._dep_btn.config(state="disabled", text="Installing...")
-        self.log(self.console, "Installing dependencies...")
-
-        def _work():
-            # 1. Install librosa + pretty_midi via vendored pip
-            try:
-                import librosa  # noqa: F401
-            except ImportError:
-                self.log(self.console,
-                         "Installing librosa + pretty_midi...")
-                try:
-                    from core.deps import require
-                    lr = require("librosa", import_name="librosa")
-                    pm = require("pretty_midi", import_name="pretty_midi")
-                    if lr and pm:
-                        self.log_tagged(self.console,
-                                        "  librosa + pretty_midi installed",
-                                        "success")
-                    else:
-                        self.log_tagged(self.console,
-                                        "  Install failed - try manually:\n"
-                                        "  pip install librosa pretty_midi",
-                                        "error")
-                except Exception as e:
-                    self.log_tagged(self.console,
-                                    f"  Install error: {e}", "error")
-
-            # 2. Download FluidSynth if not found anywhere
-            if not _find_fluidsynth():
-                self.log(self.console, "Downloading FluidSynth...")
-                try:
-                    self._download_fluidsynth()
-                    self.log_tagged(self.console,
-                                    "  FluidSynth downloaded", "success")
-                except Exception as e:
-                    self.log_tagged(self.console,
-                                    f"  FluidSynth download failed: {e}",
-                                    "error")
-
-            # 3. SoundFont - copy from local if found, else inform user
-            if not _find_soundfont():
-                self.log(self.console,
-                         "SoundFont not found automatically.")
-                self.log(self.console,
-                         "  Please download GeneralUser GS from:")
-                self.log(self.console,
-                         "  https://schristiancollins.com/generaluser.php")
-                self.log(self.console,
-                         f"  Place the .sf2 file in: {_SOUNDFONTS_DIR}")
-
-            self.after(0, lambda: self._dep_btn.config(
-                state="normal", text=t("midifier.install_btn")))
-            self._check_deps()
-
-        self.run_in_thread(_work)
-
-    def _download_fluidsynth(self):
-        """Download and extract FluidSynth for Windows."""
-        import urllib.request
-        import zipfile
-        import io
-
-        os.makedirs(os.path.join(_ROOT, "bin"), exist_ok=True)
-        self.log(self.console, "  Downloading from GitHub...")
-
-        req = urllib.request.Request(
-            _FLUIDSYNTH_URL,
-            headers={"User-Agent": "Mozilla/5.0"})
-        resp = urllib.request.urlopen(req, timeout=120)
-        data = resp.read()
-        mb = len(data) // (1024 * 1024)
-        self.log(self.console, f"  Extracting ({mb} MB)...")
-
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            top = zf.namelist()[0].split("/")[0]
-            zf.extractall(os.path.join(_ROOT, "bin"))
-            extracted = os.path.join(_ROOT, "bin", top)
-            if extracted != _FLUIDSYNTH_DIR:
-                if os.path.exists(_FLUIDSYNTH_DIR):
-                    shutil.rmtree(_FLUIDSYNTH_DIR)
-                os.rename(extracted, _FLUIDSYNTH_DIR)
-
-    # ── Audio → MIDI conversion ──────────────────────────────────────────
-
-    def _audio_to_midi(self, audio_path, midi_path):
-        """Convert audio to MIDI using polyphonic CQT-based transcription.
-
-        Uses the Constant-Q Transform (CQT) which maps directly to musical
-        pitches, enabling detection of multiple simultaneous notes - essential
-        for real songs with vocals, bass, drums, chords, etc.
-        """
-        import librosa
-        import numpy as np
-        import pretty_midi
-
-        self.log(self.console, "  Loading audio...")
-        y, sr = librosa.load(audio_path, sr=22050, mono=True)
-        duration = librosa.get_duration(y=y, sr=sr)
-        self.log(self.console,
-                 f"  Duration: {duration:.1f}s, "
-                 f"Sample rate: {sr} Hz")
-
-        # ── CQT spectrogram (84 bins = 7 octaves, C1-B7) ────────────
-        self.log(self.console,
-                 "  Computing CQT spectrogram (polyphonic)...")
-        n_bins = 84                       # 7 octaves
-        bins_per_octave = 12              # chromatic
-        hop = 512
-        C = np.abs(librosa.cqt(
-            y, sr=sr,
-            hop_length=hop,
-            n_bins=n_bins,
-            bins_per_octave=bins_per_octave,
-            fmin=librosa.note_to_hz("C1"),
-        ))
-
-        # Convert to dB and normalise to 0-1
-        C_db = librosa.amplitude_to_db(C, ref=C.max())
-        # C_db ranges from 0 (loudest) to ~ -80 (silence)
-        # Normalise so 0 = silence, 1 = loudest
-        C_norm = np.clip((C_db + 80.0) / 80.0, 0.0, 1.0)
-
-        frame_times = librosa.frames_to_time(
-            np.arange(C_norm.shape[1]), sr=sr, hop_length=hop)
-
-        # ── Threshold + peak-picking ─────────────────────────────────
-        note_thresh = float(self.note_thresh_var.get() or 0.5)
-        min_dur = float(self.min_note_var.get() or 0.05)
-
-        self.log(self.console,
-                 f"  Extracting notes (threshold={note_thresh})...")
-
-        # Build piano-roll with spectral peak-picking to reduce
-        # leakage: a bin must be above threshold AND be a local
-        # maximum in the pitch dimension (within +/-2 bins)
-        piano_roll = np.zeros_like(C_norm, dtype=np.uint8)
-        for t_idx in range(C_norm.shape[1]):
-            col = C_norm[:, t_idx]
-            for p in range(n_bins):
-                if col[p] < note_thresh:
-                    continue
-                # Check if this is a local peak in pitch
-                lo = max(0, p - 2)
-                hi = min(n_bins, p + 3)
-                if col[p] >= col[lo:hi].max() - 0.05:
-                    piano_roll[p, t_idx] = 1
-
-        # ── Convert piano-roll to MIDI notes ─────────────────────────
-        midi = pretty_midi.PrettyMIDI(initial_tempo=120)
-        program_num = int(self.program_var.get().split(" - ")[0])
-        instrument = pretty_midi.Instrument(program=program_num)
-
-        # MIDI note offset: CQT bin 0 = C1 = MIDI 24
-        midi_offset = 24
-        note_count = 0
-        min_frames = max(1, int(min_dur * sr / hop))
-
-        for pitch_bin in range(n_bins):
-            midi_note = pitch_bin + midi_offset
-            if midi_note > 127:
-                continue
-
-            # Find contiguous runs of 1s in this pitch row
-            row = piano_roll[pitch_bin]
-            in_note = False
-            start_frame = 0
-
-            for frame_idx in range(len(row)):
-                if row[frame_idx] and not in_note:
-                    # Note onset
-                    in_note = True
-                    start_frame = frame_idx
-                elif not row[frame_idx] and in_note:
-                    # Note offset
-                    in_note = False
-                    length = frame_idx - start_frame
-                    if length >= min_frames:
-                        t_start = frame_times[start_frame]
-                        t_end = frame_times[min(frame_idx,
-                                                len(frame_times) - 1)]
-                        # Velocity from average energy during the note
-                        avg_energy = float(np.mean(
-                            C_norm[pitch_bin,
-                                   start_frame:frame_idx]))
-                        velocity = int(np.clip(
-                            avg_energy * 127, 30, 127))
-
-                        note = pretty_midi.Note(
-                            velocity=velocity,
-                            pitch=midi_note,
-                            start=t_start,
-                            end=t_end)
-                        instrument.notes.append(note)
-                        note_count += 1
-
-            # Handle note that extends to end of track
-            if in_note:
-                length = len(row) - start_frame
-                if length >= min_frames:
-                    t_start = frame_times[start_frame]
-                    t_end = frame_times[-1]
-                    avg_energy = float(np.mean(
-                        C_norm[pitch_bin, start_frame:]))
-                    velocity = int(np.clip(
-                        avg_energy * 127, 30, 127))
-                    note = pretty_midi.Note(
-                        velocity=velocity,
-                        pitch=midi_note,
-                        start=t_start,
-                        end=t_end)
-                    instrument.notes.append(note)
-                    note_count += 1
-
-        midi.instruments.append(instrument)
-        midi.write(midi_path)
-
-        self.log_tagged(self.console,
-                        f"  MIDI created: {note_count} notes, "
-                        f"{os.path.getsize(midi_path) / 1024:.1f} KB",
-                        "success")
+    def _choose_soundfont(self):
+        p = dialogs.askopenfilename(title="Choose a SoundFont",
+                                    filetypes=[("SoundFont", "*.sf2 *.sf3"), ("All files", "*.*")])
+        if p:
+            self._sf2_path = p
+            self.run_in_thread(self._check_deps)
 
     # ── Main pipeline ────────────────────────────────────────────────────
 
     def _run(self):
-        if not self.file_path:
-            messagebox.showwarning(t("midifier.no_input"),
-                                   t("midifier.no_input"))
+        from tabs import common
+        typed = self.src_var.get().strip()
+        if typed and os.path.isfile(typed):
+            self.file_path = typed
+        src = self.file_path
+        if not src or not os.path.isfile(src):
+            messagebox.showwarning(t("midifier.no_input"), t("midifier.no_input"), parent=self)
             return
-        if not self._deps_ok:
+        is_midi = src.lower().endswith((".mid", ".midi"))
+        info = None
+        if not is_midi:
+            info = common.check_source(self, src, need_video=False)
+            if info is None:
+                return
+            if not info.has_audio:
+                messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+                return
+        if not (self._fs_path and self._sf2_path):
             messagebox.showwarning(t("midifier.missing_deps"),
-                                   t("midifier.missing_deps"))
+                                   "FluidSynth and a SoundFont are needed to play the notes back.\n\n"
+                                   + ("On Linux, install the 'fluidsynth' package." if not self._fs_path
+                                      else "Choose a SoundFont (.sf2) file."), parent=self)
             return
-
-        out = self.out_var.get().strip()
-        if not out:
-            self._browse_out()
-            out = self.out_var.get().strip()
+        try:
+            threshold = common.number(self.note_thresh_var.get() or "0.5", "Note threshold", 0.05, 0.99)
+            min_dur = common.number(self.min_note_var.get() or "0.05", "Minimum note length", 0.01, 5)
+            gain = common.number(self.gain_var.get() or "0.6", "Gain", 0.05, 5)
+            rate = int(common.number(self.sr_var.get() or "44100", "Sample rate", 8000, 192000))
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        program = int(self.program_var.get().split(" - ")[0] or 0)
+        out = self.out_var.get().strip() or self.suggest_output(src, "midified", ".mp3")
+        if not out.lower().endswith(common.AUDIO_ONLY_EXTS):
+            out = os.path.splitext(out)[0] + ".mp3"
+        out = self.confirm_output(out, [src], default_ext=".mp3")
         if not out:
             return
+        self.out_var.set(out)
+        save_midi = self.save_midi_var.get() and not is_midi
+        fs_exe, sf2 = self._fs_path, self._sf2_path
+        length = info.duration if info else None
 
-        self.btn_run.config(state="disabled", text="Processing...")
-        self.log(self.console, "")
-        self.log_tagged(self.console,
-                        t("midifier.starting"), "info")
+        def work(_p, _c, ctx):
+            job = ctx.tempdir()
+            midi_path = src
+            if not is_midi:
+                ctx.log("Stage 1/3: finding the notes…")
+                with open(os.path.join(job, "graph.txt"), "w", encoding="utf-8") as fh:
+                    fh.write(midi.analysis_graph())
+                ctx.span(0.0, 0.5).run(midi.analysis_cmd(src, "graph.txt"), duration=length, cwd=job)
+                notes = midi.transcribe(midi.read_levels(job), threshold=threshold, min_dur=min_dur)
+                if not notes:
+                    raise RuntimeError("No notes were found - try a lower note threshold.")
+                midi_path = os.path.join(job, "transcription.mid")
+                midi.write_midi(midi_path, notes, program=program)
+                ctx.log(f"  {len(notes)} notes")
+                if save_midi:
+                    final_mid = os.path.splitext(out)[0] + ".mid"
+                    midi.write_midi(ctx.output(final_mid), notes, program=program)
+                    ctx.log(f"  MIDI saved: {os.path.basename(final_mid)}")
+            ctx.log(f"Stage 2/3: playing it with {os.path.basename(sf2)}…")
+            wav = os.path.join(job, "rendered.wav")
+            ctx.span(0.5, 0.8).run(midi.render_cmd(fs_exe, sf2, midi_path, wav, rate=rate, gain=gain))
+            if not os.path.isfile(wav) or os.path.getsize(wav) < 1000:
+                raise RuntimeError("FluidSynth produced no audio.")
+            ctx.log("Stage 3/3: encoding…")
+            cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", wav]
+            if length:      # FluidSynth adds a few seconds of release tail
+                cmd += ["-t", f"{length + 1.0:.3f}", "-af", f"afade=t=out:st={length:.3f}:d=1"]
+            if out.lower().endswith(".mp3"):
+                cmd += ["-c:a", "libmp3lame", "-b:a", "256k"]
+            else:
+                cmd += common.audio_encoder_args(out)
+            ctx.span(0.8, 1.0).run(cmd + [ctx.output(out)], duration=length)
+            return 0
 
-        def _pipeline():
-            tmp_dir = tempfile.mkdtemp(prefix="midifier_")
-            midi_path = os.path.join(tmp_dir, "transcription.mid")
-            wav_path = os.path.join(tmp_dir, "rendered.wav")
-            success = False
-
-            try:
-                # ── Stage 1: Audio → MIDI ────────────────────────────────
-                self.log_tagged(self.console,
-                                "\n\u2500 " + t("midifier.stage1"), "info")
-                self._audio_to_midi(self.file_path, midi_path)
-
-                if not os.path.isfile(midi_path):
-                    self.log_tagged(self.console,
-                                    "  MIDI generation failed", "error")
-                    return
-
-                # Save MIDI copy if requested
-                if self.save_midi_var.get():
-                    midi_save = os.path.splitext(out)[0] + ".mid"
-                    shutil.copy2(midi_path, midi_save)
-                    self.log(self.console,
-                             f"  MIDI saved: {midi_save}")
-
-                # ── Stage 2: MIDI → WAV (FluidSynth) ────────────────────
-                self.log_tagged(self.console,
-                                "\n\u2500 " + t("midifier.stage2"), "info")
-
-                fs_exe = self._fs_path
-                sf2 = self._sf2_path
-                if not fs_exe or not sf2:
-                    self.log_tagged(self.console,
-                                    t("midifier.fs_or_sf2_missing"),
-                                    "error")
-                    return
-
-                gain = self.gain_var.get() or "1.0"
-                sr = self.sr_var.get() or "44100"
-
-                cmd_fs = [
-                    fs_exe, "-ni",
-                    "-g", gain, "-r", sr,
-                    "-F", wav_path,
-                    sf2, midi_path,
-                ]
-
-                sf2_name = os.path.basename(sf2)
-                self.log(self.console, f"  SoundFont: {sf2_name}")
-                self.log(self.console,
-                         f"  Sample rate: {sr} Hz, Gain: {gain}")
-                self.log(self.console, "  Rendering...")
-
-                proc = subprocess.run(
-                    cmd_fs, capture_output=True, text=True,
-                    timeout=600, creationflags=CREATE_NO_WINDOW)
-
-                if proc.returncode != 0:
-                    err = (proc.stderr or proc.stdout or "unknown")[-400:]
-                    self.log_tagged(self.console,
-                                    f"  FluidSynth error:\n  {err}",
-                                    "error")
-                    return
-
-                if not os.path.isfile(wav_path):
-                    self.log_tagged(self.console,
-                                    "  WAV render failed", "error")
-                    return
-
-                wav_mb = os.path.getsize(wav_path) / (1024 * 1024)
-                self.log_tagged(self.console,
-                                f"  WAV rendered: {wav_mb:.1f} MB",
-                                "success")
-
-                # ── Stage 3: WAV → MP3 (FFmpeg 256k) ────────────────────
-                self.log_tagged(self.console,
-                                "\n\u2500 " + t("midifier.stage3"), "info")
-
-                ffmpeg = get_binary_path("ffmpeg")
-                cmd_ff = [
-                    ffmpeg, "-i", wav_path,
-                    "-c:a", "libmp3lame",
-                    "-b:a", "256k",
-                    "-ar", sr,
-                    out, "-y",
-                ]
-
-                self.log(self.console, "  Encoding MP3...")
-                proc = subprocess.run(
-                    cmd_ff, capture_output=True, text=True,
-                    timeout=300, creationflags=CREATE_NO_WINDOW)
-
-                if proc.returncode != 0:
-                    err = (proc.stderr or "")[-300:]
-                    self.log_tagged(self.console,
-                                    f"  FFmpeg error: {err}", "error")
-                    return
-
-                mp3_mb = os.path.getsize(out) / (1024 * 1024)
-                self.log_tagged(self.console,
-                                f"  MP3 saved: {mp3_mb:.1f} MB",
-                                "success")
-
-                success = True
-                self.log_tagged(self.console,
-                                f"\n\u2713  MIDIfication complete!  "
-                                f"{wav_mb:.1f} MB WAV \u2192 "
-                                f"{mp3_mb:.1f} MB MP3", "success")
-
-            except Exception as e:
-                import traceback
-                self.log_tagged(self.console,
-                                f"\nError: {e}", "error")
-                self.log(self.console, traceback.format_exc())
-            finally:
-                try:
-                    shutil.rmtree(tmp_dir, ignore_errors=True)
-                except Exception:
-                    pass
-                self.after(0, lambda: self.btn_run.config(
-                    state="normal", text=t("midifier.run_btn")))
-                if success:
-                    self.after(0, lambda: self.show_result(0, out))
-
-        self.run_in_thread(_pipeline)
+        self.log_tagged(self.console, t("midifier.starting"), "info")
+        common.queue_job(self, name="MIDIfier", out=out, work=work, btn=self.btn_run,
+                         btn_label=t("midifier.run_btn"), console=self.console, duration=length,
+                         inputs=[src])

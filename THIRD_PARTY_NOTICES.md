@@ -18,6 +18,7 @@ The exact versions and download checksums for each release are recorded in
 | FluidSynth (Windows build only; Linux uses the system package) | 2.6.2 | LGPL-2.1-or-later; bundled SDL3 (zlib) and libsndfile (LGPL-2.1-or-later) | https://www.fluidsynth.org |
 | whisper.cpp (`whisper-cli` and its ggml libraries, speech-to-text) | build b5454 (1.9.5) | MIT | https://github.com/ggml-org/whisper.cpp |
 | GCC OpenMP runtime `libgomp.so.1` (Linux builds, used by whisper.cpp) | from the build system | GPL-3.0 with the GCC Runtime Library Exception | https://gcc.gnu.org |
+| GeneralUser GS SoundFont (`soundfonts/GeneralUser-GS.sf2`, instruments for the MIDIfier) | 2.0.3 | GeneralUser GS License v2.0 (free use in software projects; see `licenses/generaluser-gs`) | https://www.schristiancollins.com/generaluser.php |
 
 The editor starts these as separate processes. It does not link against
 them.
@@ -49,6 +50,18 @@ least three years from the date of each release.
 | tkdnd (native drag-and-drop extension used by tkinterdnd2) | BSD-style (tkdnd licence) |
 | PyInstaller bootloader | GPL-2.0 with the PyInstaller bootloader exception, which allows use in any program |
 
+These packages are loaded at run time from `_internal/libs` as plain files.
+Their licence texts are in each package's `*.dist-info` folder there:
+
+| Component | Licence |
+|-----------|---------|
+| edge-tts 7.3.1 (online text-to-speech voices) | LGPL-3.0 (`srt_composer.py`: MIT). It is shipped as unmodified source in `_internal/libs/edge_tts`, and you may replace it with your own version. Source: https://github.com/rany2/edge-tts |
+| aiohttp, aiosignal, frozenlist, multidict, propcache, yarl | Apache-2.0 (aiohttp also contains MIT-licensed parts) |
+| aiohappyeyeballs, typing_extensions | Python Software Foundation License 2.0 |
+| attrs, tabulate | MIT |
+| idna | BSD-3-Clause |
+| certifi (CA certificates) | MPL-2.0 |
+
 ## Fonts (`assets/fonts`)
 
 | Font | Licence |
@@ -58,6 +71,14 @@ least three years from the date of each release.
 
 Each font's licence text and copyright notice are in
 `assets/fonts/licenses/`.
+
+## Noise-reduction models (`assets/models/rnnoise`)
+
+The five RNNoise models used by Voice Isolation (`bd`, `cb`, `lq`, `mp` and `sh`
+`.rnnn`) come from https://github.com/GregorR/rnnoise-models (commit
+`3eee541a`). Their authors state that the models are not creative works and
+are not subject to copyright. The repository's README is included next to
+them.
 
 ## Optional components downloaded on demand
 

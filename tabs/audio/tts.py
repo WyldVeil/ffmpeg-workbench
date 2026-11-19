@@ -8,26 +8,24 @@ Dependencies are auto-installed into  <project_root>/libs/  on first run.
 No manual pip install required.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
 import os
 import sys
-import threading
 import tempfile
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
-# ── Engine availability  (auto-installs into libs/ on first run) ──────────
-from core.deps import require, is_available
+# ── Engines (core/tts.py): online neural voices + the OS's own offline voice ──
+from core import tts as tts_core
 from core.i18n import t
 
-edge_tts  = require("edge-tts",  import_name="edge_tts")
-pyttsx3   = require("pyttsx3",   import_name="pyttsx3",  auto_install=False)
-
-EDGE_TTS_OK = edge_tts  is not None
-PYTTSX3_OK  = pyttsx3   is not None
+EDGE_TTS_OK = tts_core.edge_available()
+SYSTEM_TTS = tts_core.system_engine_label()       # "" when the OS has no voice engine
+ENGINE_EDGE = "Online neural voices (best quality)"
+ENGINE_SYSTEM = f"Offline - {SYSTEM_TTS}" if SYSTEM_TTS else ""
 
 # ── Voice catalogue ───────────────────────────────────────────────────────
 VOICES = [
@@ -115,31 +113,36 @@ class TTSVoiceOverTab(BaseTab):
 
     # ── Engine banner ─────────────────────────────────────────────────────
     def _build_engine_banner(self):
-        banner = tk.Frame(self, bg="#1A2A1A" if EDGE_TTS_OK else "#2A1A1A",
-                          pady=4)
+        engines = [e for e in (ENGINE_EDGE if EDGE_TTS_OK else "", ENGINE_SYSTEM) if e]
+        ok = bool(engines)
+        banner = tk.Frame(self, bg="#1A2A1A" if ok else "#2A1A1A", pady=4)
         banner.pack(fill="x")
-        if EDGE_TTS_OK:
-            tk.Label(banner,
-                     text=t("tts.edge_tts_engine_ready_10_neural_voices_available"),
-                     bg="#1A2A1A", fg="#66BB6A",
-                     font=(UI_FONT, 9)).pack(side="left", padx=16)
-            self._engine_var = tk.StringVar(value="edge-tts  (Neural, recommended)")
-        else:
-            tk.Label(banner,
-                     text=t("tts.edge_tts_not_installed_run_pip_install_edge_tts"),
-                     bg="#2A1A1A", fg="#EF9A9A",
-                     font=(UI_FONT, 9)).pack(side="left", padx=16)
-            self._engine_var = tk.StringVar(
-                value="pyttsx3  (Offline)" if PYTTSX3_OK else "No engine available")
+        self._engine_var = tk.StringVar(value=engines[0] if engines else "")
+        if not ok:
+            tk.Label(banner, text="⚠  No voice engine available - the online voices are missing from this "
+                                  "copy and the system has no offline voice (on Linux: install espeak-ng).",
+                     bg=banner["bg"], fg="#EF9A9A", font=(UI_FONT, 9)).pack(side="left", padx=16)
+            return
+        tk.Label(banner, text="Voice engine:", bg=banner["bg"], fg=CLR["fgdim"],
+                 font=(UI_FONT, 9)).pack(side="left", padx=(16, 4))
+        cb = ttk.Combobox(banner, textvariable=self._engine_var, values=engines, state="readonly", width=40)
+        cb.pack(side="left")
+        self._engine_note = tk.Label(banner, text="", bg=banner["bg"], fg=CLR["fgdim"], font=(UI_FONT, 9))
+        self._engine_note.pack(side="left", padx=8)
+        cb.bind("<<ComboboxSelected>>", lambda _e: self._engine_changed())
+        self.after(50, self._engine_changed)
 
-        # Engine selector (only relevant if both are installed)
-        if EDGE_TTS_OK and PYTTSX3_OK:
-            tk.Label(banner, text=t("tts.engine"), bg=banner["bg"],
-                     fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-            ttk.Combobox(banner, textvariable=self._engine_var,
-                         values=[t("tts.tts_edge_tts_neural_recommended"),
-                                 t("tts.tts_pyttsx3_offline")],
-                         state="readonly", width=28).pack(side="left", padx=4)
+    def _engine(self) -> str:
+        return "edge" if self._engine_var.get() == ENGINE_EDGE else "system"
+
+    def _engine_changed(self):
+        if not hasattr(self, "_engine_note"):
+            return
+        if self._engine() == "edge":
+            self._engine_note.config(text="Needs internet. Uses the proxy from Settings → Network.")
+        else:
+            self._engine_note.config(text="Works offline. The voice list and pitch apply to the online "
+                                          "voices only.")
 
     # ── Text section ──────────────────────────────────────────────────────
     def _build_text_section(self, parent):
@@ -563,74 +566,30 @@ class TTSVoiceOverTab(BaseTab):
         vol_s   = f"+{vol}%"   if vol   >= 0 else f"{vol}%"
         return vid, rate_s, pitch_s, vol_s
 
-    def _generate_tts_async(self, text, out_path, with_subs=False):
-        """
-        Runs edge-tts in a background thread.
-        Returns (audio_path, srt_string_or_None).
-        Calls self._on_tts_done(audio_path, srt) on the main thread when done.
-        """
-        if not EDGE_TTS_OK:
-            return self._generate_tts_pyttsx3(text, out_path)
-
+    def _synth_settings(self):
         voice_id, rate, pitch, volume = self._edge_voice_str()
+        return {"engine": self._engine(), "voice": voice_id, "rate": rate, "pitch": pitch, "volume": volume}
 
-        def _run():
-            try:
-                import asyncio as _aio
-                srt_text = None
-
-                async def _gen():
-                    nonlocal srt_text
-                    communicate = edge_tts.Communicate(
-                        text, voice_id,
-                        rate=rate, pitch=pitch, volume=volume)
-                    if with_subs:
-                        subs = edge_tts.SubMaker()
-                        with open(out_path, "wb") as f:
-                            async for chunk in communicate.stream():
-                                if chunk["type"] == "audio":
-                                    f.write(chunk["data"])
-                                elif chunk["type"] == "WordBoundary":
-                                    try:
-                                        # edge-tts >=7: positional int args
-                                        subs.create_sub(
-                                            chunk["offset"],
-                                            chunk["duration"],
-                                            chunk["text"])
-                                    except TypeError:
-                                        # edge-tts <7: tuple arg
-                                        subs.create_sub(
-                                            (chunk["offset"], chunk["duration"]),
-                                            chunk["text"])
-                        # get_srt() in edge-tts >=7; generate_subs() in older
-                        srt_text = (subs.get_srt() if hasattr(subs, "get_srt")
-                                    else subs.generate_subs())
-                    else:
-                        await communicate.save(out_path)
-
-                _aio.run(_gen())
-                self.after(0, lambda: self._on_tts_done(out_path, srt_text))
-            except Exception as e:
-                self.after(0, lambda err=e: self._on_tts_error(str(err)))
-
-        threading.Thread(target=_run, daemon=True).start()
-
-    def _generate_tts_pyttsx3(self, text, out_path):
-        """Offline fallback using pyttsx3."""
-        if not PYTTSX3_OK:
-            self._on_tts_error("No TTS engine available. Install edge-tts or pyttsx3.")
+    def _synth_async(self, text, out_path, with_subs, on_ready):
+        """Speak *text* in a worker thread, then call on_ready(path, srt) on the UI thread."""
+        from core import ui
+        if not self._engine_var.get():
+            self._on_tts_error("No voice engine is available.")
             return
+        cfg = self._synth_settings()
 
-        def _run():
-            try:
-                engine = pyttsx3.init()
-                engine.save_to_file(text, out_path)
-                engine.runAndWait()
-                self.after(0, lambda: self._on_tts_done(out_path, None))
-            except Exception as e:
-                self.after(0, lambda err=e: self._on_tts_error(str(err)))
+        def ready(srt):
+            self._on_tts_done(out_path, srt)
+            on_ready(out_path, srt)
 
-        threading.Thread(target=_run, daemon=True).start()
+        ui.run_in_thread(tts_core.synthesize, text, out_path, subtitles=with_subs, **cfg,
+                         on_done=ready, on_error=lambda e: self._on_tts_error(str(e)), name="TTS")
+
+    def _scratch(self, name):
+        if not getattr(self, "_scratch_dir", None):
+            self._scratch_dir = tempfile.mkdtemp(prefix="wme_tts_preview_")
+        ext = ".mp3" if self._engine() == "edge" else ".wav"
+        return os.path.join(self._scratch_dir, name + ext)
 
     def _on_tts_done(self, audio_path, srt_text):
         self._tts_audio_path = audio_path
@@ -639,15 +598,11 @@ class TTSVoiceOverTab(BaseTab):
         self.log(self.console, f"TTS audio ready: {os.path.basename(audio_path)}")
         if srt_text:
             self.log(self.console, t("log.tts.srt_subtitle_data_captured"))
-        # Signal the waiting render thread
-        if hasattr(self, "_tts_ready_event"):
-            self._tts_ready_event.set()
 
     def _on_tts_error(self, msg):
         self._gen_status.config(text=f"❌  {msg}", fg="#EF9A9A")
         self.log(self.console, f"[TTS ERROR] {msg}")
-        if hasattr(self, "_tts_ready_event"):
-            self._tts_ready_event.set()   # unblock render even on error
+        self.btn_render.config(state="normal", text=t("tts.generate_export"))
 
     # ─────────────────────────────────────────────────────────────────────
     #  In-tab player (ffplay -nodisp)
@@ -715,202 +670,149 @@ class TTSVoiceOverTab(BaseTab):
     #  Preview (generate + load into player, no export)
     # ─────────────────────────────────────────────────────────────────────
     def _preview_voice(self):
-        """Generate a short voice sample sentence and load into player."""
-        name   = self.voice_var.get().split("(")[0].strip()
-        sample = (f"Hello, this is {name}. "
-                  f"I can narrate your videos, create podcasts, "
-                  f"or add voice-over to any project.")
+        """Speak a short sample sentence in the chosen voice."""
+        name = self.voice_var.get().split("(")[0].strip()
+        sample = (f"Hello, this is {name}. I can narrate your videos, create podcasts, "
+                  "or add voice-over to any project.")
         self._gen_status.config(text=t("tts.generating_voice_sample"), fg=CLR["accent"])
-        tmp = tempfile.mktemp(suffix="_voice_sample.mp3")
-
-        orig_done = self._on_tts_done
-
-        def _patched_done(path, srt):
-            self._on_tts_done = orig_done
-            orig_done(path, srt)
-            self.after(0, lambda: self._player_load(path))
-            self.after(0, lambda: self._player_play())
-
-        self._on_tts_done = _patched_done
-        if EDGE_TTS_OK:
-            self._generate_tts_async(sample, tmp, with_subs=False)
-        else:
-            self._generate_tts_pyttsx3(sample, tmp)
+        self._synth_async(sample, self._scratch("voice_sample"), False,
+                          lambda path, _srt: (self._player_load(path), self._player_play()))
 
     def _generate_preview(self):
-        """Generate TTS for the full script and load into the in-tab player."""
+        """Speak the whole script into the in-tab player (nothing is exported)."""
         text = self._get_text()
         if not text:
-            messagebox.showwarning(t("common.warning"), "Enter some text first.")
+            messagebox.showwarning(t("common.warning"), "Enter some text first.", parent=self)
             return
         self._gen_status.config(text=t("tts.generating"), fg=CLR["accent"])
         self.log(self.console, t("log.tts.generating_tts_preview"))
-        tmp = tempfile.mktemp(suffix="_tts_preview.mp3")
 
-        orig_done = self._on_tts_done
-
-        def _patched_done(path, srt):
-            self._on_tts_done = orig_done
-            orig_done(path, srt)
-            self.after(0, lambda: self._player_load(path))
-            self.after(0, lambda: self._player_play())
+        def ready(path, _srt):
+            self._player_load(path)
+            self._player_play()
             self.log(self.console, t("log.tts.loaded_into_in_tab_player_press_play_to_replay"))
 
-        self._on_tts_done = _patched_done
-        if EDGE_TTS_OK:
-            self._generate_tts_async(text, tmp, with_subs=self.srt_var.get())
-        else:
-            self._generate_tts_pyttsx3(text, tmp)
+        self._synth_async(text, self._scratch("script_preview"), False, ready)
 
     # ─────────────────────────────────────────────────────────────────────
     #  Main render
     # ─────────────────────────────────────────────────────────────────────
     def _render(self):
+        from core import ffmpeg as ff
+        from tabs import common
         text = self._get_text()
         if not text:
-            messagebox.showwarning(t("common.warning"), "Enter some text in the script box.")
+            messagebox.showwarning(t("common.warning"), "Enter some text in the script box.", parent=self)
             return
-
-        out = self.out_var.get().strip()
-        if not out:
-            self._browse_out()
-            out = self.out_var.get().strip()
-        if not out:
+        if not self._engine_var.get():
+            messagebox.showwarning(t("common.warning"), "No voice engine is available.", parent=self)
             return
-
-        if self.mode_var.get() == "video" and not self._vid_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
-            return
-
-        self.btn_render.config(state="disabled", text=t("tts.generating_tts"))
-        self._gen_status.config(text=t("tts.running_tts_engine"), fg=CLR["accent"])
-        self.log(self.console, t("log.tts.step_1_2_generating_tts_audio"))
-
-        # TTS goes to a temp file; FFmpeg then processes it
-        tts_tmp = tempfile.mktemp(suffix="_tts_raw.mp3")
-        self._tts_ready_event = threading.Event()
-
-        def _on_tts_complete(path, srt_text):
-            self._tts_audio_path = path
-            self._pending_srt    = srt_text
-            self._gen_status.config(text=t("tts.tts_done_processing"), fg="#66BB6A")
-            self.log(self.console, t("log.tts.step_2_2_processing_with_ffmpeg"))
-            # Must run FFmpeg on main thread (tkinter safety)
-            self.after(0, lambda: self._ffmpeg_stage(path, srt_text, out))
-
-        self._on_tts_done = _on_tts_complete
-
-        if EDGE_TTS_OK:
-            self._generate_tts_async(text, tts_tmp, with_subs=self.srt_var.get())
+        mode = self.mode_var.get()
+        info = None
+        inputs = []
+        if mode == "video":
+            vid = (self.vid_var.get() or getattr(self, "_vid_path", "")).strip()
+            info = common.check_source(self, vid)
+            if info is None:
+                return
+            self._vid_path = vid
+            inputs = [vid]
+            default = self.suggest_output(vid, "voiceover")
         else:
-            self._generate_tts_pyttsx3(text, tts_tmp)
-
-    def _ffmpeg_stage(self, tts_path, srt_text, out):
-        """Called after TTS is ready. Builds and runs the FFmpeg command."""
-        if not os.path.exists(tts_path):
-            self.log(self.console, t("log.tts.error_tts_file_not_found_generation_may_have_fail"))
-            self.btn_render.config(state="normal", text=t("tts.generate_export"))
-            return
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        mode   = self.mode_var.get()
-
-        # ── Build audio filter for TTS track ─────────────────────────────
-        vol_offset = self.vol_var.get()
-        vol_factor = 1.0 + vol_offset / 100.0
-
-        try:
-            pad_b = float(self.pad_before_var.get())
-        except ValueError:
-            pad_b = 0.0
-        try:
-            pad_a = float(self.pad_after_var.get())
-        except ValueError:
-            pad_a = 0.3
-
-        tts_filter_parts = [f"volume={vol_factor:.3f}"]
-        if pad_b > 0 or pad_a > 0:
-            tts_filter_parts.append(
-                f"adelay={int(pad_b*1000)}|{int(pad_b*1000)}")
-        if self.normalise_var.get():
-            tts_filter_parts.append("loudnorm=I=-16:TP=-1.5:LRA=11")
-        tts_filter = ",".join(tts_filter_parts)
-
-        # ── Standalone audio ──────────────────────────────────────────────
-        if mode == "standalone":
-            cmd = [ffmpeg, "-i", tts_path,
-                   "-af", tts_filter]
             fmt = self.audio_fmt_var.get()
-            if "WAV" in fmt:
-                cmd += ["-c:a", "pcm_s16le"]
-            elif "FLAC" in fmt:
-                cmd += ["-c:a", "flac"]
-            elif "AAC" in fmt:
-                cmd += ["-c:a", "aac", "-b:a", "256k"]
-            else:
-                brate = "320k" if "320" in fmt else "192k"
-                cmd += ["-c:a", "libmp3lame", "-b:a", brate]
-            cmd += [out, "-y"]
+            ext = ".wav" if "WAV" in fmt else ".flac" if "FLAC" in fmt else ".m4a" if "AAC" in fmt else ".mp3"
+            default = os.path.join(os.path.expanduser("~"), "voiceover" + ext)
+        try:
+            pads = (max(0.0, float(self.pad_before_var.get() or 0)), max(0.0, float(self.pad_after_var.get() or 0)))
+            offset = ff.parse_time(self.timestamp_var.get() or "0") if mode == "video" else 0.0
+        except ValueError:
+            messagebox.showwarning(t("common.warning"), "Padding and start time must be numbers of seconds.",
+                                   parent=self)
+            return
+        out = self.confirm_output(self.out_var.get().strip() or default, inputs)
+        if not out:
+            return
+        self.out_var.set(out)
+        cfg = self._synth_settings()
+        with_srt = self.srt_var.get()
+        settings = {"mode": mode, "pads": pads, "offset": offset, "vol": 1.0 + self.vol_var.get() / 100.0,
+                    "normalise": self.normalise_var.get(), "fmt": self.audio_fmt_var.get(),
+                    "mix": self.mix_mode_var.get(), "orig_vol": float(self.orig_vol_var.get()),
+                    "vid_fmt": self.vid_fmt_var.get()}
 
-        # ── Burn into video ───────────────────────────────────────────────
+        def work(_p, _c, ctx):
+            speech = os.path.join(ctx.tempdir(), "speech" + (".mp3" if cfg["engine"] == "edge" else ".wav"))
+            ctx.log("Step 1/2: speaking the script…")
+            srt = tts_core.synthesize(text, speech, subtitles=with_srt, cancelled=ctx.cancelled, **cfg)
+            ctx.progress(0.3)
+            ctx.log("Step 2/2: building the output…")
+            cmd, dur = self._build_cmd(speech, ctx.output(out), info, settings)
+            ctx.span(0.3, 1.0).run(cmd, duration=dur)
+            if with_srt and srt:
+                shift = settings["pads"][0] + settings["offset"]
+                srt_path = os.path.splitext(out)[0] + ".srt"
+                with open(srt_path, "w", encoding="utf-8") as fh:
+                    fh.write(_shift_srt(srt, shift) if shift else srt)
+                ctx.log(f"Subtitles saved: {os.path.basename(srt_path)}")
+            return 0
+
+        self._gen_status.config(text=t("tts.running_tts_engine"), fg=CLR["accent"])
+        common.queue_job(self, name="TTS Voice-Over", out=out, work=work, btn=self.btn_render,
+                         btn_label=t("tts.generate_export"), console=self.console,
+                         duration=info.duration if info else None, inputs=inputs)
+
+    def _build_cmd(self, speech, out, info, cfg):
+        """FFmpeg command for the spoken track -> standalone audio or the video."""
+        from core import ffmpeg as ff
+        from tabs import common
+        pad_b, pad_a = cfg["pads"]
+        chain = ["aformat=sample_rates=48000:channel_layouts=stereo", f"volume={cfg['vol']:.3f}"]
+        if cfg["normalise"]:
+            chain += ["loudnorm=I=-16:TP=-1.5:LRA=11", "aresample=48000", "asetnsamples=n=4096:p=0"]
+        delay = pad_b + cfg["offset"]
+        if delay > 0:
+            chain.append(f"adelay=delays={round(delay * 1000)}:all=1")
+        if pad_a > 0:
+            chain.append(f"apad=pad_dur={pad_a:.3f}")
+        if cfg["mode"] != "video":
+            cmd = [ff.ffmpeg_path(), "-y", "-i", speech, "-af", ",".join(chain), "-vn"]
+            fmt = cfg["fmt"]
+            if out.lower().endswith(".mp3"):
+                cmd += ["-c:a", "libmp3lame", "-b:a", "320k" if "320" in fmt else "192k"]
+            else:
+                cmd += common.audio_encoder_args(out)
+            return cmd + [out], None
+        dur = info.duration
+        cmd = [ff.ffmpeg_path(), "-y", "-i", self._vid_path, "-i", speech]
+        tts = "[1:a:0]" + ",".join(chain) + f",apad,atrim=duration={dur:.3f}"
+        if cfg["mix"] == "replace" or not info.has_audio:
+            graph = f"{tts}[aout]"
         else:
-            vid  = self._vid_path
-            try:
-                offset = float(self.timestamp_var.get())
-            except ValueError:
-                offset = 0.0
+            graph = (f"[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo,volume={cfg['orig_vol']:.3f},"
+                     f"apad,atrim=duration={dur:.3f}[orig];{tts}[tts];"
+                     "[orig][tts]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[aout]")
+        cmd += ["-filter_complex", graph, "-map", "0:v:0", "-map", "[aout]"]
+        if "copy" in cfg["vid_fmt"].lower():
+            cmd += ["-c:v", "copy"]
+        else:
+            cmd += ["-c:v", "libx264", "-crf", "18" if "18" in cfg["vid_fmt"] else "23", "-preset", "medium",
+                    "-pix_fmt", "yuv420p"]
+        cmd += ["-c:a", "aac", "-b:a", "256k", "-t", f"{dur:.3f}"]
+        if out.lower().endswith((".mp4", ".mov", ".m4v")):
+            cmd += ["-movflags", "+faststart"]
+        return cmd + [out], dur
 
-            mix_mode = self.mix_mode_var.get()
-            orig_vol = self.orig_vol_var.get()
 
-            # inputs: [0] = video, [1] = TTS audio (with optional offset)
-            cmd = [ffmpeg, "-i", vid]
-            if offset > 0:
-                cmd += ["-itsoffset", str(offset)]
-            cmd += ["-i", tts_path]
+def _shift_srt(srt: str, seconds: float) -> str:
+    """Move every SRT cue later by *seconds*."""
+    import re as _re
 
-            if mix_mode == "replace":
-                # Just use TTS audio, drop original
-                fc = f"[1:a]{tts_filter}[tts_out]"
-                map_audio = "[tts_out]"
-            else:
-                # Mix TTS + original video audio
-                fc = (f"[0:a]volume={orig_vol:.3f}[orig];"
-                      f"[1:a]{tts_filter}[tts];"
-                      f"[orig][tts]amix=inputs=2:duration=first[aout]")
-                map_audio = "[aout]"
+    def fix(m):
+        h, mi, se, ms = (int(g) for g in m.groups())
+        total = max(0, (h * 3600 + mi * 60 + se) * 1000 + ms + round(seconds * 1000))
+        h, rem = divmod(total, 3_600_000)
+        mi, rem = divmod(rem, 60_000)
+        se, ms = divmod(rem, 1000)
+        return f"{h:02d}:{mi:02d}:{se:02d},{ms:03d}"
 
-            # Video codec
-            vid_fmt = self.vid_fmt_var.get()
-            if "copy" in vid_fmt.lower():
-                v_codec = ["-c:v", "copy"]
-            else:
-                crf = "18" if "18" in vid_fmt else "23"
-                v_codec = ["-c:v", "libx264", "-crf", crf, "-preset", "fast"]
-
-            cmd += ["-filter_complex", fc,
-                    "-map", "0:v", "-map", map_audio]
-            cmd += v_codec + ["-c:a", "aac", "-b:a", "256k",
-                               "-shortest", out, "-y"]
-
-        # ── Save SRT if requested ─────────────────────────────────────────
-        if self.srt_var.get() and srt_text:
-            srt_path = os.path.splitext(out)[0] + ".srt"
-            try:
-                with open(srt_path, "w", encoding="utf-8") as f:
-                    f.write(srt_text)
-                self.log(self.console, f"SRT saved: {os.path.basename(srt_path)}")
-            except Exception as e:
-                self.log(self.console, f"[WARN] Could not save SRT: {e}")
-
-        self.log(self.console, f"FFmpeg command ready, rendering → {os.path.basename(out)}")
-
-        def _done(rc):
-            self.btn_render.config(state="normal", text=t("tts.generate_export"))
-            self._gen_status.config(text="")
-            self.show_result(rc, out)
-
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=_done,
-                        btn=self.btn_render,
-                        btn_label="🗣  GENERATE & EXPORT")
+    return _re.sub(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})", fix, srt)

@@ -69,6 +69,7 @@ def freeze() -> str:
          "--distpath", DIST, "--workpath", os.path.join(ROOT, "build", "pyinstaller"),
          os.path.join(ROOT, "packaging", "app.spec")])
     out = os.path.join(DIST, NAME)
+    bundle_python_libs(out)
     if not IS_WIN:
         bundle_libgomp(os.path.join(out, "_internal", "bin", PLAT, "whisper"))
     # PyInstaller copies data files without the executable bit on POSIX.
@@ -79,6 +80,19 @@ def freeze() -> str:
                 if not f.endswith((".txt", ".json", ".md", ".so")) and ".so." not in f:
                     os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return out
+
+
+def bundle_python_libs(app_dir: str) -> None:
+    """Python packages loaded at run time from ``_internal/libs`` (the folder
+    core/deps.py puts on sys.path): edge-tts for the online TTS voices and its
+    dependencies.  They are installed as plain files from a hash-locked list
+    (packaging/bundled-libs.txt, made with ``uv pip compile --universal
+    --generate-hashes``) rather than frozen into the archive, so the
+    LGPL-3.0 edge-tts stays replaceable by the user."""
+    target = os.path.join(app_dir, "_internal", "libs")
+    run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
+         "--target", target, "--require-hashes", "--only-binary=:all:", "--no-deps",
+         "-r", os.path.join(ROOT, "packaging", "bundled-libs.txt")])
 
 
 def bundle_libgomp(whisper_dir: str) -> None:

@@ -1120,7 +1120,8 @@ class AllInOneTab(BaseTab):
             if self._vol_en.get():
                 af.append(f"volume={_num(self._vol_val, 1.0):.2f}")
             if self._norm_en.get():
-                af += [f"loudnorm=I={self._norm_lufs.get() or '-23'}:TP=-1:LRA=11", "aresample=48000"]
+                af += [f"loudnorm=I={self._norm_lufs.get() or '-23'}:TP=-1:LRA=11", "aresample=48000",
+                       "asetnsamples=n=4096:p=0"]
         if self._sec_fade.get() and self._fade_audio.get():
             if self._fi_en.get():
                 af.append(f"afade=t=in:st=0:d={_num(self._fi_dur, 1.5):.2f}")

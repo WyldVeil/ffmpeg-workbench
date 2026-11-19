@@ -14,13 +14,11 @@ Each stage can be bypassed independently.
 Preview by exporting a short clip with the chain applied.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import ttk
 from core import dialogs
 import os
-import tempfile
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, open_in_explorer
 from core.i18n import t
 
 
@@ -264,20 +262,18 @@ class AudioDynamicsTab(BaseTab):
             parts.append(f"agate=threshold={10**(gt/20):.6f}:ratio={gr:.1f}"
                          f":attack={ga:.1f}:release={grel:.1f}")
 
-        # EQ
+        # EQ: real shelving filters at the ends, peaking bands in between
         if self.eq_on.get():
-            eq_parts = []
             for i, (var, ftype, freq) in self._eq_vars.items():
-                gain = var.get()
-                if abs(gain) > 0.1:
-                    if ftype == "lowshelf":
-                        eq_parts.append(f"equalizer=f={freq}:t=s:w=200:g={gain:.1f}")
-                    elif ftype == "highshelf":
-                        eq_parts.append(f"equalizer=f={freq}:t=s:w=2000:g={gain:.1f}")
-                    else:
-                        eq_parts.append(f"equalizer=f={freq}:t=o:w=200:g={gain:.1f}")
-            if eq_parts:
-                parts.extend(eq_parts)
+                gain = max(-24.0, min(24.0, float(var.get())))
+                if abs(gain) <= 0.1:
+                    continue
+                if ftype == "lowshelf":
+                    parts.append(f"lowshelf=f={freq}:g={gain:.1f}")
+                elif ftype == "highshelf":
+                    parts.append(f"highshelf=f={freq}:g={gain:.1f}")
+                else:
+                    parts.append(f"equalizer=f={freq}:t=q:w=1.0:g={gain:.1f}")
 
         # Compressor
         if self.comp_on.get():
@@ -291,9 +287,12 @@ class AudioDynamicsTab(BaseTab):
 
         # De-esser (high-pass shelving compressor on the sibilant range)
         if self.deess_on.get():
-            df = self.deess_freq.get()
-            dt = self.deess_thresh.get()
-            parts.append(f"deesser=i={dt:.2f}:m=s:f={df:.0f}")
+            # deesser: i = intensity 0-1, m = max reduction 0-1,
+            # f = frequency as a fraction of the Nyquist frequency
+            nyquist = (getattr(self, "_sample_rate", 0) or 48000) / 2
+            df = min(max(float(self.deess_freq.get()) / nyquist, 0.01), 0.99)
+            dt = min(max(float(self.deess_thresh.get()), 0.0), 1.0)
+            parts.append(f"deesser=i={dt:.2f}:m=0.5:f={df:.3f}:s=o")
 
         # Limiter
         if self.limit_on.get():
@@ -327,52 +326,34 @@ class AudioDynamicsTab(BaseTab):
         if p: self.out_var.set(p)
 
     def _preview(self):
-        """Export first 10 seconds with the chain applied for a quick listen."""
-        if not self.file_path:
-            messagebox.showwarning(t("waveform.no_file_title"), t("common.no_input"))
-            return
-        tmp = tempfile.mktemp(suffix="_preview.mp3")
-        filt = self._build_filter()
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-i", self.file_path, "-t", "10",
-               "-af", filt, "-c:a", "libmp3lame", "-b:a", "192k",
-               "-vn", tmp, "-y"]
-        self.log(self.console, t("log.dynamics.rendering_10s_preview"))
+        """Listen to 12 seconds with the chain applied (in-app, no files left behind)."""
+        from tabs import common
+        src = self.src_var.get().strip()
+        self._probe_rate(src)
+        common.preview_audio(self, src, self._build_filter())
 
-        def done(rc):
-            if rc == 0 and os.path.exists(tmp):
-                open_in_explorer(tmp)
-            else:
-                self.show_result(rc)
-        self.run_ffmpeg(cmd, self.console, on_done=done)
+    def _probe_rate(self, src):
+        from core import ffmpeg as ff
+        info = ff.try_probe(src) if src else None
+        self._sample_rate = info.audio.sample_rate if info is not None and info.audio else 48000
+        return info
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("waveform.no_file_title"), t("common.no_input"))
+        from core import ffmpeg as ff
+        from tabs import common
+        src = self.src_var.get().strip()
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
             return
-        out = self.out_var.get().strip()
+        self._probe_rate(src)
+        out = self.out_var.get().strip() or self.suggest_output(src, "dynamics")
+        out = self.confirm_output(out, [src])
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4","*.mp4")])
-        if not out: return
+            return
         self.out_var.set(out)
-
-        filt   = self._build_filter()
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        ext    = os.path.splitext(out)[1].lower()
-
-        if ext in (".mp3",):
-            cmd = [ffmpeg, "-i", self.file_path, "-af", filt,
-                   "-vn", "-c:a", "libmp3lame", "-b:a", "320k", "-movflags", "+faststart", out, "-y"]
-        elif ext in (".wav",):
-            cmd = [ffmpeg, "-i", self.file_path, "-af", filt,
-                   "-vn", "-c:a", "pcm_s16le", "-movflags", "+faststart", out, "-y"]
-        else:
-            cmd = [ffmpeg, "-i", self.file_path, "-af", filt,
-                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", out, "-y"]
-
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", self._build_filter(),
+               *common.audio_job_args(out, info), out]
         self.log(self.console, t("log.dynamics.applying_audio_dynamics_chain"))
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render,
-                        btn_label=t("dynamics.btn_apply_dynamics"))
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
+                        btn_label=t("dynamics.btn_apply_dynamics"), duration=info.duration or None, output=out,
+                        inputs=[src], name="Audio Dynamics")

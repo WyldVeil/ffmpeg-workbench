@@ -1138,7 +1138,7 @@
   "ducker.standard_youtube": "استاندارد (یوتیوب)",
   "ducker.aggressive_speech": "تهاجمی (گفتار)",
   "ducker.full_mute_on_voice": "قطع کامل صدا برش برای نازکی",
-  "ducker.item_2": "هوا / روشنایی: تقویت برای درخشش",
+  "ducker.item_2": "*.*",
   "ducker.video_audio": "هوای سطح بالا",
   "dynamics.voice_presence_boost_for_clarity": "قسمت های ساکت را بالا می برد و قله های بلند را پایین می آورد. باعث می شود گفتار به طور یکنواخت در ترکیب بنشیند.",
   "dynamics.air_brightness_boost_for_sparkle": "Sibilance S/SH خشن را در فرکانس انتخابی هدف قرار می دهد. محدوده معمولی: 5-8 کیلوهرتز.",

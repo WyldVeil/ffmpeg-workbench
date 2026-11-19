@@ -1,38 +1,73 @@
 """
-tab_waveformeditor.py  ─  Audio Waveform Editor
+tabs/audio/waveform.py  -  Audio Waveform Editor
 
-Visual waveform display of a video/audio file with the ability to:
-  • See the full waveform at a glance (rendered as a canvas)
-  • Mark in/out points for cutting audio sections
-  • Adjust volume on selected regions (boost/duck)
-  • Mute specific sections
-  • Export the modified audio or the full video with modified audio
+See a file's waveform, select parts of it and mute, boost or duck them.
 
-Essential for editors who need to spot audio peaks, silences,
-or specific dialogue sections visually.
+* FFmpeg measures the peak level of every slice of the audio (at its own
+  sample rate) in one pass - fast for long files, nothing decoded in Python.
+* Drag on the waveform to select (or click = In, Shift+click = Out, or type
+  the times); mouse wheel zooms around the pointer, Shift+wheel scrolls.
+* Regions change the level with 20 ms ramps, so there are no clicks at
+  their edges.  Export the whole video with the new sound, or audio only.
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
+import math
 import os
-import struct
-import wave
+import shutil
 import tempfile
-import threading
+import tkinter as tk
+from tkinter import messagebox
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
+from core import ffmpeg as ff
+from core import ui
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import FileRow
+
+RAMP = 0.02                     # seconds of fade at each region edge
+COLOURS = {"mute": "red", "boost": "green", "duck": "orange"}
 
 
 def _fmt(seconds):
-    m, s = divmod(max(0, seconds), 60)
+    m, s = divmod(max(0.0, seconds), 60)
     h, m = divmod(m, 60)
     if h > 0:
         return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
     return f"{int(m):02d}:{s:05.2f}"
+
+
+def peaks_cmd(src: str, slice_samples: int, out_txt: str, stream: int = 0) -> list:
+    """Peak level (dBFS) of every *slice_samples* block, printed to *out_txt*."""
+    af = (f"aformat=sample_fmts=flt:channel_layouts=mono,asetnsamples=n={slice_samples}:p=0,"
+          "astats=metadata=1:reset=1:measure_perchannel=none:measure_overall=Peak_level,"
+          f"ametadata=mode=print:key=lavfi.astats.Overall.Peak_level:file={os.path.basename(out_txt)}")
+    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", src, "-map", f"0:a:{stream}",
+            "-af", af, "-f", "null", "-"]
+
+
+def read_peaks(path: str) -> list:
+    """dBFS lines -> linear peaks 0..1."""
+    vals = []
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith("lavfi.astats.Overall.Peak_level="):
+                try:
+                    db = float(line.split("=", 1)[1])
+                except ValueError:
+                    db = -120.0
+                vals.append(0.0 if math.isinf(db) or db < -120 else min(1.0, 10 ** (db / 20)))
+    return vals
+
+
+def region_filter(regions) -> str:
+    """Gain envelope for [(start, end, action, dB)] with RAMP-second edges."""
+    parts = ["asetnsamples=n=256:p=0"] if regions else []
+    for s, e, action, db in regions:
+        gain = 0.0 if action == "mute" else 10 ** ((db if action == "boost" else -db) / 20)
+        parts.append(f"volume='1+({gain:.6f}-1)*clip(min(t-{s:.3f},{e:.3f}-t)/{RAMP},0,1)':eval=frame")
+    return ",".join(parts)
 
 
 class WaveformEditorTab(BaseTab):
@@ -40,410 +75,370 @@ class WaveformEditorTab(BaseTab):
         super().__init__(parent)
         self.file_path = ""
         self.duration = 0.0
-        self._waveform_data = []  # list of peak values
+        self._info = None
+        self._peaks = []            # linear 0..1, one per slice
+        self._view = (0.0, 0.0)     # visible time range
         self._mark_in = 0.0
         self._mark_out = 0.0
-        self._regions = []  # list of (start, end, action, value)
+        self._regions = []          # (start, end, action, dB)
+        self._drag_from = None
+        self._prev_out = 0.0
+        self._load_id = 0
         self._build_ui()
 
+    # ── UI ────────────────────────────────────────────────────────────
     def _build_ui(self):
-        self.make_header(self, t("tab.waveform_editor"),
-                         t("waveform.subtitle"),
-                         icon="🎵")
+        self.make_header(self, t("tab.waveform_editor"), t("waveform.subtitle"), icon="🎵")
+        self.src_row = FileRow(self, t("common.source_file"), kind="media", on_change=self._load)
+        self.src_row.pack(fill="x", padx=20, pady=(12, 2))
+        self._src_var = self.src_row.var
+        self._info_lbl = tk.Label(self, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9), anchor="w")
+        self._info_lbl.pack(fill="x", padx=20)
 
-        # ── Source ────────────────────────────────────────────────────────
-        sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
-        tk.Label(sf, text=t("common.source_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._info_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._info_lbl.pack(side="left", padx=10)
-
-        self._btn_analyze = tk.Button(
-            sf, text=t("waveform.analyze"), bg=CLR["accent"], fg="white",
-            font=(UI_FONT, 9, "bold"), cursor="hand2", command=self._analyze)
-        self._btn_analyze.pack(side="left", padx=6)
-
-        # ── Waveform canvas ───────────────────────────────────────────────
-        wf_lf = tk.LabelFrame(self, text=f"  {t('waveform.mark_info_section')}  ",
-                              padx=8, pady=6, font=(UI_FONT, 9, "bold"))
+        wf_lf = tk.LabelFrame(self, text=f"  {t('waveform.mark_info_section')}  ", padx=8, pady=6,
+                              font=(UI_FONT, 9, "bold"))
         wf_lf.pack(fill="x", padx=20, pady=6)
-
-        self._canvas = tk.Canvas(wf_lf, bg=CLR["console_bg"], height=140,
-                                 highlightthickness=0)
+        self._canvas = tk.Canvas(wf_lf, bg=CLR["console_bg"], height=160, highlightthickness=0,
+                                 cursor="xterm")
         self._canvas.pack(fill="x")
-        self._canvas.bind("<ButtonPress-1>", self._on_click)
-        self._canvas.bind("<Shift-ButtonPress-1>", self._on_shift_click)
-        self._canvas.bind("<Configure>", lambda _: self._draw_waveform())
+        c = self._canvas
+        c.bind("<ButtonPress-1>", self._press)
+        c.bind("<B1-Motion>", self._drag)
+        c.bind("<ButtonRelease-1>", self._release)
+        c.bind("<Shift-ButtonPress-1>", self._shift_click)
+        c.bind("<Configure>", lambda _e: self._draw())
+        for seq, step in (("<MouseWheel>", None), ("<Button-4>", 1), ("<Button-5>", -1)):
+            c.bind(seq, lambda e, s=step: self._wheel(e, s))
+            c.bind("<Shift-" + seq.strip("<>") + ">", lambda e, s=step: self._wheel(e, s, scroll=True))
+        tk.Label(wf_lf, text="Drag to select · click = In · Shift+click = Out · wheel = zoom · "
+                             "Shift+wheel = scroll", fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
-        # ── Mark info ─────────────────────────────────────────────────────
-        mk_f = tk.Frame(self)
-        mk_f.pack(fill="x", padx=20, pady=4)
-
-        tk.Label(mk_f, text=t("waveform.in_label"), font=(UI_FONT, 10, "bold"),
-                 fg=CLR["green"]).pack(side="left")
-        self._in_lbl = tk.Label(mk_f, text="00:00.00", font=(MONO_FONT, 10),
-                                fg=CLR["green"], width=10)
-        self._in_lbl.pack(side="left", padx=(4, 16))
-
-        tk.Label(mk_f, text=t("waveform.out_label"), font=(UI_FONT, 10, "bold"),
-                 fg=CLR["red"]).pack(side="left")
-        self._out_lbl = tk.Label(mk_f, text="00:00.00", font=(MONO_FONT, 10),
-                                 fg=CLR["red"], width=10)
-        self._out_lbl.pack(side="left", padx=(4, 16))
-
-        tk.Label(mk_f, text=t("waveform.selection_label"), font=(UI_FONT, 10)).pack(side="left")
-        self._sel_lbl = tk.Label(mk_f, text=t("waveform.0_00s"), font=(MONO_FONT, 10),
-                                 fg=CLR["accent"], width=10)
+        mk = tk.Frame(self)
+        mk.pack(fill="x", padx=20, pady=4)
+        self._in_var, self._out_var_t = tk.StringVar(value="0"), tk.StringVar(value="0")
+        tk.Label(mk, text=t("waveform.in_label"), font=(UI_FONT, 10, "bold"), fg=CLR["green"]).pack(side="left")
+        e_in = tk.Entry(mk, textvariable=self._in_var, width=11, font=(MONO_FONT, 10))
+        e_in.pack(side="left", padx=(4, 14))
+        tk.Label(mk, text=t("waveform.out_label"), font=(UI_FONT, 10, "bold"), fg=CLR["red"]).pack(side="left")
+        e_out = tk.Entry(mk, textvariable=self._out_var_t, width=11, font=(MONO_FONT, 10))
+        e_out.pack(side="left", padx=(4, 14))
+        for ent in (e_in, e_out):
+            ent.bind("<Return>", lambda _e: self._typed_marks())
+            ent.bind("<FocusOut>", lambda _e: self._typed_marks())
+        tk.Label(mk, text=t("waveform.selection_label"), font=(UI_FONT, 10)).pack(side="left")
+        self._sel_lbl = tk.Label(mk, text="0.00s", font=(MONO_FONT, 10), fg=CLR["accent"], width=10)
         self._sel_lbl.pack(side="left")
+        tk.Button(mk, text="Zoom to selection", relief="flat", command=self._zoom_sel).pack(side="left", padx=4)
+        tk.Button(mk, text="Show all", relief="flat", command=self._zoom_all).pack(side="left")
 
-        # ── Region actions ────────────────────────────────────────────────
-        act_lf = tk.LabelFrame(self, text=f"  {t('waveform.region_actions_section')}  ",
-                               padx=15, pady=8, font=(UI_FONT, 9, "bold"))
-        act_lf.pack(fill="x", padx=20, pady=6)
-
-        ar1 = tk.Frame(act_lf)
-        ar1.pack(fill="x", pady=4)
-
-        tk.Button(ar1, text=t("waveform.mute_button"), bg=CLR["red"], fg="white",
-                  font=(UI_FONT, 10, "bold"), cursor="hand2", width=16,
-                  command=lambda: self._add_region("mute")).pack(side="left", padx=4)
-
-        tk.Button(ar1, text=t("waveform.boost_button"), bg=CLR["green"], fg="white",
-                  font=(UI_FONT, 10, "bold"), cursor="hand2", width=16,
-                  command=lambda: self._add_region("boost")).pack(side="left", padx=4)
-
-        tk.Button(ar1, text=t("waveform.duck_button"), bg=CLR["orange"], fg="white",
-                  font=(UI_FONT, 10, "bold"), cursor="hand2", width=16,
-                  command=lambda: self._add_region("duck")).pack(side="left", padx=4)
-
-        tk.Label(ar1, text=t("waveform.amount_label"), font=(UI_FONT, 10)).pack(side="left", padx=(20, 0))
+        act = tk.LabelFrame(self, text=f"  {t('waveform.region_actions_section')}  ", padx=15, pady=8,
+                            font=(UI_FONT, 9, "bold"))
+        act.pack(fill="x", padx=20, pady=6)
+        for key, label in (("mute", t("waveform.mute_button")), ("boost", t("waveform.boost_button")),
+                           ("duck", t("waveform.duck_button"))):
+            tk.Button(act, text=label, bg=CLR[COLOURS[key]], fg="white", font=(UI_FONT, 10, "bold"),
+                      width=16, cursor="hand2", command=lambda k=key: self._add_region(k)).pack(side="left", padx=4)
+        tk.Label(act, text=t("waveform.amount_label"), font=(UI_FONT, 10)).pack(side="left", padx=(20, 0))
         self._vol_adj = tk.StringVar(value="6")
-        tk.Entry(ar1, textvariable=self._vol_adj, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=4)
-        tk.Label(ar1, text=t("waveform.db_label"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        tk.Entry(act, textvariable=self._vol_adj, width=5, font=(UI_FONT, 10)).pack(side="left", padx=4)
+        tk.Label(act, text=t("waveform.db_label"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
 
-        # ── Region list ───────────────────────────────────────────────────
-        reg_lf = tk.LabelFrame(self, text=f"  {t('waveform.applied_regions_section')}  ", padx=10, pady=6,
-                               font=(UI_FONT, 9, "bold"))
-        reg_lf.pack(fill="x", padx=20, pady=4)
-
-        self._region_list = tk.Listbox(
-            reg_lf, bg=CLR["console_bg"], fg=CLR["console_fg"],
-            font=(MONO_FONT, 9), height=4, relief="flat", bd=0)
+        reg = tk.LabelFrame(self, text=f"  {t('waveform.applied_regions_section')}  ", padx=10, pady=6,
+                            font=(UI_FONT, 9, "bold"))
+        reg.pack(fill="x", padx=20, pady=4)
+        self._region_list = tk.Listbox(reg, bg=CLR["console_bg"], fg=CLR["console_fg"], font=(MONO_FONT, 9),
+                                       height=4, relief="flat", bd=0)
         self._region_list.pack(fill="x", side="left", expand=True)
-        reg_btn_f = tk.Frame(reg_lf)
-        reg_btn_f.pack(side="right", padx=6)
-        tk.Button(reg_btn_f, text=t("batch_joiner.btn_remove"), bg=CLR["panel"], fg=CLR["fg"],
-                  font=(UI_FONT, 9), cursor="hand2",
-                  command=self._remove_region).pack(pady=2)
-        tk.Button(reg_btn_f, text=t("waveform.clear_all"), bg=CLR["panel"], fg=CLR["fg"],
-                  font=(UI_FONT, 9), cursor="hand2",
-                  command=self._clear_regions).pack(pady=2)
+        rb = tk.Frame(reg)
+        rb.pack(side="right", padx=6)
+        tk.Button(rb, text=t("batch_joiner.btn_remove"), command=self._remove_region).pack(pady=2, fill="x")
+        tk.Button(rb, text=t("waveform.clear_all"), command=self._clear_regions).pack(pady=2, fill="x")
 
-        # ── Output ────────────────────────────────────────────────────────
         of = tk.Frame(self)
         of.pack(fill="x", padx=20, pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        opt_f = tk.Frame(self)
-        opt_f.pack(fill="x", padx=20, pady=2)
         self._export_mode = tk.StringVar(value="video")
-        tk.Radiobutton(opt_f, text=t("waveform.export_video_option"),
-                       variable=self._export_mode, value="video",
-                       font=(UI_FONT, 10)).pack(side="left", padx=(0, 20))
-        tk.Radiobutton(opt_f, text=t("waveform.export_audio_option"),
-                       variable=self._export_mode, value="audio",
-                       font=(UI_FONT, 10)).pack(side="left")
-
-        # ── Run ───────────────────────────────────────────────────────────
-        self._btn_run = tk.Button(
-            self, text=t("waveform.apply_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=26,
-            cursor="hand2", command=self._render)
+        tk.Radiobutton(of, text=t("waveform.export_video_option"), variable=self._export_mode, value="video",
+                       command=self._mode_changed).pack(side="left", padx=(0, 20))
+        tk.Radiobutton(of, text=t("waveform.export_audio_option"), variable=self._export_mode, value="audio",
+                       command=self._mode_changed).pack(side="left")
+        self.out_row = FileRow(self, t("common.output_file"), save=True, kind="media",
+                               suggest=lambda: self._suggest())
+        self.out_row.pack(fill="x", padx=20)
+        self._out_var = self.out_row.var
+        self._btn_run = tk.Button(self, text=t("waveform.apply_button"), font=(UI_FONT, 12, "bold"),
+                                  bg=CLR["green"], fg="white", height=2, width=26, cursor="hand2",
+                                  command=self._render)
         self._btn_run.pack(pady=8)
-
-        # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ── Waveform analysis ─────────────────────────────────────────────
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.webm *.mp3 *.wav *.aac *.flac *.m4a"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self._src_var.set(p)
-            self.duration = get_video_duration(p)
-            self._info_lbl.config(text=_fmt(self.duration))
-            self._mark_in = 0.0
-            self._mark_out = self.duration
-            self._in_lbl.config(text=_fmt(0))
-            self._out_lbl.config(text=_fmt(self.duration))
-
-    def _browse_out(self):
-        ext = ".mp4" if self._export_mode.get() == "video" else ".mp3"
-        p = dialogs.asksaveasfilename(
-            defaultextension=ext,
-            filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"),
-                       ("WAV", "*.wav"), ("All", t("ducker.item_2"))])
-        if p:
-            self._out_var.set(p)
-
-    def _analyze(self):
+    def _suggest(self):
         if not self.file_path:
-            messagebox.showwarning(t("waveform.no_file_title"), t("waveform.no_file_message"))
+            return ""
+        audio = self._export_mode.get() == "audio" or not (self._info and self._info.has_video)
+        return self.suggest_output(self.file_path, "edited", ".wav" if audio else None)
+
+    def _mode_changed(self):
+        if self.file_path:
+            self.out_row.set(self._suggest())
+
+    # ── Loading ───────────────────────────────────────────────────────
+    def _load(self, path):
+        """New file: forget everything about the previous one, then analyse."""
+        self._load_id += 1
+        my_id = self._load_id
+        self.file_path, self.duration, self._info, self._peaks = path, 0.0, None, []
+        self._regions.clear()
+        self._region_list.delete(0, "end")
+        self._mark_in = self._mark_out = 0.0
+        self._view = (0.0, 0.0)
+        self._info_lbl.config(text="Reading the file…")
+        self._draw()
+        ui.run_in_thread(self._analyse, path, on_done=lambda res: self._loaded(my_id, res),
+                         on_error=lambda e: self._failed(my_id, e), name="Waveform")
+
+    @staticmethod
+    def _analyse(path):
+        info = ff.probe(path)
+        if not info.has_audio:
+            raise ValueError("This file has no audio.")
+        rate = info.audio.sample_rate or 48000
+        dur = info.duration or 0.0
+        slices = max(200, min(20000, int(dur * 100)))         # up to 10 ms resolution
+        slice_samples = max(64, math.ceil(dur * rate / slices)) if dur else 4800
+        tmp = tempfile.mkdtemp(prefix="wme_wave_")
+        try:
+            out = os.path.join(tmp, "peaks.txt")
+            res = ff.run(peaks_cmd(path, slice_samples, out), cwd=tmp)
+            if res.returncode != 0 or not os.path.isfile(out):
+                raise RuntimeError("FFmpeg could not read the audio:\n" + "\n".join(res.log_tail[-4:]))
+            peaks = read_peaks(out)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return info, peaks, slice_samples / rate
+
+    def _loaded(self, my_id, res):
+        if my_id != self._load_id:
+            return                                  # a newer file was chosen meanwhile
+        info, peaks, slice_s = res
+        self._info, self._peaks = info, peaks
+        self.duration = info.duration or len(peaks) * slice_s
+        self._mark_out = self.duration
+        self._view = (0.0, self.duration)
+        a = info.audio
+        self._info_lbl.config(text=f"{_fmt(self.duration)}   {a.codec_name}  {a.sample_rate} Hz  "
+                                   f"{a.channel_layout or str(a.channels) + ' ch'}")
+        self._sync_marks()
+        if not self.out_row.path:
+            self.out_row.set(self._suggest())
+        self.log(self.console, f"Waveform ready: {len(peaks)} slices of {slice_s * 1000:.0f} ms")
+
+    def _failed(self, my_id, exc):
+        if my_id != self._load_id:
             return
+        self.file_path = ""
+        self._info_lbl.config(text="")
+        self._draw()
+        self.log(self.console, f"❌ {exc}")
+        messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 
-        self._btn_analyze.config(state="disabled", text=t("waveform.analyzing"))
-        self.log(self.console, t("log.waveform.extracting_waveform_data"))
+    # ── Drawing ───────────────────────────────────────────────────────
+    def _x(self, sec, w):
+        a, b = self._view
+        return (sec - a) / max(b - a, 1e-6) * w
 
-        def _worker():
-            try:
-                tmp_wav = os.path.join(tempfile.gettempdir(), "_xfpro_waveform.wav")
-                ffmpeg = get_binary_path("ffmpeg")
+    def _sec(self, x):
+        a, b = self._view
+        w = max(1, self._canvas.winfo_width())
+        return max(0.0, min(self.duration, a + (x / w) * (b - a)))
 
-                # Extract audio as low-res wav for visualization
-                cmd = [ffmpeg, "-i", self.file_path,
-                       "-ac", "1", "-ar", "8000",
-                       "-sample_fmt", "s16",
-                       tmp_wav, "-y"]
-                proc = subprocess.run(cmd, capture_output=True, text=True,
-                                      creationflags=CREATE_NO_WINDOW, timeout=120)
-
-                # Read WAV peaks
-                peaks = []
-                with wave.open(tmp_wav, 'rb') as wf:
-                    n_frames = wf.getnframes()
-                    sample_width = wf.getsampwidth()
-                    raw = wf.readframes(n_frames)
-
-                    # Downsample to ~800 visual bins
-                    n_bins = 800
-                    frames_per_bin = max(1, n_frames // n_bins)
-
-                    for i in range(n_bins):
-                        start = i * frames_per_bin * sample_width
-                        end = start + frames_per_bin * sample_width
-                        chunk = raw[start:end]
-
-                        if len(chunk) < sample_width:
-                            peaks.append(0)
-                            continue
-
-                        # Get peak amplitude in this bin
-                        max_val = 0
-                        for j in range(0, len(chunk) - 1, sample_width):
-                            val = abs(struct.unpack_from('<h', chunk, j)[0])
-                            if val > max_val:
-                                max_val = val
-                        peaks.append(max_val)
-
-                self._waveform_data = peaks
-
-                try:
-                    os.remove(tmp_wav)
-                except Exception:
-                    pass
-
-                self.after(0, self._draw_waveform)
-                self.after(0, lambda: self.log(self.console, f"Waveform loaded: {len(peaks)} bins"))
-            except Exception as e:
-                self.after(0, lambda: self.log(self.console, f"Error: {e}"))
-            finally:
-                self.after(0, lambda: self._btn_analyze.config(
-                    state="normal", text=t("waveform.analyze")))
-
-        self.run_in_thread(_worker)
-
-    def _draw_waveform(self):
+    def _draw(self):
         c = self._canvas
         c.delete("all")
-        w = c.winfo_width()
-        h = c.winfo_height()
+        w, h = c.winfo_width(), c.winfo_height()
         if w < 10:
             return
-
         mid = h // 2
-
-        if not self._waveform_data:
-            c.create_text(w // 2, mid, text="Click 'Analyze' to load waveform",
-                          fill=CLR["fgdim"], font=(UI_FONT, 11))
+        if not self._peaks or self.duration <= 0:
+            c.create_text(w // 2, mid, text="Choose a file to see its waveform" if not self.file_path
+                          else "Reading…", fill=CLR["fgdim"], font=(UI_FONT, 11))
             return
-
-        # Draw center line
-        c.create_line(0, mid, w, mid, fill="#333333", width=1)
-
-        # Draw waveform
-        max_peak = max(self._waveform_data) if self._waveform_data else 1
-        if max_peak == 0:
-            max_peak = 1
-
-        n = len(self._waveform_data)
-        bar_w = max(1, w / n)
-
-        for i, peak in enumerate(self._waveform_data):
-            x = int(i * w / n)
-            amp = int((peak / max_peak) * (mid - 8))
-            color = CLR["accent"]
-            # Check if in a region
-            t = (i / n) * self.duration if self.duration > 0 else 0
-            for rs, re, act, val in self._regions:
-                if rs <= t <= re:
-                    if act == "mute":
-                        color = CLR["red"]
-                    elif act == "boost":
-                        color = CLR["green"]
-                    elif act == "duck":
-                        color = CLR["orange"]
+        a, b = self._view
+        n = len(self._peaks)
+        per = self.duration / n
+        c.create_line(0, mid, w, mid, fill="#333333")
+        for x in range(w):                                       # one column per pixel: max of its slices
+            t0, t1 = a + (b - a) * x / w, a + (b - a) * (x + 1) / w
+            i0, i1 = int(t0 / per), max(int(t0 / per) + 1, int(math.ceil(t1 / per)))
+            chunk = self._peaks[max(0, i0):min(n, i1)]
+            if not chunk:
+                continue
+            amp = int(max(chunk) * (mid - 6))
+            colour = CLR["accent"]
+            tm = (t0 + t1) / 2
+            for rs, re_, act, _db in self._regions:
+                if rs <= tm <= re_:
+                    colour = CLR[COLOURS[act]]
                     break
+            c.create_line(x, mid - amp, x, mid + amp + 1, fill=colour)
+        x_in, x_out = self._x(self._mark_in, w), self._x(self._mark_out, w)
+        if x_out > x_in:
+            c.create_rectangle(x_in, 0, x_out, h, outline=CLR["accent"], dash=(4, 2))
+        c.create_line(x_in, 0, x_in, h, fill=CLR["green"], width=2)
+        c.create_line(x_out, 0, x_out, h, fill=CLR["red"], width=2)
+        for i in range(11):                                       # time ruler for the visible range
+            tx = int(i * w / 10)
+            c.create_line(tx, h - 12, tx, h - 4, fill="#555555")
+            c.create_text(min(max(tx, 24), w - 24), h - 2, text=_fmt(a + (b - a) * i / 10), fill="#666666",
+                          font=(UI_FONT, 6), anchor="s")
 
-            c.create_line(x, mid - amp, x, mid + amp, fill=color, width=max(1, int(bar_w)))
-
-        # Draw selection markers
-        if self.duration > 0:
-            in_x = int((self._mark_in / self.duration) * w)
-            out_x = int((self._mark_out / self.duration) * w)
-
-            # Selection region
-            if out_x > in_x:
-                c.create_rectangle(in_x, 0, out_x, h, fill="", outline=CLR["accent"],
-                                   width=1, dash=(4, 2))
-
-            # In marker (green)
-            c.create_line(in_x, 0, in_x, h, fill=CLR["green"], width=2)
-            c.create_text(in_x + 3, 10, text=f"IN {_fmt(self._mark_in)}",
-                          fill=CLR["green"], font=(UI_FONT, 7, "bold"), anchor="w")
-
-            # Out marker (red)
-            c.create_line(out_x, 0, out_x, h, fill=CLR["red"], width=2)
-            c.create_text(out_x - 3, 10, text=f"OUT {_fmt(self._mark_out)}",
-                          fill=CLR["red"], font=(UI_FONT, 7, "bold"), anchor="e")
-
-        # Time ticks
-        if self.duration > 0:
-            for i in range(11):
-                tx = int(i * w / 10)
-                t = self.duration * i / 10
-                c.create_line(tx, h - 12, tx, h - 4, fill="#555555")
-                c.create_text(tx, h - 2, text=_fmt(t), fill="#555555",
-                              font=(UI_FONT, 6), anchor="s")
-
-    def _on_click(self, ev):
+    # ── Mouse / marks ─────────────────────────────────────────────────
+    def _press(self, ev):
         if self.duration <= 0:
             return
-        w = self._canvas.winfo_width()
-        t = (ev.x / w) * self.duration
-        t = max(0.0, min(t, self.duration))
-        self._mark_in = t
-        self._in_lbl.config(text=_fmt(t))
-        self._update_sel()
-        self._draw_waveform()
+        self._drag_from = self._sec(ev.x)
+        self._prev_out = self._mark_out
 
-    def _on_shift_click(self, ev):
-        if self.duration <= 0:
+    def _drag(self, ev):
+        if self._drag_from is None:
             return
-        w = self._canvas.winfo_width()
-        t = (ev.x / w) * self.duration
-        t = max(0.0, min(t, self.duration))
-        self._mark_out = t
-        self._out_lbl.config(text=_fmt(t))
-        self._update_sel()
-        self._draw_waveform()
+        cur = self._sec(ev.x)
+        self._mark_in, self._mark_out = min(self._drag_from, cur), max(self._drag_from, cur)
+        self._sync_marks()
 
-    def _update_sel(self):
-        sel = abs(self._mark_out - self._mark_in)
-        self._sel_lbl.config(text=f"{sel:.2f}s")
-
-    # ── Region management ─────────────────────────────────────────────
-    def _add_region(self, action):
-        s = min(self._mark_in, self._mark_out)
-        e = max(self._mark_in, self._mark_out)
-        if e - s < 0.01:
-            messagebox.showwarning(t("waveform.no_selection_title"), t("waveform.no_selection_message"))
+    def _release(self, ev):
+        if self._drag_from is None:
             return
+        if abs(self._sec(ev.x) - self._drag_from) < 1e-3:     # a plain click moves In only
+            self._mark_in = self._drag_from
+            self._mark_out = self._prev_out if self._prev_out > self._mark_in else self.duration
+            self._sync_marks()
+        self._drag_from = None
+
+    def _shift_click(self, ev):
+        if self.duration > 0:
+            self._mark_out = self._sec(ev.x)
+            if self._mark_out < self._mark_in:
+                self._mark_in, self._mark_out = self._mark_out, self._mark_in
+            self._sync_marks()
+        return "break"
+
+    def _typed_marks(self):
         try:
-            vol = float(self._vol_adj.get())
+            a = ff.parse_time(self._in_var.get() or "0")
+            b = ff.parse_time(self._out_var_t.get() or "0")
         except ValueError:
-            vol = 6.0
+            self._sync_marks()
+            return
+        a, b = max(0.0, min(a, self.duration)), max(0.0, min(b, self.duration))
+        self._mark_in, self._mark_out = min(a, b), max(a, b)
+        self._sync_marks()
 
-        self._regions.append((s, e, action, vol))
-        label = {"mute": "MUTE", "boost": f"BOOST +{vol}dB", "duck": f"DUCK -{vol}dB"}
-        self._region_list.insert("end",
-            f"  {_fmt(s)} → {_fmt(e)}  [{label.get(action, action)}]")
-        self._draw_waveform()
-        self.log(self.console, f"Region added: {label.get(action)} at {_fmt(s)} → {_fmt(e)}")
+    def _sync_marks(self):
+        self._in_var.set(_fmt(self._mark_in))
+        self._out_var_t.set(_fmt(self._mark_out))
+        self._sel_lbl.config(text=f"{self._mark_out - self._mark_in:.2f}s")
+        self._draw()
+
+    def _wheel(self, ev, step, scroll=False):
+        if self.duration <= 0:
+            return "break"
+        direction = step if step is not None else (1 if ev.delta > 0 else -1)
+        a, b = self._view
+        span = b - a
+        if scroll:
+            shift = -direction * span * 0.15
+            a, b = a + shift, b + shift
+        else:
+            pivot = self._sec(ev.x)
+            min_span = max(0.05, self.duration / max(1, len(self._peaks)) * 20)
+            new = max(min_span, min(self.duration, span * (0.8 if direction > 0 else 1.25)))
+            frac = (pivot - a) / span if span else 0.5
+            a = pivot - frac * new
+            b = a + new
+        if a < 0:
+            a, b = 0.0, b - a
+        if b > self.duration:
+            a, b = max(0.0, a - (b - self.duration)), self.duration
+        self._view = (a, b)
+        self._draw()
+        return "break"
+
+    def _zoom_sel(self):
+        if self._mark_out - self._mark_in > 0.05:
+            pad = (self._mark_out - self._mark_in) * 0.1
+            self._view = (max(0.0, self._mark_in - pad), min(self.duration, self._mark_out + pad))
+            self._draw()
+
+    def _zoom_all(self):
+        self._view = (0.0, self.duration)
+        self._draw()
+
+    # ── Regions ───────────────────────────────────────────────────────
+    def _add_region(self, action):
+        s, e = self._mark_in, self._mark_out
+        if e - s < 0.01:
+            messagebox.showwarning(t("waveform.no_selection_title"), t("waveform.no_selection_message"),
+                                   parent=self)
+            return
+        db = 0.0
+        if action != "mute":
+            try:
+                db = abs(float(self._vol_adj.get().replace("dB", "")))
+            except ValueError:
+                db = -1
+            if not 0 < db <= 30:
+                messagebox.showwarning(t("common.warning"), "The amount must be between 0.1 and 30 dB.",
+                                       parent=self)
+                return
+        self._regions.append((s, e, action, db))
+        label = {"mute": "MUTE", "boost": f"BOOST +{db:g} dB", "duck": f"DUCK -{db:g} dB"}[action]
+        self._region_list.insert("end", f"  {_fmt(s)} → {_fmt(e)}  [{label}]")
+        self._draw()
+        self.log(self.console, f"Region added: {label} at {_fmt(s)} → {_fmt(e)}")
 
     def _remove_region(self):
         sel = self._region_list.curselection()
-        if sel:
-            idx = sel[0]
-            self._region_list.delete(idx)
-            if idx < len(self._regions):
-                self._regions.pop(idx)
-            self._draw_waveform()
+        if sel and sel[0] < len(self._regions):
+            self._region_list.delete(sel[0])
+            self._regions.pop(sel[0])
+            self._draw()
 
     def _clear_regions(self):
         self._regions.clear()
         self._region_list.delete(0, "end")
-        self._draw_waveform()
+        self._draw()
 
-    # ── Render ────────────────────────────────────────────────────────
+    # ── Export ────────────────────────────────────────────────────────
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("waveform.no_file_title"), t("common.no_input"))
+        src, info = self.file_path, self._info
+        if not src or info is None:
+            messagebox.showwarning(t("waveform.no_file_title"), t("common.no_input"), parent=self)
             return
         if not self._regions:
-            messagebox.showwarning(t("waveform.no_regions_title"), t("waveform.no_regions_message"))
+            messagebox.showwarning(t("waveform.no_regions_title"), t("waveform.no_regions_message"), parent=self)
             return
-
-        out = self._out_var.get().strip()
-        if not out:
-            ext = ".mp4" if self._export_mode.get() == "video" else ".mp3"
-            out = dialogs.asksaveasfilename(
-                defaultextension=ext,
-                filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"), ("WAV", "*.wav")])
+        audio_only = self._export_mode.get() == "audio" or not info.has_video
+        out = self.out_row.path or self._suggest()
+        if audio_only and not out.lower().endswith(common.AUDIO_ONLY_EXTS):
+            out = os.path.splitext(out)[0] + ".wav"
+        out = self.confirm_output(out, [src], default_ext=".wav" if audio_only else ".mp4")
         if not out:
             return
-        self._out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg")
-
-        # Build audio filter chain
-        af_parts = []
-        for s, e, action, val in self._regions:
-            if action == "mute":
-                af_parts.append(f"volume=enable='between(t,{s},{e})':volume=0")
-            elif action == "boost":
-                af_parts.append(f"volume=enable='between(t,{s},{e})':volume={val}dB")
-            elif action == "duck":
-                af_parts.append(f"volume=enable='between(t,{s},{e})':volume=-{val:.1f}dB")
-
-        af = ",".join(af_parts)
-
-        if self._export_mode.get() == "video":
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-af", af, "-c:v", "copy",
-                   "-c:a", "aac", "-b:a", "192k",
-                   "-movflags", "+faststart", out, "-y"]
+        self.out_row.set(out)
+        af = region_filter(self._regions)
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src]
+        if audio_only:
+            cmd += ["-map", "0:a:0", "-af", af, "-vn", *common.audio_encoder_args(out)]
         else:
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-af", af, "-vn", out, "-y"]
-
+            cmd += ["-map", "0:v:0", "-map", "0:a:0", "-af", af, "-c:v", "copy", "-c:a", "aac", "-b:a", "256k"]
+            if out.lower().endswith((".mp4", ".mov", ".m4v")):
+                cmd += ["-movflags", "+faststart"]
+        cmd.append(out)
         self.log(self.console, f"Applying {len(self._regions)} region(s)…")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label=t("waveform.apply_button"))
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self._btn_run,
+                        btn_label=t("waveform.apply_button"), duration=self.duration or None, output=out,
+                        inputs=[src], name="Waveform Editor")

@@ -290,6 +290,28 @@ def resolve_whisper() -> dict:
     raise SystemExit("no whisper.cpp release with Windows and Linux binaries found")
 
 
+GENERALUSER_REPO = "mrbumpy409/GeneralUser-GS"
+
+
+def resolve_soundfont(cache: str) -> dict:
+    """GeneralUser GS (General MIDI SoundFont for the MIDIfier).  Its licence
+    asks for a local copy rather than links to the author's downloads, so the
+    build ships one, pinned to a commit and verified by hash."""
+    commit = get_json(f"https://api.github.com/repos/{GENERALUSER_REPO}/commits?per_page=1")[0]["sha"]
+    raw = f"https://raw.githubusercontent.com/{GENERALUSER_REPO}/{commit}"
+    url = f"{raw}/GeneralUser-GS.sf2"
+    licence = get_text(f"{raw}/documentation/LICENSE.txt")
+    m = re.search(r"GeneralUser GS v(\d+(?:\.\d+)+)", licence)
+    version = m.group(1) if m else commit[:10]
+    path = download(url, os.path.join(cache, f"{version}-GeneralUser-GS.sf2"))   # same name install uses
+    return {
+        "version": version,
+        "license": "GeneralUser GS License v2.0 (free use in software projects)",
+        "license_urls": [f"{raw}/documentation/LICENSE.txt"],
+        "assets": {"any": {"name": "GeneralUser-GS.sf2", "url": url, "sha256": sha256_file(path)}},
+    }
+
+
 def refresh_lock(cache: str) -> dict:
     print("Resolving latest versions …")
     lock = {
@@ -300,6 +322,7 @@ def refresh_lock(cache: str) -> dict:
             "deno": resolve_deno(),
             "fluidsynth": resolve_fluidsynth(cache),
             "whisper": resolve_whisper(),
+            "soundfont": resolve_soundfont(cache),
         },
     }
     with open(LOCK, "w", encoding="utf-8", newline="\n") as fh:
@@ -514,6 +537,16 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
         fetch_licence_texts("whisper", wh["license_urls"], out)
         versions["whisper.cpp"] = {"version": wh["version"], "url": a["url"], "sha256": a["sha256"],
                                    "license": wh["license"]}
+
+    sf = tools.get("soundfont", {})
+    a = sf.get("assets", {}).get("any")
+    if a:
+        path = download(a["url"], os.path.join(cache, f"{sf['version']}-{a['name']}"), a["sha256"])
+        os.makedirs(os.path.join(out, "soundfonts"), exist_ok=True)
+        shutil.copyfile(path, os.path.join(out, "soundfonts", a["name"]))
+        fetch_licence_texts("generaluser-gs", sf["license_urls"], out)
+        versions["GeneralUser GS"] = {"version": sf["version"], "url": a["url"], "sha256": a["sha256"],
+                                      "license": sf["license"]}
 
     with open(os.path.join(out, "VERSIONS.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump({"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2)

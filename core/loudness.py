@@ -68,11 +68,15 @@ def parse_measurement(lines: Sequence[str]) -> Measurement:
 
 def normalise_filter(i: float, tp: float, lra: float, m: Optional[Measurement],
                      sample_rate: int = 48000) -> str:
-    """Second-pass filter (or single-pass when *m* is None) + resample back."""
+    """Second-pass filter (or single-pass when *m* is None) + resample back.
+
+    loudnorm looks 3 s ahead, so a shorter clip comes out as one huge block
+    at end-of-file and encoders with a block-size limit (FLAC, ALAC) refuse
+    to open - asetnsamples re-chunks the output into normal 4096-sample blocks."""
     base = f"loudnorm=I={i}:TP={tp}:LRA={lra}"
     if m is not None and m.input_i > -70:
         base += f":{m.as_args()}:linear=true"
-    return f"{base},aresample={sample_rate or 48000}"
+    return f"{base},aresample={sample_rate or 48000},asetnsamples=n=4096:p=0"
 
 
 def measure(path: str, i: float = -16.0, tp: float = -1.5, lra: float = 11.0, *, stream: int = 0,

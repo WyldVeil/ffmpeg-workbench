@@ -72,3 +72,37 @@ def test_transcribe_mux_and_burn(ui, outdir, media):
     tab._burn()
     hs = ui.app.pages.get("Hard-Subber")
     assert hs is not None and hs.sub_row.path == srt
+
+
+@needs_assets
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_karaoke_from_audio(ui, outdir):
+    shutil.copyfile(os.path.join(ASSETS, "ggml-base-q5_1.bin"), whisper.model_path("base"))
+    with open(whisper.model_path("base") + ".ok", "w") as fh:
+        fh.write("test\n")
+    ui.reset()
+    tab = ui.open("Karaoke Generator")
+    tab._src_var.set(os.path.join(ASSETS, "jfk.wav"))
+    tab._model_var.set(next(k for k, v in __import__("tabs.audio.karaoke", fromlist=["MODELS"]).MODELS.items()
+                            if v == "base"))
+    out = str(outdir / "karaoke.mp4")
+    tab._out_var.set(out)
+    tab._generate()
+    ui.wait_idle(300)
+    assert not ui.dialogs.errors(), ui.dialogs.errors()
+    info = ff.probe(out, use_cache=False)
+    assert info.has_video and info.video.pix_fmt == "yuv420p" and info.duration > 10
+
+
+def test_karaoke_word_grouping(tmp_path):
+    from tabs.audio.karaoke import segments_from_whispercpp
+    p = tmp_path / "w.json"
+    p.write_text('{"transcription": [{"offsets": {"from": 0, "to": 2000}, "text": " Hello world", "tokens": ['
+                 '{"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},'
+                 '{"text": " Hel", "offsets": {"from": 100, "to": 300}},'
+                 '{"text": "lo", "offsets": {"from": 300, "to": 500}},'
+                 '{"text": " world", "offsets": {"from": 600, "to": 1200}}]}]}')
+    segs = segments_from_whispercpp(str(p))
+    assert [w["word"] for w in segs[0]["words"]] == [" Hello", " world"]
+    assert segs[0]["words"][0]["end"] == 0.5

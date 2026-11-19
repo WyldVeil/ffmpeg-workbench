@@ -135,9 +135,10 @@ def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) 
 
 def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
               duration: Optional[float] = None, inputs: Sequence[str] = (),
-              on_start=None) -> str:
+              on_start=None, on_done=None) -> str:
     """Queue a multi-step ``work(progress, cancelled, ctx)`` job.  While it
-    runs, *btn* shows the progress and cancels the job when clicked."""
+    runs, *btn* shows the progress and cancels the job when clicked;
+    ``on_done(rc)`` runs on the UI thread afterwards."""
     orig = btn.cget("command")
     queued_at = time.monotonic()
 
@@ -161,6 +162,8 @@ def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
             pass
         tab._last_task = tab.task(tid)
         tab.show_result(rc, out)
+        if on_done is not None:
+            on_done(rc)
 
     state = {"tid": None}
     state["tid"] = tab.enqueue_render(name, out, worker_fn=work, on_start=on_start,

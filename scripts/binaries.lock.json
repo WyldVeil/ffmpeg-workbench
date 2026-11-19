@@ -94,6 +94,20 @@
           "sha256": "a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c"
         }
       }
+    },
+    "soundfont": {
+      "version": "2.0.3",
+      "license": "GeneralUser GS License v2.0 (free use in software projects)",
+      "license_urls": [
+        "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/684543d5e5efaef08d02be50dcda8d552478fa60/documentation/LICENSE.txt"
+      ],
+      "assets": {
+        "any": {
+          "name": "GeneralUser-GS.sf2",
+          "url": "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/684543d5e5efaef08d02be50dcda8d552478fa60/GeneralUser-GS.sf2",
+          "sha256": "9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe"
+        }
+      }
     }
   }
 }

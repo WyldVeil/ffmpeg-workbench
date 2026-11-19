@@ -328,6 +328,20 @@ def _expand_case(patterns) -> str:
     return " ".join(dict.fromkeys(out))
 
 
+def _clean_patterns(pats) -> str:
+    """Keep real glob patterns only: a pattern that came through the
+    translation layer can be a sentence in some languages, which would make
+    the filter match nothing.  On Linux '*.*' also hides files without an
+    extension, so it becomes '*'."""
+    items = pats.split() if isinstance(pats, str) else [str(p) for p in pats]
+    good = [p for p in items if "*" in p or p.startswith(".")]
+    if not good:
+        return "*"
+    if not _IS_WIN:
+        good = ["*" if p == "*.*" else p for p in good]
+    return " ".join(good)
+
+
 def _normalise_filetypes(filetypes) -> list:
     norm = []
     for entry in filetypes or ():
@@ -335,7 +349,7 @@ def _normalise_filetypes(filetypes) -> list:
             label, pats = entry
         except (TypeError, ValueError):
             continue
-        norm.append((str(label), _expand_case(pats)))
+        norm.append((str(label), _expand_case(_clean_patterns(pats))))
     if not any(p.strip() in ("*", "*.*") for _, p in norm):
         norm.append(("All files", "*"))
     return norm

@@ -95,6 +95,7 @@ def bundled_bin_dirs() -> list:
         dirs.append(os.path.join(tag_dir, "ffmpeg", "bin"))
         dirs.append(tag_dir)
         dirs.append(os.path.join(tag_dir, "whisper"))        # whisper.cpp speech-to-text
+        dirs.append(os.path.join(tag_dir, "fluidsynth"))     # FluidSynth (Windows build)
         dirs.append(os.path.join(root, "bin"))
     return dirs
 

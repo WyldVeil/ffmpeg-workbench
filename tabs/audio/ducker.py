@@ -6,12 +6,11 @@ in the main video track, using FFmpeg's sidechaincompress filter.
 Classic YouTube workflow: voice commentary ducks the background music.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
 import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from tabs.base_tab import BaseTab, CLR, UI_FONT
 from core.i18n import t
 
 
@@ -228,9 +227,12 @@ class AudioDuckerTab(BaseTab):
         if not music or not os.path.exists(music):
             messagebox.showwarning(t("common.warning"), t("ducker.msg_no_music"))
             return
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        from core import ffmpeg as _ff
+        info = _ff.try_probe(src)
+        if info is None or not info.has_audio:
+            messagebox.showwarning(t("common.warning"), "The video needs a voice/speech audio track.", parent=self)
+            return
+        out = self.confirm_output(out or self.suggest_output(src, "ducked"), [src, music])
         if not out:
             return
         self._out_var.set(out)
@@ -251,7 +253,7 @@ class AudioDuckerTab(BaseTab):
         attack    = max(0.01, min(2000.0, attack))
         release   = max(0.01, min(9000.0, release))
 
-        ffmpeg = get_binary_path("ffmpeg.exe")
+        ffmpeg = _ff.ffmpeg_path()
 
         # ── Build FFmpeg command ───────────────────────────────────────────────
         # Input 0: source video (voice/speech audio on [0:a])
@@ -273,35 +275,26 @@ class AudioDuckerTab(BaseTab):
         #
         #   (optional) [mixed]loudnorm=...[aout]
 
+        # Both branches in the same layout/rate (amix takes the first input's layout,
+        # which turned stereo music mono whenever the voice was mono), the voice is
+        # split so it can be both mixed and used as the side-chain key, the music is
+        # bounded to the video, and the mix is not halved (normalize=0).
+        dur = info.duration
+        st = "aformat=sample_rates=48000:channel_layouts=stereo"
         fc_parts = [
-            "[1:a]volume={:.3f}[music]".format(music_vol),
-            (
-                "[music][0:a]sidechaincompress="
-                "threshold={th}:"
-                "ratio={rt}:"
-                "attack={at}:"
-                "release={rl}[ducked]"
-            ).format(th=threshold, rt=ratio, at=attack, rl=release),
-            "[0:a][ducked]amix=inputs=2:duration=first[mixed]",
+            f"[0:a:0]{st},asplit=2[voice][key]",
+            f"[1:a:0]{st},volume={music_vol:.3f},apad,atrim=duration={dur:.3f}[music]",
+            (f"[music][key]sidechaincompress=threshold={threshold}:ratio={ratio}:attack={attack}:"
+             f"release={release}[ducked]"),
+            "[voice][ducked]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[mixed]",
         ]
-
         if self._normalize.get():
-            fc_parts.append("[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[aout]")
+            fc_parts.append("[mixed]loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]")
             final_a = "[aout]"
         else:
             final_a = "[mixed]"
-
-        fc = ";".join(fc_parts)
-
-        cmd += [
-            "-filter_complex", fc,
-            "-map", "0:v",
-            "-map", final_a,
-            "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "256k",
-            "-movflags", "+faststart",
-            out,
-        ]
+        cmd += ["-filter_complex", ";".join(fc_parts), "-map", "0:v?", "-map", final_a, "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "256k", "-t", f"{dur:.3f}", "-movflags", "+faststart", out]
 
         self.log(self.console, "▶ Ducking music into: {}".format(
             os.path.basename(src)))
@@ -316,4 +309,5 @@ class AudioDuckerTab(BaseTab):
             on_done=lambda rc: self.show_result(rc, out),
             btn=self._btn_render,
             btn_label=t("ducker.btn_duck_render"),
+            duration=dur, output=out, inputs=[src, music], name="Music Ducker",
         )
