@@ -700,6 +700,14 @@ def _apply_ttk_styles(skin: dict):
                   foreground=[("readonly", i_fg)],
                   selectbackground=[("readonly", acc)])
 
+        # Tree lists (queue, batch lists, metadata...)
+        style.configure("Treeview", background=i_bg, fieldbackground=i_bg, foreground=i_fg,
+                        borderwidth=0, font=(UI_FONT, 10), rowheight=24)
+        style.map("Treeview", background=[("selected", acc)], foreground=[("selected", "#FFFFFF")])
+        style.configure("Treeview.Heading", background=pnl, foreground=fg, relief="flat",
+                        font=(UI_FONT, 9, "bold"))
+        style.map("Treeview.Heading", background=[("active", bdr)])
+
         # Progressbar
         style.configure("TProgressbar",
                         background=acc, troughcolor=bdr,
