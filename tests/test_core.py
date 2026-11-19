@@ -4,6 +4,8 @@ tests/test_core.py  -  Tests for core utilities (no GUI required).
 import sys
 import os
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -42,3 +44,29 @@ def test_settings_roundtrip(tmp_path, monkeypatch):
     with open(fake_path, "w", encoding="utf-8") as fh:
         fh.write("{ not json")
     assert s.load_settings()["theme"] in ("Classic", "Mystical")
+
+
+@pytest.mark.gui
+def test_mystical_star_canvas_stays_behind_the_ui():
+    from core import skins
+    from tests.gui_harness import Harness
+    app = Harness.instance().app
+    skins._start_stars(app, {"sb_bg": "#101018"})
+    try:
+        canvas = skins._star_canvas
+        if canvas is not None and canvas.master is app:
+            stack = app.tk.splitlist(app.tk.call("winfo", "children", app._w))
+            assert stack[0] == str(canvas)            # lowest in stacking order, under every panel
+    finally:
+        skins._stop_stars()
+
+
+def test_deps_import_has_no_side_effects(tmp_path, monkeypatch):
+    import importlib
+    import sys
+    import core.deps as deps
+    made = []
+    monkeypatch.setattr("os.makedirs", lambda *a, **k: made.append(a))
+    importlib.reload(deps)
+    assert not made
+    assert deps._LIBS_DIR not in sys.path[:1]          # never ahead of the interpreter's packages

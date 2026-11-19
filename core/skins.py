@@ -270,8 +270,10 @@ def _start_stars(app: tk.Tk, skin: dict, inner_frame=None):
         _star_toplevel.overrideredirect(True)
         _star_toplevel.configure(bg=_STAR_CHROMA)
         _star_toplevel.attributes("-transparentcolor", _STAR_CHROMA)
-        _star_toplevel.attributes("-topmost", True)
-        _star_toplevel.lift()
+        # Not -topmost (that drew stars over every other program): owned by the
+        # app window and kept just above it.
+        _star_toplevel.transient(app)
+        _star_toplevel.lift(app)
 
         # Apply WS_EX_TRANSPARENT | WS_EX_LAYERED so the overlay is
         # completely click-through - all mouse events reach the app below.
@@ -303,6 +305,7 @@ def _start_stars(app: tk.Tk, skin: dict, inner_frame=None):
                     _star_toplevel.withdraw()
                 else:
                     _star_toplevel.deiconify()
+                    _star_toplevel.lift(app)
                     x = app.winfo_rootx()
                     y = app.winfo_rooty()
                     w = app.winfo_width()
@@ -332,8 +335,10 @@ def _start_stars(app: tk.Tk, skin: dict, inner_frame=None):
                                   highlightthickness=0, bd=0)
         _star_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
         try:
-            _star_canvas.lower()
-        except Exception:
+            # Canvas.lower() reorders the canvas's *items*; the window-stacking
+            # lower is Misc.lower - without it the canvas covered the whole UI.
+            tk.Misc.lower(_star_canvas)
+        except tk.TclError:
             pass
 
     # _star_data is populated lazily on the first tick.

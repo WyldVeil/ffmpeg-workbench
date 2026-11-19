@@ -18,7 +18,6 @@ Requirements
     2. yt-dlp on the system PATH  (pip install yt-dlp)
 """
 
-import io
 import json
 import os
 import re
@@ -29,10 +28,9 @@ import tempfile
 import threading
 import time
 import tkinter as tk
-import urllib.request
 import webbrowser
 from datetime import datetime
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
 
 from core.hardware import CREATE_NO_WINDOW, get_binary_path
@@ -1231,14 +1229,21 @@ class YouTubeDownloaderTab(BaseTab):
             filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")])
         if not p:
             return
-        try:
-            # PIL required for saving
-            from PIL import Image
-            img = self._thumb_pil_image
-            img.save(p)
+        data = getattr(self, "_thumb_bytes", None)
+        if not data:
+            messagebox.showwarning(t("common.warning"), "Fetch video info first.", parent=self)
+            return
+        import subprocess
+        from core import ffmpeg as ff
+        codec = ["-c:v", "mjpeg", "-q:v", "2"] if p.lower().endswith((".jpg", ".jpeg")) else ["-c:v", "png"]
+        res = subprocess.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0",
+                              "-frames:v", "1", *codec, "-update", "1", p], input=data, capture_output=True,
+                             timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if res.returncode == 0 and os.path.isfile(p):
             self.log_tagged(self.console, f"✔ Thumbnail saved: {p}", "success")
-        except Exception as e:
-            messagebox.showerror(t("common.error"), f"Could not save thumbnail:\n{e}")
+        else:
+            messagebox.showerror(t("common.error"), "Could not save the thumbnail:\n"
+                                 + (res.stderr or b"").decode("utf-8", "replace")[-300:], parent=self)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Format filter
@@ -1444,49 +1449,29 @@ class YouTubeDownloaderTab(BaseTab):
                 self._sub_lang_var.set(labeled[0])
 
     def _load_thumbnail(self, thumb_url: str):
-        # Pillow is an optional dep - try the project's auto-install helper
-        # first, then a plain import as a fallback. If both fail, surface
-        # the reason instead of silently leaving the canvas blank.
-        Image = ImageTk = None
+        """Worker thread: fetch the thumbnail (through the app's network settings)
+        and let FFmpeg decode it - Tk shows PNG natively, so no Pillow needed."""
+        import base64
+        import subprocess
+        from core import ffmpeg as ff
+        from core import network as _net
         try:
-            from core.deps import require
-            pil = require("Pillow", import_name="PIL")
-            if pil is not None:
-                from PIL import Image as _Image, ImageTk as _ImageTk
-                Image, ImageTk = _Image, _ImageTk
-        except Exception:
-            pass
-        if Image is None:
-            try:
-                from PIL import Image as _Image, ImageTk as _ImageTk
-                Image, ImageTk = _Image, _ImageTk
-            except ImportError:
-                self.after(0, lambda: self._set_thumbnail_message(
-                    "Pillow not installed\n(pip install Pillow)\n\n"
-                    "Thumbnails disabled"))
-                self.after(0, lambda: self.log_tagged(
-                    self.console,
-                    "ℹ Thumbnail preview disabled: Pillow could not be "
-                    "loaded or auto-installed. Run `pip install Pillow` "
-                    "to enable.",
-                    "warn"))
-                return
-        try:
-            from core import network as _net
-            with _net.urlopen(thumb_url, timeout=12,
-                              headers={"User-Agent": "Mozilla/5.0"}) as resp:
+            with _net.urlopen(thumb_url, timeout=12, headers={"User-Agent": "Mozilla/5.0"}) as resp:
                 data = resp.read()
-            img = Image.open(io.BytesIO(data)).convert("RGB")
-            self._thumb_pil_image = img.copy()
-            img = img.resize((256, 144), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(img)
-            self.after(0, lambda p=photo: self._set_thumbnail(p))
+            self._thumb_bytes = data
+            res = subprocess.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+                                  "-frames:v", "1", "-vf", "scale=256:144:force_original_aspect_ratio=decrease,"
+                                  "pad=256:144:-1:-1:color=black", "-f", "image2pipe", "-c:v", "png", "pipe:1"],
+                                 input=data, capture_output=True, timeout=20,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if res.returncode != 0 or not res.stdout:
+                raise RuntimeError((res.stderr or b"").decode("utf-8", "replace").strip()[-80:] or "decode failed")
+            png = base64.b64encode(res.stdout).decode("ascii")
+            self.after(0, lambda: self._set_thumbnail(tk.PhotoImage(master=self, data=png)))
         except Exception as exc:
             err = str(exc) or type(exc).__name__
-            self.after(0, lambda e=err: self._set_thumbnail_message(
-                f"Thumbnail failed:\n{e[:80]}"))
-            self.after(0, lambda e=err: self.log_tagged(
-                self.console, f"⚠ Thumbnail load error: {e}", "warn"))
+            self.after(0, lambda e=err: self._set_thumbnail_message(f"Thumbnail failed:\n{e[:80]}"))
+            self.after(0, lambda e=err: self.log_tagged(self.console, f"⚠ Thumbnail load error: {e}", "warn"))
 
     def _set_thumbnail(self, photo):
         self._thumb_photo = photo

@@ -31,9 +31,11 @@ _LIBS_DIR = os.path.join(os.path.dirname(_HERE), "libs")
 
 
 def _ensure_libs_on_path():
-    os.makedirs(_LIBS_DIR, exist_ok=True)
-    if _LIBS_DIR not in sys.path:
-        sys.path.insert(0, _LIBS_DIR)
+    """Make libs/ importable without creating anything (the app folder can be
+    read-only) and *after* the interpreter's own packages, so a stray copy
+    in libs/ can never shadow them."""
+    if os.path.isdir(_LIBS_DIR) and _LIBS_DIR not in sys.path:
+        sys.path.append(_LIBS_DIR)
 
 
 _ensure_libs_on_path()
@@ -82,7 +84,7 @@ def _pip_install(pip_name):
         return False
 
 
-def require(pip_name, import_name=None, auto_install=True):
+def require(pip_name, import_name=None, auto_install=False):
     # type: (str, str | None, bool) -> object | None
     """
     Try to import *import_name* (defaults to *pip_name* with hyphens → underscores).
