@@ -12,6 +12,14 @@ import tempfile
 from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
 from core.i18n import t
+from core import concat
+from core import encoders as enc
+from core import ffmpeg as ff
+
+
+def _tr(key, fallback):
+    text = t(key)
+    return fallback if text == key else text
 
 
 class SplicerTab(BaseTab):
@@ -87,7 +95,7 @@ class SplicerTab(BaseTab):
         # Options
         opt_f = tk.Frame(self)
         opt_f.pack(pady=4)
-        self.reencode_var = tk.BooleanVar(value=False)
+        self.reencode_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt_f, text=t("splicer.reencode_checkbox"),
                        variable=self.reencode_var).pack(side="left", padx=10)
         tk.Label(opt_f, text=t("common.crf")).pack(side="left")
@@ -224,128 +232,82 @@ class SplicerTab(BaseTab):
             self.out_var.set(p)
 
     # ─── Render ───────────────────────────────────────────────────────────────
+    def _pieces(self, segs):
+        pieces = []
+        for i, seg in enumerate(segs, start=1):
+            try:
+                ss = ff.parse_time(seg["start"].get())
+                ee = ff.parse_time(seg["end"].get())
+            except ValueError:
+                raise ValueError(_tr("splicer.bad_time", "Segment {n}: times must look like 12.5, 01:23.4 or 1:02:03.").format(n=i))
+            if ee <= ss:
+                raise ValueError(_tr("splicer.empty_segment", "Segment {n} ends before it starts.").format(n=i))
+            pieces.append(concat.Piece.of(seg["path"], ss, ee))
+        return pieces
+
     def _render(self):
         active = [s for s in self.segments if s["include"].get()]
         if len(active) < 1:
-            messagebox.showwarning(t("splicer.no_segments_title"), t("splicer.no_segments_message"))
+            messagebox.showwarning(t("splicer.no_segments_title"), t("splicer.no_segments_message"), parent=self)
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        try:
+            pieces = self._pieces(active)
+        except (ValueError, ff.ProbeError) as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        inputs = sorted({p.path for p in pieces})
+        out = self.out_var.get().strip() or self.suggest_output(pieces[0].path, "spliced", ".mp4")
+        out = self.confirm_output(out, inputs)
         if not out:
             return
         self.out_var.set(out)
-        self.log(self.console, t("log.splicer.starting_splice_render"))
+        container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
+        if not self.reencode_var.get():
+            problems = concat.copy_compatibility([p.info for p in pieces])
+            if problems:
+                if not messagebox.askyesno(
+                        _tr("batch_joiner.files_differ", "Files differ"),
+                        _tr("splicer.not_copyable", "These segments can't be joined losslessly:") + "\n\n"
+                        + "\n".join("\u2022 " + x for x in problems[:8]) + "\n\n"
+                        + _tr("batch_joiner.offer_reencode", "Re-encode them so they match?"), parent=self):
+                    return
+                self.reencode_var.set(True)
+            else:
+                from tabs.cutting.trimmer import keyframe_at_or_before
+                from core.paths import temp_dir
+                ins, outs = [], []
+                for p in pieces:
+                    k = keyframe_at_or_before(p.path, p.start)
+                    k = p.start if k is None else k
+                    if p.start - k > 0.01:
+                        self.log(self.console, f"\u2139 {os.path.basename(p.path)}: lossless cut starts at keyframe "
+                                               f"{ff.format_time(k)} instead of {ff.format_time(p.start)}")
+                    ins.append(k)
+                    outs.append(p.start + p.length)
+                list_path = os.path.join(temp_dir("splice_"), "list.txt")
+                cmd = concat.copy_join_command([p.path for p in pieces], out, list_path, inpoints=ins, outpoints=outs)
+                total = sum(o - i for i, o in zip(ins, outs))
+                self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                                btn=self._render_button(), btn_label=self._render_label(),
+                                duration=total, output=out, inputs=inputs, name="Splicer")
+                return
+        venc = enc.video("vp9" if container == "webm" else "h264", "high", hw="auto", container=container)
+        crf = self.crf_var.get().strip()
+        if "-crf" in venc.args and crf.isdigit():
+            venc.args[venc.args.index("-crf") + 1] = crf
+        cmd, total = concat.filter_join_command(pieces, out, venc=venc,
+                                                audio_codec="opus" if container == "webm" else "aac")
+        self.log(self.console, f"Splicing {len(pieces)} segments ({ff.format_time(total, ms=False)}, {venc.label})")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self._render_button(), btn_label=self._render_label(),
+                        duration=total, output=out, inputs=inputs, name="Splicer")
 
-        ffmpeg = get_binary_path("ffmpeg.exe")
+    def _render_button(self):
+        for attr in ("btn_render", "render_btn", "_btn_render", "run_btn"):
+            if hasattr(self, attr):
+                return getattr(self, attr)
+        return None
 
-        if self.reencode_var.get():
-            self._render_reencode(active, out, ffmpeg)
-        else:
-            self._render_concat(active, out, ffmpeg)
-
-    def _render_concat(self, segs, out, ffmpeg):
-        """Fast stream-copy via concat demuxer (requires matching codec/resolution)."""
-        # Trim each segment to a temp file first, then concat
-        tmp_dir = tempfile.mkdtemp()
-        tmp_files = []
-        self.log(self.console, f"Temp dir: {tmp_dir}")
-
-        def _work():
-            for i, seg in enumerate(segs):
-                tmp = os.path.join(tmp_dir, f"seg_{i:03d}.mp4")
-                tmp_files.append(tmp)
-                ss = seg["start"].get()
-                to = seg["end"].get()
-                try:
-                    dur = float(to) - float(ss)
-                except ValueError:
-                    dur = 0
-                # Use -t (duration) instead of -to to avoid pts drift issues
-                # -reset_timestamps 1 ensures each segment starts at pts=0
-                cmd = [ffmpeg, "-ss", str(ss), "-i", seg["path"],
-                       "-t", str(max(0.01, dur)),
-                       "-c", "copy",
-                       "-avoid_negative_ts", "make_zero",
-                       "-reset_timestamps", "1",
-                       tmp, "-y"]
-                self.log(self.console, f"[{i+1}/{len(segs)}] Trimming → {os.path.basename(tmp)}")
-                r = subprocess.run(cmd, capture_output=True, text=True,
-                                   creationflags=CREATE_NO_WINDOW)
-                if r.returncode != 0:
-                    self.log(self.console, f"  ⚠ Trim failed for segment {i+1}: {r.stderr[-200:]}")
-
-            # Write concat list
-            list_path = os.path.join(tmp_dir, "list.txt")
-            with open(list_path, "w") as f:
-                for p in tmp_files:
-                    f.write(f"file '{p}'\n")
-
-            cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, t("log.splicer.concatenating"))
-            proc = subprocess.run(cmd_cat, capture_output=True, text=True,
-                                  creationflags=CREATE_NO_WINDOW)
-            rc = proc.returncode
-            # Cleanup
-            for p in tmp_files:
-                try: os.remove(p)
-                except Exception: pass
-            try: os.rmdir(tmp_dir)
-            except Exception: pass
-            self.after(0, lambda: self.show_result(rc, out))
-
-        self.run_in_thread(_work)
-
-    def _render_reencode(self, segs, out, ffmpeg):
-        """Full re-encode with select filter - handles mixed sources."""
-        crf = self.crf_var.get()
-        tmp_dir = tempfile.mkdtemp()
-        tmp_files = []
-
-        def _work():
-            for i, seg in enumerate(segs):
-                tmp = os.path.join(tmp_dir, f"seg_{i:03d}.mp4")
-                tmp_files.append(tmp)
-                ss = seg["start"].get()
-                to = seg["end"].get()
-                try:
-                    dur = float(to) - float(ss)
-                except ValueError:
-                    dur = 0
-                # Normalise to 1920×1080 so all segments share same resolution
-                vf = ("scale=1920:1080:force_original_aspect_ratio=decrease,"
-                      "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
-                      "setpts=PTS-STARTPTS")
-                cmd = [ffmpeg, "-ss", str(ss), "-i", seg["path"],
-                       "-t", str(max(0.01, dur)),
-                       "-vf", vf,
-                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                       "-c:a", "aac", "-b:a", "192k",
-                       "-avoid_negative_ts", "make_zero",
-                       "-reset_timestamps", "1",
-                       tmp, "-y"]
-                self.log(self.console, f"[{i+1}/{len(segs)}] Encoding → {os.path.basename(tmp)}")
-                r = subprocess.run(cmd, capture_output=True, text=True,
-                                   creationflags=CREATE_NO_WINDOW)
-                if r.returncode != 0:
-                    self.log(self.console, f"  ⚠ Encode error: {r.stderr[-300:]}")
-
-            list_path = os.path.join(tmp_dir, "list.txt")
-            with open(list_path, "w") as f:
-                for p in tmp_files:
-                    f.write(f"file '{p}'\n")
-
-            cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, t("log.splicer.final_concat"))
-            proc = subprocess.run(cmd_cat, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-            for p in tmp_files:
-                try: os.remove(p)
-                except Exception: pass
-            try: os.rmdir(tmp_dir)
-            except Exception: pass
-            self.after(0, lambda: self.show_result(proc.returncode, out))
-
-        self.run_in_thread(_work)
+    def _render_label(self):
+        btn = self._render_button()
+        return btn.cget("text") if btn is not None else "Render"

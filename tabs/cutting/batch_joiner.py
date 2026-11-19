@@ -12,6 +12,14 @@ import tempfile
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
 from core.i18n import t
+from core import concat
+from core import encoders as enc
+from core import ffmpeg as ff
+
+
+def _tr(key, fallback):
+    text = t(key)
+    return fallback if text == key else text
 
 
 class BatchJoinerTab(BaseTab):
@@ -74,14 +82,20 @@ class BatchJoinerTab(BaseTab):
         # Row 2 - encode options (shown/hidden)
         self.enc_frame = tk.Frame(opt_lf)
         tk.Label(self.enc_frame, text=t("common.resolution")).pack(side="left")
-        self.res_var = tk.StringVar(value="1920x1080")
-        ttk.Combobox(self.enc_frame, textvariable=self.res_var, width=12,
-                     values=["3840x2160", "2560x1440", "1920x1080", "1280x720",
-                              "854x480", t("batch_joiner.batch_joiner_keep_highest")], state="readonly").pack(side="left", padx=4)
+        self._res_choices = [("first", _tr("batch_joiner.same_as_first", "Same as first clip")),
+                             ("largest", _tr("batch_joiner.largest_clip", "Largest clip")),
+                             ("3840x2160", "3840x2160"), ("2560x1440", "2560x1440"),
+                             ("1920x1080", "1920x1080"), ("1280x720", "1280x720"), ("854x480", "854x480")]
+        self.res_var = tk.StringVar(value=self._res_choices[0][1])
+        ttk.Combobox(self.enc_frame, textvariable=self.res_var, width=18,
+                     values=[lbl for _, lbl in self._res_choices], state="readonly").pack(side="left", padx=4)
         tk.Label(self.enc_frame, text=t("batch_joiner.lbl_fps")).pack(side="left")
-        self.fps_var = tk.StringVar(value="30")
-        ttk.Combobox(self.enc_frame, textvariable=self.fps_var, width=6,
-                     values=["24", "25", "30", "50", "60", t("batch_joiner.batch_joiner_keep_highest")], state="readonly").pack(side="left", padx=4)
+        self._fps_choices = [("first", _tr("batch_joiner.same_as_first", "Same as first clip")),
+                             ("largest", _tr("batch_joiner.highest", "Highest")),
+                             ("24", "24"), ("25", "25"), ("30", "30"), ("50", "50"), ("60", "60")]
+        self.fps_var = tk.StringVar(value=self._fps_choices[0][1])
+        ttk.Combobox(self.enc_frame, textvariable=self.fps_var, width=18,
+                     values=[lbl for _, lbl in self._fps_choices], state="readonly").pack(side="left", padx=4)
         tk.Label(self.enc_frame, text=t("common.crf")).pack(side="left")
         self.crf_var = tk.StringVar(value="18")
         tk.Entry(self.enc_frame, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
@@ -178,102 +192,75 @@ class BatchJoinerTab(BaseTab):
         if p:
             self.out_var.set(p)
 
+    def _choice(self, var, choices):
+        return {lbl: key for key, lbl in choices}.get(var.get(), choices[0][0])
+
+    def load_file(self, path):
+        self.file_paths.append(path)
+        self.listbox.insert(tk.END, os.path.basename(path))
+        if not self.out_var.get().strip():
+            self.out_var.set(self.suggest_output(path, "joined", ".mp4"))
+        return True
+
     def _render(self):
         if len(self.file_paths) < 2:
-            messagebox.showwarning(t("common.warning"), t("batch_joiner.msg_too_few_files"))
+            messagebox.showwarning(t("common.warning"), t("batch_joiner.msg_too_few_files"), parent=self)
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        out = self.out_var.get().strip() or self.suggest_output(self.file_paths[0], "joined", ".mp4")
+        out = self.confirm_output(out, self.file_paths)
         if not out:
             return
         self.out_var.set(out)
-        ffmpeg = get_binary_path("ffmpeg.exe")
-
-        if self.reencode_var.get():
-            self._render_reencode(out, ffmpeg)
-        else:
-            self._render_copy(out, ffmpeg)
-
-    def _render_copy(self, out, ffmpeg):
-        self.log(self.console, t("log.batch_joiner.stream_copy_join_fast_requires_matching_specs"))
-        tmp_dir = tempfile.mkdtemp()
-        list_path = os.path.join(tmp_dir, "list.txt")
-        with open(list_path, "w") as f:
-            for p in self.file_paths:
-                # Use forward slashes for FFmpeg compatibility
-                f.write(f"file '{p.replace(chr(92), '/')}'\n")
-
-        self.log(self.console, f"Joining {len(self.file_paths)} files (stream-copy)…")
-        cmd = [ffmpeg, "-f", "concat", "-safe", "0",
-               "-i", list_path, "-c", "copy",
-               "-movflags", "+faststart",
-               out, "-y"]
-
-        def done(rc):
-            self.show_result(rc, out)
-            try: os.remove(list_path); os.rmdir(tmp_dir)
-            except Exception: pass
-
-        self.run_ffmpeg(cmd, self.console, on_done=done,
-                        btn=self.btn_render, btn_label=t("batch_joiner.btn_join"))
-
-    def _render_reencode(self, out, ffmpeg):
-        self.log(self.console, t("log.batch_joiner.re_encode_join"))
-        res = self.res_var.get()
-        fps = self.fps_var.get()
-        crf = self.crf_var.get()
-        abr = self.audio_var.get()
-        tmp_dir = tempfile.mkdtemp()
-        paths = self.file_paths[:]
-
-        def _work():
-            tmp_files = []
-            for i, src in enumerate(paths):
-                tmp = os.path.join(tmp_dir, f"enc_{i:04d}.mp4")
-                tmp_files.append(tmp)
-                if res == "Keep Highest":
-                    vf = ""
-                else:
-                    # Convert "1920x1080" -> "1920:1080" for FFmpeg scale filter
-                    res_ffmpeg = res.replace("x", ":")
-                    res_w, res_h = res.split("x")
-                    vf = (f"scale={res_ffmpeg}:force_original_aspect_ratio=decrease,"
-                          f"pad={res_w}:{res_h}:(ow-iw)/2:(oh-ih)/2,"
-                          f"setpts=PTS-STARTPTS")
-                vf_fps = f"fps={fps}" if fps != "Keep Highest" else ""
-                filters = ",".join(filter(None, [vf, vf_fps]))
-
-                cmd = [ffmpeg, "-i", src]
-                if filters:
-                    cmd += ["-vf", filters]
-                cmd += ["-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                        "-c:a", "aac", "-b:a", abr, tmp, "-y"]
-
-                self.log(self.console, f"[{i+1}/{len(paths)}] Encoding {os.path.basename(src)}…")
-                r = subprocess.run(cmd, capture_output=True, text=True,
-                                   creationflags=CREATE_NO_WINDOW)
-                if r.returncode != 0:
-                    self.log(self.console, f"  ⚠ Encode error segment {i+1}:")
-                    self.log(self.console, r.stderr[-400:])
-
-            list_path = os.path.join(tmp_dir, "list.txt")
-            with open(list_path, "w") as f:
-                for p in tmp_files:
-                    f.write(f"file '{p}'\n")
-
-            cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", out, "-y"]
-            self.log(self.console, t("log.batch_joiner.concatenating_encoded_segments"))
-            proc = subprocess.run(cmd_cat, capture_output=True, creationflags=CREATE_NO_WINDOW)
-
-            for p in tmp_files:
-                try: os.remove(p)
-                except Exception: pass
-            try: os.rmdir(tmp_dir)
-            except Exception: pass
-
-            self.after(0, lambda: self.show_result(proc.returncode, out))
-
-        self.run_in_thread(_work)
+        try:
+            pieces = [concat.Piece.of(p) for p in self.file_paths]
+        except ff.ProbeError as exc:
+            messagebox.showerror(t("common.error"), str(exc), parent=self)
+            return
+        total = sum(p.length for p in pieces)
+        if not self.reencode_var.get():
+            problems = concat.copy_compatibility([p.info for p in pieces])
+            container = os.path.splitext(out)[1].lstrip(".").lower()
+            src_ext = os.path.splitext(self.file_paths[0])[1].lstrip(".").lower()
+            if not problems and container in ("mp4", "mov", "m4v") and src_ext not in ("mp4", "mov", "m4v") \
+                    and pieces[0].info.audio and not enc.audio_ok_for(container, enc.audio_key_from_probe(
+                        pieces[0].info.audio.codec) or "x"):
+                problems.append(f"{pieces[0].info.audio.codec} audio can't be stored in .{container}")
+            if problems:
+                msg = (_tr("batch_joiner.not_copyable",
+                           "These files can't be joined losslessly because they differ:") + "\n\n"
+                       + "\n".join("\u2022 " + p for p in problems[:8])
+                       + "\n\n" + _tr("batch_joiner.offer_reencode",
+                                       "Re-encode them so they match? (slower, but the result will play correctly)"))
+                if not messagebox.askyesno(_tr("batch_joiner.files_differ", "Files differ"), msg, parent=self):
+                    return
+                self.reencode_var.set(True)
+                self._toggle_encode_opts()
+            else:
+                from core.paths import temp_dir
+                list_path = os.path.join(temp_dir("join_"), "list.txt")
+                cmd = concat.copy_join_command(self.file_paths, out, list_path)
+                self.log(self.console, f"Lossless join of {len(pieces)} files \u2192 {os.path.basename(out)}")
+                self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                                btn=self.btn_render, btn_label=t("batch_joiner.btn_join"),
+                                duration=total, output=out, inputs=self.file_paths, name="Batch Joiner")
+                return
+        res_mode = self._choice(self.res_var, self._res_choices)
+        fps_mode = self._choice(self.fps_var, self._fps_choices)
+        W, H, fps = concat.target_geometry(pieces, res_mode)
+        if fps_mode == "largest":
+            fps = concat.target_geometry(pieces, "largest")[2]
+        elif fps_mode not in ("first",):
+            fps = fps_mode
+        container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
+        venc = enc.video("vp9" if container == "webm" else "h264", "high", speed="balanced",
+                         hw="auto", container=container)
+        crf = self.crf_var.get().strip()
+        if "-crf" in venc.args and crf.isdigit():
+            venc.args[venc.args.index("-crf") + 1] = crf
+        cmd, total = concat.filter_join_command(pieces, out, size=(W, H), fps=fps, venc=venc,
+                                                audio_codec="opus" if container == "webm" else "aac",
+                                                audio_bitrate=self.audio_var.get() or "192k")
+        self.log(self.console, f"Re-encoding {len(pieces)} files to {W}x{H} @ {fps} fps ({venc.label})")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self.btn_render, btn_label=t("batch_joiner.btn_join"),
+                        duration=total, output=out, inputs=self.file_paths, name="Batch Joiner")
