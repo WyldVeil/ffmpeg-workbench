@@ -150,16 +150,16 @@ class TrimmerTab(BaseTab):
 
         r3 = tk.Frame(mk); r3.pack(fill="x", pady=8)
         tk.Label(r3, text=t("trimmer.preview_time_label"), font=(UI_FONT, 10, "bold"), width=14, anchor="e").pack(side="left")
-        self._scrub_sc = tk.Scale(r3, variable=self._scrub, from_=0, to=100,
-                                   resolution=0.05, orient="horizontal", length=440,
-                                   command=self._on_scrub, bg=CLR["panel"], fg=CLR["fg"],
-                                   troughcolor=CLR["bg"], highlightthickness=0)
-        self._scrub_sc.pack(side="left", padx=6)
+        # the button and time stay on the right; the slider takes whatever width is left
+        tk.Button(r3, text=t("trimmer.show_frame_button"), bg=CLR["accent"], fg="white",
+                  command=self._preview_at_scrub).pack(side="right", padx=8)
         self._scrub_lbl = tk.Label(r3, text="00:00.00", fg=CLR["accent"],
                                     font=(MONO_FONT, 10), width=9)
-        self._scrub_lbl.pack(side="left")
-        tk.Button(r3, text=t("trimmer.show_frame_button"), bg=CLR["accent"], fg="white",
-                  command=self._preview_at_scrub).pack(side="left", padx=8)
+        self._scrub_lbl.pack(side="right")
+        self._scrub_sc = tk.Scale(r3, variable=self._scrub, from_=0, to=100,
+                                   resolution=0.05, orient="horizontal", length=200,
+                                   command=self._on_scrub, highlightthickness=0)
+        self._scrub_sc.pack(side="left", padx=6, fill="x", expand=True)
 
         # Encode options
         enc = tk.LabelFrame(self, text=t("section.export_options"), padx=14, pady=6)

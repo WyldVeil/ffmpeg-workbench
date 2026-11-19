@@ -276,7 +276,6 @@ class AudioExporterTab(BaseTab):
                                     orient="horizontal", variable=self.vbr_var,
                                     length=200,
                                     bg=CLR["bg"], fg=CLR["fg"],
-                                    troughcolor=CLR["input_bg"],
                                     highlightthickness=0)
         self._vbr_scale.pack(side="left", padx=8)
         self._vbr_hint = tk.Label(self._vbr_row, text="0 = best, 9 = smallest",
@@ -302,7 +301,6 @@ class AudioExporterTab(BaseTab):
                                      orient="horizontal", variable=self.comp_var,
                                      length=200,
                                      bg=CLR["bg"], fg=CLR["fg"],
-                                     troughcolor=CLR["input_bg"],
                                      highlightthickness=0)
         self._comp_scale.pack(side="left", padx=8)
         tk.Label(self._comp_row, text=t("exporter.compression_hint"),

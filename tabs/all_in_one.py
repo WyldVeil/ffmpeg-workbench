@@ -603,7 +603,6 @@ class AllInOneTab(BaseTab):
                 r, variable=var, from_=lo, to=hi, resolution=inc,
                 orient="horizontal", length=280,
                 bg=CLR["bg"], fg=CLR["fg"],
-                troughcolor=CLR["panel"],
                 highlightthickness=0,
                 command=lambda v, var=var: (var.set(
                     "{:.2f}".format(float(v))), self._rebuild_cmd()),

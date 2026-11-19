@@ -75,8 +75,7 @@ class ThumbnailMakerTab(BaseTab):
         self._scrub_var = tk.DoubleVar(value=0.0)
         self._scrub = tk.Scale(fr1, variable=self._scrub_var, from_=0, to=100,
                                resolution=0.01, orient="horizontal", length=420,
-                               bg=CLR["panel"], fg=CLR["fg"],
-                               troughcolor=CLR["bg"], highlightthickness=0,
+                               bg=CLR["panel"], fg=CLR["fg"], highlightthickness=0,
                                command=self._on_scrub)
         self._scrub.pack(side="left", padx=8)
         self._time_lbl = tk.Label(fr1, text="00:00.00", fg=CLR["accent"],
@@ -127,21 +126,21 @@ class ThumbnailMakerTab(BaseTab):
         self._brightness = tk.DoubleVar(value=0.0)
         tk.Scale(ar1, variable=self._brightness, from_=-0.5, to=0.5,
                  resolution=0.02, orient="horizontal", length=150,
-                 bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
+                 bg=CLR["panel"], fg=CLR["fg"],
                  highlightthickness=0).pack(side="left", padx=4)
 
         tk.Label(ar1, text=t("thumbnail.contrast_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
         self._contrast = tk.DoubleVar(value=1.0)
         tk.Scale(ar1, variable=self._contrast, from_=0.5, to=2.0,
                  resolution=0.05, orient="horizontal", length=150,
-                 bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
+                 bg=CLR["panel"], fg=CLR["fg"],
                  highlightthickness=0).pack(side="left", padx=4)
 
         tk.Label(ar1, text=t("thumbnail.saturation_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
         self._saturation = tk.DoubleVar(value=1.0)
         tk.Scale(ar1, variable=self._saturation, from_=0.0, to=3.0,
                  resolution=0.05, orient="horizontal", length=150,
-                 bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
+                 bg=CLR["panel"], fg=CLR["fg"],
                  highlightthickness=0).pack(side="left", padx=4)
 
         # ── Text overlay ──────────────────────────────────────────────────

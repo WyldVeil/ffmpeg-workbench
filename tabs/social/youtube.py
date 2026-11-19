@@ -598,7 +598,7 @@ class YouTubeDownloaderTab(BaseTab):
         crf_scale = tk.Scale(
             crf_row, variable=self._crf_var, from_=0, to=51,
             orient="horizontal", length=120,
-            bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
+            bg=CLR["panel"], fg=CLR["fg"],
             highlightthickness=0, command=lambda v: self._crf_entry_var.set(str(int(float(v)))))
         crf_scale.pack(side="left", padx=4)
         self._crf_entry_var = tk.StringVar(value="18")
