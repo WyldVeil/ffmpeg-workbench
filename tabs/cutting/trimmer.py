@@ -15,32 +15,46 @@ from core.hardware import (    get_binary_path, get_video_duration,
     launch_preview, CREATE_NO_WINDOW,
 )
 from core.i18n import t
+from core import ffmpeg as ff
+from core import ui as _ui
+from tabs.widgets import FramePreview
 
 def fmt_time(seconds):
-    """Convert raw seconds into HH:MM:SS.mmm or MM:SS.mmm"""
-    if seconds < 0: seconds = 0
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        # Use :06.3f to ensure 3 decimal places (milliseconds)
-        return f"{int(h):02d}:{int(m):02d}:{s:06.3f}"
-    return f"{int(m):02d}:{s:06.3f}"
+    """Seconds -> MM:SS.mmm (or HH:MM:SS.mmm)."""
+    return ff.format_time(seconds)
+
 
 def parse_time(time_str):
-    """Parse HH:MM:SS.ms, MM:SS.ms, or raw seconds back into a float."""
+    """HH:MM:SS.ms, MM:SS.ms, seconds (',' accepted as decimal point).
+    Raises ValueError on anything else - never silently returns 0."""
+    return ff.parse_time(time_str)
+
+
+def keyframe_at_or_before(path, at, lookback=30.0):
+    """PTS of the last video keyframe at or before *at* seconds (None if the
+    probe fails).  Stream copy can only start on a keyframe."""
+    ffprobe = ff.ffprobe_path()
+    window = max(0.0, at - lookback)
     try:
-        ts = str(time_str).strip()
-        if not ts: return 0.0
-        if ':' not in ts:
-            return float(ts)
-        parts = ts.split(':')
-        if len(parts) == 3:  # HH:MM:SS
-            return float(parts[0])*3600 + float(parts[1])*60 + float(parts[2])
-        elif len(parts) == 2:  # MM:SS
-            return float(parts[0])*60 + float(parts[1])
-    except ValueError:
-        return 0.0
-    return 0.0
+        r = ff.capture([ffprobe, "-v", "error", "-read_intervals", f"{window:.3f}%{at + 0.05:.3f}",
+                        "-select_streams", "v:0", "-skip_frame", "nokey",
+                        "-show_entries", "frame=pts_time,best_effort_timestamp_time",
+                        "-of", "csv=p=0", path], timeout=30)
+    except Exception:
+        return None
+    best = None
+    for line in r.stdout.splitlines():
+        for part in line.split(","):
+            try:
+                pts = float(part)
+            except ValueError:
+                continue
+            if pts <= at + 1e-3 and (best is None or pts > best):
+                best = pts
+            break
+    if best is None and window > 0:
+        return keyframe_at_or_before(path, at, lookback=lookback * 4) if lookback < 600 else 0.0
+    return best if best is not None else 0.0
 
 
 class TrimmerTab(BaseTab):
@@ -77,7 +91,10 @@ class TrimmerTab(BaseTab):
         sf = tk.Frame(self); sf.pack(fill="x", padx=20, pady=(14, 4))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=62, relief="flat").pack(side="left", padx=8)
+        src_entry = tk.Entry(sf, textvariable=self._src_var, width=62, relief="flat")
+        src_entry.pack(side="left", padx=8)
+        src_entry.bind("<Return>", lambda _e: self._load_typed_source())
+        src_entry.bind("<FocusOut>", lambda _e: self._load_typed_source())
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
 
         # Canvas timeline
@@ -103,6 +120,10 @@ class TrimmerTab(BaseTab):
         # Marker controls
         mk = tk.LabelFrame(self, text=t("trimmer.clip_boundaries_section"), padx=14, pady=8)
         mk.pack(fill="x", padx=20, pady=4)
+        self.preview = FramePreview(mk, width=320, height=180)
+        self.preview.pack(side="right", anchor="n", padx=(12, 0))
+        self._preview_soon = _ui.debounce(self, 90, lambda: self.preview.show(self._preview_t))
+        self._preview_t = 0.0
 
         r1 = tk.Frame(mk); r1.pack(fill="x", pady=2)
         tk.Label(r1, text=t("trimmer.keep_from_label"), font=(UI_FONT, 10, "bold"), width=14, anchor="e").pack(side="left")
@@ -183,22 +204,38 @@ class TrimmerTab(BaseTab):
     # ─── File loading ─────────────────────────────────────────────────────
     def _browse(self):
         p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if not p: return
+            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.m4v *.mts *.m2ts *.ts *.flv *.wmv *.3gp"),
+                       ("All", "*")])
+        if p:
+            self.load_file(p)
+
+    def _load_typed_source(self):
+        p = self._src_var.get().strip().strip('"')
+        if p and p != self.file_path and os.path.isfile(p):
+            self.load_file(p)
+
+    def _default_out(self, src):
+        ext = os.path.splitext(src)[1] if self._copy_mode.get() else ".mp4"
+        return self.suggest_output(src, "trimmed", ext or ".mp4")
+
+    def load_file(self, p):
+        info = ff.try_probe(p)
+        if info is None or not info.duration:
+            messagebox.showerror(t("common.error"), t("common.no_input") + f"\n{p}", parent=self)
+            return False
         self.file_path = p
         self._src_var.set(p)
-        self.duration = get_video_duration(p)
-        base = os.path.splitext(p)[0]
-        self._out_var.set(base + "_trimmed.mp4")
-        
-        self._start_var.set("00:00.00")
+        self.duration = info.video.duration if info.video and info.video.duration else info.duration
+        self._out_var.set(self._default_out(p))
+        self._start_var.set(fmt_time(0))
         self._end_var.set(fmt_time(self.duration))
         self._scrub.set(0.0)
         self._scrub_sc.config(to=max(self.duration, 1))
-        
-        self._info_lbl.config(text=f"{os.path.basename(p)}  ·  {fmt_time(self.duration)} total")
+        self._info_lbl.config(text=f"{os.path.basename(p)}  \u00b7  {info.summary()}")
         self._update_dur()
         self._draw()
+        self.preview.load(p, duration=self.duration, at=0.0)
+        return True
 
     def _browse_out(self):
         p = dialogs.asksaveasfilename(defaultextension=".mp4",
@@ -220,23 +257,35 @@ class TrimmerTab(BaseTab):
 
     def _apply_typed_times(self, *_):
         """Called when user types a time and hits Enter or clicks away."""
-        s_sec = parse_time(self._start_var.get())
-        e_sec = parse_time(self._end_var.get())
-        
-        # Enforce bounds
-        s_sec = max(0.0, min(s_sec, self.duration - 0.1))
-        e_sec = max(s_sec + 0.1, min(e_sec, self.duration))
-        
-        # Reformat nicely in the boxes
+        try:
+            s_sec = parse_time(self._start_var.get())
+            e_sec = parse_time(self._end_var.get())
+        except ValueError:
+            self.log_tagged(self.console, t("trimmer.invalid_range_message"), "warn")
+            self._start_var.set(fmt_time(getattr(self, "_last_start", 0.0)))
+            self._end_var.set(fmt_time(getattr(self, "_last_end", self.duration)))
+            return
+        s_sec = max(0.0, min(s_sec, max(0.0, self.duration - 0.04)))
+        e_sec = max(s_sec + 0.04, min(e_sec, self.duration)) if self.duration else e_sec
+        self._last_start, self._last_end = s_sec, e_sec
         self._start_var.set(fmt_time(s_sec))
         self._end_var.set(fmt_time(e_sec))
-        
-        # Move the playhead to the new start time so the UI slider updates
         self._scrub.set(s_sec)
         self._scrub_lbl.config(text=fmt_time(s_sec))
-        
+        self._show_frame(s_sec)
         self._update_dur()
         self._draw()
+
+    def _tv(self, var, default=0.0):
+        try:
+            return parse_time(var.get())
+        except ValueError:
+            return default
+
+    def _show_frame(self, at):
+        self._preview_t = float(at)
+        if self.file_path:
+            self._preview_soon()
 
     def _draw(self, *_):
         c = self._canvas
@@ -251,8 +300,8 @@ class TrimmerTab(BaseTab):
                               fill=CLR["fgdim"], font=(UI_FONT, 10)); return
             cy = h // 2
             
-            s_sec = parse_time(self._start_var.get())
-            e_sec = parse_time(self._end_var.get())
+            s_sec = self._tv(self._start_var, 0.0)
+            e_sec = self._tv(self._end_var, self.duration)
             
             xs = self._t2x(s_sec, w)
             xe = self._t2x(e_sec, w)
@@ -301,8 +350,8 @@ class TrimmerTab(BaseTab):
         w   = self._canvas.winfo_width()
         cy  = self._canvas.winfo_height() // 2
         
-        s_sec = parse_time(self._start_var.get())
-        e_sec = parse_time(self._end_var.get())
+        s_sec = self._tv(self._start_var, 0.0)
+        e_sec = self._tv(self._end_var, self.duration)
         
         try:
             xs = self._t2x(s_sec, w)
@@ -326,8 +375,8 @@ class TrimmerTab(BaseTab):
         w = self._canvas.winfo_width()
         t = self._x2t(ev.x, w)
         
-        s_sec = parse_time(self._start_var.get())
-        e_sec = parse_time(self._end_var.get())
+        s_sec = self._tv(self._start_var, 0.0)
+        e_sec = self._tv(self._end_var, self.duration)
         
         if self._dragging == "start":
             t = max(0.0, min(t, e_sec - 0.1))
@@ -339,6 +388,7 @@ class TrimmerTab(BaseTab):
             t = max(0.0, min(t, self.duration))
             self._scrub.set(t)
             self._scrub_lbl.config(text=fmt_time(t))
+        self._show_frame(t)
             
         self._update_dur()
         self._draw()
@@ -348,14 +398,15 @@ class TrimmerTab(BaseTab):
 
     def _update_dur(self):
         try:
-            s_sec = parse_time(self._start_var.get())
-            e_sec = parse_time(self._end_var.get())
+            s_sec = self._tv(self._start_var, 0.0)
+            e_sec = self._tv(self._end_var, self.duration)
             sel = max(0.0, e_sec - s_sec)
             self._dur_lbl.config(text=f"Clip Length: {fmt_time(sel)}")
         except Exception:
             pass
 
     def _on_scrub(self, val):
+        self._show_frame(float(val))
         try:
             self._scrub_lbl.config(text=fmt_time(float(val)))
         except (ValueError, tk.TclError):
@@ -386,8 +437,8 @@ class TrimmerTab(BaseTab):
             try: self.preview_proc.terminate()
             except Exception: pass
             
-        ss = parse_time(self._start_var.get())
-        ee = parse_time(self._end_var.get())
+        ss = self._tv(self._start_var, 0.0)
+        ee = self._tv(self._end_var, self.duration)
         dur = max(0.1, ee - ss)
         
         ffplay = get_binary_path("ffplay.exe")
@@ -397,132 +448,72 @@ class TrimmerTab(BaseTab):
                "-x", "800", "-y", "450", "-loglevel", "quiet"]
         self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
 
-    # ─── Keyframe probe ──────────────────────────────────────────────────
-    def _has_video_keyframe_in_range(self, ss: float, end: float) -> bool:
-        """
-        Return True if the source has any video keyframe whose presentation
-        timestamp falls within [ss, end]. Stream-copy can only start a clip
-        on a keyframe, so if none exists in the window the output will have
-        zero video frames - we use this to decide whether to fall back to
-        re-encode automatically. Returns True on probe failure (don't block
-        the user when we can't be sure).
-        """
-        try:
-            ffprobe = get_binary_path("ffprobe.exe")
-            if not os.path.isfile(ffprobe):
-                return True
-            # Use -read_intervals to limit decoding to the window of interest
-            # (much faster than scanning whole file for long videos).
-            window = f"{max(0.0, ss - 0.1):.3f}%{end + 0.1:.3f}"
-            r = subprocess.run(
-                [ffprobe, "-v", "error",
-                 "-read_intervals", window,
-                 "-select_streams", "v",
-                 "-show_entries", "packet=pts_time,flags",
-                 "-of", "csv=print_section=0",
-                 self.file_path],
-                capture_output=True, text=True, timeout=15,
-                creationflags=CREATE_NO_WINDOW,
-            )
-            for line in r.stdout.splitlines():
-                parts = line.strip().split(",")
-                if len(parts) < 2:
-                    continue
-                try:
-                    pts = float(parts[0])
-                except ValueError:
-                    continue
-                flags = parts[1]
-                if "K" in flags and ss <= pts <= end:
-                    return True
-            return False
-        except Exception:
-            return True
-
     # ─── Trim / Export ────────────────────────────────────────────────────
     def _run_trim(self):
         if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+            messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
-
-        # Force any focused Entry to commit its typed value to the StringVar
-        # before we read times. Without this, on Windows a click on the
-        # Export button can fire the button command before <FocusOut> on the
-        # entry has had a chance to run _apply_typed_times, causing stale
-        # values from a prior trim to be used.
         try:
             self.focus_set()
-            self.update_idletasks()
             self._apply_typed_times()
         except Exception:
             pass
-
-        ss = parse_time(self._start_var.get())
-        end = parse_time(self._end_var.get())
-        dur = end - ss
-
-        if dur <= 0:
-            messagebox.showerror(t("trimmer.invalid_range_error"), t("trimmer.invalid_range_message"))
-            return
-
-        out = self._out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self._out_var.set(out)
-
-        # Disable the Export button synchronously so a second click can't
-        # race in and queue a duplicate task before run_ffmpeg's after(0)
-        # disable takes effect.
         try:
-            self._btn_trim.config(state="disabled")
-        except Exception:
-            pass
-
-        # Clear the console so prior runs' output doesn't muddle the log
-        # for this export.
+            ss = parse_time(self._start_var.get())
+            end = parse_time(self._end_var.get())
+        except ValueError:
+            messagebox.showerror(t("trimmer.invalid_range_error"), t("trimmer.invalid_range_message"), parent=self)
+            return
+        if end - ss <= 0:
+            messagebox.showerror(t("trimmer.invalid_range_error"), t("trimmer.invalid_range_message"), parent=self)
+            return
+        out = self._out_var.get().strip() or self._default_out(self.file_path)
+        default_ext = os.path.splitext(self.file_path)[1] if self._copy_mode.get() else ".mp4"
+        out = self.confirm_output(out, [self.file_path], default_ext=default_ext or ".mp4")
+        if not out:
+            return
+        self._out_var.set(out)
         try:
             self.console.delete("1.0", tk.END)
-        except Exception:
+        except tk.TclError:
             pass
 
-        ffmpeg = get_binary_path("ffmpeg.exe")
-
-        # If the user picked stream-copy but the requested window contains
-        # no video keyframe, copy would produce an audio-only clip. Probe
-        # the source and silently fall back to re-encode for this run -
-        # their checkbox preference is preserved for future trims.
-        use_copy = self._copy_mode.get()
-        if use_copy and not self._has_video_keyframe_in_range(ss, end):
-            self.log(self.console,
-                     "⚠ No video keyframe in this range - falling back to "
-                     "re-encode so the output has video. (Stream-copy can "
-                     "only cut on keyframes; this clip's keyframes don't "
-                     "land inside the selected window.)")
-            use_copy = False
-
-        if use_copy:
-            # Use OUTPUT seek (-ss AFTER -i) for stream copy. Input seek
-            # (-ss before -i) is unreliable on codecs with sparse keyframes
-            # like VP9 - it silently lands on the wrong keyframe and the
-            # output ends up the wrong length regardless of -t. Output seek
-            # is slightly slower but always lines up correctly.
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-ss", str(ss), "-t", str(dur), "-c", "copy",
-                   "-avoid_negative_ts", "make_zero",
-                   "-movflags", "+faststart",
-                   out, "-y"]
-            self.log(self.console, f"Stream-copy trim: {fmt_time(ss)} – {fmt_time(end)}  ({fmt_time(dur)})")
+        ffmpeg = ff.ffmpeg_path()
+        container = os.path.splitext(out)[1].lstrip(".").lower()
+        if self._copy_mode.get():
+            # Lossless: input-seek to the keyframe at/before the mark so video
+            # and audio both start at 0 (output-side -ss with -c copy left a
+            # second of missing video at the start).
+            k = keyframe_at_or_before(self.file_path, ss)
+            k = ss if k is None else k
+            if ss - k > 0.01:
+                self.log_tagged(self.console, t("trimmer.snapped_note") if t("trimmer.snapped_note") != "trimmer.snapped_note"
+                                else f"\u2139 Lossless cuts must start on a keyframe: starting at {fmt_time(k)} "
+                                     f"({ss - k:.2f} s before your mark). Untick 'stream copy' for a frame-exact cut.",
+                                "info")
+            dur = end - k
+            cmd = [ffmpeg, "-y", "-ss", ff.ts(k), "-i", self.file_path, "-t", ff.ts(dur),
+                   "-map", "0:v:0?", "-map", "0:a?", "-c", "copy", "-sn", "-dn",
+                   "-map_metadata", "0", "-map_chapters", "-1"]
+            if container in ("mp4", "m4v", "mov"):
+                cmd += ["-movflags", "+faststart"]
+            cmd.append(out)
+            self.log(self.console, f"Lossless trim: {fmt_time(k)} \u2013 {fmt_time(end)}  ({fmt_time(dur)})")
         else:
-            cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
-                   "-t", str(dur),
-                   "-c:v", "libx264", "-crf", self._crf_var.get(), "-preset", "fast",
-                   "-c:a", "aac", "-b:a", "192k",
-                   "-movflags", "+faststart",
-                   out, "-y"]
-            self.log(self.console, f"Re-encode trim: {fmt_time(ss)} – {fmt_time(end)}  CRF={self._crf_var.get()}")
-
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_trim, btn_label=t("trimmer.export_button"))
+            from core import encoders as enc
+            venc = enc.video("h264", "high", speed="balanced", hw="off", container=container or "mp4")
+            crf = (self._crf_var.get() or "18").strip()
+            vargs = list(venc.args)
+            if "-crf" in vargs and crf.replace(".", "", 1).isdigit():
+                vargs[vargs.index("-crf") + 1] = crf
+            dur = end - ss
+            info = ff.try_probe(self.file_path)
+            has_audio = bool(info and info.has_audio)
+            cmd = [ffmpeg, "-y", "-ss", ff.ts(ss), "-i", self.file_path, "-t", ff.ts(dur),
+                   "-map", "0:v:0", "-map", "0:a?", "-sn", "-dn", *vargs,
+                   *(enc.audio("aac", "192k", container=container or "mp4") if has_audio else []),
+                   "-map_metadata", "0", "-map_chapters", "-1", out]
+            self.log(self.console, f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self._btn_trim, btn_label=t("trimmer.export_button"),
+                        duration=dur, output=out, inputs=[self.file_path], name="Quick Trimmer")
