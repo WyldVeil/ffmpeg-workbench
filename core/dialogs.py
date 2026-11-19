@@ -138,7 +138,9 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> Optional[str]:
         # Never touch Tk from this thread: the main thread is inside
         # wait_variable(), not mainloop(), so cross-thread Tk calls fail.
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            from core.procenv import child_env
+            r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                               env=child_env())
             result["rc"], result["out"] = r.returncode, r.stdout
         except OSError as exc:
             result["rc"], result["out"] = -1, ""

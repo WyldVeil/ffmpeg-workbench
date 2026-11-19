@@ -324,6 +324,10 @@ class Harness:
     # ── navigation ───────────────────────────────────────────────────────────
 
     def page_names(self) -> list[str]:
+        """Every page key the running app can show (as registered by main.py)."""
+        keys = list(getattr(self.app, "_tab_classes", {}) or {})
+        if keys:
+            return keys
         from tabs.registry import HIDDEN, PINNED, TOOLS
         names = [PINNED[0]]
         for items in TOOLS.values():
@@ -332,6 +336,12 @@ class Harness:
         return names
 
     def open(self, name: str):
+        if name not in getattr(self.app, "_tab_classes", {name: None}):
+            # accept display names that differ only by a decorative prefix
+            for key in getattr(self.app, "_tab_classes", {}):
+                if key.endswith(name) or name.endswith(key):
+                    name = key
+                    break
         self.app.show_page(name)
         self.pump(0.15)
         page = self.app.pages.get(name)

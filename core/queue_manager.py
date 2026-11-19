@@ -1,106 +1,155 @@
 """
-core/queue_manager.py  -  Global Background Render Queue
-=========================================================
-Thread-safe singleton that serialises all FFmpeg (and other long-running)
-render jobs submitted from any tab.
+core/queue_manager.py - Global background render queue.
 
-Design:
-  • Tasks are executed ONE AT A TIME in the order they were submitted.
-  • Each task is either a simple cmd/cmds list  OR  a worker_fn callable.
-  • All UI callbacks (on_start, on_progress, on_complete) are dispatched to
-    the Tkinter main thread via root.after(0, …) so they are always safe
-    to touch widgets.
-  • The background worker thread is a daemon; it wakes via a threading.Event
-    whenever new work arrives.
+Every long-running job (FFmpeg renders, downloads, multi-step pipelines) goes
+through this singleton so the app can show progress, queue work, cancel it
+reliably and stop everything on exit.
+
+Highlights
+----------
+* Jobs run in worker threads (``max_parallel_jobs`` setting, default 1).
+* FFmpeg commands run through :func:`core.ffmpeg.run`: real percentage and
+  ETA (from ``-progress``), ``-nostdin``, UTF-8-safe log decoding, and a
+  cancel that kills the whole process tree within a fraction of a second.
+* Atomic outputs: a command whose last argument is the task's
+  ``output_path`` writes to ``<name>.part<ext>`` and is renamed on success;
+  the partial file is deleted on failure or cancel, so a broken render never
+  replaces a good file.
+* ``on_complete(task_id, returncode)`` ALWAYS fires exactly once - including
+  for jobs cancelled while still waiting.  ``returncode`` is 0 on success,
+  ``-1`` when cancelled; look up :meth:`get_task` for ``status`` and
+  ``error`` (a human-readable summary of what went wrong).
+* All UI callbacks run on the Tk thread via :mod:`core.ui`.
+
+``worker_fn(progress_cb, cancel_fn)`` jobs remain supported; a worker that
+accepts a third parameter receives a :class:`TaskContext` with ``run()``
+(an FFmpeg runner wired to this task's progress and cancel), ``progress()``,
+``log()`` and a private ``tempdir()`` that is cleaned up afterwards.
 """
+from __future__ import annotations
 
+import inspect
+import logging
+import os
+import shutil
 import threading
-import subprocess
 import time
 import uuid
-from typing import Optional, Callable, List
+from typing import Callable, List, Optional, Sequence
 
-try:
-    from core.hardware import CREATE_NO_WINDOW
-except ImportError:
-    import platform
-    CREATE_NO_WINDOW = 0x08000000 if platform.system() == "Windows" else 0
+from core import ffmpeg as ff
 
+_log = logging.getLogger("crossfader.queue")
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  RenderTask  -  data model for a single queue entry
-# ─────────────────────────────────────────────────────────────────────────────
+PENDING, ACTIVE, DONE, FAILED, CANCELLED = "pending", "active", "done", "failed", "cancelled"
+
 
 class RenderTask:
-    """
-    Represents one unit of work in the render queue.
+    """One unit of work in the queue (read-only from the UI's point of view)."""
 
-    Either ``cmds`` or ``worker_fn`` must be provided (not both).
-
-    ``cmds``       List[List[str]] - one or more FFmpeg (or arbitrary) commands
-                   to run sequentially. The task fails at the first non-zero
-                   return code.
-
-    ``worker_fn``  Callable[[progress_cb, cancel_fn], int]
-                   A function run entirely inside the worker thread.
-                   It receives:
-                     progress_cb(line: str) - report a log line
-                     cancel_fn() -> bool   - True when cancellation requested
-                   It must return an int return-code (0 = success).
-                   Use this for complex multi-step workflows that need to
-                   run several subprocesses or do Python-level work between
-                   subprocess calls.
-    """
-
-    def __init__(self, *, id, name, output_path="",
-                 cmds=None, worker_fn=None,
-                 on_start=None, on_progress=None, on_complete=None):
-        self.id          = id                   # short UUID str
-        self.name        = name                 # display name
-        self.output_path = output_path          # used for open-folder actions
-        self.cmds        = cmds                 # List[List[str]] | None
-        self.worker_fn   = worker_fn            # callable | None
-        self.status      = "pending"            # pending|active|done|failed|cancelled
-        self.progress    = ""                   # latest progress line
-        self.created_at  = time.time()
+    def __init__(self, *, id, name, output_path="", cmds=None, worker_fn=None,
+                 on_start=None, on_progress=None, on_complete=None,
+                 expected_duration=None, inputs=(), atomic_output=True):
+        self.id = id
+        self.name = name
+        self.output_path = output_path or ""
+        self.cmds = cmds
+        self.worker_fn = worker_fn
+        self.inputs = list(inputs or ())
+        self.expected_duration = expected_duration
+        self.atomic_output = atomic_output
+        self.status = PENDING
+        self.progress = ""            # latest log line
+        self.fraction: Optional[float] = None
+        self.eta: Optional[float] = None
+        self.speed: Optional[float] = None
+        self.error = ""
+        self.log_tail: list = []
+        self.created_at = time.time()
         self.started_at: Optional[float] = None
         self.finished_at: Optional[float] = None
-        self.returncode  = 0
-        # UI callbacks (always called on main thread)
-        self.on_start    = on_start             # (task_id)
-        self.on_progress = on_progress          # (task_id, line)
-        self.on_complete = on_complete          # (task_id, returncode)
-        # Internal
-        self._cancel     = threading.Event()    # set by cancel()
-        self._proc       = None                 # active subprocess.Popen
+        self.returncode = 0
+        self.on_start = on_start
+        self.on_progress = on_progress
+        self.on_complete = on_complete
+        self._cancel = threading.Event()
+        self._proc = None
+        self._completed_fired = False
+        self._tempdirs: list = []
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancel.is_set()
+
+    @property
+    def elapsed(self) -> float:
+        if not self.started_at:
+            return 0.0
+        return (self.finished_at or time.time()) - self.started_at
+
+    @property
+    def command_text(self) -> str:
+        if not self.cmds:
+            return ""
+        return "\n".join(ff.format_cmd(c) for c in self.cmds)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  RenderQueueManager  -  singleton, owns the worker thread
-# ─────────────────────────────────────────────────────────────────────────────
+class TaskContext:
+    """Helper handed to 3-argument ``worker_fn(progress_cb, cancel_fn, ctx)``."""
+
+    def __init__(self, manager: "RenderQueueManager", task: RenderTask,
+                 progress_cb: Callable[[str], None]):
+        self._m = manager
+        self.task = task
+        self._progress_cb = progress_cb
+        self._span = (0.0, 1.0)
+
+    def log(self, line: str) -> None:
+        self._progress_cb(line)
+
+    def cancelled(self) -> bool:
+        return self.task.cancelled
+
+    def progress(self, fraction: Optional[float]) -> None:
+        """Report overall progress 0..1 for this task."""
+        self._m._set_fraction(self.task, fraction)
+
+    def span(self, start: float, end: float) -> "TaskContext":
+        """Map the next :meth:`run`'s 0..1 progress onto *start*..*end*."""
+        self._span = (max(0.0, start), min(1.0, end))
+        return self
+
+    def tempdir(self) -> str:
+        from core.paths import temp_dir
+        d = temp_dir(prefix=f"task_{self.task.id}_")
+        self.task._tempdirs.append(d)
+        return d
+
+    def run(self, cmd: Sequence[str], *, duration: Optional[float] = None,
+            check: bool = True) -> ff.RunResult:
+        """Run one command for this task.  Raises :class:`ff.CancelledError`
+        or :class:`ff.CommandError` (when *check*) so multi-step jobs can
+        simply call ``ctx.run`` repeatedly."""
+        lo, hi = self._span
+
+        def on_prog(p: ff.Progress):
+            if p.fraction is not None:
+                self._m._set_fraction(self.task, lo + (hi - lo) * p.fraction, p)
+
+        self._progress_cb("$ " + ff.format_cmd(cmd))
+        res = ff.run(cmd, duration=duration, on_line=self._progress_cb,
+                     on_progress=on_prog, cancel=self.cancelled)
+        self.task.log_tail = res.log_tail[-60:]
+        self._span = (hi, hi)
+        if check:
+            if res.cancelled:
+                raise ff.CancelledError("cancelled")
+            if res.returncode != 0:
+                raise ff.CommandError(res, cmd)
+        return res
+
 
 class RenderQueueManager:
-    """
-    Singleton background render queue.
-
-    Usage
-    -----
-    # In main.py / App.__init__:
-        qmgr = RenderQueueManager.get_instance()
-        qmgr.set_tk_root(self)
-        qmgr.register_update_callback(self._refresh_queue_widget)
-
-    # In a tab:
-        from core.queue_manager import RenderQueueManager
-        RenderQueueManager.get_instance().enqueue(
-            name="My Render",
-            cmd=[ffmpeg, "-i", src, ..., out, "-y"],
-            output_path=out,
-            on_progress=lambda tid, line: ...,
-            on_complete=lambda tid, rc: ...,
-        )
-    """
-
     _instance: Optional["RenderQueueManager"] = None
     _instance_lock = threading.Lock()
 
@@ -114,240 +163,294 @@ class RenderQueueManager:
 
     def __init__(self):
         self._tasks: List[RenderTask] = []
-        self._lock = threading.Lock()                # guards _tasks list
-        self._work_event = threading.Event()         # signals worker
-        self._update_callbacks: List[Callable] = []  # registered UI refreshers
+        self._lock = threading.RLock()
+        self._work = threading.Condition(self._lock)
+        self._update_callbacks: List[Callable] = []
         self._tk_root = None
+        self._workers: List[threading.Thread] = []
+        self._last_ui_update = 0.0
+        self._ensure_workers()
 
-        worker = threading.Thread(
-            target=self._run_worker,
-            name="RenderQueueWorker",
-            daemon=True,
-        )
-        worker.start()
+    # ── configuration ────────────────────────────────────────────────────────
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    def _parallel(self) -> int:
+        try:
+            from core.settings import get
+            return max(1, min(4, int(get("max_parallel_jobs", 1) or 1)))
+        except Exception:
+            return 1
+
+    def _ensure_workers(self) -> None:
+        with self._lock:
+            self._workers = [w for w in self._workers if w.is_alive()]
+            while len(self._workers) < self._parallel():
+                w = threading.Thread(target=self._run_worker, daemon=True,
+                                     name=f"RenderQueueWorker-{len(self._workers) + 1}")
+                self._workers.append(w)
+                w.start()
 
     def set_tk_root(self, root) -> None:
-        """Give the manager a reference to the Tk root for after() callbacks."""
         self._tk_root = root
 
     def register_update_callback(self, cb: Callable) -> None:
-        """
-        Register a zero-argument callable that will be called (on the main
-        thread) whenever the queue state changes. Use this to refresh widgets.
-        """
         self._update_callbacks.append(cb)
 
-    def enqueue(
-        self,
-        name: str,
-        output_path: str = "",
-        *,
-        cmd: Optional[List] = None,
-        cmds: Optional[List[List]] = None,
-        worker_fn: Optional[Callable] = None,
-        on_start: Optional[Callable] = None,
-        on_progress: Optional[Callable] = None,
-        on_complete: Optional[Callable] = None,
-    ) -> str:
-        """
-        Submit a task to the queue and return its task_id.
+    # ── public API ───────────────────────────────────────────────────────────
 
-        Exactly one of ``cmd``, ``cmds``, or ``worker_fn`` must be supplied.
-
-        cmd / cmds  - FFmpeg (or any) command(s) run via subprocess.Popen.
-        worker_fn   - callable(progress_cb, cancel_fn) -> int  for complex
-                      multi-step workflows.
-        """
+    def enqueue(self, name: str, output_path: str = "", *, cmd=None, cmds=None,
+                worker_fn=None, on_start=None, on_progress=None, on_complete=None,
+                expected_duration: Optional[float] = None, inputs: Sequence[str] = (),
+                atomic_output: bool = True) -> str:
         if cmd is not None:
-            cmds_arg = [list(cmd)]
+            cmds_arg = [[str(c) for c in cmd]]
         elif cmds is not None:
-            cmds_arg = [list(c) for c in cmds]
+            cmds_arg = [[str(c) for c in c_] for c_ in cmds]
         else:
             cmds_arg = None
-
-        task = RenderTask(
-            id=str(uuid.uuid4())[:8],
-            name=name,
-            output_path=output_path,
-            cmds=cmds_arg,
-            worker_fn=worker_fn,
-            on_start=on_start,
-            on_progress=on_progress,
-            on_complete=on_complete,
-        )
-        with self._lock:
+        if cmds_arg is None and worker_fn is None:
+            raise ValueError("enqueue() needs cmd, cmds or worker_fn")
+        task = RenderTask(id=uuid.uuid4().hex[:8], name=name, output_path=output_path,
+                          cmds=cmds_arg, worker_fn=worker_fn, on_start=on_start,
+                          on_progress=on_progress, on_complete=on_complete,
+                          expected_duration=expected_duration, inputs=inputs,
+                          atomic_output=atomic_output)
+        with self._work:
             self._tasks.append(task)
-
-        self._work_event.set()
-        self._fire_update()
+            self._work.notify()
+        self._ensure_workers()
+        self._fire_update(force=True)
+        _log.info("queued %s [%s] -> %s", task.name, task.id, task.output_path or "-")
         return task.id
 
-    def cancel(self, task_id: str) -> None:
-        """Cancel a pending or active task by id."""
+    def get_task(self, task_id: str) -> Optional[RenderTask]:
         with self._lock:
-            for t in self._tasks:
-                if t.id == task_id:
-                    t._cancel.set()
-                    if t.status == "pending":
-                        t.status = "cancelled"
-                        self._fire_update()
-                    # If active, the worker detects _cancel and terminates proc
-                    break
+            return next((t for t in self._tasks if t.id == task_id), None)
+
+    def cancel(self, task_id: str) -> None:
+        fire = None
+        with self._lock:
+            task = next((t for t in self._tasks if t.id == task_id), None)
+            if task is None or task.status in (DONE, FAILED, CANCELLED):
+                return
+            task._cancel.set()
+            if task.status == PENDING:
+                task.status = CANCELLED
+                task.returncode = -1
+                task.error = "Cancelled before it started."
+                task.finished_at = time.time()
+                fire = task
+        if fire is not None:
+            self._complete(fire)
+        self._fire_update(force=True)
+
+    def cancel_all(self) -> int:
+        with self._lock:
+            ids = [t.id for t in self._tasks if t.status in (PENDING, ACTIVE)]
+        for tid in ids:
+            self.cancel(tid)
+        return len(ids)
+
+    def retry(self, task_id: str) -> Optional[str]:
+        task = self.get_task(task_id)
+        if task is None or task.status not in (FAILED, CANCELLED):
+            return None
+        return self.enqueue(task.name, task.output_path, cmds=task.cmds, worker_fn=task.worker_fn,
+                            on_start=task.on_start, on_progress=task.on_progress,
+                            on_complete=task.on_complete, expected_duration=task.expected_duration,
+                            inputs=task.inputs, atomic_output=task.atomic_output)
 
     def clear_finished(self) -> None:
-        """Remove all done/failed/cancelled tasks from the list."""
         with self._lock:
-            self._tasks = [
-                t for t in self._tasks
-                if t.status not in ("done", "failed", "cancelled")
-            ]
-        self._fire_update()
+            self._tasks = [t for t in self._tasks if t.status in (PENDING, ACTIVE)]
+        self._fire_update(force=True)
 
     def get_all_tasks(self) -> List[RenderTask]:
-        """Return a snapshot of all tasks (any status)."""
         with self._lock:
             return list(self._tasks)
 
-    def get_stats(self):
-        """Return (active_count, pending_count, done_count, failed_count)."""
+    def active_tasks(self) -> List[RenderTask]:
         with self._lock:
-            active  = sum(1 for t in self._tasks if t.status == "active")
-            pending = sum(1 for t in self._tasks if t.status == "pending")
-            done    = sum(1 for t in self._tasks if t.status == "done")
-            failed  = sum(1 for t in self._tasks
-                         if t.status in ("failed", "cancelled"))
+            return [t for t in self._tasks if t.status in (PENDING, ACTIVE)]
+
+    def get_stats(self):
+        """(active, pending, done, failed_or_cancelled)."""
+        with self._lock:
+            active = sum(1 for t in self._tasks if t.status == ACTIVE)
+            pending = sum(1 for t in self._tasks if t.status == PENDING)
+            done = sum(1 for t in self._tasks if t.status == DONE)
+            failed = sum(1 for t in self._tasks if t.status in (FAILED, CANCELLED))
         return active, pending, done, failed
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
-
-    def _fire_update(self) -> None:
-        """Schedule all registered update callbacks on the main thread."""
-        if self._tk_root:
-            try:
-                cbs = list(self._update_callbacks)
-                self._tk_root.after(0, lambda: [_safe_call(cb) for cb in cbs])
-            except Exception:
-                pass
-
-    # ── Worker thread ─────────────────────────────────────────────────────────
-
-    def _run_worker(self) -> None:
-        """Runs in a background daemon thread. Picks up pending tasks."""
-        while True:
-            self._work_event.wait()
-            self._work_event.clear()
-
-            while True:
-                task = self._next_pending()
-                if task is None:
-                    break
-                self._execute_task(task)
-
-    def _next_pending(self) -> Optional[RenderTask]:
+    def overall_progress(self) -> Optional[float]:
+        """Mean fraction of active tasks (None when nothing reports progress)."""
         with self._lock:
-            for t in self._tasks:
-                if t.status == "pending":
-                    t.status = "active"
-                    return t
-        return None
+            fr = [t.fraction for t in self._tasks if t.status == ACTIVE and t.fraction is not None]
+        return sum(fr) / len(fr) if fr else None
 
-    def _execute_task(self, task: RenderTask) -> None:
-        task.started_at = time.time()
+    # ── internals ────────────────────────────────────────────────────────────
+
+    def _fire_update(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_ui_update < 0.25:
+            return
+        self._last_ui_update = now
+        from core import ui
+        for cb in list(self._update_callbacks):
+            ui.call_soon(_safe_call, cb)
+
+    def _dispatch(self, fn: Optional[Callable], *args) -> None:
+        if fn is None:
+            return
+        from core import ui
+        ui.call_soon(_safe_call, fn, *args)
+
+    def _set_fraction(self, task: RenderTask, fraction: Optional[float],
+                      prog: Optional[ff.Progress] = None) -> None:
+        if fraction is not None:
+            task.fraction = max(task.fraction or 0.0, min(1.0, fraction))
+        if prog is not None:
+            task.speed = prog.speed
+            if task.fraction and task.fraction > 0.01 and task.started_at:
+                elapsed = time.time() - task.started_at
+                task.eta = max(0.0, elapsed / task.fraction - elapsed)
         self._fire_update()
 
-        # on_start callback
-        if task.on_start:
-            self._dispatch(task.on_start, task.id)
+    def _run_worker(self) -> None:
+        while True:
+            with self._work:
+                task = None
+                while task is None:
+                    task = next((t for t in self._tasks if t.status == PENDING), None)
+                    if task is None:
+                        self._work.wait(timeout=1.0)
+                        if threading.current_thread() not in self._workers[:self._parallel()]:
+                            return
+                task.status = ACTIVE
+            try:
+                self._execute(task)
+            except Exception:  # pragma: no cover - last-resort guard
+                _log.exception("queue worker crashed on %s", task.name)
+                task.status = FAILED
+                task.error = "Internal error - see the log file."
+                self._complete(task)
+
+    def _execute(self, task: RenderTask) -> None:
+        task.started_at = time.time()
+        self._fire_update(force=True)
+        self._dispatch(task.on_start, task.id)
 
         def progress_cb(line: str) -> None:
             task.progress = line
-            if task.on_progress:
-                self._dispatch(task.on_progress, task.id, line)
+            self._dispatch(task.on_progress, task.id, line)
 
-        def cancel_fn() -> bool:
-            return task._cancel.is_set()
-
-        final_rc = 0
+        rc = 0
         try:
             if task.worker_fn is not None:
-                result = task.worker_fn(progress_cb, cancel_fn)
-                final_rc = result if isinstance(result, int) else 0
-            elif task.cmds:
-                for cmd in task.cmds:
-                    if task._cancel.is_set():
-                        final_rc = -1
-                        break
-                    final_rc = self._run_cmd(cmd, task, progress_cb)
-                    if final_rc != 0 and not task._cancel.is_set():
-                        break
+                rc = self._run_worker_fn(task, progress_cb)
+            else:
+                rc = self._run_cmds(task, progress_cb)
+        except ff.CancelledError:
+            rc = -1
+        except ff.CommandError as exc:
+            rc = exc.result.returncode or 1
+            task.error = exc.result.error_summary
+            task.log_tail = exc.result.log_tail[-60:]
         except Exception as exc:
-            progress_cb(f"⚠ Queue error: {exc}")
-            final_rc = 1
+            _log.exception("task %s failed", task.name)
+            progress_cb(f"⚠ {type(exc).__name__}: {exc}")
+            task.error = f"{type(exc).__name__}: {exc}"
+            rc = 1
+        finally:
+            for d in task._tempdirs:
+                shutil.rmtree(d, ignore_errors=True)
 
         task.finished_at = time.time()
-        task.returncode  = final_rc
-
-        if task._cancel.is_set():
-            task.status = "cancelled"
-        elif final_rc == 0:
-            task.status = "done"
+        if task.cancelled:
+            task.status, task.returncode = CANCELLED, -1
+            task.error = task.error or "Cancelled."
+        elif rc == 0:
+            task.status, task.returncode = DONE, 0
+            task.fraction = 1.0
         else:
-            task.status = "failed"
+            task.status, task.returncode = FAILED, rc
+            if not task.error:
+                task.error = ff.summarize_error(task.log_tail, rc)
+        _log.info("%s %s [%s] in %.1fs%s", task.status, task.name, task.id, task.elapsed,
+                  f": {task.error.splitlines()[0]}" if task.status == FAILED and task.error else "")
+        self._complete(task)
 
-        self._fire_update()
-
-        if task.on_complete:
-            self._dispatch(task.on_complete, task.id, task.returncode)
-
-    def _run_cmd(self, cmd: List, task: RenderTask,
-                 progress_cb: Callable) -> int:
-        """Run one command via Popen, streaming stdout to progress_cb."""
+    def _run_worker_fn(self, task: RenderTask, progress_cb) -> int:
+        fn = task.worker_fn
+        wants_ctx = False
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                creationflags=CREATE_NO_WINDOW,
-            )
-            task._proc = proc
-            for line in iter(proc.stdout.readline, ""):
-                if task._cancel.is_set():
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
-                    break
-                stripped = line.rstrip()
-                if stripped:
-                    progress_cb(stripped)
-            proc.stdout.close()
-            try:
-                proc.wait(timeout=7200)  # 2-hour safety net
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                progress_cb("⚠ Process killed: exceeded 2-hour timeout")
-                return 1
-            task._proc = None
-            return proc.returncode if proc.returncode is not None else 0
-        except Exception as exc:
-            progress_cb(f"⚠ Launch error: {exc}")
-            return 1
+            params = [p for p in inspect.signature(fn).parameters.values()
+                      if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+            wants_ctx = len(params) >= 3
+        except (TypeError, ValueError):
+            pass
+        if wants_ctx:
+            result = fn(progress_cb, lambda: task.cancelled, TaskContext(self, task, progress_cb))
+        else:
+            result = fn(progress_cb, lambda: task.cancelled)
+        return result if isinstance(result, int) else 0
 
-    def _dispatch(self, fn: Callable, *args) -> None:
-        """Schedule fn(*args) on the Tkinter main thread."""
-        if self._tk_root and fn:
-            try:
-                self._tk_root.after(0, lambda f=fn, a=args: _safe_call(f, *a))
-            except Exception:
-                pass
+    def _run_cmds(self, task: RenderTask, progress_cb) -> int:
+        n = len(task.cmds or [])
+        for i, cmd in enumerate(task.cmds or []):
+            if task.cancelled:
+                return -1
+            part = None
+            argv = list(cmd)
+            if task.atomic_output and task.output_path and argv and argv[-1] == task.output_path \
+                    and ff.is_ffmpeg(argv[0]):
+                base, ext = os.path.splitext(task.output_path)
+                part = f"{base}.part{ext}"
+                argv[-1] = part
+                if "-y" not in argv:
+                    argv.insert(1, "-y")
+            lo, hi = i / n, (i + 1) / n
+
+            def on_prog(p: ff.Progress, lo=lo, hi=hi):
+                if p.fraction is not None:
+                    self._set_fraction(task, lo + (hi - lo) * p.fraction, p)
+
+            progress_cb("$ " + ff.format_cmd(cmd))
+            res = ff.run(argv, duration=task.expected_duration, on_line=progress_cb,
+                         on_progress=on_prog, cancel=lambda: task.cancelled)
+            task.log_tail = res.log_tail[-60:]
+            if res.cancelled or res.returncode != 0:
+                if part and os.path.exists(part):
+                    try:
+                        os.remove(part)
+                    except OSError:
+                        pass
+                if res.cancelled:
+                    return -1
+                task.error = res.error_summary
+                return res.returncode or 1
+            if part:
+                if not os.path.exists(part) or os.path.getsize(part) == 0:
+                    task.error = "FFmpeg finished but wrote no output."
+                    return 1
+                os.replace(part, task.output_path)
+        return 0
+
+    def _complete(self, task: RenderTask) -> None:
+        with self._lock:
+            if task._completed_fired:
+                return
+            task._completed_fired = True
+        self._fire_update(force=True)
+        self._dispatch(task.on_complete, task.id, task.returncode)
+        try:
+            from core.notify import job_finished
+            job_finished(task)
+        except Exception:
+            pass
 
 
 def _safe_call(fn, *args):
     try:
         fn(*args)
     except Exception:
-        pass
+        _log.exception("queue callback %r failed", getattr(fn, "__name__", fn))

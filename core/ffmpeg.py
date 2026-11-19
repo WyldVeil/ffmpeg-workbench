@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 from core.hardware import CREATE_NO_WINDOW, get_binary_path
+from core.procenv import child_env
 
 _IS_WIN = sys.platform.startswith("win")
 _CREATE_NEW_PROCESS_GROUP = 0x00000200 if _IS_WIN else 0
@@ -399,7 +400,7 @@ def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaI
            "-of", "json", path]
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=timeout,
-                           stdin=subprocess.DEVNULL,
+                           stdin=subprocess.DEVNULL, env=child_env(),
                            creationflags=CREATE_NO_WINDOW)
     except FileNotFoundError as exc:
         raise ProbeError("ffprobe was not found - install FFmpeg or set its "
@@ -453,6 +454,8 @@ def popen(cmd: Sequence[str], **kwargs) -> subprocess.Popen:
     on Windows, its own process group (so the whole tree can be stopped),
     stdin closed unless requested, and registration for :func:`kill_all`."""
     kwargs.setdefault("stdin", subprocess.DEVNULL)
+    if kwargs.get("env") is None:
+        kwargs["env"] = child_env()
     if _IS_WIN:
         kwargs["creationflags"] = (kwargs.get("creationflags", 0)
                                    | CREATE_NO_WINDOW | _CREATE_NEW_PROCESS_GROUP)
@@ -902,10 +905,10 @@ def capture(cmd: Sequence[str], *, timeout: float = 60.0,
     if text:
         return subprocess.run(argv, capture_output=True, text=True,
                               encoding="utf-8", errors="replace",
-                              timeout=timeout, stdin=subprocess.DEVNULL,
+                              timeout=timeout, stdin=subprocess.DEVNULL, env=child_env(),
                               creationflags=CREATE_NO_WINDOW)
     return subprocess.run(argv, capture_output=True, timeout=timeout,
-                          stdin=subprocess.DEVNULL,
+                          stdin=subprocess.DEVNULL, env=child_env(),
                           creationflags=CREATE_NO_WINDOW)
 
 
@@ -928,7 +931,8 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
     cmd += ["-f", "image2pipe", "-c:v", "png", "-"]
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=timeout,
-                           stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
+                           stdin=subprocess.DEVNULL, env=child_env(),
+                           creationflags=CREATE_NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if r.returncode != 0 or not r.stdout.startswith(b"\x89PNG"):

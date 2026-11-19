@@ -154,18 +154,37 @@ def is_rtl() -> bool:
     return _current in RTL_LANGUAGES
 
 
+def _load_fragments(code: str) -> dict[str, str]:
+    """Extra strings from locale/fragments/*.json (en_US) or
+    locale/fragments/<code>/*.json, merged in file-name order."""
+    folder = os.path.join(_LOCALE_DIR, "fragments") if code == "en_US" else \
+        os.path.join(_LOCALE_DIR, "fragments", code)
+    merged: dict[str, str] = {}
+    if os.path.isdir(folder):
+        for name in sorted(os.listdir(folder)):
+            if name.endswith(".json"):
+                try:
+                    with open(os.path.join(folder, name), encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    data.pop("_meta", None)
+                    merged.update({k: v for k, v in data.items() if isinstance(v, str)})
+                except Exception as exc:
+                    print(f"[i18n] Failed to load fragment {name}: {exc}")
+    return merged
+
+
 def load_language(code: str) -> None:
     """Load *code* as the active language (call this before building any UI)."""
     global _strings, _current, _fallback
 
-    # Always keep en_US as the fallback baseline
+    # Always keep en_US (plus any string fragments) as the fallback baseline
     if not _fallback:
-        _fallback = _load_file("en_US")
+        _fallback = {**_load_fragments("en_US"), **_load_file("en_US")}
 
     if code == "en_US":
         _strings = dict(_fallback)
     else:
-        data = _load_file(code)
+        data = {**_load_fragments(code), **_load_file(code)}
         # Merge: en_US fills any missing keys
         _strings = {**_fallback, **data}
 

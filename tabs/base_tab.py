@@ -8,13 +8,15 @@ Provides:
     make_render_btn, make_labeled_entry - UI factory helpers
 """
 import tkinter as tk
-from tkinter import ttk
-import subprocess
+from tkinter import messagebox, ttk
+import subprocess  # noqa: F401 - re-exported for older tabs
 import threading
 import time
-import os
+import os  # noqa: F401 - re-exported for older tabs
 
-from core.hardware import get_binary_path, CREATE_NO_WINDOW, open_in_explorer
+from core import dialogs, logs, outputs, ui
+from core import ffmpeg as ff
+from core.hardware import get_binary_path, CREATE_NO_WINDOW, open_in_explorer, reveal_file  # noqa: F401
 from core.skins import UI_FONT, MONO_FONT
 from core.i18n import t
 
@@ -536,206 +538,304 @@ class VideoTimeline(tk.Frame):
 
 class BaseTab(ttk.Frame):
     """
-    Common base class for all Studio Pro tool tabs.
+    Common base class for all tool tabs.
 
-    Key API:
-      log(widget, msg)                 - thread-safe append to console Text
-      log_tagged(widget, msg, tag)     - append with colour tag
-      run_ffmpeg(cmd, console, ...)    - run FFmpeg in background thread
-      run_in_thread(func, ...)         - run arbitrary function in background
-      show_result(returncode, out)     - success/error feedback
-      make_header / make_console / ... - UI helpers (also module-level)
+    Rendering
+      run_ffmpeg(cmd, console, on_done, btn, btn_label, *, duration, output, inputs)
+          Queue an FFmpeg command.  While it runs, *btn* shows the progress
+          and becomes a Cancel button; *on_done(rc)* gets 0 on success.
+      enqueue_render(...)        lower-level queue access (multi-step jobs)
+      show_result(rc, out_path)  success / cancelled / error feedback with
+                                 FFmpeg's actual error message
+    Files
+      load_file(path)            standard entry point (drag-and-drop, File >
+                                 Open, Open Recent); override or implement
+                                 on_source_loaded(path)
+      pick_source(kind) / pick_output(...) / suggest_output(...) /
+      confirm_output(out, inputs) / probe(path)
+    Logging (thread-safe)
+      log(widget, msg) / log_tagged(widget, msg, tag)
     """
 
-    # Expose module-level helpers as static/class methods so tabs can use
-    # either BaseTab.make_console() or self.make_console()
     make_header        = staticmethod(make_header)
     make_section       = staticmethod(make_section)
     make_console       = staticmethod(make_console)
     make_file_row      = staticmethod(make_file_row)
     make_labeled_entry = staticmethod(make_labeled_entry)
     make_render_btn    = staticmethod(make_render_btn)
-    VideoTimeline      = VideoTimeline      # expose for easy access
+    VideoTimeline      = VideoTimeline
     ToolTip            = ToolTip
     add_tooltip        = staticmethod(add_tooltip)
 
+    #: Maximum lines kept in a console widget (older lines are trimmed).
+    CONSOLE_MAX_LINES = 3000
+    #: Kinds of file this tab accepts by drag-and-drop (see core.dialogs).
+    accepted_kinds = ("media",)
+
     def __init__(self, parent):
         super().__init__(parent)
-        self._render_thread = None
+        self._render_thread = None      # last task id (kept for compatibility)
         self.preview_proc   = None
+        self._active_tasks: set = set()
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
+    def _append(self, widget, msg, tag=""):
+        try:
+            if not widget.winfo_exists():
+                return
+            start = widget.index("end-1c")
+            widget.insert(tk.END, f"{msg}\n")
+            if tag:
+                widget.tag_add(tag, f"{start} linestart", "end-1c")
+            lines = int(widget.index("end-1c").split(".")[0])
+            if lines > self.CONSOLE_MAX_LINES:
+                widget.delete("1.0", f"{lines - self.CONSOLE_MAX_LINES}.0")
+            widget.see(tk.END)
+        except tk.TclError:
+            pass
+
     def log(self, widget, msg):
         """Thread-safe append to a console Text widget."""
-        def _do():
-            try:
-                widget.insert(tk.END, f"{msg}\n")
-                widget.see(tk.END)
-                widget.update_idletasks()
-            except Exception:
-                pass
-        self.after(0, _do)
+        if widget is None:
+            return
+        ui.call_soon(self._append, widget, msg)
 
     def log_tagged(self, widget, msg, tag=""):
         """Append with a colour tag (success, error, warn, info, dim)."""
-        def _do():
-            try:
-                start = widget.index(tk.END)
-                widget.insert(tk.END, f"{msg}\n")
-                if tag:
-                    end = widget.index(tk.END)
-                    widget.tag_add(tag, f"{start} linestart", end)
-                widget.see(tk.END)
-                widget.update_idletasks()
-            except Exception:
-                pass
-        self.after(0, _do)
+        if widget is None:
+            return
+        ui.call_soon(self._append, widget, msg, tag)
 
     def log_debug(self, msg):
-        app = self.winfo_toplevel()
-        if hasattr(app, "log_debug"):
-            app.log_debug(msg)
+        logs.get("tab").debug(msg)
+        try:
+            app = self.winfo_toplevel()
+            if hasattr(app, "log_debug"):
+                app.log_debug(msg)
+        except tk.TclError:
+            pass
 
     # ── Thread helpers ────────────────────────────────────────────────────────
 
     def run_in_thread(self, func, *args, **kwargs):
-        t = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
-        t.start()
-        return t
+        t_ = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+        t_.start()
+        return t_
+
+    def call_ui(self, fn, *args, **kwargs):
+        """Schedule *fn* on the Tk thread (safe from worker threads)."""
+        ui.call_soon(fn, *args, **kwargs)
+
+    # ── Files ────────────────────────────────────────────────────────────────
+
+    def probe(self, path):
+        """Cached :class:`core.ffmpeg.MediaInfo` for *path*, or None."""
+        return ff.try_probe(path) if path else None
+
+    def pick_source(self, kind="media", title=None):
+        return dialogs.ask_open(kind, title=title or t("btn.browse"), parent=self)
+
+    def pick_sources(self, kind="media", title=None):
+        return dialogs.ask_open_many(kind, title=title or t("btn.browse"), parent=self)
+
+    def pick_output(self, default_name="", kind="video", ext=".mp4", title=None):
+        return dialogs.ask_save(default_name, kind=kind, defaultextension=ext,
+                                title=title or t("common.save_as"), parent=self)
+
+    def suggest_output(self, src, suffix="edited", ext=None):
+        return outputs.suggest_output(src, suffix, ext)
+
+    def confirm_output(self, out, inputs=(), default_ext=".mp4"):
+        """Validate *out* before rendering.  Returns the final path (possibly
+        renamed to avoid overwriting) or None if the user cancelled - in
+        which case a message has already been shown."""
+        policy = "overwrite" if dialogs.was_confirmed(out) else None
+        try:
+            return outputs.resolve_output(out, [i for i in inputs if i], default_ext=default_ext,
+                                          policy=policy, parent=self)
+        except outputs.OutputRejected as exc:
+            if str(exc):
+                messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return None
+
+    def load_file(self, path):
+        """Load *path* as this tab's source.  Returns True if accepted.
+
+        Tabs override this, or implement ``on_source_loaded(path)``; the
+        default fills the usual ``_src_var``/``src_var`` and ``file_path``."""
+        loaded = False
+        for attr in ("_src_var", "src_var", "source_var", "input_var", "_input_var"):
+            var = getattr(self, attr, None)
+            if isinstance(var, tk.Variable):
+                var.set(path)
+                loaded = True
+                break
+        if hasattr(self, "file_path"):
+            self.file_path = path
+            loaded = True
+        hook = getattr(self, "on_source_loaded", None)
+        if callable(hook):
+            hook(path)
+            loaded = True
+        return loaded
 
     # ── Queue bridge ──────────────────────────────────────────────────────────
 
-    def enqueue_render(
-        self,
-        task_name: str,
-        output_path: str = "",
-        *,
-        cmd=None,
-        cmds=None,
-        worker_fn=None,
-        on_start=None,
-        on_progress=None,
-        on_complete=None,
-    ) -> str:
-        """
-        Submit a render job to the global RenderQueueManager.
+    def enqueue_render(self, task_name, output_path="", *, cmd=None, cmds=None,
+                       worker_fn=None, on_start=None, on_progress=None, on_complete=None,
+                       expected_duration=None, inputs=(), atomic_output=True):
+        """Submit a job to the global render queue and return its task id.
 
-        Provide exactly one of:
-          cmd        - a single FFmpeg command list
-          cmds       - a list of FFmpeg command lists (run sequentially)
-          worker_fn  - callable(progress_cb, cancel_fn) -> int  for complex
-                       multi-step workflows
-
-        Callbacks are invoked on the Tkinter main thread:
-          on_start(task_id)
-          on_progress(task_id, line)
-          on_complete(task_id, returncode)
-
-        Returns the task_id string.
+        Provide exactly one of *cmd*, *cmds* (run sequentially) or
+        *worker_fn* (``fn(progress_cb, cancel_fn[, ctx])`` returning an int).
+        Callbacks run on the Tk thread; *on_complete(task_id, rc)* always
+        fires (rc 0 = success, -1 = cancelled).
         """
         from core.queue_manager import RenderQueueManager
-        return RenderQueueManager.get_instance().enqueue(
-            name=task_name,
-            output_path=output_path,
-            cmd=cmd,
-            cmds=cmds,
-            worker_fn=worker_fn,
-            on_start=on_start,
-            on_progress=on_progress,
-            on_complete=on_complete,
-        )
+
+        def _done(task_id, rc):
+            self._active_tasks.discard(task_id)
+            if on_complete:
+                on_complete(task_id, rc)
+
+        task_id = RenderQueueManager.get_instance().enqueue(
+            name=task_name, output_path=output_path, cmd=cmd, cmds=cmds,
+            worker_fn=worker_fn, on_start=on_start, on_progress=on_progress,
+            on_complete=_done, expected_duration=expected_duration,
+            inputs=inputs, atomic_output=atomic_output)
+        self._active_tasks.add(task_id)
+        self._render_thread = task_id
+        return task_id
+
+    def cancel_render(self, task_id=None):
+        """Cancel *task_id*, or every job this tab started."""
+        from core.queue_manager import RenderQueueManager
+        q = RenderQueueManager.get_instance()
+        for tid in ([task_id] if task_id else list(self._active_tasks)):
+            q.cancel(tid)
+
+    def task(self, task_id):
+        from core.queue_manager import RenderQueueManager
+        return RenderQueueManager.get_instance().get_task(task_id)
 
     # ── FFmpeg runner ─────────────────────────────────────────────────────────
 
-    def run_ffmpeg(self, cmd, console=None, on_done=None,
-                   btn=None, btn_label="▶  Run"):
-        """
-        Submit an FFmpeg command to the global background render queue.
-        Streams output to console, manages button state, and updates the
-        status bar.  The task is queued and will start as soon as the
-        worker thread is free - existing renders are never interrupted.
+    def run_ffmpeg(self, cmd, console=None, on_done=None, btn=None, btn_label="▶  Run",
+                   *, duration=None, output=None, inputs=(), name=None, cmds=None):
+        """Queue FFmpeg *cmd* (or a list *cmds* run in order).
+
+        *duration* is the expected output length in seconds (enables an
+        accurate percentage; guessed from the command when omitted).
+        *output* is the final file (written atomically; defaults to the last
+        argument of the last command).  While the job runs, *btn* shows the
+        progress and acts as a Cancel button.
         """
         app = self.winfo_toplevel()
+        cmds = [list(map(str, c)) for c in cmds] if cmds else [list(map(str, cmd))]
+        if output is None and cmds and cmds[-1] and ff.is_ffmpeg(cmds[-1][0]):
+            last = cmds[-1][-1]
+            output = last if last not in ("-", "pipe:", "pipe:1") and not last.startswith("-") else ""
+        self.log_debug("Queuing: " + " | ".join(ff.format_cmd(c) for c in cmds))
+        state = {"task": None, "orig_cmd": None, "t0": time.time()}
 
-        # Disable the button immediately so the user can't double-submit
-        if btn:
-            self.after(0, lambda: btn.config(
-                state="disabled", text=t("app.status.queued_btn")))
+        def _cancel_click():
+            if state["task"]:
+                self.cancel_render(state["task"])
+
+        if btn is not None:
+            try:
+                state["orig_cmd"] = btn.cget("command")
+                btn.config(state="normal", text="⏳ " + t("app.status.queued_btn"),
+                           command=_cancel_click)
+            except tk.TclError:
+                btn = None
         if hasattr(app, "set_status"):
-            self.after(0, lambda: app.set_status(t("app.status.queued")))
-
-        self.log_debug("Queuing: " + " ".join(str(c) for c in cmd))
-
-        # Record submission time; elapsed includes any queue wait - we reset
-        # t_start to the actual start time inside on_start.
-        _t = [time.time()]   # mutable container so closure can update it
+            app.set_status(t("app.status.queued"))
 
         def _on_start(task_id):
-            _t[0] = time.time()            # reset to actual start
-            if btn:
-                btn.config(text=t("app.status.processing_btn"))
+            state["t0"] = time.time()
+            if btn is not None:
+                try:
+                    btn.config(text="✖ " + _cancel_label())
+                except tk.TclError:
+                    pass
             if hasattr(app, "set_status"):
                 app.set_status(t("app.status.processing"))
 
+        def _cancel_label(pct=None):
+            label = t("btn.cancel") if t("btn.cancel") != "btn.cancel" else "Cancel"
+            return f"{label}  {pct:.0f}%" if pct is not None else label
+
         def _on_progress(task_id, line):
-            if console:
+            if console is not None:
                 self.log(console, line)
-            # Feed progress to status bar progress bar
-            if hasattr(app, "update_render_progress"):
-                app.update_render_progress(line)
+            tk_task = self.task(task_id)
+            if btn is not None and tk_task is not None and tk_task.fraction is not None:
+                try:
+                    btn.config(text="✖ " + _cancel_label(tk_task.fraction * 100))
+                except tk.TclError:
+                    pass
 
         def _on_complete(task_id, returncode):
-            elapsed = time.time() - _t[0]
+            elapsed = time.time() - state["t0"]
             elapsed_str = (f"{elapsed:.1f}s" if elapsed < 60
-                           else f"{int(elapsed//60)}m {int(elapsed%60)}s")
-            if btn:
-                btn.config(state="normal", text=btn_label)
+                           else f"{int(elapsed // 60)}m {int(elapsed % 60)}s")
+            if btn is not None:
+                try:
+                    btn.config(state="normal", text=btn_label, command=state["orig_cmd"] or "")
+                except tk.TclError:
+                    pass
+            tk_task = self.task(task_id)
+            status = tk_task.status if tk_task else ("done" if returncode == 0 else "failed")
             if hasattr(app, "set_status"):
-                if returncode == 0:
+                if status == "done":
                     app.set_status(t("app.status.done", elapsed=elapsed_str))
+                elif status == "cancelled":
+                    app.set_status(t("common.cancelled") if t("common.cancelled") != "common.cancelled" else "Cancelled")
                 else:
-                    app.set_status(t("app.status.error_code", code=returncode),
-                                   color=CLR["red"])
+                    app.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
+            if console is not None and tk_task is not None and status == "failed" and tk_task.error:
+                self.log_tagged(console, tk_task.error, "error")
+            self._last_task = tk_task
             if on_done:
-                on_done(returncode)
+                on_done(0 if status == "done" else (returncode if returncode else 1))
 
-        self._render_thread = self.enqueue_render(
-            "Render",
-            cmd=cmd,
-            on_start=_on_start,
-            on_progress=_on_progress,
-            on_complete=_on_complete,
-        )
+        state["task"] = self.enqueue_render(
+            name or getattr(self, "TOOL_NAME", "") or "Render",
+            output or "", cmds=cmds, on_start=_on_start, on_progress=_on_progress,
+            on_complete=_on_complete, expected_duration=duration, inputs=inputs)
+        return state["task"]
 
     # ── Result display ────────────────────────────────────────────────────────
 
     def show_result(self, returncode, out_path=""):
-        """
-        Show success or error feedback.
-        Success: messagebox with optional 'Open folder' action.
-        Error:   error dialog with instructions.
-        """
-        from tkinter import messagebox
-        if returncode == 0:
+        """Success / cancelled / error feedback after a render."""
+        task = getattr(self, "_last_task", None)
+        status = task.status if task is not None else ("done" if returncode == 0 else "failed")
+        if status == "cancelled":
+            return
+        if returncode == 0 and status == "done":
             msg = "{}\n\n{}".format(t("common.complete"), out_path) if out_path else t("common.complete")
-            messagebox.showinfo(t("common.done"), msg)
+            messagebox.showinfo(t("common.done"), msg, parent=self)
             if out_path:
                 try:
-                    from core.settings import load_settings
-                    if load_settings().get("auto_open_output", False):
-                        folder = (os.path.dirname(out_path)
-                                  if not os.path.isdir(out_path) else out_path)
-                        open_in_explorer(folder)
+                    from core.settings import get
+                    if get("auto_open_output", False):
+                        reveal_file(out_path)
                 except Exception:
                     pass
-        else:
-            messagebox.showerror(
-                t("common.render_error_title"),
-                t("common.render_error_msg", code=returncode))
+            return
+        detail = (task.error if task is not None and task.error else
+                  t("common.render_error_msg", code=returncode))
+        messagebox.showerror(t("common.render_error_title"), detail, parent=self)
 
     # ── Convenience ───────────────────────────────────────────────────────────
 
     @staticmethod
     def open_path(path):
         return open_in_explorer(path)
+
+    @staticmethod
+    def reveal(path):
+        return reveal_file(path)

@@ -9,5 +9,9 @@ Submodules
   skins     - theming engine (skin palette, live switching, star particles)
 """
 
-# ── Single-source application version ────────────────────────────────────────
-APP_VERSION = "1.16.0"
+# ── Application identity (single source of truth) ────────────────────────────
+APP_VERSION = "2.0.0"
+APP_NAME = "WyldVeil's Media Editor"
+APP_ID = "io.github.wyldveil.MediaEditor"     # Linux desktop/AppStream id
+APP_SLUG = "wyldveil-media-editor"            # Linux executable / folder names
+APP_URL = "https://github.com/WyldVeil/wyldveils-media-editor"

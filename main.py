@@ -12,7 +12,7 @@ import subprocess
 import threading
 import platform
 
-from core import APP_VERSION
+from core import APP_NAME, APP_VERSION
 from core.state import state as _app_state
 from core.hardware import get_binary_path, download_and_extract_ffmpeg, CREATE_NO_WINDOW
 from core.i18n import t, init as _i18n_init
@@ -82,7 +82,15 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Quintessential Video Editor  ·  Version 1.14")
+        # Thread-safe UI dispatch, logging and crash reporting come first so
+        # that everything constructed below can rely on them.
+        from core import encoders as _encoders, logs as _logs, ui as _ui
+        _ui.install(self)
+        _logs.setup(debug="--debug" in sys.argv)
+        _logs.install_excepthooks(self)
+        _encoders.detect_in_background()
+
+        self.title(f"{APP_NAME}  \u00b7  {APP_VERSION}")
         self.geometry("1480x920")
         self.minsize(1100, 700)
 
