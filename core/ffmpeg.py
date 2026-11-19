@@ -913,13 +913,15 @@ def capture(cmd: Sequence[str], *, timeout: float = 60.0,
 
 
 def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
-                   timeout: float = 20.0) -> Optional[bytes]:
+                   vf: str = "", timeout: float = 20.0) -> Optional[bytes]:
     """Return one frame of *path* at *at* seconds as PNG bytes (or None).
 
     Input-side seeking with decoding is frame-accurate in modern FFmpeg.
+    *vf* is an optional filter chain applied to the full-size frame first
+    (used for live previews of colour grades, keys, scopes...).
     *width*/*height* bound the size (aspect preserved, even dimensions).
     """
-    vf = []
+    vf = [vf] if vf else []
     if width or height:
         w = width or -2
         h = height or -2
@@ -938,6 +940,26 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
     if r.returncode != 0 or not r.stdout.startswith(b"\x89PNG"):
         return None
     return r.stdout
+
+
+_FILTERS: Optional[frozenset] = None
+
+
+def has_filter(name: str) -> bool:
+    """True if the FFmpeg in use was built with filter *name* (cached)."""
+    global _FILTERS
+    if _FILTERS is None:
+        try:
+            out = capture([ffmpeg_path(), "-hide_banner", "-filters"], timeout=20).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        names = set()
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and len(parts[0]) <= 4 and "->" in parts[2]:
+                names.add(parts[1])
+        _FILTERS = frozenset(names)
+    return name in _FILTERS
 
 
 def version_of(binary: Optional[str] = None) -> str:

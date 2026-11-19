@@ -1,223 +1,214 @@
 """
-tab_colorcorrector.py  ─  Basic Color Corrector
-Interactive sliders for brightness, contrast, saturation, gamma,
-highlights, shadows, and colour temperature using FFmpeg eq + curves.
+tabs/visuals/color_correct.py  -  Colour Corrector
+
+Exposure, contrast, tone (blacks / shadows / highlights / whites), white
+balance, saturation, vibrance, hue and sharpening, with a live in-app
+before/after preview of the exact filter chain that will be rendered.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from tkinter import ttk
+
 from core.i18n import t
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.visuals import common
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+
+# key: (label, low, high, default, resolution)
+CONTROLS = {
+    "exposure":    ("Exposure (stops)", -2.0, 2.0, 0.0, 0.05),
+    "contrast":    ("Contrast", 0.5, 2.0, 1.0, 0.01),
+    "brightness":  ("Brightness", -0.3, 0.3, 0.0, 0.01),
+    "gamma":       ("Gamma (midtones)", 0.4, 2.5, 1.0, 0.01),
+    "blacks":      ("Blacks", -0.2, 0.2, 0.0, 0.01),
+    "shadows":     ("Shadows", -1.0, 1.0, 0.0, 0.05),
+    "highlights":  ("Highlights", -1.0, 1.0, 0.0, 0.05),
+    "whites":      ("Whites", -0.2, 0.2, 0.0, 0.01),
+    "temperature": ("Temperature (cool / warm)", -100.0, 100.0, 0.0, 1.0),
+    "tint":        ("Tint (green / magenta)", -100.0, 100.0, 0.0, 1.0),
+    "saturation":  ("Saturation", 0.0, 2.5, 1.0, 0.01),
+    "vibrance":    ("Vibrance", -1.0, 1.0, 0.0, 0.05),
+    "hue":         ("Hue rotate (degrees)", -180.0, 180.0, 0.0, 1.0),
+    "sharpen":     ("Sharpen", 0.0, 2.0, 0.0, 0.05),
+}
+DEFAULTS = {k: v[3] for k, v in CONTROLS.items()}
+GROUPS = [
+    ("Light", ("exposure", "contrast", "brightness", "gamma")),
+    ("Tone", ("blacks", "shadows", "highlights", "whites")),
+    ("Colour", ("temperature", "tint", "saturation", "vibrance", "hue")),
+    ("Detail", ("sharpen",)),
+]
+LOOKS = {
+    "Neutral (reset)": {},
+    "Warm & sunny": {"temperature": 35, "saturation": 1.12, "vibrance": 0.2, "highlights": 0.15},
+    "Cool & clean": {"temperature": -30, "contrast": 1.06, "whites": 0.03},
+    "Punchy": {"contrast": 1.18, "vibrance": 0.45, "blacks": -0.03, "sharpen": 0.5},
+    "Faded film": {"blacks": 0.08, "contrast": 0.9, "saturation": 0.8, "temperature": 12,
+                   "highlights": -0.2},
+    "Moody": {"exposure": -0.25, "contrast": 1.12, "saturation": 0.75, "temperature": -15,
+              "shadows": -0.3},
+    "Black & white": {"saturation": 0.0, "contrast": 1.15},
+    "Lift shadows": {"shadows": 0.45, "blacks": 0.02},
+}
+
+
+def _changed(values: dict, key: str) -> bool:
+    return abs(float(values.get(key, DEFAULTS[key])) - DEFAULTS[key]) > 1e-6
+
+
+def build_chain(values: dict) -> str:
+    """FFmpeg filter chain for the slider *values* ('' when nothing changes)."""
+    v = {k: float(values.get(k, d)) for k, d in DEFAULTS.items()}
+    parts = []
+    if _changed(v, "temperature"):
+        kelvin = 6500 * 2 ** (-v["temperature"] / 100 * 0.6)
+        parts.append(f"colortemperature=temperature={kelvin:.0f}:pl=1")
+    if _changed(v, "tint"):
+        parts.append(f"colorchannelmixer=gg={1 - v['tint'] / 100 * 0.15:.4f}")
+    if _changed(v, "exposure"):
+        gain = 2 ** v["exposure"]
+        if gain > 1:
+            m = f"{1 / gain:.4f}"
+            parts.append(f"colorlevels=rimax={m}:gimax={m}:bimax={m}")
+        else:
+            m = f"{gain:.4f}"
+            parts.append(f"colorlevels=romax={m}:gomax={m}:bomax={m}")
+    eq = [f"{k}={v[k]:.3f}" for k in ("contrast", "brightness", "gamma", "saturation")
+          if _changed(v, k)]
+    if eq:
+        parts.append("eq=" + ":".join(eq))
+    if any(_changed(v, k) for k in ("blacks", "shadows", "highlights", "whites")):
+        b, w = v["blacks"], v["whites"]
+        lo = f"0/{b:.3f}" if b >= 0 else f"{-b:.3f}/0"
+        hi = f"1/{1 + w:.3f}" if w <= 0 else f"{1 - w:.3f}/1"
+        ys = min(max(0.25 + 0.12 * v["shadows"], 0.02), 0.6)
+        yh = min(max(0.75 + 0.12 * v["highlights"], 0.4), 0.98)
+        parts.append(f"curves=all='{lo} 0.25/{ys:.3f} 0.75/{yh:.3f} {hi}':interp=pchip")
+    if _changed(v, "vibrance"):
+        parts.append(f"vibrance=intensity={v['vibrance']:.3f}")
+    if _changed(v, "hue"):
+        parts.append(f"hue=h={v['hue']:.1f}")
+    if _changed(v, "sharpen"):
+        parts.append(f"unsharp=5:5:{v['sharpen']:.2f}:5:5:0")
+    return ",".join(parts)
 
 
 class ColorCorrectorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self.vars: dict[str, tk.DoubleVar] = {}
         self._preview_job = None
         self._build_ui()
 
+    # ── UI ───────────────────────────────────────────────────────────────────
+
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🌈  " + t("tab.basic_color_corrector"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("color_correct.desc"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.basic_color_corrector"),
+                         "Exposure, tone, white balance and colour with a live before/after preview.",
+                         icon="🌈")
+        body = scroll_body(self)
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=8)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=55, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
 
-        # ── Sliders ──────────────────────────────────────────────────────────
-        sliders_lf = tk.LabelFrame(self, text=t("color_correct.sect_colour_controls"), padx=15, pady=8)
-        sliders_lf.pack(fill="x", padx=20, pady=6)
+        self.compare = CompareView(body, 400, 225)
+        self.compare.pack(pady=6)
 
-        # Define: (label, attr, min, max, default, resolution)
-        slider_defs = [
-            ("Brightness",   "brightness",  -1.0,  1.0,   0.0,  0.01),
-            ("Contrast",     "contrast",     0.0,  3.0,   1.0,  0.01),
-            ("Saturation",   "saturation",   0.0,  3.0,   1.0,  0.01),
-            ("Gamma",        "gamma",        0.1,  5.0,   1.0,  0.01),
-            (t("color_correct.gamma_r"),      "gamma_r",      0.1,  5.0,   1.0,  0.01),
-            (t("color_correct.gamma_g"),      "gamma_g",      0.1,  5.0,   1.0,  0.01),
-            (t("color_correct.gamma_b"),      "gamma_b",      0.1,  5.0,   1.0,  0.01),
-            (t("color_correct.hue_deg"),    "hue",        -180, 180.0,   0.0,  1.0),
-        ]
+        looks = tk.Frame(body, bg=CLR["bg"])
+        looks.pack(fill="x", padx=20, pady=(2, 4))
+        tk.Label(looks, text="Quick look:", bg=CLR["bg"], fg=CLR["fg"],
+                 font=(UI_FONT, 10, "bold")).pack(side="left")
+        self.look_var = tk.StringVar(value="Neutral (reset)")
+        box = ttk.Combobox(looks, textvariable=self.look_var, values=list(LOOKS),
+                           state="readonly", width=22)
+        box.pack(side="left", padx=8)
+        box.bind("<<ComboboxSelected>>", lambda _e: self._apply_look(self.look_var.get()))
+        tk.Button(looks, text=t("color_correct.btn_reset_all"), relief="flat", cursor="hand2",
+                  command=lambda: self._apply_look("Neutral (reset)")).pack(side="left", padx=6)
 
-        self.slider_vars = {}
-        self.slider_lbls = {}
+        grid = tk.Frame(body, bg=CLR["bg"])
+        grid.pack(fill="x", padx=20, pady=4)
+        for col, (title, keys) in enumerate((GROUPS[0], GROUPS[2])):
+            self._group(grid, title, keys).grid(row=0, column=col, sticky="nsew", padx=4, pady=4)
+        for col, (title, keys) in enumerate((GROUPS[1], GROUPS[3])):
+            self._group(grid, title, keys).grid(row=1, column=col, sticky="nsew", padx=4, pady=4)
+        grid.columnconfigure(0, weight=1)
+        grid.columnconfigure(1, weight=1)
 
-        grid = tk.Frame(sliders_lf)
-        grid.pack(fill="x")
+        enc_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        enc_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(enc_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(enc_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "graded"))
+        self.out_row.pack(fill="x", pady=(8, 0))
 
-        for idx, (label, attr, lo, hi, default, res) in enumerate(slider_defs):
-            col = (idx % 2) * 4
-            row = idx // 2
-            var = tk.DoubleVar(value=default)
-            self.slider_vars[attr] = var
-
-            tk.Label(grid, text=label, width=11, anchor="e").grid(
-                row=row, column=col, padx=(12, 4), pady=4)
-            sl = tk.Scale(grid, variable=var, from_=lo, to=hi, resolution=res,
-                          orient="horizontal", length=200,
-                          command=lambda v, a=attr: self._update_lbl(a))
-            sl.grid(row=row, column=col+1, padx=2)
-            lbl = tk.Label(grid, text=str(default), width=6, fg=CLR["accent"])
-            lbl.grid(row=row, column=col+2, padx=4)
-            self.slider_lbls[attr] = lbl
-
-            tk.Button(grid, text="↺", width=2,
-                      command=lambda a=attr, d=default, v=var: (v.set(d), self._update_lbl(a))
-                      ).grid(row=row, column=col+3, padx=2)
-
-        # Reset All button
-        reset_row = tk.Frame(sliders_lf)
-        reset_row.pack(anchor="e", pady=4)
-        tk.Button(reset_row, text=t("color_correct.btn_reset_all"), command=self._reset_all,
-                  bg=CLR["panel"], fg=CLR["fg"]).pack(side="right", padx=6)
-
-        # ── Curves (quick lift/gamma/gain) ───────────────────────────────────
-        curves_lf = tk.LabelFrame(self, text=f"  {t('color_correct.curves_section')}  ", padx=15, pady=8)
-        curves_lf.pack(fill="x", padx=20, pady=4)
-        for lbl, attr, default in [("Lift (blacks):", "lift", 0.0),
-                                     ("Gain (whites):", "gain", 1.0)]:
-            rf = tk.Frame(curves_lf); rf.pack(fill="x", pady=2)
-            tk.Label(rf, text=lbl, width=16, anchor="e").pack(side="left")
-            var = tk.DoubleVar(value=default)
-            setattr(self, attr + "_var", var)
-            tk.Scale(rf, variable=var, from_=0.0, to=2.0, resolution=0.01,
-                     orient="horizontal", length=250,
-                     command=lambda _: self._schedule_preview()).pack(side="left", padx=6)
-            tk.Button(rf, text="↺", width=2,
-                      command=lambda a=attr, d=default, v=var: (
-                          v.set(d), self._schedule_preview())
-                      ).pack(side="left", padx=2)
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        # Buttons
-        btn_row = tk.Frame(self); btn_row.pack(pady=8)
-        tk.Button(btn_row, text=t("color_correct.live_preview"), bg=CLR["accent"], fg="white",
-                  width=16, command=self._preview).pack(side="left", padx=8)
-        self.btn_render = tk.Button(btn_row, text=t("color_correct.render_grade"),
-                                     font=(UI_FONT, 12, "bold"),
-                                     bg=CLR["pink"], fg="white", width=20,
-                                     command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
+        self.btn_render = tk.Button(body, text=t("color_correct.render_grade"),
+                                    font=(UI_FONT, 12, "bold"), bg=CLR["pink"], fg="white",
+                                    width=24, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body, bg=CLR["bg"])
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _update_lbl(self, attr):
-        val = self.slider_vars[attr].get()
-        self.slider_lbls[attr].config(text=f"{val:.2f}")
+    def _group(self, parent, title, keys):
+        lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=10, pady=4)
+        for row, key in enumerate(keys):
+            label, lo, hi, default, res = CONTROLS[key]
+            var = tk.DoubleVar(value=default)
+            self.vars[key] = var
+            tk.Label(lf, text=label, anchor="w", width=22).grid(row=row, column=0, sticky="w")
+            tk.Scale(lf, variable=var, from_=lo, to=hi, resolution=res, orient="horizontal",
+                     length=190, showvalue=True,
+                     command=lambda _v: self._schedule_preview()).grid(row=row, column=1)
+            tk.Button(lf, text="↺", width=2, relief="flat", cursor="hand2",
+                      command=lambda v=var, d=default: (v.set(d), self._schedule_preview())
+                      ).grid(row=row, column=2, padx=2)
+        return lf
+
+    # ── Behaviour ────────────────────────────────────────────────────────────
+
+    def values(self) -> dict:
+        return {k: v.get() for k, v in self.vars.items()}
+
+    def _apply_look(self, name):
+        merged = dict(DEFAULTS)
+        merged.update(LOOKS.get(name, {}))
+        for key, var in self.vars.items():
+            var.set(merged[key])
         self._schedule_preview()
 
+    def _source_changed(self, path):
+        self.compare.load(path)
+        self.compare.set_filter(build_chain(self.values()))
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "graded"))
+
     def _schedule_preview(self):
-        """Debounce preview renders: wait 250 ms after the last slider move."""
         if self._preview_job is not None:
             self.after_cancel(self._preview_job)
-        self._preview_job = self.after(250, self._debounced_preview)
+        self._preview_job = self.after(150, self._update_preview)
 
-    def _debounced_preview(self):
+    def _update_preview(self):
         self._preview_job = None
-        if self.file_path and self.preview_proc and self.preview_proc.poll() is None:
-            # A live preview window is already open - relaunch it with new settings
-            try:
-                self.preview_proc.terminate()
-            except Exception:
-                pass
-            self._preview()
-
-    def _reset_all(self):
-        defaults = {"brightness": 0.0, "contrast": 1.0, "saturation": 1.0,
-                    "gamma": 1.0, "gamma_r": 1.0, "gamma_g": 1.0,
-                    "gamma_b": 1.0, "hue": 0.0}
-        for attr, val in defaults.items():
-            self.slider_vars[attr].set(val)
-            self._update_lbl(attr)
-        self.lift_var.set(0.0)
-        self.gain_var.set(1.0)
-
-    def _build_vf(self):
-        sv = self.slider_vars
-        eq = (f"eq=brightness={sv['brightness'].get():.3f}"
-              f":contrast={sv['contrast'].get():.3f}"
-              f":saturation={sv['saturation'].get():.3f}"
-              f":gamma={sv['gamma'].get():.3f}"
-              f":gamma_r={sv['gamma_r'].get():.3f}"
-              f":gamma_g={sv['gamma_g'].get():.3f}"
-              f":gamma_b={sv['gamma_b'].get():.3f}")
-        hue = sv['hue'].get()
-        hue_f = f",hue=h={hue:.1f}" if abs(hue) > 0.01 else ""
-        lift = self.lift_var.get()
-        gain = self.gain_var.get()
-        lift_f = ""
-        if abs(lift) > 0.01 or abs(gain - 1.0) > 0.01:
-            lift_f = f",curves=all='{lift:.2f}/0 {gain:.2f}/1'"
-        return f"{eq}{hue_f}{lift_f}"
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            base = os.path.splitext(p)[0]
-            self.out_var.set(f"{base}_corrected.mp4")
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p: self.out_var.set(p)
-
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
-            return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-        ffplay = get_binary_path("ffplay.exe")
-        vf = self._build_vf()
-        cmd = [ffplay, "-i", self.file_path, "-vf", vf,
-               "-window_title", t("color_correct.colour_preview"), "-x", "800", "-autoexit"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+        self.compare.set_filter(build_chain(self.values()))
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
+        chain = build_chain(self.values())
+        if not chain:
+            self.log(self.console, "No adjustments set - the video will just be re-encoded.")
+        out = common.output_for(self, self.out_row, src, "graded")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        vf = self._build_vf()
-        cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-        self.log(self.console, t("log.color_correct.rendering_colour_grade"))
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label="🌈  RENDER GRADE")
+            return
+        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder,
+                      console=self.console, btn=self.btn_render,
+                      btn_label=t("color_correct.render_grade"), name="Colour Correct")

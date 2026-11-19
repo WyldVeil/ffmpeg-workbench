@@ -30,7 +30,7 @@ AUDIO_EXTS = ("mp3", "wav", "flac", "aac", "m4a", "ogg", "oga", "opus", "wma", "
               "aiff", "alac", "ac3", "eac3", "mka", "caf", "amr")
 IMAGE_EXTS = ("png", "jpg", "jpeg", "bmp", "webp", "tif", "tiff", "gif", "avif", "heic")
 SUB_EXTS = ("srt", "ass", "ssa", "vtt", "sub", "sbv")
-LUT_EXTS = ("cube", "3dl", "dat", "m3d", "csp")
+LUT_EXTS = ("cube", "3dl", "dat", "m3d", "csp", "png", "tif", "tiff")
 MIDI_EXTS = ("mid", "midi")
 SOUNDFONT_EXTS = ("sf2", "sf3")
 FONT_EXTS = ("ttf", "otf")

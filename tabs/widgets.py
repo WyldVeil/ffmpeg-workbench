@@ -7,6 +7,14 @@ FramePreview
     thread; while the user drags a slider only the newest request is kept, so
     scrubbing stays responsive on long files.
 
+CompareView
+    Before/after FramePreviews of one video with a shared time slider; the
+    "after" side shows a live FFmpeg filter (colour grades, LUTs, keys...).
+
+FileRow
+    Label + entry + Browse button bound to a StringVar - the entry is the
+    single source of truth, so typed or pasted paths work too.
+
 EncoderPanel
     Codec / quality / speed / hardware-acceleration controls backed by
     core/encoders.py.  ``panel.video_encode(container)`` returns a
@@ -16,6 +24,7 @@ EncoderPanel
 from __future__ import annotations
 
 import base64
+import os
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -56,6 +65,8 @@ class FramePreview(tk.Frame):
         self._wanted: Optional[float] = None       # newest requested time
         self._busy = False
         self._shown_t: Optional[float] = None
+        self._last_at = 0.0
+        self._vf = ""                               # optional preview filter
         self._gen = 0                               # bumps on every load()
         self.canvas = tk.Canvas(self, width=width, height=height, bg="#000000",
                                 highlightthickness=1, highlightbackground=clr["border"],
@@ -98,6 +109,7 @@ class FramePreview(tk.Frame):
             return
         if self._duration:
             at = max(0.0, min(float(at), max(0.0, self._duration - 0.04)))
+        self._last_at = at
         with self._lock:
             self._wanted = at
             if self._busy:
@@ -108,6 +120,18 @@ class FramePreview(tk.Frame):
 
     def clear(self) -> None:
         self.load(None)
+
+    def set_filter(self, vf: str) -> None:
+        """Show frames through FFmpeg filter chain *vf* ("" = untouched)."""
+        if (vf or "") == self._vf:
+            return
+        self._vf = vf or ""
+        if self._path:
+            self.show(self._last_at)
+
+    @property
+    def position(self) -> float:
+        return self._last_at
 
     @property
     def path(self) -> Optional[str]:
@@ -131,7 +155,8 @@ class FramePreview(tk.Frame):
                 if at is None or gen != self._gen:
                     self._busy = False
                     return
-            png = ff.grab_frame_png(self._path or "", at, width=self._pw, height=self._ph)
+            png = ff.grab_frame_png(self._path or "", at, width=self._pw, height=self._ph,
+                                    vf=self._vf)
             self._deliver(gen, at, png)
 
     def _deliver(self, gen: int, at: float, png: Optional[bytes]) -> None:
@@ -155,6 +180,154 @@ class FramePreview(tk.Frame):
         self._shown_t = at
         if self._time_lbl is not None:
             self._time_lbl.config(text=ff.format_time(at))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  CompareView
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CompareView(tk.Frame):
+    """Before / after preview of one video with a shared position slider."""
+
+    def __init__(self, parent, width: int = 360, height: int = 203,
+                 before_label: str = "", after_label: str = ""):
+        clr = _clr()
+        super().__init__(parent, bg=clr["bg"])
+        row = tk.Frame(self, bg=clr["bg"])
+        row.pack()
+        self.views = []
+        for label in (before_label or _tr("preview.before", "Before"),
+                      after_label or _tr("preview.after", "After")):
+            col = tk.Frame(row, bg=clr["bg"])
+            col.pack(side="left", padx=4)
+            tk.Label(col, text=label, bg=clr["bg"], fg=clr["fgdim"],
+                     font=(UI_FONT, 9, "bold")).pack(anchor="w")
+            view = FramePreview(col, width, height, show_time=False)
+            view.pack()
+            self.views.append(view)
+        self.view_before, self.view_after = self.views
+        bar = tk.Frame(self, bg=clr["bg"])
+        bar.pack(fill="x", pady=(4, 0))
+        self._pos = tk.DoubleVar(value=0.0)
+        self._scale = ttk.Scale(bar, from_=0.0, to=1.0, variable=self._pos,
+                                command=lambda _v: self._moved())
+        self._scale.pack(side="left", fill="x", expand=True, padx=(4, 8))
+        self._time = tk.Label(bar, text="", width=12, bg=clr["bg"], fg=clr["fgdim"],
+                              font=(MONO_FONT, 9))
+        self._time.pack(side="right")
+        self._duration = 0.0
+
+    def load(self, path: Optional[str], at: Optional[float] = None) -> None:
+        info = ff.try_probe(path) if path else None
+        self._duration = info.duration if info else 0.0
+        pos = at if at is not None else self._duration * 0.25
+        self._scale.configure(to=max(self._duration, 0.01))
+        self._pos.set(pos)
+        for view in self.views:
+            view.load(path, self._duration, pos)
+        self._time.config(text=ff.format_time(pos) if path else "")
+
+    def set_filter(self, vf: str) -> None:
+        self.view_after.set_filter(vf)
+
+    @property
+    def position(self) -> float:
+        return float(self._pos.get())
+
+    def _moved(self) -> None:
+        pos = self.position
+        self._time.config(text=ff.format_time(pos))
+        for view in self.views:
+            view.show(pos)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  FileRow
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FileRow(tk.Frame):
+    """``Label [entry......] [Browse]`` bound to a StringVar.
+
+    The entry is the single source of truth: :attr:`path` reads it at the
+    moment it is needed, so typed and pasted paths work exactly like
+    browsed ones.  *on_change(path)* fires (debounced) when the entry holds
+    an existing file (any text for save rows)."""
+
+    def __init__(self, parent, label: str, var: Optional[tk.StringVar] = None, *,
+                 kind: str = "video", save: bool = False, ext: str = ".mp4",
+                 width: int = 56, label_width: int = 16,
+                 on_change: Optional[Callable[[str], None]] = None,
+                 suggest: Optional[Callable[[], str]] = None):
+        clr = _clr()
+        super().__init__(parent, bg=clr["bg"])
+        self.var = var if var is not None else tk.StringVar()
+        self._kind, self._save, self._ext = kind, save, ext
+        self._on_change, self._suggest = on_change, suggest
+        self._job = None
+        tk.Label(self, text=label, width=label_width, anchor="w", bg=clr["bg"], fg=clr["fg"],
+                 font=(UI_FONT, 10, "bold")).pack(side="left")
+        self.entry = tk.Entry(self, textvariable=self.var, width=width, relief="flat")
+        self.entry.pack(side="left", fill="x", expand=True, padx=6)
+        text = (_tr("common.save_as", "Save as…") if save else _tr("btn.browse", "Browse…"))
+        tk.Button(self, text=text, command=self._browse, cursor="hand2",
+                  relief="flat").pack(side="left")
+        if on_change is not None:
+            self.var.trace_add("write", self._changed)
+
+    @property
+    def path(self) -> str:
+        return self.var.get().strip().strip('"').strip()
+
+    def set(self, path: str) -> None:
+        self.var.set(path)
+
+    def _browse(self) -> None:
+        from core import dialogs
+        if self._save:
+            current = self.path or (self._suggest() if self._suggest else "")
+            chosen = dialogs.ask_save(current, kind=self._kind, defaultextension=self._ext,
+                                      parent=self)
+        else:
+            chosen = dialogs.ask_open(self._kind, parent=self)
+        if chosen:
+            self.var.set(chosen)
+
+    def _changed(self, *_a) -> None:
+        if self._job is not None:
+            try:
+                self.after_cancel(self._job)
+            except tk.TclError:
+                pass
+        self._job = self.after(350, self._fire)
+
+    def _fire(self) -> None:
+        self._job = None
+        path = self.path
+        if self._on_change is not None and path and (self._save or os.path.isfile(path)):
+            self._on_change(path)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  scroll_body
+# ─────────────────────────────────────────────────────────────────────────────
+
+def scroll_body(parent) -> tk.Frame:
+    """Fill *parent* with a vertically scrolling area and return the inner
+    frame to build into.  The mouse wheel works over any child (the app's
+    global wheel handler scrolls the nearest canvas with a scroll command)."""
+    clr = _clr()
+    outer = tk.Frame(parent, bg=clr["bg"])
+    outer.pack(fill="both", expand=True)
+    canvas = tk.Canvas(outer, bg=clr["bg"], highlightthickness=0, yscrollincrement=20)
+    vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+    inner = tk.Frame(canvas, bg=clr["bg"])
+    win = canvas.create_window((0, 0), window=inner, anchor="nw")
+    inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+    canvas.configure(yscrollcommand=vsb.set)
+    vsb.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+    return inner
 
 
 # ─────────────────────────────────────────────────────────────────────────────

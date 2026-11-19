@@ -76,6 +76,7 @@ class RenderTask:
         self._proc = None
         self._completed_fired = False
         self._tempdirs: list = []
+        self._parts: list = []          # (part, final) promoted on success
 
     @property
     def cancelled(self) -> bool:
@@ -125,8 +126,18 @@ class TaskContext:
         self.task._tempdirs.append(d)
         return d
 
+    def output(self, path: Optional[str] = None) -> str:
+        """A temporary ``.part`` file to write a final output to.  It replaces
+        *path* (default: the task's output) only if the job succeeds, so a
+        failed or cancelled job never leaves a broken file behind."""
+        final = path or self.task.output_path
+        base, ext = os.path.splitext(final)
+        part = f"{base}.part{ext}"
+        self.task._parts.append((part, final))
+        return part
+
     def run(self, cmd: Sequence[str], *, duration: Optional[float] = None,
-            check: bool = True) -> ff.RunResult:
+            check: bool = True, cwd: Optional[str] = None) -> ff.RunResult:
         """Run one command for this task.  Raises :class:`ff.CancelledError`
         or :class:`ff.CommandError` (when *check*) so multi-step jobs can
         simply call ``ctx.run`` repeatedly."""
@@ -138,7 +149,7 @@ class TaskContext:
 
         self._progress_cb("$ " + ff.format_cmd(cmd))
         res = ff.run(cmd, duration=duration, on_line=self._progress_cb,
-                     on_progress=on_prog, cancel=self.cancelled)
+                     on_progress=on_prog, cancel=self.cancelled, cwd=cwd)
         self.task.log_tail = res.log_tail[-60:]
         self._span = (hi, hi)
         if check:
@@ -363,6 +374,7 @@ class RenderQueueManager:
         finally:
             for d in task._tempdirs:
                 shutil.rmtree(d, ignore_errors=True)
+        rc = self._promote_parts(task, rc)
 
         task.finished_at = time.time()
         if task.cancelled:
@@ -378,6 +390,28 @@ class RenderQueueManager:
         _log.info("%s %s [%s] in %.1fs%s", task.status, task.name, task.id, task.elapsed,
                   f": {task.error.splitlines()[0]}" if task.status == FAILED and task.error else "")
         self._complete(task)
+
+    @staticmethod
+    def _promote_parts(task: RenderTask, rc: int) -> int:
+        """Rename a worker's ``.part`` outputs on success, delete them otherwise."""
+        ok = rc == 0 and not task.cancelled
+        for part, final in task._parts:
+            if ok and (not os.path.exists(part) or os.path.getsize(part) == 0):
+                task.error = "The job finished but wrote no output."
+                ok, rc = False, 1
+            if ok:
+                try:
+                    os.replace(part, final)
+                    continue
+                except OSError as exc:
+                    task.error = f"Could not save {final}: {exc}"
+                    ok, rc = False, 1
+            try:
+                if os.path.exists(part):
+                    os.remove(part)
+            except OSError:
+                pass
+        return rc
 
     def _run_worker_fn(self, task: RenderTask, progress_cb) -> int:
         fn = task.worker_fn

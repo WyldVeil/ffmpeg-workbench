@@ -1,170 +1,287 @@
 """
-tab_lutapplicator.py  ─  LUT Applicator
-Apply .cube or .3dl LUT files for colour grading.
-Supports intensity blending and preview.
+tabs/visuals/lut.py  -  LUT Applicator
+
+Apply a colour look-up table: 3D .cube/.3dl/.dat/.m3d/.csp files, 1D .cube
+files, Hald CLUT images (.png/.tif), or one of the built-in looks.  An
+intensity slider blends the look with the original, and the before/after
+preview shows exactly what will be rendered.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
+from __future__ import annotations
+
+import math
 import os
-import subprocess
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+from core import filters as fl
 from core.i18n import t
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.visuals import common
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+
+INTERPOLATIONS = ["tetrahedral", "trilinear", "pyramid", "prism", "nearest"]
+_CUSTOM = "Use a LUT file…"
+_HALD_EXTS = (".png", ".tif", ".tiff")
+
+
+# ── Built-in looks (generated .cube files, no licensing strings attached) ────
+
+def _clip(x):
+    return 0.0 if x < 0 else 1.0 if x > 1 else x
+
+
+def _luma(r, g, b):
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _smooth(e0, e1, x):
+    x = _clip((x - e0) / (e1 - e0))
+    return x * x * (3 - 2 * x)
+
+
+def _teal_orange(r, g, b):
+    w = _smooth(0.15, 0.85, _luma(r, g, b))
+    return r * (0.86 + 0.24 * w), g * (0.98 + 0.02 * w), b * (1.14 - 0.30 * w)
+
+
+def _bleach(r, g, b):
+    y = _luma(r, g, b)
+    s = [x + (y - x) * 0.6 for x in (r, g, b)]
+    return tuple(0.5 + (x - 0.5) * 1.3 for x in s)
+
+
+def _warm_film(r, g, b):
+    return tuple(0.035 + 0.94 * x for x in (r * 1.07, g * 1.01, b * 0.9))
+
+
+def _cool_night(r, g, b):
+    return r * 0.78, g * 0.9, b * 1.08
+
+
+def _sepia(r, g, b):
+    return (0.393 * r + 0.769 * g + 0.189 * b, 0.349 * r + 0.686 * g + 0.168 * b,
+            0.272 * r + 0.534 * g + 0.131 * b)
+
+
+def _cross_process(r, g, b):
+    s = lambda x: 0.5 - 0.5 * math.cos(math.pi * _clip(x))  # noqa: E731 - S-curve
+    return s(r) * 1.05, g * 1.06 + 0.02, 0.12 + 0.76 * b
+
+
+def _vintage(r, g, b):
+    y = _luma(r, g, b)
+    return tuple(0.08 + 0.82 * (x + (y - x) * 0.25) for x in (r * 1.04, g, b * 0.92))
+
+
+def _mono_contrast(r, g, b):
+    y = _luma(r, g, b)
+    y = 0.5 + (y - 0.5) * 1.25
+    return y, y, y
+
+
+BUILTIN = {
+    "Teal & orange": _teal_orange,
+    "Bleach bypass": _bleach,
+    "Warm film": _warm_film,
+    "Cool night": _cool_night,
+    "Sepia": _sepia,
+    "Cross process": _cross_process,
+    "Vintage fade": _vintage,
+    "Contrasty black & white": _mono_contrast,
+}
+
+
+def builtin_lut_path(name: str, size: int = 33) -> str:
+    """Path of the generated .cube for built-in look *name* (created once)."""
+    from core.paths import cache_dir
+    folder = os.path.join(cache_dir(), "luts")
+    os.makedirs(folder, exist_ok=True)
+    slug = "".join(c if c.isalnum() else "_" for c in name.lower()).strip("_")
+    path = os.path.join(folder, f"{slug}_{size}.cube")
+    if os.path.isfile(path):
+        return path
+    fn = BUILTIN[name]
+    step = 1.0 / (size - 1)
+    lines = [f'TITLE "{name}"', f"LUT_3D_SIZE {size}", "DOMAIN_MIN 0 0 0", "DOMAIN_MAX 1 1 1"]
+    for bi in range(size):              # .cube order: red varies fastest
+        for gi in range(size):
+            for ri in range(size):
+                r, g, b = (_clip(c) for c in fn(ri * step, gi * step, bi * step))
+                lines.append(f"{r:.6f} {g:.6f} {b:.6f}")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="ascii", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+    os.replace(tmp, path)
+    return path
+
+
+# ── Filter construction ──────────────────────────────────────────────────────
+
+def lut_kind(path: str) -> str:
+    """'3d', '1d' or 'hald' for a LUT file."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _HALD_EXTS:
+        return "hald"
+    if ext == ".cube":
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                for _ in range(200):
+                    line = fh.readline()
+                    if not line:
+                        break
+                    if line.strip().upper().startswith("LUT_1D_SIZE"):
+                        return "1d"
+                    if line.strip().upper().startswith("LUT_3D_SIZE"):
+                        return "3d"
+        except OSError:
+            pass
+    return "3d"
+
+
+def build_chain(lut_path: str, *, intensity: float = 1.0, interp: str = "tetrahedral") -> str:
+    """A single-input filter chain applying *lut_path* at *intensity* (0..1)."""
+    kind = lut_kind(lut_path)
+    if kind == "1d":
+        one_d = {"nearest": "nearest", "trilinear": "linear"}.get(interp, "cubic")
+        look = f"lut1d=file={fl.filter_path(lut_path)}:interp={one_d}"
+    elif kind == "hald":
+        look = ""
+    else:
+        look = fl.lut3d_filter(lut_path, interp if interp in INTERPOLATIONS else "tetrahedral")
+    intensity = max(0.0, min(1.0, intensity))
+    if kind == "hald":
+        clut = f"movie=filename={fl.filter_path(lut_path)}[clut]"
+        if intensity >= 0.999:
+            return f"{clut};[in][clut]haldclut"
+        return (f"{clut};[in]split[orig][grade];[grade][clut]haldclut[look];"
+                f"[look][orig]blend=all_mode=normal:all_opacity={intensity:.3f}")
+    if intensity >= 0.999:
+        return look
+    return (f"split[orig][grade];[grade]{look}[look];"
+            f"[look][orig]blend=all_mode=normal:all_opacity={intensity:.3f}")
 
 
 class LUTApplicatorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.video_path = ""
-        self.lut_path   = ""
+        self.src_var = tk.StringVar()
+        self._job = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🎨  " + t("tab.lut_applicator"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("lut.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.lut_applicator"), t("lut.subtitle"), icon="🎨")
+        body = scroll_body(self)
 
-        # File pickers
-        pick = tk.LabelFrame(self, text=t("section.input_files"), padx=15, pady=8)
-        pick.pack(fill="x", padx=20, pady=8)
+        pick = tk.LabelFrame(body, text=f"  {t('section.input_files')}  ", padx=12, pady=8)
+        pick.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row = FileRow(pick, t("lut.video_label"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", pady=2)
+        look_row = tk.Frame(pick)
+        look_row.pack(fill="x", pady=2)
+        tk.Label(look_row, text="Look:", width=16, anchor="w",
+                 font=(UI_FONT, 10, "bold")).pack(side="left")
+        self.look_var = tk.StringVar(value=_CUSTOM)
+        box = ttk.Combobox(look_row, textvariable=self.look_var, state="readonly", width=30,
+                           values=[_CUSTOM, *BUILTIN])
+        box.pack(side="left", padx=6)
+        box.bind("<<ComboboxSelected>>", lambda _e: self._look_changed())
+        self.lut_row = FileRow(pick, t("lut.lut_label"), kind="lut",
+                               on_change=lambda _p: self._schedule())
+        self.lut_row.pack(fill="x", pady=2)
+        tk.Label(pick, text="  ℹ  3D/1D .cube, .3dl, .dat, .m3d, .csp and Hald CLUT images "
+                            "(.png/.tif) are supported.",
+                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
-        for row, label, attr, ftypes in [
-            (0, t("lut.video_label"), "video_path",
-             [("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", "*.*")]),
-            (1, t("lut.lut_label"), "lut_path",
-             [("LUT Files", "*.cube *.3dl"), ("All", "*.*")]),
-        ]:
-            tk.Label(pick, text=label, font=(UI_FONT, 9, "bold")).grid(
-                row=row, column=0, sticky="w", pady=4)
-            var = tk.StringVar()
-            setattr(self, attr + "_var", var)
-            tk.Entry(pick, textvariable=var, width=60, relief="flat").grid(row=row, column=1, padx=8)
+        self.compare = CompareView(body, 400, 225, after_label="With LUT")
+        self.compare.pack(pady=6)
 
-            def _b(a=attr, v=var, ft=ftypes):
-                p = dialogs.askopenfilename(filetypes=ft)
-                if p:
-                    setattr(self, a, p)
-                    v.set(p)
-                    if a == "video_path":
-                        base = os.path.splitext(p)[0]
-                        self.out_var.set(f"{base}_graded.mp4")
-            tk.Button(pick, text=t("btn.browse"), command=_b, cursor="hand2", relief="flat").grid(row=row, column=2)
-
-        # Options
-        opts = tk.LabelFrame(self, text=f"  {t('lut.application_section')}  ", padx=15, pady=10)
-        opts.pack(fill="x", padx=20, pady=6)
-
-        r0 = tk.Frame(opts); r0.pack(fill="x", pady=4)
+        opts = tk.LabelFrame(body, text=f"  {t('lut.application_section')}  ", padx=12, pady=8)
+        opts.pack(fill="x", padx=20, pady=4)
+        r0 = tk.Frame(opts)
+        r0.pack(fill="x", pady=2)
         tk.Label(r0, text=t("lut.intensity_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.intensity_var = tk.DoubleVar(value=1.0)
-        tk.Scale(r0, variable=self.intensity_var, from_=0.0, to=1.0,
-                 resolution=0.01, orient="horizontal", length=300).pack(side="left", padx=8)
-        self.intens_lbl = tk.Label(r0, text="100%", width=5)
-        self.intens_lbl.pack(side="left")
-        self.intensity_var.trace_add("write", lambda *_: self.intens_lbl.config(
-            text=f"{int(self.intensity_var.get()*100)}%"))
-
-        r1 = tk.Frame(opts); r1.pack(fill="x", pady=4)
+        tk.Scale(r0, variable=self.intensity_var, from_=0.0, to=1.0, resolution=0.01,
+                 orient="horizontal", length=300,
+                 command=lambda _v: self._schedule()).pack(side="left", padx=8)
+        r1 = tk.Frame(opts)
+        r1.pack(fill="x", pady=2)
         tk.Label(r1, text=t("lut.interpolation_label")).pack(side="left")
-        self.interp_var = tk.StringVar(value="trilinear")
-        ttk.Combobox(r1, textvariable=self.interp_var,
-                     values=["nearest", "trilinear", "tetrahedral"],
-                     state="readonly", width=14).pack(side="left", padx=6)
-        tk.Label(r1, text=t("lut.interpolation_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        self.interp_var = tk.StringVar(value="tetrahedral")
+        ib = ttk.Combobox(r1, textvariable=self.interp_var, values=INTERPOLATIONS,
+                          state="readonly", width=14)
+        ib.pack(side="left", padx=6)
+        ib.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
+        tk.Label(r1, text=t("lut.interpolation_hint"), fg=CLR["fgdim"],
+                 font=(UI_FONT, 9)).pack(side="left")
 
-        r2 = tk.Frame(opts); r2.pack(fill="x", pady=4)
-        tk.Label(r2, text=t("common.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(r2, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
-        self.preview_btn = tk.Button(r2, text=t("crop.preview"), bg=CLR["accent"], fg="white",
-                                     command=self._preview)
-        self.preview_btn.pack(side="left", padx=20)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "graded"))
+        self.out_row.pack(fill="x", pady=(8, 0))
 
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self, text=t("lut.apply_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["pink"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=7)
+        self.btn_render = tk.Button(body, text=t("lut.apply_button"), font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["pink"], fg="white", width=28, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p: self.out_var.set(p)
+    # ── Behaviour ────────────────────────────────────────────────────────────
 
-    def _build_vf(self):
-        intensity = self.intensity_var.get()
-        interp    = self.interp_var.get()
-        lut_safe  = self.lut_path.replace("\\", "/").replace(":", "\\:")
-        if intensity >= 1.0:
-            return f"lut3d='{lut_safe}':interp={interp}"
-        else:
-            # Blend with original using overlay + mix
-            return (f"split=2[orig][toapply];"
-                    f"[toapply]lut3d='{lut_safe}':interp={interp}[luted];"
-                    f"[orig][luted]blend=all_expr='A*{1-intensity:.2f}+B*{intensity:.2f}'")
+    def lut_path(self) -> str:
+        look = self.look_var.get()
+        if look in BUILTIN:
+            return builtin_lut_path(look)
+        return self.lut_row.path
 
-    def _preview(self):
-        if not self.video_path or not self.lut_path:
-            messagebox.showwarning(t("lut.missing_title"), t("lut.missing_message"))
-            return
-        ffplay = get_binary_path("ffplay.exe")
-        vf = self._build_vf()
-        # For complex filter in preview, use simpler blend approach
-        if "[orig]" in vf:
-            vf = f"lut3d='{self.lut_path.replace(chr(92), '/').replace(':', chr(92)+':')}'"
-        cmd = [ffplay, "-i", self.video_path, "-vf", vf,
-               "-window_title", t("lut.lut_preview"), "-x", "800", "-autoexit"]
-        subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+    def chain(self) -> str:
+        path = self.lut_path()
+        if not path or not os.path.isfile(path):
+            return ""
+        return build_chain(path, intensity=self.intensity_var.get(), interp=self.interp_var.get())
+
+    def _look_changed(self):
+        builtin = self.look_var.get() in BUILTIN
+        self.lut_row.entry.config(state="disabled" if builtin else "normal")
+        self._schedule()
+
+    def _source_changed(self, path):
+        self.compare.load(path)
+        self.compare.set_filter(self.chain())
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "graded"))
+
+    def _schedule(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(150, self._refresh)
+
+    def _refresh(self):
+        self._job = None
+        self.compare.set_filter(self.chain())
 
     def _render(self):
-        if not self.video_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        if not self.lut_path:
-            messagebox.showwarning(t("lut.no_lut_title"), t("lut.no_lut_message"))
+        lut = self.lut_path()
+        if not lut or not os.path.isfile(lut):
+            messagebox.showwarning(t("lut.no_lut_title"), t("lut.no_lut_message"), parent=self)
             return
-        out = self.out_var.get().strip()
+        out = common.output_for(self, self.out_row, src, "graded", inputs=[lut])
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        vf = self._build_vf()
-        intensity = self.intensity_var.get()
-
-        if "[orig]" in vf:
-            # Complex filter
-            cmd = [ffmpeg, "-i", self.video_path,
-                   "-filter_complex", vf,
-                   "-c:v", "libx264", "-crf", self.crf_var.get(),
-                   "-preset", "fast", "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-        else:
-            cmd = [ffmpeg, "-i", self.video_path, "-vf", vf,
-                   "-c:v", "libx264", "-crf", self.crf_var.get(),
-                   "-preset", "fast", "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console, f"Applying LUT at {int(intensity*100)}% intensity…")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("lut.apply_button"))
+            return
+        self.log(self.console, f"Applying {os.path.basename(lut)} at "
+                               f"{int(self.intensity_var.get() * 100)}% intensity…")
+        common.render(self, src=src, info=info, out=out, chain=self.chain(), encoder=self.encoder,
+                      console=self.console, btn=self.btn_render,
+                      btn_label=t("lut.apply_button"), name="LUT")
