@@ -1,472 +1,408 @@
 """
-tab_beatsynccutter.py  ─  Beat Sync Cutter
-Detects beat timestamps in a music/audio track using FFmpeg's
-`ebur128` and `astats` filters combined with peak detection, then:
+tabs/cutting/beat_sync.py  -  Beat Sync Cutter
 
-  Mode 1 - Mark only: export a text file of beat timestamps
-  Mode 2 - Auto-cut:  slice a source video at beat boundaries and
-                      re-join as a rhythmically-edited clip
-  Mode 3 - Chapter markers: export YouTube-formatted chapter list
+Build a music montage: pick a song and some clips, and the video cuts land
+exactly on the beat.
 
-Beat detection uses FFmpeg's `silencedetect` on a high-passed,
-compressed version of the audio to find transient peaks - effective
-for music with a clear beat (electronic, pop, hip-hop, drums).
+Beat detection: FFmpeg turns the music into an energy envelope (200 Hz);
+onsets are the rises in log-energy.  The tempo comes from the envelope's
+autocorrelation (70-180 BPM, biased towards ~120 to avoid double/half
+tempo), the phase from the best-aligned grid, and each beat is then nudged
+to the nearest strong onset so live, drifting tempos are followed.
+"Every hit" mode uses the onsets themselves (sensitivity = threshold).
 
-For the auto-cut mode the user can set:
-  • Beat subdivision (every 1st, 2nd, 4th beat)
-  • Minimum clip length (ignores beats that are too close together)
-  • Max number of cuts
+Rendering: every segment is encoded on its own with frame counts taken
+from the cumulative beat times (so there is no drift, however many cuts),
+then the segments are joined losslessly and the song is laid underneath.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
+from __future__ import annotations
+
+import array
+import math
 import os
-import re
-import shutil
-import tempfile
-import json
+import random
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
+from core import encoders as enc
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
+
+ENV_RATE = 200            # energy envelope samples per second
+ORDERS = {"sequential": "In order, continuing through each clip",
+          "shuffle": "Shuffle clips and positions"}
+SIZES = {"Same as the first clip": None, "1920×1080": (1920, 1080), "1080×1920 (vertical)": (1080, 1920),
+         "1280×720": (1280, 720), "1080×1080 (square)": (1080, 1080)}
 
 
-def _detect_beats(ffmpeg_path, audio_path, sensitivity=0.15, min_gap=0.2):
-    """
-    Detect beat/transient onsets using a high-pass + dynamics trick.
-    Returns sorted list of beat timestamps (seconds, float).
-    """
-    # Strategy: apply high-pass filter to isolate transients,
-    # then use volumedetect + manual peak scanning via stderr parsing.
-    # We use `astats` frame-by-frame at short intervals to find RMS peaks.
+# ── beat detection (pure, tested) ────────────────────────────────────────────
 
-    cmd = [
-        ffmpeg_path,
-        "-i", audio_path,
-        "-af", (
-            # 1. High-pass to isolate kick/snare attack transients
-            "highpass=f=80,"
-            # 2. Heavy compression to make all beats equally loud
-            "acompressor=threshold=0.05:ratio=20:attack=1:release=10,"
-            # 3. astats every 0.05s chunk - we'll parse RMS from stderr
-            "astats=length=0.05:metadata=1:reset=1,"
-            "ametadata=mode=print:file=-"
-        ),
-        "-f", "null", "-",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True,
-                            creationflags=CREATE_NO_WINDOW)
-    output = result.stderr + result.stdout
+def envelope(path: str, stream: int = 0, timeout: float = 600) -> list:
+    """Energy envelope of the audio at ENV_RATE Hz."""
+    cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error", "-i", path,
+           "-map", f"0:a:{stream}", "-vn", "-sn",
+           "-af", f"aformat=channel_layouts=mono,aresample=22050,highpass=f=30,"
+                  f"aeval=val(0)*val(0),aresample={ENV_RATE}",
+           "-f", "f32le", "-"]
+    r = ff.capture(cmd, timeout=timeout, text=False)
+    if r.returncode != 0 or not r.stdout:
+        raise RuntimeError("Could not read the music's audio.")
+    data = array.array("f")
+    data.frombytes(r.stdout[: len(r.stdout) // 4 * 4])
+    return [max(0.0, v) for v in data]
 
-    # Parse RMS_level lines
-    rms_values = []
-    time_re  = re.compile(r"pts_time:([\d.]+)")
-    rms_re   = re.compile(r"lavfi\.astats\.Overall\.RMS_level=([-\d.]+)")
 
-    current_t   = None
-    for line in output.split("\n"):
-        tm = time_re.search(line)
-        rm = rms_re.search(line)
-        if tm:
-            current_t = float(tm.group(1))
-        if rm and current_t is not None:
-            try:
-                rms_str = rm.group(1).strip()
-                # FFmpeg can output '-', '-inf', 'nan', or '-nan' for silence
-                if rms_str in ('-', '-inf', 'nan', '-nan', 'inf'):
-                    rms_db = -200.0
-                else:
-                    rms_db = float(rms_str)
-            except (ValueError, TypeError):
-                rms_db = -200.0
-            # Convert dB to linear
-            if rms_db > -100:
-                rms_lin = 10 ** (rms_db / 20)
-                rms_values.append((current_t, rms_lin))
-            current_t = None
+def onset_strength(env: list) -> list:
+    logs = [math.log10(v + 1e-9) for v in env]
+    on = [0.0] * len(logs)
+    for i in range(2, len(logs)):
+        on[i] = max(0.0, logs[i] - max(logs[i - 1], logs[i - 2]) * 0.5 - logs[i - 2] * 0.5)
+    # light smoothing (3 samples = 15 ms)
+    return [(on[max(i - 1, 0)] + on[i] + on[min(i + 1, len(on) - 1)]) / 3 for i in range(len(on))]
 
-    if not rms_values:
+
+def estimate_tempo(onset: list, lo_bpm: float = 70, hi_bpm: float = 180) -> float:
+    """Beat period in envelope samples."""
+    seg = onset[: ENV_RATE * 90]
+    if len(seg) < ENV_RATE * 4:
+        return ENV_RATE * 0.5
+    mean = sum(seg) / len(seg)
+    x = [v - mean for v in seg]
+    best, best_lag = -1e18, ENV_RATE * 0.5
+    for lag in range(int(ENV_RATE * 60 / hi_bpm), int(ENV_RATE * 60 / lo_bpm) + 1):
+        r = sum(a * b for a, b in zip(x, x[lag:])) / (len(x) - lag)
+        bpm = 60 * ENV_RATE / lag
+        weight = math.exp(-0.5 * (math.log2(bpm / 120) / 0.9) ** 2)
+        if r * weight > best:
+            best, best_lag = r * weight, lag
+    # sub-sample refinement with the neighbours (parabolic)
+    def ac(lag):
+        return sum(a * b for a, b in zip(x, x[lag:])) / (len(x) - lag)
+    y0, y1, y2 = ac(best_lag - 1), ac(best_lag), ac(best_lag + 1)
+    denom = y0 - 2 * y1 + y2
+    shift = 0.5 * (y0 - y2) / denom if denom else 0.0
+    return best_lag + max(-0.5, min(0.5, shift))
+
+
+def beat_grid(onset: list, period: float) -> list:
+    """Beat times (s): best phase, then each beat snapped to a nearby onset."""
+    n = len(onset)
+    if n == 0:
         return []
-
-    # Find peaks: a beat is where RMS exceeds `sensitivity` times the
-    # rolling max, with at least `min_gap` seconds between beats.
-    max_rms   = max(v for _, v in rms_values)
-    threshold = max_rms * sensitivity
-
-    beats       = []
-    last_beat_t = -999
-
-    for i in range(1, len(rms_values) - 1):
-        t, rms = rms_values[i]
-        if (rms > threshold
-                and rms >= rms_values[i-1][1]
-                and rms >= rms_values[i+1][1]
-                and (t - last_beat_t) >= min_gap):
-            beats.append(round(t, 3))
-            last_beat_t = t
-
+    best, phase = -1.0, 0
+    for ph in range(int(period)):
+        s = sum(onset[int(round(ph + k * period))] for k in range(int((n - ph) / period)))
+        if s > best:
+            best, phase = s, ph
+    peak = sorted(onset)[int(len(onset) * 0.9)] if onset else 0
+    beats, pos = [], float(phase)
+    win = max(1, int(period * 0.12))
+    while pos < n:
+        i = int(round(pos))
+        lo, hi = max(0, i - win), min(n, i + win + 1)
+        j = max(range(lo, hi), key=lambda k: onset[k]) if hi > lo else i
+        if onset[j] >= peak:
+            pos = float(j)
+        beats.append(pos / ENV_RATE)
+        pos += period
     return beats
 
 
-def _fmt_timestamp(secs: float) -> str:
-    """Format seconds as MM:SS for YouTube chapters."""
-    m = int(secs) // 60
-    s = int(secs) % 60
-    return f"{m:02d}:{s:02d}"
+def onset_peaks(onset: list, sensitivity: float = 0.5, min_gap: float = 0.15) -> list:
+    """Every hit: local maxima above an adaptive threshold."""
+    if not onset:
+        return []
+    ordered = sorted(onset)
+    median = ordered[len(ordered) // 2]
+    high = ordered[int(len(ordered) * 0.98)]
+    thr = median + (high - median) * (1.0 - sensitivity) * 0.8
+    gap = int(min_gap * ENV_RATE)
+    out, last = [], -gap
+    for i in range(1, len(onset) - 1):
+        if onset[i] >= thr and onset[i] >= onset[i - 1] and onset[i] > onset[i + 1] and i - last >= gap:
+            out.append(i / ENV_RATE)
+            last = i
+    return out
+
+
+def frame_plan(cuts, total: float, fps: float) -> list:
+    """[(start_s, frames)] covering 0..total with cuts on the given times."""
+    marks = [0.0] + [c for c in cuts if 0 < c < total] + [total]
+    plan = []
+    for a, b in zip(marks, marks[1:]):
+        frames = int(round(b * fps)) - int(round(a * fps))
+        if frames > 0:
+            plan.append((a, frames))
+    return plan
+
+
+def assign_sources(plan, clips, order: str, fps: float, seed: int = 7) -> list:
+    """[(clip_path, in_point, frames)] for each planned segment."""
+    rng = random.Random(seed)
+    out, idx, pos = [], 0, {c[0]: 0.0 for c in clips}
+    for _start, frames in plan:
+        seconds = frames / fps
+        if order == "shuffle":
+            path, dur = rng.choice(clips)
+            start = rng.uniform(0, max(0.0, dur - seconds)) if dur > seconds else 0.0
+        else:
+            path, dur = clips[idx % len(clips)]
+            start = pos[path]
+            if start + seconds > dur:
+                start = 0.0 if seconds >= dur else start % max(dur - seconds, 0.001)
+            pos[path] = start + seconds
+            idx += 1
+        out.append((path, start, frames))
+    return out
 
 
 class BeatSyncCutterTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.audio_path = ""
-        self.video_path = ""
-        self._beats: list = []
+        self.src_var = tk.StringVar()
+        self.clips: list = []
+        self.beats: list = []
+        self._music_dur = 0.0
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(hdr, text="🥁  " + t("tab.beat_sync_cutter"),
-                 font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=20, pady=12)
-        tk.Label(hdr,
-                 text=t("beat_sync.desc"),
-                 bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
+        self.make_header(self, t("tab.beat_sync_cutter"), "Music montages that cut on the beat.",
+                         icon="🥁")
+        body = scroll_body(self)
+        self.music_row = FileRow(body, "Music:", self.src_var, kind="media",
+                                 on_change=lambda _p: self._analyse())
+        self.music_row.pack(fill="x", padx=20, pady=(10, 4))
 
-        # ── Input files ───────────────────────────────────────────────────
-        inp = tk.LabelFrame(self, text=t("section.input_files"), padx=14, pady=8)
-        inp.pack(fill="x", padx=16, pady=8)
+        bl = tk.LabelFrame(body, text="  Beats  ", padx=12, pady=6)
+        bl.pack(fill="x", padx=20, pady=4)
+        r0 = tk.Frame(bl)
+        r0.pack(fill="x")
+        self.mode_var = tk.StringVar(value="grid")
+        tk.Radiobutton(r0, text="Beat grid (steady tempo)", value="grid", variable=self.mode_var,
+                       command=self._analyse).pack(side="left")
+        tk.Radiobutton(r0, text="Every hit", value="hits", variable=self.mode_var,
+                       command=self._analyse).pack(side="left", padx=10)
+        tk.Label(r0, text="Sensitivity:").pack(side="left", padx=(10, 2))
+        self.sens_var = tk.DoubleVar(value=0.5)
+        tk.Scale(r0, variable=self.sens_var, from_=0.05, to=0.95, resolution=0.05, orient="horizontal",
+                 length=120, command=lambda _v: self._schedule()).pack(side="left")
+        self.bpm_lbl = tk.Label(bl, text="Choose a music file.", fg=CLR["accent"], font=(MONO_FONT, 10))
+        self.bpm_lbl.pack(anchor="w", pady=(4, 0))
+        self.canvas = tk.Canvas(bl, height=60, bg=CLR["console_bg"], highlightthickness=0)
+        self.canvas.pack(fill="x", pady=4)
+        self.canvas.bind("<Configure>", lambda _e: self._draw())
+        r1 = tk.Frame(bl)
+        r1.pack(fill="x")
+        tk.Label(r1, text="Cut every").pack(side="left")
+        self.every_var = tk.StringVar(value="2")
+        ttk.Combobox(r1, textvariable=self.every_var, values=["1", "2", "4", "8", "16"],
+                     state="readonly", width=4).pack(side="left", padx=4)
+        tk.Label(r1, text="beats").pack(side="left")
+        tk.Button(r1, text="Save beat times…", relief="flat", command=self._save_beats).pack(
+            side="right")
 
-        for label, attr, tip in [
-            ("🎵  Music / Audio  (beat source):", "audio",
-             "The track whose beats will be detected."),
-            ("🎬  Video to cut  (optional):", "video",
-             "The video to slice at beat points. Leave blank for marks-only mode."),
-        ]:
-            row = tk.Frame(inp); row.pack(fill="x", pady=3)
-            tk.Label(row, text=label, width=32, anchor="w",
-                     font=(UI_FONT, 9, "bold")).pack(side="left")
-            var = tk.StringVar()
-            setattr(self, attr + "_var", var)
-            tk.Entry(row, textvariable=var, width=50, relief="flat").pack(side="left", padx=6)
+        cl = tk.LabelFrame(body, text="  Clips  ", padx=12, pady=6)
+        cl.pack(fill="x", padx=20, pady=4)
+        top = tk.Frame(cl)
+        top.pack(fill="x")
+        self.listbox = tk.Listbox(top, height=6)
+        self.listbox.pack(side="left", fill="x", expand=True)
+        bt = tk.Frame(top)
+        bt.pack(side="left", padx=6)
+        for text, cmd in (("➕ Add clips", self._add), ("🗑 Remove", self._remove), ("🧹 Clear", self._clear)):
+            tk.Button(bt, text=text, relief="flat", width=12, command=cmd).pack(fill="x", pady=1)
+        r2 = tk.Frame(cl)
+        r2.pack(fill="x", pady=(4, 0))
+        tk.Label(r2, text="Order:").pack(side="left")
+        self.order_var = tk.StringVar(value=ORDERS["sequential"])
+        ttk.Combobox(r2, textvariable=self.order_var, values=list(ORDERS.values()), state="readonly",
+                     width=36).pack(side="left", padx=4)
+        tk.Label(r2, text="Size:").pack(side="left", padx=(10, 2))
+        self.size_var = tk.StringVar(value=next(iter(SIZES)))
+        ttk.Combobox(r2, textvariable=self.size_var, values=list(SIZES), state="readonly",
+                     width=22).pack(side="left")
 
-            def _b(a=attr, v=var):
-                ft = ([("Audio/Video",
-                        "*.mp3 *.wav *.aac *.flac *.ogg *.mp4 *.mov"),
-                       ("All", "*.*")]
-                      if a == "audio"
-                      else [("Video", "*.mp4 *.mov *.mkv *.avi"),
-                             ("All", "*.*")])
-                p = dialogs.askopenfilename(filetypes=ft)
-                if p:
-                    setattr(self, a + "_path", p)
-                    v.set(p)
-                    try:
-                        self.duration = get_video_duration(p)
-                        self._timeline.set_duration(self.duration)
-                    except Exception:
-                        pass
-            tk.Button(row, text=t("btn.browse"), command=_b, cursor="hand2", relief="flat").pack(side="left")
-            tk.Label(inp, text=f"  ℹ  {tip}", fg=CLR["fgdim"],
-                     font=(UI_FONT, 8)).pack(anchor="w")
-
-        # ── Video timeline ────────────────────────────────────────────────
-        tl_lf = tk.LabelFrame(self, text=t("beat_sync.sect_beat_timeline"), padx=14, pady=8)
-        tl_lf.pack(fill="x", padx=20, pady=4)
-        self._timeline = VideoTimeline(tl_lf, on_change=self._on_timeline_change,
-                                       height=90, show_handles=False)
-        self._timeline.pack(fill="x")
-
-        # ── Detection options ─────────────────────────────────────────────
-        det_lf = tk.LabelFrame(self, text=t("beat_sync.sect_beat_detection"), padx=14, pady=10)
-        det_lf.pack(fill="x", padx=16, pady=4)
-
-        d0 = tk.Frame(det_lf); d0.pack(fill="x", pady=3)
-        tk.Label(d0, text=t("beat_sync.lbl_sensitivity"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.sens_var = tk.DoubleVar(value=0.15)
-        tk.Scale(d0, variable=self.sens_var, from_=0.05, to=0.80,
-                 resolution=0.01, orient="horizontal", length=220).pack(side="left", padx=8)
-        self.sens_lbl = tk.Label(d0, text="0.15", width=5, fg=CLR["accent"])
-        self.sens_lbl.pack(side="left")
-        self.sens_var.trace_add("write", lambda *_: self.sens_lbl.config(
-            text=f"{self.sens_var.get():.2f}"))
-        tk.Label(d0, text=t("beat_sync.desc_sensitivity_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        d1 = tk.Frame(det_lf); d1.pack(fill="x", pady=3)
-        tk.Label(d1, text=t("beat_sync.lbl_min_gap")).pack(side="left")
-        self.mingap_var = tk.StringVar(value="0.2")
-        tk.Entry(d1, textvariable=self.mingap_var, width=5, relief="flat").pack(side="left", padx=6)
-        tk.Label(d1, text=t("beat_sync.desc_min_gap_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        self.btn_detect = tk.Button(det_lf, text=t("beat_sync.btn_detect_beats"),
-                                     bg=CLR["accent"], fg="black",
-                                     font=(UI_FONT, 10, "bold"),
-                                     command=self._detect)
-        self.btn_detect.pack(anchor="w", pady=6)
-
-        # Beat results panel
-        res_lf = tk.LabelFrame(self, text=t("beat_sync.sect_detected_beats"), padx=10, pady=6)
-        res_lf.pack(fill="x", padx=16, pady=4)
-
-        self.beat_text = tk.Text(res_lf, height=4, bg=CLR["console_bg"],
-                                  fg="#00FF88", font=(MONO_FONT, 9),
-                                  wrap="word")
-        self.beat_text.pack(fill="x")
-        self.beat_text.insert(tk.END, "Run detection first…")
-        self.beat_text.config(state="disabled")
-
-        # ── Cut options ───────────────────────────────────────────────────
-        cut_lf = tk.LabelFrame(self, text=t("beat_sync.sect_auto_cut_options"), padx=14, pady=10)
-        cut_lf.pack(fill="x", padx=16, pady=4)
-
-        c0 = tk.Frame(cut_lf); c0.pack(fill="x", pady=3)
-        tk.Label(c0, text=t("beat_sync.lbl_mode"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.mode_var = tk.StringVar(value="Auto-cut video to beats")
-        ttk.Combobox(c0, textvariable=self.mode_var,
-                     values=["Auto-cut video to beats",
-                              t("beat_sync.beat_sync_export_beat_timestamps_txt"),
-                              t("beat_sync.beat_sync_export_youtube_chapters_txt"),
-                              t("beat_sync.beat_sync_export_edl_cut_list_edl")],
-                     state="readonly", width=32).pack(side="left", padx=8)
-
-        c1 = tk.Frame(cut_lf); c1.pack(fill="x", pady=3)
-        tk.Label(c1, text=t("beat_sync.lbl_nth_beat")).pack(side="left")
-        self.nth_var = tk.StringVar(value="1")
-        ttk.Combobox(c1, textvariable=self.nth_var,
-                     values=[t("beat_sync.beat_sync_1_every_beat"), t("beat_sync.beat_sync_2_every_2nd"),
-                              t("beat_sync.beat_sync_4_every_bar"), t("beat_sync.beat_sync_8_every_2_bars")],
-                     state="readonly", width=18).pack(side="left", padx=6)
-
-        c2 = tk.Frame(cut_lf); c2.pack(fill="x", pady=3)
-        tk.Label(c2, text=t("beat_sync.lbl_min_clip_length")).pack(side="left")
-        self.minclip_var = tk.StringVar(value="0.5")
-        tk.Entry(c2, textvariable=self.minclip_var, width=5, relief="flat").pack(side="left", padx=4)
-        tk.Label(c2, text=t("beat_sync.lbl_max_cuts")).pack(side="left")
-        self.maxcuts_var = tk.StringVar(value="0")
-        tk.Entry(c2, textvariable=self.maxcuts_var, width=5, relief="flat").pack(side="left", padx=4)
-        tk.Label(c2, text=t("beat_sync.0_unlimited"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # ── Chapter name prefix ───────────────────────────────────────────
-        ch_f = tk.Frame(cut_lf); ch_f.pack(fill="x", pady=3)
-        tk.Label(ch_f, text=t("beat_sync.chapter_name_prefix")).pack(side="left")
-        self.ch_prefix_var = tk.StringVar(value="Chapter")
-        tk.Entry(ch_f, textvariable=self.ch_prefix_var, width=16, relief="flat").pack(side="left", padx=4)
-        tk.Label(ch_f, text="  (e.g. 'Chapter 1', 'Part 1', etc.)",
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self); of.pack(fill="x", padx=16, pady=5)
-        tk.Label(of, text=t("beat_sync.output_file_folder"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=58, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self, text=t("beat_sync.apply_beat_sync"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#6A1B9A", fg="white",
-            height=2, command=self._render)
-        self.btn_render.pack(pady=8, padx=16, fill="x")
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=16, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.music_row.path, "montage", ".mp4"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🥁  BUILD MONTAGE", font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=24, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
+        self._onset = None
+        self._period = None
+        self._job = None
 
-    # ─────────────────────────────────────────────────────────────────────
-    def _on_timeline_change(self, start, end, playhead):
-        """Called when the user moves the playhead on the timeline."""
-        pass
+    # ── clips ────────────────────────────────────────────────────────────────
 
-    def _browse_out(self):
-        mode = self.mode_var.get()
-        if "video" in mode.lower():
-            p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                              filetypes=[("MP4","*.mp4")])
+    def _add(self):
+        for p in self.pick_sources("video"):
+            info = ff.try_probe(p)
+            if info is not None and info.has_video and info.duration > 0.2:
+                self.clips.append((p, info.duration))
+                self.listbox.insert("end", f"{os.path.basename(p)}   ({ff.format_time(info.duration)})")
+
+    def _remove(self):
+        sel = self.listbox.curselection()
+        if sel:
+            del self.clips[sel[0]]
+            self.listbox.delete(sel[0])
+
+    def _clear(self):
+        self.clips.clear()
+        self.listbox.delete(0, "end")
+
+    def load_file(self, path):
+        info = ff.try_probe(path)
+        if info is None:
+            return False
+        if info.has_video and self.music_row.path:
+            self.clips.append((path, info.duration))
+            self.listbox.insert("end", f"{os.path.basename(path)}   ({ff.format_time(info.duration)})")
         else:
-            p = dialogs.asksaveasfilename(defaultextension=".txt",
-                                              filetypes=[("Text","*.txt"),
-                                                         ("EDL",t("beat_sync.edl"))])
-        if p: self.out_var.set(p)
+            self.src_var.set(path)
+        return True
 
-    def _detect(self):
-        src = self.audio_path or self.video_path
-        if not src:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+    # ── analysis ─────────────────────────────────────────────────────────────
+
+    def _schedule(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(250, self._pick_beats)
+
+    def _analyse(self):
+        path = self.music_row.path
+        info = ff.try_probe(path) if path else None
+        if info is None or not info.has_audio:
+            self.bpm_lbl.config(text="The music file needs an audio track.")
             return
-        self.btn_detect.config(state="disabled", text=t("beat_sync.detecting"))
-        self.log(self.console, t("log.beat_sync.detecting_beats"))
+        self._music_dur = info.duration
+        self.bpm_lbl.config(text="Listening for the beat…")
 
-        def _work():
-            try:
-                ffmpeg = get_binary_path("ffmpeg.exe")
-                beats  = _detect_beats(
-                    ffmpeg, src,
-                    sensitivity=self.sens_var.get(),
-                    min_gap=float(self.mingap_var.get() or "0.2"))
-                self._beats = beats
-                self.after(0, lambda: self._show_beats(beats))
-            except Exception as e:
-                self.log(self.console, f"❌  Detection error: {e}")
-            finally:
-                self.after(0, lambda: self.btn_detect.config(
-                    state="normal", text=t("beat_sync.btn_detect_beats")))
+        def work():
+            on = onset_strength(envelope(path))
+            return on, estimate_tempo(on)
 
-        self.run_in_thread(_work)
+        def done(res):
+            self._onset, self._period = res
+            self._pick_beats()
 
-    def _show_beats(self, beats):
-        self.beat_text.config(state="normal")
-        self.beat_text.delete("1.0", tk.END)
-        if beats:
-            ts_str = "  ".join(f"{b:.3f}s" for b in beats[:40])
-            suffix = f"  … (+{len(beats)-40} more)" if len(beats) > 40 else ""
-            self.beat_text.insert(tk.END,
-                                   f"{len(beats)} beats detected:\n{ts_str}{suffix}")
-            self.log(self.console, f"✅  {len(beats)} beats found.")
+        def failed(exc):
+            self.bpm_lbl.config(text=f"Beat detection failed: {exc}")
+
+        from core import ui
+        ui.run_in_thread(work, on_done=done, on_error=failed, name="BeatDetect")
+
+    def _pick_beats(self):
+        self._job = None
+        if self._onset is None:
+            return
+        if self.mode_var.get() == "grid":
+            self.beats = beat_grid(self._onset, self._period)
+            bpm = 60 * ENV_RATE / self._period
+            self.bpm_lbl.config(text=f"{bpm:.1f} BPM · {len(self.beats)} beats")
         else:
-            self.beat_text.insert(tk.END,
-                                   "No beats found. Try lowering sensitivity.")
-            self.log(self.console, t("log.beat_sync.no_beats_detected_try_lower_sensitivity"))
-        self.beat_text.config(state="disabled")
+            self.beats = onset_peaks(self._onset, float(self.sens_var.get()))
+            self.bpm_lbl.config(text=f"{len(self.beats)} hits")
+        self._draw()
 
-    def _get_filtered_beats(self):
-        """Apply nth-beat and min-clip filtering."""
-        if not self._beats:
-            return []
-        nth_str = self.nth_var.get().split(" ")[0]
-        try:
-            nth = int(nth_str)
-        except ValueError:
-            nth = 1
-        filtered = [b for i, b in enumerate(self._beats) if i % nth == 0]
+    def _draw(self):
+        c = self.canvas
+        c.delete("all")
+        w, h = max(c.winfo_width(), 100), int(c.cget("height"))
+        dur = self._music_dur or 1.0
+        if self._onset:
+            step = max(1, len(self._onset) // w)
+            peak = max(self._onset) or 1
+            for x in range(0, w):
+                seg = self._onset[x * step:(x + 1) * step]
+                v = (max(seg) if seg else 0) / peak
+                c.create_line(x, h, x, h - v * (h - 4), fill="#335577")
+        every = int(self.every_var.get() or 1)
+        for i, b in enumerate(self.beats):
+            x = b / dur * w
+            c.create_line(x, 0, x, h, fill=CLR["accent"] if i % every == 0 else "#444444")
 
-        min_len = float(self.minclip_var.get() or "0.5")
-        result  = []
-        for b in filtered:
-            if not result or (b - result[-1]) >= min_len:
-                result.append(b)
+    def _save_beats(self):
+        if not self.beats:
+            return
+        from core import dialogs
+        out = dialogs.ask_save("beats.txt", kind="text", defaultextension=".txt", parent=self)
+        if out:
+            with open(out, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(f"{b:.3f}" for b in self.beats) + "\n")
+            self.log_tagged(self.console, f"Saved {len(self.beats)} beat times to {out}", "success")
 
-        max_cuts = int(self.maxcuts_var.get() or "0")
-        if max_cuts > 0:
-            result = result[:max_cuts]
-
-        return result
+    # ── render ───────────────────────────────────────────────────────────────
 
     def _render(self):
-        if not self._beats:
-            messagebox.showwarning(t("common.warning"),
-                                   "Run beat detection first.")
+        music = self.music_row.path
+        minfo = common.check_source(self, music, need_video=False, what="Music")
+        if minfo is None:
             return
-        mode = self.mode_var.get()
-        out  = self.out_var.get().strip()
+        if not self.beats:
+            messagebox.showwarning(t("common.warning"), "No beats yet - wait for the analysis to "
+                                                        "finish.", parent=self)
+            return
+        if not self.clips:
+            messagebox.showwarning(t("common.warning"), "Add some video clips.", parent=self)
+            return
+        first = ff.probe(self.clips[0][0])
+        size = SIZES.get(self.size_var.get())
+        w, h = size if size else common.even_size(first)
+        fps_str = common.frame_rate(first)
+        num, _, den = fps_str.partition("/")
+        fps = float(num) / float(den or 1)
+        every = int(self.every_var.get() or 1)
+        cuts = self.beats[::every]
+        total = minfo.duration
+        plan = frame_plan(cuts, total, fps)
+        order = next((k for k, v in ORDERS.items() if v == self.order_var.get()), "sequential")
+        segments = assign_sources(plan, self.clips, order, fps)
+        out = self.confirm_output(self.out_row.path or self.suggest_output(music, "montage", ".mp4"),
+                                  [music] + [c[0] for c in self.clips])
+        if not out:
+            return
+        self.out_row.set(out)
+        container = common.container_of(out)
+        venc = self.encoder.video_encode(container)
+        chain = (f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,"
+                 f"fps={fps_str},format=yuv420p")
+        n = len(segments)
 
-        if "video" in mode.lower():
-            if not self.video_path:
-                messagebox.showwarning(t("common.warning"),
-                                       "Select a video file for auto-cut mode.")
-                return
-            if not out:
-                out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                                   filetypes=[("MP4","*.mp4")])
-            if not out: return
-            self.out_var.set(out)
-            self._autocut(out)
+        def work(_p, cancelled, ctx):
+            tmp = ctx.tempdir()
+            files = []
+            for i, (path, start, frames) in enumerate(segments):
+                seg = os.path.join(tmp, f"seg{i:05d}.mp4" if container != "webm" else f"seg{i:05d}.mkv")
+                ctx.span(0.95 * i / n, 0.95 * (i + 1) / n).run(
+                    [ff.ffmpeg_path(), "-y", *venc.pre_input, "-stream_loop", "-1", "-ss", ff.ts(start),
+                     "-i", path, "-frames:v", str(frames), "-an", "-sn",
+                     *venc.vf_args(chain), *venc.args, seg], duration=frames / fps)
+                files.append(seg)
+            lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
+            ctx.span(0.95, 1.0).run(
+                [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", lst, "-i", music,
+                 "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                 *enc.audio(enc.default_audio_for(container), container=container, bitrate="256k"),
+                 "-t", f"{total:.3f}", *(["-movflags", "+faststart"] if container in ("mp4", "mov") else []),
+                 ctx.output()], duration=total)
+            return 0
 
-        else:
-            if not out:
-                out = dialogs.asksaveasfilename(defaultextension=".txt",
-                                                   filetypes=[("Text","*.txt")])
-            if not out: return
-            self.out_var.set(out)
-            if "chapter" in mode.lower():
-                self._export_chapters(out)
-            elif "edl" in mode.lower():
-                self._export_edl(out)
-            else:
-                self._export_timestamps(out)
-
-    def _autocut(self, out):
-        """Slice video at beat points and concat."""
-        beats  = self._get_filtered_beats()
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        tmp    = tempfile.mkdtemp()
-
-        vid_dur = get_video_duration(self.video_path)
-
-        # Build cut boundaries
-        boundaries = beats + [vid_dur]
-        if boundaries[0] > 0:
-            boundaries.insert(0, 0.0)
-
-        self.log(self.console, f"Cutting {len(boundaries)-1} segments at beat points…")
-
-        def _work():
-            clips = []
-            for i in range(len(boundaries) - 1):
-                ss  = boundaries[i]
-                dur = boundaries[i+1] - ss
-                if dur < 0.1:
-                    continue
-                clip = os.path.join(tmp, f"beat_{i:04d}.mp4")
-                cmd  = [ffmpeg, "-ss", str(ss), "-t", str(dur),
-                        "-i", self.video_path,
-                        "-c", "copy", clip, "-y"]
-                subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
-                clips.append(clip)
-
-            list_path = os.path.join(tmp, "list.txt")
-            with open(list_path, "w") as f:
-                for c in clips:
-                    f.write(f"file '{c}'\n")
-
-            self.log(self.console, t("log.beat_sync.joining_clips"))
-            cmd_cat = [ffmpeg, "-f", "concat", "-safe", "0",
-                       "-i", list_path, "-c", "copy", "-movflags", "+faststart", out, "-y"]
-            r = subprocess.run(cmd_cat, capture_output=True, creationflags=CREATE_NO_WINDOW)
-
-            try: shutil.rmtree(tmp)
-            except Exception: pass
-
-            self.after(0, lambda: self.show_result(r.returncode, out))
-
-        self.run_in_thread(_work)
-
-    def _export_timestamps(self, out):
-        beats = self._get_filtered_beats()
-        with open(out, "w") as f:
-            for b in beats:
-                f.write(f"{b:.3f}\n")
-        self.log(self.console, f"Exported {len(beats)} timestamps → {out}")
-        messagebox.showinfo("Exported",
-                            f"{len(beats)} beat timestamps saved to:\n{out}")
-
-    def _export_chapters(self, out):
-        beats  = self._get_filtered_beats()
-        prefix = self.ch_prefix_var.get().strip() or "Chapter"
-        lines  = []
-        # YouTube requires 00:00 at the start
-        if not beats or beats[0] > 0.5:
-            lines.append(f"00:00 {prefix} 0 - Intro")
-        for i, b in enumerate(beats):
-            lines.append(f"{_fmt_timestamp(b)} {prefix} {i+1}")
-        text = "\n".join(lines)
-        with open(out, "w") as f:
-            f.write(text)
-        self.log(self.console, f"Chapter markers:\n{text}")
-        messagebox.showinfo("Chapters exported",
-                            f"Paste this into your YouTube description:\n\n{text}")
-
-    def _export_edl(self, out):
-        beats = self._get_filtered_beats()
-        lines = [t("beat_sync.title_beat_sync_edl"), t("beat_sync.fcm_non_drop_frame"), ""]
-        for i, b in enumerate(beats):
-            tc = _fmt_timestamp(b)
-            lines.append(f"{i+1:03d}  AX  V  C  {tc} {tc} {tc} {tc}")
-        with open(out, "w") as f:
-            f.write("\n".join(lines))
-        self.log(self.console, f"EDL exported → {out}")
-        messagebox.showinfo("EDL exported", f"Saved to:\n{out}")
+        self.log(self.console, f"{len(plan)} cuts · {w}×{h} @ {fps_str} · {ff.format_time(total)}")
+        common.queue_job(self, name="Beat montage", out=out, work=work, btn=self.btn_render,
+                         btn_label="🥁  BUILD MONTAGE", console=self.console, duration=total,
+                         inputs=[music] + [c[0] for c in self.clips])

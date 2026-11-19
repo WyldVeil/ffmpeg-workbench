@@ -1,482 +1,356 @@
 """
-tab_manualcrop.py  ─  Manual Crop & Reframe
+tabs/cutting/crop.py  -  Manual Crop
 
-Manually crop any region of the video frame - essential for:
-  • Cropping out UI elements, watermarks, or black bars
-  • Reframing a wide shot to focus on one person
-  • Converting between aspect ratios with precise control
-  • Extracting a sub-region for vertical/short-form content
-
-Provides a visual crop preview on a canvas where users can
-drag corners to define the crop rectangle, plus numeric
-fields for pixel-perfect control.
+Drag a crop rectangle over the real picture (or type exact numbers), lock
+it to a common aspect ratio, or let "Detect black bars" find letterboxing
+automatically.  Optionally scale the result.  Sizes are always the size as
+displayed, so rotated phone videos crop correctly.
 """
+from __future__ import annotations
 
+import base64
+import collections
+import re
+import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, get_video_duration, launch_preview, CREATE_NO_WINDOW,
-)
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
+
+ASPECTS = [("free", "Free", None), ("16:9", "16:9 (YouTube)", (16, 9)),
+           ("9:16", "9:16 (Shorts / Reels)", (9, 16)), ("1:1", "1:1 (square)", (1, 1)),
+           ("4:5", "4:5 (Instagram)", (4, 5)), ("4:3", "4:3 (classic)", (4, 3)),
+           ("21:9", "21:9 (cinema)", (21, 9))]
 
 
-def _fmt(seconds):
-    m, s = divmod(max(0, seconds), 60)
-    return f"{int(m):02d}:{s:05.2f}"
+def fit_aspect(vw: int, vh: int, rw: int, rh: int) -> tuple:
+    """Largest centred rectangle of aspect rw:rh inside vw x vh (even sizes)."""
+    if vw / vh > rw / rh:
+        h = vh
+        w = int(h * rw / rh)
+    else:
+        w = vw
+        h = int(w * rh / rw)
+    w, h = min(w, vw) // 2 * 2, min(h, vh) // 2 * 2
+    return (vw - w) // 4 * 2, (vh - h) // 4 * 2, w, h
 
 
-def _probe_wh(path):
-    try:
-        r = subprocess.run(
-            [get_binary_path("ffprobe"), "-v", "error",
-             "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0:s=x", path],
-            capture_output=True, text=True,
-            creationflags=CREATE_NO_WINDOW, timeout=10)
-        w, h = r.stdout.strip().split("x")
-        return int(w), int(h)
-    except Exception:
-        return 1920, 1080
-
-
-ASPECT_PRESETS = {
-    t("crop.free_custom"):   None,
-    t("crop.16_9_youtube"):  (16, 9),
-    t("crop.9_16_shorts"):   (9, 16),
-    t("crop.4_3_classic"):   (4, 3),
-    t("crop.1_1_square"):    (1, 1),
-    t("crop.21_9_cinema"):   (21, 9),
-    t("crop.4_5_instagram"): (4, 5),
-}
+def parse_cropdetect(text: str):
+    """Most frequent crop=W:H:X:Y suggestion in cropdetect output, or None."""
+    found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", text or "")
+    if not found:
+        return None
+    (w, h, x, y), _n = collections.Counter(found).most_common(1)[0]
+    return int(x), int(y), int(w), int(h)
 
 
 class ManualCropTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
+        self.src_var = tk.StringVar()
+        self.vid_w, self.vid_h = 0, 0
         self.duration = 0.0
-        self.vid_w, self.vid_h = 1920, 1080
-        self.preview_proc = None
-
-        # Crop rect in video pixels
-        self._crop_x = tk.IntVar(value=0)
-        self._crop_y = tk.IntVar(value=0)
-        self._crop_w = tk.IntVar(value=1920)
-        self._crop_h = tk.IntVar(value=1080)
-
-        # Canvas dragging state
-        self._drag_type = None  # "move", "tl", "tr", "bl", "br"
-        self._drag_start = (0, 0)
-        self._drag_crop_start = (0, 0, 0, 0)
-
+        self._cx, self._cy, self._cw, self._ch = (tk.IntVar(value=0) for _ in range(4))
+        self._drag = None
+        self._photo = None
+        self._frame_job = None
+        self._frame_gen = 0
         self._build_ui()
 
+    # ── UI ───────────────────────────────────────────────────────────────────
+
     def _build_ui(self):
-        self.make_header(self, t("tab.manual_crop"),
-                         t("crop.subtitle"),
-                         icon="🔲")
+        self.make_header(self, t("tab.manual_crop"), t("crop.subtitle"), icon="🔲")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
+        self.info_lbl.pack(anchor="w", padx=24)
 
-        # ── Source ────────────────────────────────────────────────────────
-        sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=52, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._info_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._info_lbl.pack(side="left", padx=10)
+        main = tk.Frame(body)
+        main.pack(fill="both", expand=True, padx=20, pady=6)
+        left = tk.Frame(main)
+        left.pack(side="left", fill="both", expand=True)
+        self.canvas = tk.Canvas(left, bg="#000000", width=560, height=315, highlightthickness=0,
+                                cursor="crosshair")
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", lambda _e: self._schedule_frame())
+        self.canvas.bind("<ButtonPress-1>", self._press)
+        self.canvas.bind("<B1-Motion>", self._move)
+        self.canvas.bind("<ButtonRelease-1>", lambda _e: setattr(self, "_drag", None))
+        self.pos_var = tk.DoubleVar(value=0)
+        self.slider = ttk.Scale(left, from_=0, to=1, variable=self.pos_var,
+                                command=lambda _v: self._schedule_frame())
+        self.slider.pack(fill="x", pady=(4, 0))
 
-        # ── Main area: canvas + controls side by side ─────────────────────
-        main_f = tk.Frame(self)
-        main_f.pack(fill="both", expand=True, padx=20, pady=6)
-
-        # Left: crop preview canvas
-        canvas_lf = tk.LabelFrame(main_f, text=f"  {t('crop.preview_section')}  ",
-                                  padx=6, pady=6, font=(UI_FONT, 9, "bold"))
-        canvas_lf.pack(side="left", fill="both", expand=True)
-
-        self._canvas = tk.Canvas(canvas_lf, bg=CLR["console_bg"], width=520, height=300,
-                                 highlightthickness=0, cursor="crosshair")
-        self._canvas.pack(fill="both", expand=True)
-        self._canvas.bind("<Configure>", lambda _: self._draw_crop())
-        self._canvas.bind("<ButtonPress-1>", self._on_press)
-        self._canvas.bind("<B1-Motion>", self._on_drag)
-        self._canvas.bind("<ButtonRelease-1>", self._on_release)
-
-        # Right: controls panel
-        ctrl_f = tk.Frame(main_f, width=300)
-        ctrl_f.pack(side="right", fill="y", padx=(10, 0))
-        ctrl_f.pack_propagate(False)
-
-        # Aspect ratio presets
-        ar_lf = tk.LabelFrame(ctrl_f, text=f"  {t('crop.aspect_ratio_section')}  ", padx=10, pady=6,
-                              font=(UI_FONT, 9, "bold"))
-        ar_lf.pack(fill="x", pady=(0, 6))
-
-        self._aspect_var = tk.StringVar(value="Free (custom)")
-        for name in ASPECT_PRESETS:
-            tk.Radiobutton(ar_lf, text=name, variable=self._aspect_var,
-                           value=name, font=(UI_FONT, 9),
-                           command=self._on_aspect_change).pack(anchor="w")
-
-        # Numeric crop fields
-        num_lf = tk.LabelFrame(ctrl_f, text=f"  {t('crop.crop_region_section')}  ", padx=10, pady=6,
-                               font=(UI_FONT, 9, "bold"))
-        num_lf.pack(fill="x", pady=6)
-
-        for lbl, var in [("X offset:", self._crop_x), ("Y offset:", self._crop_y),
-                         ("Width:", self._crop_w), ("Height:", self._crop_h)]:
-            row = tk.Frame(num_lf)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=lbl, font=(UI_FONT, 9), width=10,
-                     anchor="e").pack(side="left")
-            ent = tk.Entry(row, textvariable=var, width=7, relief="flat",
-                           font=(MONO_FONT, 10))
-            ent.pack(side="left", padx=4)
-            ent.bind("<Return>", lambda e: self._draw_crop())
-            ent.bind("<FocusOut>", lambda e: self._draw_crop())
-
-        tk.Button(num_lf, text=t("crop.reset_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  font=(UI_FONT, 9), cursor="hand2", width=20,
-                  command=self._reset_crop).pack(pady=6)
-
-        # Crop info
-        self._crop_info = tk.Label(ctrl_f, text="", fg=CLR["accent"],
-                                   font=(MONO_FONT, 9))
-        self._crop_info.pack(pady=4)
-
-        # Scale output after crop
-        scale_lf = tk.LabelFrame(ctrl_f, text=f"  {t('crop.scale_output_section')}  ", padx=10, pady=6,
-                                 font=(UI_FONT, 9, "bold"))
-        scale_lf.pack(fill="x", pady=6)
-
-        self._scale_mode = tk.StringVar(value="keep")
-        tk.Radiobutton(scale_lf, text=t("crop.keep_cropped_size"), variable=self._scale_mode,
-                       value="keep", font=(UI_FONT, 9)).pack(anchor="w")
-        sr = tk.Frame(scale_lf)
+        ctrl = tk.Frame(main, width=290)
+        ctrl.pack(side="right", fill="y", padx=(10, 0))
+        ar = tk.LabelFrame(ctrl, text=f"  {t('crop.aspect_ratio_section')}  ", padx=8, pady=4)
+        ar.pack(fill="x")
+        self.aspect_var = tk.StringVar(value="free")
+        for key, label, _ratio in ASPECTS:
+            tk.Radiobutton(ar, text=label, value=key, variable=self.aspect_var,
+                           command=self._aspect_changed).pack(anchor="w")
+        num = tk.LabelFrame(ctrl, text=f"  {t('crop.crop_region_section')}  ", padx=8, pady=4)
+        num.pack(fill="x", pady=6)
+        for label, var in (("X:", self._cx), ("Y:", self._cy), ("Width:", self._cw), ("Height:", self._ch)):
+            row = tk.Frame(num)
+            row.pack(fill="x", pady=1)
+            tk.Label(row, text=label, width=8, anchor="e").pack(side="left")
+            e = tk.Entry(row, textvariable=var, width=8, font=(MONO_FONT, 10))
+            e.pack(side="left", padx=4)
+            e.bind("<Return>", lambda _e: self._clamp_and_draw())
+            e.bind("<FocusOut>", lambda _e: self._clamp_and_draw())
+        bt = tk.Frame(num)
+        bt.pack(fill="x", pady=4)
+        tk.Button(bt, text="Reset", relief="flat", command=self._reset).pack(side="left")
+        self.detect_btn = tk.Button(bt, text="Detect black bars", relief="flat",
+                                    command=self._detect_bars)
+        self.detect_btn.pack(side="left", padx=6)
+        sc = tk.LabelFrame(ctrl, text=f"  {t('crop.scale_output_section')}  ", padx=8, pady=4)
+        sc.pack(fill="x")
+        self.scale_var = tk.StringVar(value="keep")
+        tk.Radiobutton(sc, text="Keep the cropped size", value="keep",
+                       variable=self.scale_var).pack(anchor="w")
+        sr = tk.Frame(sc)
         sr.pack(fill="x")
-        tk.Radiobutton(sr, text=t("crop.scale_to_label"), variable=self._scale_mode,
-                       value="scale", font=(UI_FONT, 9)).pack(side="left")
-        self._scale_w = tk.StringVar(value="1920")
-        tk.Entry(sr, textvariable=self._scale_w, width=6, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=4)
-        tk.Label(sr, text="×", font=(UI_FONT, 10)).pack(side="left")
-        self._scale_h = tk.StringVar(value="1080")
-        tk.Entry(sr, textvariable=self._scale_h, width=6, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=4)
+        tk.Radiobutton(sr, text="Scale to", value="scale", variable=self.scale_var).pack(side="left")
+        self.sw_var, self.sh_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
+        tk.Entry(sr, textvariable=self.sw_var, width=6).pack(side="left", padx=2)
+        tk.Label(sr, text="×").pack(side="left")
+        tk.Entry(sr, textvariable=self.sh_var, width=6).pack(side="left", padx=2)
 
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        opt_f = tk.Frame(self)
-        opt_f.pack(fill="x", padx=20, pady=2)
-        tk.Label(opt_f, text=t("common.crf"), font=(UI_FONT, 10)).pack(side="left")
-        self._crf_var = tk.StringVar(value="18")
-        tk.Entry(opt_f, textvariable=self._crf_var, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-
-        # ── Run ───────────────────────────────────────────────────────────
-        bf = tk.Frame(self)
-        bf.pack(pady=8)
-        tk.Button(bf, text=t("crop.preview"), bg=CLR["accent"], fg="white",
-                  width=14, font=(UI_FONT, 10), cursor="hand2",
-                  command=self._preview).pack(side="left", padx=8)
-        self._btn_run = tk.Button(
-            bf, text=t("crop.export_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=24,
-            cursor="hand2", command=self._render)
-        self._btn_run.pack(side="left", padx=8)
-
-        # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "cropped"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text=t("crop.export_button"), font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=24, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=4)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ── Canvas coordinate helpers ─────────────────────────────────────
-    def _vid_to_canvas(self, vx, vy):
-        cw = self._canvas.winfo_width()
-        ch = self._canvas.winfo_height()
-        if self.vid_w == 0 or self.vid_h == 0:
-            return 0, 0
-        scale = min(cw / self.vid_w, ch / self.vid_h)
-        ox = (cw - self.vid_w * scale) / 2
-        oy = (ch - self.vid_h * scale) / 2
-        return ox + vx * scale, oy + vy * scale
+    # ── geometry ─────────────────────────────────────────────────────────────
 
-    def _canvas_to_vid(self, cx, cy):
-        cw = self._canvas.winfo_width()
-        ch = self._canvas.winfo_height()
-        if self.vid_w == 0 or self.vid_h == 0:
-            return 0, 0
-        scale = min(cw / self.vid_w, ch / self.vid_h)
-        ox = (cw - self.vid_w * scale) / 2
-        oy = (ch - self.vid_h * scale) / 2
-        vx = (cx - ox) / scale
-        vy = (cy - oy) / scale
-        return max(0, min(int(vx), self.vid_w)), max(0, min(int(vy), self.vid_h))
+    def _view(self):
+        """(scale, offset_x, offset_y) mapping video pixels onto the canvas."""
+        cw, ch = max(self.canvas.winfo_width(), 2), max(self.canvas.winfo_height(), 2)
+        if not self.vid_w:
+            return 1.0, 0.0, 0.0
+        s = min(cw / self.vid_w, ch / self.vid_h)
+        return s, (cw - self.vid_w * s) / 2, (ch - self.vid_h * s) / 2
 
-    # ── Drawing ───────────────────────────────────────────────────────
-    def _draw_crop(self):
-        c = self._canvas
+    def rect(self):
+        return self._cx.get(), self._cy.get(), self._cw.get(), self._ch.get()
+
+    def set_rect(self, x, y, w, h):
+        w = max(16, min(int(w), self.vid_w))
+        h = max(16, min(int(h), self.vid_h))
+        x = max(0, min(int(x), self.vid_w - w))
+        y = max(0, min(int(y), self.vid_h - h))
+        for var, val in zip((self._cx, self._cy, self._cw, self._ch), (x, y, w, h)):
+            var.set(val)
+        self._draw()
+
+    def _clamp_and_draw(self):
+        try:
+            self.set_rect(*self.rect())
+        except (tk.TclError, ValueError):
+            self._reset()
+
+    # ── drawing ──────────────────────────────────────────────────────────────
+
+    def _schedule_frame(self):
+        self._draw()
+        if self._frame_job is not None:
+            self.after_cancel(self._frame_job)
+        self._frame_job = self.after(200, self._load_frame)
+
+    def _load_frame(self):
+        self._frame_job = None
+        path = self.src_row.path
+        if not path or not self.vid_w:
+            return
+        s, _ox, _oy = self._view()
+        w, h = max(2, int(self.vid_w * s)), max(2, int(self.vid_h * s))
+        self._frame_gen += 1
+        gen, at = self._frame_gen, float(self.pos_var.get())
+
+        def work():
+            png = ff.grab_frame_png(path, at, width=w, height=h)
+            self.call_ui(self._show_frame, gen, png)
+
+        threading.Thread(target=work, daemon=True, name="CropFrame").start()
+
+    def _show_frame(self, gen, png):
+        if gen != self._frame_gen or not png:
+            return
+        try:
+            self._photo = tk.PhotoImage(master=self, data=base64.b64encode(png).decode("ascii"))
+        except tk.TclError:
+            self._photo = None
+        self._draw()
+
+    def _draw(self):
+        c = self.canvas
         c.delete("all")
-        cw = c.winfo_width()
-        ch = c.winfo_height()
-
-        # Draw video frame outline
-        x1c, y1c = self._vid_to_canvas(0, 0)
-        x2c, y2c = self._vid_to_canvas(self.vid_w, self.vid_h)
-        c.create_rectangle(x1c, y1c, x2c, y2c, fill="#222222", outline="#555555")
-        c.create_text((x1c + x2c) / 2, (y1c + y2c) / 2,
-                      text=f"{self.vid_w}×{self.vid_h}",
-                      fill="#444444", font=(UI_FONT, 14))
-
-        # Draw crop rectangle
-        cx = self._crop_x.get()
-        cy = self._crop_y.get()
-        cw_val = self._crop_w.get()
-        ch_val = self._crop_h.get()
-
-        rx1, ry1 = self._vid_to_canvas(cx, cy)
-        rx2, ry2 = self._vid_to_canvas(cx + cw_val, cy + ch_val)
-
-        # Dimmed areas outside crop
-        # top
-        c.create_rectangle(x1c, y1c, x2c, ry1, fill="#000000", stipple="gray50", outline="")
-        # bottom
-        c.create_rectangle(x1c, ry2, x2c, y2c, fill="#000000", stipple="gray50", outline="")
-        # left
-        c.create_rectangle(x1c, ry1, rx1, ry2, fill="#000000", stipple="gray50", outline="")
-        # right
-        c.create_rectangle(rx2, ry1, x2c, ry2, fill="#000000", stipple="gray50", outline="")
-
-        # Crop border
-        c.create_rectangle(rx1, ry1, rx2, ry2, outline=CLR["accent"], width=2)
-
-        # Corner handles
-        hs = 6
-        for x, y in [(rx1, ry1), (rx2, ry1), (rx1, ry2), (rx2, ry2)]:
-            c.create_rectangle(x - hs, y - hs, x + hs, y + hs,
-                               fill=CLR["accent"], outline="white", width=1)
-
-        # Rule of thirds - stipple simulates transparency (Tk has no RGBA hex support)
+        if not self.vid_w:
+            c.create_text(c.winfo_width() // 2, c.winfo_height() // 2, text="Choose a video",
+                          fill="#777777", font=(UI_FONT, 11))
+            return
+        s, ox, oy = self._view()
+        if self._photo is not None:
+            c.create_image(ox, oy, image=self._photo, anchor="nw")
+        else:
+            c.create_rectangle(ox, oy, ox + self.vid_w * s, oy + self.vid_h * s, fill="#222222")
+        x, y, w, h = self.rect()
+        x1, y1, x2, y2 = ox + x * s, oy + y * s, ox + (x + w) * s, oy + (y + h) * s
+        X2, Y2 = ox + self.vid_w * s, oy + self.vid_h * s
+        for box in ((ox, oy, X2, y1), (ox, y2, X2, Y2), (ox, y1, x1, y2), (x2, y1, X2, y2)):
+            c.create_rectangle(*box, fill="#000000", stipple="gray50", outline="")
+        c.create_rectangle(x1, y1, x2, y2, outline=CLR["accent"], width=2)
         for i in (1, 2):
-            tx = rx1 + (rx2 - rx1) * i / 3
-            ty = ry1 + (ry2 - ry1) * i / 3
-            c.create_line(tx, ry1, tx, ry2, fill="#FFFFFF", stipple="gray25", dash=(2, 4))
-            c.create_line(rx1, ty, rx2, ty, fill="#FFFFFF", stipple="gray25", dash=(2, 4))
+            c.create_line(x1 + (x2 - x1) * i / 3, y1, x1 + (x2 - x1) * i / 3, y2, fill="#FFFFFF",
+                          dash=(2, 4))
+            c.create_line(x1, y1 + (y2 - y1) * i / 3, x2, y1 + (y2 - y1) * i / 3, fill="#FFFFFF",
+                          dash=(2, 4))
+        for hx, hy in ((x1, y1), (x2, y1), (x1, y2), (x2, y2)):
+            c.create_rectangle(hx - 6, hy - 6, hx + 6, hy + 6, fill=CLR["accent"], outline="white")
+        c.create_text((x1 + x2) / 2, max(y1 - 10, 8), text=f"{w}×{h}", fill=CLR["accent"],
+                      font=(MONO_FONT, 9, "bold"))
 
-        # Info label
-        c.create_text((rx1 + rx2) / 2, ry1 - 12,
-                      text=f"{cw_val}×{ch_val}",
-                      fill=CLR["accent"], font=(MONO_FONT, 9, "bold"))
+    # ── mouse ────────────────────────────────────────────────────────────────
 
-        # Update info label
-        self._crop_info.config(
-            text=f"Crop: {cw_val}×{ch_val} at ({cx},{cy})")
-
-    # ── Mouse interaction ─────────────────────────────────────────────
-    def _on_press(self, ev):
-        cx = self._crop_x.get()
-        cy = self._crop_y.get()
-        cw = self._crop_w.get()
-        ch = self._crop_h.get()
-
-        rx1, ry1 = self._vid_to_canvas(cx, cy)
-        rx2, ry2 = self._vid_to_canvas(cx + cw, cy + ch)
-
-        hs = 10
-
-        if abs(ev.x - rx1) < hs and abs(ev.y - ry1) < hs:
-            self._drag_type = "tl"
-        elif abs(ev.x - rx2) < hs and abs(ev.y - ry1) < hs:
-            self._drag_type = "tr"
-        elif abs(ev.x - rx1) < hs and abs(ev.y - ry2) < hs:
-            self._drag_type = "bl"
-        elif abs(ev.x - rx2) < hs and abs(ev.y - ry2) < hs:
-            self._drag_type = "br"
-        elif rx1 < ev.x < rx2 and ry1 < ev.y < ry2:
-            self._drag_type = "move"
-        else:
-            self._drag_type = None
+    def _press(self, ev):
+        if not self.vid_w:
             return
+        s, ox, oy = self._view()
+        x, y, w, h = self.rect()
+        x1, y1, x2, y2 = ox + x * s, oy + y * s, ox + (x + w) * s, oy + (y + h) * s
+        near = lambda a, b: abs(a - b) < 10  # noqa: E731
+        corners = {"tl": (x1, y1), "tr": (x2, y1), "bl": (x1, y2), "br": (x2, y2)}
+        kind = next((k for k, (cx, cy) in corners.items() if near(ev.x, cx) and near(ev.y, cy)), None)
+        if kind is None and x1 < ev.x < x2 and y1 < ev.y < y2:
+            kind = "move"
+        self._drag = (kind, ev.x, ev.y, (x, y, w, h)) if kind else None
 
-        self._drag_start = (ev.x, ev.y)
-        self._drag_crop_start = (cx, cy, cw, ch)
-
-    def _on_drag(self, ev):
-        if not self._drag_type:
+    def _move(self, ev):
+        if not self._drag:
             return
-
-        vx, vy = self._canvas_to_vid(ev.x, ev.y)
-        ocx, ocy, ocw, och = self._drag_crop_start
-
-        if self._drag_type == "move":
-            dx_vid, dy_vid = self._canvas_to_vid(ev.x, ev.y)
-            sx_vid, sy_vid = self._canvas_to_vid(*self._drag_start)
-            new_x = max(0, min(ocx + dx_vid - sx_vid, self.vid_w - ocw))
-            new_y = max(0, min(ocy + dy_vid - sy_vid, self.vid_h - och))
-            self._crop_x.set(new_x)
-            self._crop_y.set(new_y)
-
-        elif self._drag_type == "tl":
-            new_x = max(0, min(vx, ocx + ocw - 16))
-            new_y = max(0, min(vy, ocy + och - 16))
-            self._crop_x.set(new_x)
-            self._crop_y.set(new_y)
-            self._crop_w.set(ocx + ocw - new_x)
-            self._crop_h.set(ocy + och - new_y)
-
-        elif self._drag_type == "tr":
-            new_w = max(16, min(vx - ocx, self.vid_w - ocx))
-            new_y = max(0, min(vy, ocy + och - 16))
-            self._crop_y.set(new_y)
-            self._crop_w.set(new_w)
-            self._crop_h.set(ocy + och - new_y)
-
-        elif self._drag_type == "bl":
-            new_x = max(0, min(vx, ocx + ocw - 16))
-            new_h = max(16, min(vy - ocy, self.vid_h - ocy))
-            self._crop_x.set(new_x)
-            self._crop_w.set(ocx + ocw - new_x)
-            self._crop_h.set(new_h)
-
-        elif self._drag_type == "br":
-            new_w = max(16, min(vx - ocx, self.vid_w - ocx))
-            new_h = max(16, min(vy - ocy, self.vid_h - ocy))
-            self._crop_w.set(new_w)
-            self._crop_h.set(new_h)
-
-        self._draw_crop()
-
-    def _on_release(self, ev):
-        self._drag_type = None
-
-    # ── Aspect ratio ──────────────────────────────────────────────────
-    def _on_aspect_change(self):
-        name = self._aspect_var.get()
-        ratio = ASPECT_PRESETS.get(name)
-        if ratio is None:
+        kind, sx, sy, (x, y, w, h) = self._drag
+        s, _ox, _oy = self._view()
+        dx, dy = (ev.x - sx) / s, (ev.y - sy) / s
+        ratio = next((r for k, _l, r in ASPECTS if k == self.aspect_var.get()), None)
+        if kind == "move":
+            self.set_rect(x + dx, y + dy, w, h)
             return
+        left, top, right, bottom = x, y, x + w, y + h
+        if "l" in kind:
+            left = min(max(0, left + dx), right - 16)
+        if "r" in kind:
+            right = max(min(self.vid_w, right + dx), left + 16)
+        if "t" in kind:
+            top = min(max(0, top + dy), bottom - 16)
+        if "b" in kind:
+            bottom = max(min(self.vid_h, bottom + dy), top + 16)
+        nw, nh = right - left, bottom - top
+        if ratio:
+            nh = nw * ratio[1] / ratio[0]
+            if "t" in kind:
+                top = bottom - nh
+        self.set_rect(left, top, nw, nh)
 
-        rw, rh = ratio
-        # Fit the crop rect to the selected aspect within the video
-        if (self.vid_w / self.vid_h) > (rw / rh):
-            # Video is wider - constrain by height
-            new_h = self.vid_h
-            new_w = int(new_h * rw / rh)
-        else:
-            # Video is taller - constrain by width
-            new_w = self.vid_w
-            new_h = int(new_w * rh / rw)
+    # ── actions ──────────────────────────────────────────────────────────────
 
-        new_w = min(new_w, self.vid_w)
-        new_h = min(new_h, self.vid_h)
-
-        self._crop_x.set((self.vid_w - new_w) // 2)
-        self._crop_y.set((self.vid_h - new_h) // 2)
-        self._crop_w.set(new_w)
-        self._crop_h.set(new_h)
-        self._draw_crop()
-
-    def _reset_crop(self):
-        self._crop_x.set(0)
-        self._crop_y.set(0)
-        self._crop_w.set(self.vid_w)
-        self._crop_h.set(self.vid_h)
-        self._aspect_var.set("Free (custom)")
-        self._draw_crop()
-
-    # ── File browsing ─────────────────────────────────────────────────
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self._src_var.set(p)
-            self.duration = get_video_duration(p)
-            self.vid_w, self.vid_h = _probe_wh(p)
-            self._info_lbl.config(
-                text=f"{_fmt(self.duration)}  ·  {self.vid_w}×{self.vid_h}")
-            self._reset_crop()
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self._out_var.set(p)
-
-    # ── Preview & Render ──────────────────────────────────────────────
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+    def _source_changed(self, path):
+        info = ff.try_probe(path)
+        if info is None or not info.has_video:
+            self.vid_w = self.vid_h = 0
+            self.info_lbl.config(text="Not a readable video.")
+            self._draw()
             return
-        if self.preview_proc:
-            try:
-                self.preview_proc.terminate()
-            except Exception:
-                pass
-        self.preview_proc = launch_preview(self.file_path)
+        self.vid_w, self.vid_h = info.video.display_size
+        self.duration = info.duration
+        self.info_lbl.config(text=f"{ff.format_time(self.duration)}  ·  {self.vid_w}×{self.vid_h}"
+                                  + (f"  (rotated {info.video.rotation}°)" if info.video.rotation else ""))
+        self.slider.configure(to=max(self.duration, 0.01))
+        self.pos_var.set(min(self.duration * 0.25, 30))
+        self._photo = None
+        self._reset()
+        self._schedule_frame()
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "cropped"))
+
+    def _reset(self):
+        self.aspect_var.set("free")
+        if self.vid_w:
+            self.set_rect(0, 0, self.vid_w, self.vid_h)
+
+    def _aspect_changed(self):
+        ratio = next((r for k, _l, r in ASPECTS if k == self.aspect_var.get()), None)
+        if ratio and self.vid_w:
+            self.set_rect(*fit_aspect(self.vid_w, self.vid_h, *ratio))
+
+    def _detect_bars(self):
+        path = self.src_row.path
+        if not path or not self.vid_w:
+            return
+        start = max(0.0, min(self.duration * 0.1, 30.0))
+        cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-ss", ff.ts(start), "-t", "20",
+               "-i", path, "-an", "-sn", "-vf", "cropdetect=limit=24:round=2:reset=0",
+               "-f", "null", "-"]
+        self.detect_btn.config(state="disabled", text="Detecting…")
+
+        def work():
+            return parse_cropdetect(ff.capture(cmd, timeout=120).stderr)
+
+        def done(found):
+            self.detect_btn.config(state="normal", text="Detect black bars")
+            if not found:
+                messagebox.showinfo(t("common.warning"), "No black bars found.", parent=self)
+                return
+            self.aspect_var.set("free")
+            self.set_rect(*found)
+            self.log(self.console, f"Black bars detected: picture is {found[2]}×{found[3]} at "
+                                   f"({found[0]},{found[1]}).")
+
+        from core import ui
+        ui.run_in_thread(work, on_done=done, on_error=lambda _e: done(None), name="CropDetect")
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-
-        out = self._out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out:
-            return
-        self._out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg")
-        cx = self._crop_x.get()
-        cy = self._crop_y.get()
-        cw = self._crop_w.get()
-        ch = self._crop_h.get()
-        crf = self._crf_var.get()
-
-        # Make even (FFmpeg requires even dimensions for h264)
-        cw = cw - (cw % 2)
-        ch = ch - (ch % 2)
-
-        vf = f"crop={cw}:{ch}:{cx}:{cy}"
-
-        if self._scale_mode.get() == "scale":
+        x, y, w, h = self.rect()
+        w, h = w // 2 * 2, h // 2 * 2
+        chain = f"crop={w}:{h}:{x}:{y}"
+        if self.scale_var.get() == "scale":
             try:
-                sw = int(self._scale_w.get())
-                sh = int(self._scale_h.get())
-                sw = sw - (sw % 2)
-                sh = sh - (sh % 2)
-                vf += f",scale={sw}:{sh}"
-            except ValueError:
-                pass
-
-        cmd = [ffmpeg, "-i", self.file_path,
-               "-vf", vf,
-               "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-               "-c:a", "aac", "-b:a", "192k",
-               "-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console, f"Cropping: {cw}×{ch} at ({cx},{cy})")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label="🔲  CROP & EXPORT")
+                sw = int(common.number(self.sw_var.get(), "Width", 16, 8192)) // 2 * 2
+                sh = int(common.number(self.sh_var.get(), "Height", 16, 8192)) // 2 * 2
+            except ValueError as exc:
+                messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+                return
+            chain += (f",scale={sw}:{sh}:force_original_aspect_ratio=decrease:flags=lanczos,"
+                      f"pad={sw}:{sh}:(ow-iw)/2:(oh-ih)/2")
+        chain += ",setsar=1"
+        out = common.output_for(self, self.out_row, src, "cropped")
+        if not out:
+            return
+        self.log(self.console, f"Cropping to {w}×{h} at ({x},{y})")
+        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder,
+                      console=self.console, btn=self.btn_render, btn_label=t("crop.export_button"),
+                      name="Manual Crop")

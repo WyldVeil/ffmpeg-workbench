@@ -1,276 +1,163 @@
 """
-tab_rotateflip.py  ─  Rotate & Flip
-Rotate video 90°/180°/270° and/or flip horizontally/vertically.
-Handles the most common problem in video editing: phone footage shot sideways.
-Uses transpose/hflip/vflip filters. Stream-copy audio.
-"""
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
+tabs/cutting/rotate_flip.py  -  Rotate & Flip
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path
+Turn sideways phone videos the right way up, mirror selfies, and so on.
+
+* Lossless (default for MP4/MOV/MKV): only the orientation flag (display
+  matrix) changes - instant, no quality loss, audio and every track kept.
+  Players, browsers, phones and editors all honour it.
+* Re-encode: the pixels are actually rotated, for software that ignores
+  orientation flags.  Uses the chosen encoder; audio is copied.
+"""
+from __future__ import annotations
+
+import tkinter as tk
+
+from core import ffmpeg as ff
 from core.i18n import t
-import sys as _sys
-CREATE_NO_WINDOW = 0x08000000 if _sys.platform == "win32" else 0
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+
+ROTATIONS = [(0, "No rotation"), (90, "90° clockwise ↻"), (180, "180°"),
+             (270, "90° anticlockwise ↺")]
+LOSSLESS_CONTAINERS = ("mp4", "m4v", "mov", "mkv", "3gp")
+
+
+def reencode_chain(rot_cw: int, hflip: bool, vflip: bool) -> str:
+    """Pixel filters: rotate clockwise by *rot_cw*, then mirror (as displayed)."""
+    parts = {90: ["transpose=clock"], 180: ["hflip", "vflip"], 270: ["transpose=cclock"]}.get(
+        rot_cw % 360, [])
+    if hflip:
+        parts.append("hflip")
+    if vflip:
+        parts.append("vflip")
+    return ",".join(parts)
+
+
+def lossless_args(existing_cw: int, rot_cw: int, hflip: bool, vflip: bool) -> list:
+    """Input options that rewrite the orientation flag (display matrix): the
+    total rotation, then mirroring as displayed (verified against the pixel
+    filters for all 16 combinations, including already-rotated sources)."""
+    total_cw = (existing_cw + rot_cw) % 360
+    args = ["-display_rotation:v:0", str((-total_cw) % 360)]
+    if hflip:
+        args.append("-display_hflip:v:0")
+    if vflip:
+        args.append("-display_vflip:v:0")
+    return args
 
 
 class RotateFlipTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🔄  " + t("tab.rotate_flip"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("rotate_flip.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.rotate_flip"), t("rotate_flip.subtitle"), icon="🔄")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], font=(UI_FONT, 9))
+        self.info_lbl.pack(anchor="w", padx=24)
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=14)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=60, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
+        self.compare = CompareView(body, 360, 240)
+        self.compare.pack(pady=6)
 
-        # ── Visual rotation picker ────────────────────────────────────────
-        rot_lf = tk.LabelFrame(self, text=t("rotate_flip.rotation_section"), padx=20, pady=14)
-        rot_lf.pack(fill="x", padx=20, pady=6)
+        opts = tk.LabelFrame(body, text=f"  {t('rotate_flip.rotation_section')}  ", padx=12, pady=8)
+        opts.pack(fill="x", padx=20, pady=4)
+        self.rot_var = tk.IntVar(value=90)
+        r0 = tk.Frame(opts)
+        r0.pack(fill="x")
+        for deg, label in ROTATIONS:
+            tk.Radiobutton(r0, text=label, value=deg, variable=self.rot_var, indicatoron=False,
+                           width=18, pady=6, selectcolor=CLR["accent"], cursor="hand2",
+                           command=self._changed).pack(side="left", padx=3)
+        r1 = tk.Frame(opts)
+        r1.pack(fill="x", pady=(8, 0))
+        self.hflip_var = tk.BooleanVar(value=False)
+        self.vflip_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(r1, text="Mirror left ↔ right", variable=self.hflip_var,
+                       command=self._changed).pack(side="left", padx=4)
+        tk.Checkbutton(r1, text="Flip upside down ↕", variable=self.vflip_var,
+                       command=self._changed).pack(side="left", padx=12)
 
-        btn_row = tk.Frame(rot_lf); btn_row.pack(pady=4)
-        self.rotate_var = tk.StringVar(value="0")
+        meth = tk.LabelFrame(body, text="  Method  ", padx=12, pady=8)
+        meth.pack(fill="x", padx=20, pady=4)
+        self.lossless_var = tk.BooleanVar(value=True)
+        tk.Radiobutton(meth, text="Lossless - change the orientation flag only (instant, keeps "
+                                  "quality and all tracks)", value=True, variable=self.lossless_var,
+                       command=self._method_changed).pack(anchor="w")
+        tk.Radiobutton(meth, text="Re-encode - rotate the pixels (for software that ignores "
+                                  "orientation)", value=False, variable=self.lossless_var,
+                       command=self._method_changed).pack(anchor="w")
+        self.encoder = EncoderPanel(meth, codecs=("h264", "hevc", "av1", "vp9", "prores"))
 
-        rot_options = [
-            (t("rotate_flip.rotate_flip_rotation_0"),     "0",    t("rotate_flip.2a2a2a")),
-            (t("rotate_flip.rotate_flip_rotation_90_cw"), "90",   t("rotate_flip.1a3a5c")),
-            (t("rotate_flip.rotate_flip_rotation_180"),   "180",  t("rotate_flip.1a3a5c")),
-            (t("rotate_flip.rotate_flip_rotation_90_ccw"),"270",  t("rotate_flip.1a3a5c")),
-        ]
-
-        self._rot_buttons = {}
-        for label, val, bg in rot_options:
-            btn = tk.Button(
-                btn_row, text=label,
-                width=12, height=3,
-                bg=bg, fg="white",
-                font=(UI_FONT, 10),
-                relief="raised",
-                command=lambda v=val: self._select_rotation(v))
-            btn.pack(side="left", padx=8)
-            self._rot_buttons[val] = btn
-
-        # ── Flip options ─────────────────────────────────────────────────
-        flip_lf = tk.LabelFrame(self, text=t("rotate_flip.flip_section"), padx=20, pady=12)
-        flip_lf.pack(fill="x", padx=20, pady=6)
-
-        flip_row = tk.Frame(flip_lf); flip_row.pack()
-        self.flip_h_var = tk.BooleanVar(value=False)
-        self.flip_v_var = tk.BooleanVar(value=False)
-
-        tk.Checkbutton(flip_row,
-                       text=t("rotate_flip.flip_horizontal"),
-                       variable=self.flip_h_var,
-                       font=(UI_FONT, 11)).pack(side="left", padx=20)
-        tk.Checkbutton(flip_row,
-                       text=t("rotate_flip.flip_vertical"),
-                       variable=self.flip_v_var,
-                       font=(UI_FONT, 11)).pack(side="left", padx=20)
-
-        # ── Preview of transformation ─────────────────────────────────────
-        desc_lf = tk.LabelFrame(self, text=t("rotate_flip.resulting_transform_section"), padx=14, pady=8)
-        desc_lf.pack(fill="x", padx=20, pady=4)
-        self.desc_lbl = tk.Label(desc_lf,
-                                  text=t("rotate_flip.no_transform"),
-                                  fg=CLR["accent"], font=(MONO_FONT, 10))
-        self.desc_lbl.pack(anchor="w")
-        self.filter_lbl = tk.Label(desc_lf, text="", fg=CLR["fgdim"],
-                                    font=(MONO_FONT, 9))
-        self.filter_lbl.pack(anchor="w")
-
-        # Update description live
-        for var in (self.flip_h_var, self.flip_v_var):
-            var.trace_add("write", lambda *_: self._update_desc())
-
-        # ── Encode options ────────────────────────────────────────────────
-        enc_lf = tk.LabelFrame(self, text=t("section.encode_options"), padx=14, pady=8)
-        enc_lf.pack(fill="x", padx=20, pady=4)
-        enc_row = tk.Frame(enc_lf); enc_row.pack(fill="x")
-
-        self.copy_var = tk.BooleanVar(value=False)
-        copy_cb = tk.Checkbutton(enc_row,
-                                  text=t("rotate_flip.stream_copy_checkbox"),
-                                  variable=self.copy_var,
-                                  command=self._update_desc)
-        copy_cb.pack(side="left")
-
-        tk.Label(enc_row, text=t("rotate_flip.crf")).pack(side="left", padx=(20, 4))
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(enc_row, textvariable=self.crf_var, width=4, relief="flat").pack(side="left")
-        tk.Label(enc_row, text=t("rotate_flip.preset")).pack(side="left", padx=(12, 4))
-        self.preset_var = tk.StringVar(value="fast")
-        ttk.Combobox(enc_row, textvariable=self.preset_var,
-                     values=["ultrafast","fast","medium","slow"],
-                     state="readonly", width=10).pack(side="left")
-
-        # ── Output & buttons ─────────────────────────────────────────────
-        of = tk.Frame(self); of.pack(pady=8)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=62, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        btn_row2 = tk.Frame(self); btn_row2.pack(pady=6)
-        tk.Button(btn_row2, text=t("rotate_flip.preview_button"), bg=CLR["accent"], fg="white",
-                  width=14, font=(UI_FONT, 10), command=self._preview).pack(side="left", padx=8)
-        self.btn_render = tk.Button(
-            btn_row2, text=t("rotate_flip.apply_button"),
-            font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-            height=2, width=24, command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        # Console
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self._suggest(self.src_row.path))
+        self.out_row.pack(fill="x")
+        self.btn_render = tk.Button(body, text="🔄  APPLY", font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=22, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-        self._select_rotation("0")   # highlight default - must be last, needs all vars
-        self._update_desc()
+    def _suggest(self, src):
+        return self.suggest_output(src, "rotated") if src else ""
 
-    # ─────────────────────────────────────────────────────────────────────
-    def _select_rotation(self, val):
-        self.rotate_var.set(val)
-        for v, btn in self._rot_buttons.items():
-            btn.config(bg="#4FC3F7" if v == val else "#2A2A2A",
-                       fg="black" if v == val else "white",
-                       relief="sunken" if v == val else "raised")
-        self._update_desc()
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        if self._info is not None and self._info.video is not None:
+            v = self._info.video
+            w, h = v.display_size
+            flag = f", orientation flag: {v.rotation}° clockwise" if v.rotation else ""
+            self.info_lbl.config(text=f"{w}×{h} as displayed{flag}")
+        self.compare.load(path)
+        self._changed()
+        if not self.out_row.path:
+            self.out_row.set(self._suggest(path))
 
-    def _build_filter(self):
-        """Return (vf_string, can_stream_copy)."""
-        rot   = self.rotate_var.get()
-        hflip = self.flip_h_var.get()
-        vflip = self.flip_v_var.get()
-        parts = []
+    def _method_changed(self):
+        if self.lossless_var.get():
+            self.encoder.pack_forget()
+        else:
+            self.encoder.pack(anchor="w", pady=(6, 0))
 
-        # Rotation via transpose (keeps metadata correct)
-        if rot == "90":
-            parts.append("transpose=1")    # 90° CW
-        elif rot == "180":
-            parts += ["hflip", "vflip"]    # 180° = hflip + vflip
-        elif rot == "270":
-            parts.append("transpose=2")    # 90° CCW
-
-        if hflip:
-            parts.append("hflip")
-        if vflip:
-            parts.append("vflip")
-
-        # Can stream-copy only for pure flips / 180° (no reshape)
-        can_copy = rot in ("0", "180") and not (rot == "0" and not hflip and not vflip)
-        return ",".join(parts) if parts else None, can_copy
-
-    def _update_desc(self, *_):
-        rot   = self.rotate_var.get()
-        hflip = self.flip_h_var.get()
-        vflip = self.flip_v_var.get()
-        parts = []
-        if rot != "0":
-            parts.append(f"Rotate {rot}°")
-        if hflip:
-            parts.append("Mirror horizontal")
-        if vflip:
-            parts.append("Flip vertical")
-
-        desc = "  →  ".join(parts) if parts else "No transformation (pass-through)"
-        vf, can_copy = self._build_filter()
-        self.desc_lbl.config(text=desc)
-        self.filter_lbl.config(
-            text=f"-vf \"{vf}\"" if vf else "(no filter needed)",
-            fg=CLR["fgdim"])
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            base = os.path.splitext(p)[0]
-            self.out_var.set(base + "_rotated.mp4")
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
-        if p: self.out_var.set(p)
-
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("rotate_flip.no_file_title"), t("rotate_flip.no_file_message"))
-            return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-        vf, _ = self._build_filter()
-        ffplay = get_binary_path("ffplay.exe")
-        cmd = [ffplay, "-i", self.file_path,
-               "-window_title", t("rotate_flip.rotate_flip_preview"), "-x", "800", "-autoexit"]
-        if vf:
-            cmd += ["-vf", vf]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+    def _changed(self):
+        self.compare.set_filter(reencode_chain(self.rot_var.get(), self.hflip_var.get(),
+                                               self.vflip_var.get()))
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
+        rot, hf, vf = self.rot_var.get(), self.hflip_var.get(), self.vflip_var.get()
+        out = common.output_for(self, self.out_row, src, "rotated")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        vf, can_copy = self._build_filter()
-        if not vf:
-            messagebox.showinfo(t("rotate_flip.nothing_to_do_title"), t("rotate_flip.nothing_to_do_message"))
             return
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        use_copy = self.copy_var.get() and can_copy
-
-        # Note: stream-copy (-c:v copy) cannot be used with -vf filters.
-        # For "instant" flips we still need to re-encode, but ultrafast preset
-        # makes it nearly as fast.  Always add movflags+faststart for seekability.
-        if use_copy:
-            # Ultrafast re-encode: near-lossless speed, fully seekable output
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-vf", vf,
-                   "-c:v", "libx264", "-crf", "0", "-preset", "ultrafast",
-                   "-c:a", "copy",
-                   "-movflags", "+faststart",
-                   "-g", "30",
-                   out, "-y"]
-        else:
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-vf", vf,
-                   "-c:v", "libx264",
-                   "-crf", self.crf_var.get(),
-                   "-preset", self.preset_var.get(),
-                   "-c:a", "copy",
-                   "-movflags", "+faststart",
-                   "-g", "30",
-                   out, "-y"]
-
-        self.log(self.console, f"Applying: {vf}")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("rotate_flip.apply_button"))
+        if self.lossless_var.get():
+            if common.container_of(out) not in LOSSLESS_CONTAINERS:
+                self.log_tagged(self.console, "Lossless rotation needs an MP4, MOV or MKV output - "
+                                              "re-encoding instead.", "warn")
+            else:
+                cmd = [ff.ffmpeg_path(), "-y",
+                       *lossless_args(info.video.rotation, rot, hf, vf),
+                       "-i", src, "-map", "0", "-c", "copy", "-map_metadata", "0", out]
+                self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                                btn=self.btn_render, btn_label="🔄  APPLY",
+                                duration=info.duration or None, output=out, inputs=[src],
+                                name="Rotate & Flip")
+                return
+        common.render(self, src=src, info=info, out=out, chain=reencode_chain(rot, hf, vf),
+                      encoder=self.encoder, console=self.console, btn=self.btn_render,
+                      btn_label="🔄  APPLY", name="Rotate & Flip")
