@@ -27,7 +27,7 @@ def test_pinned_structure():
     assert isinstance(PINNED, tuple) and len(PINNED) == 2
     name, cls = PINNED
     assert isinstance(name, str) and len(name) > 0
-    assert isinstance(cls, type)
+    assert isinstance(cls.load(), type)
 
 
 def test_hidden_structure():
@@ -36,7 +36,7 @@ def test_hidden_structure():
     assert isinstance(HIDDEN, dict)
     for name, cls in HIDDEN.items():
         assert isinstance(name, str)
-        assert isinstance(cls, type)
+        assert isinstance(cls.load(), type)
 
 
 def test_tools_structure():
@@ -48,7 +48,7 @@ def test_tools_structure():
         for entry in items:
             name, cls = entry
             assert isinstance(name, str) and len(name) > 0
-            assert isinstance(cls, type), f"{name!r} is not a class"
+            assert isinstance(cls.load(), type), f"{name!r} is not a class"
 
 
 def test_no_duplicate_tool_names():
@@ -104,3 +104,22 @@ def test_compatibility_shims():
     for module_path, class_name in shim_checks:
         mod = importlib.import_module(module_path)
         assert hasattr(mod, class_name), f"{module_path} missing {class_name}"
+
+
+def test_registry_is_lazy():
+    """Importing the registry must not import any tool module."""
+    import subprocess, sys, os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import sys; sys.path.insert(0, %r); import tabs.registry as r; "
+            "loaded = [m for m in sys.modules if m.startswith('tabs.') and m.count('.') >= 2]; "
+            "print(loaded)" % root)
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
+    assert out == "[]", out
+
+
+def test_every_registered_tool_loads():
+    from tabs.registry import TOOLS, PINNED, HIDDEN
+    specs = [PINNED[1], *HIDDEN.values(), *(c for items in TOOLS.values() for _, c in items)]
+    for spec in specs:
+        cls = spec.load()
+        assert isinstance(cls, type) and cls.__name__ == spec.cls_name

@@ -69,13 +69,16 @@ def _tab_label(name: str) -> str:
 
 
 class PlaceholderTab(ttk.Frame):
-    """Shown for any tab whose class failed to initialise."""
-    def __init__(self, parent, title):
+    """Shown for any tab whose module or class failed to load."""
+    def __init__(self, parent, title, error=""):
         super().__init__(parent)
-        tk.Label(self, text="⚙  {}".format(title),
-                 font=(UI_FONT, 22, "bold"), fg="#404040").pack(pady=(140, 12))
-        tk.Label(self, text=t("app.under_construction"),
-                 font=(UI_FONT, 12), fg="#505050").pack()
+        tk.Label(self, text="\u26a0  {}".format(title),
+                 font=(UI_FONT, 20, "bold"), fg="#C0392B").pack(pady=(120, 10))
+        msg = ("This tool could not be loaded:\n{}\n\nThe full details were written "
+               "to the log file (Help \u203a Open log folder).").format(error) if error \
+            else t("app.under_construction")
+        tk.Label(self, text=msg, font=(UI_FONT, 11), fg="#808080",
+                 wraplength=700, justify="center").pack()
 
 
 class App(tk.Tk):
@@ -1446,9 +1449,10 @@ class App(tk.Tk):
                 self.pages[page_name] = self._tab_classes[page_name](
                     self._content_area)
             except Exception as exc:
-                self.log_debug(f"Error loading {page_name}: {exc}")
+                import logging
+                logging.getLogger("crossfader.shell").exception("Could not load tool %r", page_name)
                 self.pages[page_name] = PlaceholderTab(
-                    self._content_area, page_name)
+                    self._content_area, page_name, f"{type(exc).__name__}: {exc}")
             # The Home tab needs a way to navigate to other tabs. Inject
             # the navigator after construction (avoids passing the App
             # instance into the tab constructor).

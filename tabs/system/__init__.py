@@ -1,13 +1,24 @@
 """
 tabs.system  -  System-level and application tools
 """
-from tabs.system.screen_recorder   import ScreenRecorderTab
-from tabs.system.batch             import BatchTab
-from tabs.system.advanced_settings import AdvancedSettingsTab
-from tabs.system.settings          import SettingsTab
-from tabs.system.home              import HomeTab
 
-__all__ = [
-    "ScreenRecorderTab", "BatchTab", "AdvancedSettingsTab",
-    "SettingsTab", "HomeTab",
-]
+# Tool classes are imported lazily (PEP 562) so that importing one tool
+# never imports - or breaks on - its siblings.
+import importlib
+
+_EXPORTS = {
+    "ScreenRecorderTab": "tabs.system.screen_recorder",
+    "BatchTab": "tabs.system.batch",
+    "AdvancedSettingsTab": "tabs.system.advanced_settings",
+    "SettingsTab": "tabs.system.settings",
+    "HomeTab": "tabs.system.home",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(importlib.import_module(module), name)

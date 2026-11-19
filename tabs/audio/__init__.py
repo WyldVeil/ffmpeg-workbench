@@ -1,28 +1,36 @@
 """
 tabs.audio  -  Audio engineering and processing tools
 """
-from tabs.audio.silence         import SilenceTab
-from tabs.audio.extractor       import AudioExtractorTab
-from tabs.audio.replacer        import AudioReplacerTab
-from tabs.audio.loudness        import LoudnessNormTab
-from tabs.audio.sync            import AudioSyncTab
-from tabs.audio.muter           import MuterTab
-from tabs.audio.dynamics        import AudioDynamicsTab
-from tabs.audio.mixer           import AudioMixerTab
-from tabs.audio.voice_isolation import VoiceIsolationTab
-from tabs.audio.voice_changer   import VoiceChangerTab
-from tabs.audio.tts             import TTSVoiceOverTab
-from tabs.audio.waveform        import WaveformEditorTab
-from tabs.audio.laugh_track     import LaughTrackRemoverTab
-from tabs.audio.ducker          import AudioDuckerTab
-from tabs.audio.karaoke         import KaraokeTab
-from tabs.audio.exporter        import AudioExporterTab
-from tabs.audio.midifier        import MIDIfierTab
 
-__all__ = [
-    "SilenceTab", "AudioExtractorTab", "AudioReplacerTab", "LoudnessNormTab",
-    "AudioSyncTab", "MuterTab", "AudioDynamicsTab", "AudioMixerTab",
-    "VoiceIsolationTab", "VoiceChangerTab", "TTSVoiceOverTab", "WaveformEditorTab",
-    "LaughTrackRemoverTab", "AudioDuckerTab", "KaraokeTab", "AudioExporterTab",
-    "MIDIfierTab",
-]
+# Tool classes are imported lazily (PEP 562) so that importing one tool
+# never imports - or breaks on - its siblings.
+import importlib
+
+_EXPORTS = {
+    "SilenceTab": "tabs.audio.silence",
+    "AudioExtractorTab": "tabs.audio.extractor",
+    "AudioReplacerTab": "tabs.audio.replacer",
+    "LoudnessNormTab": "tabs.audio.loudness",
+    "AudioSyncTab": "tabs.audio.sync",
+    "MuterTab": "tabs.audio.muter",
+    "AudioDynamicsTab": "tabs.audio.dynamics",
+    "AudioMixerTab": "tabs.audio.mixer",
+    "VoiceIsolationTab": "tabs.audio.voice_isolation",
+    "VoiceChangerTab": "tabs.audio.voice_changer",
+    "TTSVoiceOverTab": "tabs.audio.tts",
+    "WaveformEditorTab": "tabs.audio.waveform",
+    "LaughTrackRemoverTab": "tabs.audio.laugh_track",
+    "AudioDuckerTab": "tabs.audio.ducker",
+    "KaraokeTab": "tabs.audio.karaoke",
+    "AudioExporterTab": "tabs.audio.exporter",
+    "MIDIfierTab": "tabs.audio.midifier",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(importlib.import_module(module), name)

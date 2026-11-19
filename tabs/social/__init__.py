@@ -1,26 +1,35 @@
 """
 tabs.social  -  Social media, format, and delivery tools
 """
-from tabs.social.shortifier     import ShortifierTab
-from tabs.social.auto_cropper   import AutoCropperTab
-from tabs.social.gif_maker      import GIFMakerTab
-from tabs.social.webm_maker     import WebMTab
-from tabs.social.watermark      import TextBurnerTab
-from tabs.social.image_watermark import ImageWatermarkTab
-from tabs.social.hard_subber    import HardSubberTab
-from tabs.social.auto_subs      import AutoSubsTab
-from tabs.social.titles         import TitlesGeneratorTab
-from tabs.social.frame_extractor import FrameExtractorTab
-from tabs.social.intro_maker    import IntroMakerTab
-from tabs.social.slideshow      import SlideshowMakerTab
-from tabs.social.chapter_markers import ChapterMarkersTab
-from tabs.social.thumbnail      import ThumbnailMakerTab
-from tabs.social.collage        import VideoCollageTab
-from tabs.social.youtube        import YouTubeDownloaderTab
 
-__all__ = [
-    "ShortifierTab", "AutoCropperTab", "GIFMakerTab", "WebMTab",
-    "TextBurnerTab", "ImageWatermarkTab", "HardSubberTab", "AutoSubsTab",
-    "TitlesGeneratorTab", "FrameExtractorTab", "IntroMakerTab", "SlideshowMakerTab",
-    "ChapterMarkersTab", "ThumbnailMakerTab", "VideoCollageTab", "YouTubeDownloaderTab",
-]
+# Tool classes are imported lazily (PEP 562) so that importing one tool
+# never imports - or breaks on - its siblings.
+import importlib
+
+_EXPORTS = {
+    "ShortifierTab": "tabs.social.shortifier",
+    "AutoCropperTab": "tabs.social.auto_cropper",
+    "GIFMakerTab": "tabs.social.gif_maker",
+    "WebMTab": "tabs.social.webm_maker",
+    "TextBurnerTab": "tabs.social.watermark",
+    "ImageWatermarkTab": "tabs.social.image_watermark",
+    "HardSubberTab": "tabs.social.hard_subber",
+    "AutoSubsTab": "tabs.social.auto_subs",
+    "TitlesGeneratorTab": "tabs.social.titles",
+    "FrameExtractorTab": "tabs.social.frame_extractor",
+    "IntroMakerTab": "tabs.social.intro_maker",
+    "SlideshowMakerTab": "tabs.social.slideshow",
+    "ChapterMarkersTab": "tabs.social.chapter_markers",
+    "ThumbnailMakerTab": "tabs.social.thumbnail",
+    "VideoCollageTab": "tabs.social.collage",
+    "YouTubeDownloaderTab": "tabs.social.youtube",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(importlib.import_module(module), name)

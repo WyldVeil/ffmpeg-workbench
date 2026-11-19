@@ -1,15 +1,27 @@
 """
 tabs.transcoder  -  Encoding, format conversion, and codec tools
 """
-from tabs.transcoder.downsizer    import UniversalDownsizerTab
-from tabs.transcoder.proxy        import ProxyGenTab
-from tabs.transcoder.codec        import CodecCruncherTab
-from tabs.transcoder.converter    import FormatConverterTab
-from tabs.transcoder.scaler       import ResolutionScalerTab, FPSInterpolatorTab
-from tabs.transcoder.encode_queue import EncodeQueueTab
-from tabs.transcoder.presets      import PresetManagerTab
 
-__all__ = [
-    "UniversalDownsizerTab", "ProxyGenTab", "CodecCruncherTab", "FormatConverterTab",
-    "ResolutionScalerTab", "FPSInterpolatorTab", "EncodeQueueTab", "PresetManagerTab",
-]
+# Tool classes are imported lazily (PEP 562) so that importing one tool
+# never imports - or breaks on - its siblings.
+import importlib
+
+_EXPORTS = {
+    "UniversalDownsizerTab": "tabs.transcoder.downsizer",
+    "ProxyGenTab": "tabs.transcoder.proxy",
+    "CodecCruncherTab": "tabs.transcoder.codec",
+    "FormatConverterTab": "tabs.transcoder.converter",
+    "ResolutionScalerTab": "tabs.transcoder.scaler",
+    "FPSInterpolatorTab": "tabs.transcoder.scaler",
+    "EncodeQueueTab": "tabs.transcoder.encode_queue",
+    "PresetManagerTab": "tabs.transcoder.presets",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(importlib.import_module(module), name)

@@ -1,25 +1,34 @@
 """
 tabs.cutting  -  Timeline cutting and arrangement tools
 """
-from tabs.cutting.crossfader   import CrossfaderTab
-from tabs.cutting.trimmer      import TrimmerTab
-from tabs.cutting.splitter     import MultiSplitterTab
-from tabs.cutting.splicer      import SplicerTab
-from tabs.cutting.batch_joiner import BatchJoinerTab
-from tabs.cutting.rotate_flip  import RotateFlipTab
-from tabs.cutting.side_by_side import SideBySideTab
-from tabs.cutting.beat_sync    import BeatSyncCutterTab
-from tabs.cutting.smart_reframe import SmartReframeTab
-from tabs.cutting.crop         import ManualCropTab
-from tabs.cutting.reverser     import ReverserTab
-from tabs.cutting.freeze_frame import FreezeFrameTab
-from tabs.cutting.clip_looper  import ClipLooperTab
-from tabs.cutting.sequencer    import SequencerTab
-from tabs.cutting.scene_detect import SceneDetectTab
 
-__all__ = [
-    "CrossfaderTab", "TrimmerTab", "MultiSplitterTab", "SplicerTab",
-    "BatchJoinerTab", "RotateFlipTab", "SideBySideTab", "BeatSyncCutterTab",
-    "SmartReframeTab", "ManualCropTab", "ReverserTab", "FreezeFrameTab",
-    "ClipLooperTab", "SequencerTab", "SceneDetectTab",
-]
+# Tool classes are imported lazily (PEP 562) so that importing one tool
+# never imports - or breaks on - its siblings.
+import importlib
+
+_EXPORTS = {
+    "CrossfaderTab": "tabs.cutting.crossfader",
+    "TrimmerTab": "tabs.cutting.trimmer",
+    "MultiSplitterTab": "tabs.cutting.splitter",
+    "SplicerTab": "tabs.cutting.splicer",
+    "BatchJoinerTab": "tabs.cutting.batch_joiner",
+    "RotateFlipTab": "tabs.cutting.rotate_flip",
+    "SideBySideTab": "tabs.cutting.side_by_side",
+    "BeatSyncCutterTab": "tabs.cutting.beat_sync",
+    "SmartReframeTab": "tabs.cutting.smart_reframe",
+    "ManualCropTab": "tabs.cutting.crop",
+    "ReverserTab": "tabs.cutting.reverser",
+    "FreezeFrameTab": "tabs.cutting.freeze_frame",
+    "ClipLooperTab": "tabs.cutting.clip_looper",
+    "SequencerTab": "tabs.cutting.sequencer",
+    "SceneDetectTab": "tabs.cutting.scene_detect",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(importlib.import_module(module), name)
