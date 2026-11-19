@@ -1,312 +1,222 @@
 """
-tab_freezeframe.py  ─  Freeze Frame Maker
+tabs/cutting/freeze_frame.py  -  Freeze Frame
 
-Extract a single frame from a video and hold it for a configurable
-duration, then optionally stitch it back into the clip.  Essential for
-comedy/reaction content ("record scratch" moments) and dramatic pauses.
-
-Modes
-─────
-  1. Freeze Insert    - original plays → freeze → original continues
-  2. Freeze Extend    - freeze is appended at the end
-  3. Freeze Only      - export just the frozen frame as a still video
+Hold a frame: insert a freeze in the middle of a clip (picture pauses,
+sound pauses with it or keeps playing), extend the end with the last frame,
+or export just the frozen moment as a clip.  Optional flash, black-and-
+white and caption while frozen - the classic "record scratch" moment.
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
 import os
-import tempfile
+import shutil
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT, VideoTimeline
-from core.hardware import (    get_binary_path, get_video_duration, launch_preview, CREATE_NO_WINDOW,
-)
+from core import ass
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+
+MODES = [("insert", "Insert a freeze", "Pause the picture at the chosen moment, then carry on."),
+         ("end", "Freeze the ending", "Hold the last frame at the end of the clip."),
+         ("only", "Freeze only", "Export just the frozen moment as a still clip.")]
+AUDIO = {"pause": "Sound pauses during the freeze", "continue": "Sound keeps playing",
+         "mute": "No sound"}
 
 
-def _fmt(seconds):
-    if seconds < 0:
-        seconds = 0
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
-    return f"{int(m):02d}:{s:05.2f}"
+def freeze_graph(mode: str, at: float, hold: float, dur: float, *, has_audio: bool,
+                 audio_mode: str = "pause", flash: bool = False, mono: bool = False,
+                 caption_ass: str | None = None) -> tuple:
+    """(filter_complex, output seconds, audio_out)."""
+    look = []
+    if mono:
+        look.append("hue=s=0")
+    if mode == "only":
+        v = (f"[0:v]trim=start={at:.4f},setpts=PTS-STARTPTS,trim=end_frame=1,"
+             f"tpad=stop_mode=clone:stop_duration={hold:.4f}")
+        if look:
+            v += "," + ",".join(look)
+        start, total = 0.0, hold
+        parts = [v + "[fz]"]
+        vlast = "[fz]"
+    elif mode == "end":
+        at = dur
+        parts = [f"[0:v]setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={hold:.4f}[fz]"]
+        vlast, start, total = "[fz]", dur, dur + hold
+        if look:
+            when = ":enable=gte(t\\," + f"{dur:.4f})"
+            parts.append(vlast + ",".join(f + when for f in look) + "[fl]")
+            vlast = "[fl]"
+    else:
+        parts = ["[0:v]setpts=PTS-STARTPTS,split[va][vb]",
+                 f"[va]trim=end={at:.4f},setpts=PTS-STARTPTS[v0]",
+                 f"[vb]trim=start={at:.4f},setpts=PTS-STARTPTS,"
+                 f"tpad=start_mode=clone:start_duration={hold:.4f}[v1]",
+                 "[v0][v1]concat=n=2:v=1:a=0[fz]"]
+        vlast, start, total = "[fz]", at, dur + hold
+        if look:
+            when = ":enable=between(t\\," + f"{at:.4f}" + "\\," + f"{at + hold:.4f})"
+            parts.append(vlast + ",".join(f + when for f in look) + "[fl]")
+            vlast = "[fl]"
+    if flash:
+        parts.append(f"{vlast}fade=t=in:st={start:.4f}:d=0.35:color=white[fx]")
+        vlast = "[fx]"
+    if caption_ass:
+        parts.append(f"{vlast}{ass.subtitles_filter(caption_ass)}[cap]")
+        vlast = "[cap]"
+    parts.append(f"{vlast}null[v]")
+
+    audio_out = has_audio and audio_mode != "mute"
+    if audio_out:
+        if mode == "only":
+            audio_out = False
+        elif mode == "end":
+            parts.append(f"[0:a:0]asetpts=PTS-STARTPTS,apad=pad_dur={hold:.4f}[a]")
+        elif audio_mode == "continue":
+            parts.append(f"[0:a:0]asetpts=PTS-STARTPTS,apad=pad_dur={hold:.4f}[a]")
+        else:
+            ms = int(round(hold * 1000))
+            parts += ["[0:a:0]asetpts=PTS-STARTPTS,asplit[xa][xb]",
+                      f"[xa]atrim=end={at:.4f},asetpts=PTS-STARTPTS[a0]",
+                      f"[xb]atrim=start={at:.4f},asetpts=PTS-STARTPTS,adelay=delays={ms}:all=1[a1]",
+                      "[a0][a1]concat=n=2:v=0:a=1[a]"]
+    return ";".join(parts), total, audio_out
 
 
 class FreezeFrameTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.duration = 0.0
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.freeze_frame"),
-                         t("freeze_frame.subtitle"),
-                         icon="⏸")
+        self.make_header(self, t("tab.freeze_frame"), "Pause the picture on a moment - with "
+                         "an optional flash and caption.", icon="⏸")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        pv = tk.Frame(body)
+        pv.pack(pady=4)
+        self.preview = FramePreview(pv, 480, 270)
+        self.preview.pack()
+        self.pos_var = tk.DoubleVar(value=0)
+        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=480,
+                                command=lambda _v: self._moved())
+        self.slider.pack(fill="x")
 
-        # ── Source ────────────────────────────────────────────────────────
-        sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=58, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_lbl.pack(side="left", padx=10)
+        opt = tk.LabelFrame(body, text="  Freeze  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.mode_var = tk.StringVar(value="insert")
+        for key, label, desc in MODES:
+            row = tk.Frame(opt)
+            row.pack(fill="x")
+            tk.Radiobutton(row, text=label, value=key, variable=self.mode_var, width=18,
+                           anchor="w").pack(side="left")
+            tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        r = tk.Frame(opt)
+        r.pack(fill="x", pady=(6, 2))
+        tk.Label(r, text="At:").pack(side="left")
+        self.at_var = tk.StringVar(value="0")
+        tk.Entry(r, textvariable=self.at_var, width=12).pack(side="left", padx=4)
+        tk.Label(r, text="(follows the slider)   Hold for (s):").pack(side="left")
+        self.hold_var = tk.StringVar(value="2")
+        tk.Entry(r, textvariable=self.hold_var, width=6).pack(side="left", padx=4)
+        r2 = tk.Frame(opt)
+        r2.pack(fill="x", pady=2)
+        self.audio_var = tk.StringVar(value=AUDIO["pause"])
+        ttk.Combobox(r2, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly",
+                     width=32).pack(side="left")
+        self.flash_var = tk.BooleanVar(value=False)
+        self.mono_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(r2, text="White flash", variable=self.flash_var).pack(side="left", padx=8)
+        tk.Checkbutton(r2, text="Black & white while frozen", variable=self.mono_var).pack(side="left")
+        r3 = tk.Frame(opt)
+        r3.pack(fill="x", pady=2)
+        tk.Label(r3, text="Caption while frozen:").pack(side="left")
+        self.caption_var = tk.StringVar()
+        tk.Entry(r3, textvariable=self.caption_var, width=40).pack(side="left", padx=4)
 
-        # ── Timeline ──────────────────────────────────────────────────────
-        tl_lf = tk.LabelFrame(self, text=f"  {t('freeze_frame.timeline_section')}  ", padx=15, pady=10,
-                              font=(UI_FONT, 9, "bold"))
-        tl_lf.pack(fill="x", padx=20, pady=8)
-        self._timeline = VideoTimeline(tl_lf, on_change=self._on_timeline_change,
-                                       height=90, show_handles=False)
-        self._timeline.pack(fill="x")
-
-        # ── Freeze point ──────────────────────────────────────────────────
-        fp_lf = tk.LabelFrame(self, text=f"  {t('freeze_frame.freeze_point_section')}  ", padx=15, pady=10,
-                              font=(UI_FONT, 9, "bold"))
-        fp_lf.pack(fill="x", padx=20, pady=8)
-
-        r1 = tk.Frame(fp_lf)
-        r1.pack(fill="x", pady=2)
-        tk.Label(r1, text=t("freeze_frame.freeze_at_label"), font=(UI_FONT, 10, "bold"),
-                 width=12, anchor="e").pack(side="left")
-        self._freeze_time = tk.StringVar(value="0.0")
-        tk.Entry(r1, textvariable=self._freeze_time, width=10, relief="flat",
-                 font=(MONO_FONT, 11)).pack(side="left", padx=8)
-        tk.Label(r1, text="seconds", font=(UI_FONT, 9),
-                 fg=CLR["fgdim"]).pack(side="left")
-
-        # Scrubber for picking the freeze point
-        r1b = tk.Frame(fp_lf)
-        r1b.pack(fill="x", pady=4)
-        tk.Label(r1b, text=t("freeze_frame.scrub_label"), font=(UI_FONT, 10), width=12,
-                 anchor="e").pack(side="left")
-        self._scrub_var = tk.DoubleVar(value=0.0)
-        self._scrub = tk.Scale(r1b, variable=self._scrub_var, from_=0, to=100,
-                               resolution=0.01, orient="horizontal", length=420,
-                               bg=CLR["panel"], fg=CLR["fg"],
-                               troughcolor=CLR["bg"], highlightthickness=0,
-                               command=self._on_scrub)
-        self._scrub.pack(side="left", padx=8)
-        tk.Button(r1b, text=t("freeze_frame.set_freeze_button"), bg=CLR["accent"], fg="white",
-                  font=(UI_FONT, 9), cursor="hand2",
-                  command=self._set_freeze_from_scrub).pack(side="left", padx=6)
-        tk.Button(r1b, text=t("freeze_frame.preview_frame_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  font=(UI_FONT, 9), cursor="hand2",
-                  command=self._preview_frame).pack(side="left", padx=4)
-
-        r2 = tk.Frame(fp_lf)
-        r2.pack(fill="x", pady=4)
-        tk.Label(r2, text=t("freeze_frame.freeze_duration_label"), font=(UI_FONT, 10, "bold"),
-                 width=12, anchor="e").pack(side="left")
-        self._freeze_dur = tk.StringVar(value="3.0")
-        tk.Entry(r2, textvariable=self._freeze_dur, width=8, relief="flat",
-                 font=(MONO_FONT, 11)).pack(side="left", padx=8)
-        tk.Label(r2, text="seconds", font=(UI_FONT, 9),
-                 fg=CLR["fgdim"]).pack(side="left")
-
-        # Quick duration buttons
-        qf = tk.Frame(r2)
-        qf.pack(side="left", padx=20)
-        for val, lbl in [(0.5, "0.5s"), (1.0, "1s"), (2.0, "2s"),
-                          (3.0, "3s"), (5.0, "5s"), (10.0, "10s")]:
-            tk.Button(qf, text=lbl, width=4, bg=CLR["panel"], fg=CLR["fg"],
-                      font=(UI_FONT, 9),
-                      command=lambda v=val: self._freeze_dur.set(str(v))
-                      ).pack(side="left", padx=2)
-
-        # ── Mode ──────────────────────────────────────────────────────────
-        mode_lf = tk.LabelFrame(self, text=f"  {t('freeze_frame.freeze_mode_section')}  ", padx=15, pady=8,
-                                font=(UI_FONT, 9, "bold"))
-        mode_lf.pack(fill="x", padx=20, pady=6)
-
-        self._mode_var = tk.StringVar(value="insert")
-        modes = [
-            ("insert",  t("freeze_frame.freeze_frame_insert_label"),
-             t("freeze_frame.freeze_frame_insert_desc")),
-            ("extend",  t("freeze_frame.freeze_frame_at_end_label"),
-             t("freeze_frame.freeze_frame_at_end_desc")),
-            ("only",    t("freeze_frame.freeze_frame_only_label"),
-             t("freeze_frame.freeze_frame_only_desc")),
-        ]
-        for val, label, desc in modes:
-            row = tk.Frame(mode_lf, bg=CLR["bg"])
-            row.pack(fill="x", pady=2)
-            tk.Radiobutton(row, text=label, variable=self._mode_var, value=val,
-                           font=(UI_FONT, 10), bg=CLR["bg"]).pack(side="left")
-            tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9),
-                     bg=CLR["bg"]).pack(side="left", padx=(8, 0))
-
-        # ── Options ───────────────────────────────────────────────────────
-        opt_f = tk.Frame(self)
-        opt_f.pack(fill="x", padx=20, pady=4)
-        tk.Label(opt_f, text=t("common.crf"), font=(UI_FONT, 10)).pack(side="left")
-        self._crf_var = tk.StringVar(value="18")
-        tk.Entry(opt_f, textvariable=self._crf_var, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-        self._silent_freeze = tk.BooleanVar(value=True)
-        tk.Checkbutton(opt_f, text=t("freeze_frame.silent_checkbox"),
-                       variable=self._silent_freeze,
-                       font=(UI_FONT, 10)).pack(side="left", padx=20)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=8)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=58, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Run ───────────────────────────────────────────────────────────
-        bf = tk.Frame(self)
-        bf.pack(pady=8)
-        self._btn_run = tk.Button(
-            bf, text=t("freeze_frame.create_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=28,
-            cursor="hand2", command=self._render)
-        self._btn_run.pack()
-
-        # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
-        self.console, csb = self.make_console(cf, height=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "freeze"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="⏸  CREATE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ── Callbacks ──────────────────────────────────────────────────────
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self._src_var.set(p)
-            self.duration = get_video_duration(p)
-            self._dur_lbl.config(text=_fmt(self.duration))
-            self._scrub.config(to=max(0.1, self.duration))
-            self._timeline.set_duration(self.duration)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        dur = self._info.duration if self._info else 0.0
+        self.slider.configure(to=max(dur, 0.01))
+        self.pos_var.set(dur / 2)
+        self.preview.load(path, dur, dur / 2)
+        self._moved()
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "freeze"))
 
-    def _on_timeline_change(self, start, end, playhead):
-        self._freeze_time.set(str(round(playhead, 2)))
-        self._scrub_var.set(playhead)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self._out_var.set(p)
-
-    def _on_scrub(self, val):
-        pass
-
-    def _set_freeze_from_scrub(self):
-        self._freeze_time.set(str(round(self._scrub_var.get(), 2)))
-
-    def _preview_frame(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
-            return
-        t = self._scrub_var.get()
-        if self.preview_proc:
-            try:
-                self.preview_proc.terminate()
-            except Exception:
-                pass
-        self.preview_proc = launch_preview(self.file_path, start_time=t)
+    def _moved(self):
+        pos = float(self.pos_var.get())
+        self.at_var.set(ff.format_time(pos))
+        self.preview.show(pos)
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-
-        out = self._out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out:
-            return
-        self._out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg")
-        mode = self._mode_var.get()
-        crf = self._crf_var.get()
-
+        dur = info.duration
         try:
-            ft = float(self._freeze_time.get())
-            fd = float(self._freeze_dur.get())
-        except ValueError:
-            messagebox.showerror(t("freeze_frame.bad_input_title"), t("freeze_frame.bad_input_message"))
+            at = ff.parse_time(self.at_var.get() or "0")
+            hold = common.number(self.hold_var.get(), "Hold for", 0.04, 600)
+            if not 0 <= at < dur:
+                raise ValueError(f"The freeze time must be inside the clip (0 - {ff.format_time(dur)}).")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-
-        if fd <= 0:
-            messagebox.showerror(t("freeze_frame.bad_input_title"), t("freeze_frame.bad_input_message"))
+        out = common.output_for(self, self.out_row, src, "freeze")
+        if not out:
             return
+        mode = self.mode_var.get()
+        work_dir = None
+        caption_ass = None
+        if self.caption_var.get().strip():
+            from core.paths import temp_dir
+            work_dir = temp_dir("freeze_")
+            w, h = common.even_size(info)
+            sc = ass.Script(w, h)
+            u = min(w, h) / 1080
+            sc.style(ass.Style("Cap", font="Montserrat", size=round(64 * u), bold=True,
+                               outline=4 * u, shadow=2 * u, alignment=2, margin_v=round(80 * u)))
+            start = 0.0 if mode == "only" else (dur if mode == "end" else at)
+            sc.add(start, start + hold, f"{{\\fad(150,150)}}{ass.escape(self.caption_var.get())}", "Cap")
+            caption_ass = sc.write(os.path.join(work_dir, "caption.ass"))
+        audio_mode = next((k for k, v in AUDIO.items() if v == self.audio_var.get()), "pause")
+        graph, total, audio_out = freeze_graph(mode, at, hold, dur, has_audio=info.has_audio,
+                                               audio_mode=audio_mode, flash=self.flash_var.get(),
+                                               mono=self.mono_var.get(), caption_ass=caption_ass)
+        container = common.container_of(out)
+        from core import encoders as enc
+        audio = (["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+                 if audio_out else ["-an"])
 
-        if mode == "insert":
-            # tpad filter: freeze at the specified frame
-            # Use trim to split, then tpad to insert freeze
-            fps_cmd = [get_binary_path("ffprobe"), "-v", "error",
-                       "-select_streams", "v:0",
-                       "-show_entries", "stream=r_frame_rate",
-                       "-of", "csv=p=0", self.file_path]
-            try:
-                r = subprocess.run(fps_cmd, capture_output=True, text=True,
-                                   creationflags=CREATE_NO_WINDOW, timeout=10)
-                num, den = r.stdout.strip().split("/")
-                fps = float(num) / float(den)
-            except Exception:
-                fps = 30.0
+        def done(rc):
+            if work_dir:
+                shutil.rmtree(work_dir, ignore_errors=True)
+            self.show_result(rc, out)
 
-            freeze_frames = int(fd * fps)
-
-            # Complex filter: split input, trim before/after freeze point,
-            # generate freeze frame, concatenate
-            fc = (
-                f"[0:v]split=3[pre][freeze_src][post];"
-                f"[pre]trim=0:{ft},setpts=PTS-STARTPTS[v_pre];"
-                f"[freeze_src]trim={ft}:{ft + 0.05},setpts=PTS-STARTPTS,"
-                f"loop=loop={freeze_frames}:size=1:start=0,setpts=PTS-STARTPTS[v_freeze];"
-                f"[post]trim={ft}:{self.duration},setpts=PTS-STARTPTS[v_post];"
-                f"[v_pre][v_freeze][v_post]concat=n=3:v=1:a=0[vout]"
-            )
-
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-filter_complex", fc, "-map", "[vout]", "-an",
-                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                   "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, f"Freeze insert at {_fmt(ft)} for {fd}s ({freeze_frames} frames)")
-
-        elif mode == "extend":
-            # tpad to repeat the last frame
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-vf", f"tpad=stop_mode=clone:stop_duration={fd}",
-                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                   "-c:a", "aac", "-b:a", "192k",
-                   "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, f"Freeze extend: hold last frame for {fd}s")
-
-        elif mode == "only":
-            # Extract single frame, loop it for fd seconds
-            cmd = [ffmpeg, "-ss", str(ft), "-i", self.file_path,
-                   "-vframes", "1", "-vf",
-                   f"loop=loop={int(fd * 30)}:size=1:start=0,fps=30",
-                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                   "-t", str(fd), "-an",
-                   "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, f"Freeze only: frame at {_fmt(ft)} for {fd}s")
-
-        else:
-            return
-
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label=t("freeze_frame.create_button"))
+        common.render(self, src=src, info=info, out=out, graph=graph, encoder=self.encoder,
+                      console=self.console, btn=self.btn_render, btn_label="⏸  CREATE",
+                      name="Freeze Frame", audio=audio, duration=total, on_done=done)

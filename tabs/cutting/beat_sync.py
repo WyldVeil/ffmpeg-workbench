@@ -387,18 +387,18 @@ class BeatSyncCutterTab(BaseTab):
             tmp = ctx.tempdir()
             files = []
             for i, (path, start, frames) in enumerate(segments):
-                seg = os.path.join(tmp, f"seg{i:05d}.mp4" if container != "webm" else f"seg{i:05d}.mkv")
+                seg = os.path.join(tmp, f"seg{i:05d}.mkv")
                 ctx.span(0.95 * i / n, 0.95 * (i + 1) / n).run(
                     [ff.ffmpeg_path(), "-y", *venc.pre_input, "-stream_loop", "-1", "-ss", ff.ts(start),
                      "-i", path, "-frames:v", str(frames), "-an", "-sn",
-                     *venc.vf_args(chain), *venc.args, seg], duration=frames / fps)
+                     *venc.vf_args(chain), *common.intermediate_args(venc), seg], duration=frames / fps)
                 files.append(seg)
             lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
             ctx.span(0.95, 1.0).run(
                 [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", lst, "-i", music,
                  "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
                  *enc.audio(enc.default_audio_for(container), container=container, bitrate="256k"),
-                 "-t", f"{total:.3f}", *(["-movflags", "+faststart"] if container in ("mp4", "mov") else []),
+                 "-t", f"{total:.3f}", *common.final_copy_args(venc, container),
                  ctx.output()], duration=total)
             return 0
 

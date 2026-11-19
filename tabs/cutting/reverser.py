@@ -1,317 +1,205 @@
 """
-tab_reverser.py  ─  Video Reverser
+tabs/cutting/reverser.py  -  Video Reverser
 
-Reverse video playback - full clip or a selected time range.
-Options for reversing video only, audio only, or both.
-Includes a "boomerang" mode (forward → reverse → forward loop)
-popular in meme and reaction content.
+Play a clip backwards, reverse just a section, or make boomerang / ping-pong
+loops.  Works on clips of any length: FFmpeg's reverse filter has to hold
+every frame in memory, so long clips are reversed in chunks sized to stay
+within a memory budget, and the chunks are joined losslessly in reverse
+order (audio is reversed the same way and encoded once at the end).
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
 import os
+import tkinter as tk
+from tkinter import messagebox
 
-from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, launch_preview, CREATE_NO_WINDOW
+from core import encoders as enc
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
+
+MODES = [("full", "Reverse the whole clip", "The entire video plays backwards."),
+         ("range", "Reverse one section", "Only the chosen part plays backwards; the rest is untouched."),
+         ("boomerang", "Boomerang", "Forwards, then backwards (Instagram style)."),
+         ("pingpong", "Ping-pong loop", "Forwards and backwards, repeated.")]
+MEMORY_BUDGET = 1.2e9          # bytes of decoded frames the reverse filter may hold
 
 
-def _fmt(seconds):
-    if seconds < 0:
-        seconds = 0
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
-    return f"{int(m):02d}:{s:05.2f}"
+def chunk_seconds(width: int, height: int, fps: float, budget: float = MEMORY_BUDGET) -> float:
+    frame_bytes = max(1, width * height) * 1.5 * 1.3        # yuv420p + filter overhead
+    return max(1.0, budget / frame_bytes / max(fps, 1.0))
+
+
+def reverse_chunks(start: float, end: float, chunk: float) -> list:
+    """[(a, b)] slices of [start, end] in the order they must be played once
+    each slice is reversed (latest slice first)."""
+    out, b = [], end
+    while b - start > 1e-6:
+        a = max(start, b - chunk)
+        out.append((a, b))
+        b = a
+    return out
+
+
+def plan(mode: str, dur: float, start: float, end: float, repeats: int) -> list:
+    """[('fwd'|'rev', a, b)] pieces of the output in order."""
+    if mode == "full":
+        return [("rev", 0.0, dur)]
+    if mode == "range":
+        pieces = []
+        if start > 0.01:
+            pieces.append(("fwd", 0.0, start))
+        pieces.append(("rev", start, end))
+        if end < dur - 0.01:
+            pieces.append(("fwd", end, dur))
+        return pieces
+    if mode == "boomerang":
+        return [("fwd", start, end), ("rev", start, end)]
+    return [("fwd", start, end), ("rev", start, end)] * max(1, repeats)
 
 
 class ReverserTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.duration = 0.0
+        self.src_var = tk.StringVar()
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.video_reverser"),
-                         t("reverser.subtitle"),
-                         icon="⏪")
+        self.make_header(self, t("tab.video_reverser"), "Backwards playback, boomerangs and "
+                         "ping-pong loops - for clips of any length.", icon="⏪")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"])
+        self.info_lbl.pack(anchor="w", padx=24)
 
-        # ── Source ────────────────────────────────────────────────────────
-        sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=58, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_lbl.pack(side="left", padx=10)
+        mode_lf = tk.LabelFrame(body, text="  Effect  ", padx=12, pady=6)
+        mode_lf.pack(fill="x", padx=20, pady=6)
+        self.mode_var = tk.StringVar(value="full")
+        for key, label, desc in MODES:
+            row = tk.Frame(mode_lf)
+            row.pack(fill="x", pady=1)
+            tk.Radiobutton(row, text=label, value=key, variable=self.mode_var, width=22, anchor="w",
+                           command=self._mode_changed).pack(side="left")
+            tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        self.range_f = tk.Frame(mode_lf)
+        tk.Label(self.range_f, text="Section from").pack(side="left")
+        self.start_var = tk.StringVar(value="0")
+        tk.Entry(self.range_f, textvariable=self.start_var, width=10).pack(side="left", padx=4)
+        tk.Label(self.range_f, text="to").pack(side="left")
+        self.end_var = tk.StringVar(value="")
+        tk.Entry(self.range_f, textvariable=self.end_var, width=10).pack(side="left", padx=4)
+        tk.Label(self.range_f, text="(empty = end)   Repeats:").pack(side="left")
+        self.repeat_var = tk.StringVar(value="3")
+        tk.Entry(self.range_f, textvariable=self.repeat_var, width=4).pack(side="left", padx=4)
+        self.audio_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(mode_lf, text="Reverse the sound too (otherwise the output is silent)",
+                       variable=self.audio_var).pack(anchor="w", pady=(4, 0))
 
-        # ── Timeline ──────────────────────────────────────────────────────
-        tl_lf = tk.LabelFrame(self, text=t("section.timeline"), padx=15, pady=8,
-                               font=(UI_FONT, 9, "bold"))
-        tl_lf.pack(fill="x", padx=20, pady=6)
-        self._timeline = VideoTimeline(tl_lf, on_change=self._on_timeline_change,
-                                       height=90, show_handles=True)
-        self._timeline.pack(fill="x")
-
-        # ── Mode ──────────────────────────────────────────────────────────
-        mode_lf = tk.LabelFrame(self, text=t("reverser.reverse_mode_section"), padx=15, pady=10,
-                                font=(UI_FONT, 9, "bold"))
-        mode_lf.pack(fill="x", padx=20, pady=8)
-
-        self._mode_var = tk.StringVar(value="full_reverse")
-        modes = [
-            ("full_reverse",  t("reverser.reverser_full_reverse_label"),
-             t("reverser.reverser_full_reverse_desc")),
-            ("range_reverse", t("reverser.reverser_range_reverse_label"),
-             t("reverser.reverser_range_reverse_desc")),
-            ("boomerang",     t("reverser.reverser_boomerang_label"),
-             t("reverser.reverser_boomerang_desc")),
-            ("ping_pong",     t("reverser.reverser_ping_pong_label"),
-             t("reverser.reverser_ping_pong_desc")),
-        ]
-        for val, label, desc in modes:
-            row = tk.Frame(mode_lf, bg=CLR["bg"])
-            row.pack(fill="x", pady=2)
-            tk.Radiobutton(row, text=label, variable=self._mode_var, value=val,
-                           font=(UI_FONT, 10), command=self._on_mode,
-                           bg=CLR["bg"]).pack(side="left")
-            tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9),
-                     bg=CLR["bg"]).pack(side="left", padx=(8, 0))
-
-        # ── Range frame (shown for range_reverse) ─────────────────────────
-        self._range_f = tk.LabelFrame(self, text=t("section.time_range"), padx=15, pady=8,
-                                      font=(UI_FONT, 9, "bold"))
-        rr = tk.Frame(self._range_f)
-        rr.pack(fill="x")
-        tk.Label(rr, text=t("splitter.start_label"), font=(UI_FONT, 10)).pack(side="left")
-        self._range_start = tk.StringVar(value="0.0")
-        tk.Entry(rr, textvariable=self._range_start, width=10, relief="flat",
-                 font=(MONO_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(rr, text=t("splitter.end_label"), font=(UI_FONT, 10)).pack(side="left", padx=(16, 0))
-        self._range_end = tk.StringVar(value="5.0")
-        tk.Entry(rr, textvariable=self._range_end, width=10, relief="flat",
-                 font=(MONO_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(rr, text=t("reverser.seconds"), fg=CLR["fgdim"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=4)
-
-        # ── Ping-pong frame ───────────────────────────────────────────────
-        self._pp_f = tk.LabelFrame(self, text=t("reverser.ping_pong_repeats_section"), padx=15, pady=8,
-                                   font=(UI_FONT, 9, "bold"))
-        ppr = tk.Frame(self._pp_f)
-        ppr.pack(fill="x")
-        tk.Label(ppr, text=t("reverser.loop_count_label"), font=(UI_FONT, 10)).pack(side="left")
-        self._loop_count = tk.IntVar(value=3)
-        tk.Spinbox(ppr, from_=2, to=20, textvariable=self._loop_count, width=5,
-                   font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Label(ppr, text=t("reverser.loop_info"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Options ───────────────────────────────────────────────────────
-        opt_lf = tk.LabelFrame(self, text=t("section.options"), padx=15, pady=8,
-                               font=(UI_FONT, 9, "bold"))
-        opt_lf.pack(fill="x", padx=20, pady=6)
-
-        or1 = tk.Frame(opt_lf)
-        or1.pack(fill="x", pady=2)
-        self._rev_video = tk.BooleanVar(value=True)
-        tk.Checkbutton(or1, text=t("reverser.reverse_video_checkbox"), variable=self._rev_video,
-                       font=(UI_FONT, 10)).pack(side="left", padx=(0, 20))
-        self._rev_audio = tk.BooleanVar(value=True)
-        tk.Checkbutton(or1, text=t("reverser.reverse_audio_checkbox"), variable=self._rev_audio,
-                       font=(UI_FONT, 10)).pack(side="left", padx=(0, 20))
-        self._strip_audio = tk.BooleanVar(value=False)
-        tk.Checkbutton(or1, text=t("reverser.strip_audio_checkbox"),
-                       variable=self._strip_audio,
-                       font=(UI_FONT, 10)).pack(side="left")
-
-        or2 = tk.Frame(opt_lf)
-        or2.pack(fill="x", pady=4)
-        tk.Label(or2, text=t("common.crf"), font=(UI_FONT, 10)).pack(side="left")
-        self._crf_var = tk.StringVar(value="18")
-        tk.Entry(or2, textvariable=self._crf_var, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(or2, text=t("common.preset"), font=(UI_FONT, 10)).pack(side="left", padx=(16, 0))
-        self._preset_var = tk.StringVar(value="fast")
-        ttk.Combobox(or2, textvariable=self._preset_var, width=12,
-                     values=["ultrafast", "superfast", "veryfast", "faster",
-                             "fast", "medium", "slow"],
-                     state="readonly").pack(side="left", padx=6)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=8)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=58, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Buttons ───────────────────────────────────────────────────────
-        bf = tk.Frame(self)
-        bf.pack(pady=8)
-        tk.Button(bf, text=t("reverser.preview"), bg=CLR["accent"], fg="white",
-                  width=18, font=(UI_FONT, 10), cursor="hand2",
-                  command=self._preview).pack(side="left", padx=8)
-        self._btn_run = tk.Button(
-            bf, text=t("reverser.reverse_video"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=26,
-            cursor="hand2", command=self._render)
-        self._btn_run.pack(side="left", padx=8)
-
-        # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "reversed"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="⏪  CREATE", font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=22, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
+        self._mode_changed()
 
-        self._on_mode()
+    def _mode_changed(self):
+        if self.mode_var.get() == "full":
+            self.range_f.pack_forget()
+        else:
+            self.range_f.pack(fill="x", pady=(4, 0))
 
-    def _on_mode(self):
-        mode = self._mode_var.get()
-        self._range_f.pack_forget()
-        self._pp_f.pack_forget()
-        if mode == "range_reverse":
-            self._range_f.pack(fill="x", padx=20, pady=6)
-        elif mode == "ping_pong":
-            self._pp_f.pack(fill="x", padx=20, pady=6)
-
-    def _on_timeline_change(self, start, end):
-        self._range_start.set(str(round(start, 2)))
-        self._range_end.set(str(round(end, 2)))
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self._src_var.set(p)
-            self.duration = get_video_duration(p)
-            self._dur_lbl.config(text=_fmt(self.duration))
-            self._timeline.set_duration(self.duration)
-            self._range_end.set(str(round(min(5.0, self.duration), 2)))
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self._out_var.set(p)
-
-    def _get_output(self):
-        out = self._out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if out:
-            self._out_var.set(out)
-        return out
-
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
-            return
-        launch_preview(self.file_path)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        if self._info is not None and self._info.has_video:
+            w, h = self._info.video.display_size
+            self.info_lbl.config(text=f"{w}×{h}, {ff.format_time(self._info.duration)}")
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "reversed"))
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self._get_output()
+        dur = info.duration
+        mode = self.mode_var.get()
+        try:
+            start = ff.parse_time(self.start_var.get() or "0") if mode != "full" else 0.0
+            end = ff.parse_time(self.end_var.get()) if mode != "full" and self.end_var.get().strip() else dur
+            repeats = int(common.number(self.repeat_var.get() or "1", "Repeats", 1, 50))
+            if not 0 <= start < end <= dur + 0.05:
+                raise ValueError("The section must lie inside the clip, with 'from' before 'to'.")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        end = min(end, dur)
+        out = common.output_for(self, self.out_row, src, "reversed")
         if not out:
             return
+        w, h = common.even_size(info)
+        fps = info.video.fps or 30.0
+        chunk = chunk_seconds(w, h, fps)
+        pieces = plan(mode, dur, start, end, repeats)
+        audio = self.audio_var.get() and info.has_audio
+        container = common.container_of(out)
+        venc = self.encoder.video_encode(container)
+        norm = f"scale={w}:{h},setsar=1,format=yuv420p" if not venc.pix_fmt.endswith("10le") else \
+            f"scale={w}:{h},setsar=1"
+        total = sum(b - a for _k, a, b in pieces)
 
-        ffmpeg = get_binary_path("ffmpeg")
-        mode = self._mode_var.get()
-        crf = self._crf_var.get()
-        preset = self._preset_var.get()
-        strip = hasattr(self, '_strip_audio') and self._strip_audio.get()
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            files, cache, done, n = [], {}, 0.0, 0
+            for kind, a, b in pieces:
+                key = (kind, a, b)
+                if key in cache:                       # ping-pong reuses rendered pieces
+                    files += cache[key]
+                    done += b - a
+                    continue
+                slices = reverse_chunks(a, b, chunk) if kind == "rev" else [(a, b)]
+                made = []
+                for sa, sb in slices:
+                    n += 1
+                    seg = os.path.join(tmp, f"piece{n:05d}.mkv")
+                    vf = ("reverse," if kind == "rev" else "") + norm
+                    cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input, "-ss", ff.ts(sa), "-i", src,
+                           "-t", ff.ts(sb - sa), "-map", "0:v:0", *venc.vf_args(vf)]
+                    cmd += (["-map", "0:a:0", "-af", "areverse" if kind == "rev" else "anull",
+                             "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"] if audio else ["-an"])
+                    cmd += [*common.intermediate_args(venc), seg]
+                    ctx.span(0.95 * done / total, 0.95 * (done + sb - sa) / total).run(cmd, duration=sb - sa)
+                    done += sb - sa
+                    made.append(seg)
+                cache[key] = made
+                files += made
+            lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
+            final = [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", lst, "-map", "0:v:0",
+                     "-c:v", "copy"]
+            final += (["-map", "0:a:0", *enc.audio(enc.default_audio_for(container), container=container)]
+                      if audio else ["-an"])
+            final += common.final_copy_args(venc, container)
+            ctx.span(0.95, 1.0).run(final + [ctx.output()], duration=total)
+            return 0
 
-        vf_parts = []
-        af_parts = []
-
-        if mode == "full_reverse":
-            if self._rev_video.get():
-                vf_parts.append("reverse")
-            if self._rev_audio.get() and not strip:
-                af_parts.append("areverse")
-            self.log(self.console, t("log.reverser.full_reverse"))
-
-        elif mode == "range_reverse":
-            try:
-                ss = float(self._range_start.get())
-                ee = float(self._range_end.get())
-            except ValueError:
-                messagebox.showerror(t("reverser.bad_range_title"), t("reverser.bad_range_message"))
-                return
-            if ee <= ss:
-                messagebox.showerror(t("reverser.bad_range_title"), t("reverser.bad_range_order"))
-                return
-            # Trim to range, then reverse
-            cmd = [ffmpeg, "-ss", str(ss), "-to", str(ee), "-i", self.file_path]
-            filt_v = "reverse"
-            filt_a = "areverse" if self._rev_audio.get() and not strip else None
-            cmd += ["-vf", filt_v]
-            if filt_a:
-                cmd += ["-af", filt_a]
-            elif strip:
-                cmd += ["-an"]
-            cmd += ["-c:v", "libx264", "-crf", crf, "-preset", preset,
-                    "-c:a", "aac", "-b:a", "192k",
-                    "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, f"Range reverse: {_fmt(ss)} → {_fmt(ee)}")
-            self.run_ffmpeg(cmd, self.console,
-                            on_done=lambda rc: self.show_result(rc, out),
-                            btn=self._btn_run, btn_label="⏪  REVERSE VIDEO")
-            return
-
-        elif mode == "boomerang":
-            # Forward + reversed copy concatenated
-            vf_parts = ["split[main][rev]",
-                        "[rev]reverse[reversed]",
-                        "[main][reversed]concat=n=2:v=1:a=0"]
-            strip = True  # Boomerang typically has no audio
-            self.log(self.console, t("log.reverser.boomerang_forward_reverse"))
-
-        elif mode == "ping_pong":
-            loops = self._loop_count.get()
-            # Build a complex filter that ping-pongs
-            vf_parts = [
-                "split[main][rev]",
-                "[rev]reverse[reversed]",
-                f"[main][reversed]concat=n=2:v=1:a=0[ppout]",
-                f"[ppout]loop=loop={loops - 1}:size=32767",
-            ]
-            strip = True
-            self.log(self.console, f"Ping-pong × {loops}…")
-
-        cmd = [ffmpeg, "-i", self.file_path]
-
-        if mode in ("boomerang", "ping_pong"):
-            cmd += ["-filter_complex", vf_parts[0] if len(vf_parts) == 1
-                    else ";".join(vf_parts)]
-        else:
-            if vf_parts:
-                cmd += ["-vf", ",".join(vf_parts)]
-            if af_parts and not strip:
-                cmd += ["-af", ",".join(af_parts)]
-
-        if strip:
-            cmd += ["-an"]
-        else:
-            if "-af" not in cmd and "-an" not in cmd:
-                cmd += ["-c:a", "aac", "-b:a", "192k"]
-
-        cmd += ["-c:v", "libx264", "-crf", crf, "-preset", preset,
-                "-movflags", "+faststart", out, "-y"]
-
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label="⏪  REVERSE VIDEO")
+        n_chunks = sum(len(reverse_chunks(a, b, chunk)) for k, a, b in pieces if k == "rev")
+        self.log(self.console, f"{dict((k, lbl) for k, lbl, _d in MODES)[mode]} · "
+                               f"{ff.format_time(total)} · reversed in {n_chunks} chunk(s) of up to {chunk:.0f}s")
+        common.queue_job(self, name="Reverser", out=out, work=work, btn=self.btn_render,
+                         btn_label="⏪  CREATE", console=self.console, duration=total, inputs=[src])

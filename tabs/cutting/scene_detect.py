@@ -1,378 +1,258 @@
 """
-tab_scenedetect.py  ─  Scene Detector & Splitter
+tabs/cutting/scene_detect.py  -  Scene Detector
 
-Automatically detect scene changes in long footage (livestream VODs,
-multi-camera recordings, raw captured footage) and split into
-individual clips.  Essential for processing hours-long streams into
-highlight compilations.
+Find the cuts in a video, review them in a list (click to preview), then
+split the video into one file per scene, save the list, or embed the
+scenes as chapters.
 
-Uses FFmpeg's scene-detection filter (select='gt(scene,T)') to find
-cut points, then splits the video at those timestamps.
+Splitting re-encodes by default so every file starts exactly on its cut
+(the encoder is told to place a keyframe there); lossless splitting is
+offered too, with cuts moving to the next keyframe.
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
+import csv
 import os
-import threading
 import re
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, get_video_duration, CREATE_NO_WINDOW, open_in_explorer,
-)
+from core import encoders as enc
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.social.frame_extractor import keep_scenes
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
 
-def _fmt(seconds):
-    if seconds < 0:
-        seconds = 0
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
-    return f"{int(m):02d}:{s:05.2f}"
+def scene_ranges(starts, duration: float) -> list:
+    """[(start, end)] for each scene."""
+    ends = list(starts[1:]) + [duration]
+    return [(a, b) for a, b in zip(starts, ends) if b - a > 0.01]
 
 
 class SceneDetectTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.duration = 0.0
-        self._scenes = []  # list of float timestamps
+        self.src_var = tk.StringVar()
+        self._info = None
+        self.scenes: list = []
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.scene_detector"),
-                         t("scene_detect.subtitle"),
-                         icon="🎬")
+        self.make_header(self, t("tab.scene_detector"), "Find every cut, then split, list or "
+                         "chapter the video.", icon="🎬")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
 
-        # ── Source ────────────────────────────────────────────────────────
-        sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_lbl.pack(side="left", padx=10)
+        det = tk.Frame(body)
+        det.pack(fill="x", padx=20, pady=4)
+        tk.Label(det, text="Sensitivity:").pack(side="left")
+        self.sens_var = tk.DoubleVar(value=0.3)
+        tk.Scale(det, variable=self.sens_var, from_=0.05, to=0.8, resolution=0.05, orient="horizontal",
+                 length=160).pack(side="left", padx=4)
+        tk.Label(det, text="(lower finds more cuts)   Shortest scene (s):").pack(side="left")
+        self.min_var = tk.StringVar(value="1.0")
+        tk.Entry(det, textvariable=self.min_var, width=5).pack(side="left", padx=4)
+        self.btn_detect = tk.Button(det, text="🔍 Find scenes", relief="flat", cursor="hand2",
+                                    command=self._detect)
+        self.btn_detect.pack(side="left", padx=10)
 
-        # ── Detection settings ────────────────────────────────────────────
-        det_lf = tk.LabelFrame(self, text=f"  {t('scene_detect.detection_settings_section')}  ", padx=15, pady=10,
-                               font=(UI_FONT, 9, "bold"))
-        det_lf.pack(fill="x", padx=20, pady=8)
+        mid = tk.Frame(body)
+        mid.pack(fill="x", padx=20, pady=4)
+        self.tree = ttk.Treeview(mid, columns=("n", "start", "end", "len"), show="headings", height=9)
+        for c, label, w in (("n", "#", 40), ("start", "Start", 110), ("end", "End", 110),
+                            ("len", "Length", 90)):
+            self.tree.heading(c, text=label)
+            self.tree.column(c, width=w, anchor="w")
+        self.tree.pack(side="left", fill="y")
+        self.tree.bind("<<TreeviewSelect>>", lambda _e: self._selected())
+        self.preview = FramePreview(mid, 400, 225)
+        self.preview.pack(side="left", padx=10)
 
-        r1 = tk.Frame(det_lf)
-        r1.pack(fill="x", pady=2)
-        tk.Label(r1, text=t("scene_detect.sensitivity_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._thresh_var = tk.DoubleVar(value=0.3)
-        self._thresh_scale = tk.Scale(
-            r1, variable=self._thresh_var, from_=0.05, to=0.8,
-            resolution=0.01, orient="horizontal", length=300,
-            bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
-            highlightthickness=0)
-        self._thresh_scale.pack(side="left", padx=8)
-        self._thresh_lbl = tk.Label(r1, text="0.30", fg=CLR["accent"],
-                                    font=(MONO_FONT, 11, "bold"), width=5)
-        self._thresh_lbl.pack(side="left")
-        self._thresh_var.trace_add("write",
-            lambda *_: self._thresh_lbl.config(
-                text=f"{self._thresh_var.get():.2f}"))
+        act = tk.LabelFrame(body, text="  Use the scenes  ", padx=12, pady=8)
+        act.pack(fill="x", padx=20, pady=6)
+        r = tk.Frame(act)
+        r.pack(fill="x")
+        self.lossless_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(r, text="Lossless split (fast, but each cut moves to the next keyframe)",
+                       variable=self.lossless_var).pack(side="left")
+        self.encoder = EncoderPanel(act, codecs=("h264", "hevc", "av1"))
+        self.encoder.pack(anchor="w", pady=4)
+        drow = tk.Frame(act)
+        drow.pack(fill="x")
+        tk.Label(drow, text="Save files to:", width=14, anchor="w").pack(side="left")
+        self.dir_var = tk.StringVar()
+        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(side="left", fill="x", expand=True, padx=6)
+        tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(side="left")
+        btns = tk.Frame(act)
+        btns.pack(pady=(8, 0))
+        self.btn_split = tk.Button(btns, text="✂  SPLIT INTO SCENES", font=(UI_FONT, 11, "bold"),
+                                   bg=CLR["green"], fg="white", cursor="hand2", command=self._split)
+        self.btn_split.pack(side="left", padx=4)
+        self.btn_chapters = tk.Button(btns, text="📑 Add as chapters…", relief="flat",
+                                      command=self._chapters)
+        self.btn_chapters.pack(side="left", padx=4)
+        tk.Button(btns, text="💾 Save list (CSV)…", relief="flat", command=self._save_csv).pack(
+            side="left", padx=4)
 
-        r1b = tk.Frame(det_lf)
-        r1b.pack(fill="x", pady=2)
-        tk.Label(r1b, text="", width=10).pack(side="left")
-        tk.Label(r1b, text=t("scene_detect.sensitivity_info"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # Presets
-        r1c = tk.Frame(det_lf)
-        r1c.pack(fill="x", pady=4)
-        tk.Label(r1c, text=t("scene_detect.presets_label"), font=(UI_FONT, 10)).pack(side="left")
-        for val, lbl in [(0.10, t("scene_detect.preset_very_sensitive")), (0.25, t("scene_detect.preset_sensitive")),
-                          (0.35, t("scene_detect.preset_balanced")), (0.50, t("scene_detect.preset_conservative")),
-                          (0.70, t("scene_detect.preset_hard_cuts"))]:
-            tk.Button(r1c, text=lbl, bg=CLR["panel"], fg=CLR["fg"],
-                      font=(UI_FONT, 9), cursor="hand2",
-                      command=lambda v=val: self._thresh_var.set(v)
-                      ).pack(side="left", padx=3)
-
-        r2 = tk.Frame(det_lf)
-        r2.pack(fill="x", pady=4)
-        tk.Label(r2, text=t("scene_detect.min_scene_label"), font=(UI_FONT, 10)).pack(side="left")
-        self._min_dur = tk.StringVar(value="2.0")
-        tk.Entry(r2, textvariable=self._min_dur, width=6, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(r2, text=t("scene_detect.min_scene_info"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Detect button ─────────────────────────────────────────────────
-        self._btn_detect = tk.Button(
-            self, text=t("scene_detect.detect_button"), font=(UI_FONT, 11, "bold"),
-            bg=CLR["accent"], fg="white", height=2, width=24,
-            cursor="hand2", command=self._detect)
-        self._btn_detect.pack(pady=8)
-
-        # ── Results ───────────────────────────────────────────────────────
-        res_lf = tk.LabelFrame(self, text=f"  {t('scene_detect.detected_section')}  ", padx=15, pady=8,
-                               font=(UI_FONT, 9, "bold"))
-        res_lf.pack(fill="both", expand=True, padx=20, pady=4)
-
-        self._scene_count_lbl = tk.Label(res_lf, text=t("scene_detect.no_scenes_yet"),
-                                         fg=CLR["fgdim"], font=(UI_FONT, 10))
-        self._scene_count_lbl.pack(anchor="w")
-
-        # Canvas for scene visualization
-        self._scene_canvas = tk.Canvas(res_lf, bg=CLR["console_bg"], height=60,
-                                       highlightthickness=0)
-        self._scene_canvas.pack(fill="x", pady=6)
-
-        # Listbox of timestamps
-        list_f = tk.Frame(res_lf)
-        list_f.pack(fill="both", expand=True)
-        self._scene_list = tk.Listbox(
-            list_f, bg=CLR["console_bg"], fg=CLR["console_fg"],
-            font=(MONO_FONT, 9), selectmode="extended", height=6,
-            relief="flat", bd=0)
-        lsb = ttk.Scrollbar(list_f, command=self._scene_list.yview)
-        self._scene_list.config(yscrollcommand=lsb.set)
-        self._scene_list.pack(side="left", fill="both", expand=True)
-        lsb.pack(side="right", fill="y")
-
-        # ── Split options ─────────────────────────────────────────────────
-        split_f = tk.Frame(self)
-        split_f.pack(fill="x", padx=20, pady=6)
-
-        tk.Label(split_f, text=t("common.output_folder"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_dir_var = tk.StringVar()
-        tk.Entry(split_f, textvariable=self._out_dir_var, width=50, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(split_f, text=t("scene_detect.choose"), command=self._browse_out_dir,
-                  cursor="hand2", relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        split_opt = tk.Frame(self)
-        split_opt.pack(fill="x", padx=20, pady=2)
-        self._copy_mode = tk.BooleanVar(value=True)
-        tk.Checkbutton(split_opt, text=t("scene_detect.stream_copy_checkbox"),
-                       variable=self._copy_mode, font=(UI_FONT, 10)).pack(side="left")
-        self._prefix_var = tk.StringVar(value="scene_")
-        tk.Label(split_opt, text=f"    {t('scene_detect.filename_prefix_label')}", font=(UI_FONT, 10)).pack(side="left")
-        tk.Entry(split_opt, textvariable=self._prefix_var, width=12, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-
-        self._btn_split = tk.Button(
-            self, text=t("scene_detect.split_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=28,
-            cursor="hand2", command=self._split, state="disabled")
-        self._btn_split.pack(pady=8)
-
-        # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ── Callbacks ──────────────────────────────────────────────────────
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self._src_var.set(p)
-            self.duration = get_video_duration(p)
-            self._dur_lbl.config(text=_fmt(self.duration))
+    # ── detection ────────────────────────────────────────────────────────────
 
-    def _browse_out_dir(self):
-        d = dialogs.askdirectory(title="Output folder for split clips")
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        self.scenes = []
+        self._fill()
+        dur = self._info.duration if self._info else 0.0
+        self.preview.load(path, dur, 0.0)
+        if not self.dir_var.get().strip():
+            from core.outputs import default_output_folder
+            self.dir_var.set(default_output_folder(path))
+
+    def _pick_dir(self):
+        from core import dialogs
+        d = dialogs.ask_directory(parent=self)
         if d:
-            self._out_dir_var.set(d)
-
-    def _draw_scenes(self):
-        c = self._scene_canvas
-        c.delete("all")
-        w = c.winfo_width()
-        h = c.winfo_height()
-        if w < 10 or self.duration <= 0:
-            return
-
-        # Draw timeline bar
-        c.create_rectangle(20, 15, w - 20, h - 15, fill=CLR["panel"], outline=CLR["border"])
-
-        # Draw scene boundaries
-        bar_l, bar_r = 20, w - 20
-        bar_w = bar_r - bar_l
-
-        all_pts = [0.0] + self._scenes + [self.duration]
-        colors = [CLR["accent"], CLR["green"], CLR["orange"], CLR["pink"],
-                  "#9C27B0", "#00BCD4", "#FF5722", "#8BC34A", "#FFEB3B"]
-
-        for i in range(len(all_pts) - 1):
-            x1 = bar_l + (all_pts[i] / self.duration) * bar_w
-            x2 = bar_l + (all_pts[i + 1] / self.duration) * bar_w
-            color = colors[i % len(colors)]
-            c.create_rectangle(x1, 16, x2, h - 16, fill=color, outline="")
-            # Label
-            mid = (x1 + x2) / 2
-            dur_s = all_pts[i + 1] - all_pts[i]
-            if x2 - x1 > 30:
-                c.create_text(mid, h // 2, text=f"{dur_s:.1f}s",
-                              fill="white", font=(UI_FONT, 7, "bold"))
-
-        # Scene cut lines
-        for t in self._scenes:
-            x = bar_l + (t / self.duration) * bar_w
-            c.create_line(x, 10, x, h - 10, fill="white", width=2)
+            self.dir_var.set(d)
 
     def _detect(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-
-        thresh = self._thresh_var.get()
         try:
-            min_dur = float(self._min_dur.get())
-        except ValueError:
-            min_dur = 2.0
+            min_len = common.number(self.min_var.get() or "0", "Shortest scene", 0, 3600)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        thr = float(self.sens_var.get())
+        result = {}
 
-        self.log(self.console, f"Detecting scenes (threshold={thresh:.2f}, min={min_dur}s)…")
-        self._btn_detect.config(state="disabled", text=t("scene_detect.analyzing"))
-
-        def _worker(progress_cb, cancel_fn):
-            ffmpeg = get_binary_path("ffmpeg")
-            cmd = [
-                ffmpeg, "-i", self.file_path,
-                "-vf", f"select='gt(scene,{thresh})',showinfo",
-                "-fps_mode", "vfr", "-f", "null", "-"
-            ]
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, creationflags=CREATE_NO_WINDOW)
-
-            timestamps = []
-            pattern = re.compile(r"pts_time:([\d.]+)")
-
-            for line in iter(proc.stdout.readline, ""):
-                if cancel_fn():
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
-                    break
-                match = pattern.search(line)
-                if match:
-                    t = float(match.group(1))
-                    timestamps.append(t)
-                    progress_cb(f"  Scene change at {_fmt(t)}")
-
-            proc.stdout.close()
-            proc.wait()
-
-            # Filter by minimum duration
-            filtered = []
-            last_t = 0.0
-            for t in sorted(timestamps):
-                if t - last_t >= min_dur:
-                    filtered.append(t)
-                    last_t = t
-
-            self._scenes = filtered
-            self.after(0, self._update_scene_ui)
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            ctx.run([ff.ffmpeg_path(), "-i", src, "-an", "-sn", "-dn",
+                     "-vf", f"scale=320:-2,select='gt(scene,{thr:.3f})',metadata=print:file=cuts.txt",
+                     "-fps_mode", "passthrough", "-f", "null", "-"], duration=info.duration, cwd=tmp)
+            try:
+                with open(os.path.join(tmp, "cuts.txt"), encoding="utf-8", errors="replace") as fh:
+                    cuts = [float(m) for m in re.findall(r"pts_time:\s*([\d.]+)", fh.read())]
+            except OSError:
+                cuts = []
+            result["starts"] = keep_scenes(set(cuts), min_len)
             return 0
 
-        self.enqueue_render(
-            "Scene Detect",
-            worker_fn=_worker,
-            on_progress=lambda tid, line: self.log(self.console, line),
-        )
+        orig = self.btn_detect.cget("command")
 
-    def _update_scene_ui(self):
-        self._btn_detect.config(state="normal", text=t("scene_detect.detect_button"))
-        count = len(self._scenes)
-        self._scene_count_lbl.config(
-            text=f"{count} scene{'s' if count != 1 else ''} detected  →  "
-                 f"{count + 1} clips",
-            fg=CLR["green"] if count > 0 else CLR["orange"])
+        def on_complete(tid, rc):
+            self.btn_detect.config(text="🔍 Find scenes", command=orig)
+            if rc == 0:
+                self.scenes = scene_ranges(result.get("starts", [0.0]), info.duration)
+                self._fill()
+                self.log_tagged(self.console, f"{len(self.scenes)} scenes found.", "success")
+            elif rc != -1:
+                self._last_task = self.task(tid)
+                self.show_result(rc)
 
-        self._scene_list.delete(0, "end")
-        all_pts = [0.0] + self._scenes + [self.duration]
-        for i in range(len(all_pts) - 1):
-            dur = all_pts[i + 1] - all_pts[i]
-            self._scene_list.insert(
-                "end",
-                f"  Clip {i + 1:03d}:   {_fmt(all_pts[i])}  →  "
-                f"{_fmt(all_pts[i + 1])}   ({_fmt(dur)})")
+        tid = self.enqueue_render("Scene detection", "", worker_fn=work, on_complete=on_complete,
+                                  on_progress=lambda _t, line: None, expected_duration=info.duration,
+                                  inputs=[src])
+        self.btn_detect.config(text="✖ Stop", command=lambda: self.cancel_render(tid))
 
-        if count > 0:
-            self._btn_split.config(state="normal")
-        self.log(self.console, f"Done: {count} scene changes, {count + 1} clips.")
-        self._scene_canvas.after(100, self._draw_scenes)
+    def _fill(self):
+        self.tree.delete(*self.tree.get_children())
+        for i, (a, b) in enumerate(self.scenes):
+            self.tree.insert("", "end", iid=str(i), values=(i + 1, ff.format_time(a), ff.format_time(b),
+                                                            f"{b - a:.2f}s"))
+
+    def _selected(self):
+        sel = self.tree.selection()
+        if sel:
+            a, b = self.scenes[int(sel[0])]
+            self.preview.show(a + min(0.2, (b - a) / 2))
+
+    # ── actions ──────────────────────────────────────────────────────────────
+
+    def _need_scenes(self):
+        if not self.scenes:
+            messagebox.showwarning(t("common.warning"), "Find the scenes first.", parent=self)
+            return False
+        return True
 
     def _split(self):
-        if not self._scenes:
-            messagebox.showwarning(t("scene_detect.no_scenes_title"), t("scene_detect.run_detection_first"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None or not self._need_scenes():
             return
-
-        out_dir = self._out_dir_var.get().strip()
-        if not out_dir:
-            out_dir = dialogs.askdirectory(title="Output folder")
-        if not out_dir:
+        folder = self.dir_var.get().strip() or os.path.dirname(src)
+        base = os.path.splitext(os.path.basename(src))[0]
+        from tabs.social.frame_extractor import fresh_folder
+        out_dir = fresh_folder(folder, f"{base} scenes")
+        ext = os.path.splitext(src)[1].lower() if self.lossless_var.get() else ".mp4"
+        self.log(self.console, f"Splitting into {len(self.scenes)} files → {out_dir}")
+        if self.lossless_var.get():
+            pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%03d{ext}"
+            times = ",".join(f"{a:.3f}" for a, _b in self.scenes[1:]) or f"{info.duration + 1:.3f}"
+            cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-map", "0:v:0", "-map", "0:a?", "-c", "copy",
+                   "-f", "segment", "-segment_times", times, "-reset_timestamps", "1"]
+            if ext in (".mp4", ".mov", ".m4v"):
+                cmd += ["-segment_format_options", "movflags=+faststart"]
+            self.run_ffmpeg(cmd + [pattern], self.console, on_done=lambda rc: self.show_result(rc, out_dir),
+                            btn=self.btn_split, btn_label="✂  SPLIT INTO SCENES", duration=info.duration,
+                            output=out_dir, inputs=[src], name="Scene split")
             return
-        self._out_dir_var.set(out_dir)
-        os.makedirs(out_dir, exist_ok=True)
+        # Re-encode: one exact cut per scene, whatever the encoder's keyframe habits.
+        venc = self.encoder.video_encode("mp4")
+        audio = enc.audio("aac", container="mp4") if info.has_audio else []
+        cmds = []
+        for i, (a, b) in enumerate(self.scenes, 1):
+            cmds.append([ff.ffmpeg_path(), "-y", *venc.pre_input, "-ss", ff.ts(a), "-t", ff.ts(b - a),
+                         "-i", src, "-map", "0:v:0", *(["-map", "0:a:0"] if info.has_audio else ["-an"]),
+                         *venc.vf_args(None), *venc.args, *audio,
+                         os.path.join(out_dir, f"{base}_scene_{i:03d}.mp4")])
+        self.run_ffmpeg(None, self.console, on_done=lambda rc: self.show_result(rc, out_dir),
+                        btn=self.btn_split, btn_label="✂  SPLIT INTO SCENES",
+                        output=out_dir, inputs=[src], name="Scene split", cmds=cmds)
 
-        prefix = self._prefix_var.get().strip() or "scene_"
-        copy = self._copy_mode.get()
+    def _chapters(self):
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None or not self._need_scenes():
+            return
+        ext = os.path.splitext(src)[1].lower()
+        if ext not in (".mp4", ".mkv", ".mov", ".m4v"):
+            ext = ".mkv"
+        out = self.confirm_output(self.suggest_output(src, "chapters", ext), [src], default_ext=ext)
+        if not out:
+            return
+        from core.paths import temp_dir
+        meta = fl.write_ffmetadata(os.path.join(temp_dir("chapters_"), "meta.txt"),
+                                   chapters=[(a, b, f"Scene {i + 1}") for i, (a, b) in enumerate(self.scenes)])
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-f", "ffmetadata", "-i", meta, "-map", "0",
+               "-map_metadata", "0", "-map_chapters", "1", "-c", "copy", out]
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self.btn_chapters, btn_label="📑 Add as chapters…", duration=info.duration,
+                        output=out, inputs=[src], name="Add chapters")
 
-        all_pts = [0.0] + self._scenes + [self.duration]
-        total = len(all_pts) - 1
-        self.log(self.console, f"Splitting into {total} clips…")
-        self._btn_split.config(state="disabled", text=t("scene_detect.splitting"))
-
-        def _worker(progress_cb, cancel_fn):
-            ffmpeg = get_binary_path("ffmpeg")
-            ext = os.path.splitext(self.file_path)[1] if copy else ".mp4"
-            for i in range(total):
-                if cancel_fn():
-                    return -1
-                ss = all_pts[i]
-                to = all_pts[i + 1]
-                out = os.path.join(out_dir, f"{prefix}{i + 1:03d}{ext}")
-
-                if copy:
-                    cmd = [ffmpeg, "-ss", str(ss), "-to", str(to),
-                           "-i", self.file_path,
-                           "-c", "copy", "-avoid_negative_ts", "make_zero",
-                           out, "-y"]
-                else:
-                    cmd = [ffmpeg, "-ss", str(ss), "-to", str(to),
-                           "-i", self.file_path,
-                           "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-                           "-c:a", "aac", "-b:a", "192k",
-                           "-movflags", "+faststart", out, "-y"]
-
-                progress_cb(f"  [{i + 1}/{total}] {_fmt(ss)} → {_fmt(to)}")
-                proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, creationflags=CREATE_NO_WINDOW)
-                proc.communicate()
-
-            progress_cb(f"✅  All {total} clips saved to: {out_dir}")
-            self.after(0, lambda: open_in_explorer(out_dir))
-            return 0
-
-        def _on_complete(tid, rc):
-            self._btn_split.config(state="normal", text=t("scene_detect.split_button"))
-            if rc == 0:
-                self.log(self.console, f"✅  Done. {total} clips saved to: {out_dir}")
-
-        self.enqueue_render(
-            "Scene Split",
-            output_path=out_dir,
-            worker_fn=_worker,
-            on_progress=lambda tid, line: self.log(self.console, line),
-            on_complete=_on_complete,
-        )
+    def _save_csv(self):
+        if not self._need_scenes():
+            return
+        from core import dialogs
+        base = os.path.splitext(os.path.basename(self.src_row.path))[0]
+        out = dialogs.ask_save(f"{base}_scenes.csv", kind="text", defaultextension=".csv", parent=self)
+        if not out:
+            return
+        with open(out, "w", encoding="utf-8", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["scene", "start", "end", "start_seconds", "end_seconds", "length_seconds"])
+            for i, (a, b) in enumerate(self.scenes, 1):
+                w.writerow([i, ff.format_time(a), ff.format_time(b), f"{a:.3f}", f"{b:.3f}", f"{b - a:.3f}"])
+        self.log_tagged(self.console, f"Saved {out}", "success")

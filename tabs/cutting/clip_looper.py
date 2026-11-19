@@ -1,434 +1,223 @@
 """
-tab_cliplooper.py  ─  Clip Looper
+tabs/cutting/clip_looper.py  -  Clip Looper
 
-Loop a video section N times for comedic emphasis, beat drops,
-or "wait for it" moments.  Options for:
-  • Simple repeat (exact loop)
-  • Stutter loop (rapid short repeats for emphasis/comedy)
-  • Speed ramp loop (each iteration faster than the last)
-  • Echo loop (each repeat fades in volume/opacity)
+Repeat a moment: plain loops, DJ-style stutters, loops that speed up each
+time, or echoes that fade away - with the rest of the clip kept around it
+if you like.  Each distinct loop is rendered once, then everything is
+joined losslessly (audio encoded once at the end), so there is no drift or
+quality loss however many repeats.
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
 import os
-import tempfile
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, get_video_duration, launch_preview, CREATE_NO_WINDOW,
-)
+from core import encoders as enc
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+
+MODES = [("simple", "Repeat", "Play the section several times in a row."),
+         ("stutter", "Stutter", "Rapid repeats of a tiny slice (DJ / glitch style)."),
+         ("accel", "Speed up each time", "Every repeat plays faster than the last."),
+         ("echo", "Echo", "Every repeat is darker and quieter, fading away.")]
+MAX_SPEED = 16.0
 
 
-def _fmt(seconds):
-    m, s = divmod(max(0, seconds), 60)
-    return f"{int(m):02d}:{s:05.2f}"
+def loop_units(mode: str, count: int, factor: float) -> list:
+    """(speed, level) for each repeat; level 1 = untouched picture/sound."""
+    units = []
+    for k in range(count):
+        if mode == "accel":
+            speed = min(factor ** k, MAX_SPEED)
+            units.append((speed, 1.0))
+        elif mode == "echo":
+            units.append((1.0, max(0.15, 0.7 ** k)))
+        else:
+            units.append((1.0, 1.0))
+    return units
+
+
+def _tempo(speed: float) -> str:
+    parts, rem = [], speed
+    while rem > 2.0:
+        parts.append("atempo=2.0")
+        rem /= 2.0
+    parts.append(f"atempo={rem:.5f}")
+    return ",".join(parts)
 
 
 class ClipLooperTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.duration = 0.0
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.clip_looper"),
-                         t("clip_looper.subtitle"),
-                         icon="🔁")
+        self.make_header(self, t("tab.clip_looper"), "Repeat, stutter or echo a moment.", icon="🔁")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        pv = tk.Frame(body)
+        pv.pack(pady=4)
+        self.preview = FramePreview(pv, 448, 252)
+        self.preview.pack()
+        self.pos_var = tk.DoubleVar(value=0)
+        bar = tk.Frame(pv)
+        bar.pack(fill="x")
+        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=300,
+                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider.pack(side="left", fill="x", expand=True)
+        tk.Button(bar, text="Set start", relief="flat",
+                  command=lambda: self.start_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
+        tk.Button(bar, text="Set end", relief="flat",
+                  command=lambda: self.end_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
 
-        # ── Source ────────────────────────────────────────────────────────
-        sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_lbl.pack(side="left", padx=10)
+        opt = tk.LabelFrame(body, text="  Loop  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.mode_var = tk.StringVar(value="simple")
+        for key, label, desc in MODES:
+            row = tk.Frame(opt)
+            row.pack(fill="x")
+            tk.Radiobutton(row, text=label, value=key, variable=self.mode_var, width=18, anchor="w",
+                           command=self._mode_changed).pack(side="left")
+            tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        r = tk.Frame(opt)
+        r.pack(fill="x", pady=(6, 2))
+        tk.Label(r, text="Section from").pack(side="left")
+        self.start_var = tk.StringVar(value="0")
+        tk.Entry(r, textvariable=self.start_var, width=11).pack(side="left", padx=4)
+        self.end_lbl = tk.Label(r, text="to")
+        self.end_lbl.pack(side="left")
+        self.end_var = tk.StringVar(value="2")
+        self.end_entry = tk.Entry(r, textvariable=self.end_var, width=11)
+        self.end_entry.pack(side="left", padx=4)
+        tk.Label(r, text="Repeats:").pack(side="left", padx=(10, 2))
+        self.count_var = tk.StringVar(value="4")
+        tk.Entry(r, textvariable=self.count_var, width=4).pack(side="left")
+        r2 = tk.Frame(opt)
+        r2.pack(fill="x", pady=2)
+        tk.Label(r2, text="Stutter slice (s):").pack(side="left")
+        self.slice_var = tk.StringVar(value="0.15")
+        tk.Entry(r2, textvariable=self.slice_var, width=6).pack(side="left", padx=4)
+        tk.Label(r2, text="Speed-up per repeat:").pack(side="left", padx=(10, 2))
+        self.factor_var = tk.StringVar(value="1.3")
+        tk.Entry(r2, textvariable=self.factor_var, width=6).pack(side="left")
+        self.context_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(opt, text="Keep the rest of the clip before and after the loop",
+                       variable=self.context_var).pack(anchor="w")
 
-        # ── Timeline ──────────────────────────────────────────────────────
-        tl_lf = tk.LabelFrame(self, text=f"  {t('clip_looper.timeline_section')}  ",
-                               padx=15, pady=8, font=(UI_FONT, 9, "bold"))
-        tl_lf.pack(fill="x", padx=20, pady=8)
-        self._timeline = VideoTimeline(tl_lf, on_change=self._on_timeline_change,
-                                       height=90, show_handles=True)
-        self._timeline.pack(fill="x")
-
-        # ── Loop range ────────────────────────────────────────────────────
-        range_lf = tk.LabelFrame(self, text=f"  {t('clip_looper.loop_range_section')}  ", padx=15, pady=10,
-                                 font=(UI_FONT, 9, "bold"))
-        range_lf.pack(fill="x", padx=20, pady=8)
-
-        rr1 = tk.Frame(range_lf)
-        rr1.pack(fill="x", pady=3)
-        tk.Label(rr1, text=t("clip_looper.loop_from_label"), font=(UI_FONT, 10, "bold"),
-                 width=12, anchor="e").pack(side="left")
-        self._loop_start = tk.StringVar(value="0.0")
-        tk.Entry(rr1, textvariable=self._loop_start, width=10, relief="flat",
-                 font=(MONO_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(rr1, text=t("clip_looper.to_label"), font=(UI_FONT, 10, "bold")).pack(side="left", padx=(12, 0))
-        self._loop_end = tk.StringVar(value="2.0")
-        tk.Entry(rr1, textvariable=self._loop_end, width=10, relief="flat",
-                 font=(MONO_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(rr1, text="seconds", fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-
-        rr2 = tk.Frame(range_lf)
-        rr2.pack(fill="x", pady=3)
-        self._loop_whole = tk.BooleanVar(value=False)
-        tk.Checkbutton(rr2, text=t("clip_looper.loop_entire_checkbox"),
-                       variable=self._loop_whole, font=(UI_FONT, 10),
-                       command=self._on_whole_toggle).pack(side="left")
-
-        # ── Loop mode ─────────────────────────────────────────────────────
-        mode_lf = tk.LabelFrame(self, text=f"  {t('clip_looper.loop_mode_section')}  ", padx=15, pady=10,
-                                font=(UI_FONT, 9, "bold"))
-        mode_lf.pack(fill="x", padx=20, pady=6)
-
-        self._mode_var = tk.StringVar(value="simple")
-        modes = [
-            ("simple",   t("clip_looper.simple_repeat_label"),
-             t("clip_looper.simple_repeat_desc")),
-            ("stutter",  t("clip_looper.stutter_label"),
-             t("clip_looper.stutter_desc")),
-            ("accel",    t("clip_looper.accelerating_label"),
-             t("clip_looper.accelerating_desc")),
-            ("echo",     t("clip_looper.echo_fade_label"),
-             t("clip_looper.echo_fade_desc")),
-        ]
-        for val, label, desc in modes:
-            row = tk.Frame(mode_lf, bg=CLR["bg"])
-            row.pack(fill="x", pady=2)
-            tk.Radiobutton(row, text=label, variable=self._mode_var, value=val,
-                           font=(UI_FONT, 10), bg=CLR["bg"],
-                           command=self._on_mode).pack(side="left")
-            tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9),
-                     bg=CLR["bg"]).pack(side="left", padx=(8, 0))
-
-        # ── Settings frame ────────────────────────────────────────────────
-        self._settings_f = tk.LabelFrame(self, text=f"  {t('clip_looper.loop_settings_section')}  ",
-                                         padx=15, pady=8, font=(UI_FONT, 9, "bold"))
-        self._settings_f.pack(fill="x", padx=20, pady=6)
-
-        sr1 = tk.Frame(self._settings_f)
-        sr1.pack(fill="x", pady=3)
-        tk.Label(sr1, text=t("clip_looper.number_of_loops_label"), font=(UI_FONT, 10, "bold"),
-                 width=16, anchor="e").pack(side="left")
-        self._loop_count = tk.IntVar(value=3)
-        self._loop_spin = tk.Spinbox(sr1, from_=2, to=50,
-                                     textvariable=self._loop_count, width=5,
-                                     font=(UI_FONT, 11))
-        self._loop_spin.pack(side="left", padx=8)
-
-        # Quick loop presets
-        qlf = tk.Frame(sr1)
-        qlf.pack(side="left", padx=12)
-        for val, lbl in [(2, "×2"), (3, "×3"), (5, "×5"),
-                          (8, "×8"), (10, "×10"), (20, "×20")]:
-            tk.Button(qlf, text=lbl, width=4, bg=CLR["panel"], fg=CLR["fg"],
-                      font=(UI_FONT, 9), cursor="hand2",
-                      command=lambda v=val: self._loop_count.set(v)
-                      ).pack(side="left", padx=2)
-
-        # Stutter-specific: segment duration
-        self._stutter_f = tk.Frame(self._settings_f)
-        sr2 = tk.Frame(self._stutter_f)
-        sr2.pack(fill="x", pady=3)
-        tk.Label(sr2, text=t("clip_looper.stutter_slice_label"), font=(UI_FONT, 10),
-                 width=16, anchor="e").pack(side="left")
-        self._stutter_dur = tk.StringVar(value="0.15")
-        tk.Entry(sr2, textvariable=self._stutter_dur, width=8, relief="flat",
-                 font=(MONO_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(sr2, text=t("clip_looper.stutter_duration_info"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-
-        # Accel-specific: speed multiplier per iteration
-        self._accel_f = tk.Frame(self._settings_f)
-        ar1 = tk.Frame(self._accel_f)
-        ar1.pack(fill="x", pady=3)
-        tk.Label(ar1, text=t("clip_looper.speed_up_label"), font=(UI_FONT, 10),
-                 width=16, anchor="e").pack(side="left")
-        self._accel_factor = tk.DoubleVar(value=1.3)
-        tk.Scale(ar1, variable=self._accel_factor, from_=1.05, to=3.0,
-                 resolution=0.05, orient="horizontal", length=200,
-                 bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
-                 highlightthickness=0).pack(side="left", padx=8)
-        tk.Label(ar1, text=t("clip_looper.speed_factor_info"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Context: keep surrounding video ───────────────────────────────
-        ctx_lf = tk.LabelFrame(self, text=f"  {t('clip_looper.context_section')}  ", padx=15, pady=8,
-                               font=(UI_FONT, 9, "bold"))
-        ctx_lf.pack(fill="x", padx=20, pady=6)
-
-        self._keep_context = tk.BooleanVar(value=True)
-        tk.Checkbutton(ctx_lf, text=t("clip_looper.keep_context_checkbox"),
-                       variable=self._keep_context,
-                       font=(UI_FONT, 10)).pack(side="left")
-
-        # ── Options ───────────────────────────────────────────────────────
-        opt_f = tk.Frame(self)
-        opt_f.pack(fill="x", padx=20, pady=4)
-        tk.Label(opt_f, text=t("common.crf"), font=(UI_FONT, 10)).pack(side="left")
-        self._crf_var = tk.StringVar(value="18")
-        tk.Entry(opt_f, textvariable=self._crf_var, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Run ───────────────────────────────────────────────────────────
-        bf = tk.Frame(self)
-        bf.pack(pady=8)
-        self._btn_run = tk.Button(
-            bf, text="🔁  " + t("tab.clip_looper"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=26,
-            cursor="hand2", command=self._render)
-        self._btn_run.pack()
-
-        # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "looped"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🔁  CREATE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
+        self._mode_changed()
 
-        self._on_mode()
+    def _mode_changed(self):
+        stutter = self.mode_var.get() == "stutter"
+        self.end_entry.config(state="disabled" if stutter else "normal")
 
-    def _on_mode(self):
-        self._stutter_f.pack_forget()
-        self._accel_f.pack_forget()
-        mode = self._mode_var.get()
-        if mode == "stutter":
-            self._stutter_f.pack(fill="x", pady=2)
-        elif mode == "accel":
-            self._accel_f.pack(fill="x", pady=2)
-
-    def _on_timeline_change(self, start, end, playhead):
-        """Called when the user drags the timeline handles."""
-        self._loop_start.set(str(round(start, 2)))
-        self._loop_end.set(str(round(end, 2)))
-
-    def _on_whole_toggle(self):
-        pass  # UI only; logic in render
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self._src_var.set(p)
-            self.duration = get_video_duration(p)
-            self._dur_lbl.config(text=_fmt(self.duration))
-            self._timeline.set_duration(self.duration)
-            loop_end = round(min(2.0, self.duration), 2)
-            self._loop_end.set(str(loop_end))
-            self._timeline.set_range(0.0, loop_end)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self._out_var.set(p)
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        dur = self._info.duration if self._info else 0.0
+        self.slider.configure(to=max(dur, 0.01))
+        self.preview.load(path, dur, 0.0)
+        self.end_var.set(ff.format_time(min(2.0, dur)))
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "looped"))
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-
-        out = self._out_var.get().strip()
+        dur = info.duration
+        mode = self.mode_var.get()
+        fps = info.video.fps or 30.0
+        try:
+            start = ff.parse_time(self.start_var.get() or "0")
+            if mode == "stutter":
+                end = start + common.number(self.slice_var.get(), "Stutter slice", 1.0 / fps, 5)
+            else:
+                end = ff.parse_time(self.end_var.get())
+            count = int(common.number(self.count_var.get(), "Repeats", 2, 200))
+            factor = common.number(self.factor_var.get() or "1.3", "Speed-up", 1.01, 4)
+            if not 0 <= start < end <= dur + 0.05:
+                raise ValueError("The section must lie inside the clip, with 'from' before 'to'.")
+            if end - start < 1.0 / fps:
+                raise ValueError("The section is shorter than one frame.")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        end = min(end, dur)
+        out = common.output_for(self, self.out_row, src, "looped")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out:
             return
-        self._out_var.set(out)
+        units = loop_units(mode, count, factor)
+        if mode == "accel":                        # stop once a repeat is shorter than a frame
+            units = [u for u in units if (end - start) / u[0] >= 1.0 / fps] or units[:1]
+        keep = self.context_var.get()
+        audio = info.has_audio
+        w, h = common.even_size(info)
+        container = common.container_of(out)
+        venc = self.encoder.video_encode(container)
+        fps_str = common.frame_rate(info)
+        base = f"scale={w}:{h},setsar=1,fps={fps_str},format=yuv420p"
+        pieces = ([("plain", 0.0, start, 1.0, 1.0)] if keep and start > 0.01 else [])
+        pieces += [("loop", start, end, sp, lv) for sp, lv in units]
+        if keep and end < dur - 0.01:
+            pieces.append(("plain", end, dur, 1.0, 1.0))
+        total = sum((b - a) / sp for _k, a, b, sp, _lv in pieces)
 
-        mode = self._mode_var.get()
-        loops = self._loop_count.get()
-        crf = self._crf_var.get()
-        ffmpeg = get_binary_path("ffmpeg")
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            made, files, done = {}, [], 0.0
+            for i, (kind, a, b, sp, lv) in enumerate(pieces):
+                key = (a, b, sp, lv)
+                length = (b - a) / sp
+                if key not in made:
+                    seg = os.path.join(tmp, f"u{len(made):04d}.mkv")
+                    vf = base + (f",setpts=PTS/{sp:.5f}" if sp != 1 else "") + \
+                        (f",lutyuv=y=val*{lv:.3f}" if lv < 1 else "")
+                    af = "anull" + (f",{_tempo(sp)}" if sp != 1 else "") + \
+                        (f",volume={lv:.3f}" if lv < 1 else "")
+                    # -t before -i limits the SOURCE section (speed changes come after)
+                    cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input, "-ss", ff.ts(a), "-t", ff.ts(b - a),
+                           "-i", src, "-map", "0:v:0", *venc.vf_args(vf)]
+                    cmd += (["-map", "0:a:0", "-af", af, "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
+                            if audio else ["-an"])
+                    cmd += [*common.intermediate_args(venc), seg]
+                    ctx.span(0.9 * done / total, 0.9 * (done + length) / total).run(cmd, duration=length)
+                    made[key] = seg
+                done += length
+                files.append(made[key])
+            lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
+            final = [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", lst,
+                     "-map", "0:v:0", "-c:v", "copy"]
+            final += (["-map", "0:a:0", *enc.audio(enc.default_audio_for(container), container=container)]
+                      if audio else ["-an"])
+            ctx.span(0.9, 1.0).run(final + common.final_copy_args(venc, container) + [ctx.output()],
+                                   duration=total)
+            return 0
 
-        if self._loop_whole.get():
-            ss, ee = 0.0, self.duration
-        else:
-            try:
-                ss = float(self._loop_start.get())
-                ee = float(self._loop_end.get())
-            except ValueError:
-                messagebox.showerror(t("clip_looper.bad_range_title"), t("clip_looper.bad_range_message"))
-                return
-        if ee <= ss:
-            messagebox.showerror(t("clip_looper.bad_range_title"), t("clip_looper.bad_range_order"))
-            return
-
-        self._btn_run.config(state="disabled", text=t("app.status.queued_btn"))
-        self.log(self.console, f"Looping {_fmt(ss)}→{_fmt(ee)} × {loops} ({mode})…")
-
-        def _worker(progress_cb, cancel_fn):
-            tmp_dir = tempfile.mkdtemp(prefix="xfpro_loop_")
-            segment_dur = ee - ss
-            parts = []
-
-            # Part 1: before the loop (if keeping context)
-            if self._keep_context.get() and ss > 0.1 and not self._loop_whole.get():
-                if cancel_fn():
-                    return -1
-                pre = os.path.join(tmp_dir, "pre.mp4")
-                cmd = [ffmpeg, "-i", self.file_path, "-t", str(ss),
-                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                       "-c:a", "aac", "-b:a", "192k", pre, "-y"]
-                subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
-                if os.path.exists(pre):
-                    parts.append(pre)
-
-            # Part 2: the loop segment(s)
-            for i in range(loops):
-                seg_out = os.path.join(tmp_dir, f"loop_{i:03d}.mp4")
-
-                if mode == "simple":
-                    cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
-                           "-t", str(segment_dur),
-                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
-
-                elif mode == "stutter":
-                    try:
-                        stut_dur = float(self._stutter_dur.get())
-                    except ValueError:
-                        stut_dur = 0.15
-                    # Each stutter is a tiny slice from the start of the range
-                    cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
-                           "-t", str(stut_dur),
-                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
-
-                elif mode == "accel":
-                    factor = self._accel_factor.get()
-                    speed = factor ** i
-                    pts_mult = 1.0 / speed
-                    # Build atempo chain
-                    remaining = speed
-                    atempo_chain = []
-                    while remaining > 2.0:
-                        atempo_chain.append("atempo=2.0")
-                        remaining /= 2.0
-                    while remaining < 0.5:
-                        atempo_chain.append("atempo=0.5")
-                        remaining *= 2.0
-                    atempo_chain.append(f"atempo={remaining:.4f}")
-                    af = ",".join(atempo_chain)
-
-                    cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
-                           "-t", str(segment_dur),
-                           "-vf", f"setpts={pts_mult:.4f}*PTS",
-                           "-af", af,
-                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
-
-                elif mode == "echo":
-                    # Reduce volume progressively
-                    vol_db = -3 * i  # -3dB per iteration
-                    cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
-                           "-t", str(segment_dur),
-                           "-af", f"volume={vol_db}dB",
-                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
-                else:
-                    cmd = [ffmpeg, "-ss", str(ss), "-i", self.file_path,
-                           "-t", str(segment_dur),
-                           "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                           "-c:a", "aac", "-b:a", "192k", seg_out, "-y"]
-
-                if cancel_fn():
-                    return -1
-                self.log(self.console, f"  Loop {i + 1}/{loops}")
-                subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
-                if os.path.exists(seg_out):
-                    parts.append(seg_out)
-
-            # Part 3: after the loop (if keeping context)
-            if (self._keep_context.get() and ee < self.duration - 0.1
-                    and not self._loop_whole.get()):
-                if cancel_fn():
-                    return -1
-                post = os.path.join(tmp_dir, "post.mp4")
-                cmd = [ffmpeg, "-ss", str(ee), "-i", self.file_path,
-                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                       "-c:a", "aac", "-b:a", "192k", post, "-y"]
-                subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW)
-                if os.path.exists(post):
-                    parts.append(post)
-
-            # Concat
-            list_file = os.path.join(tmp_dir, "concat.txt")
-            with open(list_file, "w", encoding="utf-8") as f:
-                for p in parts:
-                    f.write(f"file '{p}'\n")
-
-            cmd = [ffmpeg, "-f", "concat", "-safe", "0",
-                   "-i", list_file,
-                   "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                   "-c:a", "aac", "-b:a", "192k",
-                   "-movflags", "+faststart", out, "-y"]
-            progress_cb("Concatenating all parts…")
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True,
-                                    creationflags=CREATE_NO_WINDOW)
-            for line in iter(proc.stdout.readline, ""):
-                if cancel_fn():
-                    try:
-                        proc.terminate()
-                    except Exception:
-                        pass
-                    break
-                progress_cb(line.rstrip())
-            proc.stdout.close()
-            proc.wait()
-            final_rc = proc.returncode
-
-            # Cleanup
-            for p in parts:
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
-            try:
-                os.remove(list_file)
-                os.rmdir(tmp_dir)
-            except Exception:
-                pass
-
-            return final_rc
-
-        def _on_start(tid):
-            self._btn_run.config(text=t("app.status.processing_btn"))
-
-        def _on_progress(tid, line):
-            self.log(self.console, line)
-
-        def _on_complete(tid, rc):
-            self._btn_run.config(state="normal", text=t("clip_looper.create_button"))
-            self.show_result(rc, out)
-
-        self.enqueue_render(
-            "Clip Looper",
-            output_path=out,
-            worker_fn=_worker,
-            on_start=_on_start,
-            on_progress=_on_progress,
-            on_complete=_on_complete,
-        )
+        self.log(self.console, f"{len(units)} repeats of {ff.format_time(end - start)} → "
+                               f"{ff.format_time(total)} total")
+        common.queue_job(self, name="Clip Looper", out=out, work=work, btn=self.btn_render,
+                         btn_label="🔁  CREATE", console=self.console, duration=total, inputs=[src])

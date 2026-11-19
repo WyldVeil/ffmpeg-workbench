@@ -169,3 +169,29 @@ def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
     btn.config(text=f"\u2716 {t('btn.cancel')}", command=cancel)
     tab.log(console, f"Queued: {os.path.basename(out)}")
     return state["tid"]
+
+
+def intermediate_args(venc) -> list:
+    """Encoder args for temporary pieces that are joined later: drops the
+    container-specific flags (faststart, hvc1 tag) that only belong on the
+    final file - see :func:`final_copy_args`."""
+    out, skip = [], False
+    for a in venc.args:
+        if skip:
+            skip = False
+            continue
+        if a in ("-movflags", "-tag:v"):
+            skip = True
+            continue
+        out.append(a)
+    return out
+
+
+def final_copy_args(venc, container: str) -> list:
+    """Flags for the final stream-copied file made from intermediate pieces."""
+    args = []
+    if container in ("mp4", "mov", "m4v"):
+        args += ["-movflags", "+faststart"]
+        if venc.codec == "hevc":
+            args += ["-tag:v", "hvc1"]
+    return args
