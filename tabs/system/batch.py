@@ -5,25 +5,29 @@ Supports: re-encode, resize, extract audio, convert format.
 Progress is shown per-file in the console.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
 import os
 import threading
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path
+from core import ffmpeg as ff
 from core.i18n import t
 
 
-OPERATIONS = {
-    t("batch.re_encode_h_264"):     "reencode",
-    t("batch.convert_to_mp4"):        "to_mp4",
-    t("batch.extract_audio_mp3"):   "audio_mp3",
-    t("batch.extract_audio_aac"):   "audio_aac",
-    t("batch.resize_video"):          "resize",
-    t("batch.normalise_loudness"):    "loudness",
-    t("webm_maker.strip_metadata_checkbox"):        "strip_meta",
-}
+# (id, label) - looked up by position, so translations can never mix them up
+OPERATION_LIST = [
+    ("reencode", t("batch.re_encode_h_264")),
+    ("to_mp4", t("batch.convert_to_mp4")),
+    ("audio_mp3", t("batch.extract_audio_mp3")),
+    ("audio_aac", t("batch.extract_audio_aac")),
+    ("resize", t("batch.resize_video")),
+    ("loudness", t("batch.normalise_loudness")),
+    ("strip_meta", t("webm_maker.strip_metadata_checkbox")),
+]
+OPERATIONS = {label: key for key, label in OPERATION_LIST}      # kept for older callers
+AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wma", ".aiff")
+VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v", ".mts", ".m2ts", ".ts", ".mxf", ".wmv")
 
 RESOLUTIONS = ["3840x2160", "2560x1440", "1920x1080", "1280x720",
                "854x480", "640x360"]
@@ -151,10 +155,7 @@ class BatchTab(BaseTab):
 
     # ─── File management ──────────────────────────────────────────────────
     def _add_files(self):
-        paths = dialogs.askopenfilenames(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        for p in paths:
+        for p in dialogs.ask_open_many("media", title="Add files", parent=self):
             if p not in self.input_files:
                 self.input_files.append(p)
                 self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
@@ -163,9 +164,8 @@ class BatchTab(BaseTab):
     def _add_folder(self):
         folder = dialogs.askdirectory()
         if not folder: return
-        exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v"}
         for fn in sorted(os.listdir(folder)):
-            if os.path.splitext(fn)[1].lower() in exts:
+            if os.path.splitext(fn)[1].lower() in VIDEO_EXTS + AUDIO_EXTS:
                 full = os.path.join(folder, fn)
                 if full not in self.input_files:
                     self.input_files.append(full)
@@ -191,13 +191,29 @@ class BatchTab(BaseTab):
         p = dialogs.askdirectory()
         if p: self._out_var.set(p)
 
+    def load_file(self, path) -> bool:
+        if os.path.isfile(path) and path not in self.input_files:
+            self.input_files.append(path)
+            self.listbox.insert(tk.END, f"  {os.path.basename(path)}")
+            self._update_count()
+        return True
+
     def _cancel(self):
-        self._cancel_flag.set()
-        self.log(self.console, t("log.batch.cancel_requested_will_stop_after_current_file"))
+        tid = getattr(self, "_batch_tid", None)
+        if tid:
+            self.cancel_render(tid)          # stops the running file at once
+            self.log(self.console, "Cancelling…")
 
     # ─── Operation UI ─────────────────────────────────────────────────────
+    def _op(self) -> str:
+        labels = [label for _k, label in OPERATION_LIST]
+        try:
+            return OPERATION_LIST[labels.index(self._op_var.get())][0]
+        except ValueError:
+            return "reencode"
+
     def _on_op_change(self, *_):
-        op = OPERATIONS.get(self._op_var.get(), "reencode")
+        op = self._op()
         self._enc_row.pack_forget()
         self._res_row.pack_forget()
         if op in ("reencode", "to_mp4"):
@@ -208,130 +224,143 @@ class BatchTab(BaseTab):
 
     # ─── Render ──────────────────────────────────────────────────────────
     def _run(self):
+        from tabs import common
         if not self.input_files:
-            messagebox.showwarning(t("common.warning"), "Add at least one file to process.")
+            messagebox.showwarning(t("common.warning"), "Add at least one file to process.", parent=self)
             return
-        out_dir = self._out_var.get().strip()
-        if not out_dir:
-            out_dir = dialogs.askdirectory(title="Select output folder")
+        out_dir = self._out_var.get().strip() or dialogs.askdirectory(title="Select output folder")
         if not out_dir:
             return
         self._out_var.set(out_dir)
-        os.makedirs(out_dir, exist_ok=True)
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+            crf = int(common.number(self._crf_var.get(), "Quality (CRF)", 0, 51))
+        except (OSError, ValueError) as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        op = self._op()
+        opts = {"crf": crf, "preset": self._preset_var.get(), "res": self._res_var.get()}
+        files = self.input_files[:]
+        taken = {os.path.normcase(os.path.abspath(f)) for f in files}
 
-        self._cancel_flag.clear()
-        self._btn_run.config(state="disabled")
-        self.log(self.console, f"── Batch start: {len(self.input_files)} files ──")
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        op     = OPERATIONS.get(self._op_var.get(), "reencode")
-        files  = self.input_files[:]
-
-        def _work():
-            """Runs in a background thread; enqueues each file and waits."""
-            import threading as _threading
-            done = 0
-            failed = 0
-
-            for i, src_path in enumerate(files):
-                if self._cancel_flag.is_set():
-                    self.log(self.console, t("log.batch.cancelled_by_user"))
-                    break
-
-                base_name = os.path.basename(src_path)
-                self.after(0, lambda i=i: self._prog_lbl.config(
-                    text=f"[{i+1}/{len(files)}]  {os.path.basename(files[i])}"))
-                self.log(self.console, f"[{i+1}/{len(files)}] {base_name}")
-
-                cmd = self._build_cmd(ffmpeg, op, src_path, out_dir)
-                if not cmd:
-                    self.log(self.console, t("log.batch.skipped_unsupported_op"))
-                    continue
-
-                # Determine output path (last positional arg before -y)
-                out_path = cmd[-2] if len(cmd) >= 2 else ""
-
-                # Event to block until this task finishes
-                done_event = _threading.Event()
-                file_rc    = [0]
-
-                def _on_prog(tid, line, idx=i):
-                    self.log(self.console, f"  {line}")
-
-                def _on_done(tid, rc, _name=base_name, _ev=done_event, _rc=file_rc):
-                    _rc[0] = rc
-                    self.log(self.console,
-                             f"  {'✅ Done' if rc == 0 else '❌ Failed'}: {_name}")
-                    _ev.set()
-
-                self.enqueue_render(
-                    f"Batch: {base_name}",
-                    output_path=out_path,
-                    cmd=cmd,
-                    on_progress=_on_prog,
-                    on_complete=_on_done,
-                )
-
-                # Wait for this file to complete before submitting the next
-                done_event.wait()
-
-                if file_rc[0] == 0:
+        def work(_p, _c, ctx):
+            done, skipped, failed = 0, [], []
+            for i, src in enumerate(files):
+                ctx.span(i / len(files), (i + 1) / len(files))
+                ctx.log(f"[{i + 1}/{len(files)}] {os.path.basename(src)}")
+                try:
+                    info = ff.probe(src)
+                    plan = batch_plan(op, info, src, out_dir, opts, taken)
+                    if isinstance(plan, str):
+                        skipped.append((src, plan))
+                        ctx.log(f"  skipped: {plan}")
+                        continue
+                    out, steps = plan
+                    taken.add(os.path.normcase(out))
+                    part = f"{os.path.splitext(out)[0]}.part{os.path.splitext(out)[1]}"
+                    try:
+                        for step in steps:
+                            argv = step(ctx) if callable(step) else step
+                            ctx.run([a if a != "{OUT}" else part for a in argv], duration=info.duration or None,
+                                    tail=200000)
+                        os.replace(part, out)
+                    finally:
+                        if os.path.exists(part):
+                            os.remove(part)
                     done += 1
-                else:
-                    failed += 1
+                    ctx.log(f"  ✓ {os.path.basename(out)}")
+                except ff.CancelledError:
+                    raise
+                except Exception as exc:
+                    reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
+                    failed.append((src, reason))
+                    ctx.log(f"  ✖ {reason}")
+            ctx.log(f"Done: {done} · skipped {len(skipped)} · failed {len(failed)}")
+            if failed:
+                raise RuntimeError(f"{len(failed)} of {len(files)} file(s) failed:\n" +
+                                   "\n".join(f"• {os.path.basename(s_)}: {r}" for s_, r in failed[:12]))
+            return 0
 
-            self.after(0, lambda: [
-                self._btn_run.config(state="normal"),
-                self._prog_lbl.config(text=""),
-                messagebox.showinfo(
-                    "Batch complete",
-                    f"✅ {done} succeeded   ❌ {failed} failed\nOutput: {out_dir}")])
+        self._batch_tid = common.queue_job(self, name=f"Batch: {len(files)} file(s)", out=out_dir, work=work,
+                                           btn=self._btn_run, btn_label=t("batch.process_all_files"),
+                                           console=self.console, inputs=files)
 
-        threading.Thread(target=_work, daemon=True).start()
 
-    def _build_cmd(self, ffmpeg, op, src, out_dir):
-        base = os.path.splitext(os.path.basename(src))[0]
-        crf    = self._crf_var.get()
-        preset = self._preset_var.get()
+def batch_plan(op, info, src, out_dir, opts, taken):
+    """(output path, [argv | callable(ctx) -> argv]) or a reason string to skip.
+    '{OUT}' in an argv stands for the temporary output file."""
+    from core import encoders as enc
+    from core import loudness
+    from tabs.transcoder.converter import free_name, stream_args
+    base = os.path.splitext(os.path.basename(src))[0]
+    src_ext = os.path.splitext(src)[1].lower()
+    ffm = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
 
-        if op == "reencode":
-            out = os.path.join(out_dir, base + "_batch.mp4")
-            return [ffmpeg, "-i", src,
-                    "-c:v", "libx264", "-crf", crf, "-preset", preset,
-                    "-c:a", "aac", "-b:a", "192k",
-                    "-movflags", "+faststart", out, "-y"]
-        elif op == "to_mp4":
-            out = os.path.join(out_dir, base + "_batch.mp4")
-            return [ffmpeg, "-i", src,
-                    "-c:v", "libx264", "-crf", crf, "-preset", preset,
-                    "-c:a", "aac", "-b:a", "192k",
-                    "-movflags", "+faststart", out, "-y"]
-        elif op == "audio_mp3":
-            out = os.path.join(out_dir, base + "_batch.mp3")
-            return [ffmpeg, "-i", src, "-vn",
-                    "-c:a", "libmp3lame", "-q:a", "2", out, "-y"]
-        elif op == "audio_aac":
-            out = os.path.join(out_dir, base + "_batch.aac")
-            return [ffmpeg, "-i", src, "-vn",
-                    "-c:a", "aac", "-b:a", "192k", out, "-y"]
-        elif op == "resize":
-            res = self._res_var.get()
-            rw, rh = res.split("x")
-            out = os.path.join(out_dir, base + f"_batch_{res}.mp4")
-            vf  = (f"scale={rw}:{rh}:force_original_aspect_ratio=decrease,"
-                   f"pad={rw}:{rh}:(ow-iw)/2:(oh-ih)/2")
-            return [ffmpeg, "-i", src, "-vf", vf,
-                    "-c:v", "libx264", "-crf", crf, "-preset", preset,
-                    "-c:a", "copy",
-                    "-movflags", "+faststart", out, "-y"]
-        elif op == "loudness":
-            out = os.path.join(out_dir, base + "_batch_loud.mp4")
-            return [ffmpeg, "-i", src,
-                    "-af", "loudnorm=I=-16:LRA=11:TP=-1.5",
-                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", out, "-y"]
-        elif op == "strip_meta":
-            out = os.path.join(out_dir, base + "_batch_clean.mp4")
-            return [ffmpeg, "-i", src, "-c", "copy",
-                    "-map_metadata", "-1",
-                    "-map_chapters", "-1", out, "-y"]
-        return None
+    def name(suffix, ext):
+        return free_name(os.path.join(out_dir, f"{base}{suffix}{ext}"), taken)
+
+    if op in ("audio_mp3", "audio_aac"):
+        if not info.has_audio:
+            return "no audio"
+        mp3 = op == "audio_mp3"
+        out = name("", ".mp3" if mp3 else ".m4a")
+        codec = ["-c:a", "libmp3lame", "-q:a", "2"] if mp3 else ["-c:a", "aac", "-b:a", "192k"]
+        return out, [ffm + ["-i", src, "-map", "0:a:0", "-vn", *codec, "-map_metadata", "0", "{OUT}"]]
+    if op == "loudness":
+        if not info.has_audio:
+            return "no audio to normalise"
+        ext = src_ext if src_ext in (".mp4", ".mkv", ".mov", ".webm", ".m4a", ".mp3", ".flac", ".wav") else ".mkv"
+        out = name("_loud", ext)
+        rate = info.audio.sample_rate or 48000
+        container = ext.lstrip(".")
+
+        def second_pass(ctx):
+            res = ctx.run(loudness.measure_cmd(src, -16.0, -1.5, 11.0), duration=info.duration or None, tail=200000)
+            meas = loudness.parse_measurement(res.log_tail)
+            acodec = enc.default_audio_for(container) if container not in ("wav", "flac", "mp3") else \
+                {"wav": "pcm16", "flac": "flac", "mp3": "mp3"}[container]
+            vargs = ["-map", "0:v?", "-c:v", "copy"]
+            if info.has_video and info.video.codec == "hevc" and container in ("mp4", "mov"):
+                vargs += ["-tag:v", "hvc1"]
+            return ffm + ["-i", src, *vargs, "-map", "0:a:0", "-af",
+                          loudness.normalise_filter(-16.0, -1.5, 11.0, meas, rate),
+                          *enc.audio(acodec, "192k", container=container), "-map", "0:s?", "-c:s", "copy",
+                          "-map_metadata", "0", "{OUT}"]
+        return out, [second_pass]
+    if op == "strip_meta":
+        out = name("_clean", src_ext or ".mkv")
+        keep = []
+        for st in info.streams:
+            lang = st.tags.get("language")
+            if lang:
+                keep += [f"-metadata:s:{st.index}", f"language={lang}"]
+        return out, [ffm + ["-i", src, "-map", "0", "-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1",
+                            *keep, "-fflags", "+bitexact", "{OUT}"]]
+    if not info.has_video:
+        return "no video"
+    if op == "to_mp4":
+        out = name("", ".mp4") if src_ext != ".mp4" else name("_converted", ".mp4")
+        pre, args, _notes, _summary = stream_args(info, "mp4", True)
+        return out, [ffm + pre + ["-i", src, *args, "{OUT}"]]
+    crf = opts["crf"]
+    quality = "very_high" if crf <= 18 else "high" if crf <= 22 else "good" if crf <= 26 else \
+        "low" if crf <= 30 else "lowest"
+    speed = {"ultrafast": "fastest", "superfast": "fastest", "veryfast": "fast", "faster": "fast", "fast": "fast",
+             "medium": "balanced", "slow": "slow", "slower": "slowest", "veryslow": "slowest"}.get(
+        opts["preset"], "balanced")
+    ve = enc.video("h264", quality, speed=speed, hw="auto", container="mp4")
+    vf = []
+    suffix = "_h264"
+    if op == "resize":
+        bw, bh = (int(x) for x in opts["res"].split("x"))
+        w, h = info.video.display_size
+        if h > w:
+            bw, bh = bh, bw                       # portrait videos get a portrait box
+        if w <= bw and h <= bh:
+            return "already that size or smaller"
+        vf.append(f"scale={bw}:{bh}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1")
+        suffix = f"_{min(bw, bh)}p"
+    out = name(suffix, ".mp4")
+    audio = ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
+    return out, [ffm + ve.pre_input + ["-i", src, "-map", "0:v:0", *ve.vf_args(",".join(vf) or None), *ve.args,
+                                       *audio, "-map_metadata", "0", "{OUT}"]]

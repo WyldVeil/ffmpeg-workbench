@@ -6,26 +6,23 @@ developer tools.  All settings I/O is delegated to core.settings -
 no duplicated load/save logic.
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, scrolledtext
+from tkinter import messagebox, ttk, scrolledtext
 from core import dialogs
 import subprocess
 import threading
 import os
 import platform
 import json
-import math
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.skins import (SKINS, save_skin_name, apply_skin, load_skin_name,
-                        set_star_speed, get_star_speed,
-                        set_star_count, get_star_count,
-                        get_skin, save_custom_color, _CUSTOM_DEFAULTS)
+                        set_star_speed, set_star_count, get_skin, save_custom_color, _CUSTOM_DEFAULTS)
 from core.hardware import (
     get_binary_path, get_local_version, get_latest_online_version,
     download_and_extract_ffmpeg, detect_gpu, CREATE_NO_WINDOW,
     open_in_explorer,
 )
-from core.settings import load_settings, save_settings
+from core.settings import load_settings, update
 from core.i18n import SUPPORTED_LANGUAGES, LANGUAGE_NAMES, get_language, set_language
 from core.i18n import t
 
@@ -141,10 +138,11 @@ class AdvancedSettingsTab(BaseTab):
 
     def _browse_binary(self, key, var):
         p = dialogs.askopenfilename(
-            filetypes=[("Executable", t("advanced_settings.exe")), ("All", t("ducker.item_2"))])
+            filetypes=[("Program", "*.exe")] if os.name == "nt" else [("All files", "*")])
         if p:
             var.set(p)
             self.settings[key] = p
+            update({key: p})
 
     # ─── Defaults ─────────────────────────────────────────────────────────────
     def _build_defaults_tab(self, nb):
@@ -209,12 +207,16 @@ class AdvancedSettingsTab(BaseTab):
         self.save_lbl.pack()
 
     def _save_settings(self):
-        for key, var in self._settings_vars.items():
-            self.settings[key] = var.get()
-        self.settings["default_output_folder"] = self.out_folder_var.get()
-        self.settings["auto_open_output"]       = self.auto_open_var.get()
-        self.settings["ffmpeg_path_override"]    = self.ffmpeg_path_var.get()
-        if save_settings(self.settings):
+        changes = {key: var.get() for key, var in self._settings_vars.items()}
+        changes["default_output_folder"] = self.out_folder_var.get()
+        changes["auto_open_output"] = self.auto_open_var.get()
+        changes["ffmpeg_path_override"] = self.ffmpeg_path_var.get()
+        override = changes["ffmpeg_path_override"].strip()
+        if override and not os.path.isfile(override):
+            self.save_lbl.config(text=f"FFmpeg not found at: {override}", fg=CLR["red"])
+            return
+        self.settings.update(changes)
+        if update(changes):
             self.save_lbl.config(text=t("advanced_settings.settings_saved"), fg=CLR["green"])
         else:
             self.save_lbl.config(text=t("advanced_settings.save_failed"), fg=CLR["red"])
@@ -523,10 +525,7 @@ class AdvancedSettingsTab(BaseTab):
         return out
 
     def _net_save(self):
-        from core.settings import load_settings, save_settings
-        s = load_settings()
-        s.update(self._net_collect())
-        ok = save_settings(s)
+        ok = update(self._net_collect())
         self._net_status_lbl.config(
             text=("Saved." if ok else "Save failed."),
             fg=(CLR["green"] if ok else CLR["red"]))
@@ -959,14 +958,13 @@ class AdvancedSettingsTab(BaseTab):
 
     def _reset_custom_defaults(self):
         """Reset all custom color vars to _CUSTOM_DEFAULTS."""
-        from core.settings import load_settings as _ls, save_settings as _ss
-        data = _ls()
         prefix = "custom_color_"
+        changes = {}
         for key, val in _CUSTOM_DEFAULTS.items():
             if isinstance(val, str) and val.startswith("#"):
                 self._custom_vars[key].set(val)
-                data[f"{prefix}{key}"] = val
-        _ss(data)
+                changes[f"{prefix}{key}"] = val
+        update(changes)
         try:
             self._custom_status.config(text=t("advanced_settings.reset_to_defaults_2"), fg=CLR["green"])
         except Exception:
@@ -1105,6 +1103,7 @@ class AdvancedSettingsTab(BaseTab):
     def _build_system_tab(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("advanced_settings.system_info"))
+        self.system_info_page = (nb, f)          # Help → System Info selects it by widget
 
         hdr2 = tk.Frame(f)
         hdr2.pack(fill="x", padx=20, pady=(16, 4))
@@ -1153,7 +1152,6 @@ class AdvancedSettingsTab(BaseTab):
             platform.system(), platform.release()))
         lines.append("  Version:      {}".format(platform.version()[:70]))
         lines.append("  Architecture: {}".format(platform.machine()))
-        lines.append("  Hostname:     {}".format(platform.node()))
         if is_win:
             try:
                 reg = ps(
@@ -1326,66 +1324,21 @@ class AdvancedSettingsTab(BaseTab):
 
         # ── Network ───────────────────────────────────────────────────────
         sep("NETWORK")
+        # No addresses here: this text gets pasted into bug reports, and looking up
+        # the public IP would contact a third party behind the user's back (and
+        # around their proxy/Tor settings).
         try:
-            lines.append("  Hostname:     {}".format(platform.node()))
-            lan_ip = None
-            if is_win:
-                VPN_KEYWORDS = ("nordlynx", "nordvpn", "openvpn", "wireguard",
-                                "vpn", "virtual", "loopback", "bluetooth",
-                                "vmware", "vethernet", "hyper-v")
-                try:
-                    ipc = subprocess.run(["ipconfig"], capture_output=True, text=True,
-                                 creationflags=CREATE_NO_WINDOW)
-                    current_adapter = ""
-                    skip_adapter    = False
-                    for line in ipc.stdout.splitlines():
-                        if line and not line.startswith(" "):
-                            current_adapter = line.lower()
-                            skip_adapter = any(k in current_adapter
-                                               for k in VPN_KEYWORDS)
-                        if skip_adapter:
-                            continue
-                        stripped = line.strip()
-                        if "IPv4 Address" in stripped and ":" in stripped:
-                            ip = stripped.split(":")[-1].strip().rstrip(
-                                "(Preferred)").strip()
-                            if ip.startswith("192.168.") or (
-                                    ip.startswith("10.") and not ip.startswith("10.5.")):
-                                lan_ip = ip
-                                break
-                            elif ip.startswith("172."):
-                                lan_ip = ip
-                except Exception:
-                    pass
-
-            if not lan_ip:
-                import socket
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.connect(("8.8.8.8", 80))
-                    lan_ip = s.getsockname()[0]
-                    s.close()
-                except Exception:
-                    lan_ip = "Unknown"
-
-            lines.append("  LAN IP:       {}".format(lan_ip))
-
-            import urllib.request as _ur
-            try:
-                pub = _ur.urlopen(
-                    "https://api.ipify.org", timeout=4
-                ).read().decode().strip()
-                lines.append("  Public IP:    {}".format(pub))
-            except Exception:
-                try:
-                    pub = _ur.urlopen(
-                        "https://checkip.amazonaws.com", timeout=4
-                    ).read().decode().strip()
-                    lines.append("  Public IP:    {}".format(pub))
-                except Exception:
-                    lines.append("  Public IP:    (unavailable, check connection)")
+            from core import network
+            cfg = network.get()
+            if cfg.get("network.offline"):
+                lines.append("  Mode:         offline (no network use)")
+            elif network.proxy_url(cfg):
+                scheme = (network.proxy_url(cfg) or "").split("://", 1)[0]
+                lines.append(f"  Proxy:        {scheme} proxy configured in the app")
+            else:
+                lines.append("  Proxy:        none set in the app (system settings apply)")
         except Exception as exc:
-            lines.append("  (Network error: {})".format(exc))
+            lines.append("  (Network settings unavailable: {})".format(exc))
 
         # ── Python & App ──────────────────────────────────────────────────
         sep("PYTHON & APPLICATION")
@@ -1494,3 +1447,8 @@ class AdvancedSettingsTab(BaseTab):
                 tk.END, "\n[Exited {}]\n".format(proc.returncode)))
 
         threading.Thread(target=_work, daemon=True).start()
+
+    def show_system_info(self) -> None:
+        nb, page = getattr(self, "system_info_page", (None, None))
+        if nb is not None:
+            nb.select(page)

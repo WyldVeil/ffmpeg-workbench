@@ -7,13 +7,12 @@ Reads and writes the same settings.json as AdvancedSettingsTab via the
 centralised core.settings module (no duplicated load/save logic).
 """
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk
 from core import dialogs
 
-import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.settings import load_settings, save_settings
+from tabs.base_tab import BaseTab, CLR, UI_FONT
+from core.settings import load_settings, update
 from core.i18n import t
 
 
@@ -105,12 +104,13 @@ class SettingsTab(BaseTab):
         ).pack(pady=8)
 
     def _save(self):
-        for key, var in self._vars.items():
-            self.settings[key] = var.get()
-        self.settings["default_output_folder"] = self._out_var.get()
-        self.settings["auto_open_output"]       = self._auto_open.get()
-
-        if save_settings(self.settings):
+        # Only the values on this page: settings changed elsewhere since it was
+        # opened (favourites, language, network...) must not be reverted.
+        changes = {key: var.get() for key, var in self._vars.items()}
+        changes["default_output_folder"] = self._out_var.get()
+        changes["auto_open_output"] = self._auto_open.get()
+        self.settings.update(changes)
+        if update(changes):
             self._status.config(text=f"✅  {t('settings.saved_confirmation')}", fg=CLR["green"])
         else:
             self._status.config(text=f"❌  {t('settings.save_failed')}", fg=CLR["red"])

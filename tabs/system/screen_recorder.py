@@ -9,19 +9,16 @@ Advanced mode features:
   • Auto-stop after configurable duration (adds -t to FFmpeg)
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from typing import Optional
+from tkinter import messagebox, ttk
 from core import dialogs
-import subprocess
 import ctypes
 import ctypes.wintypes
 import os
 import sys
 import threading
-import time
-from datetime import datetime
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
 from core.i18n import t
 
 
@@ -157,7 +154,7 @@ class ScreenRecorderTab(BaseTab):
 
         # ── Advanced recording variables ──────────────────────────────────────
         self.fps_var      = tk.StringVar(value="60")
-        self.vcodec_var   = tk.StringVar(value="libx264 (CPU - High Compatibility)")
+        self.vcodec_var   = tk.StringVar(value="Auto (GPU when available)")
         self.preset_var   = tk.StringVar(value="superfast")
         self.crf_var      = tk.IntVar(value=18)
         self.pix_fmt_var  = tk.StringVar(value="yuv420p (Standard)")
@@ -458,44 +455,29 @@ class ScreenRecorderTab(BaseTab):
     #  Audio Hardware Scanning
     # ─────────────────────────────────────────────────────────────────────────
     def _load_audio_devices(self):
-        devices = ["None"]
-        try:
-            ffmpeg = get_binary_path("ffmpeg.exe")
-            if sys.platform == "win32":
-                r = subprocess.run([ffmpeg, "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                                   stderr=subprocess.PIPE, text=True, creationflags=CREATE_NO_WINDOW)
-                in_audio = False
-                for line in r.stderr.splitlines():
-                    if "DirectShow audio devices" in line:
-                        in_audio = True
-                    elif "DirectShow video devices" in line:
-                        in_audio = False
-                    elif in_audio and '"' in line and "Alternative name" not in line:
-                        dev = line.split('"')[1]
-                        if dev not in devices:
-                            devices.append(dev)
-            elif sys.platform == "darwin":
-                devices.extend(["0 (Default)", "1"])
-            else:
-                devices.extend(["default"])
-        except Exception as e:
-            pass # Keep silent, fallback to None is acceptable
+        """Worker thread: find audio sources (incl. the computer's own sound)."""
+        from core import recorder
+        sources = recorder.audio_sources()
+        self.after(0, lambda: self._update_audio_dropdowns(sources))
 
-        self.after(0, lambda: self._update_audio_dropdowns(devices))
-
-    def _update_audio_dropdowns(self, devices):
+    def _update_audio_dropdowns(self, sources):
+        from core import recorder
+        self._audio_ids = {label: sid for sid, label in sources}
+        labels = ["None"] + [label for _sid, label in sources]
         try:
-            self.cb_audio1.config(values=devices)
-            self.cb_audio2.config(values=devices)
-            
-            # SMART AUTO-SELECT: Try to find system audio if available
-            sys_audio = next((d for d in devices if any(x in d.lower() for x in ["stereo mix", "what u hear", "mezcla", "wave out"])), "None")
-            self.audio_src1_var.set(sys_audio)
-            
-            # Leave source 2 as None (for secondary mic)
+            self.cb_audio1.config(values=labels)
+            self.cb_audio2.config(values=labels)
+            system = recorder.system_sound_source(sources)
+            self.audio_src1_var.set(next((label for sid, label in sources if sid == system), "None"))
             self.audio_src2_var.set("None")
-        except Exception:
+        except tk.TclError:
             pass
+
+    def _audio_choice(self, var) -> str:
+        label = var.get()
+        if not label or label == "None" or "Loading" in label:
+            return ""
+        return getattr(self, "_audio_ids", {}).get(label, label)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Mode toggle (desktop vs window)
@@ -548,16 +530,10 @@ class ScreenRecorderTab(BaseTab):
             self.out_folder_var.set(folder)
 
     def _resolve_output_path(self, ext: str) -> str:
-        self._rec_counter += 1
-        template = self.out_template_var.get() or "StudioCapture_{date}_{time}"
-        now = datetime.now()
-        name = (template
-                .replace("{date}",    now.strftime("%Y%m%d"))
-                .replace("{time}",    now.strftime("%H%M%S"))
-                .replace("{counter}", str(self._rec_counter)))
-        folder = self.out_folder_var.get() or os.path.join(os.path.expanduser("~"), "Desktop")
+        from core import recorder
+        folder = self.out_folder_var.get().strip() or recorder.default_folder()
         os.makedirs(folder, exist_ok=True)
-        return os.path.join(folder, name + ext)
+        return recorder.recording_name(folder, self.out_template_var.get(), ext)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  OBS Feature 1 – Global Hotkey
@@ -576,42 +552,55 @@ class ScreenRecorderTab(BaseTab):
 
     def _start_hotkey_listener(self):
         if sys.platform != "win32":
-            messagebox.showinfo(t("msg.unsupported_title"), t("msg.hotkeys_windows_only"))
+            messagebox.showinfo(t("msg.unsupported_title"), t("msg.hotkeys_windows_only"), parent=self)
             self.hotkey_enabled_var.set(False)
             return
-
+        import ctypes.wintypes
         key_name = self.hotkey_var.get()
-        mod, vk  = self._HOTKEY_MAP.get(key_name, (0x0001, 0x78))
+        mod, vk = self._HOTKEY_MAP.get(key_name, (0x0001, 0x78))
+        self._hotkey_active = True
+        result = {}
+        ready = threading.Event()
 
-        ok = ctypes.windll.user32.RegisterHotKey(None, 9901, mod, vk)
-        if not ok:
-            messagebox.showerror(t("common.error"),
-                f"Could not register {key_name}.\n"
-                "Another application may be using it.")
+        def _listen():
+            # The hotkey message is posted to the thread that registered it.
+            user32 = ctypes.windll.user32
+            result["ok"] = bool(user32.RegisterHotKey(None, 9901, mod | 0x4000, vk))   # MOD_NOREPEAT
+            result["tid"] = ctypes.windll.kernel32.GetCurrentThreadId()
+            ready.set()
+            if not result["ok"]:
+                return
+            msg = ctypes.wintypes.MSG()
+            while self._hotkey_active and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                if msg.message == 0x0312 and msg.wParam == 9901:          # WM_HOTKEY
+                    self.after(0, self._hotkey_triggered)
+            user32.UnregisterHotKey(None, 9901)
+
+        threading.Thread(target=_listen, daemon=True, name="Hotkey").start()
+        ready.wait(2)
+        if not result.get("ok"):
+            self._hotkey_active = False
+            messagebox.showerror(t("common.error"), f"Could not register {key_name}.\n"
+                                 "Another application may be using it.", parent=self)
             self.hotkey_enabled_var.set(False)
             return
-
-        self._hotkey_active = True
+        self._hotkey_tid = result["tid"]
         self.lbl_hotkey_status.config(text=f"  ● {key_name} active", fg=CLR["green"])
         self.log(self.console, f"Global hotkey {key_name} registered.")
 
-        def _listen():
-            MSG = ctypes.wintypes.MSG()
-            while self._hotkey_active:
-                if ctypes.windll.user32.PeekMessageW(
-                        ctypes.byref(MSG), None, 0x0312, 0x0312, 1):  # WM_HOTKEY
-                    if MSG.wParam == 9901:
-                        self.after(0, self._hotkey_triggered)
-                time.sleep(0.04)
-
-        threading.Thread(target=_listen, daemon=True).start()
-
     def _stop_hotkey_listener(self):
+        was_active = getattr(self, "_hotkey_active", False)
         self._hotkey_active = False
-        if sys.platform == "win32":
-            ctypes.windll.user32.UnregisterHotKey(None, 9901)
-        self.lbl_hotkey_status.config(text=t("screen_recorder.inactive"), fg=CLR["fgdim"])
-        self.log(self.console, t("log.screen_recorder.global_hotkey_unregistered"))
+        tid = getattr(self, "_hotkey_tid", None)
+        if sys.platform == "win32" and tid:
+            ctypes.windll.user32.PostThreadMessageW(tid, 0x0012, 0, 0)       # WM_QUIT ends GetMessage
+            self._hotkey_tid = None
+        try:
+            self.lbl_hotkey_status.config(text=t("screen_recorder.inactive"), fg=CLR["fgdim"])
+        except tk.TclError:
+            pass
+        if was_active:
+            self.log(self.console, t("log.screen_recorder.global_hotkey_unregistered"))
 
     def _hotkey_triggered(self):
         if self._recording:
@@ -626,286 +615,200 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Express Mode logic
     # ─────────────────────────────────────────────────────────────────────────
-    def _get_express_audio_args(self):
-        """Helper to inject automatically detected audio into Simple mode recordings."""
-        src = self.audio_src1_var.get()
-        if not src or src in ("None", "Loading devices..."):
-            self.log(self.console, t("log.screen_recorder.warning_no_audio_device_found_recording_video_only"))
-            return [], []
-            
-        inputs = []
-        if sys.platform == "win32":
-            inputs = ["-thread_queue_size", "1024", "-f", "dshow", "-i", f"audio={src}"]
-        elif sys.platform == "darwin":
-            inputs = ["-f", "avfoundation", "-i", f":{src}"]
+    def _wayland_check(self) -> Optional[str]:
+        """On Wayland: the external recorder to use, '' to fall back to X11
+        capture after warning, or None when the user cancelled."""
+        from core import recorder
+        if recorder.session() != "wayland":
+            return ""
+        tool = recorder.wayland_tool()
+        if tool:
+            return tool
+        if messagebox.askyesno(
+                "Wayland desktop",
+                "This desktop uses Wayland, which only lets screen recorders in through its own "
+                "screen-sharing system. Without gpu-screen-recorder or wf-recorder installed, only "
+                "windows of older X11 apps can be captured (others show black).\n\n"
+                "Install gpu-screen-recorder for full recording (e.g. from Flathub or your package "
+                "manager).\n\nRecord with X11 capture anyway?", parent=self):
+            return ""
+        return None
+
+    def _express_encode(self, ext=".mp4"):
+        from core import encoders as enc
+        return enc.video("h264", "high", speed="fastest", hw="auto", container=ext.lstrip("."))
+
+    def _start_capture(self, mode_name, video_in, *, out_ext=".mp4", venc=None, region=None,
+                       seconds=None, audio=None):
+        from core import recorder
+        tool = self._wayland_check()
+        if tool is None:
+            return
+        out = self._resolve_output_path(out_ext)
+        sources = audio if audio is not None else [x for x in (self._audio_choice(self.audio_src1_var),)
+                                                   if x]
+        if tool:
+            want = tuple(("output" if src.endswith(".monitor") or "monitor" in src else "input")
+                         for src in sources) or ()
+            cmd = recorder.wayland_command(tool, out, fps=self.fps_var.get() or "60", audio=want, seconds=seconds)
+            self.log(self.console, f"Wayland: recording with {os.path.basename(tool)} - choose the screen or "
+                                   "window in the system dialog.")
         else:
-            inputs = ["-f", "pulse", "-i", src]
-            
-        # Audio encode flags + Explicit mapping
-        maps = ["-c:a", "aac", "-b:a", "192k", "-map", "0:v", "-map", "1:a"]
-        return inputs, maps
+            venc = venc or self._express_encode(out_ext)
+            cmd = recorder.ffmpeg_command(video_in, sources, out, venc.args, audio_codec=self.acodec_var.get() or "aac",
+                                          region_crop=region, seconds=seconds, pre_input=venc.pre_input,
+                                          vf_suffix=venc.filter_suffix)
+        self._execute(cmd, out, mode_name, seconds)
 
     def _start_express(self):
-        self.output_path = os.path.join(
-            os.path.expanduser("~"), "Desktop", "ScreenRecord.mp4")
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-y"]
-        
-        # Video Input
-        if sys.platform == "win32":
-            cmd += ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", "30", "-i", "desktop"]
-        elif sys.platform == "darwin":
-            cmd += ["-f", "avfoundation", "-framerate", "30", "-i", "1"]
-        else:
-            cmd += ["-f", "x11grab", "-framerate", "30", "-i", ":0.0"]
-            
-        # Audio Input
-        aud_in, aud_map = self._get_express_audio_args()
-        cmd += aud_in
-        
-        # Encoding & Output
-        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
-        cmd += aud_map
-        cmd += [self.output_path]
-        
-        self._execute_ffmpeg(cmd, "Simple: Full Screen")
+        from core import recorder
+        self._start_capture("Full screen", recorder.screen_input("30"))
 
     def _start_express_area(self):
+        from core import recorder
+        if recorder.session() == "wayland" and recorder.wayland_tool():
+            self._start_express()                    # the portal dialog lets the user pick
+            return
         AreaSelector(self, self._execute_express_area)
 
     def _execute_express_area(self, x, y, w, h):
-        self.output_path = os.path.join(
-            os.path.expanduser("~"), "Desktop", "AreaRecord.mp4")
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-y"]
-        
-        # Video Input
-        if sys.platform == "win32":
-            cmd += ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", "30",
-                    "-offset_x", str(x), "-offset_y", str(y),
-                    "-video_size", f"{w}x{h}", "-i", "desktop"]
-        elif sys.platform == "darwin":
-            cmd += ["-f", "avfoundation", "-framerate", "30", "-i", "1",
-                    "-vf", f"crop={w}:{h}:{x}:{y}"]
-        else:
-            cmd += ["-f", "x11grab", "-framerate", "30",
-                    "-video_size", f"{w}x{h}", "-i", f":0.0+{x},{y}"]
-                    
-        # Audio Input
-        aud_in, aud_map = self._get_express_audio_args()
-        cmd += aud_in
-        
-        # Encoding & Output
-        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
-        cmd += aud_map
-        cmd += [self.output_path]
-        
-        self._execute_ffmpeg(cmd, "Simple: Area")
+        from core import recorder
+        if w < 16 or h < 16:
+            messagebox.showwarning(t("common.warning"), "Drag a larger area to record.", parent=self)
+            return
+        self._start_capture("Area", recorder.screen_input("30", region=(x, y, w, h)), region=(x, y, w, h))
 
     def _start_express_window(self):
-        """Click on any window to start recording it instantly."""
+        from core import recorder
+        if recorder.session() == "wayland" and recorder.wayland_tool():
+            self._start_express()
+            return
         if sys.platform != "win32":
-            messagebox.showinfo(t("msg.os_limitation_title"), t("msg.click_pick_windows_only"))
+            messagebox.showinfo(t("msg.os_limitation_title"), t("msg.click_pick_windows_only"), parent=self)
             return
         WindowPicker(self, self._execute_express_window)
 
     def _execute_express_window(self, title: str, rect=None):
-        self.output_path = os.path.join(
-            os.path.expanduser("~"), "Desktop", "WindowRecord.mp4")
-        ffmpeg = get_binary_path("ffmpeg.exe")
-
-        cmd = [ffmpeg, "-y"]
-
-        # Video Input
-        if rect and sys.platform == "win32":
-            x, y, w, h = rect
-            w = max(2, w // 2 * 2)   # libx264 requires even dimensions
-            h = max(2, h // 2 * 2)
-            cmd += ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", "30",
-                    "-offset_x", str(x), "-offset_y", str(y),
-                    "-video_size", f"{w}x{h}", "-i", "desktop"]
-            self.log(self.console,
-                     f"Capturing window region: \"{title}\" at {x},{y} {w}x{h}")
+        from core import recorder
+        if rect:
+            video = recorder.screen_input("30", region=rect)
         else:
-            cmd += ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", "30",
-                    "-i", f"title={title}"]
-            self.log(self.console, f"Targeting window by title: \"{title}\"")
+            video = recorder.screen_input("30", window_title=title)
+        self.log(self.console, f"Window: \"{title}\"")
+        self._start_capture("Window", video)
 
-        # Audio Input
-        aud_in, aud_map = self._get_express_audio_args()
-        cmd += aud_in
-        
-        # Encoding & Output
-        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
-        cmd += aud_map
-        cmd += [self.output_path]
-
-        self._execute_ffmpeg(cmd, "Simple: Window")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    #  Pro Studio logic
-    # ─────────────────────────────────────────────────────────────────────────
     def _start_pro(self):
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        ext    = self.container_var.get()
-        self.output_path = self._resolve_output_path(ext)
-        fps    = self.fps_var.get()
-
-        cmd = [ffmpeg, "-y"]
-
-        # ── Auto-stop duration (OBS feature 3) ───────────────────────────────
+        from core import encoders as enc
+        from core import recorder
+        ext = self.container_var.get() or ".mp4"
+        fps = self.fps_var.get() or "30"
+        seconds = None
         if self.autostop_var.get():
             try:
-                hh = int(self.autostop_hh_var.get())
-                mm = int(self.autostop_mm_var.get())
-                ss = int(self.autostop_ss_var.get())
-                total_s = hh * 3600 + mm * 60 + ss
-                if total_s > 0:
-                    cmd += ["-t", str(total_s)]
-                    self.log(self.console, f"Auto-stop set: {hh:02d}:{mm:02d}:{ss:02d}")
+                seconds = (int(self.autostop_hh_var.get() or 0) * 3600 + int(self.autostop_mm_var.get() or 0) * 60
+                           + int(self.autostop_ss_var.get() or 0)) or None
             except ValueError:
-                pass
-
-        # ── Input 0: Video Source ────────────────────────────────────────────
-        if sys.platform == "win32":
-            # Add thread queue size to prevent buffer overflow when capturing video + audio
-            cmd += ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", fps]
-            if not self.cursor_var.get():
-                cmd += ["-draw_mouse", "0"]
-
-            if self.capture_mode_var.get() == "window":
-                win_title = self.window_title_var.get().strip()
-                if not win_title and not self._window_rect:
-                    messagebox.showerror(t("common.error"), "Switch to 'Specific Window' mode and pick or type a window title.")
-                    return
-                if self._window_rect:
-                    x, y, w, h = self._window_rect
-                    w = max(2, w // 2 * 2)
-                    h = max(2, h // 2 * 2)
-                    cmd += ["-offset_x", str(x), "-offset_y", str(y),
-                            "-video_size", f"{w}x{h}", "-i", "desktop"]
-                    self.log(self.console, f"Capturing window region: \"{win_title}\" at {x},{y} {w}x{h}")
-                else:
-                    cmd += ["-i", f"title={win_title}"]
-                    self.log(self.console, f"Capturing window by title: \"{win_title}\"")
-            else:
-                if self.selected_region:
-                    x, y, w, h = self.selected_region
-                    cmd += ["-offset_x", str(x), "-offset_y", str(y),
-                            "-video_size", f"{w}x{h}"]
-                cmd += ["-i", "desktop"]
-
-        elif sys.platform == "darwin":
-            cmd += ["-f", "avfoundation", "-framerate", fps, "-i", "1"]
-        else:
-            cmd += ["-f", "x11grab", "-framerate", fps, "-i", ":0.0"]
-
-        # ── Inputs 1 & 2: Audio Sources ───────────────────────────────────────
-        src1 = self.audio_src1_var.get()
-        src2 = self.audio_src2_var.get()
-        audio_inputs = 0
-        
-        if sys.platform == "win32":
-            for src in (src1, src2):
-                if src and src != "None" and "Loading" not in src:
-                    # Buffer safety for audio streams to prevent dropping frames
-                    cmd += ["-thread_queue_size", "1024", "-f", "dshow", "-i", f"audio={src}"]
-                    audio_inputs += 1
-        elif sys.platform == "darwin":
-            if src1 and src1 not in ("None", "Loading devices..."):
-                cmd += ["-f", "avfoundation", "-i", f":{src1}"]
-                audio_inputs += 1
-        else:
-            if src1 and src1 not in ("None", "Loading devices..."):
-                cmd += ["-f", "pulse", "-i", src1]
-                audio_inputs += 1
-
-        # ── Video encoding ────────────────────────────────────────────────────
-        vcodec  = self.vcodec_var.get().split(" ")[0]
-        pix_fmt = self.pix_fmt_var.get().split(" ")[0]
-        cmd += ["-c:v", vcodec, "-preset", self.preset_var.get(), "-pix_fmt", pix_fmt]
-
-        if "nvenc" not in vcodec and "amf" not in vcodec:
-            cmd += ["-crf", str(self.crf_var.get())]
-        else:
-            cmd += ["-rc", "vbr", "-cq", str(self.crf_var.get()), "-b:v", "0"]
-
-        # ── Audio encoding & Filters ──────────────────────────────────────────
-        if audio_inputs == 0:
-            self.log(self.console, t("log.screen_recorder.warning_audio_sources_set_to_none_recording_video"))
-        elif audio_inputs > 0:
-            cmd += ["-c:a", self.acodec_var.get(), "-b:a", "320k"]
-            if audio_inputs == 1:
-                # EXPLICIT MAPPING: Forces FFmpeg to properly glue video and audio together
-                cmd += ["-map", "0:v", "-map", "1:a"]
-            elif audio_inputs == 2:
-                cmd += ["-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest[aout]", 
-                        "-map", "0:v", "-map", "[aout]"]
-
-        cmd.append(self.output_path)
-        self._execute_ffmpeg(cmd, "Advanced")
+                messagebox.showwarning(t("common.warning"), "The auto-stop time must be whole numbers.", parent=self)
+                return
+        label = self.vcodec_var.get()
+        codec, hw = ("hevc", "off") if label.startswith("libx265") else ("av1", "off") if "svtav1" in label else \
+            ("h264", "nvenc") if label.startswith("h264_nvenc") else ("hevc", "nvenc") if label.startswith(
+                "hevc_nvenc") else ("h264", "amf") if label.startswith("h264_amf") else \
+            ("h264", "auto") if label.startswith("Auto") else ("h264", "off")
+        crf = int(self.crf_var.get())
+        quality = "very_high" if crf <= 18 else "high" if crf <= 22 else "good" if crf <= 26 else \
+            "low" if crf <= 30 else "lowest"
+        speed = {"ultrafast": "fastest", "superfast": "fastest", "veryfast": "fast", "faster": "fast",
+                 "fast": "balanced", "medium": "balanced", "slow": "slow"}.get(self.preset_var.get(), "fastest")
+        ve = enc.video(codec, quality, speed=speed, hw=hw, container=ext.lstrip("."))
+        if self.pix_fmt_var.get().startswith("yuv444p") and ve.encoder in ("libx264", "libx265", "h264_nvenc",
+                                                                           "hevc_nvenc") and "-pix_fmt" in ve.args:
+            ve.args[ve.args.index("-pix_fmt") + 1] = "yuv444p"
+        region = window = None
+        if self.capture_mode_var.get() == "window":
+            window = self.window_title_var.get().strip()
+            if self._window_rect:
+                region = self._window_rect
+            elif not window:
+                messagebox.showerror(t("common.error"), "Pick a window or type its title first.", parent=self)
+                return
+        elif self.selected_region:
+            region = self.selected_region
+        video = recorder.screen_input(fps, region=region, cursor=self.cursor_var.get(),
+                                      window_title=window if window and not region else "")
+        sources = [x for x in (self._audio_choice(self.audio_src1_var), self._audio_choice(self.audio_src2_var)) if x]
+        self._start_capture("Advanced", video, out_ext=ext, venc=ve, region=region, seconds=seconds,
+                            audio=sources)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Execution & teardown
     # ─────────────────────────────────────────────────────────────────────────
-    def _execute_ffmpeg(self, cmd, mode_name):
+    def _set_buttons(self, recording: bool):
+        state = "disabled" if recording else "normal"
+        for b in (self.btn_start_express, self.btn_start_express_area, self.btn_start_express_window):
+            b.config(state=state)
+        self.btn_start_pro.config(state=state, text=t("screen_recorder.recording") if recording else
+                                  t("screen_recorder.start_studio_recording"))
+        self.btn_stop.config(state="normal" if recording else "disabled",
+                             bg=CLR["red"] if recording else CLR["panel"], fg="white" if recording else CLR["fg"])
+
+    def _execute(self, cmd, out, mode_name, seconds=None):
+        from core import recorder
+        self.output_path = out
+        try:
+            rec = recorder.Recording(cmd, out, seconds=seconds,
+                                     on_exit=lambda r, rc: self.after(0, lambda: self._ended(r, rc)))
+        except OSError as exc:
+            messagebox.showerror(t("common.error"), f"The recorder could not start:\n{exc}", parent=self)
+            return
+        self.record_proc = rec
         self._recording = True
-        self.log(self.console, f"[{mode_name}] Recording → {self.output_path}")
+        self._set_buttons(True)
+        self.log(self.console, f"[{mode_name}] Recording → {out}")
+        self._tick()
 
-        self.btn_start_express.config(state="disabled")
-        self.btn_start_express_area.config(state="disabled")
-        self.btn_start_express_window.config(state="disabled")
-        self.btn_start_pro.config(state="disabled", text=t("screen_recorder.recording"))
-        self.btn_stop.config(state="normal", bg=CLR["red"], fg="white")
+    def _tick(self):
+        rec = self.record_proc
+        if rec is None or not self._recording:
+            return
+        m, s_ = divmod(int(rec.elapsed), 60)
+        try:
+            self.btn_stop.config(text=f"■  STOP   {m:02d}:{s_:02d}")
+        except tk.TclError:
+            return
+        self.after(500, self._tick)
 
-        def _run():
-            try:
-                self.record_proc = subprocess.Popen(
-                    cmd, stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, creationflags=CREATE_NO_WINDOW)
-                for line in iter(self.record_proc.stdout.readline, ""):
-                    if "time=" in line or "error" in line.lower() or "warning" in line.lower():
-                        self.after(0, lambda l=line: [
-                            self.console.insert(tk.END, l),
-                            self.console.see(tk.END)])
-            except Exception as e:
-                self.after(0, lambda: messagebox.showerror(t("common.error"), str(e)))
-                self.after(0, self._stop)
-
-        threading.Thread(target=_run, daemon=True).start()
+    def _ended(self, rec, rc):
+        """The recorder process finished - on request or by itself."""
+        if rec is not self.record_proc and self.record_proc is not None:
+            return
+        self.record_proc = None
+        self._recording = False
+        self._set_buttons(False)
+        try:
+            self.btn_stop.config(text=t("screen_recorder.stop_button") if t("screen_recorder.stop_button") !=
+                                 "screen_recorder.stop_button" else "■  STOP")
+        except tk.TclError:
+            pass
+        ok = os.path.isfile(rec.out) and os.path.getsize(rec.out) > 1024
+        if ok and (rec.stopping or rc == 0 or rec.seconds):
+            self.log(self.console, f"Saved: {rec.out}")
+            return
+        detail = rec.error_text() or f"exit code {rc}"
+        self.log(self.console, f"Recording failed:\n{detail}")
+        messagebox.showerror(t("common.error"), "The recording stopped unexpectedly:\n\n" + detail, parent=self)
 
     def _stop(self):
-        self._recording = False
-        proc = self.record_proc
-        self.record_proc = None
-        self.btn_stop.config(state="disabled", bg=CLR["panel"], fg=CLR["fg"])
+        rec = self.record_proc
+        if rec is None:
+            return
+        self.btn_stop.config(state="disabled")
         self.log(self.console, t("log.screen_recorder.stopping_flushing_file_headers"))
-
-        out_path = self.output_path
-
-        def _do_stop():
-            if proc is not None:
-                try:
-                    # 'q' + newline is the clean FFmpeg quit signal
-                    proc.stdin.write("q\n")
-                    proc.stdin.flush()
-                    proc.wait(timeout=8)
-                except Exception:
-                    try: proc.terminate()
-                    except Exception: pass
-            self.after(0, lambda: self._on_stop_done(out_path))
-
-        threading.Thread(target=_do_stop, daemon=True).start()
-
-    def _on_stop_done(self, out_path):
-        self.btn_start_express.config(state="normal")
-        self.btn_start_express_area.config(state="normal")
-        self.btn_start_express_window.config(state="normal")
-        self.btn_start_pro.config(state="normal", text=t("screen_recorder.start_studio_recording"))
-        self.log(self.console, f"Saved: {out_path}")
+        threading.Thread(target=rec.stop, daemon=True, name="RecorderStop").start()
 
     def on_close(self):
-        """Called when the tab is destroyed / app exits."""
+        """Called when the tab is destroyed / app exits: finish the file properly."""
         self._stop_hotkey_listener()
-        super().on_close() if hasattr(super(), "on_close") else None
+        rec = self.record_proc
+        if rec is not None and rec.running():
+            rec.stop(timeout=8)

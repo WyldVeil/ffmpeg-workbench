@@ -15,7 +15,6 @@ import re
 
 from core import APP_NAME, APP_VERSION
 from core.state import state as _app_state
-from core.hardware import get_binary_path, download_and_extract_ffmpeg, CREATE_NO_WINDOW
 from core.i18n import t, init as _i18n_init
 
 # Initialise i18n before any UI is constructed
@@ -1064,22 +1063,8 @@ class App(tk.Tk):
     def _menu_system_info(self):
         self.show_page("Advanced Settings")
         page = self.pages.get("Advanced Settings")
-        if not page:
-            return
-        def _find_nb(w):
-            for c in w.winfo_children():
-                if isinstance(c, ttk.Notebook):
-                    return c
-                r = _find_nb(c)
-                if r:
-                    return r
-            return None
-        try:
-            nb = _find_nb(page)
-            if nb:
-                nb.select(3)
-        except Exception:
-            pass
+        if page is not None and hasattr(page, "show_system_info"):
+            page.show_system_info()
 
     def _menu_shortcuts(self):
         messagebox.showinfo("Keyboard Shortcuts",
