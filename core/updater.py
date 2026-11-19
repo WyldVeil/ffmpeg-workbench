@@ -15,13 +15,10 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import re
-import shutil
 import ssl
 import subprocess
-import tarfile
-import tempfile
-import zipfile
 from typing import Callable, Optional
 
 from core.hardware import CREATE_NO_WINDOW, find_binary, platform_tag, user_tools_dir
@@ -36,13 +33,25 @@ _YTDLP_ASSET = {"windows-x64": "yt-dlp.exe", "linux-x64": "yt-dlp_linux"}
 
 
 def _offline() -> bool:
+    """Offline mode (Settings → Network) or the test switch."""
     if os.environ.get("CROSSFADER_NO_NETWORK") == "1":
         return True
     try:
-        from core.settings import get
-        return not get("check_updates", True)
+        from core import network
+        return network.is_offline()
     except Exception:
         return False
+
+
+def _checks_enabled() -> bool:
+    """Automatic update checks: not offline and not switched off."""
+    if _offline():
+        return False
+    try:
+        from core.settings import get
+        return bool(get("check_updates", True))
+    except Exception:
+        return True
 
 
 def _open(url: str, timeout: float = 30.0):
@@ -103,157 +112,26 @@ def _sums(text: str) -> dict:
 
 
 # ── FFmpeg ───────────────────────────────────────────────────────────────────
-
-def _latest_btbn() -> Optional[dict]:
-    variant = _VARIANT.get(platform_tag())
-    if not variant:
-        return None
-    pat = re.compile(r"^ffmpeg-n(\d+)\.(\d+)(?:\.(\d+))?-(\d+)-g([0-9a-f]+)-" + re.escape(variant)
-                     + r"-\d+\.\d+\.(zip|tar\.xz)$")
-    for rel in _json(_BTBN_API):
-        if not rel.get("tag_name", "").startswith("autobuild-"):
-            continue
-        assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
-        best = None
-        for name in assets:
-            m = pat.match(name)
-            if m:
-                key = tuple(int(x or 0) for x in m.group(1, 2, 3, 4))
-                if best is None or key > best[0]:
-                    best = (key, name)
-        if best and "checksums.sha256" in assets:
-            name = best[1]
-            sums = _sums(_text(assets["checksums.sha256"]))
-            ver = ".".join(str(x) for x in best[0][:3])
-            return {"version": ver, "name": name, "url": assets[name], "sha256": sums.get(name, "")}
-    return None
-
-
-def latest_ffmpeg_release() -> Optional[str]:
-    if _offline():
-        return None
-    try:
-        info = _latest_btbn()
-        return info["version"] if info else None
-    except Exception as exc:
-        _log.info("FFmpeg update check failed: %s", exc)
-        return None
-
+# FFmpeg is pinned: the app ships the build every tool is tested against and
+# it changes only with app releases (a newer FFmpeg can change or drop options
+# the tools rely on).  There is deliberately no in-app FFmpeg updater.
 
 def is_app_managed(path: Optional[str]) -> bool:
-    """True if *path* is a bundled or app-downloaded FFmpeg (safe to update)."""
+    """True if *path* is the FFmpeg shipped with the app."""
     if not path:
         return True
     from core.hardware import APP_ROOT
     p = os.path.abspath(path)
     roots = [os.path.abspath(APP_ROOT)]
-    if user_tools_dir():
-        roots.append(os.path.abspath(user_tools_dir()))
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.append(os.path.abspath(meipass))
     return any(p.startswith(r + os.sep) for r in roots)
 
 
-def install_ffmpeg(log: Log) -> bool:
-    """Download the newest stable FFmpeg build into the user tools folder."""
-    if _offline():
-        log("Updates are disabled (offline mode).")
-        return False
-    target_root = user_tools_dir()
-    if not target_root:
-        log("No writable tools folder available.")
-        return False
-    try:
-        log("Checking the latest FFmpeg build…")
-        info = _latest_btbn()
-        if not info or not info["sha256"]:
-            log("No suitable FFmpeg build is published for this platform.")
-            return False
-        log(f"Downloading FFmpeg {info['version']} ({info['name']})")
-        work = tempfile.mkdtemp(prefix="ffmpeg_update_")
-        try:
-            archive = os.path.join(work, info["name"])
-            _download(info["url"], archive, info["sha256"], log)
-            log("Checksum verified. Extracting…")
-            stage = os.path.join(work, "ffmpeg")
-            _extract_ffmpeg(archive, stage)
-            exe = os.path.join(stage, "bin", "ffmpeg" + (".exe" if os.name == "nt" else ""))
-            r = subprocess.run([exe, "-hide_banner", "-version"], capture_output=True, text=True,
-                               timeout=30, creationflags=CREATE_NO_WINDOW)
-            if r.returncode != 0:
-                log("The downloaded FFmpeg does not run on this system - keeping the current one.")
-                return False
-            os.makedirs(target_root, exist_ok=True)
-            final = os.path.join(target_root, "ffmpeg")
-            old = final + ".old"
-            if os.path.isdir(old):
-                shutil.rmtree(old, ignore_errors=True)
-            if os.path.isdir(final):
-                os.replace(final, old)
-            shutil.move(stage, final)
-            shutil.rmtree(old, ignore_errors=True)
-            with open(os.path.join(final, "VERSION.json"), "w", encoding="utf-8") as fh:
-                json.dump(info, fh, indent=2)
-        finally:
-            shutil.rmtree(work, ignore_errors=True)
-        try:
-            from core import encoders
-            encoders._ENCODERS.clear()
-            encoders._HW_OK.clear()
-        except Exception:
-            pass
-        log(f"✅ FFmpeg {info['version']} installed to {final}")
-        return True
-    except Exception as exc:
-        _log.exception("FFmpeg update failed")
-        log(f"❌ Update failed: {exc}")
-        return False
-
-
-def _safe(name: str) -> str:
-    norm = os.path.normpath(name).replace("\\", "/")
-    if norm.startswith(("/", "../")) or "/../" in norm:
-        raise RuntimeError(f"unsafe archive member {name}")
-    return norm
-
-
-def _extract_ffmpeg(archive: str, dest: str) -> None:
-    os.makedirs(os.path.join(dest, "bin"), exist_ok=True)
-    soname = re.compile(r"^(lib[\w.+-]+?\.so\.\d+)\.\d+\.\d+$")
-
-    def place(name: str, data: bytes) -> None:
-        base, parent = os.path.basename(name), os.path.basename(os.path.dirname(name))
-        stem, ext = os.path.splitext(base)
-        if parent == "bin" and (stem in ("ffmpeg", "ffprobe", "ffplay") or ext == ".dll"):
-            out = os.path.join(dest, "bin", base)
-        elif parent == "lib" and soname.match(base):
-            out = os.path.join(dest, "lib", soname.match(base).group(1))
-        elif base in ("LICENSE.txt", "LICENSE"):
-            out = os.path.join(dest, "LICENSE.txt")
-        else:
-            return
-        os.makedirs(os.path.dirname(out), exist_ok=True)
-        with open(out, "wb") as fh:
-            fh.write(data)
-        if parent == "bin" and os.name != "nt":
-            os.chmod(out, 0o755)
-
-    if archive.endswith(".zip"):
-        with zipfile.ZipFile(archive) as zf:
-            for info in zf.infolist():
-                if not info.is_dir():
-                    place(_safe(info.filename), zf.read(info))
-    else:
-        with tarfile.open(archive, "r:*") as tf:
-            for m in tf.getmembers():
-                if m.isfile():
-                    f = tf.extractfile(m)
-                    if f is not None:
-                        place(_safe(m.name), f.read())
-
-
-# ── yt-dlp ───────────────────────────────────────────────────────────────────
-
-def latest_ytdlp_release() -> Optional[str]:
-    if _offline():
+def latest_ytdlp_release(force: bool = False) -> Optional[str]:
+    """Newest yt-dlp version (automatic checks respect 'check for updates')."""
+    if _offline() or (not force and not _checks_enabled()):
         return None
     try:
         return _json(_YTDLP_API).get("tag_name")
@@ -273,8 +151,19 @@ def install_ytdlp(log: Log) -> bool:
         log("No yt-dlp build is published for this platform - update it with your package manager.")
         return False
     try:
-        rel = _json(_YTDLP_API)
-        assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+        from core import network
+        try:
+            rel = _json(_YTDLP_API)
+            assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+        except Exception:
+            if not network.get().get("network.github_mirror"):
+                raise
+            # api.github.com is often blocked together with GitHub; mirrors serve the
+            # release files themselves, so use the stable "latest" links.
+            base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
+            rel = {"tag_name": "latest"}
+            assets = {name: base + name for name in (asset, "SHA2-256SUMS")}
+        assets = {k: network.mirror_url(v) for k, v in assets.items()}
         sums = _sums(_text(assets["SHA2-256SUMS"]))
         os.makedirs(target_root, exist_ok=True)
         exe_name = "yt-dlp" + (".exe" if os.name == "nt" else "")

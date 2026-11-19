@@ -74,21 +74,46 @@ def is_installed(key: str) -> bool:
     return os.path.isfile(path) and os.path.isfile(path + ".ok")
 
 
+def adopt_file(key: str, path: Optional[str] = None) -> bool:
+    """Install model *key* from a file the person copied in by hand (offline
+    machines): accepted only if its SHA-256 matches the pinned one."""
+    m = MODELS[key]
+    src = path or model_path(key)
+    if not os.path.isfile(src):
+        return False
+    h = hashlib.sha256()
+    with open(src, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    if h.hexdigest() != m.sha256:
+        return False
+    dest = model_path(key)
+    if os.path.abspath(src) != os.path.abspath(dest):
+        import shutil
+        shutil.copyfile(src, dest + ".part")
+        os.replace(dest + ".part", dest)
+    with open(dest + ".ok", "w", encoding="utf-8") as fh:
+        fh.write(m.sha256 + "\n")
+    return True
+
+
 def download_model(key: str, progress: Optional[Callable[[float], None]] = None,
                    cancelled: Optional[Callable[[], bool]] = None) -> str:
     """Download and verify model *key*; returns its path.  Raises RuntimeError."""
     from core.updater import _open, _offline
     m = MODELS[key]
     dest = model_path(key)
-    if is_installed(key):
+    if is_installed(key) or adopt_file(key):
         return dest
-    if _offline() and os.environ.get("CROSSFADER_NO_NETWORK") == "1":
-        raise RuntimeError("Network access is disabled.")
+    if _offline():
+        raise RuntimeError(f"Offline mode is on. To install this model by hand, put {m.file} "
+                           f"(from {BASE_URL}{m.file}) in {models_folder()} and choose it again.")
     part = dest + ".part"
     h = hashlib.sha256()
     done = 0
     try:
-        with _open(BASE_URL + m.file, timeout=60) as r, open(part, "wb") as fh:
+        from core import network
+        with _open(network.mirror_url(BASE_URL + m.file), timeout=60) as r, open(part, "wb") as fh:
             total = int(r.headers.get("Content-Length") or 0) or m.size_mb * 1_000_000
             while True:
                 if cancelled is not None and cancelled():

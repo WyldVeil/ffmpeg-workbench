@@ -127,3 +127,23 @@ def test_batch_operations(ui, media, tmp_path, op):
         assert first.video.height == 720
     if op == "to_mp4":
         assert first.video.codec == "h264" and made[0].endswith(".mp4")
+
+
+@pytest.mark.gui
+def test_network_page_situations(ui):
+    from core import network as net
+    ui.reset()
+    page = ui.open("Advanced Settings")
+    clash = next(t for t, sid in page._net_app_labels.items() if sid == "clash")
+    page._net_app_var.set(clash)
+    page._net_situation_var.set("app")
+    page._net_choose("app")
+    page._net_vars["network.tor_retries"].set("5")
+    page._net_save()
+    c = net.get()
+    assert (net.mode(c), c["network.proxy_port"], c["network.proxy_scheme"]) == ("manual", "7890", "http")
+    assert net.tor_retries(c) == 5
+    page._net_situation_var.set("auto")
+    page._net_choose("auto")
+    page._net_save()
+    assert net.mode() == "auto" and not net.strict()

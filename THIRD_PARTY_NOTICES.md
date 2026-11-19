@@ -60,6 +60,8 @@ Their licence texts are in each package's `*.dist-info` folder there:
 | aiohappyeyeballs, typing_extensions | Python Software Foundation License 2.0 |
 | attrs, tabulate | MIT |
 | idna | BSD-3-Clause |
+| truststore (uses the operating system's own certificate checks) | MIT |
+| PySocks (SOCKS proxy support for the app's own downloads) | BSD-3-Clause |
 | certifi (CA certificates) | MPL-2.0 |
 
 ## Fonts (`assets/fonts`)

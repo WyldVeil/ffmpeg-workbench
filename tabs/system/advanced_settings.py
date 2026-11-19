@@ -18,8 +18,8 @@ from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.skins import (SKINS, save_skin_name, apply_skin, load_skin_name,
                         set_star_speed, set_star_count, get_skin, save_custom_color, _CUSTOM_DEFAULTS)
 from core.hardware import (
-    get_binary_path, get_local_version, get_latest_online_version,
-    download_and_extract_ffmpeg, detect_gpu, CREATE_NO_WINDOW,
+    get_binary_path, get_local_version,
+    detect_gpu, CREATE_NO_WINDOW,
     open_in_explorer,
 )
 from core.settings import load_settings, update
@@ -70,16 +70,12 @@ class AdvancedSettingsTab(BaseTab):
                                        font=(MONO_FONT, 11))
         self.online_ver_lbl.pack(anchor="w")
 
+        tk.Label(ver_f, text="The app ships the FFmpeg build every tool is tested with; it is updated "
+                             "together with the app (there is no separate FFmpeg updater, so an FFmpeg "
+                             "change can never break a tool).", fg=CLR["fgdim"], wraplength=640,
+                 justify="left").pack(anchor="w", pady=(4, 0))
         btn_row = tk.Frame(ver_f)
         btn_row.pack(anchor="w", pady=8)
-        tk.Button(btn_row, text=t("advanced_settings.check_versions"),
-                  bg=CLR["panel"], fg=CLR["fg"],
-                  command=lambda: threading.Thread(
-                      target=self._check_versions, daemon=True).start()
-                  ).pack(side="left", padx=4)
-        tk.Button(btn_row, text=t("advanced_settings.download_update_ffmpeg"),
-                  bg=CLR["green"], fg="white",
-                  command=self._download_ffmpeg).pack(side="left", padx=4)
         tk.Button(btn_row, text=t("advanced_settings.open_bin_folder"),
                   bg=CLR["panel"], fg=CLR["fg"],
                   command=self._open_bin).pack(side="left", padx=4)
@@ -108,28 +104,13 @@ class AdvancedSettingsTab(BaseTab):
         threading.Thread(target=self._check_versions, daemon=True).start()
 
     def _check_versions(self):
-        local  = get_local_version()
-        online = get_latest_online_version()
-        status = ("✅ Up to date"
-                  if local == online
-                  else "⚠ Update available ({})".format(online))
-        self.after(0, lambda: self.local_ver_lbl.config(
-            text=t("advanced_settings.local").format(local)))
-        self.after(0, lambda: self.online_ver_lbl.config(
-            text=t("advanced_settings.online").format(online, status)))
-
-    def _download_ffmpeg(self):
-        def _log(msg):
-            self.after(0, lambda m=msg: [
-                self.upd_console.insert(tk.END, m + "\n"),
-                self.upd_console.see(tk.END)])
-
-        def _work():
-            ok = download_and_extract_ffmpeg(_log)
-            if ok:
-                self.after(0, self._check_versions)
-
-        threading.Thread(target=_work, daemon=True).start()
+        from core import updater
+        from core.hardware import find_binary
+        local = get_local_version()
+        path = find_binary("ffmpeg") or ""
+        where = "bundled with the app" if updater.is_app_managed(path) else f"your own copy: {path}"
+        self.after(0, lambda: self.local_ver_lbl.config(text=f"FFmpeg {local}"))
+        self.after(0, lambda: self.online_ver_lbl.config(text=where))
 
     def _open_bin(self):
         bin_dir = os.path.dirname(get_binary_path("ffmpeg"))
@@ -224,11 +205,9 @@ class AdvancedSettingsTab(BaseTab):
     # ─── Networking ───────────────────────────────────────────────────────────
     def _build_networking_tab(self, nb):
         from core import network as _net
-
+        from core import sysproxy
         f = ttk.Frame(nb)
-        nb.add(f, text="  Networking  ")
-
-        # Scrollable body, since the form has many rows.
+        nb.add(f, text="  Network  ")
         outer = tk.Frame(f, bg=CLR["bg"])
         outer.pack(fill="both", expand=True)
         canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0)
@@ -237,279 +216,348 @@ class AdvancedSettingsTab(BaseTab):
         vsb.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
         body = tk.Frame(canvas, bg=CLR["bg"])
-        canvas_win = canvas.create_window((0, 0), window=body, anchor="nw")
-        body.bind("<Configure>",
-                  lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>",
-                    lambda e, w=canvas_win: canvas.itemconfig(w, width=e.width))
-
-        tk.Label(body,
-                 text="Network settings apply to all in-app fetches "
-                      "(version checks, thumbnails) and to every yt-dlp / "
-                      "ffmpeg / pip subprocess started by the app.",
-                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"],
-                 wraplength=720, justify="left").pack(
-            anchor="w", padx=20, pady=(14, 8))
-
-        # Load saved values into form variables.
+        win = canvas.create_window((0, 0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
         cfg = _net.get()
         self._net_vars = {}
-        for key, default in _net.DEFAULTS.items():
-            val = cfg.get(key, default)
-            if isinstance(default, bool):
-                v = tk.BooleanVar(value=bool(val))
-            else:
-                v = tk.StringVar(value="" if val is None else str(val))
-            self._net_vars[key] = v
 
-        def _section(parent, title):
-            lf = tk.LabelFrame(parent, text=f"  {title}  ",
-                               padx=14, pady=10,
-                               bg=CLR["bg"], fg=CLR["fgdim"],
-                               font=(UI_FONT, 9, "bold"),
-                               bd=1, relief="solid")
+        def var(key):
+            default = _net.DEFAULTS[key]
+            v = (tk.BooleanVar(value=bool(cfg.get(key, default))) if isinstance(default, bool)
+                 else tk.StringVar(value=str(cfg.get(key, default) or "")))
+            self._net_vars[key] = v
+            return v
+
+        def section(title):
+            lf = tk.LabelFrame(body, text=f"  {title}  ", padx=12, pady=8)
             lf.pack(fill="x", padx=20, pady=6)
             return lf
 
-        def _row(parent, label, key, widget_factory, hint=""):
-            r = tk.Frame(parent, bg=CLR["bg"])
-            r.pack(fill="x", pady=3)
-            tk.Label(r, text=label, font=(UI_FONT, 9),
-                     width=22, anchor="e",
-                     bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-            widget_factory(r)
-            default = _net.DEFAULTS[key]
-            default_str = "(default)" if default in (False, "", "auto", True) \
-                else f"(default: {default})"
-            reset_btn = tk.Button(
-                r, text="↺", font=(UI_FONT, 9),
-                bg=CLR["panel"], fg=CLR["fg"],
-                relief="flat", cursor="hand2",
-                width=2, padx=2, pady=0,
-                command=lambda k=key: self._net_reset_field(k))
-            reset_btn.pack(side="left", padx=4)
-            self.add_tooltip(reset_btn, f"Reset to default {default_str}")
-            if hint:
-                tk.Label(r, text=hint, font=(UI_FONT, 8),
-                         bg=CLR["bg"], fg=CLR["fgdim"]).pack(
-                    side="left", padx=(6, 0))
-            return r
+        def hint(parent, text):
+            tk.Label(parent, text=text, fg=CLR["fgdim"], font=(UI_FONT, 8), justify="left", anchor="w",
+                     wraplength=760).pack(anchor="w", fill="x")
 
-        # ── Quick presets ──────────────────────────────────────────────
-        ps = _section(body, "Quick Presets")
-        ps_row = tk.Frame(ps, bg=CLR["bg"])
-        ps_row.pack(anchor="w")
-        tk.Label(ps_row, text="One-click setups:",
-                 font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=(0, 8))
+        # ── What happens now ─────────────────────────────────────────────────
+        now = section("Right now")
+        self._net_now_lbl = tk.Label(now, text="Checking…", anchor="w", justify="left", wraplength=760,
+                                     font=(UI_FONT, 10, "bold"))
+        self._net_now_lbl.pack(anchor="w", fill="x")
+        self._net_sys_lbl = tk.Label(now, text="", anchor="w", justify="left", wraplength=760, fg=CLR["fgdim"])
+        self._net_sys_lbl.pack(anchor="w", fill="x")
+        row = tk.Frame(now)
+        row.pack(anchor="w", pady=(6, 0))
+        tk.Button(row, text="Test the connection", command=self._net_test).pack(side="left")
+        tk.Button(row, text="Save", bg=CLR["green"], fg="white", command=self._net_save).pack(side="left", padx=6)
+        tk.Button(row, text="Reset everything", fg=CLR["red"], command=self._net_reset_all).pack(side="left")
+        self._net_status_lbl = tk.Label(now, text="", anchor="w", justify="left", wraplength=760)
+        self._net_status_lbl.pack(anchor="w", fill="x", pady=(4, 0))
 
-        def _preset_btn(label, pid):
-            return tk.Button(
-                ps_row, text=label,
-                bg=CLR["panel"], fg=CLR["fg"],
-                font=(UI_FONT, 9),
-                activebackground=CLR["accent"], activeforeground="white",
-                relief="flat", cursor="hand2", padx=10, pady=3,
-                command=lambda p=pid: self._net_apply_preset(p))
+        special = sysproxy.special_system()
+        if special:
+            self._build_tor_system_section(body, special)
 
-        _preset_btn("Direct (no proxy)", "direct").pack(side="left", padx=3)
-        _preset_btn("System defaults",   "system").pack(side="left", padx=3)
-        _preset_btn("Tor (127.0.0.1:9050)", "tor").pack(side="left", padx=3)
-        _preset_btn("Local HTTP (127.0.0.1:8080)", "local_http").pack(side="left", padx=3)
+        # ── Situations ───────────────────────────────────────────────────────
+        sit = section("How should the app connect?")
+        apps = [x for x in _net.SITUATIONS if x[0] not in ("auto", "direct", "offline", "tor", "tor_browser")]
+        tors = [x for x in _net.SITUATIONS if x[0] in ("tor_browser", "tor")]
+        self._net_app_labels = {title: sid for sid, title, _d, _v in apps}
+        self._net_tor_labels = {title: sid for sid, title, _d, _v in tors}
+        current = self._net_situation(cfg)
+        kind = ("app" if current in self._net_app_labels.values() else
+                "tor" if current in self._net_tor_labels.values() else current)
+        self._net_situation_var = tk.StringVar(value=kind)
 
-        # ── Proxy ──────────────────────────────────────────────────────
-        px = _section(body, "Proxy")
+        def radio(value, text, desc="", extra=None):
+            r = tk.Frame(sit)
+            r.pack(anchor="w", fill="x", pady=2)
+            top = tk.Frame(r)
+            top.pack(anchor="w")
+            tk.Radiobutton(top, text=text, variable=self._net_situation_var, value=value,
+                           command=lambda: self._net_choose(value)).pack(side="left")
+            if extra:
+                extra(top)
+            if desc:
+                tk.Label(r, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 8), wraplength=720,
+                         justify="left").pack(anchor="w", padx=(24, 0))
 
-        en_row = tk.Frame(px, bg=CLR["bg"])
-        en_row.pack(fill="x", pady=2)
-        tk.Checkbutton(en_row, text="Route all traffic through a proxy",
-                       variable=self._net_vars["network.proxy_enabled"],
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       activebackground=CLR["bg"]).pack(side="left")
+        def app_box(parent):
+            self._net_app_var = tk.StringVar(value=next((t_ for t_, i in self._net_app_labels.items()
+                                                         if i == current), apps[0][1]))
+            cb = ttk.Combobox(parent, textvariable=self._net_app_var, values=list(self._net_app_labels),
+                              state="readonly", width=44)
+            cb.pack(side="left", padx=6)
+            cb.bind("<<ComboboxSelected>>", lambda _e: (self._net_situation_var.set("app"), self._net_choose("app")))
+            tk.Button(parent, text="Find…", command=self._net_find_local).pack(side="left")
 
-        def _scheme_widget(parent):
-            ttk.Combobox(parent,
-                         textvariable=self._net_vars["network.proxy_scheme"],
-                         values=["http", "https", "socks4", "socks5", "socks5h"],
-                         state="readonly", width=10,
-                         font=(UI_FONT, 9)).pack(side="left", padx=6)
+        def tor_box(parent):
+            self._net_tor_var = tk.StringVar(value=next((t_ for t_, i in self._net_tor_labels.items()
+                                                         if i == current), tors[0][1]))
+            cb = ttk.Combobox(parent, textvariable=self._net_tor_var, values=list(self._net_tor_labels),
+                              state="readonly", width=34)
+            cb.pack(side="left", padx=6)
+            cb.bind("<<ComboboxSelected>>", lambda _e: (self._net_situation_var.set("tor"), self._net_choose("tor")))
 
-        _row(px, "Scheme:", "network.proxy_scheme", _scheme_widget,
-             hint="(SOCKS proxies are honoured by yt-dlp / ffmpeg; "
-                  "in-app urllib falls back to direct.)")
+        desc = {sid: d for sid, _t, d, _v in _net.SITUATIONS}
+        radio("auto", "Automatic - follow this computer's settings", desc["auto"])
+        radio("direct", "No proxy - connect directly", desc["direct"])
+        radio("app", "A proxy app on this computer:", "Clash, v2rayN, Shadowsocks, NekoRay, Hiddify, Privoxy... "
+              "'Find…' looks for one that is running.", app_box)
+        radio("tor", "Tor:", "Everything goes through Tor and nothing goes out without it. Some sites block Tor; "
+              "downloads then retry through fresh Tor circuits.", tor_box)
+        radio("custom", "My own proxy (details below)")
+        radio("offline", "Offline - never use the network", desc["offline"])
+        self._net_found_lbl = tk.Label(sit, text="", fg=CLR["fgdim"])
+        self._net_found_lbl.pack(anchor="w", padx=(24, 0))
+        self._net_found_frame = tk.Frame(sit)
+        self._net_found_frame.pack(anchor="w", padx=(24, 0))
 
-        def _host_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.proxy_host"],
-                     width=22, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+        # ── Own proxy ────────────────────────────────────────────────────────
+        own = section("Your own proxy")
+        var("network.mode")
+        g = tk.Frame(own)
+        g.pack(anchor="w")
+        tk.Label(g, text="Type").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(g, textvariable=var("network.proxy_scheme"), state="readonly", width=9,
+                     values=["http", "https", "socks5h", "socks5", "socks4a", "socks4"]).grid(row=0, column=1,
+                                                                                          sticky="w", padx=4)
+        tk.Label(g, text="Address").grid(row=0, column=2, sticky="w", padx=(8, 0))
+        tk.Entry(g, textvariable=var("network.proxy_host"), width=26).grid(row=0, column=3, padx=4)
+        tk.Label(g, text="Port").grid(row=0, column=4, sticky="w")
+        tk.Entry(g, textvariable=var("network.proxy_port"), width=7).grid(row=0, column=5, padx=4)
+        tk.Label(g, text="Username").grid(row=1, column=0, sticky="w", pady=4)
+        tk.Entry(g, textvariable=var("network.proxy_user"), width=18).grid(row=1, column=1, columnspan=2,
+                                                                          sticky="w", padx=4)
+        tk.Label(g, text="Password").grid(row=1, column=3, sticky="e")
+        tk.Entry(g, textvariable=var("network.proxy_pass"), width=18, show="•").grid(row=1, column=4, columnspan=2,
+                                                                                    sticky="w", padx=4)
+        tk.Checkbutton(own, text="Strict: never connect without this proxy (for Tor and privacy proxies)",
+                       variable=var("network.strict")).pack(anchor="w")
+        r = tk.Frame(own)
+        r.pack(anchor="w", pady=2)
+        tk.Label(r, text="When a site blocks Tor, retry through a fresh Tor circuit up to").pack(side="left")
+        tk.Spinbox(r, from_=0, to=50, width=4, textvariable=var("network.tor_retries")).pack(side="left", padx=4)
+        tk.Label(r, text="times (0 = off)").pack(side="left")
+        hint(own, "Proxies that sign you in automatically with your Windows account (NTLM/Kerberos) need a local "
+                  "helper such as Px or CNTLM; then use its local address here. The password is never put on a "
+                  "command line.")
+        for key in ("network.proxy_scheme", "network.proxy_host", "network.proxy_port"):
+            self._net_vars[key].trace_add("write", lambda *_a: self._net_situation_var.set("custom"))
 
-        _row(px, "Host:", "network.proxy_host", _host_widget)
+        # ── Certificates ─────────────────────────────────────────────────────
+        cert = section("Security certificates")
+        tk.Checkbutton(cert, text="Trust this computer's certificates (needed on many company and school networks)",
+                       variable=var("network.system_certs")).pack(anchor="w")
+        r = tk.Frame(cert)
+        r.pack(anchor="w", fill="x", pady=2)
+        tk.Label(r, text="Extra certificate file (PEM):").pack(side="left")
+        ca = var("network.extra_ca")
+        tk.Entry(r, textvariable=ca, width=44).pack(side="left", padx=4)
+        tk.Button(r, text="Choose…", command=lambda: ca.set(dialogs.askopenfilename(
+            filetypes=[("Certificates", "*.pem *.crt *.cer"), ("All files", "*")]) or ca.get())).pack(side="left")
+        tk.Checkbutton(cert, text="Check certificates at all (turning this off is unsafe)",
+                       variable=var("network.verify_ssl")).pack(anchor="w")
+        hint(cert, "Security products such as Zscaler, Netskope or a school firewall re-sign websites with their own "
+                   "certificate. It is usually installed on the computer already; if not, ask IT for the file.")
 
-        def _port_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.proxy_port"],
-                     width=8, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+        # ── Mirrors ──────────────────────────────────────────────────────────
+        mir = section("Mirrors (when download sites are blocked)")
+        g = tk.Frame(mir)
+        g.pack(anchor="w")
+        tk.Label(g, text="Speech models (Hugging Face) mirror:").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(g, textvariable=var("network.hf_mirror"), width=36,
+                     values=["", "https://hf-mirror.com"]).grid(row=0, column=1, padx=4, pady=2)
+        tk.Label(g, text="GitHub download prefix:").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(g, textvariable=var("network.github_mirror"), width=36,
+                     values=["", "https://ghfast.top/", "https://gh-proxy.com/"]).grid(row=1, column=1, padx=4,
+                                                                                    pady=2)
+        hint(mir, "Downloads are checked against fixed SHA-256 sums, so a mirror can't swap the files.")
 
-        _row(px, "Port:", "network.proxy_port", _port_widget,
-             hint="(blank if no proxy)")
+        # ── Connection details ───────────────────────────────────────────────
+        con = section("Connection details")
+        g = tk.Frame(con)
+        g.pack(anchor="w")
+        rows = [("Don't use the proxy for (comma-separated):", "network.no_proxy", 40),
+                ("Bandwidth limit for downloads (e.g. 2M, 500K):", "network.bandwidth_limit", 10),
+                ("Send from this local address (choose the connection):", "network.source_address", 20),
+                ("Run downloads through this command (VPN split tunnelling):", "network.wrapper", 30),
+                ("Timeout (seconds):", "network.socket_timeout", 6),
+                ("Browser identity (User-Agent), blank = default:", "network.user_agent", 40)]
+        for i, (label, key, width) in enumerate(rows):
+            tk.Label(g, text=label).grid(row=i, column=0, sticky="w", pady=2)
+            if key == "network.source_address":
+                ttk.Combobox(g, textvariable=var(key), width=width, values=[""] + _local_addresses()).grid(
+                    row=i, column=1, sticky="w", padx=4)
+            elif key == "network.wrapper":
+                ttk.Combobox(g, textvariable=var(key), width=width,
+                             values=["", "mullvad-exclude", "proxychains4 -q", "torsocks"]).grid(
+                    row=i, column=1, sticky="w", padx=4)
+            else:
+                tk.Entry(g, textvariable=var(key), width=width).grid(row=i, column=1, sticky="w", padx=4)
+        r = tk.Frame(con)
+        r.pack(anchor="w", pady=2)
+        tk.Label(r, text="Internet protocol:").pack(side="left")
+        ttk.Combobox(r, textvariable=var("network.ip_version"), values=["auto", "ipv4", "ipv6"], state="readonly",
+                     width=6).pack(side="left", padx=4)
+        tk.Checkbutton(r, text="Allow plain (unencrypted) HTTP", variable=var("network.allow_http")).pack(
+            side="left", padx=10)
+        hint(con, "The local address only helps where the network allows it (several connections, or a VPN with "
+                  "split tunnelling). Where an organisation's VPN sends all traffic through itself, the app "
+                  "doesn't try to get around that.")
+        for key in _net.DEFAULTS:
+            if key not in self._net_vars:
+                var(key)
+        self._net_refresh_now()
 
-        def _user_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.proxy_user"],
-                     width=22, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+    def _net_choose(self, kind):
+        if kind == "app":
+            self._net_apply_preset(self._net_app_labels.get(self._net_app_var.get(), "clash"))
+        elif kind == "tor":
+            self._net_apply_preset(self._net_tor_labels.get(self._net_tor_var.get(), "tor_browser"))
+        else:
+            self._net_apply_preset(kind)
 
-        _row(px, "Username:", "network.proxy_user", _user_widget,
-             hint="(optional)")
+    def _net_situation(self, cfg) -> str:
+        from core import network as _net
+        m = _net.mode(cfg)
+        if m in ("auto", "direct", "offline"):
+            return m
+        for sid, _t, _d, values in _net.SITUATIONS:
+            if values.get("network.mode") == "manual" and all(
+                    str(cfg.get(k)) == str(v) for k, v in values.items() if k != "network.proxy_enabled"):
+                return sid
+        return "custom"
 
-        def _pass_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.proxy_pass"],
-                     width=22, show="*", relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+    def _net_refresh_now(self):
+        from core import network as _net
+        from core import sysproxy
 
-        _row(px, "Password:", "network.proxy_pass", _pass_widget,
-             hint="(optional)")
+        def work():
+            try:
+                now = _net.describe()
+                system = sysproxy.system_config(refresh=True).describe()
+            except Exception as exc:          # never let a lookup break the settings page
+                now, system = f"Couldn't check: {exc}", ""
+            return now, system
 
-        def _np_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.no_proxy"],
-                     width=40, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+        def done(res):
+            try:
+                self._net_now_lbl.config(text=res[0])
+                self._net_sys_lbl.config(text="This computer's own setting: " + res[1] if res[1] else "")
+            except tk.TclError:
+                pass
 
-        _row(px, "Bypass list:", "network.no_proxy", _np_widget,
-             hint="(comma-separated hosts that skip the proxy)")
+        from core import ui
+        ui.run_in_thread(work, on_done=done, on_error=lambda e: None, name="NetDescribe")
 
-        # ── Bandwidth & timeouts ────────────────────────────────────────
-        bw = _section(body, "Bandwidth and Timeouts")
+    def _net_find_local(self):
+        from core import network as _net
+        from core import ui
+        self._net_found_lbl.config(text="Looking…")
+        for w in self._net_found_frame.winfo_children():
+            w.destroy()
 
-        def _rate_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.bandwidth_limit"],
-                     width=10, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+        def done(found):
+            if not found:
+                self._net_found_lbl.config(text="No proxy apps found on the usual ports.")
+                return
+            self._net_found_lbl.config(text=f"Found {len(found)}:")
+            for port, scheme, label in found:
+                tk.Button(self._net_found_frame, text=f"Use {label} - {scheme} 127.0.0.1:{port}", relief="flat",
+                          command=lambda p=port, sc=scheme: self._net_use_local(sc, p)).pack(anchor="w")
 
-        _row(bw, "Download rate cap:", "network.bandwidth_limit", _rate_widget,
-             hint="(e.g. 1M, 500K, 50K. Blank = unlimited)")
+        ui.run_in_thread(_net.find_local_proxies, on_done=done,
+                         on_error=lambda e: self._net_found_lbl.config(text=str(e)), name="ProxyProbe")
 
-        def _ct_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.connect_timeout"],
-                     width=6, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+    def _net_use_local(self, scheme, port):
+        self._net_vars["network.mode"].set("manual")
+        self._net_vars["network.proxy_enabled"].set(True)
+        self._net_vars["network.proxy_scheme"].set(scheme)
+        self._net_vars["network.proxy_host"].set("127.0.0.1")
+        self._net_vars["network.proxy_port"].set(str(port))
+        self._net_situation_var.set("custom")
+        self._net_status_lbl.config(text="Filled in - click Test, then Save.", fg=CLR["fgdim"])
 
-        _row(bw, "Connect timeout (s):", "network.connect_timeout", _ct_widget)
+    def _build_tor_system_section(self, body, special):
+        lf = tk.LabelFrame(body, text="  " + ("Tails" if special == "tails" else "Whonix") + "  ", padx=12, pady=8)
+        lf.pack(fill="x", padx=20, pady=6)
+        if special == "whonix":
+            tk.Label(lf, text="Whonix's gateway already sends all traffic through Tor - no proxy is needed here.",
+                     wraplength=760, justify="left").pack(anchor="w")
+            return
+        tk.Label(lf, text="Tails sends everything through Tor, and some sites (YouTube often) block Tor. Downloads "
+                          "retry through fresh Tor circuits automatically. If that isn't enough, Tails' own "
+                          "mechanism for its Unsafe Browser can be used for downloads only, for this session.",
+                 wraplength=760, justify="left").pack(anchor="w")
+        self._tails_lbl = tk.Label(lf, text="", fg=CLR["fgdim"], wraplength=760, justify="left")
+        self._tails_lbl.pack(anchor="w", pady=4)
+        r = tk.Frame(lf)
+        r.pack(anchor="w")
+        self._tails_on_btn = tk.Button(r, text="Allow direct downloads (not anonymous)…", fg=CLR["red"],
+                                       command=self._tails_enable)
+        self._tails_on_btn.pack(side="left")
+        tk.Button(r, text="Turn off", command=self._tails_disable).pack(side="left", padx=6)
+        self._tails_refresh()
 
-        def _so_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.socket_timeout"],
-                     width=6, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+    def _tails_refresh(self):
+        from core import tails
+        if tails.direct_enabled():
+            text, colour = "Direct downloads are ON for this session (not anonymous).", CLR["red"]
+        else:
+            issues = tails.problems()
+            text = ("Available - needs your administration password." if not issues
+                    else "Not available right now:\n• " + "\n• ".join(issues))
+            colour = CLR["fgdim"]
+        self._tails_lbl.config(text=text, fg=colour)
 
-        _row(bw, "Socket timeout (s):", "network.socket_timeout", _so_widget)
+    def _tails_enable(self):
+        from core import tails
+        issues = tails.problems()
+        if issues:
+            messagebox.showinfo("Tails", "\n\n".join(issues), parent=self)
+            return
+        if not messagebox.askyesno(
+                "Not anonymous",
+                "Downloads will connect directly, NOT through Tor.\n\nThe websites you download from, and anyone "
+                "watching this network, will see your real internet address. Everything else in Tails stays on "
+                "Tor.\n\nThis lasts until you close the app or click Turn off.\n\nContinue?",
+                icon="warning", default="no", parent=self):
+            return
+        dlg = tk.Toplevel(self)
+        dlg.title("Administration password")
+        dlg.transient(self.winfo_toplevel())
+        tk.Label(dlg, text="Tails' administration password (set at the Welcome Screen):").pack(padx=14, pady=(12, 4))
+        pw = tk.StringVar()
+        entry = tk.Entry(dlg, textvariable=pw, show="•", width=30)
+        entry.pack(padx=14)
+        remember = tk.BooleanVar(value=False)
+        tk.Checkbutton(dlg, text="Remember it until I close the app (kept in memory only)",
+                       variable=remember).pack(padx=14, pady=4)
+        msg = tk.Label(dlg, text="", fg=CLR["red"])
+        msg.pack()
 
-        # ── Identity ────────────────────────────────────────────────────
-        idn = _section(body, "Identity")
+        def ok(_e=None):
+            done, text = tails.enable(pw.get(), remember.get())
+            pw.set("")
+            if done:
+                dlg.destroy()
+                self._tails_refresh()
+                messagebox.showinfo("Tails", text, parent=self)
+            else:
+                msg.config(text=text)
 
-        def _ua_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.user_agent"],
-                     width=44, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
+        bf = tk.Frame(dlg)
+        bf.pack(pady=10)
+        tk.Button(bf, text="Turn on", command=ok).pack(side="left", padx=4)
+        tk.Button(bf, text="Cancel", command=lambda: (pw.set(""), dlg.destroy())).pack(side="left", padx=4)
+        entry.bind("<Return>", ok)
+        entry.focus_set()
+        dlg.grab_set()
 
-        _row(idn, "User-Agent:", "network.user_agent", _ua_widget,
-             hint="(blank = library default)")
-
-        def _ipv_widget(parent):
-            ttk.Combobox(parent,
-                         textvariable=self._net_vars["network.ip_version"],
-                         values=["auto", "ipv4", "ipv6"],
-                         state="readonly", width=8,
-                         font=(UI_FONT, 9)).pack(side="left", padx=6)
-
-        _row(idn, "IP version:", "network.ip_version", _ipv_widget)
-
-        def _src_widget(parent):
-            tk.Entry(parent,
-                     textvariable=self._net_vars["network.source_address"],
-                     width=22, relief="flat",
-                     bg=CLR["input_bg"], fg=CLR["input_fg"]
-                     ).pack(side="left", padx=6)
-
-        _row(idn, "Source address:", "network.source_address", _src_widget,
-             hint="(bind to a specific local IP)")
-
-        # ── Security ────────────────────────────────────────────────────
-        sec = _section(body, "Security")
-        sec_row1 = tk.Frame(sec, bg=CLR["bg"])
-        sec_row1.pack(fill="x", pady=2)
-        tk.Checkbutton(sec_row1, text="Verify SSL certificates",
-                       variable=self._net_vars["network.verify_ssl"],
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       activebackground=CLR["bg"]).pack(side="left")
-        ssl_reset = tk.Button(
-            sec_row1, text="↺", font=(UI_FONT, 9),
-            bg=CLR["panel"], fg=CLR["fg"],
-            relief="flat", cursor="hand2", width=2, padx=2,
-            command=lambda: self._net_reset_field("network.verify_ssl"))
-        ssl_reset.pack(side="left", padx=8)
-        self.add_tooltip(ssl_reset, "Reset to default (on)")
-
-        sec_row2 = tk.Frame(sec, bg=CLR["bg"])
-        sec_row2.pack(fill="x", pady=2)
-        tk.Checkbutton(sec_row2, text="Allow plain HTTP downloads",
-                       variable=self._net_vars["network.allow_http"],
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       activebackground=CLR["bg"]).pack(side="left")
-        http_reset = tk.Button(
-            sec_row2, text="↺", font=(UI_FONT, 9),
-            bg=CLR["panel"], fg=CLR["fg"],
-            relief="flat", cursor="hand2", width=2, padx=2,
-            command=lambda: self._net_reset_field("network.allow_http"))
-        http_reset.pack(side="left", padx=8)
-        self.add_tooltip(http_reset, "Reset to default (on)")
-
-        # ── Action row ─────────────────────────────────────────────────
-        actions = tk.Frame(body, bg=CLR["bg"])
-        actions.pack(fill="x", padx=20, pady=(14, 12))
-
-        tk.Button(actions, text="Save",
-                  bg=CLR["green"], fg="white",
-                  font=(UI_FONT, 11, "bold"),
-                  activebackground=CLR["accent"], activeforeground="white",
-                  relief="flat", cursor="hand2", padx=18, pady=6,
-                  command=self._net_save).pack(side="left", padx=4)
-
-        tk.Button(actions, text="Test Connection",
-                  bg=CLR["panel"], fg=CLR["fg"],
-                  font=(UI_FONT, 10),
-                  activebackground=CLR["accent"], activeforeground="white",
-                  relief="flat", cursor="hand2", padx=14, pady=6,
-                  command=self._net_test).pack(side="left", padx=4)
-
-        tk.Button(actions, text="Reset all networking settings",
-                  bg=CLR["panel"], fg=CLR["red"],
-                  font=(UI_FONT, 10),
-                  activebackground=CLR["red"], activeforeground="white",
-                  relief="flat", cursor="hand2", padx=14, pady=6,
-                  command=self._net_reset_all).pack(side="right", padx=4)
-
-        self._net_status_lbl = tk.Label(
-            body, text="", font=(UI_FONT, 9),
-            bg=CLR["bg"], fg=CLR["fgdim"], anchor="w", justify="left",
-            wraplength=820)
-        self._net_status_lbl.pack(fill="x", padx=20, pady=(0, 14))
+    def _tails_disable(self):
+        from core import tails
+        tails.disable()
+        self._tails_refresh()
 
     def _net_collect(self):
         """Read every form variable into a settings-ready dict."""
@@ -525,7 +573,12 @@ class AdvancedSettingsTab(BaseTab):
         return out
 
     def _net_save(self):
-        ok = update(self._net_collect())
+        values = self._net_collect()
+        if self._net_situation_var.get() == "custom" or values.get("network.mode") == "manual":
+            values["network.mode"] = "manual" if values.get("network.proxy_port") else values.get("network.mode")
+            values["network.proxy_enabled"] = values["network.mode"] == "manual"
+        ok = update(values)
+        self._net_refresh_now()
         self._net_status_lbl.config(
             text=("Saved." if ok else "Save failed."),
             fg=(CLR["green"] if ok else CLR["red"]))
@@ -588,6 +641,10 @@ class AdvancedSettingsTab(BaseTab):
 
     def _net_apply_preset(self, preset_id):
         from core import network as _net
+        if preset_id == "custom":
+            self._net_vars["network.mode"].set("manual")
+            self._net_vars["network.proxy_enabled"].set(True)
+            return
         preset = _net.PRESETS.get(preset_id, {})
         if not preset:
             return
@@ -601,9 +658,7 @@ class AdvancedSettingsTab(BaseTab):
                 var.set(bool(value))
             else:
                 var.set(str(value))
-        self._net_status_lbl.config(
-            text=f"Preset '{preset_id}' applied to form. Click Save to persist.",
-            fg=CLR["fgdim"])
+        self._net_status_lbl.config(text="Chosen - click Save (or Test first).", fg=CLR["fgdim"])
 
     # ─── Skins ────────────────────────────────────────────────────────────────
     def _build_skins_tab(self, nb):
@@ -1452,3 +1507,29 @@ class AdvancedSettingsTab(BaseTab):
         nb, page = getattr(self, "system_info_page", (None, None))
         if nb is not None:
             nb.select(page)
+
+
+def _local_addresses() -> list:
+    """IPv4/IPv6 addresses of this computer's network connections."""
+    import re as _re
+    import socket as _socket
+    import subprocess as _sp
+    out = []
+    try:
+        if os.name == "nt":
+            text = _sp.run(["ipconfig"], capture_output=True, text=True, timeout=5,
+                           creationflags=CREATE_NO_WINDOW).stdout
+            out = _re.findall(r"IPv4[^:]*:\s*([0-9.]+)", text)
+        else:
+            text = _sp.run(["ip", "-o", "addr", "show", "scope", "global"], capture_output=True, text=True,
+                           timeout=5).stdout
+            out = [m.split("/")[0] for m in _re.findall(r"inet6?\s+(\S+)", text)]
+    except (OSError, _sp.SubprocessError):
+        pass
+    if not out:
+        try:
+            out = sorted({a[4][0] for a in _socket.getaddrinfo(_socket.gethostname(), None)
+                          if not a[4][0].startswith(("127.", "::1"))})
+        except OSError:
+            pass
+    return out

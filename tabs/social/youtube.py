@@ -48,10 +48,11 @@ def _find_ytdlp() -> str | None:
     return ytdlp_path()
 
 
-def _yt(ytdlp, net_args=None):
-    """yt-dlp argv prefix: JS runtime, FFmpeg location, network settings."""
+def _yt(ytdlp, url="https://www.youtube.com/"):
+    """yt-dlp argv prefix: JS runtime, FFmpeg location and the network route for *url*
+    (auto-config, proxy, offline/strict checks, Tails, wrapper command)."""
     from core.ytdlp import base_argv
-    return base_argv(ytdlp)
+    return base_argv(ytdlp, url=url)
 
 
 def _ffmpeg_dir() -> str:
@@ -167,9 +168,15 @@ class YouTubeDownloaderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        # Tails: a clear warning while downloads bypass Tor (Settings → Network)
+        self._route_banner = tk.Label(self, text="⚠  DIRECT CONNECTION - NOT ANONYMOUS: downloads are bypassing "
+                                                 "Tor for this session (Settings → Network to turn off)",
+                                      bg="#B71C1C", fg="white", font=(UI_FONT, 10, "bold"), pady=6)
+        self._poll_route_banner()
         # Outer scrollable frame
         outer = tk.Frame(self, bg=CLR["bg"])
         outer.pack(fill="both", expand=True)
+        self._outer_frame = outer
 
         canvas_scroll = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0)
         vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas_scroll.yview)
@@ -1300,16 +1307,12 @@ class YouTubeDownloaderTab(BaseTab):
             from core import network as _net
             # Check playlist flag dynamically
             playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-            cmd = [ytdlp, playlist_flag, "-J", url]
-            # Apply user network settings to the info-fetch call too.
-            net_args = _net.build_yt_dlp_args()
-            if net_args:
-                cmd = [ytdlp] + net_args + cmd[1:]
+            cmd = _yt(ytdlp, url) + [playlist_flag, "-J", url]
             r = subprocess.run(
                 cmd,
                 capture_output=True, text=True, timeout=45,
                 creationflags=CREATE_NO_WINDOW,
-                env=_net.subprocess_env())
+                env=_net.subprocess_env(url=url))
             if r.returncode != 0:
                 snippet = (r.stderr or r.stdout or "")[:600]
                 self.after(0, lambda s=snippet: self.log_tagged(
@@ -1508,13 +1511,19 @@ class YouTubeDownloaderTab(BaseTab):
             try:
                 from core import network as _net
                 playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
+                route = _net.tool_proxy(url)
+                if route and route.startswith("socks"):
+                    self.after(0, lambda: self.log_tagged(
+                        self.console, "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
+                        "one and would connect around it). Download the video instead.", "warn"))
+                    return
                 r = subprocess.run(
-                    _yt(ytdlp) + [playlist_flag, "-g",
+                    _yt(ytdlp, url) + [playlist_flag, "-g",
                      "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
                      url],
                     capture_output=True, text=True, timeout=25,
                     creationflags=CREATE_NO_WINDOW,
-                    env=_net.subprocess_env())
+                    env=_net.subprocess_env(url=url))
                 lines = [l.strip() for l in r.stdout.splitlines() if l.strip()]
                 if not lines:
                     self.after(0, lambda: self.log_tagged(
@@ -1562,13 +1571,11 @@ class YouTubeDownloaderTab(BaseTab):
         out_template = os.path.join(out_dir, f"recording_{ts}.%(ext)s")
 
         from core import network as _net
-        cmd = _yt(ytdlp) + [
-               "-f", "best", "--live-from-start",
-               "-o", out_template, url]
-
-        ff_dir = _ffmpeg_dir()
-        if ff_dir:
-            cmd += ["--ffmpeg-location", ff_dir]
+        try:
+            cmd = _yt(ytdlp, url) + ["-f", "best", "--live-from-start", "-o", out_template, url]
+        except OSError as exc:
+            messagebox.showwarning(t("common.warning"), _net.explain_error(exc), parent=self)
+            return
 
         self.log(self.console, f"⏺ Starting live recording → {out_template}")
         self._btn_record.config(state="disabled", text=t("youtube.recording"))
@@ -1607,57 +1614,109 @@ class YouTubeDownloaderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _stream_ytdlp(self, cmd: list,
-                      on_line=None, on_progress=None, on_done=None):
-        """Run yt-dlp; parse progress lines; call callbacks. Blocks until done."""
+                      on_line=None, on_progress=None, on_done=None, url: str = "https://www.youtube.com/"):
+        """Run yt-dlp; parse progress lines; call callbacks. Blocks until done.
+        Behind a Tor proxy, a block (bot check, 403/429) is retried through
+        fresh Tor circuits - as many as set under Settings → Network."""
+        rc = self._run_with_fresh_circuits(cmd, url, on_line=on_line, on_progress=on_progress)
+        if on_done:
+            self.after(0, lambda c=rc: on_done(c))
+
+    def _run_with_fresh_circuits(self, cmd: list, url: str, *, on_line=None, on_progress=None,
+                                 batch: bool = False) -> int:
+        from core import network as _net
+        tor = _net.tor_like_proxy(cmd)
+        retries = _net.tor_retries() if tor else 0
+        attempt = 0
+        while True:
+            rc, tail = self._run_ytdlp_once(cmd, url, on_line=on_line, on_progress=on_progress, batch=batch)
+            if rc != 0 and tor and attempt >= retries and retries and _net.looks_blocked(tail):
+                from core import sysproxy
+                hint = ("Tails can download directly for this session instead: Settings → Network → Tails."
+                        if sysproxy.special_system() == "tails" else
+                        "Raise the number of fresh-circuit retries, or choose another route, under Settings → "
+                        "Network.")
+                self.after(0, lambda h=hint, n=retries: self.log_tagged(
+                    self.console, f"The site still blocked Tor after {n} fresh circuits. {h}", "warn"))
+            if rc == 0 or attempt >= retries or getattr(self, "_cancel_requested", False) \
+                    or not _net.looks_blocked(tail):
+                return rc
+            attempt += 1
+            self.after(0, lambda n=attempt, m=retries: self.log_tagged(
+                self.console, f"↻ The site blocked this Tor exit - trying a fresh Tor circuit ({n}/{m})…", "warn"))
+            cmd = list(cmd)
+            idx = max(i for i, a in enumerate(cmd[:-1]) if a == "--proxy")
+            cmd[idx + 1] = _net.fresh_circuit(tor, attempt)
+
+    def _run_ytdlp_once(self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False):
+        """(returncode, last output lines)"""
+        from collections import deque
         from core import network as _net
         from core.ytdlp import redact
-        self.after(0, lambda: self.log(self.console, "CMD: " + " ".join(str(c) for c in redact(cmd))))
+        tail = deque(maxlen=40)
+        prefix = "BATCH CMD: " if batch else "CMD: "
+        self.after(0, lambda: self.log(self.console, prefix + " ".join(str(c) for c in redact(cmd))))
         try:
             from core import ffmpeg as _ff
-            self._active_proc = _ff.popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace", bufsize=1,
-                env=_net.subprocess_env())
-            for line in iter(self._active_proc.stdout.readline, ""):
+            proc = _ff.popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                             errors="replace", bufsize=1, creationflags=CREATE_NO_WINDOW,
+                             env=_net.subprocess_env(url=url))
+            self._active_proc = proc
+            for line in iter(proc.stdout.readline, ""):
                 stripped = line.rstrip()
                 if not stripped:
                     continue
                 m = _DL_PROGRESS_RE.search(stripped)
-                if m and on_progress:
-                    pct  = float(m.group(1))
-                    size = m.group(2).strip()
-                    spd  = m.group(3).strip()
-                    eta  = m.group(4).strip()
-                    self.after(0, lambda p=pct, sz=size, sp=spd, et=eta:
-                               on_progress(p, sz, sp, et))
-                else:
-                    if on_line:
-                        self.after(0, lambda s=stripped: on_line(s))
+                if m and (on_progress or batch):
+                    pct = float(m.group(1))
+                    size, spd, eta = m.group(2).strip(), m.group(3).strip(), m.group(4).strip()
+                    if batch:
+                        self.after(0, lambda p_=pct, s_=spd: self._on_progress_update(p_, "-", s_, "-"))
                     else:
-                        self.after(0, lambda s=stripped: self.log(self.console, s))
-            self._active_proc.stdout.close()
-            self._active_proc.wait()
-            rc = self._active_proc.returncode
+                        self.after(0, lambda p_=pct, sz=size, sp=spd, et=eta: on_progress(p_, sz, sp, et))
+                else:
+                    tail.append(stripped)
+                    if on_line:
+                        self.after(0, lambda s_=stripped: on_line(s_))
+                    else:
+                        self.after(0, lambda s_=stripped: self.log(self.console, s_))
+            proc.stdout.close()
+            proc.wait()
+            rc = proc.returncode
         except Exception as exc:
-            self.after(0, lambda e=exc: self.log_tagged(
-                self.console, f"⚠ yt-dlp error: {e}", "error"))
+            self.after(0, lambda e=exc: self.log_tagged(self.console, f"⚠ yt-dlp error: {e}", "error"))
             rc = 1
         finally:
             self._active_proc = None
-
-        if on_done:
-            self.after(0, lambda c=rc: on_done(c))
+        return rc, list(tail)
 
     def _on_progress_update(self, pct: float, size: str, speed: str, eta: str):
         self._progress["value"] = pct
         self._prog_status_var.set(
             f"{pct:.1f}%  {size}  {speed}/s  ETA {eta}")
 
+    def _poll_route_banner(self):
+        try:
+            from core import tails
+            on = tails.direct_enabled()
+        except Exception:
+            on = False
+        try:
+            if on and not self._route_banner.winfo_ismapped():
+                outer = getattr(self, "_outer_frame", None)
+                self._route_banner.pack(fill="x", **({"before": outer} if outer is not None else {}))
+            elif not on and self._route_banner.winfo_ismapped():
+                self._route_banner.pack_forget()
+            self.after(1500, self._poll_route_banner)
+        except tk.TclError:
+            pass
+
     def _cancel_download(self):
         # yt-dlp typically spawns ffmpeg (and optionally aria2c) as child
         # processes. proc.terminate() only kills yt-dlp itself, leaving the
         # children running and the download effectively continuing. Kill
         # the whole process tree instead.
+        self._cancel_requested = True              # also stops fresh-circuit retries
         proc = self._active_proc
         if proc:
             try:
@@ -1690,9 +1749,8 @@ class YouTubeDownloaderTab(BaseTab):
         # timeout, IP version, source address, user agent, SSL verify).
         # Any per-tab overrides below come later in the argv so yt-dlp
         # picks them up as the winning value.
-        from core import network as _net
-        args = list(_net.build_yt_dlp_args())
-        # Auth / Network
+        args = []
+        # Auth / Network (the app-wide route is already in the command from _yt())
         cookies = self._cookies_var.get().strip()
         if cookies and os.path.isfile(cookies):
             args += ["--cookies", cookies]
@@ -1855,8 +1913,15 @@ class YouTubeDownloaderTab(BaseTab):
         trim_args = self._build_trim_args()
         if trim_args is None:
             return
+        try:
+            _yt(ytdlp, url)                    # offline? strict proxy not set up? say so now
+        except OSError as exc:
+            from core import network as _net
+            messagebox.showwarning(t("common.warning"), _net.explain_error(exc), parent=self)
+            return
 
         mode = self._dl_mode.get()
+        self._cancel_requested = False
         self._btn_dl.config(state="disabled", text=t("youtube.downloading"))
         self._btn_cancel.config(state="normal")
         self._progress["value"] = 0
@@ -1884,15 +1949,12 @@ class YouTubeDownloaderTab(BaseTab):
                    if 0 <= idx < len(self._format_options)
                    else "bestvideo+bestaudio/best")
         container = self._container_var.get()
-        ff_dir = _ffmpeg_dir()
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [ytdlp, playlist_flag,
+        cmd = _yt(ytdlp, url) + [playlist_flag,
                "-f", fmt_str,
                "--merge-output-format", container,
                "--no-overwrites"]
-        if ff_dir:
-            cmd += ["--ffmpeg-location", ff_dir]
 
         # Subtitles
         if self._dl_subs_var.get():
@@ -1912,7 +1974,7 @@ class YouTubeDownloaderTab(BaseTab):
             cmd,
             on_line=lambda s: self.log(self.console, s),
             on_progress=self._on_progress_update,
-            on_done=lambda rc: self._on_single_done(rc, out))
+            on_done=lambda rc: self._on_single_done(rc, out), url=url)
 
     # ── Audio only ───────────────────────────────────────────────────────────
 
@@ -1920,19 +1982,16 @@ class YouTubeDownloaderTab(BaseTab):
                         ytdlp: str, trim_args: list):
         audio_fmt = self._audio_fmt_var.get()
         quality   = self._audio_quality_var.get().split()[0]
-        ff_dir    = _ffmpeg_dir()
 
         # Derive output path with audio extension
         base = os.path.splitext(out)[0]
         audio_out = base + "." + audio_fmt
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [ytdlp, playlist_flag, "-x",
+        cmd = _yt(ytdlp, url) + [playlist_flag, "-x",
                "--audio-format", audio_fmt,
                "--audio-quality", quality,
                "--no-overwrites"]
-        if ff_dir:
-            cmd += ["--ffmpeg-location", ff_dir]
         if self._embed_thumb_var.get():
             cmd += ["--embed-thumbnail"]
         if self._add_metadata_var.get():
@@ -1952,22 +2011,19 @@ class YouTubeDownloaderTab(BaseTab):
             cmd,
             on_line=lambda s: self.log(self.console, s),
             on_progress=self._on_progress_update,
-            on_done=lambda rc: self._on_single_done(rc, audio_out))
+            on_done=lambda rc: self._on_single_done(rc, audio_out), url=url)
 
     # ── Re-encode ────────────────────────────────────────────────────────────
 
     def _run_reencode(self, url: str, out: str,
                       ytdlp: str, trim_args: list):
         tmp = os.path.join(tempfile.gettempdir(), f"_cf_yt_tmp_{os.getpid()}.mkv")
-        ff_dir = _ffmpeg_dir()
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [ytdlp, playlist_flag,
+        cmd = _yt(ytdlp, url) + [playlist_flag,
                "-f", "bv*+ba/b",
                "--merge-output-format", "mkv",
                "--no-overwrites"]
-        if ff_dir:
-            cmd += ["--ffmpeg-location", ff_dir]
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
         cmd += ["-o", tmp, url]
@@ -2139,6 +2195,7 @@ class YouTubeDownloaderTab(BaseTab):
                 "Install yt-dlp first.")
             return
         self._batch_running = True
+        self._cancel_requested = False
         self._btn_dl_all.config(state="disabled")
         self._btn_stop_batch.config(state="normal")
         threading.Thread(
@@ -2161,10 +2218,11 @@ class YouTubeDownloaderTab(BaseTab):
             # Quick title fetch
             title = "-"
             try:
+                from core import network as _net
                 r = subprocess.run(
-                    [ytdlp, "--no-playlist", "--get-title", url],
+                    _yt(ytdlp, url) + ["--no-playlist", "--get-title", url],
                     capture_output=True, text=True, timeout=20,
-                    creationflags=CREATE_NO_WINDOW)
+                    creationflags=CREATE_NO_WINDOW, env=_net.subprocess_env(url=url))
                 if r.returncode == 0:
                     title = r.stdout.strip().splitlines()[0][:60]
             except Exception:
@@ -2177,18 +2235,18 @@ class YouTubeDownloaderTab(BaseTab):
 
             dl_dir   = os.path.join(os.path.expanduser("~"), "Downloads")
             out_path = os.path.join(dl_dir, "%(title)s.%(ext)s")
-            ff_dir   = _ffmpeg_dir()
 
-            cmd = [ytdlp, "--yes-playlist",
-                   "-f", "bv*+ba/b",
-                   "--merge-output-format", self._container_var.get(),
-                   "--no-overwrites"]
-            if ff_dir:
-                cmd += ["--ffmpeg-location", ff_dir]
+            try:
+                cmd = _yt(ytdlp, url) + ["--yes-playlist", "-f", "bv*+ba/b",
+                                         "--merge-output-format", self._container_var.get(), "--no-overwrites"]
+            except OSError as exc:
+                from core import network as _net
+                self.after(0, lambda e=exc: self.log_tagged(self.console, _net.explain_error(e), "error"))
+                break
             cmd += self._build_common_ytdlp_args()
             cmd += ["-o", out_path, url]
 
-            rc = self._run_ytdlp_sync_batch(cmd)
+            rc = self._run_ytdlp_sync_batch(cmd, url=url)
             status = "✔ Done" if rc == 0 else f"✘ Error ({rc})"
 
             self.after(0, lambda i=item, t=title, s=status:
@@ -2199,36 +2257,8 @@ class YouTubeDownloaderTab(BaseTab):
 
         self.after(0, self._batch_finished)
 
-    def _run_ytdlp_sync_batch(self, cmd: list) -> int:
-        from core import network as _net
-        self.after(0, lambda: self.log(self.console, "BATCH CMD: " + " ".join(cmd)))
-        try:
-            from core import ffmpeg as _ff
-            proc = _ff.popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, creationflags=CREATE_NO_WINDOW,
-                env=_net.subprocess_env())
-            self._active_proc = proc
-            for line in iter(proc.stdout.readline, ""):
-                stripped = line.rstrip()
-                if stripped:
-                    m = _DL_PROGRESS_RE.search(stripped)
-                    if m:
-                        pct = float(m.group(1))
-                        spd = m.group(3).strip()
-                        self.after(0, lambda p=pct, s=spd:
-                                   self._on_progress_update(p, "-", s, "-"))
-                    else:
-                        self.after(0, lambda s=stripped: self.log(self.console, s))
-            proc.stdout.close()
-            proc.wait()
-            self._active_proc = None
-            return proc.returncode
-        except Exception as exc:
-            self.after(0, lambda e=exc: self.log_tagged(
-                self.console, f"⚠ Batch error: {e}", "error"))
-            self._active_proc = None
-            return 1
+    def _run_ytdlp_sync_batch(self, cmd: list, url: str = "https://www.youtube.com/") -> int:
+        return self._run_with_fresh_circuits(cmd, url, batch=True)
 
     def _batch_stop(self):
         self._batch_running = False

@@ -71,15 +71,24 @@ def _pct(value: str) -> float:
         return 0.0
 
 
+VOICE_SERVICE = "https://speech.platform.bing.com/"
+
+
 def edge_proxy() -> str | None:
-    """The app's proxy for edge-tts; raises when only SOCKS is configured."""
+    """The route to the voice service under the app's network settings (incl.
+    the computer's own proxy / auto-config); refuses SOCKS rather than going
+    around it."""
     from core import network
-    url = network.proxy_url()
+    try:
+        network.check_online()
+        url = network.tool_proxy(VOICE_SERVICE)
+    except OSError as exc:
+        raise TTSError(network.explain_error(exc)) from exc
     if not url:
         return None
     if url.lower().startswith("socks"):
         raise TTSError("The online voices can't go through a SOCKS proxy (such as Tor), and they "
-                       "won't bypass it either. Use the offline system voice, or set an HTTP proxy.")
+                       "won't connect around it either. Use the offline system voice, or an HTTP proxy.")
     return url
 
 
@@ -105,6 +114,12 @@ def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled
     if edge_tts is None:
         raise TTSError("The online voice engine (edge-tts) is not available in this copy.")
     proxy = edge_proxy()
+    try:                                          # the app's trust settings (company certificates...)
+        from core import network
+        import edge_tts.communicate as _comm
+        _comm._SSL_CTX = network.ssl_context()
+    except Exception:
+        pass
 
     async def run():
         comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume,

@@ -88,7 +88,7 @@ def bundled_bin_dirs() -> list:
     # Tools installed or updated by the app itself (always user-writable).
     user_bin = user_tools_dir()
     if user_bin:
-        dirs += [os.path.join(user_bin, "ffmpeg", "bin"), user_bin, os.path.join(user_bin, "whisper")]
+        dirs += [user_bin, os.path.join(user_bin, "whisper")]     # yt-dlp updates, models' tools
     for root in roots:
         tag_dir = os.path.join(root, "bin", platform_tag())
         # FFmpeg's own tree (shared build: executables + DLLs, or bin/ + lib/).
@@ -153,7 +153,11 @@ def find_binary(name: str) -> Optional[str]:
 
     exe = _exe_name(name)
     bundled = None
+    pinned = name.lower().replace(".exe", "") in ("ffmpeg", "ffprobe", "ffplay")
+    user_root = os.path.abspath(user_tools_dir() or "\0")
     for folder in bundled_bin_dirs():
+        if pinned and os.path.abspath(folder).startswith(user_root):
+            continue        # FFmpeg is pinned to the build shipped with the app (old updater copies ignored)
         candidate = os.path.join(folder, exe)
         if _is_executable(candidate):
             bundled = candidate
@@ -251,21 +255,6 @@ def get_local_version() -> str:
         return "Missing"
     from core.ffmpeg import version_of
     return version_of(get_binary_path("ffmpeg"))
-
-
-def get_latest_online_version() -> str:
-    """Latest FFmpeg release version (from gyan.dev), or the local version."""
-    try:
-        from core.updater import latest_ffmpeg_release
-        return latest_ffmpeg_release() or get_local_version()
-    except Exception:
-        return get_local_version()
-
-
-def download_and_extract_ffmpeg(log_func) -> bool:
-    """Download a verified FFmpeg build into the per-user tools folder."""
-    from core.updater import install_ffmpeg
-    return install_ffmpeg(log_func)
 
 
 # ── Opening files and folders ─────────────────────────────────────────────────

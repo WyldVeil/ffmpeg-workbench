@@ -33,19 +33,25 @@ def js_runtime_args() -> list:
     return []
 
 
-def base_argv(ytdlp: Optional[str] = None, *, network: bool = True) -> list:
+def base_argv(ytdlp: Optional[str] = None, *, network: bool = True,
+              url: str = "https://www.youtube.com/") -> list:
+    """yt-dlp command prefix.  Raises OSError (offline mode, strict proxy not
+    set up...) instead of quietly connecting some other way."""
     exe = ytdlp or ytdlp_path() or "yt-dlp"
     argv = [exe, "--ignore-config", *js_runtime_args()]
     ff = find_binary("ffmpeg")
     if ff:
         argv += ["--ffmpeg-location", os.path.dirname(ff)]
-    if network:
-        try:
-            from core import network as _net
-            argv += list(_net.build_yt_dlp_args())
-        except Exception:
-            pass
-    return argv
+    if not network:
+        return argv
+    from core import network as _net
+    from core import tails
+    if tails.direct_enabled():
+        # Tails: the user opened the direct route for this session - run yt-dlp
+        # outside Tor the way Tails runs its Unsafe Browser.
+        return tails.wrap(argv + ["--proxy", ""])
+    argv += list(_net.build_yt_dlp_args(url=url))
+    return _net.wrapper_prefix() + argv
 
 
 def redact(argv: list) -> list:

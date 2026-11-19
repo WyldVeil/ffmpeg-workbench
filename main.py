@@ -112,7 +112,6 @@ class App(tk.Tk):
         # Latest known versions (set by background fetches). Used by the
         # status-bar click handlers to decide whether to offer an update or
         # just confirm the local copy is current.
-        self._ffmpeg_latest_version: str | None = None
         self._ytdlp_latest_version:  str | None = None
         self._ffmpeg_local_version:  str | None = None
         self._ytdlp_local_version:   str | None = None
@@ -420,7 +419,7 @@ class App(tk.Tk):
             self._ui_scale = 1.0
 
     def _check_ffmpeg(self):
-        """Background: describe the active FFmpeg and look for updates."""
+        """Background: describe the FFmpeg in use (pinned - no online check)."""
         from core import updater
         from core.ffmpeg import version_of
         from core.hardware import find_binary
@@ -428,80 +427,42 @@ class App(tk.Tk):
         path = find_binary("ffmpeg")
         if not path:
             self._ffmpeg_local_version = None
-            self._ffmpeg_managed = True
             self._ui(self._status_ffmpeg.config, text=t("app.status.ffmpeg_missing_click_install"),
                      fg=skin["red"], cursor="hand2")
             return
         local = version_of(path)
         managed = updater.is_app_managed(path)
         self._ffmpeg_local_version, self._ffmpeg_managed = local, managed
-        local_t = self._vtuple(local)
-        if not managed:
-            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} (system)",
-                     fg=skin["fgdim"], cursor="hand2")
-            return
-        if local_t is None:
-            self._ui(self._status_ffmpeg.config, text="FFmpeg (development build)",
-                     fg=skin["fgdim"], cursor="arrow")
-            return
-        self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} (checking…)",
-                 fg=skin["fgdim"], cursor="watch")
-        latest = updater.latest_ffmpeg_release()
-        self._ffmpeg_latest_version = latest
-        latest_t = self._vtuple(latest)
-        if latest_t is None:
-            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local}", fg=skin["fgdim"], cursor="arrow")
-        elif latest_t > local_t:
-            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} → {latest} (click to update)",
-                     fg=skin["orange"], cursor="hand2")
-        else:
-            self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} (up to date)",
-                     fg=skin["green"], cursor="arrow")
+        self._ui(self._status_ffmpeg.config, text=f"FFmpeg {local} ({'bundled' if managed else 'your own copy'})",
+                 fg=skin["fgdim"], cursor="hand2")
 
     def _prompt_ffmpeg_update(self):
-        if self._ffmpeg_local_version and not getattr(self, "_ffmpeg_managed", True):
-            messagebox.showinfo(
-                t("msg.ffmpeg_update_title"),
-                "This copy of FFmpeg ({v}) belongs to your system.\n\nUpdate it with your package "
-                "manager, or choose 'Bundled' under Advanced Settings › FFmpeg.".format(
-                    v=self._ffmpeg_local_version), parent=self)
-            return
-        local_t = self._vtuple(self._ffmpeg_local_version)
-        latest_t = self._vtuple(self._ffmpeg_latest_version)
-        if self._ffmpeg_local_version and (latest_t is None or (local_t and latest_t <= local_t)):
-            messagebox.showinfo(t("msg.ffmpeg_update_title"),
-                                f"FFmpeg {self._ffmpeg_local_version} is already up to date.", parent=self)
-            return
-        if not messagebox.askyesno(t("msg.ffmpeg_update_title"), t("msg.ffmpeg_update_confirm"), parent=self):
-            return
-        self._status_ffmpeg.config(text=t("app.status.ffmpeg_downloading"), fg=self._skin_data["orange"])
-
-        def _task():
-            from core import updater
-            ok = updater.install_ffmpeg(lambda msg: self._ui(self.set_status, msg))
-            threading.Thread(target=self._check_ffmpeg, daemon=True).start()
-            if ok:
-                self._ui(messagebox.showinfo, t("msg.ffmpeg_update_success_title"),
-                         t("msg.ffmpeg_update_success"))
-            else:
-                self._ui(messagebox.showerror, t("msg.ffmpeg_update_failed_title"),
-                         t("msg.ffmpeg_update_failed"))
-
-        threading.Thread(target=_task, daemon=True).start()
+        from core.hardware import find_binary
+        path = find_binary("ffmpeg") or "not found"
+        if getattr(self, "_ffmpeg_managed", True):
+            msg = (f"This app ships FFmpeg {self._ffmpeg_local_version or ''}, the build every tool is tested "
+                   "with. It is updated together with the app, so a new FFmpeg can never break a tool.\n\n"
+                   f"In use: {path}")
+        else:
+            msg = (f"A different FFmpeg ({self._ffmpeg_local_version or 'unknown version'}) is in use:\n{path}\n\n"
+                   "Tools are tested with the bundled FFmpeg; choose 'Bundled' under Advanced Settings › FFmpeg "
+                   "if something doesn't work.")
+        messagebox.showinfo("FFmpeg", msg, parent=self)
 
     # ── yt-dlp status / update ───────────────────────────────────────────────
-    def set_ytdlp_status(self, version: str, bin_path: str):
-        """Called by the Video Downloader once it has resolved a yt-dlp binary."""
+    def set_ytdlp_status(self, version: str, bin_path: str, force: bool = False):
+        """Called by the Video Downloader once it has resolved a yt-dlp binary
+        (force: the person asked, so check even if automatic checks are off)."""
         self._ytdlp_path = bin_path
         self._ytdlp_local_version = version
         self._status_ytdlp.config(text=f"yt-dlp {version} (checking…)",
                                   fg=self._skin_data["fgdim"], cursor="watch")
-        threading.Thread(target=self._compare_ytdlp_versions, args=(version,), daemon=True).start()
+        threading.Thread(target=self._compare_ytdlp_versions, args=(version, force), daemon=True).start()
 
-    def _compare_ytdlp_versions(self, local: str):
+    def _compare_ytdlp_versions(self, local: str, force: bool = False):
         from core import updater
         skin = self._skin_data
-        latest = updater.latest_ytdlp_release()
+        latest = updater.latest_ytdlp_release(force=force)
         self._ytdlp_latest_version = latest
         lt, nt = self._vtuple(local), self._vtuple(latest)
         if nt is None or lt is None:
@@ -1099,7 +1060,7 @@ class App(tk.Tk):
                     v = capture([yt, "--version"], timeout=60).stdout.strip()
                 except Exception:
                     return
-                self._ui(self.set_ytdlp_status, v, yt)
+                self._ui(self.set_ytdlp_status, v, yt, True)
                 self._ui(self._status_ytdlp.pack, side="right", padx=(0, 6), before=self._status_ffmpeg)
             threading.Thread(target=_ver, daemon=True).start()
 
