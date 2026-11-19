@@ -17,6 +17,7 @@ Also includes:
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -224,7 +225,7 @@ class VoiceIsolationTab(BaseTab):
             self.custom_model_f.pack_forget()
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.mp3 *.wav *.aac *.flac"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -234,7 +235,7 @@ class VoiceIsolationTab(BaseTab):
             self.out_var.set(base + "_cleaned.mp4")
 
     def _browse_model(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[(t("voice_isolation.rnnoise_model"), "*.rnnn"), ("All", t("ducker.item_2"))])
         if p:
             self.custom_model = p
@@ -243,7 +244,7 @@ class VoiceIsolationTab(BaseTab):
     def _browse_out(self):
         mode = self.out_mode_var.get()
         ext  = ".mp3" if mode == t("voice_isolation.audio_mp3_option") else (".wav" if mode == t("voice_isolation.audio_wav_option") else ".mp4")
-        p = filedialog.asksaveasfilename(defaultextension=ext,
+        p = dialogs.asksaveasfilename(defaultextension=ext,
                                           filetypes=[("Media", f"*{ext}")])
         if p: self.out_var.set(p)
 
@@ -342,7 +343,7 @@ class VoiceIsolationTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)

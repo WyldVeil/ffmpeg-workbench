@@ -4,6 +4,7 @@ Generate synthetic B-roll media: SMPTE Color Bars, Countdown Leaders, and Test T
 """
 import tkinter as tk
 from tkinter import filedialog, ttk
+from core import dialogs
 import os
 import subprocess
 
@@ -50,7 +51,7 @@ class MediaGeneratorTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _render(self):
-        out = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4", "*.mp4")])
+        out = dialogs.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4", "*.mp4")])
         if not out: return
 
         ffmpeg = get_binary_path("ffmpeg.exe")

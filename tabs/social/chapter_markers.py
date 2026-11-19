@@ -17,6 +17,7 @@ Features:
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import re
 import json
@@ -206,7 +207,7 @@ class ChapterMarkersTab(BaseTab):
 
     # ─────────────────────────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -336,7 +337,7 @@ class ChapterMarkersTab(BaseTab):
             self._refresh_tree()
 
     def _import_srt(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[(t("chapter_markers.srt_text"), "*.srt *.txt"), ("All", t("ducker.item_2"))])
         if not p: return
         with open(p) as f:
@@ -369,7 +370,7 @@ class ChapterMarkersTab(BaseTab):
         messagebox.showinfo(t("msg.copied_title"), t("msg.chapters_copied"))
 
     def _save_txt(self):
-        p = filedialog.asksaveasfilename(defaultextension=".txt",
+        p = dialogs.asksaveasfilename(defaultextension=".txt",
                                           filetypes=[("Text", "*.txt")])
         if p:
             with open(p, "w") as f:
@@ -377,7 +378,7 @@ class ChapterMarkersTab(BaseTab):
             messagebox.showinfo("Saved", f"Saved to {os.path.basename(p)}")
 
     def _save_srt(self):
-        p = filedialog.asksaveasfilename(defaultextension=".srt",
+        p = dialogs.asksaveasfilename(defaultextension=".srt",
                                           filetypes=[("SRT", "*.srt")])
         if not p: return
         lines = []
@@ -394,7 +395,7 @@ class ChapterMarkersTab(BaseTab):
         messagebox.showinfo("Saved", f"SRT saved to {os.path.basename(p)}")
 
     def _save_vtt(self):
-        p = filedialog.asksaveasfilename(defaultextension=".vtt",
+        p = dialogs.asksaveasfilename(defaultextension=".vtt",
                                           filetypes=[("WebVTT", "*.vtt")])
         if not p: return
         lines = ["WEBVTT", ""]
@@ -414,7 +415,7 @@ class ChapterMarkersTab(BaseTab):
         messagebox.showinfo("Saved", f"VTT saved to {os.path.basename(p)}")
 
     def _save_json(self):
-        p = filedialog.asksaveasfilename(defaultextension=".json",
+        p = dialogs.asksaveasfilename(defaultextension=".json",
                                           filetypes=[("JSON", t("chapter_markers.json"))])
         if not p: return
         data = [{"time": c.time, "timestamp": _fmt_yt(c.time),

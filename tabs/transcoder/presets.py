@@ -6,6 +6,7 @@ Presets store the full FFmpeg command template with placeholders
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, scrolledtext
+from core import dialogs
 import json
 import os
 import subprocess
@@ -390,7 +391,7 @@ class PresetManagerTab(BaseTab):
         self._refresh_list()
 
     def _export_presets(self):
-        path = filedialog.asksaveasfilename(defaultextension=".json",
+        path = dialogs.asksaveasfilename(defaultextension=".json",
                                             filetypes=[("JSON", t("chapter_markers.json"))])
         if path:
             with open(path, "w") as f:
@@ -398,7 +399,7 @@ class PresetManagerTab(BaseTab):
             messagebox.showinfo("Exported", f"Presets exported to {os.path.basename(path)}")
 
     def _import_presets(self):
-        path = filedialog.askopenfilename(filetypes=[("JSON", t("chapter_markers.json"))])
+        path = dialogs.askopenfilename(filetypes=[("JSON", t("chapter_markers.json"))])
         if not path: return
         try:
             with open(path) as f:
@@ -417,7 +418,7 @@ class PresetManagerTab(BaseTab):
 
     # ── Quick run ─────────────────────────────────────────────────────────
     def _browse_run_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.run_src_var.set(p)
@@ -425,7 +426,7 @@ class PresetManagerTab(BaseTab):
             self.run_out_var.set(base + "_preset.mp4")
 
     def _browse_run_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4"), ("All", t("ducker.item_2"))])
         if p: self.run_out_var.set(p)
 
@@ -436,7 +437,7 @@ class PresetManagerTab(BaseTab):
         src = self.run_src_var.get().strip()
         out = self.run_out_var.get().strip()
         if not src:
-            src = filedialog.askopenfilename(
+            src = dialogs.askopenfilename(
                 filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi"), ("All", t("ducker.item_2"))])
         if not src: return
         if not out:

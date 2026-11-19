@@ -5,6 +5,7 @@ Supports styling overrides for SRT files.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, colorchooser
+from core import dialogs
 import os
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
@@ -44,7 +45,7 @@ class HardSubberTab(BaseTab):
             tk.Entry(pick_f, textvariable=var, width=60, relief="flat").grid(row=row, column=1, padx=8)
 
             def _browse(a=attr, v=var, ft=ftype):
-                p = filedialog.askopenfilename(filetypes=ft)
+                p = dialogs.askopenfilename(filetypes=ft)
                 if p:
                     setattr(self, a, p)
                     v.set(p)
@@ -153,7 +154,7 @@ class HardSubberTab(BaseTab):
                 self.out_color_btn.config(bg=result[1], fg="white", text=f"  {result[1]}")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self.out_var.set(p)
@@ -168,7 +169,7 @@ class HardSubberTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

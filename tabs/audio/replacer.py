@@ -5,6 +5,7 @@ Supports offset, volume mixing, and fade in/out.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path, get_video_duration
@@ -46,7 +47,7 @@ class AudioReplacerTab(BaseTab):
             tk.Entry(pick, textvariable=var, width=60, relief="flat").grid(row=row, column=1, padx=8)
 
             def _b(a=attr, v=var, f=ft):
-                p = filedialog.askopenfilename(filetypes=f)
+                p = dialogs.askopenfilename(filetypes=f)
                 if p:
                     setattr(self, a, p)
                     v.set(p)
@@ -108,7 +109,7 @@ class AudioReplacerTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self.out_var.set(p)
@@ -120,7 +121,7 @@ class AudioReplacerTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

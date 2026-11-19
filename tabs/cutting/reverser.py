@@ -9,6 +9,7 @@ popular in meme and reaction content.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 
 from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
@@ -187,7 +188,7 @@ class ReverserTab(BaseTab):
         self._range_end.set(str(round(end, 2)))
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -199,7 +200,7 @@ class ReverserTab(BaseTab):
             self._range_end.set(str(round(min(5.0, self.duration), 2)))
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self._out_var.set(p)
@@ -207,7 +208,7 @@ class ReverserTab(BaseTab):
     def _get_output(self):
         out = self._out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if out:
             self._out_var.set(out)

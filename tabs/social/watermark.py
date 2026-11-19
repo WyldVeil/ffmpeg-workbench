@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, colorchooser
+from core import dialogs
 import subprocess
 import os
 import math
@@ -262,7 +263,7 @@ class TextBurnerTab(BaseTab):
                 f"x={x}:y={y}:fontcolor=0x{color_val}:alpha={alpha_val}{style_str}")
 
     def load_file(self):
-        path = filedialog.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi")])
+        path = dialogs.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi")])
         if path:
             self.file_path = path
             self.ent_path.delete(0, tk.END)
@@ -303,7 +304,7 @@ class TextBurnerTab(BaseTab):
             messagebox.showerror(t("common.warning"),
                                  "Font file not found in assets/fonts/. Pick a different font or restore the missing TTF.")
             return
-        out = filedialog.asksaveasfilename(defaultextension=".mp4",
+        out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                            filetypes=[("MP4", "*.mp4")])
         if not out: return
         cmd = [get_binary_path("ffmpeg.exe"), "-i", self.file_path,

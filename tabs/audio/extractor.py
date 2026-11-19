@@ -4,6 +4,7 @@ Rip audio from any video file into MP3, WAV, FLAC, AAC, or OGG.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
@@ -104,7 +105,7 @@ class AudioExtractorTab(BaseTab):
             text=t("extractor.lossless_note") if lossless else "")
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[(t("extractor.video_audio"), "*.mp4 *.mov *.mkv *.avi *.webm *.mp3 *.aac"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -112,7 +113,7 @@ class AudioExtractorTab(BaseTab):
 
     def _browse_out(self):
         ext = FORMAT_MAP[self.fmt_var.get()][0]
-        p = filedialog.asksaveasfilename(defaultextension=ext,
+        p = dialogs.asksaveasfilename(defaultextension=ext,
                                          filetypes=[(self.fmt_var.get(), f"*{ext}")])
         if p:
             self.out_var.set(p)
@@ -123,7 +124,7 @@ class AudioExtractorTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(
+            out = dialogs.asksaveasfilename(
                 defaultextension=FORMAT_MAP[self.fmt_var.get()][0],
                 filetypes=[(self.fmt_var.get(), f"*{FORMAT_MAP[self.fmt_var.get()][0]}")])
         if not out:

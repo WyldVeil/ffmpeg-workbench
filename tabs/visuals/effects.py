@@ -20,6 +20,7 @@ effects overlay onto the existing video so no content is lost.
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
+from core import dialogs
 import os
 import subprocess
 import threading
@@ -3010,7 +3011,7 @@ class SpecialEffectsTab(BaseTab):
     # ═════════════════════════════════════════════════════════════════════
 
     def _browse_src(self, src_var, out_var, suffix):
-        p = filedialog.askopenfilename(filetypes=VIDEO_TYPES)
+        p = dialogs.askopenfilename(filetypes=VIDEO_TYPES)
         if not p:
             return
         src_var.set(p)
@@ -3020,7 +3021,7 @@ class SpecialEffectsTab(BaseTab):
 
     @staticmethod
     def _browse_out(out_var):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[(t("effects.mp4_video"), "*.mp4"), (t("youtube.all_files"), t("ducker.item_2"))])
         if p:

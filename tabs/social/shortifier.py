@@ -6,6 +6,7 @@ and optional duration trimming.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import subprocess
 import json
@@ -146,7 +147,7 @@ class ShortifierTab(BaseTab):
         sb.pack(side="right", fill="y")
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -156,7 +157,7 @@ class ShortifierTab(BaseTab):
             self.dur_lbl.config(text=f"  {m}m {s}s")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self.out_var.set(p)
@@ -301,7 +302,7 @@ class ShortifierTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

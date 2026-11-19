@@ -7,6 +7,7 @@ Classic YouTube workflow: voice commentary ducks the background music.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
@@ -191,7 +192,7 @@ class AudioDuckerTab(BaseTab):
             self._release.set(str(p["release"]))
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Select source video (with voice/speech)",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
@@ -200,7 +201,7 @@ class AudioDuckerTab(BaseTab):
                 self._out_var.set(os.path.splitext(p)[0] + "_ducked.mp4")
 
     def _browse_music(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Select background music",
             filetypes=[("Audio", "*.mp3 *.wav *.aac *.flac *.ogg *.m4a"),
                         (t("ducker.video_audio"), "*.mp4 *.mov *.mkv"),
@@ -209,7 +210,7 @@ class AudioDuckerTab(BaseTab):
             self._music_var.set(p)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if p:
@@ -228,7 +229,7 @@ class AudioDuckerTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("ducker.msg_no_music"))
             return
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

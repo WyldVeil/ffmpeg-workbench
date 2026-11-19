@@ -12,6 +12,7 @@ Optional: animated wipe divider, labels, audio source selection.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 
@@ -73,7 +74,7 @@ class SideBySideTab(BaseTab):
             tk.Entry(row, textvariable=var, width=55, relief="flat").pack(side="left", padx=6)
 
             def _b(idx=i, v=var):
-                p = filedialog.askopenfilename(
+                p = dialogs.askopenfilename(
                     filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"),
                                ("All", t("ducker.item_2"))])
                 if p:
@@ -251,7 +252,7 @@ class SideBySideTab(BaseTab):
             self.labels_f.pack_forget()
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4", "*.mp4")])
         if p: self.out_var.set(p)
 
@@ -394,7 +395,7 @@ class SideBySideTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)

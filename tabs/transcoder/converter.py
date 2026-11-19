@@ -5,6 +5,7 @@ Attempts stream-copy first for speed; falls back to re-encode.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import subprocess
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
@@ -110,7 +111,7 @@ class FormatConverterTab(BaseTab):
         self.fmt_note.config(text=FORMAT_NOTES.get(fmt, ""))
 
     def _add(self):
-        paths = filedialog.askopenfilenames(
+        paths = dialogs.askopenfilenames(
             filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.webm *.mp3 *.aac *.wav *.flac"), ("All", t("ducker.item_2"))])
         for p in paths:
             if p not in self.file_paths:
@@ -128,7 +129,7 @@ class FormatConverterTab(BaseTab):
         self.listbox.delete(0, tk.END)
 
     def _browse_dir(self):
-        p = filedialog.askdirectory()
+        p = dialogs.askdirectory()
         if p: self.out_dir_var.set(p)
 
     def _render(self):

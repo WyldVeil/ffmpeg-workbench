@@ -4,6 +4,7 @@ Extract multiple different segments from a single video into separate files.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import threading
@@ -84,7 +85,7 @@ class MultiSplitterTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse_file(self):
-        p = filedialog.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi *.webm")])
+        p = dialogs.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi *.webm")])
         if p:
             self.file_path = p
             self.src_var.set(p)

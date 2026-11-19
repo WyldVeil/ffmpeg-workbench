@@ -14,6 +14,7 @@ Modes
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -183,7 +184,7 @@ class FreezeFrameTab(BaseTab):
 
     # ── Callbacks ──────────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -199,7 +200,7 @@ class FreezeFrameTab(BaseTab):
         self._scrub_var.set(playhead)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self._out_var.set(p)
@@ -229,7 +230,7 @@ class FreezeFrameTab(BaseTab):
 
         out = self._out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

@@ -5,6 +5,7 @@ spec, then concatenate them all in order into a single output file.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -115,7 +116,7 @@ class BatchJoinerTab(BaseTab):
             self.enc_frame.pack_forget()
 
     def _add_files(self):
-        paths = filedialog.askopenfilenames(
+        paths = dialogs.askopenfilenames(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv"), ("All", t("ducker.item_2"))])
         for p in paths:
             if p not in self.file_paths:
@@ -123,7 +124,7 @@ class BatchJoinerTab(BaseTab):
                 self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
 
     def _add_folder(self):
-        folder = filedialog.askdirectory()
+        folder = dialogs.askdirectory()
         if not folder:
             return
         exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v"}
@@ -172,7 +173,7 @@ class BatchJoinerTab(BaseTab):
         self.listbox.delete(0, tk.END)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if p:
             self.out_var.set(p)
@@ -183,7 +184,7 @@ class BatchJoinerTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

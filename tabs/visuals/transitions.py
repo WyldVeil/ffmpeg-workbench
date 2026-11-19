@@ -12,6 +12,7 @@ with a visual preview of each effect.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import threading
@@ -212,7 +213,7 @@ class TransitionStudioTab(BaseTab):
 
     # ── Callbacks ──────────────────────────────────────────────────────
     def _browse(self, which):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         if not p:
@@ -229,7 +230,7 @@ class TransitionStudioTab(BaseTab):
             self._dur_b_lbl.config(text=f"{self.dur_b:.1f}s")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self._out_var.set(p)
@@ -313,7 +314,7 @@ class TransitionStudioTab(BaseTab):
             return
         out = self._out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

@@ -13,6 +13,7 @@ image suitable for YouTube/TikTok thumbnails.  Options for:
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 
@@ -234,7 +235,7 @@ class ThumbnailMakerTab(BaseTab):
 
     # ── Callbacks ──────────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -245,7 +246,7 @@ class ThumbnailMakerTab(BaseTab):
             self._scrub.config(to=max(0.1, self.duration))
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".png",
             filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("WebP", "*.webp")])
         if p:
@@ -285,7 +286,7 @@ class ThumbnailMakerTab(BaseTab):
 
         if batch:
             # Batch: export frames to a folder
-            out_dir = filedialog.askdirectory(title="Choose folder for thumbnails")
+            out_dir = dialogs.askdirectory(title="Choose folder for thumbnails")
             if not out_dir:
                 return
 
@@ -315,7 +316,7 @@ class ThumbnailMakerTab(BaseTab):
         out = self._out_var.get().strip()
         if not out:
             ext = self._get_ext()
-            out = filedialog.asksaveasfilename(
+            out = dialogs.asksaveasfilename(
                 defaultextension=ext,
                 filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("WebP", "*.webp")])
         if not out:

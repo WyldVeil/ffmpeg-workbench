@@ -12,6 +12,7 @@ before/after galleries, tutorial image sequences.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -275,7 +276,7 @@ class SlideshowMakerTab(BaseTab):
 
     # ─────────────────────────────────────────────────────────────────────
     def _add_images(self):
-        paths = filedialog.askopenfilenames(
+        paths = dialogs.askopenfilenames(
             filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp *.webp *.tiff"),
                        ("All", t("ducker.item_2"))])
         for p in paths:
@@ -285,7 +286,7 @@ class SlideshowMakerTab(BaseTab):
         self._update_count()
 
     def _add_folder(self):
-        folder = filedialog.askdirectory()
+        folder = dialogs.askdirectory()
         if not folder: return
         exts = {".jpg",".jpeg",".png",".bmp",".webp",".tiff",".tif"}
         for f in sorted(os.listdir(folder)):
@@ -346,14 +347,14 @@ class SlideshowMakerTab(BaseTab):
             self.captions[sel[0]] = self.cap_var.get()
 
     def _browse_music(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Audio", "*.mp3 *.aac *.wav *.flac *.ogg"), ("All",t("ducker.item_2"))])
         if p:
             self.music_path = p
             self.music_var.set(p)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4","*.mp4")])
         if p: self.out_var.set(p)
 
@@ -365,7 +366,7 @@ class SlideshowMakerTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4","*.mp4")])
         if not out: return
         self.out_var.set(out)

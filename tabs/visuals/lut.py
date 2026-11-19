@@ -5,6 +5,7 @@ Supports intensity blending and preview.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import subprocess
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
@@ -48,7 +49,7 @@ class LUTApplicatorTab(BaseTab):
             tk.Entry(pick, textvariable=var, width=60, relief="flat").grid(row=row, column=1, padx=8)
 
             def _b(a=attr, v=var, ft=ftypes):
-                p = filedialog.askopenfilename(filetypes=ft)
+                p = dialogs.askopenfilename(filetypes=ft)
                 if p:
                     setattr(self, a, p)
                     v.set(p)
@@ -106,7 +107,7 @@ class LUTApplicatorTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p: self.out_var.set(p)
 
@@ -144,7 +145,7 @@ class LUTApplicatorTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)

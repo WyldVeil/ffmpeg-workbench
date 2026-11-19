@@ -9,6 +9,7 @@ Right panel - job settings editor for queueing new encode jobs from here
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, scrolledtext
+from core import dialogs
 import os
 import uuid
 import time
@@ -351,7 +352,7 @@ class EncodeQueueTab(BaseTab):
     #  Editor: add new encode jobs
     # ═══════════════════════════════════════════════════════════════════════
     def _ed_browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.ed_src_var.set(p)
@@ -359,7 +360,7 @@ class EncodeQueueTab(BaseTab):
                 self.ed_out_var.set(os.path.splitext(p)[0] + "_encoded.mp4")
 
     def _ed_browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("All", t("ducker.item_2"))])
         if p:
@@ -397,7 +398,7 @@ class EncodeQueueTab(BaseTab):
         )
 
     def _add_folder(self):
-        folder = filedialog.askdirectory()
+        folder = dialogs.askdirectory()
         if not folder:
             return
         exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v"}

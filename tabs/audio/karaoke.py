@@ -14,6 +14,7 @@ Turns any music video into a singalong karaoke track in three steps:
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import threading
 import os
@@ -353,7 +354,7 @@ class KaraokeTab(BaseTab):
         self.run_in_thread(_work)
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Select music video",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
@@ -362,7 +363,7 @@ class KaraokeTab(BaseTab):
                 self._out_var.set(os.path.splitext(p)[0] + "_karaoke.mp4")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if p:
@@ -395,7 +396,7 @@ class KaraokeTab(BaseTab):
                 t("karaoke.install_first_message"))
             return
         if not out:
-            out = filedialog.asksaveasfilename(
+            out = dialogs.asksaveasfilename(
                 defaultextension=".mp4", filetypes=[("MP4", "*.mp4")])
         if not out:
             return

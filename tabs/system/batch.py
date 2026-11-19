@@ -6,6 +6,7 @@ Progress is shown per-file in the console.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import threading
 
@@ -150,7 +151,7 @@ class BatchTab(BaseTab):
 
     # ─── File management ──────────────────────────────────────────────────
     def _add_files(self):
-        paths = filedialog.askopenfilenames(
+        paths = dialogs.askopenfilenames(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         for p in paths:
@@ -160,7 +161,7 @@ class BatchTab(BaseTab):
         self._update_count()
 
     def _add_folder(self):
-        folder = filedialog.askdirectory()
+        folder = dialogs.askdirectory()
         if not folder: return
         exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v"}
         for fn in sorted(os.listdir(folder)):
@@ -187,7 +188,7 @@ class BatchTab(BaseTab):
         self._count_lbl.config(text=f"{n} file{'s' if n != 1 else ''} queued")
 
     def _browse_out(self):
-        p = filedialog.askdirectory()
+        p = dialogs.askdirectory()
         if p: self._out_var.set(p)
 
     def _cancel(self):
@@ -212,7 +213,7 @@ class BatchTab(BaseTab):
             return
         out_dir = self._out_var.get().strip()
         if not out_dir:
-            out_dir = filedialog.askdirectory(title="Select output folder")
+            out_dir = dialogs.askdirectory(title="Select output folder")
         if not out_dir:
             return
         self._out_var.set(out_dir)

@@ -9,6 +9,7 @@ No manual pip install required.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import sys
 import threading
@@ -473,7 +474,7 @@ class TTSVoiceOverTab(BaseTab):
             pass
 
     def _load_text_file(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[(t("tts.text_files"), "*.txt *.srt *.md"), ("All", t("ducker.item_2"))])
         if p:
             with open(p, "r", encoding="utf-8", errors="replace") as f:
@@ -524,7 +525,7 @@ class TTSVoiceOverTab(BaseTab):
             self._video_lf.pack_forget()
 
     def _browse_video(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self._vid_path = p
@@ -544,7 +545,7 @@ class TTSVoiceOverTab(BaseTab):
                    ".flac" if "FLAC" in fmt else
                    ".aac" if "AAC" in fmt else ".mp3")
             ft  = [(ext.upper().strip("."), f"*{ext}")]
-        p = filedialog.asksaveasfilename(defaultextension=ext, filetypes=ft)
+        p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=ft)
         if p:
             self.out_var.set(p)
 

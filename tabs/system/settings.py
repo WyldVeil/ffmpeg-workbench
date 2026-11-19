@@ -8,6 +8,7 @@ centralised core.settings module (no duplicated load/save logic).
 """
 import tkinter as tk
 from tkinter import ttk, filedialog
+from core import dialogs
 
 import os
 
@@ -72,7 +73,7 @@ class SettingsTab(BaseTab):
         tk.Button(
             of_row, text=t("btn.browse"),
             command=lambda: self._out_var.set(
-                filedialog.askdirectory() or self._out_var.get()
+                dialogs.askdirectory() or self._out_var.get()
             )
         ).pack(side="left")
 

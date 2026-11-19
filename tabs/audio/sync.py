@@ -5,6 +5,7 @@ Handles positive (delay audio) and negative (advance audio) offsets.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
@@ -96,7 +97,7 @@ class AudioSyncTab(BaseTab):
             self.offset_var.set(f"{delta:.3f}")
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -105,7 +106,7 @@ class AudioSyncTab(BaseTab):
             self.out_var.set(f"{base}_synced.mp4")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self.out_var.set(p)
@@ -125,7 +126,7 @@ class AudioSyncTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

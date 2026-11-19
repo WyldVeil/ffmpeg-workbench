@@ -5,6 +5,7 @@ Produces the smallest, highest-quality GIF possible.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -99,7 +100,7 @@ class GIFMakerTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -109,7 +110,7 @@ class GIFMakerTab(BaseTab):
             self.dur_lbl.config(text=f"{m}m {s}s")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".gif",
+        p = dialogs.asksaveasfilename(defaultextension=".gif",
                                          filetypes=[("GIF", "*.gif")])
         if p:
             self.out_var.set(p)
@@ -120,7 +121,7 @@ class GIFMakerTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".gif",
+            out = dialogs.asksaveasfilename(defaultextension=".gif",
                                                filetypes=[("GIF", "*.gif")])
         if not out:
             return

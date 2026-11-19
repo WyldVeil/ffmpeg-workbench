@@ -12,6 +12,7 @@ cut points, then splits the video at those timestamps.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import threading
@@ -176,7 +177,7 @@ class SceneDetectTab(BaseTab):
 
     # ── Callbacks ──────────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -186,7 +187,7 @@ class SceneDetectTab(BaseTab):
             self._dur_lbl.config(text=_fmt(self.duration))
 
     def _browse_out_dir(self):
-        d = filedialog.askdirectory(title="Output folder for split clips")
+        d = dialogs.askdirectory(title="Output folder for split clips")
         if d:
             self._out_dir_var.set(d)
 
@@ -317,7 +318,7 @@ class SceneDetectTab(BaseTab):
 
         out_dir = self._out_dir_var.get().strip()
         if not out_dir:
-            out_dir = filedialog.askdirectory(title="Output folder")
+            out_dir = dialogs.askdirectory(title="Output folder")
         if not out_dir:
             return
         self._out_dir_var.set(out_dir)

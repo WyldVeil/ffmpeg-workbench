@@ -13,6 +13,7 @@ Uses FFmpeg's xstack filter for precise grid positioning.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 
@@ -231,7 +232,7 @@ class VideoCollageTab(BaseTab):
 
     # ── Slot management ───────────────────────────────────────────────
     def _add_videos(self):
-        paths = filedialog.askopenfilenames(
+        paths = dialogs.askopenfilenames(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         for p in paths:
@@ -278,7 +279,7 @@ class VideoCollageTab(BaseTab):
         self._draw_grid_preview()
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4")])
         if p:
             self._out_var.set(p)
@@ -297,7 +298,7 @@ class VideoCollageTab(BaseTab):
 
         out = self._out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

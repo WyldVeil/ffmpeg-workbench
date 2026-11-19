@@ -7,6 +7,7 @@ no duplicated load/save logic.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, scrolledtext
+from core import dialogs
 import subprocess
 import threading
 import os
@@ -139,7 +140,7 @@ class AdvancedSettingsTab(BaseTab):
             messagebox.showinfo("Bin folder", bin_dir)
 
     def _browse_binary(self, key, var):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Executable", t("advanced_settings.exe")), ("All", t("ducker.item_2"))])
         if p:
             var.set(p)
@@ -190,7 +191,7 @@ class AdvancedSettingsTab(BaseTab):
         tk.Button(
             of, text=t("btn.browse"),
             command=lambda: self.out_folder_var.set(
-                filedialog.askdirectory() or self.out_folder_var.get())
+                dialogs.askdirectory() or self.out_folder_var.get())
         ).pack(side="left")
 
         self.auto_open_var = tk.BooleanVar(

@@ -5,6 +5,7 @@ Supports H.264, H.265/HEVC, AV1, VP9, ProRes, DNxHD.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path, detect_gpu
@@ -137,7 +138,7 @@ class CodecCruncherTab(BaseTab):
             self.pix_var.set(info["pix"])
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -145,7 +146,7 @@ class CodecCruncherTab(BaseTab):
 
     def _browse_out(self):
         ext = ".mov" if "ProRes" in self.codec_var.get() or "DNx" in self.codec_var.get() else ".mp4"
-        p = filedialog.asksaveasfilename(defaultextension=ext,
+        p = dialogs.asksaveasfilename(defaultextension=ext,
                                          filetypes=[("Video", f"*{ext}"), ("All", t("ducker.item_2"))])
         if p: self.out_var.set(p)
 
@@ -155,7 +156,7 @@ class CodecCruncherTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4")
+            out = dialogs.asksaveasfilename(defaultextension=".mp4")
         if not out: return
         self.out_var.set(out)
 

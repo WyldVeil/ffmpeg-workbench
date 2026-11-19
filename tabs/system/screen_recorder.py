@@ -10,6 +10,7 @@ Advanced mode features:
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import ctypes
 import ctypes.wintypes
@@ -541,7 +542,7 @@ class ScreenRecorderTab(BaseTab):
     #  Output path helpers
     # ─────────────────────────────────────────────────────────────────────────
     def _browse_output_folder(self):
-        folder = filedialog.askdirectory(title="Choose output folder",
+        folder = dialogs.askdirectory(title="Choose output folder",
                                          initialdir=self.out_folder_var.get())
         if folder:
             self.out_folder_var.set(folder)

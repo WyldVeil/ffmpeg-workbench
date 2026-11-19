@@ -5,6 +5,7 @@ Generates DNxHD, ProRes Proxy, or simple H.264 low-res copies.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import subprocess
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
@@ -93,7 +94,7 @@ class ProxyGenTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _add(self):
-        paths = filedialog.askopenfilenames(
+        paths = dialogs.askopenfilenames(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         for p in paths:
             if p not in self.file_paths:
@@ -101,7 +102,7 @@ class ProxyGenTab(BaseTab):
                 self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
 
     def _add_folder(self):
-        folder = filedialog.askdirectory()
+        folder = dialogs.askdirectory()
         if not folder: return
         exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v"}
         for f in sorted(os.listdir(folder)):
@@ -122,7 +123,7 @@ class ProxyGenTab(BaseTab):
         self.listbox.delete(0, tk.END)
 
     def _browse_dir(self):
-        p = filedialog.askdirectory()
+        p = dialogs.askdirectory()
         if p: self.out_dir_var.set(p)
 
     def _render(self):

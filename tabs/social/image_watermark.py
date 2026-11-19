@@ -8,6 +8,7 @@ onto the video, which is what most users expect when they say "add a watermark."
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
@@ -190,7 +191,7 @@ class ImageWatermarkTab(BaseTab):
         self._t_end_entry.config(state=state)
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Select source video",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
@@ -199,7 +200,7 @@ class ImageWatermarkTab(BaseTab):
                 self._out_var.set(os.path.splitext(p)[0] + "_watermarked.mp4")
 
     def _browse_img(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Select logo / watermark image",
             filetypes=[("Image", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
                         ("All", t("ducker.item_2"))])
@@ -207,7 +208,7 @@ class ImageWatermarkTab(BaseTab):
             self._img_var.set(p)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if p:
@@ -226,7 +227,7 @@ class ImageWatermarkTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("watermark.no_image_message"))
             return
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

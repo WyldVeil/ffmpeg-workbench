@@ -13,6 +13,7 @@ Fully offline - no templates needed.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, colorchooser
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -328,26 +329,26 @@ class IntroMakerTab(BaseTab):
             self.sub_color_btn.config(bg=hex_c, fg=fg, text=f"  {hex_c}  ")
 
     def _browse_bg_custom(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[(t("intro_maker.image_video"), "*.jpg *.jpeg *.png *.mp4 *.mov"), ("All", t("ducker.item_2"))])
         if p:
             self.bg_custom_path = p
             self.bg_custom_var.set(p)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4", "*.mp4")])
         if p: self.out_var.set(p)
 
     def _browse_main(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi"), ("All", t("ducker.item_2"))])
         if p:
             self.main_video_path = p
             self.main_var.set(p)
 
     def _browse_attach_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4", "*.mp4")])
         if p: self.attach_out_var.set(p)
 
@@ -403,7 +404,7 @@ class IntroMakerTab(BaseTab):
     def _generate_bumper(self):
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)
@@ -463,7 +464,7 @@ class IntroMakerTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Select the main video to attach to.")
             return
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.attach_out_var.set(out)

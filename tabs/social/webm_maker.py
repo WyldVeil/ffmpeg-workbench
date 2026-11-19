@@ -8,6 +8,7 @@ Resolution sliders lock to original aspect ratio if desired.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import threading
 import os
@@ -465,7 +466,7 @@ class WebMTab(BaseTab):
     #  File loading
     # ═════════════════════════════════════════════════════════════════════════
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -755,7 +756,7 @@ class WebMTab(BaseTab):
     #  Browse output
     # ═════════════════════════════════════════════════════════════════════════
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".webm",
             filetypes=[("WebM", "*.webm"), ("All", t("ducker.item_2"))])
         if p:
@@ -778,7 +779,7 @@ class WebMTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".webm",
+            out = dialogs.asksaveasfilename(defaultextension=".webm",
                                                filetypes=[("WebM", "*.webm")])
         if not out:
             return

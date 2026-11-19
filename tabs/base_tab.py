@@ -627,6 +627,18 @@ class BaseTab(ttk.Frame):
         """Schedule *fn* on the Tk thread (safe from worker threads)."""
         ui.call_soon(fn, *args, **kwargs)
 
+    def after(self, ms, func=None, *args):
+        """Thread-safe ``after``: calls from worker threads (a common pattern in
+        older tabs) are handed to the Tk thread instead of touching Tk directly,
+        which fails before/around mainloop and can dead-lock."""
+        if func is not None and not ui.on_main_thread():
+            if not ms:
+                ui.call_soon(func, *args)
+            else:
+                ui.call_soon(lambda: tk.Misc.after(self, ms, func, *args))
+            return None
+        return super().after(ms, func, *args)
+
     # ── Files ────────────────────────────────────────────────────────────────
 
     def probe(self, path):

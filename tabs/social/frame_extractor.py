@@ -11,6 +11,7 @@ Modes:
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import math
@@ -239,7 +240,7 @@ class FrameExtractorTab(BaseTab):
 
     # ─────────────────────────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
@@ -249,7 +250,7 @@ class FrameExtractorTab(BaseTab):
             self.dur_lbl.config(text=f"{m}m {s}s")
 
     def _browse_dir(self):
-        p = filedialog.askdirectory()
+        p = dialogs.askdirectory()
         if p: self.out_dir_var.set(p)
 
     def _set_pct(self, pct):

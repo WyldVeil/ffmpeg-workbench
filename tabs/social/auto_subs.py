@@ -15,6 +15,7 @@ Requires:  pip install openai-whisper
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, scrolledtext
+from core import dialogs
 import subprocess
 import threading
 import os
@@ -280,7 +281,7 @@ class AutoSubsTab(BaseTab):
         self.run_in_thread(_work)
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.webm *.mp3 *.wav *.m4a *.flac"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -291,13 +292,13 @@ class AutoSubsTab(BaseTab):
             self.burned_out_var.set(base + "_subtitled.mp4")
 
     def _browse_srt(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".srt",
             filetypes=[("SRT", "*.srt"), ("VTT", "*.vtt"), ("Text", "*.txt")])
         if p: self.srt_var.set(p)
 
     def _browse_burned_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4", "*.mp4")])
         if p: self.burned_out_var.set(p)
 
@@ -424,7 +425,7 @@ class AutoSubsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not srt or not os.path.exists(srt):
-            srt = filedialog.askopenfilename(
+            srt = dialogs.askopenfilename(
                 filetypes=[("Subtitles", "*.srt *.ass *.vtt"), ("All", t("ducker.item_2"))])
         if not srt: return
         self.srt_var.set(srt)

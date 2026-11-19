@@ -4,6 +4,7 @@ Apply creative vocal effects like Pitch Shift, Robot, Chipmunk, or Echo.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import subprocess
 
@@ -47,14 +48,14 @@ class VoiceChangerTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse(self):
-        p = filedialog.askopenfilename(filetypes=[("Media", "*.mp4 *.mov *.wav *.mp3")])
+        p = dialogs.askopenfilename(filetypes=[("Media", "*.mp4 *.mov *.wav *.mp3")])
         if p:
             self.file_path = p
             self.src_var.set(p)
 
     def _render(self):
         if not self.file_path: return
-        out = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3")])
+        out = dialogs.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3")])
         if not out: return
 
         ffmpeg = get_binary_path("ffmpeg.exe")

@@ -14,6 +14,7 @@ or specific dialogue sections visually.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import struct
@@ -180,7 +181,7 @@ class WaveformEditorTab(BaseTab):
 
     # ── Waveform analysis ─────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.webm *.mp3 *.wav *.aac *.flac *.m4a"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -195,7 +196,7 @@ class WaveformEditorTab(BaseTab):
 
     def _browse_out(self):
         ext = ".mp4" if self._export_mode.get() == "video" else ".mp3"
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=ext,
             filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"),
                        ("WAV", "*.wav"), ("All", t("ducker.item_2"))])
@@ -412,7 +413,7 @@ class WaveformEditorTab(BaseTab):
         out = self._out_var.get().strip()
         if not out:
             ext = ".mp4" if self._export_mode.get() == "video" else ".mp3"
-            out = filedialog.asksaveasfilename(
+            out = dialogs.asksaveasfilename(
                 defaultextension=ext,
                 filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"), ("WAV", "*.wav")])
         if not out:

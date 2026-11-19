@@ -26,6 +26,7 @@ Sections (all optional, all combinable):
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from core import dialogs
 import os
 import shlex
 import subprocess
@@ -273,7 +274,7 @@ class AllInOneTab(BaseTab):
                   bg=CLR["panel"], fg=CLR["fg"]).pack(side="left")
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
                        ("All", "*.*")])
         if not p:
@@ -295,7 +296,7 @@ class AllInOneTab(BaseTab):
         self.after(0, self._rebuild_cmd)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"),
                        ("MOV", "*.mov"), ("All", "*.*")])
@@ -1280,7 +1281,7 @@ class AllInOneTab(BaseTab):
         self.log(self.console, t("log.all_in_one.command_copied_to_clipboard"))
 
     def _save_bat(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".bat",
             filetypes=[("Batch file", "*.bat"), ("All", "*.*")])
         if not p:
@@ -1296,7 +1297,7 @@ class AllInOneTab(BaseTab):
             messagebox.showerror(t("common.error"), str(exc))
 
     def _save_sh(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".sh",
             filetypes=[("Shell script", "*.sh"), ("All", "*.*")])
         if not p:

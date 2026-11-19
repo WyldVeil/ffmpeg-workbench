@@ -15,6 +15,7 @@ Preview by exporting a short clip with the chain applied.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import os
 import tempfile
 
@@ -308,7 +309,7 @@ class AudioDynamicsTab(BaseTab):
 
     # ─────────────────────────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.mp3 *.wav *.aac *.flac"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -319,7 +320,7 @@ class AudioDynamicsTab(BaseTab):
         self._update_filter_preview()
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4","*.mp4"),
                                                      ("MP3","*.mp3"),
                                                      ("WAV","*.wav")])
@@ -351,7 +352,7 @@ class AudioDynamicsTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4","*.mp4")])
         if not out: return
         self.out_var.set(out)

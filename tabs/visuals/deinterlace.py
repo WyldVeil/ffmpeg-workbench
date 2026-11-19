@@ -6,6 +6,7 @@ buttery-smooth output from 50i/60i sources.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import re
@@ -189,7 +190,7 @@ class DeinterlaceTab(BaseTab):
         self.filter_lbl.config(text=f"Filter:  {self._build_filter()}")
 
     def _browse(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.ts *.mpg *.vob"),
                        ("All", t("ducker.item_2"))])
         if p:
@@ -199,7 +200,7 @@ class DeinterlaceTab(BaseTab):
             self.out_var.set(base + "_deinterlaced.mp4")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if p: self.out_var.set(p)
 
@@ -222,7 +223,7 @@ class DeinterlaceTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)

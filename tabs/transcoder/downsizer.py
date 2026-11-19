@@ -6,6 +6,7 @@ codecs, and scaling required to hit that target optimally.
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from core import dialogs
 import os
 import shlex
 import subprocess
@@ -132,7 +133,7 @@ class UniversalDownsizerTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.m4v"), ("All", t("ducker.item_2"))])
+        p = dialogs.askopenfilename(filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.m4v"), ("All", t("ducker.item_2"))])
         if p:
             self._src_var.set(p)
             ext = os.path.splitext(p)[1]
@@ -140,7 +141,7 @@ class UniversalDownsizerTab(BaseTab):
                 self._out_var.set(os.path.splitext(p)[0] + f"_downsized{ext}")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("Video", "*.mp4 *.mkv *.mov"), ("All", t("ducker.item_2"))])
+        p = dialogs.asksaveasfilename(defaultextension=".mp4", filetypes=[("Video", "*.mp4 *.mkv *.mov"), ("All", t("ducker.item_2"))])
         if p: self._out_var.set(p)
 
     def _on_src_changed(self, *_):

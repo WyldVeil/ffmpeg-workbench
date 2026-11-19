@@ -16,6 +16,7 @@ Optional: adjust match strength (blend with original via overlay).
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import json
 import os
@@ -141,7 +142,7 @@ class ColorMatchTab(BaseTab):
             tk.Entry(row, textvariable=var, width=50, relief="flat").pack(side="left", padx=6)
 
             def _b(a=attr, v=var):
-                p = filedialog.askopenfilename(
+                p = dialogs.askopenfilename(
                     filetypes=[(t("color_match.video_image"),
                                 "*.mp4 *.mov *.mkv *.avi *.webm *.jpg *.jpeg *.png"),
                                ("All", t("ducker.item_2"))])
@@ -248,7 +249,7 @@ class ColorMatchTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4", "*.mp4")])
         if p: self.out_var.set(p)
 
@@ -317,7 +318,7 @@ class ColorMatchTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)

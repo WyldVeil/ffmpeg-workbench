@@ -33,6 +33,7 @@ import urllib.request
 import webbrowser
 from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 
 from core.hardware import CREATE_NO_WINDOW, get_binary_path
 from tabs.base_tab import BaseTab, CLR, MONO_FONT, UI_FONT
@@ -1155,7 +1156,7 @@ class YouTubeDownloaderTab(BaseTab):
             webbrowser.open(url)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"),
                        ("WebM", "*.webm"), (t("youtube.all_files"), t("ducker.item_2"))])
@@ -1163,7 +1164,7 @@ class YouTubeDownloaderTab(BaseTab):
             self._out_var.set(p)
 
     def _browse_cookies(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[(t("youtube.text_cookies"), "*.txt"), (t("youtube.all_files"), t("ducker.item_2"))])
         if p:
             self._cookies_var.set(p)
@@ -1232,7 +1233,7 @@ class YouTubeDownloaderTab(BaseTab):
         if self._thumb_photo is None:
             messagebox.showwarning(t("common.warning"), "Fetch video info first.")
             return
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             defaultextension=".png",
             filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")])
         if not p:
@@ -1876,7 +1877,7 @@ class YouTubeDownloaderTab(BaseTab):
             return
         out = self._out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(
+            out = dialogs.asksaveasfilename(
                 defaultextension=".mp4",
                 filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"),
                            (t("youtube.all_files"), t("ducker.item_2"))])

@@ -14,6 +14,7 @@ The result is the original video re-encoded with the new mixed audio.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 
@@ -206,7 +207,7 @@ class AudioMixerTab(BaseTab):
         file_entry.pack(side="left", padx=2)
 
         def _browse(tr=t):
-            p = filedialog.askopenfilename(
+            p = dialogs.askopenfilename(
                 filetypes=[(t("mixer.audio_video"),
                             "*.mp3 *.wav *.aac *.flac *.ogg *.mp4 *.mov"),
                            ("All",t("ducker.item_2"))])
@@ -260,7 +261,7 @@ class AudioMixerTab(BaseTab):
             self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
 
     def _browse_video(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All",t("ducker.item_2"))])
         if p:
             self.video_path = p
@@ -279,7 +280,7 @@ class AudioMixerTab(BaseTab):
                   (".flac" if "FLAC" in fmt else ".aac"))
         else:
             ext = ".mp4"
-        p = filedialog.asksaveasfilename(defaultextension=ext,
+        p = dialogs.asksaveasfilename(defaultextension=ext,
                                           filetypes=[("Media", f"*{ext}")])
         if p: self.out_var.set(p)
 
@@ -298,7 +299,7 @@ class AudioMixerTab(BaseTab):
 
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4","*.mp4")])
         if not out: return
         self.out_var.set(out)

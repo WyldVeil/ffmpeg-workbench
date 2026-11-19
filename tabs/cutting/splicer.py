@@ -5,6 +5,7 @@ stitches the chosen segments together into a single output file.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -108,7 +109,7 @@ class SplicerTab(BaseTab):
 
     # ─── Segment management ───────────────────────────────────────────────────
     def _add_segment(self):
-        path = filedialog.askopenfilename(
+        path = dialogs.askopenfilename(
             title="Select source clip",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
         if not path:
@@ -217,7 +218,7 @@ class SplicerTab(BaseTab):
         self._select_row(new_idx)
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                          filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if p:
             self.out_var.set(p)
@@ -230,7 +231,7 @@ class SplicerTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out:
             return

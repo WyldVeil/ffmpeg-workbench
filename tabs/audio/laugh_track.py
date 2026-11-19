@@ -7,6 +7,7 @@ classic FFmpeg DSP filters, or state-of-the-art AI Stem Separation.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import tempfile
@@ -386,7 +387,7 @@ class LaughTrackRemoverTab(BaseTab):
 
     # ── File browsing ─────────────────────────────────────────────────
     def _browse(self):
-        p = filedialog.askopenfilename(filetypes=[("Media", "*.mp4 *.mkv *.mp3 *.wav *.aac"), ("All", t("ducker.item_2"))])
+        p = dialogs.askopenfilename(filetypes=[("Media", "*.mp4 *.mkv *.mp3 *.wav *.aac"), ("All", t("ducker.item_2"))])
         if p:
             self.file_path = p
             self._src_var.set(p)
@@ -395,7 +396,7 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _browse_out(self):
         ext = ".mp4" if self._export_mode.get() == "video" else ".wav"
-        p = filedialog.asksaveasfilename(defaultextension=ext, filetypes=[("MP4", "*.mp4"), ("WAV", "*.wav")])
+        p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=[("MP4", "*.mp4"), ("WAV", "*.wav")])
         if p:
             self._out_var.set(p)
 
@@ -435,7 +436,7 @@ class LaughTrackRemoverTab(BaseTab):
         out = self._out_var.get().strip()
         if not out:
             ext = ".mp4" if self._export_mode.get() == "video" else ".wav"
-            out = filedialog.asksaveasfilename(defaultextension=ext)
+            out = dialogs.asksaveasfilename(defaultextension=ext)
             if not out: return
             self._out_var.set(out)
 

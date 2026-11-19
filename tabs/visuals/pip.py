@@ -6,6 +6,7 @@ corner rounding, and optional slide-in animation.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 
@@ -72,7 +73,7 @@ class PIPTab(BaseTab):
             tk.Entry(row, textvariable=var, width=52, relief="flat").pack(side="left", padx=6)
 
             def _b(a=attr, v=var):
-                p = filedialog.askopenfilename(
+                p = dialogs.askopenfilename(
                     filetypes=[(t("color_match.video_image"),
                                 "*.mp4 *.mov *.mkv *.avi *.webm *.png *.jpg"),
                                ("All", t("ducker.item_2"))])
@@ -278,7 +279,7 @@ class PIPTab(BaseTab):
                 fg="black" if sum(int(c[1][i:i+2], 16) for i in (1,3,5)) > 400 else "white")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4",
+        p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                           filetypes=[("MP4", "*.mp4")])
         if p: self.out_var.set(p)
 
@@ -383,7 +384,7 @@ class PIPTab(BaseTab):
             return
         out = self.out_var.get().strip()
         if not out:
-            out = filedialog.asksaveasfilename(defaultextension=".mp4",
+            out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                filetypes=[("MP4", "*.mp4")])
         if not out: return
         self.out_var.set(out)

@@ -10,6 +10,7 @@ Produces a high-quality MIDI re-render of any song.
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import sys
@@ -291,7 +292,7 @@ class MIDIfierTab(BaseTab):
     # ── Browse ────────────────────────────────────────────────────────────
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Open audio file",
             filetypes=[
                 ("Audio files", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg "
@@ -306,7 +307,7 @@ class MIDIfierTab(BaseTab):
                 self.out_var.set(base + "_midified.mp3")
 
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             title="Save MP3 as", defaultextension=".mp3",
             filetypes=[("MP3", "*.mp3"), ("All files", "*.*")])
         if p:

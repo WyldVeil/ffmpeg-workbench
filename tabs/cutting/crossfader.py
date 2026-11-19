@@ -13,6 +13,7 @@ Encoding modes
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import json
@@ -441,7 +442,7 @@ class CrossfaderTab(BaseTab):
     #  File handling & metadata
     # ─────────────────────────────────────────────────────────────────────
     def _browse_clip(self, idx):
-        path = filedialog.askopenfilename(
+        path = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mkv *.avi *.mov *.webm"),
                        ("All", t("ducker.item_2"))])
         if path:
@@ -527,7 +528,7 @@ class CrossfaderTab(BaseTab):
             self.bd_label.config(text=t("crossfader.bit_depth"))
 
     def _browse_output(self):
-        path = filedialog.asksaveasfilename(
+        path = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
         if path:

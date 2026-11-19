@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import re
@@ -46,7 +47,7 @@ class SilenceTab(BaseTab):
         self.console.pack(padx=20, pady=10, fill="both", expand=True)
 
     def load_file(self):
-        path = filedialog.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv")])
+        path = dialogs.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv")])
         if path:
             self.file_path = path
             self.ent_path.delete(0, tk.END); self.ent_path.insert(0, path)
@@ -142,7 +143,7 @@ class SilenceTab(BaseTab):
         # Pass 3: The "Magic" Filter
         select_v = " + ".join([f"between(t,{z[0]},{z[1]})" for z in keep_zones])
 
-        out_path = filedialog.asksaveasfilename(defaultextension=".mp4", initialfile="jumpcut_result.mp4")
+        out_path = dialogs.asksaveasfilename(defaultextension=".mp4", initialfile="jumpcut_result.mp4")
         if not out_path: return
 
         self.log_msg(t("log.silence.step_2_rendering_fast_paced_final_video"))

@@ -17,6 +17,7 @@ video-with-audio) file and re-save it with full control over:
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import re
@@ -566,7 +567,7 @@ class AudioExporterTab(BaseTab):
     # ── Callbacks ────────────────────────────────────────────────────────────
 
     def _browse_src(self):
-        p = filedialog.askopenfilename(
+        p = dialogs.askopenfilename(
             title="Open audio / video file",
             filetypes=[
                 ("Audio files", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus "
@@ -582,7 +583,7 @@ class AudioExporterTab(BaseTab):
     def _browse_out(self):
         fmt_def = FORMAT_DEFS[self.fmt_var.get()]
         ext = fmt_def["ext"]
-        p = filedialog.asksaveasfilename(
+        p = dialogs.asksaveasfilename(
             title="Save audio as",
             defaultextension=ext,
             filetypes=[(self.fmt_var.get(), f"*{ext}"), ("All files", "*.*")])

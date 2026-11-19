@@ -19,6 +19,7 @@ For the auto-cut mode the user can set:
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from core import dialogs
 import subprocess
 import os
 import re
@@ -157,7 +158,7 @@ class BeatSyncCutterTab(BaseTab):
                       if a == "audio"
                       else [("Video", "*.mp4 *.mov *.mkv *.avi"),
                              ("All", "*.*")])
-                p = filedialog.askopenfilename(filetypes=ft)
+                p = dialogs.askopenfilename(filetypes=ft)
                 if p:
                     setattr(self, a + "_path", p)
                     v.set(p)
@@ -284,10 +285,10 @@ class BeatSyncCutterTab(BaseTab):
     def _browse_out(self):
         mode = self.mode_var.get()
         if "video" in mode.lower():
-            p = filedialog.asksaveasfilename(defaultextension=".mp4",
+            p = dialogs.asksaveasfilename(defaultextension=".mp4",
                                               filetypes=[("MP4","*.mp4")])
         else:
-            p = filedialog.asksaveasfilename(defaultextension=".txt",
+            p = dialogs.asksaveasfilename(defaultextension=".txt",
                                               filetypes=[("Text","*.txt"),
                                                          ("EDL",t("beat_sync.edl"))])
         if p: self.out_var.set(p)
@@ -369,7 +370,7 @@ class BeatSyncCutterTab(BaseTab):
                                        "Select a video file for auto-cut mode.")
                 return
             if not out:
-                out = filedialog.asksaveasfilename(defaultextension=".mp4",
+                out = dialogs.asksaveasfilename(defaultextension=".mp4",
                                                    filetypes=[("MP4","*.mp4")])
             if not out: return
             self.out_var.set(out)
@@ -377,7 +378,7 @@ class BeatSyncCutterTab(BaseTab):
 
         else:
             if not out:
-                out = filedialog.asksaveasfilename(defaultextension=".txt",
+                out = dialogs.asksaveasfilename(defaultextension=".txt",
                                                    filetypes=[("Text","*.txt")])
             if not out: return
             self.out_var.set(out)
