@@ -377,6 +377,13 @@ def find_font(name: str = "sans") -> Optional[str]:
     return result
 
 
+#: HDR descriptions that ride along with the frames.  An SDR result must not
+#: carry them: encoders write them into the new file (x265/NVENC as SEI, MP4 as
+#: mdcv/clli boxes) and TVs then treat the SDR picture as HDR.
+STRIP_HDR = ",".join(f"sidedata=mode=delete:type={kind}" for kind in (
+    "MASTERING_DISPLAY_METADATA", "CONTENT_LIGHT_LEVEL", "DYNAMIC_HDR_PLUS", "DYNAMIC_HDR_VIVID",
+    "DOVI_METADATA", "DOVI_RPU_BUFFER"))
+
 #: re-tag frames whose HDR tags were lost (zscale's own *in options can't do it: "no path between colorspaces")
 HDR_INPUTS = {"pq": "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,",
               "hlg": "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc,"}
@@ -391,7 +398,7 @@ def hdr_to_sdr_chain(*, method: str = "hable", peak_nits: float = 100.0, out_fmt
     lost.  *method*: hable (filmic, default), mobius (keeps saturation),
     reinhard, clip."""
     return (f"{HDR_INPUTS.get(assume, '')}zscale=t=linear:npl={peak_nits:g},format=gbrpf32le,zscale=p=bt709,"
-            f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt}")
+            f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt},{STRIP_HDR}")
 
 
 _VULKAN_OK = None

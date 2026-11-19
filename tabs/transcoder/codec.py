@@ -134,6 +134,8 @@ class CodecCruncherTab(BaseTab):
         return "." + self._container()
 
     def _update_ext(self, *_a):
+        if not hasattr(self, "out_row"):           # called while the page is still being built
+            return
         out = self.out_row.path
         if out and self.src_row.path:
             want = self._ext()

@@ -109,6 +109,7 @@ TOOLS = {
         ("Universal Downsizer",    _lazy("tabs.transcoder.downsizer", "UniversalDownsizerTab")),
         ("Proxy Generator",        _lazy("tabs.transcoder.proxy", "ProxyGenTab")),
         ("Codec Cruncher",         _lazy("tabs.transcoder.codec", "CodecCruncherTab")),
+        ("HDR to SDR",             _lazy("tabs.transcoder.hdr", "HdrToSdrTab")),
         ("Format Converter",       _lazy("tabs.transcoder.converter", "FormatConverterTab")),
         ("Resolution Scaler",      _lazy("tabs.transcoder.scaler", "ResolutionScalerTab")),
         ("Framerate Interpolator", _lazy("tabs.transcoder.scaler", "FPSInterpolatorTab")),

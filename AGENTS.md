@@ -76,7 +76,7 @@ be left out.
 | `convert` | Change the format, copying streams where possible | `--to mp4\|mkv\|mov\|webm\|mp3\|m4a\|wav\|flac\|ogg\|opus...`, `--reencode` | Format Converter |
 | `scale` | Resize | `--size 1280x720`, `--height 720`, `--factor 2`, `--fit fit\|pad\|crop\|stretch` | Resolution Scaler |
 | `framerate` | New frame rate or slow motion | `--rate 60`, `--method motion\|blend\|dup`, `--slowmo 2` | Framerate Interpolator |
-| `hdr-to-sdr` | Fix washed-out HDR phone or camera video for normal screens | `--method hable\|mobius\|reinhard\|clip`, `--assume pq\|hlg` (for untagged files) | Codec Cruncher |
+| `hdr-to-sdr` | Fix washed-out HDR video (HDR10, HDR10+, HLG, Dolby Vision) for normal screens | `--curve bt2390\|spline\|hable\|mobius\|...`, `--assume pq\|hlg` (for untagged files) | HDR to SDR |
 | `extract-audio` | Save the sound | `--format mp3\|m4a\|wav\|flac\|opus\|ogg`, `--copy` | Audio Extractor |
 | `normalize` | Make loudness even, to a standard | `--target streaming\|youtube\|ebu\|atsc\|film` | Loudness Normalizer |
 | `clean-voice` | Remove background noise from speech | `--method neural\|fft` | Voice Isolation |

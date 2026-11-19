@@ -67,3 +67,57 @@ def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
     ui.wait_for(lambda: q.get_task(tid).status == "cancelled", 15)
     time.sleep(0.2)
     assert ff.active_count() == 0
+
+
+@pytest.mark.gui
+def test_every_tool_opens(ui):
+    """Each tool in the sidebar builds without errors - in any order, after other tools
+    (shared widgets cache things between tools, e.g. the GPU encoder probe)."""
+    from tabs.registry import PINNED, TOOLS
+    names = [n for items in TOOLS.values() for n, _c in items] + ["⚡ " + PINNED[0], "Start", "Home", "Settings"]
+    failed = []
+    for name in names:
+        try:
+            ui.open(name)
+        except Exception as exc:                       # PlaceholderTab -> RuntimeError
+            failed.append(f"{name}: {exc}")
+        ui.pump(0.05)
+    assert not failed, failed
+    errors = list(ui.callback_errors)
+    ui.callback_errors.clear()
+    assert not errors, errors
+
+
+@pytest.mark.gui
+def test_preview_serves_a_reload_that_arrives_mid_grab(ui, monkeypatch):
+    """Loading a second file while the first frame is still being grabbed used to
+    leave the preview on "Loading preview..." for good."""
+    import tkinter as tk
+    from core import ffmpeg as ff
+    from tabs.widgets import FramePreview
+    tiny = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+            b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\xc9\xfe\x92\xef\x00\x00\x00\x00IEND"
+            b"\xaeB`\x82")
+    grabbed = []
+
+    def slow_grab(path, at, **kw):
+        time.sleep(0.4)
+        grabbed.append(path)
+        return tiny
+
+    monkeypatch.setattr(ff, "grab_frame_png", slow_grab)
+    top = tk.Toplevel(ui.app)
+    try:
+        view = FramePreview(top, 64, 36)
+        view.pack()
+        view.load("first.mp4", duration=10.0)
+        ui.pump(0.1)                                   # the first grab is now running
+        view.load("second.mp4", duration=10.0)
+        deadline = time.time() + 5
+        while time.time() < deadline and grabbed[-1:] != ["second.mp4"]:
+            ui.pump(0.1)
+        ui.pump(0.2)
+        assert grabbed[-1:] == ["second.mp4"]
+        assert view._photo is not None and view.path == "second.mp4"
+    finally:
+        top.destroy()

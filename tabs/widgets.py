@@ -117,8 +117,7 @@ class FramePreview(tk.Frame):
             if self._busy:
                 return
             self._busy = True
-        threading.Thread(target=self._worker, args=(self._gen,), daemon=True,
-                         name="FramePreview").start()
+        threading.Thread(target=self._worker, daemon=True, name="FramePreview").start()
 
     def clear(self) -> None:
         self.load(None)
@@ -151,16 +150,20 @@ class FramePreview(tk.Frame):
         if self._time_lbl is not None:
             self._time_lbl.config(text="")
 
-    def _worker(self, gen: int) -> None:
+    def _worker(self) -> None:
+        # Serves the newest request until none is left.  The request is read
+        # together with the current file/filter generation: a reload while a
+        # frame is being grabbed must be served too, never dropped (the view
+        # would otherwise stay on "Loading preview..." for good).
         while True:
             with self._lock:
                 at = self._wanted
                 self._wanted = None
-                if at is None or gen != self._gen:
+                if at is None:
                     self._busy = False
                     return
-            png = ff.grab_frame_png(self._path or "", at, width=self._pw, height=self._ph,
-                                    vf=self._vf, keep_time=self._keep_time)
+                gen, path, vf, keep = self._gen, self._path, self._vf, self._keep_time
+            png = ff.grab_frame_png(path or "", at, width=self._pw, height=self._ph, vf=vf, keep_time=keep)
             self._deliver(gen, at, png)
 
     def _deliver(self, gen: int, at: float, png: Optional[bytes]) -> None:
@@ -411,7 +414,7 @@ class EncoderPanel(tk.Frame):
         self._hw_box.config(values=[v for _, v in self._hw_choices])
         from core import ui
         ui.run_in_thread(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
-        self._changed()
+        self._changed(notify=False)        # the owner is still being built: don't call back into it yet
 
     def _hw_detected(self, kinds) -> None:
         if not self.winfo_exists():
@@ -460,11 +463,11 @@ class EncoderPanel(tk.Frame):
         return encoders.video(self.codec, self.quality, speed=self.speed, hw=hw,
                               ten_bit=self.ten_bit, container=container, **kwargs)
 
-    def _changed(self) -> None:
+    def _changed(self, notify: bool = True) -> None:
         try:
             ve = self.video_encode()
             self._status.config(text=_tr("encoder.using", "Will encode with") + f": {ve.label}")
         except Exception:
             pass
-        if self._on_change:
+        if notify and self._on_change:
             self._on_change()

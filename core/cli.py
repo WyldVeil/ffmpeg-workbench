@@ -554,21 +554,35 @@ def op_framerate(ctx):
     return result(out)
 
 
-@operation("hdr-to-sdr", "Convert HDR video (HDR10/HLG) to normal SDR for phones/TVs/web", "Convert")
-@options(lambda p: (_in(p, 1), p.add_argument("--method", default="hable", choices=["hable", "mobius", "reinhard",
-                                                                                   "clip"]),
+@operation("hdr-to-sdr", "Convert HDR video (HDR10, HDR10+, HLG, Dolby Vision) to normal SDR for phones/TVs/web",
+           "Convert")
+@options(lambda p: (_in(p, 1), p.add_argument("--curve", default="bt2390",
+                                              choices=["bt2390", "spline", "bt2446a", "hable", "mobius", "reinhard",
+                                                       "clip"]),
                     p.add_argument("--assume", choices=["pq", "hlg"],
                                    help="treat an untagged file as HDR10 (pq) or HLG"), _video_opts(p)))
 def op_hdr_to_sdr(ctx):
     from core import filters as fl
+    from core import hdr
+    from tabs.transcoder.hdr import subtitle_args
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
-    if not info.video.is_hdr and not ctx.args.assume:
+    h = hdr.inspect(info, src)
+    if not h.is_hdr and not ctx.args.assume:
         raise CliError("This video isn't tagged as HDR, so there is nothing to convert. If you know it is HDR "
                        "(the tags were lost), add --assume pq (HDR10) or --assume hlg.")
+    gpu = ctx.args.gpu != "off" and fl.vulkan_ok()
+    if h.needs_gpu and not gpu:
+        ctx.notes.append("Dolby Vision without an HDR10 layer converted on the CPU: colours may be off.")
     out = output_path(ctx, [src], "sdr")
-    render_chain(ctx, src, info, out, fl.hdr_to_sdr_chain(method=ctx.args.method, assume=ctx.args.assume or ""))
-    return result(out)
+    ve = venc(ctx, container_of(out))
+    ten = bool(ve.pix_fmt) and ve.pix_fmt.endswith(("10le", "p010le", "p010"))
+    chain = hdr.sdr_chain(gpu=gpu, curve=ctx.args.curve, out_fmt="yuv420p10le" if ten else "yuv420p",
+                          assume=ctx.args.assume or "")
+    render_chain(ctx, src, info, out, chain, pre=["-init_hw_device", "vulkan"] if gpu else None,
+                 extra=subtitle_args(info, container_of(out)))
+    return result(out, source=h.label() if h.is_hdr else f"assumed {ctx.args.assume}",
+                  engine="GPU" if gpu else "CPU", notes=ctx.notes)
 
 
 @operation("extract-audio", "Save the sound as mp3 / m4a / wav / flac / opus (or --copy as is)", "Audio")

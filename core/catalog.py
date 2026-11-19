@@ -133,6 +133,9 @@ TOOLS: dict = {
                                     "large file"),
     "Codec Cruncher": ToolInfo("⚙", "Re-encode with full control - H.264, HEVC, AV1, ProRes, HDR.",
                                "codec encode reencode h264 hevc h265 av1 prores hdr sdr quality bitrate"),
+    "HDR to SDR": ToolInfo("🌗", "Make HDR video from phones and cameras look right on normal screens.",
+                           "hdr sdr washed out grey gray faded dull iphone dolby vision hlg hdr10 tone map "
+                           "colours look wrong"),
     "Format Converter": ToolInfo("🔄", "Convert to MP4, MKV, MOV, WebM, MP3... copying what fits.",
                                  "convert format mp4 mkv mov webm avi container change"),
     "Resolution Scaler": ToolInfo("📐", "Upscale or downscale to any resolution.",
@@ -214,8 +217,8 @@ GOALS = (
          ("The Shortifier", "Smart Reframe", "Pro GIF Maker", "Thumbnail Maker", "Chapter Markers",
           "Auto-Subtitles", "Universal Downsizer")),
     Goal("convert", "🔄", "Convert to another format", "MP4, MKV, MOV, WebM, MP3, GIF...",
-         ("Format Converter", "Audio Converter", "Codec Cruncher", "Audio Extractor", "WebM Maker",
-          "Pro GIF Maker")),
+         ("Format Converter", "Audio Converter", "Codec Cruncher", "HDR to SDR", "Audio Extractor",
+          "WebM Maker", "Pro GIF Maker")),
     Goal("text", "💬", "Subtitles, titles & text", "Captions from speech, titles, watermarks",
          ("Auto-Subtitles", "Hard-Subber", "Animated Titles", "Intro/Outro Maker", "Watermarker",
           "Image Watermark", "Karaoke Generator")),
@@ -228,9 +231,9 @@ GOALS = (
     Goal("look", "🎨", "Colour & look", "Brighter, warmer, cinematic, matching",
          ("Basic Color Corrector", "LUT Applicator", "Colour Match", "Special Effects", "Green Screen Keyer",
           "Video Scopes")),
-    Goal("repair", "🩹", "Repair a video", "Shaky, noisy, sideways, soft, interlaced, black bars",
-         ("Deshaker", "Denoise", "Rotate & Flip", "Sharpen", "Deinterlace", "Auto-Cropper", "Manual Crop",
-          "Framerate Interpolator", "Resolution Scaler")),
+    Goal("repair", "🩹", "Repair a video", "Shaky, noisy, sideways, washed out, interlaced, black bars",
+         ("Deshaker", "Denoise", "Rotate & Flip", "HDR to SDR", "Sharpen", "Deinterlace", "Auto-Cropper",
+          "Manual Crop", "Framerate Interpolator", "Resolution Scaler")),
     Goal("motion", "✨", "Effects, speed & motion", "Slow motion, zooms, reverse, freeze, loops",
          ("Speed Ramper", "Framerate Interpolator", "Animated Zoom", "Video Reverser", "Freeze Frame",
           "Clip Looper", "Special Effects", "Transition Studio")),
@@ -382,7 +385,7 @@ def suggest(info, limit: int = 8) -> list:
     if v is not None:
         w, h = v.display_size
         if v.is_hdr:
-            add("Codec Cruncher", "It's HDR - convert it to SDR so the colours look right on normal screens")
+            add("HDR to SDR", "It's HDR - convert it so it doesn't look washed out on normal screens")
         if info.size > 25_000_000:
             add("Universal Downsizer", f"It's {_size(info.size)} - shrink it to fit Discord, email or WhatsApp")
         if (v.field_order or "") in ("tt", "bb", "tb", "bt"):

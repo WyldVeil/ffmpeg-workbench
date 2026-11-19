@@ -929,8 +929,9 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
         w = width or -2
         h = height or -2
         vf.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2")
+    gpu = any("libplacebo" in f or "_vulkan" in f for f in vf)      # GPU filters need a Vulkan device
     cmd = [ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
-           *(["-copyts"] if keep_time else []),
+           *(["-copyts"] if keep_time else []), *(["-init_hw_device", "vulkan"] if gpu else []),
            "-ss", ts(max(0.0, at)), "-i", path, "-frames:v", "1", "-an", "-sn", "-dn"]
     if vf:
         cmd += ["-vf", ",".join(vf)]

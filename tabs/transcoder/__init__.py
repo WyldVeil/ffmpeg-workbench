@@ -10,6 +10,7 @@ _EXPORTS = {
     "UniversalDownsizerTab": "tabs.transcoder.downsizer",
     "ProxyGenTab": "tabs.transcoder.proxy",
     "CodecCruncherTab": "tabs.transcoder.codec",
+    "HdrToSdrTab": "tabs.transcoder.hdr",
     "FormatConverterTab": "tabs.transcoder.converter",
     "ResolutionScalerTab": "tabs.transcoder.scaler",
     "FPSInterpolatorTab": "tabs.transcoder.scaler",
