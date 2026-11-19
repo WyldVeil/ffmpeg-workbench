@@ -103,6 +103,13 @@ class HomeTab(BaseTab):
             font=(UI_FONT, 9),
             bg=CLR["panel"], fg=CLR["fgdim"], anchor="w",
         ).pack(side="top", anchor="w", pady=(2, 0))
+        back = tk.Label(
+            inner, text="🧭  Not sure which tool? Start: What do you want to do?  ›",
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["panel"], fg=CLR["accent"], anchor="w", cursor="hand2",
+        )
+        back.pack(side="top", anchor="w", pady=(8, 0))
+        back.bind("<Button-1>", lambda _e: self._navigate and self._navigate("Start"))
         tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
 
         # Scrollable content

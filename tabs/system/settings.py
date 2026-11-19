@@ -85,6 +85,15 @@ class SettingsTab(BaseTab):
             variable=self._auto_open,
         ).grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=4)
 
+        # Startup page
+        self._start_choices = {"start": "Start - What do you want to do?", "home": "Home - all tools",
+                               "last": "The last tool I used"}
+        tk.Label(lf, text="Start the app on:", width=24, anchor="e").grid(row=len(rows) + 2, column=0, pady=8)
+        self._start_var = tk.StringVar(value=self._start_choices.get(self.settings.get("start_page", "start"),
+                                                                      self._start_choices["start"]))
+        ttk.Combobox(lf, textvariable=self._start_var, values=list(self._start_choices.values()),
+                     state="readonly", width=30).grid(row=len(rows) + 2, column=1, sticky="w", padx=10)
+
         # Save button
         btn_f = tk.Frame(self)
         btn_f.pack(pady=16)
@@ -109,6 +118,8 @@ class SettingsTab(BaseTab):
         changes = {key: var.get() for key, var in self._vars.items()}
         changes["default_output_folder"] = self._out_var.get()
         changes["auto_open_output"] = self._auto_open.get()
+        changes["start_page"] = next((k for k, v in self._start_choices.items() if v == self._start_var.get()),
+                                     "start")
         self.settings.update(changes)
         if update(changes):
             self._status.config(text=f"✅  {t('settings.saved_confirmation')}", fg=CLR["green"])

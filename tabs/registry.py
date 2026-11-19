@@ -46,6 +46,7 @@ PINNED = ("All-in-One Builder", _lazy("tabs.all_in_one", "AllInOneTab"))
 HIDDEN = {
     "Settings": _lazy("tabs.system.settings", "SettingsTab"),
     "Home":     _lazy("tabs.system.home", "HomeTab"),
+    "Start":    _lazy("tabs.system.start", "StartTab"),
 }
 
 # ── Main tool registry (sidebar category → [(display_name, TabClass), ...]) ──

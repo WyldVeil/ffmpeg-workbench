@@ -57,6 +57,8 @@ _DEFAULTS: dict = {
     "language": "",
     "favourite_tabs": [],
     "recent_files": [],
+    "recent_tools": [],
+    "start_page": "start",               # start | home | last
 }
 
 _lock = threading.RLock()

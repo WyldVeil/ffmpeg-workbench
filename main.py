@@ -162,6 +162,17 @@ class App(tk.Tk):
         self._content_top_bar.pack(side="top", fill="x")
         self._content_top_bar.pack_propagate(False)
 
+        self._start_btn = tk.Button(
+            self._content_top_bar, text="🧭  Start",
+            font=(UI_FONT, 9, "bold"),
+            bg=skin["panel"], fg=skin["fg"],
+            activebackground=skin.get("sb_hover", "#2A2A2A"),
+            activeforeground="#FFFFFF",
+            relief="flat", cursor="hand2",
+            bd=0, padx=14, pady=4,
+            command=lambda: self.show_page("Start"))
+        self._start_btn.pack(side="left", padx=(10, 0), pady=4)
+
         self._home_btn = tk.Button(
             self._content_top_bar, text="🏠  Home",
             font=(UI_FONT, 9, "bold"),
@@ -171,7 +182,7 @@ class App(tk.Tk):
             relief="flat", cursor="hand2",
             bd=0, padx=14, pady=4,
             command=lambda: self.show_page("Home"))
-        self._home_btn.pack(side="left", padx=10, pady=4)
+        self._home_btn.pack(side="left", padx=4, pady=4)
 
         tk.Frame(self.content_container,
                  bg=skin.get("border", "#2C2C2C"),
@@ -231,7 +242,7 @@ class App(tk.Tk):
         _qmgr.set_tk_root(self)
         _qmgr.register_update_callback(self._update_queue_status)
 
-        self.show_page("Home")
+        self.show_page(self._first_page())
 
         # ── Drag-and-drop file loading ────────────────────────────────────────
         self._init_drag_drop()
@@ -715,7 +726,9 @@ class App(tk.Tk):
 
         m_file = _mksub()
         mb.add_cascade(label="File", menu=m_file)
-        m_file.add_command(label="Home",
+        m_file.add_command(label="Start - what do you want to do?",
+                           command=lambda: self.show_page("Start"))
+        m_file.add_command(label="Home - all tools",
                            command=lambda: self.show_page("Home"))
         m_file.add_separator()
         m_file.add_command(label="Open video file…",
@@ -1456,6 +1469,13 @@ class App(tk.Tk):
         self.pages[page_name].pack(fill="both", expand=True)
         self.current_page = page_name
         _app_state.set("active_tab", page_name)
+        self._remember_tool(page_name)
+        if hasattr(self.pages[page_name], "on_show"):
+            try:
+                self.pages[page_name].on_show()
+            except Exception:
+                import logging
+                logging.getLogger("crossfader.shell").exception("on_show failed in %s", page_name)
 
         if page_name in self._btn_refs:
             self._btn_refs[page_name].config(
@@ -1469,6 +1489,26 @@ class App(tk.Tk):
         except Exception: pass
 
         self._scroll_to_active(page_name)
+
+    def _first_page(self) -> str:
+        """The page the app opens on: Settings > "Start the app on"."""
+        from core import settings as _st
+        choice = _st.get("start_page", "start")
+        if choice == "home":
+            return "Home"
+        if choice == "last":
+            for name in _st.get("recent_tools", []) or []:
+                if name in self._tab_classes:
+                    return name
+        return "Start"
+
+    def _remember_tool(self, page_name: str) -> None:
+        """Recently used tools, newest first (shown on the Start page)."""
+        if page_name in HIDDEN or page_name not in self._tab_classes:
+            return
+        from core import settings as _st
+        recent = [n for n in (_st.get("recent_tools", []) or []) if n != page_name]
+        _st.set("recent_tools", ([page_name] + recent)[:8])
 
     def _scroll_to_active(self, page_name):
         try:
