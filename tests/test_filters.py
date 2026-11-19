@@ -31,7 +31,8 @@ def test_write_ffmetadata(tmp_path):
     p = fl.write_ffmetadata(str(tmp_path / "m.txt"),
                             chapters=[(0, 1.5, "Intro; part=1 #a"), (1.5, 3, "B\\C")],
                             tags={"title": "T=1"})
-    text = open(p, encoding="utf-8").read()
+    with open(p, encoding="utf-8") as fh:
+        text = fh.read()
     assert text.startswith(";FFMETADATA1\n")
     assert "title=T\\=1" in text
     assert "title=Intro\\; part\\=1 \\#a" in text and "START=1500" in text
