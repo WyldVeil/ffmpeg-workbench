@@ -75,6 +75,25 @@
           "sha256": "808295345d43c9c428f3fa87d29fbf97a9926f356df95559ff2689f3bd4072d7"
         }
       }
+    },
+    "whisper": {
+      "version": "b5454",
+      "license": "MIT",
+      "license_urls": [
+        "https://raw.githubusercontent.com/ggml-org/whisper.cpp/b5454/LICENSE"
+      ],
+      "assets": {
+        "windows-x64": {
+          "name": "whisper-bin-x64.zip",
+          "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip",
+          "sha256": "6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb"
+        },
+        "linux-x64": {
+          "name": "whisper-bin-ubuntu-x64.tar.gz",
+          "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz",
+          "sha256": "a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c"
+        }
+      }
     }
   }
 }

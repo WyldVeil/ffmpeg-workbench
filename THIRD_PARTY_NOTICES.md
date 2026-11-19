@@ -16,6 +16,8 @@ The exact versions and download checksums for each release are recorded in
 | yt-dlp (stand-alone executable) | 2026.10.26 | Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work (see `THIRD_PARTY_LICENSES.txt`) | https://github.com/yt-dlp/yt-dlp |
 | Deno (JavaScript runtime that yt-dlp needs for YouTube) | 2.9.8 | MIT | https://deno.com |
 | FluidSynth (Windows build only; Linux uses the system package) | 2.6.2 | LGPL-2.1-or-later; bundled SDL3 (zlib) and libsndfile (LGPL-2.1-or-later) | https://www.fluidsynth.org |
+| whisper.cpp (`whisper-cli` and its ggml libraries, speech-to-text) | build b5454 (1.9.5) | MIT | https://github.com/ggml-org/whisper.cpp |
+| GCC OpenMP runtime `libgomp.so.1` (Linux builds, used by whisper.cpp) | from the build system | GPL-3.0 with the GCC Runtime Library Exception | https://gcc.gnu.org |
 
 The editor starts these as separate processes. It does not link against
 them.
@@ -58,6 +60,11 @@ Each font's licence text and copyright notice are in
 `assets/fonts/licenses/`.
 
 ## Optional components downloaded on demand
+
+* **Whisper speech-recognition models** (Auto-Subtitles): ggml conversions of
+  OpenAI's Whisper models (MIT licence), downloaded from
+  https://huggingface.co/ggerganov/whisper.cpp and checked against pinned
+  SHA-256 sums.
 
 Some tools offer to download extra components the first time you use them,
 such as text-to-speech voices or speech-recognition and audio-separation

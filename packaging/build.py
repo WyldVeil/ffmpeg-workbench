@@ -69,6 +69,8 @@ def freeze() -> str:
          "--distpath", DIST, "--workpath", os.path.join(ROOT, "build", "pyinstaller"),
          os.path.join(ROOT, "packaging", "app.spec")])
     out = os.path.join(DIST, NAME)
+    if not IS_WIN:
+        bundle_libgomp(os.path.join(out, "_internal", "bin", PLAT, "whisper"))
     # PyInstaller copies data files without the executable bit on POSIX.
     if not IS_WIN:
         for dirpath, _dirs, files in os.walk(os.path.join(out, "_internal", "bin")):
@@ -77,6 +79,31 @@ def freeze() -> str:
                 if not f.endswith((".txt", ".json", ".md", ".so")) and ".so." not in f:
                     os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return out
+
+
+def bundle_libgomp(whisper_dir: str) -> None:
+    """whisper.cpp's CPU backends need GCC's OpenMP runtime (libgomp.so.1).
+    Most desktops have it, but ship the build host's copy beside them (their
+    RUNPATH is $ORIGIN) so speech-to-text works everywhere.  libgomp is
+    covered by the GCC Runtime Library Exception."""
+    if not os.path.isdir(whisper_dir):
+        return
+    found = None
+    try:
+        out = subprocess.run(["ldconfig", "-p"], capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            if "libgomp.so.1 " in line and "x86-64" in line:
+                found = line.split("=>")[-1].strip()
+                break
+    except OSError:
+        pass
+    for cand in (found, "/usr/lib/x86_64-linux-gnu/libgomp.so.1", "/usr/lib/libgomp.so.1",
+                 "/usr/lib64/libgomp.so.1"):
+        if cand and os.path.isfile(cand):
+            shutil.copy2(os.path.realpath(cand), os.path.join(whisper_dir, "libgomp.so.1"))
+            print("bundled", cand)
+            return
+    print("warning: libgomp.so.1 not found - speech-to-text will rely on the system copy")
 
 
 def smoke_test(app_dir: str) -> None:

@@ -692,6 +692,14 @@ class BaseTab(ttk.Frame):
             loaded = True
         return loaded
 
+    def goto_tool(self, page_name):
+        """Switch the main window to tool *page_name* and return it (or None)."""
+        app = self.winfo_toplevel()
+        if hasattr(app, "show_page"):
+            app.show_page(page_name)
+            return getattr(app, "pages", {}).get(page_name)
+        return None
+
     # ── Queue bridge ──────────────────────────────────────────────────────────
 
     def enqueue_render(self, task_name, output_path="", *, cmd=None, cmds=None,

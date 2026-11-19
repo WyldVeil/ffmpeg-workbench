@@ -27,7 +27,6 @@ import platform
 import shutil
 import subprocess
 import sys
-import zipfile
 from typing import Optional
 
 # ── Platform constants ────────────────────────────────────────────────────────
@@ -89,12 +88,13 @@ def bundled_bin_dirs() -> list:
     # Tools installed or updated by the app itself (always user-writable).
     user_bin = user_tools_dir()
     if user_bin:
-        dirs += [os.path.join(user_bin, "ffmpeg", "bin"), user_bin]
+        dirs += [os.path.join(user_bin, "ffmpeg", "bin"), user_bin, os.path.join(user_bin, "whisper")]
     for root in roots:
         tag_dir = os.path.join(root, "bin", platform_tag())
         # FFmpeg's own tree (shared build: executables + DLLs, or bin/ + lib/).
         dirs.append(os.path.join(tag_dir, "ffmpeg", "bin"))
         dirs.append(tag_dir)
+        dirs.append(os.path.join(tag_dir, "whisper"))        # whisper.cpp speech-to-text
         dirs.append(os.path.join(root, "bin"))
     return dirs
 

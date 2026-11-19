@@ -12,6 +12,7 @@ Layout produced::
 
     bin/windows-x64/ffmpeg.exe ffprobe.exe ffplay.exe *.dll yt-dlp.exe deno.exe
     bin/windows-x64/fluidsynth/fluidsynth.exe *.dll
+    bin/<platform>/whisper/whisper-cli[.exe] + whisper/ggml libraries (speech-to-text)
     bin/linux-x64/ffmpeg ffprobe ffplay yt-dlp deno
     bin/<platform>/licenses/<tool>/...
     bin/<platform>/VERSIONS.json
@@ -266,6 +267,29 @@ def resolve_fluidsynth(cache: str) -> dict:
     }
 
 
+def resolve_whisper() -> dict:
+    """whisper.cpp CLI builds.  Release binaries are attached to the numbered
+    'bNNNN' build releases, so take the newest release that has both."""
+    want = {"windows-x64": "whisper-bin-x64.zip", "linux-x64": "whisper-bin-ubuntu-x64.tar.gz"}
+    for rel in get_json("https://api.github.com/repos/ggml-org/whisper.cpp/releases?per_page=15"):
+        assets = {a["name"]: a for a in rel.get("assets", [])}
+        if all(name in assets for name in want.values()):
+            tag = rel["tag_name"]
+            out = {}
+            for plat, name in want.items():
+                a = assets[name]
+                digest = (a.get("digest") or "").split(":", 1)[-1]
+                out[plat] = {"name": name, "url": a["browser_download_url"],
+                             "sha256": digest if re.fullmatch(r"[0-9a-f]{64}", digest) else None}
+            return {
+                "version": tag,
+                "license": "MIT",
+                "license_urls": [f"https://raw.githubusercontent.com/ggml-org/whisper.cpp/{tag}/LICENSE"],
+                "assets": out,
+            }
+    raise SystemExit("no whisper.cpp release with Windows and Linux binaries found")
+
+
 def refresh_lock(cache: str) -> dict:
     print("Resolving latest versions …")
     lock = {
@@ -275,6 +299,7 @@ def refresh_lock(cache: str) -> dict:
             "yt-dlp": resolve_ytdlp(),
             "deno": resolve_deno(),
             "fluidsynth": resolve_fluidsynth(cache),
+            "whisper": resolve_whisper(),
         },
     }
     with open(LOCK, "w", encoding="utf-8", newline="\n") as fh:
@@ -387,6 +412,35 @@ def install_fluidsynth(archive: str, out: str) -> None:
             _write(os.path.join(out, "licenses", "fluidsynth", base), read())
 
 
+_WHISPER_KEEP = re.compile(r"^(whisper-cli(\.exe)?|(lib)?whisper[\w.-]*\.(dll|so[\d.]*)|"
+                           r"(lib)?ggml[\w.-]*\.(dll|so[\d.]*)|LICENSE)$")
+
+
+def install_whisper(archive: str, out: str) -> list:
+    """Extract whisper-cli and the ggml/whisper libraries to OUT/whisper.
+
+    Linux libraries are written under their SONAME (libwhisper.so.1 …) since
+    the archive's version symlinks are not extracted."""
+    dest = os.path.join(out, "whisper")
+    if os.path.isdir(dest):
+        shutil.rmtree(dest)
+    written = []
+    for name, read in _members(archive):
+        base = os.path.basename(name)
+        if not _WHISPER_KEEP.match(base):
+            continue
+        if base == "LICENSE":
+            _write(os.path.join(out, "licenses", "whisper", "LICENSE"), read())
+            continue
+        m = _SONAME_RE.match(base)
+        target = m.group(1) if m else base
+        _write(os.path.join(dest, target), read(), executable=True)
+        written.append(target)
+    if not any(w.startswith("whisper-cli") for w in written):
+        raise SystemExit(f"whisper-cli not found in {archive}")
+    return written
+
+
 def fetch_licence_texts(tool: str, urls: list, out: str) -> None:
     for url in urls:
         try:
@@ -452,6 +506,15 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
         versions["fluidsynth"] = {"version": fs["version"], "url": a["url"], "sha256": a["sha256"],
                                   "license": fs["license"]}
 
+    wh = tools.get("whisper", {})
+    if plat in wh.get("assets", {}):
+        a = wh["assets"][plat]
+        path = download(a["url"], os.path.join(cache, f"{wh['version']}-{a['name']}"), a["sha256"])
+        install_whisper(path, out)
+        fetch_licence_texts("whisper", wh["license_urls"], out)
+        versions["whisper.cpp"] = {"version": wh["version"], "url": a["url"], "sha256": a["sha256"],
+                                   "license": wh["license"]}
+
     with open(os.path.join(out, "VERSIONS.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump({"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2)
         fh.write("\n")
@@ -460,8 +523,12 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
     host = ("windows-x64" if os.name == "nt" else "linux-x64" if sys.platform.startswith("linux") else "")
     if host == plat:
         for tool, args in (("ffmpeg", ["-version"]), ("ffprobe", ["-version"]),
-                           ("yt-dlp", ["--version"]), ("deno", ["--version"])):
-            folder = os.path.join(out, "ffmpeg", "bin") if tool.startswith("ff") else out
+                           ("yt-dlp", ["--version"]), ("deno", ["--version"]),
+                           ("whisper-cli", ["--help"])):
+            if tool == "whisper-cli" and not os.path.isdir(os.path.join(out, "whisper")):
+                continue
+            folder = (os.path.join(out, "ffmpeg", "bin") if tool.startswith("ff") else
+                      os.path.join(out, "whisper") if tool == "whisper-cli" else out)
             r = subprocess.run([os.path.join(folder, tool + exe), *args], capture_output=True, text=True, timeout=60)
             first = (r.stdout or r.stderr).splitlines()[:1]
             print(f"  ok      {tool:<8} {first[0] if first else '?'}" if r.returncode == 0
