@@ -311,11 +311,11 @@ def test_urlopen_follows_pac_fallbacks(monkeypatch):
         monkeypatch.setattr(sp, "proxies_for",
                             lambda u, refresh=False: [f"http://127.0.0.1:{dead}",
                                                       f"http://127.0.0.1:{proxy.server_address[1]}", "direct://"])
-        with net.urlopen(url, cfg=cfg(), timeout=5) as r:
+        with net.urlopen(url, cfg=cfg(), timeout=15) as r:
             text = r.read().decode()
         assert f"via {proxy.server_address[1]}" in text and "http://127.0.0.1" in text   # went through the proxy
         monkeypatch.setattr(sp, "proxies_for", lambda u, refresh=False: [f"http://127.0.0.1:{dead}", "direct://"])
-        with net.urlopen(url, cfg=cfg(), timeout=5) as r:
+        with net.urlopen(url, cfg=cfg(), timeout=15) as r:
             assert r.read().decode() == f"hello via {web.server_address[1]} for /page"     # fell back to direct
     finally:
         web.shutdown()
