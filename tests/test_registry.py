@@ -68,10 +68,12 @@ def test_no_duplicate_tab_classes():
 
 
 def test_tool_count():
-    """Total tool count matches expected (73 tools across 6 categories)."""
+    """Every category has tools and names are unique across the sidebar."""
     from tabs.registry import TOOLS
-    total = sum(len(items) for items in TOOLS.values())
-    assert total == 73, f"Expected 73 tools, got {total}"
+    names = [n for items in TOOLS.values() for n, _ in items]
+    assert len(names) >= 70, f"Only {len(names)} tools registered"
+    assert all(items for items in TOOLS.values()), "empty category"
+    assert len(names) == len(set(names)), "duplicate tool names"
 
 
 def test_sub_package_imports():

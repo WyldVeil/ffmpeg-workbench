@@ -27,11 +27,18 @@ def test_settings_roundtrip(tmp_path, monkeypatch):
     """load_settings returns defaults when no file exists; save_settings is idempotent."""
     from core import settings as s
     fake_path = str(tmp_path / "settings.json")
-    monkeypatch.setattr(s, "_SETTINGS_PATH", fake_path)
+    monkeypatch.setattr(s, "SETTINGS_FILE", fake_path)
 
     data = s.load_settings()
-    assert isinstance(data, dict)
+    assert isinstance(data, dict) and data["theme"] == "Classic"
 
     s.save_settings(data)
-    reloaded = s.load_settings()
-    assert reloaded == data
+    assert s.load_settings() == data
+    assert s.update({"theme": "Mystical", "x.y": 3})
+    again = s.load_settings()
+    assert again["theme"] == "Mystical" and again["x.y"] == 3
+    assert s.get("x.y") == 3 and s.get("missing", "fb") == "fb"
+    # a corrupt file falls back to the .bak copy
+    with open(fake_path, "w", encoding="utf-8") as fh:
+        fh.write("{ not json")
+    assert s.load_settings()["theme"] in ("Classic", "Mystical")
