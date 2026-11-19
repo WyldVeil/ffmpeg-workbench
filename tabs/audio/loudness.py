@@ -1,244 +1,150 @@
 """
-tab_loudnessnorm.py  ─  Loudness Normalizer
-Two-pass EBU R128 / ITU-R BS.1770 loudness normalization.
-Also offers simple peak normalization mode.
+tabs/audio/loudness.py  -  Loudness Normalizer
+
+Measure and normalise loudness to a standard (EBU R128 / streaming
+targets) with a proper two-pass loudnorm: one exact gain for the whole
+file, true-peak limited, back at the source sample rate.  Works on audio
+files and videos (picture and other tracks kept).  "Analyse" just reports
+the current loudness.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import re
-import os
-import json
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from tkinter import messagebox, ttk
+
+from core import ffmpeg as ff
+from core import loudness as ln
 from core.i18n import t
-
-
-# Standard broadcast targets
-PRESETS = {
-    t("loudness.streaming_spotify_apple_music_14_lufs"): (-14.0, -1.0, 11.0),
-    t("loudness.youtube_podcast_16_lufs"):                 (-16.0, -1.5, 11.0),
-    t("loudness.broadcast_tv_ebu_r128_23_lufs"):            (-23.0, -1.0,  7.0),
-    t("loudness.broadcast_tv_atsc_a_85_us_24_lufs"):        (-24.0, -2.0,  7.0),
-    t("loudness.film_27_lufs"):                               (-27.0, -2.0, 15.0),
-    "Custom":                                        None,
-}
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import FileRow, scroll_body
 
 
 class LoudnessNormTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
+        self.src_var = tk.StringVar()
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🔊  " + t("tab.loudness_normalizer"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("loudness.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
-
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=10)
-        tk.Label(sf, text=t("common.source_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
-
-        # Presets + targets
-        opts = tk.LabelFrame(self, text=t("loudness.loudness_target_section"), padx=15, pady=10)
-        opts.pack(fill="x", padx=20, pady=6)
-
-        r0 = tk.Frame(opts); r0.pack(fill="x", pady=4)
-        tk.Label(r0, text=t("common.preset"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.preset_var = tk.StringVar(value=list(PRESETS.keys())[1])
-        preset_cb = ttk.Combobox(r0, textvariable=self.preset_var,
-                                  values=list(PRESETS.keys()), state="readonly", width=48)
-        preset_cb.pack(side="left", padx=8)
-        preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
-
-        r1 = tk.Frame(opts); r1.pack(fill="x", pady=4)
-        tk.Label(r1, text=t("loudness.target_lufs_label")).pack(side="left")
-        self.lufs_var = tk.StringVar(value="-16.0")
-        tk.Entry(r1, textvariable=self.lufs_var, width=7, relief="flat").pack(side="left", padx=4)
-        tk.Label(r1, text=t("loudness.true_peak_label")).pack(side="left")
-        self.tp_var = tk.StringVar(value="-1.5")
-        tk.Entry(r1, textvariable=self.tp_var, width=7, relief="flat").pack(side="left", padx=4)
-        tk.Label(r1, text=t("loudness.lra_label")).pack(side="left")
-        self.lra_var = tk.StringVar(value="11.0")
-        tk.Entry(r1, textvariable=self.lra_var, width=7, relief="flat").pack(side="left", padx=4)
-
-        # Mode
-        r2 = tk.Frame(opts); r2.pack(fill="x", pady=4)
-        self.mode_var = tk.StringVar(value=t("loudness.ebu_r128_option"))
-        tk.Label(r2, text=t("loudness.algorithm_label")).pack(side="left")
-        for m in [t("loudness.ebu_r128_option"), t("loudness.simple_peak_option")]:
-            tk.Radiobutton(r2, text=m, variable=self.mode_var, value=m).pack(side="left", padx=8)
-
-        # Scan button
-        self.btn_scan = tk.Button(opts, text=t("loudness.analyse_button"),
-                                   bg="#333", fg=CLR["accent"],
-                                   font=(UI_FONT, 9, "bold"), command=self._scan)
-        self.btn_scan.pack(anchor="w", pady=5)
-
-        # Scan results panel
-        self.scan_frame = tk.LabelFrame(self, text=t("loudness.measured_section"), padx=12, pady=6)
-        self.scan_frame.pack(fill="x", padx=20, pady=4)
-        self.scan_lbl = tk.Label(self.scan_frame,
-                                  text=t("loudness.run_analysis_hint"),
-                                  fg=CLR["fgdim"], font=(MONO_FONT, 10))
-        self.scan_lbl.pack(anchor="w")
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self, text=t("loudness.normalize_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=7)
+        self.make_header(self, t("tab.loudness_normalizer"), t("loudness.subtitle"), icon="📢")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        opt = tk.LabelFrame(body, text="  Target  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.preset_var = tk.StringVar(value=ln.TARGETS["youtube"][0])
+        pb = ttk.Combobox(opt, textvariable=self.preset_var, values=[v[0] for v in ln.TARGETS.values()],
+                          state="readonly", width=56)
+        pb.grid(row=0, column=0, columnspan=6, sticky="w")
+        pb.bind("<<ComboboxSelected>>", lambda _e: self._preset())
+        self.i_var, self.tp_var, self.lra_var = (tk.StringVar(value="-16"), tk.StringVar(value="-1.5"),
+                                                 tk.StringVar(value="11"))
+        for col, (label, var) in enumerate((("Loudness (LUFS)", self.i_var), ("True peak (dBTP)", self.tp_var),
+                                            ("Range (LU)", self.lra_var))):
+            tk.Label(opt, text=label).grid(row=1, column=col * 2, sticky="w", pady=4)
+            tk.Entry(opt, textvariable=var, width=7).grid(row=1, column=col * 2 + 1, sticky="w", padx=(4, 12))
+        self.track_var = tk.StringVar()
+        self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
+        tk.Label(opt, text="Audio track:").grid(row=2, column=0, sticky="w")
+        self.track_box.grid(row=2, column=1, columnspan=5, sticky="w", pady=4)
+        self.report = tk.Label(body, text="", fg=CLR["accent"], font=(MONO_FONT, 10), justify="left")
+        self.report.pack(anchor="w", padx=24, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
+                               suggest=lambda: self.suggest_output(self.src_row.path, "normalised"))
+        self.out_row.pack(fill="x")
+        row = tk.Frame(body)
+        row.pack(pady=8)
+        self.btn_analyse = tk.Button(row, text="📏  ANALYSE", font=(UI_FONT, 11, "bold"), width=14,
+                                     command=self._analyse)
+        self.btn_analyse.pack(side="left", padx=6)
+        self.btn_render = tk.Button(row, text="📢  NORMALISE", font=(UI_FONT, 11, "bold"), bg=CLR["green"],
+                                    fg="white", width=18, command=self._render)
+        self.btn_render.pack(side="left", padx=6)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _apply_preset(self, *_):
-        p = PRESETS.get(self.preset_var.get())
-        if p:
-            self.lufs_var.set(str(p[0]))
-            self.tp_var.set(str(p[1]))
-            self.lra_var.set(str(p[2]))
+    def _preset(self):
+        key = next((k for k, v in ln.TARGETS.items() if v[0] == self.preset_var.get()), "youtube")
+        _l, i, tp, lra = ln.TARGETS[key]
+        self.i_var.set(f"{i:g}")
+        self.tp_var.set(f"{tp:g}")
+        self.lra_var.set(f"{lra:g}")
 
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.mp3 *.aac *.wav *.flac"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
+    def _source_changed(self, path):
+        info = ff.try_probe(path)
+        tracks = [f"Track {i + 1}: {a.codec}, {a.channels} ch, {a.sample_rate} Hz" + (f" [{a.language}]" if a.language else "")
+                  for i, a in enumerate(info.audio_streams)] if info else []
+        self.track_box.config(values=tracks or ["(no audio)"])
+        self.track_var.set(tracks[0] if tracks else "(no audio)")
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "normalised"))
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"), ("WAV", "*.wav")])
-        if p:
-            self.out_var.set(p)
+    def _targets(self):
+        return (common.number(self.i_var.get(), "Loudness", -70, -5), common.number(self.tp_var.get(), "True peak", -9, 0),
+                common.number(self.lra_var.get(), "Range", 1, 50))
 
-    def _scan(self):
-        if not self.file_path:
-            messagebox.showwarning(t("loudness.no_file_title"), t("loudness.no_file_message"))
+    def _stream(self):
+        values = list(self.track_box.cget("values"))
+        return values.index(self.track_var.get()) if self.track_var.get() in values else 0
+
+    def _analyse(self):
+        src = self.src_row.path
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
             return
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-i", self.file_path, "-af",
-               "loudnorm=I=-23:TP=-1:LRA=11:print_format=summary",
-               "-f", "null", "-"]
-        self.log(self.console, t("log.loudness.analysing_loudness"))
-        self.btn_scan.config(state="disabled", text=t("loudness.analysing"))
+        stream = self._stream()
+        self.btn_analyse.config(state="disabled", text="Measuring…")
 
-        def do_scan():
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                                    creationflags=CREATE_NO_WINDOW)
-            out = result.stderr
-            patterns = {
-                "Input Integrated": r"Input Integrated:\s+([-\d.]+)",
-                "Input True Peak":  r"Input True Peak:\s+([-\d.]+)",
-                "Input LRA":        r"Input LRA:\s+([-\d.]+)",
-                "Input Threshold":  r"Input Threshold:\s+([-\d.]+)",
-            }
-            lines = []
-            for label, pat in patterns.items():
-                m = re.search(pat, out)
-                val = m.group(1) if m else "N/A"
-                lines.append(f"{label}: {val} LUFS" if "LRA" not in label or m else f"{label}: {val}")
-            self.after(0, lambda: self.scan_lbl.config(text="  |  ".join(lines), fg=CLR["accent"]))
-            self.after(0, lambda: self.log(self.console, t("log.loudness.analysis_complete")))
-            self.after(0, lambda: self.btn_scan.config(state="normal", text=t("loudness.analyse_button")))
+        def done(m):
+            self.btn_analyse.config(state="normal", text="📏  ANALYSE")
+            self.report.config(text=f"Integrated {m.input_i:.1f} LUFS   ·   true peak {m.input_tp:.1f} dBTP   ·   "
+                                    f"range {m.input_lra:.1f} LU")
 
-        self.run_in_thread(do_scan)
+        def failed(exc):
+            self.btn_analyse.config(state="normal", text="📏  ANALYSE")
+            messagebox.showerror(t("common.error"), f"Measurement failed:\n{exc}", parent=self)
+
+        from core import ui
+        ui.run_in_thread(ln.measure, src, -16, -1.5, 11, stream=stream, on_done=done, on_error=failed,
+                         name="LoudnessMeasure")
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("loudness.no_file_title"), t("loudness.no_file_message"))
+        src = self.src_row.path
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        if not info.has_audio:
+            messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+            return
+        try:
+            i, tp, lra = self._targets()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "normalised")
         if not out:
             return
-        self.out_var.set(out)
-        ffmpeg = get_binary_path("ffmpeg.exe")
+        stream = self._stream()
+        sr = info.audio_streams[stream].sample_rate if info.audio_streams else 48000
+        dur = info.duration or None
+        result = {}
 
-        lufs = self.lufs_var.get()
-        tp   = self.tp_var.get()
-        lra  = self.lra_var.get()
+        def work(_p, _c, ctx):
+            ctx.log("Pass 1 of 2: measuring…")
+            m = ln.measure(src, i, tp, lra, stream=stream, ctx=ctx.span(0.0, 0.45))
+            result["before"] = m
+            ctx.log(f"Measured {m.input_i:.1f} LUFS, peak {m.input_tp:.1f} dBTP")
+            ctx.log("Pass 2 of 2: normalising…")
+            ctx.span(0.45, 1.0).run([ff.ffmpeg_path(), "-y", "-i", src, "-af", ln.normalise_filter(i, tp, lra, m, sr),
+                                     *common.audio_job_args(out, info, stream=stream), ctx.output()], duration=dur)
+            return 0
 
-        if self.mode_var.get() == t("loudness.simple_peak_option"):
-            af = f"loudnorm=I={lufs}:TP={tp}:LRA={lra}"
-            cmd = [ffmpeg, "-i", self.file_path, "-af", af,
-                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, f"Normalizing (simple) → {lufs} LUFS")
-            self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                            btn=self.btn_render, btn_label=t("loudness.normalize_button"))
-        else:
-            # True two-pass: Pass 1 measures current levels, Pass 2 applies correction
-            self.log(self.console, f"Two-pass normalizing → {lufs} LUFS")
-            self.btn_render.config(state="disabled", text=t("loudness.analysing_2"))
-            af_measure = (f"loudnorm=I={lufs}:TP={tp}:LRA={lra}"
-                          f":dual_mono=true:linear=true:print_format=json")
-            cmd_p1 = [ffmpeg, "-i", self.file_path, "-af", af_measure,
-                      "-f", "null", "-"]
-
-            def _do_twopass():
-                self.log(self.console, t("log.loudness.pass_1_measuring_input_loudness"))
-                r1 = subprocess.run(cmd_p1, capture_output=True, text=True,
-                                    creationflags=CREATE_NO_WINDOW)
-                # Extract measured values from stderr JSON block
-                measured = {}
-                try:
-                    # loudnorm prints JSON between { } in stderr
-                    m = re.search(r'\{[^}]+\}', r1.stderr, re.DOTALL)
-                    if m:
-                        measured = json.loads(m.group(0))
-                except Exception:
-                    pass
-
-                if measured:
-                    il  = measured.get("input_i",  lufs)
-                    tp2 = measured.get("input_tp", tp)
-                    lra2= measured.get("input_lra", lra)
-                    thr = measured.get("input_thresh", "-70.0")
-                    off = measured.get("target_offset", "0.0")
-                    self.after(0, lambda: self.log(self.console,
-                        f"  Measured: I={il} LUFS  TP={tp2} dBTP  LRA={lra2}"))
-                    af_p2 = (f"loudnorm=I={lufs}:TP={tp}:LRA={lra}"
-                             f":dual_mono=true:linear=true"
-                             f":measured_I={il}:measured_TP={tp2}"
-                             f":measured_LRA={lra2}:measured_thresh={thr}"
-                             f":offset={off}:print_format=summary")
-                else:
-                    # Fallback: single-pass if measurement failed
-                    self.after(0, lambda: self.log(self.console,
-                        t("log.loudness.measurement_parse_failed_applying_single_pass_norm")))
-                    af_p2 = f"loudnorm=I={lufs}:TP={tp}:LRA={lra}:dual_mono=true:linear=true"
-
-                self.after(0, lambda: self.log(self.console, t("log.loudness.pass_2_applying_normalization")))
-                cmd_p2 = [ffmpeg, "-i", self.file_path, "-af", af_p2,
-                          "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
-                          "-movflags", "+faststart", out, "-y"]
-                self.after(0, lambda: self.btn_render.config(
-                    state="normal", text=t("loudness.normalize_button")))
-                self.after(0, lambda: self.run_ffmpeg(
-                    cmd_p2, self.console,
-                    on_done=lambda rc: self.show_result(rc, out),
-                    btn=self.btn_render, btn_label=t("loudness.normalize_button")))
-
-            self.run_in_thread(_do_twopass)
+        common.queue_job(self, name="Loudness", out=out, work=work, btn=self.btn_render,
+                         btn_label="📢  NORMALISE", console=self.console, duration=dur, inputs=[src])

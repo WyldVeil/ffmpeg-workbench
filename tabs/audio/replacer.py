@@ -1,181 +1,127 @@
 """
-tab_audioreplacer.py  ─  Audio Replacer
-Replace or mix the audio track of a video with a new audio file.
-Supports offset, volume mixing, and fade in/out.
+tabs/audio/replacer.py  -  Audio Replacer
+
+Swap or mix a video's soundtrack with another audio file (music, a
+voice-over, a cleaned recording).  The video always keeps its full length:
+the new audio is offset (positive or negative), optionally looped and faded,
+and padded or trimmed to the picture.  Mixing keeps both at the levels you
+choose (no automatic halving) with a limiter against clipping.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import os
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration
+from tkinter import messagebox, ttk
+
+from core import encoders as enc
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import FileRow, scroll_body
+
+MODES = {"replace": "Replace the soundtrack", "mix": "Mix with the original sound",
+         "strip": "Remove all sound"}
+
+
+def replace_graph(mode: str, video_dur: float, *, offset: float = 0.0, new_vol: float = 1.0,
+                  orig_vol: float = 0.5, loop: bool = False, fade: float = 0.0,
+                  has_orig: bool = True) -> str:
+    """filter_complex with input 0 = video, 1 = new audio, output [a]."""
+    st = "aformat=sample_rates=48000:channel_layouts=stereo"
+    new = f"[1:a:0]{st},asetpts=PTS-STARTPTS"
+    if offset < 0:
+        new += f",atrim=start={-offset:.3f},asetpts=PTS-STARTPTS"
+    elif offset > 0:
+        new += f",adelay=delays={round(offset * 1000)}:all=1"
+    new += f",volume={new_vol:.3f},apad,atrim=duration={video_dur:.3f}"
+    if fade > 0:
+        new += f",afade=t=in:st={max(offset, 0):.3f}:d={fade:.2f},afade=t=out:st={max(video_dur - fade, 0):.3f}:d={fade:.2f}"
+    if mode == "mix" and has_orig:
+        return (f"{new}[n];[0:a:0]{st},volume={orig_vol:.3f},apad,atrim=duration={video_dur:.3f}[o];"
+                f"[o][n]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[a]")
+    return f"{new}[a]"
 
 
 class AudioReplacerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.video_path = ""
-        self.audio_path = ""
+        self.src_var = tk.StringVar()
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🔄  " + t("tab.audio_replacer"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("replacer.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
-
-        # Input files
-        pick = tk.LabelFrame(self, text=t("section.input_files"), padx=15, pady=8)
-        pick.pack(fill="x", padx=20, pady=8)
-
-        for row, label, attr, ft in [
-            (0, t("common.source_video"), "video_path",
-             [("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", "*.*")]),
-            (1, t("replacer.new_audio_section"), "audio_path",
-             [("Audio / Video", "*.mp3 *.aac *.wav *.flac *.ogg *.mp4 *.mov"), ("All", "*.*")]),
-        ]:
-            tk.Label(pick, text=label, font=(UI_FONT, 9, "bold")).grid(row=row, column=0, sticky="w", pady=4)
-            var = tk.StringVar()
-            setattr(self, attr + "_var", var)
-            tk.Entry(pick, textvariable=var, width=60, relief="flat").grid(row=row, column=1, padx=8)
-
-            def _b(a=attr, v=var, f=ft):
-                p = dialogs.askopenfilename(filetypes=f)
-                if p:
-                    setattr(self, a, p)
-                    v.set(p)
-
-            tk.Button(pick, text=t("btn.browse"), command=_b, cursor="hand2", relief="flat").grid(row=row, column=2)
-
-        # Options
-        opts = tk.LabelFrame(self, text=t("replacer.replacement_options_section"), padx=15, pady=8)
-        opts.pack(fill="x", padx=20, pady=6)
-
-        r0 = tk.Frame(opts); r0.pack(fill="x", pady=4)
-        tk.Label(r0, text=t("replacer.mode_label")).pack(side="left")
-        self.mode_var = tk.StringVar(value=t("replacer.mode_replace"))
-        ttk.Combobox(r0, textvariable=self.mode_var,
-                     values=[t("replacer.replacer_replacer_mode_replace"), t("replacer.replacer_replacer_mode_mix_50"),
-                              t("replacer.replacer_replacer_mode_mix_custom"), t("replacer.replacer_replacer_mode_strip")],
-                     state="readonly", width=28).pack(side="left", padx=6)
-
-        r1 = tk.Frame(opts); r1.pack(fill="x", pady=4)
-        tk.Label(r1, text=t("replacer.new_audio_volume_label")).pack(side="left")
-        self.new_vol = tk.DoubleVar(value=1.0)
-        tk.Scale(r1, variable=self.new_vol, from_=0.0, to=2.0, resolution=0.05,
-                 orient="horizontal", length=180).pack(side="left", padx=6)
-        tk.Label(r1, text=t("replacer.original_volume_label")).pack(side="left", padx=(14, 0))
-        self.orig_vol = tk.DoubleVar(value=0.5)
-        tk.Scale(r1, variable=self.orig_vol, from_=0.0, to=2.0, resolution=0.05,
-                 orient="horizontal", length=180).pack(side="left", padx=6)
-
-        r2 = tk.Frame(opts); r2.pack(fill="x", pady=4)
-        tk.Label(r2, text=t("replacer.audio_offset_label")).pack(side="left")
+        self.make_header(self, t("tab.audio_replacer"), "Replace or mix a video's soundtrack.", icon="🎼")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, "Video:", self.src_var,
+                               on_change=lambda p: self.out_row.path or self.out_row.set(
+                                   self.suggest_output(p, "new_audio")))
+        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.audio_row = FileRow(body, "New audio:", kind="media")
+        self.audio_row.pack(fill="x", padx=20, pady=2)
+        opt = tk.LabelFrame(body, text="  Options  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.mode_var = tk.StringVar(value=MODES["replace"])
+        ttk.Combobox(opt, textvariable=self.mode_var, values=list(MODES.values()), state="readonly",
+                     width=30).grid(row=0, column=0, columnspan=2, sticky="w")
+        self.new_vol, self.orig_vol = tk.DoubleVar(value=1.0), tk.DoubleVar(value=0.35)
+        tk.Scale(opt, variable=self.new_vol, from_=0, to=2, resolution=0.05, orient="horizontal", length=180,
+                 label="New audio volume").grid(row=1, column=0, sticky="w")
+        tk.Scale(opt, variable=self.orig_vol, from_=0, to=2, resolution=0.05, orient="horizontal", length=180,
+                 label="Original volume (mix)").grid(row=1, column=1, sticky="w")
+        r = tk.Frame(opt)
+        r.grid(row=2, column=0, columnspan=2, sticky="w", pady=4)
+        tk.Label(r, text="Start the new audio at (s, negative skips its start):").pack(side="left")
         self.offset_var = tk.StringVar(value="0")
-        tk.Entry(r2, textvariable=self.offset_var, width=6, relief="flat").pack(side="left", padx=4)
-        tk.Label(r2, text=t("replacer.offset_hint")).pack(side="left")
-        self.loop_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r2, text=t("replacer.loop_audio_checkbox"),
-                       variable=self.loop_var).pack(side="left", padx=20)
-
-        r3 = tk.Frame(opts); r3.pack(fill="x", pady=4)
-        self.fade_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r3, text=t("replacer.fade_checkbox"), variable=self.fade_var).pack(side="left")
-        self.trim_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r3, text=t("replacer.trim_checkbox"), variable=self.trim_var).pack(side="left", padx=20)
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self, text=t("replacer.replace_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["orange"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=7)
+        tk.Entry(r, textvariable=self.offset_var, width=8).pack(side="left", padx=4)
+        self.loop_var, self.fade_var = tk.BooleanVar(value=False), tk.BooleanVar(value=True)
+        tk.Checkbutton(opt, text="Loop the new audio if it's shorter than the video",
+                       variable=self.loop_var).grid(row=3, column=0, columnspan=2, sticky="w")
+        tk.Checkbutton(opt, text="Fade in and out (1 s)", variable=self.fade_var).grid(row=4, column=0, sticky="w")
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "new_audio"))
+        self.out_row.pack(fill="x")
+        self.btn_render = tk.Button(body, text="🎼  APPLY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=20, command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self.out_var.set(p)
-
     def _render(self):
-        if not self.video_path:
-            messagebox.showwarning(t("replacer.no_video_title"), t("replacer.no_video_message"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        mode = next((k for k, v in MODES.items() if v == self.mode_var.get()), "replace")
+        out = common.output_for(self, self.out_row, src, "new_audio", inputs=[self.audio_row.path])
         if not out:
             return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        mode = self.mode_var.get()
-        offset = self.offset_var.get()
-
-        if mode == t("replacer.mode_strip"):
-            cmd = [ffmpeg, "-i", self.video_path, "-c:v", "copy", "-an", "-movflags", "+faststart", out, "-y"]
-        elif mode == t("replacer.mode_replace") or not self.audio_path:
-            if not self.audio_path:
-                messagebox.showwarning(t("replacer.no_audio_title"), t("replacer.no_audio_message"))
-                return
-            filters = []
-            nvol = self.new_vol.get()
-            if nvol != 1.0:
-                filters.append(f"volume={nvol}")
-            if self.fade_var.get():
-                filters.append("afade=t=in:st=0:d=0.5")
-                vid_dur = get_video_duration(self.video_path)
-                if vid_dur > 0.5:
-                    filters.append(f"afade=t=out:st={vid_dur - 0.5:.3f}:d=0.5")
-            af = ",".join(filters) if filters else None
-
-            cmd = [ffmpeg, "-i", self.video_path]
-            if float(offset) > 0:
-                cmd += ["-itsoffset", offset]
-            if self.loop_var.get():
-                cmd += ["-stream_loop", "-1"]
-            cmd += ["-i", self.audio_path]
-            if self.trim_var.get():
-                cmd += ["-shortest"]
-            if af:
-                cmd += ["-af", af]
-            cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                    "-map", "0:v:0", "-map", "1:a:0", "-movflags", "+faststart", out, "-y"]
+        container = common.container_of(out)
+        if mode == "strip":
+            cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-map", "0", "-map", "-0:a", "-c", "copy", out]
         else:
-            # Mix
-            if not self.audio_path:
-                messagebox.showwarning(t("replacer.no_audio_title"), t("replacer.no_audio_message"))
+            ainfo = common.check_source(self, self.audio_row.path, need_video=False, what="New audio")
+            if ainfo is None:
                 return
-            nvol = self.new_vol.get()
-            ovol = self.orig_vol.get()
-            mix_filter = (f"[0:a]volume={ovol}[orig];"
-                          f"[1:a]volume={nvol}[new];"
-                          f"[orig][new]amix=inputs=2:duration=first[aout]")
-            cmd = [ffmpeg, "-i", self.video_path, "-i", self.audio_path,
-                   "-filter_complex", mix_filter,
-                   "-map", "0:v:0", "-map", "[aout]",
-                   "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                   "-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console, f"Mode: {mode}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("replacer.replace_button"))
+            try:
+                offset = ff.parse_time(self.offset_var.get().lstrip("-") or "0") * (
+                    -1 if self.offset_var.get().strip().startswith("-") else 1)
+            except ValueError as exc:
+                messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+                return
+            graph = replace_graph(mode, info.duration, offset=offset, new_vol=float(self.new_vol.get()),
+                                  orig_vol=float(self.orig_vol.get()), loop=self.loop_var.get(),
+                                  fade=1.0 if self.fade_var.get() else 0.0, has_orig=info.has_audio)
+            cmd = [ff.ffmpeg_path(), "-y", "-i", src, *(["-stream_loop", "-1"] if self.loop_var.get() else []),
+                   "-i", self.audio_row.path, "-filter_complex", graph, "-map", "0:v", "-c:v", "copy",
+                   "-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container),
+                   "-t", f"{info.duration:.3f}"]
+            if container in ("mp4", "mov", "m4v"):
+                cmd += ["-movflags", "+faststart"]
+            cmd.append(out)
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
+                        btn_label="🎼  APPLY", duration=info.duration or None, output=out,
+                        inputs=[src, self.audio_row.path], name="Audio Replacer")

@@ -137,7 +137,7 @@ class TaskContext:
         return part
 
     def run(self, cmd: Sequence[str], *, duration: Optional[float] = None,
-            check: bool = True, cwd: Optional[str] = None) -> ff.RunResult:
+            check: bool = True, cwd: Optional[str] = None, tail: int = 200) -> ff.RunResult:
         """Run one command for this task.  Raises :class:`ff.CancelledError`
         or :class:`ff.CommandError` (when *check*) so multi-step jobs can
         simply call ``ctx.run`` repeatedly."""
@@ -149,7 +149,7 @@ class TaskContext:
 
         self._progress_cb("$ " + ff.format_cmd(cmd))
         res = ff.run(cmd, duration=duration, on_line=self._progress_cb,
-                     on_progress=on_prog, cancel=self.cancelled, cwd=cwd)
+                     on_progress=on_prog, cancel=self.cancelled, cwd=cwd, tail=tail)
         self.task.log_tail = res.log_tail[-60:]
         self._span = (hi, hi)
         if check:

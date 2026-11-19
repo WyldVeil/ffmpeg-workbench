@@ -1,157 +1,168 @@
 """
-tab_audioextractor.py  ─  Audio Extractor
-Rip audio from any video file into MP3, WAV, FLAC, AAC, or OGG.
+tabs/audio/extractor.py  -  Audio Extractor
+
+Pull the soundtrack out of a video: as-is (no re-encoding - the original
+codec in a matching file type), or converted to MP3, AAC, FLAC, WAV, Opus
+or Ogg Vorbis.  Choose the track, optionally trim and normalise loudness
+(two-pass EBU R128).
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import os
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path
+from tkinter import messagebox, ttk
+
+from core import ffmpeg as ff
+from core import loudness as ln
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import FileRow, scroll_body
 
-
-FORMAT_MAP = {
-    "MP3":  (".mp3",  ["-c:a", "libmp3lame"]),
-    "AAC":  (".aac",  ["-c:a", "aac"]),
-    "WAV":  (".wav",  ["-c:a", "pcm_s16le"]),
-    "FLAC": (".flac", ["-c:a", "flac"]),
-    "OGG":  (".ogg",  ["-c:a", "libvorbis"]),
-    "M4A":  (".m4a",  ["-c:a", "aac"]),
+FORMATS = {   # id: (label, extension or None = from codec, encoder args)
+    "copy": ("Original (no re-encoding)", None, ["-c:a", "copy"]),
+    "mp3": ("MP3 (VBR, very high quality)", ".mp3", ["-c:a", "libmp3lame", "-q:a", "0"]),
+    "aac": ("AAC in .m4a (256 kbps)", ".m4a", ["-c:a", "aac", "-b:a", "256k"]),
+    "flac": ("FLAC (lossless)", ".flac", ["-c:a", "flac", "-compression_level", "8"]),
+    "wav": ("WAV (uncompressed)", ".wav", ["-c:a", "pcm_s24le"]),
+    "opus": ("Opus (160 kbps)", ".opus", ["-c:a", "libopus", "-b:a", "160k"]),
+    "ogg": ("Ogg Vorbis (quality 6)", ".ogg", ["-c:a", "libvorbis", "-q:a", "6"]),
 }
+COPY_EXT = {"aac": ".m4a", "mp3": ".mp3", "opus": ".opus", "vorbis": ".ogg", "flac": ".flac", "alac": ".m4a",
+            "ac3": ".ac3", "eac3": ".eac3", "dts": ".mka", "truehd": ".mka", "mp2": ".mp2"}
+
+
+def copy_extension(codec: str) -> str:
+    if codec.startswith("pcm_"):
+        return ".wav"
+    return COPY_EXT.get(codec, ".mka")
 
 
 class AudioExtractorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
+        self.src_var = tk.StringVar()
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🎵  " + t("tab.audio_extractor"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("extractor.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
-
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=14)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
-
-        # Options
-        opts = tk.LabelFrame(self, text=t("extractor.extraction_options_section"), padx=15, pady=10)
-        opts.pack(fill="x", padx=20, pady=6)
-
-        r0 = tk.Frame(opts); r0.pack(fill="x", pady=4)
-        tk.Label(r0, text=t("extractor.output_format_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.fmt_var = tk.StringVar(value="MP3")
-        fmt_cb = ttk.Combobox(r0, textvariable=self.fmt_var, values=list(FORMAT_MAP.keys()),
-                              state="readonly", width=8)
-        fmt_cb.pack(side="left", padx=8)
-        fmt_cb.bind("<<ComboboxSelected>>", self._on_fmt_change)
-
-        tk.Label(r0, text=t("common.quality"), font=(UI_FONT, 10, "bold")).pack(side="left", padx=(20, 4))
-        self.bitrate_var = tk.StringVar(value="320k")
-        self.br_cb = ttk.Combobox(r0, textvariable=self.bitrate_var,
-                                   values=["96k", "128k", "192k", "256k", "320k"],
-                                   state="readonly", width=7)
-        self.br_cb.pack(side="left", padx=4)
-
-        # Lossless note
-        self.lossless_lbl = tk.Label(opts, text="", fg=CLR["fgdim"], font=(UI_FONT, 9, "italic"))
-        self.lossless_lbl.pack(anchor="w")
-
-        r1 = tk.Frame(opts); r1.pack(fill="x", pady=4)
-        tk.Label(r1, text=t("common.start_s")).pack(side="left")
-        self.start_var = tk.StringVar(value="0")
-        tk.Entry(r1, textvariable=self.start_var, width=7, relief="flat").pack(side="left", padx=4)
-        tk.Label(r1, text=t("common.end_s")).pack(side="left", padx=(12, 0))
-        self.end_var = tk.StringVar(value="0")
-        tk.Entry(r1, textvariable=self.end_var, width=7, relief="flat").pack(side="left", padx=4)
-        self.normalize_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r1, text=t("extractor.normalize_checkbox"),
-                       variable=self.normalize_var).pack(side="left", padx=20)
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self, text=t("extractor.extract_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=7)
+        self.make_header(self, t("tab.audio_extractor"), "Save a video's soundtrack as its own file.",
+                         icon="🎵")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        opt = tk.LabelFrame(body, text="  Extract  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.fmt_var = tk.StringVar(value=FORMATS["copy"][0])
+        fb = ttk.Combobox(opt, textvariable=self.fmt_var, values=[v[0] for v in FORMATS.values()],
+                          state="readonly", width=34)
+        fb.grid(row=0, column=1, sticky="w")
+        fb.bind("<<ComboboxSelected>>", lambda _e: self._suggest_name(force=True))
+        tk.Label(opt, text="Format:").grid(row=0, column=0, sticky="w")
+        tk.Label(opt, text="Track:").grid(row=1, column=0, sticky="w")
+        self.track_var = tk.StringVar()
+        self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
+        self.track_box.grid(row=1, column=1, sticky="w", pady=4)
+        tk.Label(opt, text="From / to (optional):").grid(row=2, column=0, sticky="w")
+        tr = tk.Frame(opt)
+        tr.grid(row=2, column=1, sticky="w")
+        self.from_var, self.to_var = tk.StringVar(), tk.StringVar()
+        tk.Entry(tr, textvariable=self.from_var, width=10).pack(side="left")
+        tk.Entry(tr, textvariable=self.to_var, width=10).pack(side="left", padx=6)
+        self.norm_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(opt, text="Normalise loudness to -16 LUFS (two-pass, re-encodes)",
+                       variable=self.norm_var).grid(row=3, column=1, sticky="w")
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="audio", ext=".m4a")
+        self.out_row.pack(fill="x")
+        self.btn_render = tk.Button(body, text="🎵  EXTRACT", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=20, command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    def _on_fmt_change(self, *_):
-        fmt = self.fmt_var.get()
-        lossless = fmt in ("WAV", "FLAC")
-        self.br_cb.config(state="disabled" if lossless else "readonly")
-        self.lossless_lbl.config(
-            text=t("extractor.lossless_note") if lossless else "")
+    def _key(self):
+        return next((k for k, v in FORMATS.items() if v[0] == self.fmt_var.get()), "copy")
 
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[(t("extractor.video_audio"), "*.mp4 *.mov *.mkv *.avi *.webm *.mp3 *.aac"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
+    def _stream(self):
+        values = list(self.track_box.cget("values"))
+        return values.index(self.track_var.get()) if self.track_var.get() in values else 0
 
-    def _browse_out(self):
-        ext = FORMAT_MAP[self.fmt_var.get()][0]
-        p = dialogs.asksaveasfilename(defaultextension=ext,
-                                         filetypes=[(self.fmt_var.get(), f"*{ext}")])
-        if p:
-            self.out_var.set(p)
+    def _ext(self):
+        key = self._key()
+        if key == "copy" and not self.norm_var.get():
+            streams = self._info.audio_streams if self._info else []
+            return copy_extension(streams[self._stream()].codec) if streams else ".mka"
+        return FORMATS[key][1] or ".m4a"
+
+    def _suggest_name(self, force=False):
+        src = self.src_row.path
+        if src and (force or not self.out_row.path):
+            self.out_row.set(self.suggest_output(src, "audio", self._ext()))
+
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        tracks = [f"Track {i + 1}: {a.codec}, {a.channels} ch" + (f" [{a.language}]" if a.language else "")
+                  + (f" {a.title}" if a.title else "") for i, a in enumerate(self._info.audio_streams)] \
+            if self._info else []
+        self.track_box.config(values=tracks or ["(no audio)"])
+        self.track_var.set(tracks[0] if tracks else "(no audio)")
+        self._suggest_name(force=True)
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(
-                defaultextension=FORMAT_MAP[self.fmt_var.get()][0],
-                filetypes=[(self.fmt_var.get(), f"*{FORMAT_MAP[self.fmt_var.get()][0]}")])
+        if not info.has_audio:
+            messagebox.showwarning(t("common.warning"), "This file has no audio track.", parent=self)
+            return
+        self._info = info
+        try:
+            start = ff.parse_time(self.from_var.get()) if self.from_var.get().strip() else 0.0
+            end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else None
+            if end is not None and end <= start:
+                raise ValueError("'to' must be after 'from'.")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = self.out_row.path or self.suggest_output(src, "audio", self._ext())
+        import os
+        if os.path.splitext(out)[1].lower() != self._ext():
+            out = os.path.splitext(out)[0] + self._ext()
+        out = self.confirm_output(out, [src], default_ext=self._ext())
         if not out:
             return
-        self.out_var.set(out)
+        self.out_row.set(out)
+        stream = self._stream()
+        key = self._key()
+        enc = FORMATS[key][2]
+        if key == "copy" and self.norm_var.get():
+            enc = common.audio_encoder_args(out)
+        inp = [ff.ffmpeg_path(), "-y"]
+        if start:
+            inp += ["-ss", ff.ts(start)]
+        if end is not None:
+            inp += ["-to", ff.ts(end)]
+        inp += ["-i", src, "-map", f"0:a:{stream}", "-vn", "-sn", "-dn"]
+        dur = (end if end is not None else info.duration) - start
+        sr = info.audio_streams[stream].sample_rate or 48000
 
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        fmt, codec_args = FORMAT_MAP[self.fmt_var.get()]
-        lossless = fmt in (".wav", ".flac")
+        if not self.norm_var.get():
+            self.run_ffmpeg(inp + enc + [out], self.console, on_done=lambda rc: self.show_result(rc, out),
+                            btn=self.btn_render, btn_label="🎵  EXTRACT", duration=dur, output=out, inputs=[src],
+                            name="Audio Extractor")
+            return
 
-        cmd = [ffmpeg, "-i", self.file_path]
-        ss = self.start_var.get()
-        end = self.end_var.get()
-        if ss and ss != "0":
-            cmd += ["-ss", ss]
-        if end and end != "0":
-            cmd += ["-to", end]
+        def work(_p, _c, ctx):
+            m = ln.measure(src, -16, -1.5, 11, stream=stream, ctx=ctx.span(0, 0.4))
+            ctx.span(0.4, 1.0).run(inp + ["-af", ln.normalise_filter(-16, -1.5, 11, m, sr)] + enc + [ctx.output()],
+                                   duration=dur)
+            return 0
 
-        cmd += codec_args
-        if not lossless:
-            cmd += ["-b:a", self.bitrate_var.get()]
-
-        if self.normalize_var.get():
-            cmd += ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
-
-        cmd += ["-vn", out, "-y"]
-
-        self.log(self.console, f"Extracting audio → {self.fmt_var.get()}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("extractor.extract_button"))
+        common.queue_job(self, name="Audio Extractor", out=out, work=work, btn=self.btn_render,
+                         btn_label="🎵  EXTRACT", console=self.console, duration=dur, inputs=[src])

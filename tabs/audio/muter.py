@@ -1,233 +1,160 @@
 """
-tab_muter.py  ─  The Muter
-Silence specific time ranges in a video. Perfect for beeping out words,
-removing music sections, or scrubbing sensitive audio.
-Also includes a fast stream-copy option to mute an entire video instantly.
+tabs/audio/muter.py  -  The Muter
+
+Silence (or bleep) chosen moments - swearing, names, background music -
+with short fades so cuts don't click, or mute / remove the whole track.
+The muting is sample-accurate: one aeval expression with a gain envelope
+built from the ranges.  The picture is copied untouched.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import os
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path
+from tkinter import messagebox, ttk
+
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import FileRow, FramePreview, scroll_body
+
+MODES = {"silence": "Silence the chosen moments", "bleep": "Bleep the chosen moments (1 kHz tone)",
+         "silent_track": "Replace all sound with silence (keeps a silent track)",
+         "remove": "Remove the audio track completely"}
+
+
+def gain_expr(ranges, fade: float) -> str:
+    """1 outside every range, 0 inside, linear ramps of *fade* seconds."""
+    f = max(fade, 0.001)
+    terms = [f"clip(max(({a:.4f}-t)/{f:.4f}\\,(t-{b:.4f})/{f:.4f})\\,0\\,1)" for a, b in ranges]
+    return "*".join(terms) if terms else "1"
+
+
+def mute_filter(ranges, fade: float, bleep: bool) -> str:
+    g = gain_expr(ranges, fade)
+    if bleep:
+        return f"aeval=val(ch)*({g})+0.25*sin(2*PI*1000*t)*(1-({g})):c=same"
+    return f"aeval=val(ch)*({g}):c=same"
 
 
 class MuterTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.ranges = []   # list of dicts: {"start": var, "end": var, "row": frame, "dur_lbl": label}
+        self.src_var = tk.StringVar()
+        self.ranges: list = []
+        self._info = None
         self._build_ui()
 
     def _build_ui(self):
-        # ── Header ──
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🔇  " + t("tab.the_muter"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("muter.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.the_muter"), "Silence or bleep moments, or remove the sound.",
+                         icon="🔇")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        top = tk.Frame(body)
+        top.pack(fill="x", padx=20, pady=4)
+        pv = tk.Frame(top)
+        pv.pack(side="left")
+        self.preview = FramePreview(pv, 384, 216)
+        self.preview.pack()
+        self.pos_var = tk.DoubleVar(value=0)
+        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var,
+                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider.pack(fill="x")
+        mark = tk.Frame(pv)
+        mark.pack(fill="x")
+        self.a_var, self.b_var = tk.StringVar(), tk.StringVar()
+        tk.Button(mark, text="Start here", relief="flat",
+                  command=lambda: self.a_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
+        tk.Entry(mark, textvariable=self.a_var, width=11).pack(side="left", padx=2)
+        tk.Button(mark, text="End here", relief="flat",
+                  command=lambda: self.b_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
+        tk.Entry(mark, textvariable=self.b_var, width=11).pack(side="left", padx=2)
+        tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(side="left", padx=4)
+        right = tk.Frame(top)
+        right.pack(side="left", fill="both", expand=True, padx=(10, 0))
+        self.listbox = tk.Listbox(right, height=10)
+        self.listbox.pack(fill="both", expand=True)
+        tk.Button(right, text="🗑 Remove selected", relief="flat", command=self._remove).pack(anchor="w")
 
-        # ── Source Video ──
-        sf = tk.Frame(self, bg=CLR["bg"])
-        sf.pack(pady=(20, 10))
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, bg=CLR["input_bg"], fg=CLR["input_fg"], relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", bg=CLR["panel"], fg=CLR["fg"], relief="flat").pack(side="left")
-
-        # ── Mode Selection ──
-        mode_f = tk.Frame(self, bg=CLR["bg"])
-        mode_f.pack(pady=5)
-        
-        self.mute_mode = tk.StringVar(value="ranges")
-        tk.Radiobutton(mode_f, text=t("muter.mode_ranges"), variable=self.mute_mode, value="ranges",
-                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"], font=(UI_FONT, 10),
-                       command=self._toggle_mode).pack(side="left", padx=10)
-        tk.Radiobutton(mode_f, text=t("muter.mode_all"), variable=self.mute_mode, value="all",
-                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"], font=(UI_FONT, 10),
-                       command=self._toggle_mode).pack(side="left", padx=10)
-
-        # ── Dynamic Wrapper for Ranges & Options ──
-        self.ranges_wrapper = tk.Frame(self, bg=CLR["bg"])
-        self.ranges_wrapper.pack(fill="both", expand=True, padx=20, pady=5)
-
-        # Ranges Box
-        self.lf = tk.LabelFrame(self.ranges_wrapper, text=t("muter.mute_ranges_section"), bg=CLR["bg"], fg=CLR["fgdim"], padx=10, pady=8)
-        self.lf.pack(fill="both", expand=True, pady=8)
-
-        hdr_row = tk.Frame(self.lf, bg=CLR["bg"])
-        hdr_row.pack(fill="x")
-        tk.Label(hdr_row, text="#", width=3, bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        tk.Label(hdr_row, text=t("muter.range_start_col"), width=12, bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        tk.Label(hdr_row, text=t("muter.range_end_col"), width=12, bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        tk.Label(hdr_row, text=t("muter.range_duration_col"), width=10, bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-
-        self.ranges_frame = tk.Frame(self.lf, bg=CLR["bg"])
-        self.ranges_frame.pack(fill="both", expand=True)
-
-        btn_row = tk.Frame(self.lf, bg=CLR["bg"])
-        btn_row.pack(pady=10)
-        tk.Button(btn_row, text=t("muter.add_range_button"), bg=CLR["panel"], fg=CLR["fg"], relief="flat",
-                  command=self._add_range).pack(side="left", padx=6)
-        tk.Button(btn_row, text=t("muter.remove_last_button"), bg=CLR["panel"], fg=CLR["fg"], relief="flat",
-                  command=self._remove_last).pack(side="left", padx=6)
-
-        # Options Box
-        self.opt = tk.Frame(self.ranges_wrapper, bg=CLR["bg"])
-        self.opt.pack(pady=4)
-        self.beep_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(self.opt, text=t("muter.beep_checkbox"), variable=self.beep_var,
-                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"]).pack(side="left")
-        tk.Label(self.opt, text="  " + t("muter.fade_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=(14, 0))
+        opt = tk.LabelFrame(body, text="  What to do  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.mode_var = tk.StringVar(value="silence")
+        for key, label in MODES.items():
+            tk.Radiobutton(opt, text=label, value=key, variable=self.mode_var).pack(anchor="w")
+        fr = tk.Frame(opt)
+        fr.pack(anchor="w", pady=(4, 0))
+        tk.Label(fr, text="Fade (s):").pack(side="left")
         self.fade_var = tk.StringVar(value="0.05")
-        tk.Entry(self.opt, textvariable=self.fade_var, width=5, bg=CLR["input_bg"], fg=CLR["input_fg"], relief="flat").pack(side="left", padx=4)
+        tk.Entry(fr, textvariable=self.fade_var, width=6).pack(side="left", padx=4)
 
-        # ── Output & Render ──
-        self.out_frame = tk.Frame(self, bg=CLR["bg"])
-        self.out_frame.pack(pady=10)
-        
-        of = tk.Frame(self.out_frame, bg=CLR["bg"])
-        of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=65, bg=CLR["input_bg"], fg=CLR["input_fg"], relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", bg=CLR["panel"], fg=CLR["fg"], relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            self.out_frame, text=t("muter.apply_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["red"], fg="white", height=2, width=28, command=self._render, relief="flat")
-        self.btn_render.pack(pady=10)
-
-        cf = tk.Frame(self, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
+                               suggest=lambda: self.suggest_output(self.src_row.path, "muted"))
+        self.out_row.pack(fill="x")
+        self.btn_render = tk.Button(body, text="🔇  APPLY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=20, command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-        # Seed one range
-        self._add_range()
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        dur = self._info.duration if self._info else 0.0
+        self.slider.configure(to=max(dur, 0.01))
+        self.preview.load(path, dur, 0.0)
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "muted"))
 
-    def _toggle_mode(self):
-        """Hides the range selection tools when 'Mute entire video' is selected."""
-        if self.mute_mode.get() == "all":
-            self.ranges_wrapper.pack_forget()
-        else:
-            self.ranges_wrapper.pack(fill="both", expand=True, padx=20, pady=5, before=self.out_frame)
+    def add_range(self, a: float, b: float):
+        if b <= a:
+            raise ValueError("The end must be after the start.")
+        self.ranges.append((a, b))
+        self.ranges.sort()
+        self.listbox.delete(0, "end")
+        for x, y in self.ranges:
+            self.listbox.insert("end", f"{ff.format_time(x)}  →  {ff.format_time(y)}   ({y - x:.2f}s)")
 
-    def _add_range(self):
-        idx = len(self.ranges)
-        row = tk.Frame(self.ranges_frame, bg=CLR["bg"])
-        row.pack(fill="x", pady=4)
-        tk.Label(row, text=str(idx + 1), width=3, bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        sv = tk.StringVar(value="0")
-        ev = tk.StringVar(value="5")
-        for var in (sv, ev):
-            tk.Entry(row, textvariable=var, width=10, bg=CLR["input_bg"], fg=CLR["input_fg"], relief="flat").pack(side="left", padx=4)
-            var.trace_add("write", lambda *_, r=(sv, ev, row): self._update_dur(r))
-        dur_lbl = tk.Label(row, text=t("muter.5_00s"), width=10, bg=CLR["bg"], fg=CLR["fgdim"])
-        dur_lbl.pack(side="left")
-        self.ranges.append({"start": sv, "end": ev, "row": row, "dur_lbl": dur_lbl})
-
-    def _update_dur(self, entry):
-        sv, ev, row = entry[0], entry[1], entry[2] if len(entry) > 2 else None
+    def _add(self):
         try:
-            d = float(ev.get()) - float(sv.get())
-            for r in self.ranges:
-                if r["start"] is sv:
-                    r["dur_lbl"].config(text=f"{d:.2f}s" if d >= 0 else "⚠ invalid")
-        except Exception:
-            pass
+            self.add_range(ff.parse_time(self.a_var.get()), ff.parse_time(self.b_var.get()))
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 
-    def _remove_last(self):
-        if self.ranges:
-            r = self.ranges.pop()
-            r["row"].destroy()
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self.out_var.set(p)
+    def _remove(self):
+        sel = self.listbox.curselection()
+        if sel:
+            del self.ranges[sel[0]]
+            self.listbox.delete(sel[0])
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
             return
-
-        out = self.out_var.get().strip()
+        mode = self.mode_var.get()
+        if mode in ("silence", "bleep") and not self.ranges:
+            messagebox.showwarning(t("common.warning"), "Add at least one moment to mute.", parent=self)
+            return
+        try:
+            fade = common.number(self.fade_var.get() or "0", "Fade", 0, 5)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "muted")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out:
             return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-
-        # ── Mode: Mute Entire Video (Fast stream-copy) ──
-        if self.mute_mode.get() == "all":
-            cmd = [ffmpeg, "-i", self.file_path, 
-                   "-c:v", "copy", "-an", 
-                   "-movflags", "+faststart", out, "-y"]
-            self.log(self.console, t("log.muter.muting_entire_video_fast_stream_copy"))
-            self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                            btn=self.btn_render, btn_label=t("muter.apply_button"))
-            return
-
-        # ── Mode: Mute Specific Ranges (Re-encode audio) ──
-        if not self.ranges:
-            messagebox.showwarning(t("muter.no_ranges_title"), t("muter.no_ranges_message"))
-            return
-
-        fade = self.fade_var.get()
-        beep = self.beep_var.get()
-
-        valid_ranges = []
-        for r in self.ranges:
-            try:
-                s = float(r["start"].get())
-                e = float(r["end"].get())
-                if e > s:
-                    valid_ranges.append((s, e))
-            except ValueError:
-                continue
-
-        if not valid_ranges:
-            messagebox.showwarning(t("muter.bad_ranges_title"), t("muter.bad_ranges_message"))
-            return
-
-        cond = "+".join(f"between(t,{s},{e})" for s, e in valid_ranges)
-
-        if beep:
-            fc = (f"[0:a]volume=enable='{cond}':volume=0[muted];"
-                  f"aevalsrc=0.3*sin(2*PI*1000*t)*({cond}):c=1:s=44100[beep];"
-                  f"[muted][beep]amix=inputs=2:duration=first[aout]")
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-filter_complex", fc,
-                   "-map", "0:v:0", "-map", "[aout]",
-                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
-                   "-movflags", "+faststart", out, "-y"]
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src]
+        if mode == "remove":
+            cmd += ["-map", "0", "-map", "-0:a", "-c", "copy", out]
+        elif mode == "silent_track":
+            cmd += ["-af", "volume=0", *common.audio_job_args(out, info), out]
         else:
-            vol_parts = [f"volume=enable='between(t,{s},{e})':volume=0"
-                         for s, e in valid_ranges]
-            af = ",".join(vol_parts)
-            cmd = [ffmpeg, "-i", self.file_path, "-af", af,
-                   "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
-                   "-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console, f"Muting {len(valid_ranges)} specific range(s)…")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("muter.apply_button"))
+            cmd += ["-af", mute_filter(self.ranges, fade, mode == "bleep"), *common.audio_job_args(out, info), out]
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
+                        btn_label="🔇  APPLY", duration=info.duration or None, output=out, inputs=[src],
+                        name="Muter")

@@ -195,3 +195,64 @@ def final_copy_args(venc, container: str) -> list:
         if venc.codec == "hevc":
             args += ["-tag:v", "hvc1"]
     return args
+
+
+# ── Audio tools ──────────────────────────────────────────────────────────────
+
+AUDIO_ONLY_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".mka", ".aiff", ".aif")
+
+
+def audio_encoder_args(out: str) -> list:
+    """Encoder for processed audio, chosen from the output file's type."""
+    ext = os.path.splitext(out)[1].lower()
+    return {
+        ".mp3": ["-c:a", "libmp3lame", "-q:a", "2"],
+        ".wav": ["-c:a", "pcm_s16le"],
+        ".aiff": ["-c:a", "pcm_s16be"], ".aif": ["-c:a", "pcm_s16be"],
+        ".flac": ["-c:a", "flac", "-compression_level", "8"],
+        ".m4a": ["-c:a", "aac", "-b:a", "256k"], ".aac": ["-c:a", "aac", "-b:a", "256k"],
+        ".ogg": ["-c:a", "libvorbis", "-q:a", "6"],
+        ".opus": ["-c:a", "libopus", "-b:a", "160k"],
+        ".mka": ["-c:a", "flac"],
+        ".webm": ["-c:a", "libopus", "-b:a", "160k"],
+    }.get(ext, ["-c:a", "aac", "-b:a", "256k"])
+
+
+def audio_job_args(out: str, info: Optional[ff.MediaInfo], *, stream: int = 0) -> list:
+    """Mapping + codecs when an audio tool writes *out*: audio-only files get
+    just the processed track; video files keep the picture (copied) and
+    subtitles where the container allows."""
+    ext = os.path.splitext(out)[1].lower()
+    if ext in AUDIO_ONLY_EXTS or info is None or not info.has_video:
+        return ["-vn", "-sn", "-map", f"0:a:{stream}", *audio_encoder_args(out)]
+    args = ["-map", "0:v?", "-c:v", "copy", "-map", f"0:a:{stream}", *audio_encoder_args(out)]
+    if ext == ".mkv":
+        args += ["-map", "0:s?", "-c:s", "copy"]
+    if ext in (".mp4", ".mov", ".m4v"):
+        args += ["-movflags", "+faststart"]
+    return args
+
+
+def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 12.0) -> None:
+    """Render a short processed WAV in the background and play it."""
+    from core.hardware import launch_preview
+    from core.paths import temp_dir
+    from core import ui
+    if not src or not os.path.isfile(src):
+        messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=tab)
+        return
+    wav = os.path.join(temp_dir("preview_"), "preview.wav")
+    cmd = [ff.ffmpeg_path(), "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
+           "-ss", ff.ts(start), "-t", ff.ts(seconds), "-i", src, "-map", "0:a:0", "-vn",
+           *(["-af", af] if af else []), "-c:a", "pcm_s16le", wav]
+
+    def done(res):
+        if res.returncode != 0 or not os.path.isfile(wav):
+            messagebox.showerror(t("common.error"), "Preview failed:\n" + ff.summarize_error(
+                (res.stderr or "").splitlines(), res.returncode), parent=tab)
+            return
+        if launch_preview(wav) is None:
+            messagebox.showinfo(t("common.warning"), f"No player available - the preview is at\n{wav}",
+                                parent=tab)
+
+    ui.run_in_thread(ff.capture, cmd, timeout=120, on_done=done, name="AudioPreview")

@@ -1,169 +1,217 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
+"""
+tabs/audio/silence.py  -  Silence Remover
+
+Jump-cut away the pauses in talks, lectures and podcasts.  Silences are
+found with silencedetect (threshold, minimum length, padding kept around
+speech); the cuts are snapped to video frame boundaries and done with
+trim/atrim + concat in one exact pass (the graph is written to a file, so
+any number of cuts works), keeping picture and sound in sync.
+"""
+from __future__ import annotations
+
 import os
 import re
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+import tkinter as tk
+from tkinter import messagebox
+
+from core import encoders as enc
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
+
+
+def detect_cmd(src: str, threshold_db: float, min_silence: float, stream: int = 0) -> list:
+    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-i", src, "-map", f"0:a:{stream}", "-vn", "-sn",
+            "-af", f"silencedetect=noise={threshold_db:g}dB:d={min_silence:g}", "-f", "null", "-"]
+
+
+def parse_silences(text: str, duration: float) -> list:
+    starts = [float(x) for x in re.findall(r"silence_start:\s*(-?[\d.]+)", text)]
+    ends = [float(x) for x in re.findall(r"silence_end:\s*([\d.]+)", text)]
+    if len(ends) < len(starts):          # silent until the very end
+        ends.append(duration)
+    return [(max(0.0, a), b) for a, b in zip(starts, ends) if b > a]
+
+
+def keep_zones(silences, duration: float, padding: float, fps: float = 0.0, min_keep: float = 0.05) -> list:
+    """Parts to keep: everything except silences, with *padding* left around speech."""
+    zones, pos = [], 0.0
+    for a, b in silences:
+        end = min(duration, a + padding)
+        if end - pos > min_keep:
+            zones.append((pos, end))
+        pos = max(pos, b - padding)
+    if duration - pos > min_keep:
+        zones.append((pos, duration))
+    if fps:
+        snap = lambda x: round(x * fps) / fps  # noqa: E731
+        zones = [(snap(a), snap(b)) for a, b in zones if snap(b) > snap(a)]
+    merged = []
+    for a, b in zones:
+        if merged and a <= merged[-1][1] + 1e-6:
+            merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def cut_graph(zones, has_video: bool, has_audio: bool) -> str:
+    n = len(zones)
+    parts = []
+    if has_video:
+        parts.append(f"[0:v]split={n}" + "".join(f"[vs{i}]" for i in range(n)))
+    if has_audio:
+        parts.append(f"[0:a:0]asplit={n}" + "".join(f"[as{i}]" for i in range(n)))
+    pads = ""
+    for i, (a, b) in enumerate(zones):
+        if has_video:
+            parts.append(f"[vs{i}]trim=start={a:.4f}:end={b:.4f},setpts=PTS-STARTPTS[v{i}]")
+            pads += f"[v{i}]"
+        if has_audio:
+            parts.append(f"[as{i}]atrim=start={a:.4f}:end={b:.4f},asetpts=PTS-STARTPTS[a{i}]")
+            pads += f"[a{i}]"
+    outs = ("[v]" if has_video else "") + ("[a]" if has_audio else "")
+    parts.append(f"{pads}concat=n={n}:v={1 if has_video else 0}:a={1 if has_audio else 0}{outs}")
+    return ";\n".join(parts)
+
 
 class SilenceTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        
-        # Settings
-        self.threshold = tk.StringVar(value="-35") # dB
-        self.min_silence = tk.StringVar(value="0.5") # Seconds
-        self.padding = tk.StringVar(value="0.1") # Buffer
-        
-        self.build_ui()
+        self.src_var = tk.StringVar()
+        self._info = None
+        self._zones = None
+        self._build_ui()
 
-    def build_ui(self):
-        top_f = tk.Frame(self); top_f.pack(pady=20)
-        tk.Label(top_f, text=t("common.source_video")).pack(side="left")
-        self.ent_path = tk.Entry(top_f, width=50, relief="flat"); self.ent_path.pack(side="left", padx=5)
-        tk.Button(top_f, text=t("btn.browse"), command=self.load_file, cursor="hand2", relief="flat").pack(side="left")
+    def _build_ui(self):
+        self.make_header(self, t("tab.silence_remover"), "Cut out the pauses - jump cuts for talks and "
+                         "podcasts.", icon="✂")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        opt = tk.LabelFrame(body, text="  Detection  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.thr_var, self.min_var, self.pad_var = (tk.StringVar(value="-35"), tk.StringVar(value="0.6"),
+                                                    tk.StringVar(value="0.15"))
+        for col, (label, var, hint) in enumerate((("Silence below (dB)", self.thr_var, "-30 noisy room … -45 studio"),
+                                                  ("Shortest pause (s)", self.min_var, "pauses shorter than this stay"),
+                                                  ("Keep around speech (s)", self.pad_var, "breathing room"))):
+            tk.Label(opt, text=label).grid(row=0, column=col, sticky="w", padx=6)
+            tk.Entry(opt, textvariable=var, width=8).grid(row=1, column=col, sticky="w", padx=6)
+            tk.Label(opt, text=hint, fg=CLR["fgdim"], font=(UI_FONT, 8)).grid(row=2, column=col, sticky="w", padx=6)
+        self.report = tk.Label(body, text="", fg=CLR["accent"], font=(MONO_FONT, 10))
+        self.report.pack(anchor="w", padx=24, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
+                               suggest=lambda: self.suggest_output(self.src_row.path, "tight"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        row = tk.Frame(body)
+        row.pack(pady=8)
+        self.btn_analyse = tk.Button(row, text="🔍  ANALYSE", font=(UI_FONT, 11, "bold"), width=14,
+                                     command=self._analyse)
+        self.btn_analyse.pack(side="left", padx=6)
+        self.btn_render = tk.Button(row, text="✂  REMOVE SILENCES", font=(UI_FONT, 11, "bold"), bg=CLR["green"],
+                                    fg="white", width=20, command=self._render)
+        self.btn_render.pack(side="left", padx=6)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=6)
+        self.console.pack(side="left", fill="both", expand=True)
+        csb.pack(side="right", fill="y")
 
-        controls = tk.LabelFrame(self, text=t("silence.engine_section"), padx=20, pady=20)
-        controls.pack(pady=10, padx=20, fill="x")
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        self._zones = None
+        self.report.config(text="")
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "tight"))
 
-        tk.Label(controls, text=t("silence.threshold_label")).grid(row=0, column=0, sticky="w")
-        tk.Entry(controls, textvariable=self.threshold, width=10, relief="flat").grid(row=0, column=1, padx=5, pady=5)
-        tk.Label(controls, text=t("silence.threshold_hint"), font=(UI_FONT, 8, "italic")).grid(row=0, column=2, sticky="w")
+    def _params(self):
+        return (common.number(self.thr_var.get(), "Silence threshold", -90, -5),
+                common.number(self.min_var.get(), "Shortest pause", 0.05, 60),
+                common.number(self.pad_var.get(), "Keep around speech", 0, 5))
 
-        tk.Label(controls, text=t("silence.min_silence_label")).grid(row=1, column=0, sticky="w")
-        tk.Entry(controls, textvariable=self.min_silence, width=10, relief="flat").grid(row=1, column=1, padx=5, pady=5)
+    def _detect(self, src, info, thr, min_s, pad, runner):
+        res = runner(detect_cmd(src, thr, min_s))
+        text = "\n".join(res.log_tail if hasattr(res, "log_tail") else [])
+        fps = info.video.fps if info.has_video and info.video else 0.0
+        zones = keep_zones(parse_silences(text, info.duration), info.duration, pad, fps)
+        return zones
 
-        tk.Label(controls, text=t("silence.padding_label")).grid(row=2, column=0, sticky="w")
-        tk.Entry(controls, textvariable=self.padding, width=10, relief="flat").grid(row=2, column=1, padx=5, pady=5)
-
-        self.btn_run = tk.Button(self, text=t("silence.generate_button"), bg="#4CAF50", fg="white",
-                                 font=(UI_FONT, 12, "bold"), height=2, command=self.process_silence)
-        self.btn_run.pack(pady=20)
-
-        self.console = tk.Text(self, height=12, bg=CLR["bg"], fg="#00FF00", font=(MONO_FONT, 10))
-        self.console.pack(padx=20, pady=10, fill="both", expand=True)
-
-    def load_file(self):
-        path = dialogs.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv")])
-        if path:
-            self.file_path = path
-            self.ent_path.delete(0, tk.END); self.ent_path.insert(0, path)
-
-    def log_msg(self, msg):
-        self.console.insert(tk.END, f"> {msg}\n")
-        self.console.see(tk.END)
-        self.update()
-
-    def get_video_duration(self, ffmpeg_path):
-        cmd = [ffmpeg_path, "-i", self.file_path]
-        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True, creationflags=CREATE_NO_WINDOW)
-        _, stderr = process.communicate()
-        match = re.search(r"Duration:\s(\d+):(\d+):(\d+\.\d+)", stderr)
-        if match:
-            h, m, s = match.groups()
-            return int(h)*3600 + int(m)*60 + float(s)
-        return 0
-
-    def process_silence(self):
-        if not self.file_path: return
-        self.console.delete("1.0", tk.END)
-        
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        thresh = self.threshold.get()
-        duration = self.min_silence.get()
-        pad = float(self.padding.get())
-
-        self.log_msg(t("log.silence.step_1_analyzing_audio_peaks_video_decoding_disabl"))
-        
-        # Pass 1: Detection (Added -vn to skip video decoding during analysis)
-        cmd_detect = [
-            ffmpeg, "-i", self.file_path,
-            "-vn", # <--- THE MAGIC FIX: Ignore video track during audio scan
-            "-af", f"silencedetect=noise={thresh}dB:d={duration}",
-            "-f", "null", "-"
-        ]
-        
-        # Log the command to terminal
-        app = self.winfo_toplevel()
-        if hasattr(app, "log_debug"):
-            app.log_debug(f"SILENCE DETECT CMD: {' '.join(cmd_detect)}")
-
-        process = subprocess.Popen(cmd_detect, stderr=subprocess.PIPE, text=True, creationflags=CREATE_NO_WINDOW)
-        _, stderr = process.communicate()
-
-        # Log the raw output to terminal so we can see what FFmpeg actually did
-        if hasattr(app, "log_debug"):
-            app.log_debug(f"RAW FFMPEG OUTPUT (Last 500 chars):\n{stderr[-500:]}")
-
-        # --- THE NEW SMART CHECK ---
-        if "Output file does not contain any stream" in stderr:
-            self.log_msg(t("log.silence.error_this_video_file_has_no_audio_track"))
-            self.log_msg(t("log.silence.the_silence_remover_requires_a_video_with_sound"))
-            messagebox.showerror(t("common.error"), "FFmpeg could not find an audio track in this file.")
+    def _analyse(self):
+        src = self.src_row.path
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
             return
-        # ---------------------------
-
-        starts = re.findall(r"silence_start: ([\d\.]+)", stderr)
-        ends = re.findall(r"silence_end: ([\d\.]+)", stderr)
-        
-        if not starts:
-            self.log_msg(t("log.silence.no_silence_found"))
-            self.log_msg(t("log.silence.try_changing_threshold_to_20_or_check_developer_de"))
+        try:
+            thr, min_s, pad = self._params()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
+        self.btn_analyse.config(state="disabled", text="Listening…")
 
-        full_dur = self.get_video_duration(ffmpeg)
-        if full_dur == 0:
-            self.log_msg(t("log.silence.warning_could_not_determine_video_duration"))
-            full_dur = 999999 # Fallback safety
-        
-        # Pass 2: Calculate "Keep" Zones
-        keep_zones = []
-        last_end = 0.0
-        
-        for s, e in zip(starts, ends):
-            start_f = float(s)
-            end_f = float(e)
-            
-            keep_start = max(0, last_end - pad)
-            keep_end = min(full_dur, start_f + pad)
-            
-            if keep_end > keep_start:
-                keep_zones.append((keep_start, keep_end))
-            last_end = end_f
+        def work():
+            return self._detect(src, info, thr, min_s, pad, lambda c: ff.run(c, tail=100000))
 
-        if last_end < full_dur:
-            keep_zones.append((max(0, last_end - pad), full_dur))
+        def done(zones):
+            self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
+            self._zones = (src, (thr, min_s, pad), zones)
+            kept = sum(b - a for a, b in zones)
+            self.report.config(text=f"{len(zones)} parts kept · {ff.format_time(kept)} of "
+                                    f"{ff.format_time(info.duration)} · removes {ff.format_time(info.duration - kept)}")
 
-        self.log_msg(f"✅ Found {len(starts)} silence gaps.")
-        self.log_msg(f"✅ Constructing {len(keep_zones)} jump-cut segments...")
+        from core import ui
+        ui.run_in_thread(work, on_done=done, on_error=lambda e: (self.btn_analyse.config(
+            state="normal", text="🔍  ANALYSE"), messagebox.showerror(t("common.error"), str(e), parent=self)),
+            name="SilenceDetect")
 
-        # Pass 3: The "Magic" Filter
-        select_v = " + ".join([f"between(t,{z[0]},{z[1]})" for z in keep_zones])
+    def _render(self):
+        src = self.src_row.path
+        info = common.check_source(self, src, need_video=False)
+        if info is None:
+            return
+        if not info.has_audio:
+            messagebox.showwarning(t("common.warning"), "This file has no audio to analyse.", parent=self)
+            return
+        try:
+            thr, min_s, pad = self._params()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "tight")
+        if not out:
+            return
+        container = common.container_of(out)
+        audio_only = not info.has_video or out.lower().endswith(common.AUDIO_ONLY_EXTS)
+        venc = None if audio_only else self.encoder.video_encode(container)
 
-        out_path = dialogs.asksaveasfilename(defaultextension=".mp4", initialfile="jumpcut_result.mp4")
-        if not out_path: return
-
-        self.log_msg(t("log.silence.step_2_rendering_fast_paced_final_video"))
-
-        cmd_render = [
-            ffmpeg, "-i", self.file_path,
-            "-vf", f"select='{select_v}',setpts=N/FRAME_RATE/TB",
-            "-af", f"aselect='{select_v}',asetpts=N/SR/TB",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-c:a", "aac", out_path, "-y"
-        ]
-
-        if hasattr(app, "log_debug"):
-            app.log_debug(f"RENDER CMD: {' '.join(cmd_render)}")
-
-        def on_done(rc):
-            if rc == 0:
-                self.log_msg(t("log.silence.success_jump_cut_video_created"))
-                messagebox.showinfo(t("msg.done_title"), t("msg.silence_done"))
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            zones = self._detect(src, info, thr, min_s, pad,
+                                 lambda c: ctx.span(0.0, 0.25).run(c, duration=info.duration, tail=200000))
+            if not zones:
+                raise RuntimeError("Everything is below the silence threshold - try a lower dB value.")
+            kept = sum(b - a for a, b in zones)
+            ctx.log(f"Keeping {len(zones)} parts ({ff.format_time(kept)} of {ff.format_time(info.duration)})")
+            graph = cut_graph(zones, not audio_only, True)
+            with open(os.path.join(tmp, "cuts.txt"), "w", encoding="utf-8") as fh:
+                fh.write(graph)
+            cmd = [ff.ffmpeg_path(), "-y", *(venc.pre_input if venc else []), "-i", src, "-/filter_complex", "cuts.txt"]
+            if audio_only:
+                cmd += ["-map", "[a]", *common.audio_encoder_args(out)]
             else:
-                self.log_msg(t("log.silence.render_failed_check_terminal_for_details"))
+                if venc.filter_suffix:
+                    raise RuntimeError("Choose a software or NVENC/QSV encoder for this tool.")
+                cmd += ["-map", "[v]", "-map", "[a]", *venc.args,
+                        *enc.audio(enc.default_audio_for(container), container=container)]
+            ctx.span(0.25, 1.0).run(cmd + [ctx.output()], duration=kept, cwd=tmp)
+            return 0
 
-        self.run_ffmpeg(cmd_render, self.console, on_done=on_done,
-                        btn=self.btn_run, btn_label="⚡ GENERATE JUMP-CUTS")
+        common.queue_job(self, name="Silence Remover", out=out, work=work, btn=self.btn_render,
+                         btn_label="✂  REMOVE SILENCES", console=self.console, duration=info.duration, inputs=[src])
