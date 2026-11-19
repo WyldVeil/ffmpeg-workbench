@@ -3,11 +3,18 @@ main.py  -  WyldVeil's Media Editor: application shell
 Application entry point. Builds the professional dark sidebar, registers
 every tab, and manages page navigation, search, and preview cleanup.
 """
+import os
+import sys
+
+# ── Command line, no window: ``main.py --cli ...`` or the ``...-cli`` executable ──
+if __name__ == "__main__" and (sys.argv[1:2] == ["--cli"] or os.path.splitext(
+        os.path.basename(sys.executable))[0].lower().endswith("-cli")):
+    from core.cli import entry
+    sys.exit(entry(sys.argv[1:]))
+
 import tkinter as tk
 from tkinter import messagebox, ttk
 import ctypes
-import sys
-import os
 import subprocess
 import threading
 import platform
@@ -1667,6 +1674,8 @@ def main(argv=None) -> int:
     parser.add_argument("--debug", action="store_true", help="verbose logging to the console")
     parser.add_argument("--self-test", action="store_true", help="check the installation and exit")
     parser.add_argument("--no-ai", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--cli", action="store_true",
+                        help="command-line mode, no window (see AGENTS.md); must come first")
     args, _unknown = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
     if args.no_ai:
         os.environ["CROSSFADER_NO_AI_TEST"] = "1"

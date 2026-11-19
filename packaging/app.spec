@@ -28,7 +28,7 @@ datas = [
     (os.path.join(ROOT, "assets"), "assets"),
     (os.path.join(ROOT, "THIRD_PARTY_NOTICES.md"), "."),
 ]
-for opt in ("LICENSE", "EULA.md", "README.md", "CHANGELOG.md", "skin.zip"):
+for opt in ("LICENSE", "EULA.md", "README.md", "CHANGELOG.md", "AGENTS.md", "skin.zip"):
     if os.path.isfile(os.path.join(ROOT, opt)):
         datas.append((os.path.join(ROOT, opt), "."))
 if os.path.isdir(os.path.join(ROOT, "soundfonts")):
@@ -77,8 +77,28 @@ exe = EXE(
     version=os.path.join(ROOT, "packaging", "windows", "version_info.txt") if IS_WIN else None,
 )
 
+# Windows: the app above has no console, so commands typed in a terminal get a
+# companion with one - WyldVeilMediaEditor-cli.exe (same files; main.py sees
+# the "-cli" name and runs the command line, see AGENTS.md).
+extra_exes = []
+if IS_WIN:
+    extra_exes.append(EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name=NAME + "-cli",
+        debug=False,
+        strip=False,
+        upx=False,
+        console=True,
+        icon=os.path.join(ROOT, "assets", "icons", "app.ico"),
+        version=os.path.join(ROOT, "packaging", "windows", "version_info.txt"),
+    ))
+
 coll = COLLECT(
     exe,
+    *extra_exes,
     a.binaries,
     a.datas,
     tools_tree,

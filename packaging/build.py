@@ -70,6 +70,7 @@ def freeze() -> str:
          os.path.join(ROOT, "packaging", "app.spec")])
     out = os.path.join(DIST, NAME)
     bundle_python_libs(out)
+    shutil.copy2(os.path.join(ROOT, "AGENTS.md"), os.path.join(out, "AGENTS.md"))   # next to the program too
     if not IS_WIN:
         bundle_libgomp(os.path.join(out, "_internal", "bin", PLAT, "whisper"))
     # PyInstaller copies data files without the executable bit on POSIX.
@@ -128,6 +129,14 @@ def smoke_test(app_dir: str) -> None:
     if r.returncode != 0:
         print(r.stderr[-4000:])
         raise SystemExit(f"self-test failed ({r.returncode})")
+    # the command line (what AGENTS.md tells assistants to use) must work without a window
+    cli_exe = os.path.join(app_dir, NAME + ("-cli.exe" if IS_WIN else ""))
+    argv = [cli_exe] + ([] if IS_WIN else ["--cli"]) + ["tools", "--json"]
+    r = subprocess.run(argv, capture_output=True, text=True, timeout=120, env=env)
+    if r.returncode != 0 or '"ok": true' not in r.stdout:
+        print(r.stdout[-1000:], r.stderr[-2000:])
+        raise SystemExit(f"command-line self-test failed ({r.returncode})")
+    print("command line: ok")
 
 
 def package_windows(app_dir: str) -> None:

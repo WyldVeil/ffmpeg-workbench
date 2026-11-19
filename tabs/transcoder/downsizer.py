@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from dataclasses import dataclass
+from typing import Optional
 from tkinter import messagebox, ttk
 
 from core import encoders as enc
@@ -287,74 +288,87 @@ class UniversalDownsizerTab(BaseTab):
         if not out:
             return
         self.out_row.set(out)
-        length = end - start
-        v = info.video
-        hdr = v.is_hdr
-        ten_bit = codec != "h264" and (v.bit_depth > 8 or hdr)
-        chain = []
-        if hdr and codec == "h264":
-            chain.append(fl.hdr_to_sdr_chain())
-        sw, sh = common.even_size(info)
-        if (p.width, p.height) != (sw, sh) or (v.sar and v.sar not in ("1:1", "0:1")):
-            chain.append(f"scale={p.width}:{p.height}:flags=lanczos,setsar=1")
-        if v.fps and abs(p.fps - v.fps) > 0.01:
-            chain.append(f"fps={p.fps:g}")
         fast = self.speed_var.get() == "fast"
-        container = os.path.splitext(out)[1].lstrip(".").lower()
-
-        def video_args(kbps):
-            ve = enc.video(codec, "high", speed="balanced", hw="auto" if fast else "off", ten_bit=ten_bit,
-                           container=container, bitrate=f"{kbps}k",
-                           maxrate=f"{int(kbps * 1.5)}k" if fast else None,
-                           gop_seconds=4, fps=p.fps)
-            return ve
-
-        if audio_mode == "none" or not info.has_audio:
-            audio = ["-an"]
-        elif audio_mode == "copy":
-            audio = ["-map", "0:a:0", "-c:a", "copy"]
-        else:
-            audio = ["-map", "0:a:0", "-c:a", "aac", "-b:a", f"{p.audio_kbps}k"] + (["-ac", "1"] if p.mono else [])
         self.log(self.console, f"Target {target / 1e6:g} MB · {p.width}×{p.height} @ {p.fps:.3g} fps · "
                                f"video {p.video_kbps} kb/s · audio {p.audio_kbps} kb/s")
         for note in p.notes:
             self.log(self.console, "  " + note)
+        length = end - start
 
         def work(_p, _c, ctx):
-            tmp = ctx.tempdir()
-            final = ctx.output()
-            inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
-            if start > 0:
-                inp += ["-ss", f"{start:.3f}"]
-            if end < info.duration - 0.01:
-                inp += ["-to", f"{end:.3f}"]
-            kbps = p.video_kbps
-            ve = video_args(kbps)
-            two_pass = not fast and ve.hw is None and enc.two_pass_args(ve.encoder, 1, "x")
-            passlog = os.path.join(tmp, "pass")
-            vf = ve.vf_args(",".join(chain) if chain else None)
-            if two_pass:
-                ctx.log(f"Pass 1 of 2 ({ve.label})…")
-                ctx.span(0.0, 0.4).run(ve.pre_input + inp + ["-i", src, "-map", "0:v:0"] + vf + ve.args +
-                                       enc.two_pass_args(ve.encoder, 1, passlog) + ["-an", "-f", "null", "-"],
-                                       duration=length)
-            lo = 0.4 if two_pass else 0.0
-            for attempt in range(4):
-                ve = video_args(kbps)
-                ctx.log(f"Encoding with {ve.label}…" if attempt == 0 else
-                        f"Still over the limit - re-encoding at {kbps} kb/s…")
-                ctx.span(lo + (1 - lo) * attempt / 4, 1.0 if attempt == 0 else lo + (1 - lo) * (attempt + 1) / 4)
-                ctx.run(ve.pre_input + inp + ["-i", src, "-map", "0:v:0"] + ve.vf_args(",".join(chain) or None)
-                        + ve.args + (enc.two_pass_args(ve.encoder, 2, passlog) if two_pass else [])
-                        + audio + ["-map_metadata", "0", "-map_chapters", "0", final], duration=length)
-                size = os.path.getsize(final)
-                ctx.log(f"  {size / 1e6:.2f} MB")
-                if size <= target:
-                    return 0
-                kbps = retry_kbps(kbps, target, size, int(p.audio_kbps * 1000 / 8 * length))
-            raise RuntimeError("Could not get the video under the size limit - choose a bigger size, "
-                               "trim it, or allow a lower resolution.")
+            def runner(cmd, duration, lo, hi):
+                ctx.span(lo, hi).run(cmd, duration=duration)
+            return encode_to_size(src, ctx.output(), info, p, target, codec=codec, fast=fast,
+                                  audio_mode=audio_mode, start=start, end=end, tmp=ctx.tempdir(),
+                                  run=runner, log=ctx.log)
 
         common.queue_job(self, name="Downsizer", out=out, work=work, btn=self._btn_render,
                          btn_label=t("downsizer.render_button"), console=self.console, duration=length,
                          inputs=[src])
+
+
+def encode_to_size(src: str, final: str, info, p: Plan, target: int, *, codec: str = "h264", fast: bool = False,
+                   audio_mode: str = "auto", start: float = 0.0, end: Optional[float] = None, tmp: str,
+                   run, log=print) -> int:
+    """Encode *src* into *final* under *target* bytes following plan *p*:
+    two-pass on the CPU (or the GPU when *fast*), then re-encode at a lower
+    bitrate until the file fits.  *run(cmd, duration, lo, hi)* runs one
+    command (lo/hi = its share of the progress).  Shared by the tool and the
+    command line."""
+    end = info.duration if end is None else end
+    length = end - start
+    v = info.video
+    hdr = v.is_hdr
+    ten_bit = codec != "h264" and (v.bit_depth > 8 or hdr)
+    chain = []
+    if hdr and codec == "h264":
+        chain.append(fl.hdr_to_sdr_chain())
+    w0, h0 = v.display_size
+    sw, sh = max(2, w0 // 2 * 2), max(2, h0 // 2 * 2)
+    if (p.width, p.height) != (sw, sh) or (v.sar and v.sar not in ("1:1", "0:1")):
+        chain.append(f"scale={p.width}:{p.height}:flags=lanczos,setsar=1")
+    if v.fps and abs(p.fps - v.fps) > 0.01:
+        chain.append(f"fps={p.fps:g}")
+    container = os.path.splitext(final)[1].lstrip(".").lower() or "mp4"
+    if container == "part":
+        container = os.path.splitext(os.path.splitext(final)[0])[1].lstrip(".").lower() or "mp4"
+
+    def video_args(kbps):
+        return enc.video(codec, "high", speed="balanced", hw="auto" if fast else "off", ten_bit=ten_bit,
+                         container=container, bitrate=f"{kbps}k", maxrate=f"{int(kbps * 1.5)}k" if fast else None,
+                         gop_seconds=4, fps=p.fps)
+
+    if audio_mode == "none" or not info.has_audio:
+        audio = ["-an"]
+    elif audio_mode == "copy":
+        audio = ["-map", "0:a:0", "-c:a", "copy"]
+    else:
+        audio = ["-map", "0:a:0", "-c:a", "aac", "-b:a", f"{p.audio_kbps}k"] + (["-ac", "1"] if p.mono else [])
+    inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
+    if start > 0:
+        inp += ["-ss", f"{start:.3f}"]
+    if end < info.duration - 0.01:
+        inp += ["-to", f"{end:.3f}"]
+    kbps = p.video_kbps
+    ve = video_args(kbps)
+    two_pass = not fast and ve.hw is None and bool(enc.two_pass_args(ve.encoder, 1, "x"))
+    passlog = os.path.join(tmp, "pass")
+    if two_pass:
+        log(f"Pass 1 of 2 ({ve.label})…")
+        run(ve.pre_input + inp + ["-i", src, "-map", "0:v:0"] + ve.vf_args(",".join(chain) or None) + ve.args
+            + enc.two_pass_args(ve.encoder, 1, passlog) + ["-an", "-f", "null", "-"], length, 0.0, 0.4)
+    lo = 0.4 if two_pass else 0.0
+    for attempt in range(4):
+        ve = video_args(kbps)
+        log(f"Encoding with {ve.label}…" if attempt == 0 else f"Still over the limit - re-encoding at {kbps} kb/s…")
+        run(ve.pre_input + inp + ["-i", src, "-map", "0:v:0"] + ve.vf_args(",".join(chain) or None) + ve.args
+            + (enc.two_pass_args(ve.encoder, 2, passlog) if two_pass else []) + audio
+            + ["-map_metadata", "0", "-map_chapters", "0", final], length,
+            lo + (1 - lo) * attempt / 4, 1.0 if attempt == 0 else lo + (1 - lo) * (attempt + 1) / 4)
+        size = os.path.getsize(final)
+        log(f"  {size / 1e6:.2f} MB")
+        if size <= target:
+            return 0
+        kbps = retry_kbps(kbps, target, size, int(p.audio_kbps * 1000 / 8 * length))
+    raise RuntimeError("Could not get the video under the size limit - choose a bigger size, trim it, or allow a "
+                       "lower resolution.")

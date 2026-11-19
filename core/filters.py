@@ -377,13 +377,20 @@ def find_font(name: str = "sans") -> Optional[str]:
     return result
 
 
-def hdr_to_sdr_chain(*, method: str = "hable", peak_nits: float = 100.0, out_fmt: str = "yuv420p") -> str:
+#: re-tag frames whose HDR tags were lost (zscale's own *in options can't do it: "no path between colorspaces")
+HDR_INPUTS = {"pq": "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,",
+              "hlg": "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc,"}
+
+
+def hdr_to_sdr_chain(*, method: str = "hable", peak_nits: float = 100.0, out_fmt: str = "yuv420p",
+                     assume: str = "") -> str:
     """CPU tone-mapping of HDR10 / HLG video to SDR BT.709 (zscale + tonemap).
 
     The input transfer/primaries are taken from the frames, so PQ and HLG both
-    work.  *method*: hable (filmic, default), mobius (keeps saturation),
+    work; *assume* ("pq" / "hlg") overrides them for files whose HDR tags were
+    lost.  *method*: hable (filmic, default), mobius (keeps saturation),
     reinhard, clip."""
-    return (f"zscale=t=linear:npl={peak_nits:g},format=gbrpf32le,zscale=p=bt709,"
+    return (f"{HDR_INPUTS.get(assume, '')}zscale=t=linear:npl={peak_nits:g},format=gbrpf32le,zscale=p=bt709,"
             f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt}")
 
 
