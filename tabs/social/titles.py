@@ -1,452 +1,384 @@
 """
-tab_titlesgenerator.py  ─  Animated Titles & Lower Thirds
-Overlay professional animated text onto existing footage at specific
-timestamps. Distinct from the Watermarker (which does simple static/
-bouncing/jumping text) and the IntroMaker (which creates standalone bumpers).
+tabs/social/titles.py  -  Animated Titles
 
-This tool produces:
-  • Lower Thirds  - slide-up bar with name + subtitle reveal
-  • Chapter Titles - large centred text with fade reveal over a dark overlay
-  • Name Tags      - corner box with animated border
-  • Kinetic Text   - word-by-word stagger reveal
+Burn animated title cards onto footage: lower thirds, chapter titles, name
+tags, kinetic pop-ups and subtitle strips.  Any number of cards, each with
+its own timing and accent colour, with a live preview.
 
-Multiple title cards per video, each independently timed.
-All rendered via FFmpeg drawtext + overlay filters.
+Titles are rendered by libass from a generated ASS script (see core/ass.py):
+real bold fonts from the bundled set, vector bars, smooth slides / fades /
+pops, and any characters in the text.  Layout scales with the video size,
+so 720p, 4K and vertical videos all look right.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, colorchooser
-from core import dialogs
-import subprocess
+from __future__ import annotations
+
 import os
-import tempfile
+import shutil
+import tkinter as tk
+from dataclasses import dataclass
+from tkinter import colorchooser, messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import ass
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
-
-# ── Style presets ─────────────────────────────────────────────────────────
-TITLE_STYLES = {
-    t("titles.lower_third_slide_up_bar"): {
-        "icon": "📺",
-        "desc": "Classic broadcast lower-third: coloured bar slides up with name + role text.",
-        "bar": True,  "bar_h": 80,  "bar_alpha": 0.85,
-        "anim": "slide_up", "text_pos": "lower_third",
-    },
-    "Chapter Title  (fade overlay)": {
-        "icon": "🎬",
-        "desc": "Full-width dark overlay with large centred chapter title. Fades in/out.",
-        "bar": True, "bar_h": 120, "bar_alpha": 0.70,
-        "anim": "fade", "text_pos": "centre",
-    },
-    "Name Tag  (corner box)": {
-        "icon": "🏷",
-        "desc": "Corner label box. Great for interview names and reaction videos.",
-        "bar": True, "bar_h": 60, "bar_alpha": 0.80,
-        "anim": "slide_right", "text_pos": "bottom_left",
-    },
-    "Kinetic  (pop-up)": {
-        "icon": "⚡",
-        "desc": "Text scales up from nothing. Eye-catching for YouTube shorts.",
-        "bar": False, "bar_h": 0, "bar_alpha": 0,
-        "anim": "zoom_pop", "text_pos": "centre",
-    },
-    "Subtitle Strip  (bottom banner)": {
-        "icon": "💬",
-        "desc": "Semi-transparent strip across the bottom. Good for context and translations.",
-        "bar": True, "bar_h": 55, "bar_alpha": 0.75,
-        "anim": "fade", "text_pos": "bottom_strip",
-    },
+STYLES = {
+    "lower_third": "Lower third (sliding bar)",
+    "chapter": "Chapter title (dimmed frame)",
+    "name_tag": "Name tag (corner box)",
+    "kinetic": "Kinetic pop (word by word)",
+    "strip": "Subtitle strip (bottom banner)",
 }
-
-ACCENT_COLORS = {
-    t("titles.youtube_red"):   "#FF0000",
-    t("titles.electric_blue"): "#1565C0",
-    t("titles.neon_green"):    "#00C853",
-    "Gold":          "#FFD600",
-    "Purple":        "#7B1FA2",
-    "White":         "#FFFFFF",
-    t("smart_reframe.custom"):       None,
-}
+ACCENTS = {"YouTube red": "#E53935", "Electric blue": "#1565C0", "Neon green": "#00C853",
+           "Gold": "#FFB300", "Purple": "#7B1FA2", "Charcoal": "#263238"}
+SIZES = {"Small": 0.8, "Medium": 1.0, "Large": 1.25}
 
 
-class TitleCard:
-    """Data for one title overlay."""
-    def __init__(self):
-        self.style_var    = tk.StringVar(value=list(TITLE_STYLES.keys())[0])
-        self.line1_var    = tk.StringVar(value="Title Text")
-        self.line2_var    = tk.StringVar(value="Subtitle / Role")
-        self.start_var    = tk.StringVar(value="3")
-        self.duration_var = tk.StringVar(value="4")
-        self.size1_var    = tk.StringVar(value="48")
-        self.size2_var    = tk.StringVar(value="28")
-        self.color_var    = tk.StringVar(value="YouTube Red")
-        self.fadein_var   = tk.StringVar(value="0.4")
-        self.fadeout_var  = tk.StringVar(value="0.4")
-        self.row          = None   # tk.Frame reference
+@dataclass
+class Card:
+    style: str = "lower_third"
+    line1: str = "Title Text"
+    line2: str = ""
+    start: float = 1.0
+    duration: float = 4.0
+    accent: str = "#1565C0"
+
+
+def build_script(cards, width: int, height: int, *, font: str = "Montserrat",
+                 scale: float = 1.0, anim: float = 0.35) -> ass.Script:
+    """ASS script with every card laid out for a width x height video."""
+    sc = ass.Script(width, height)
+    u = min(width, height) / 1080 * scale
+    W, H = width, height
+    sc.style(ass.Style("Box", font=font, size=20, bold=False))
+    sc.style(ass.Style("Title", font=font, size=round(54 * u), bold=True, shadow=2 * u,
+                       back_colour="#000000", back_alpha=0.5))
+    sc.style(ass.Style("Sub", font=font, size=round(34 * u), colour="#EEEEEE", shadow=1.5 * u,
+                       back_colour="#000000", back_alpha=0.5))
+    a_ms = int(anim * 1000)
+    for c in cards:
+        s, e = c.start, c.start + c.duration
+        if c.duration <= 0 or not (c.line1.strip() or c.line2.strip()):
+            continue
+        fin, fout = min(a_ms, int(c.duration * 300)), min(a_ms, int(c.duration * 300))
+        l1, l2 = ass.escape(c.line1), ass.escape(c.line2)
+        if c.style == "chapter":
+            s1, s2 = round(84 * u), round(40 * u)
+            sc.add(s, e, ass.box(W, H, x=0, y=0, fill="#000000", alpha=0.45,
+                                 extra=f"\\fad({fin},{fout})"), "Box", 0)
+            ty = H / 2 - (s2 * 0.9 if c.line2 else 0)
+            sc.add(s, e, f"{{\\an5\\pos({W / 2:.0f},{ty:.0f})\\fs{s1}\\fsp{2 * u:.1f}"
+                         f"\\fad({fin},{fout})\\fscx92\\fscy92\\t(0,{a_ms * 2},\\fscx100\\fscy100)}}{l1}",
+                   "Title", 2)
+            line_w = min(W * 0.5, max(ass.text_width(c.line1, s1) * 0.6, 120 * u))
+            sc.add(s, e, f"{{\\an8\\pos({W / 2:.0f},{ty + s1 * 0.62:.0f})\\bord0\\shad0"
+                         f"\\1c{ass.colour(c.accent)}\\fad({fin},{fout})\\fscx0"
+                         f"\\t(0,{a_ms * 2},\\fscx100)\\p1}}{ass.rect(line_w, max(3, 6 * u))}{{\\p0}}",
+                   "Box", 1)
+            if c.line2:
+                sc.add(s, e, f"{{\\an8\\pos({W / 2:.0f},{ty + s1 * 0.62 + 18 * u:.0f})\\fs{s2}"
+                             f"\\fad({fin + 150},{fout})}}{l2}", "Sub", 2)
+        elif c.style == "kinetic":
+            s1, s2 = round(104 * u), round(44 * u)
+            ty = H / 2 - (s2 if c.line2 else 0)
+            sc.add(s, e, f"{{\\an5\\pos({W / 2:.0f},{ty:.0f})\\fs{s1}\\bord{5 * u:.1f}"
+                         f"\\3c{ass.colour(c.accent)}\\fad(0,{fout})\\fscx0\\fscy0"
+                         f"\\t(0,180,\\fscx115\\fscy115)\\t(180,320,\\fscx100\\fscy100)}}{l1}",
+                   "Title", 2)
+            if c.line2:
+                sc.add(s, e, f"{{\\an8\\pos({W / 2:.0f},{ty + s1 * 0.62:.0f})\\fs{s2}"
+                             f"\\fad(0,{fout})}}{ass.word_reveal(c.line2, 350, 170)}", "Sub", 2)
+        elif c.style == "strip":
+            s1 = round(40 * u)
+            lines = 2 if c.line2 else 1
+            bh = s1 * (1.0 + 1.25 * lines)
+            sc.add(s, e, ass.box(W, bh, x=0, y=H - bh, fill="#000000", alpha=0.35,
+                                 extra=f"\\fad({fin},{fout})"), "Box", 0)
+            text = l1 + (f"\\N{{\\fs{round(s1 * 0.8)}\\b0}}{l2}" if c.line2 else "")
+            sc.add(s, e, f"{{\\an5\\pos({W / 2:.0f},{H - bh / 2:.0f})\\fs{s1}\\fad({fin},{fout})}}{text}",
+                   "Title", 2)
+        else:  # lower_third / name_tag
+            tag = c.style == "name_tag"
+            s1 = round((40 if tag else 54) * u)
+            s2 = round((26 if tag else 34) * u)
+            pad = (18 if tag else 28) * u
+            stripe = (10 if tag else 0) * u
+            text_w = max(ass.text_width(c.line1, s1), ass.text_width(c.line2, s2, bold=False))
+            bw = min(W * 0.9, max(W * (0.18 if tag else 0.3), text_w + 2 * pad + stripe))
+            bh = pad * 1.3 + s1 * 1.15 + (s2 * 1.3 if c.line2 else 0)
+            x0 = W * 0.04
+            y0 = H * 0.06 if tag else H - bh - H * 0.08
+            fill, falpha = ("#111111", 0.15) if tag else (c.accent, 0.08)
+            sc.add(s, e, f"{{\\an7\\move({-bw:.0f},{y0:.0f},{x0:.0f},{y0:.0f},0,{a_ms})\\bord0\\shad0"
+                         f"\\1c{ass.colour(fill)}\\1a{ass.alpha_tag(falpha)}\\fad(0,{fout})\\p1}}"
+                         f"{ass.rect(bw, bh)}{{\\p0}}", "Box", 0)
+            if stripe:
+                sc.add(s, e, f"{{\\an7\\move({-bw:.0f},{y0:.0f},{x0:.0f},{y0:.0f},0,{a_ms})\\bord0"
+                             f"\\shad0\\1c{ass.colour(c.accent)}\\fad(0,{fout})\\p1}}"
+                             f"{ass.rect(stripe, bh)}{{\\p0}}", "Box", 1)
+            tx = x0 + pad + stripe
+            ty = y0 + pad * 0.65
+            sc.add(s, e, f"{{\\an7\\move({tx - 60 * u:.0f},{ty:.0f},{tx:.0f},{ty:.0f},80,{a_ms + 80})"
+                         f"\\fs{s1}\\fad({fin},{fout})}}{l1}", "Title", 2)
+            if c.line2:
+                ty2 = ty + s1 * 1.18
+                sc.add(s, e, f"{{\\an7\\move({tx - 60 * u:.0f},{ty2:.0f},{tx:.0f},{ty2:.0f},160,"
+                             f"{a_ms + 160})\\fs{s2}\\fad({fin + 120},{fout})}}{l2}", "Sub", 2)
+    return sc
 
 
 class TitlesGeneratorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path   = ""
-        self.preview_proc = None
-        self.cards: list[TitleCard] = []
+        self.src_var = tk.StringVar()
+        self.rows: list = []
+        self._info = None
+        self._job = None
+        self._preview_dir = None
+        self._preview_n = 0
         self._build_ui()
 
-    # ═══════════════════════════════════════════════════════════════════════
+    # ── UI ───────────────────────────────────────────────────────────────────
+
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(hdr, text="🎬  " + t("tab.animated_titles"),
-                 font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=20, pady=12)
-        tk.Label(hdr,
-                 text=t("titles.subtitle"),
-                 bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
+        self.make_header(self, t("tab.animated_titles"), t("titles.subtitle"), icon="🎬")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
+                               on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=8)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat").pack(side="left")
-        self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
-        self.dur_lbl.pack(side="left", padx=8)
+        pv = tk.Frame(body)
+        pv.pack(pady=4)
+        self.preview = FramePreview(pv, 480, 270)
+        self.preview.pack()
+        self.pos_var = tk.DoubleVar(value=0.0)
+        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=480,
+                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider.pack(fill="x")
 
-        # ── Title cards list ─────────────────────────────────────────────
-        list_hdr = tk.Frame(self); list_hdr.pack(fill="x", padx=16, pady=(6, 0))
-        tk.Label(list_hdr, text=t("titles.title_cards"), font=(UI_FONT, 9, "bold"),
+        look = tk.Frame(body)
+        look.pack(fill="x", padx=20, pady=4)
+        tk.Label(look, text="Font:").pack(side="left")
+        self.font_var = tk.StringVar(value="Montserrat")
+        fb = ttk.Combobox(look, textvariable=self.font_var, values=ass.families(), width=18,
+                          state="readonly")
+        fb.pack(side="left", padx=6)
+        fb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
+        tk.Label(look, text="Text size:").pack(side="left", padx=(12, 0))
+        self.size_var = tk.StringVar(value="Medium")
+        sb = ttk.Combobox(look, textvariable=self.size_var, values=list(SIZES), width=8,
+                          state="readonly")
+        sb.pack(side="left", padx=6)
+        sb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
+        tk.Label(look, text="Animation (s):").pack(side="left", padx=(12, 0))
+        self.anim_var = tk.StringVar(value="0.35")
+        tk.Entry(look, textvariable=self.anim_var, width=5).pack(side="left", padx=6)
+        self.anim_var.trace_add("write", lambda *_a: self._schedule())
+
+        cards_hdr = tk.Frame(body)
+        cards_hdr.pack(fill="x", padx=20, pady=(8, 0))
+        tk.Label(cards_hdr, text=t("titles.title_cards"), font=(UI_FONT, 9, "bold"),
                  fg=CLR["fgdim"]).pack(side="left")
-        tk.Button(list_hdr, text=f"➕ {t('titles.add_card_button')}", bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._add_card).pack(side="right", padx=4)
-        tk.Button(list_hdr, text=f"🗑 {t('titles.remove_last_button')}", bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._remove_last).pack(side="right", padx=4)
+        tk.Button(cards_hdr, text=f"➕ {t('titles.add_card_button')}", relief="flat",
+                  cursor="hand2", command=lambda: self.add_card()).pack(side="right")
+        self.cards_frame = tk.Frame(body)
+        self.cards_frame.pack(fill="x", padx=20)
 
-        # Cards scroll area
-        cards_canvas = tk.Canvas(self, height=340, highlightthickness=0)
-        cards_sb = ttk.Scrollbar(self, orient="vertical",
-                                  command=cards_canvas.yview)
-        self.cards_frame = tk.Frame(cards_canvas)
-        cards_canvas.create_window((0, 0), window=self.cards_frame, anchor="nw")
-        self.cards_frame.bind("<Configure>",
-                              lambda e: cards_canvas.configure(
-                                  scrollregion=cards_canvas.bbox("all")))
-        cards_canvas.configure(yscrollcommand=cards_sb.set)
-        cards_canvas.pack(side="left", fill="both", expand=True, padx=(16, 0))
-        cards_sb.pack(side="right", fill="y")
-
-        # Seed two cards
-        self._add_card()
-        self._add_card("Chapter Title  (fade overlay)", "Chapter One", "", "10", "5")
-
-        # ── Encode options ────────────────────────────────────────────────
-        enc_f = tk.Frame(self); enc_f.pack(fill="x", padx=16, pady=6)
-        tk.Label(enc_f, text=t("titles.font_label")).pack(side="left")
-        self.font_var = tk.StringVar(value="Arial")
-        ttk.Combobox(enc_f, textvariable=self.font_var,
-                     values=["Arial","Impact","Helvetica","Verdana",
-                              "Georgia",t("titles.hard_subber_trebuchet_ms"),t("intro_maker.hard_subber_courier_new")],
-                     width=16).pack(side="left", padx=6)
-        tk.Label(enc_f, text=t("rotate_flip.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(enc_f, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Label(enc_f, text=t("rotate_flip.preset")).pack(side="left")
-        self.preset_var = tk.StringVar(value="fast")
-        ttk.Combobox(enc_f, textvariable=self.preset_var,
-                     values=["ultrafast","fast","medium","slow"],
-                     state="readonly", width=10).pack(side="left", padx=4)
-
-        # ── Output & render ───────────────────────────────────────────────
-        of = tk.Frame(self); of.pack(fill="x", padx=16, pady=4)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=62, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        btn_row = tk.Frame(self); btn_row.pack(pady=8)
-        tk.Button(btn_row, text=f"👁  {t('titles.preview_button')}",
-                  bg=CLR["accent"], fg="white", width=18,
-                  command=self._preview).pack(side="left", padx=8)
-        self.btn_render = tk.Button(
-            btn_row, text=t("titles.render_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#AD1457", fg="white",
-            height=2, width=26, command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=16, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "titled"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text=t("titles.render_button"), font=(UI_FONT, 12, "bold"),
+                                    bg="#AD1457", fg="white", width=26, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ─────────────────────────────────────────────────────────────────────
-    def _add_card(self, style=None, line1="Title Text",
-                  line2="Subtitle / Role", start="3", duration="4"):
-        card = TitleCard()
-        if style:
-            card.style_var.set(style)
-        card.line1_var.set(line1)
-        card.line2_var.set(line2)
-        card.start_var.set(start)
-        card.duration_var.set(duration)
-        self.cards.append(card)
-        self._draw_card_row(card, len(self.cards) - 1)
+        self.add_card(Card("lower_third", "Jane Smith", "Director of Photography", 1.0, 4.0))
+        self.add_card(Card("chapter", "Chapter One", "The beginning", 6.0, 4.0, "#FFB300"))
 
-    def _draw_card_row(self, card: TitleCard, idx: int):
-        outer = tk.LabelFrame(self.cards_frame,
-                               text=f"  Card {idx+1}  ",
-                               padx=10, pady=6)
-        outer.pack(fill="x", pady=4, padx=4)
-        card.row = outer
+    def add_card(self, card: Card | None = None):
+        card = card or Card(start=(self.rows[-1]["vars"]["start"].get() if self.rows else 1.0))
+        if not isinstance(card.start, (int, float)):
+            try:
+                card.start = ff.parse_time(card.start) + 5
+            except ValueError:
+                card.start = 1.0
+        frame = tk.LabelFrame(self.cards_frame, text=f"  Card {len(self.rows) + 1}  ", padx=8, pady=4)
+        frame.pack(fill="x", pady=3)
+        v = {"style": tk.StringVar(value=STYLES.get(card.style, STYLES["lower_third"])),
+             "line1": tk.StringVar(value=card.line1), "line2": tk.StringVar(value=card.line2),
+             "start": tk.StringVar(value=f"{card.start:g}"),
+             "duration": tk.StringVar(value=f"{card.duration:g}")}
+        row = {"frame": frame, "vars": v, "accent": card.accent}
+        r1 = tk.Frame(frame)
+        r1.pack(fill="x")
+        ttk.Combobox(r1, textvariable=v["style"], values=list(STYLES.values()), state="readonly",
+                     width=30).pack(side="left")
+        tk.Label(r1, text=t("titles.start_label")).pack(side="left", padx=(10, 2))
+        tk.Entry(r1, textvariable=v["start"], width=8).pack(side="left")
+        tk.Label(r1, text=t("titles.duration_label")).pack(side="left", padx=(10, 2))
+        tk.Entry(r1, textvariable=v["duration"], width=6).pack(side="left")
+        swatch = tk.Button(r1, text="  ", bg=card.accent, relief="flat", width=3,
+                           command=lambda r=row: self._pick_accent(r))
+        swatch.pack(side="left", padx=10)
+        row["swatch"] = swatch
+        tk.Button(r1, text="👁", relief="flat", cursor="hand2",
+                  command=lambda r=row: self._show_card(r)).pack(side="left")
+        tk.Button(r1, text="✕", relief="flat", cursor="hand2",
+                  command=lambda r=row: self._remove(r)).pack(side="right")
+        r2 = tk.Frame(frame)
+        r2.pack(fill="x", pady=(3, 0))
+        tk.Label(r2, text=t("titles.line_1_label"), width=7, anchor="w").pack(side="left")
+        tk.Entry(r2, textvariable=v["line1"], width=34).pack(side="left", padx=(0, 10))
+        tk.Label(r2, text=t("titles.line_2_label"), width=7, anchor="w").pack(side="left")
+        tk.Entry(r2, textvariable=v["line2"], width=34).pack(side="left")
+        for var in v.values():
+            var.trace_add("write", lambda *_a: self._schedule())
+        self.rows.append(row)
+        self._schedule()
+        return row
 
-        # Row 1: style + timing
-        r1 = tk.Frame(outer); r1.pack(fill="x", pady=2)
-        tk.Label(r1, text=t("titles.style_label"), width=7, anchor="e").pack(side="left")
-        style_cb = ttk.Combobox(r1, textvariable=card.style_var,
-                                 values=list(TITLE_STYLES.keys()),
-                                 state="readonly", width=30)
-        style_cb.pack(side="left", padx=4)
-        style_cb.bind("<<ComboboxSelected>>", lambda e, c=card: self._show_style_desc(c))
+    def _remove(self, row):
+        if row in self.rows:
+            self.rows.remove(row)
+            row["frame"].destroy()
+            for i, r in enumerate(self.rows, 1):
+                r["frame"].config(text=f"  Card {i}  ")
+            self._schedule()
 
-        self._style_desc_lbl = tk.Label(r1, text="", fg=CLR["fgdim"],
-                                         font=(UI_FONT, 8), width=45, anchor="w")
-        self._style_desc_lbl.pack(side="left", padx=6)
+    def _pick_accent(self, row):
+        res = colorchooser.askcolor(row["accent"], parent=self)
+        if res and res[1]:
+            row["accent"] = res[1]
+            row["swatch"].config(bg=res[1])
+            self._schedule()
 
-        for lbl, var in [(t("titles.start_label"), card.start_var),
-                          (t("titles.duration_label"), card.duration_var)]:
-            tk.Label(r1, text=lbl).pack(side="left", padx=(8, 2))
-            tk.Entry(r1, textvariable=var, width=5, relief="flat").pack(side="left")
-
-        # Row 2: text lines
-        r2 = tk.Frame(outer); r2.pack(fill="x", pady=2)
-        tk.Label(r2, text=t("titles.line_1_label"), width=7, anchor="e").pack(side="left")
-        tk.Entry(r2, textvariable=card.line1_var, width=28,
-                 font=(UI_FONT, 10, "bold")).pack(side="left", padx=4)
-        tk.Label(r2, text=t("hard_subber.size_label")).pack(side="left")
-        tk.Entry(r2, textvariable=card.size1_var, width=4, relief="flat").pack(side="left", padx=2)
-
-        tk.Label(r2, text=f"  {t('titles.line_2_label')}").pack(side="left", padx=(12, 0))
-        tk.Entry(r2, textvariable=card.line2_var, width=28, relief="flat").pack(side="left", padx=4)
-        tk.Label(r2, text=t("hard_subber.size_label")).pack(side="left")
-        tk.Entry(r2, textvariable=card.size2_var, width=4, relief="flat").pack(side="left", padx=2)
-
-        # Row 3: accent color + fade
-        r3 = tk.Frame(outer); r3.pack(fill="x", pady=2)
-        tk.Label(r3, text=t("titles.accent_label"), width=7, anchor="e").pack(side="left")
-        color_cb = ttk.Combobox(r3, textvariable=card.color_var,
-                                 values=list(ACCENT_COLORS.keys()),
-                                 state="readonly", width=16)
-        color_cb.pack(side="left", padx=4)
-        color_cb.bind("<<ComboboxSelected>>",
-                      lambda e, c=card: self._on_color_change(c))
-        card._color_preview = tk.Label(r3, text=t("titles.item"), bg="#FF0000",
-                                        width=6)
-        card._color_preview.pack(side="left")
-        card._custom_btn = tk.Button(r3, text=t("smart_reframe.custom"),
-                                     command=lambda c=card: self._pick_color(c))
-        card._custom_btn.pack(side="left", padx=4)
-
-        tk.Label(r3, text=f"  {t('titles.fade_in_label')}").pack(side="left")
-        tk.Entry(r3, textvariable=card.fadein_var, width=4, relief="flat").pack(side="left", padx=2)
-        tk.Label(r3, text=f"  {t('titles.fade_out_label')}").pack(side="left")
-        tk.Entry(r3, textvariable=card.fadeout_var, width=4, relief="flat").pack(side="left", padx=2)
-
-    def _show_style_desc(self, card: TitleCard):
-        info = TITLE_STYLES.get(card.style_var.get(), {})
-        # best-effort update the nearest label
-        pass
-
-    def _on_color_change(self, card: TitleCard):
-        key = card.color_var.get()
-        hex_c = ACCENT_COLORS.get(key)
-        if hex_c:
-            card._custom_color = hex_c
-            card._color_preview.config(bg=hex_c)
-
-    def _pick_color(self, card: TitleCard):
-        c = colorchooser.askcolor()
-        if c[1]:
-            card._custom_color = c[1]
-            card._color_preview.config(bg=c[1])
-            card.color_var.set("Custom…")
-
-    def _remove_last(self):
-        if self.cards:
-            c = self.cards.pop()
-            c.row.destroy()
-
-    def _browse_src(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            from core.hardware import get_video_duration
-            dur = get_video_duration(p)
-            m, s = divmod(int(dur), 60)
-            self.dur_lbl.config(text=f"{m}m {s}s", fg=CLR["fgdim"])
-            base = os.path.splitext(p)[0]
-            self.out_var.set(base + "_titled.mp4")
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                          filetypes=[("MP4", "*.mp4")])
-        if p: self.out_var.set(p)
-
-    # ── Filter building ───────────────────────────────────────────────────
-    def _get_accent_hex(self, card: TitleCard) -> str:
-        key = card.color_var.get()
-        hex_c = getattr(card, "_custom_color",
-                        ACCENT_COLORS.get(key, "#FF0000"))
-        return (hex_c or "#FF0000").lstrip("#")
-
-    def _build_card_filter(self, card: TitleCard, vid_w=1920, vid_h=1080) -> str:
-        """Return a chain of drawtext (and drawbox) filters for one card."""
-        style_info = TITLE_STYLES[card.style_var.get()]
-        line1   = card.line1_var.get().replace("'", "").replace(":", "\\:")
-        line2   = card.line2_var.get().replace("'", "").replace(":", "\\:")
-        s1      = card.size1_var.get()
-        s2      = card.size2_var.get()
-        ts      = float(card.start_var.get() or "0")
-        dur     = float(card.duration_var.get() or "4")
-        te      = ts + dur
-        fi      = float(card.fadein_var.get() or "0.4")
-        fo      = float(card.fadeout_var.get() or "0.4")
-        font    = self.font_var.get()
-        accent  = self._get_accent_hex(card)
-        anim    = style_info["anim"]
-        pos_key = style_info["text_pos"]
-
-        # Alpha expression: fade in, hold, fade out
-        alpha = (f"'if(lt(t,{ts}),0,"
-                 f"if(lt(t,{ts+fi}),(t-{ts})/{fi},"
-                 f"if(lt(t,{te-fo}),1,"
-                 f"if(lt(t,{te}),({te}-t)/{fo},0))))'")
-
-        enable = f"enable='between(t,{ts},{te})'"
-
-        # ── Position ──────────────────────────────────────────────────────
-        bar_h   = style_info["bar_h"]
-        bar_pad = 14
-
-        if pos_key == "lower_third":
-            # Line 1 (name) above line 2 (role), anchored bottom-left with margin
-            if anim == "slide_up":
-                y_off = f"'if(lt(t,{ts}),{vid_h}," \
-                        f"if(lt(t,{ts+fi}),{vid_h-bar_h-40}+(({ts+fi}-t)/{fi})*{vid_h}," \
-                        f"{vid_h-bar_h-40}))'"
-                l1_y = f"({vid_h-bar_h-40}+{bar_pad})"
-                l2_y = f"({vid_h-bar_h-40}+{bar_pad}+{s1}+6)"
-            else:
-                l1_y = f"({vid_h-bar_h}+{bar_pad})"
-                l2_y = f"({vid_h-bar_h}+{bar_pad}+{s1}+6)"
-            l1_x = "60"
-            l2_x = "60"
-
-        elif pos_key == "centre":
-            l1_x = "(w-text_w)/2"
-            l1_y = f"(h-{int(s1)}-{int(s2)})/2"
-            l2_x = "(w-text_w)/2"
-            l2_y = f"(h-{int(s1)}-{int(s2)})/2+{s1}+10"
-
-        elif pos_key == "bottom_left":
-            l1_x, l1_y = "40", f"{vid_h-bar_h-40}+{bar_pad}"
-            l2_x, l2_y = "40", f"{vid_h-bar_h-40}+{bar_pad}+{s1}+4"
-
-        elif pos_key == "bottom_strip":
-            l1_x = "(w-text_w)/2"
-            l1_y = f"{vid_h-bar_h+8}"
-            l2_x = "(w-text_w)/2"
-            l2_y = f"{vid_h-bar_h+8+int(s1)+4}"
-        else:
-            l1_x = l2_x = "(w-text_w)/2"
-            l1_y = "(h-text_h)/2"
-            l2_y = f"(h-text_h)/2+{s1}+8"
-
-        # ── Background bar ────────────────────────────────────────────────
-        filters = []
-        if style_info["bar"]:
-            bar_alpha_val = style_info["bar_alpha"]
-            if pos_key in ("lower_third", "bottom_left"):
-                bx, by = f"0", f"{vid_h-bar_h-20}"
-                bw, bh = f"w/2", str(bar_h + 20)
-            elif pos_key == "bottom_strip":
-                bx, by = "0", str(vid_h - bar_h - 4)
-                bw, bh = "w", str(bar_h + 4)
-            else:
-                bx, by = "0", f"(h-{bar_h+20})/2"
-                bw, bh = "w", str(bar_h + 20)
-            filters.append(
-                f"drawbox=x={bx}:y={by}:w={bw}:h={bh}"
-                f":color=0x{accent}@{bar_alpha_val:.2f}:t=fill"
-                f":{enable}")
-
-        # ── Text overlays ─────────────────────────────────────────────────
-        shadow = ":shadowcolor=black@0.7:shadowx=2:shadowy=2"
-        filters.append(
-            f"drawtext=text='{line1}':fontsize={s1}:font={font}"
-            f":fontcolor=white:alpha={alpha}:x={l1_x}:y={l1_y}{shadow}")
-        if line2.strip():
-            filters.append(
-                f"drawtext=text='{line2}':fontsize={s2}:font={font}"
-                f":fontcolor=white@0.85:alpha={alpha}:x={l2_x}:y={l2_y}")
-
-        return ",".join(filters)
-
-    def _build_full_filter(self):
-        """Chain all cards into a single -vf string."""
-        if not self.cards:
-            return None
-        all_filters = []
-        for card in self.cards:
-            f = self._build_card_filter(card)
-            if f:
-                all_filters.append(f)
-        return ",".join(all_filters)
-
-    # ── Preview & Render ──────────────────────────────────────────────────
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+    def _show_card(self, row):
+        try:
+            start = ff.parse_time(row["vars"]["start"].get())
+            dur = float(row["vars"]["duration"].get())
+        except ValueError:
             return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-        vf    = self._build_full_filter()
-        ffplay = get_binary_path("ffplay.exe")
-        cmd   = [ffplay, "-i", self.file_path,
-                 "-vf", vf or "null",
-                 "-window_title", t("titles.titles_preview"),
-                 "-x", "960", "-autoexit"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+        at = start + min(1.0, dur / 2)
+        self.pos_var.set(at)
+        self.preview.show(at)
+
+    # ── Model ────────────────────────────────────────────────────────────────
+
+    def cards(self) -> list:
+        """Cards from the UI; raises ValueError naming the bad field."""
+        out = []
+        for i, r in enumerate(self.rows, 1):
+            v = r["vars"]
+            try:
+                start = ff.parse_time(v["start"].get())
+            except ValueError:
+                raise ValueError(f"Card {i}: start time '{v['start'].get()}' is not a time.") from None
+            dur = common.number(v["duration"].get(), f"Card {i} duration", 0.2, 3600)
+            style = next((k for k, lbl in STYLES.items() if lbl == v["style"].get()), "lower_third")
+            out.append(Card(style, v["line1"].get(), v["line2"].get(), start, dur, r["accent"]))
+        return out
+
+    def script(self, width: int, height: int) -> ass.Script:
+        try:
+            anim = common.number(self.anim_var.get() or "0.35", "Animation", 0.05, 3)
+        except ValueError:
+            anim = 0.35
+        return build_script(self.cards(), width, height, font=self.font_var.get(),
+                            scale=SIZES.get(self.size_var.get(), 1.0), anim=anim)
+
+    # ── Preview ──────────────────────────────────────────────────────────────
+
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        dur = self._info.duration if self._info else 0.0
+        self.slider.configure(to=max(dur, 0.01))
+        first = self.rows[0] if self.rows else None
+        self.preview.load(path, dur, 0.0)
+        if first is not None:
+            self._show_card(first)
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "titled"))
+        self._schedule()
+
+    def _schedule(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(250, self._refresh)
+
+    def _refresh(self):
+        self._job = None
+        info = self._info
+        if info is None or not info.has_video:
+            return
+        try:
+            w, h = common.even_size(info)
+            sc = self.script(w, h)
+        except ValueError:
+            return
+        if self._preview_dir is None:
+            from core.paths import temp_dir
+            self._preview_dir = temp_dir("titles_preview_")
+        self._preview_n += 1
+        path = os.path.join(self._preview_dir, f"p{self._preview_n}.ass")
+        sc.write(path)
+        old = os.path.join(self._preview_dir, f"p{self._preview_n - 3}.ass")
+        if os.path.exists(old):
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        self.preview.set_filter(ass.subtitles_filter(path), keep_time=True)
+
+    # ── Render ───────────────────────────────────────────────────────────────
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        if not self.cards:
-            messagebox.showwarning(t("common.warning"), "Add at least one title card.")
+        try:
+            cards = self.cards()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        out = self.out_var.get().strip()
+        if not cards:
+            messagebox.showwarning(t("common.warning"), "Add at least one title card.", parent=self)
+            return
+        late = [i for i, c in enumerate(cards, 1) if c.start >= info.duration > 0]
+        if late:
+            messagebox.showwarning(t("common.warning"),
+                                   f"Card {late[0]} starts after the video ends "
+                                   f"({ff.format_time(info.duration)}).", parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "titled")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
+            return
+        from core.paths import temp_dir
+        work = temp_dir("titles_")
+        w, h = common.even_size(info)
+        path = self.script(w, h).write(os.path.join(work, "titles.ass"))
+        chain = ass.subtitles_filter(path)
 
-        vf     = self._build_full_filter()
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd    = [ffmpeg, "-i", self.file_path,
-                  "-vf", vf,
-                  "-c:v", "libx264", "-crf", self.crf_var.get(),
-                  "-preset", self.preset_var.get(),
-                  "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
+        def done(rc):
+            shutil.rmtree(work, ignore_errors=True)
+            self.show_result(rc, out)
 
-        self.log(self.console,
-                 f"Rendering {len(self.cards)} title card(s)…")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render,
-                        btn_label=t("titles.render_button"))
+        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder,
+                      console=self.console, btn=self.btn_render,
+                      btn_label=t("titles.render_button"), name="Animated Titles", on_done=done)
+
+    def on_app_closing(self):
+        if self._preview_dir:
+            shutil.rmtree(self._preview_dir, ignore_errors=True)

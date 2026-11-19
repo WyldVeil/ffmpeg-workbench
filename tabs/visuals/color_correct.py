@@ -12,7 +12,7 @@ from tkinter import ttk
 
 from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.visuals import common
+from tabs import common
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 # key: (label, low, high, default, resolution)

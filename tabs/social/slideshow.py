@@ -1,558 +1,399 @@
 """
-tab_slideshowmaker.py  ─  Slideshow Maker
-Turn a folder of images into a polished video with:
-  • Ken Burns pan/zoom effect per slide
-  • Crossfade / wipe transitions between slides
-  • Per-slide caption text
-  • Background music track (auto-fades at end)
-  • Configurable duration per slide
+tabs/social/slideshow.py  -  Slideshow Maker
 
-A staple YouTube use case: travel montages, photo recaps,
-before/after galleries, tutorial image sequences.
+Photos to video: smooth Ken Burns motion (zoom in/out, pans, random), fill /
+fit / blurred-background framing for mixed portrait and landscape photos,
+xfade transitions, per-slide captions (libass, any bundled font) and
+background music that is looped, trimmed and faded to the slideshow.
+
+Each slide is rendered once (pre-upscaled zoompan for jitter-free motion),
+then everything is joined in one pass with the transitions and captions.
 """
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
+from __future__ import annotations
+
 import os
-import tempfile
-import threading
+import random
 import re
-import json
-import shutil
+import tkinter as tk
+from dataclasses import dataclass
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import ass
+from core import encoders as enc
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
+
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif",
+              ".avif", ".gif")
+TRANSITIONS = {"fade": "Crossfade", "dissolve": "Dissolve", "fadeblack": "Fade through black",
+               "fadewhite": "Fade through white", "slideleft": "Slide left",
+               "slideright": "Slide right", "slideup": "Slide up", "smoothleft": "Smooth left",
+               "wipeleft": "Wipe left", "circleopen": "Circle open", "radial": "Radial",
+               "zoomin": "Zoom in", "pixelize": "Pixelize", "random": "Random (varies)",
+               "cut": "None (cut)"}
+MOTIONS = {"zoom_in": "Zoom in", "zoom_out": "Zoom out", "pan_right": "Pan right",
+           "pan_left": "Pan left", "pan_up": "Pan up", "pan_down": "Pan down",
+           "random": "Random (varies per slide)", "static": "None (still)"}
+FITS = {"fill": "Fill the frame (crop edges)", "blur": "Fit with blurred background",
+        "bars": "Fit with black bars"}
+RESOLUTIONS = {"1920×1080 (YouTube)": (1920, 1080), "3840×2160 (4K)": (3840, 2160),
+               "1280×720 (HD)": (1280, 720), "1080×1920 (Reels / Shorts)": (1080, 1920),
+               "1080×1080 (square)": (1080, 1080)}
+CAPTION_POS = {"bottom": "Bottom", "top": "Top", "lower_third": "Lower third (left)"}
 
 
-TRANSITIONS = {
-    "Crossfade":         "fade",
-    t("slideshow.fade_to_black"):     "fadeblack",
-    t("slideshow.fade_to_white"):     "fadewhite",
-    t("slideshow.slide_left"):        "slideleft",
-    t("slideshow.slide_right"):       "slideright",
-    t("slideshow.slide_up"):          "slideup",
-    t("slideshow.wipe_left"):         "wipeleft",
-    t("slideshow.radial_wipe"):       "radial",
-    "None (cut)":        None,
-}
+@dataclass
+class Slide:
+    path: str
+    caption: str = ""
 
-KEN_BURNS_MODES = {
-    t("slideshow.zoom_in_wide_close"):   "zoom_in",
-    t("slideshow.zoom_out_close_wide"):   "zoom_out",
-    t("slideshow.pan_right"):                  "pan_right",
-    t("slideshow.pan_left"):                   "pan_left",
-    t("slideshow.pan_up"):                     "pan_up",
-    t("slideshow.random_varies_per_slide"):  "random",
-    "None (static)":              "static",
-}
 
-RESOLUTIONS = {
-    t("slideshow.1920_1080_youtube"):    (1920, 1080),
-    t("slideshow.3840_2160_4k_youtube"): (3840, 2160),
-    t("intro_maker.1280_720_hd"):         (1280, 720),
-    t("slideshow.1080_1920_9_16_reel"):  (1080, 1920),
-    t("slideshow.1080_1080_square"):     (1080, 1080),
-}
+def natural_key(path: str):
+    return [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", os.path.basename(path))]
+
+
+def motion_filter(motion: str, w: int, h: int, fps: str, frames: int, zoom: float = 1.2) -> str:
+    """Ken Burns on ONE input frame: expressions use the output frame number."""
+    d = max(frames - 1, 1)
+    p = f"(on/{d})"
+    cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+    if motion == "zoom_in":
+        z, x, y = f"1+{zoom - 1:.4f}*{p}", cx, cy
+    elif motion == "zoom_out":
+        z, x, y = f"{zoom:.4f}-{zoom - 1:.4f}*{p}", cx, cy
+    elif motion == "pan_right":
+        z, x, y = f"{zoom:.4f}", f"(iw-iw/zoom)*{p}", cy
+    elif motion == "pan_left":
+        z, x, y = f"{zoom:.4f}", f"(iw-iw/zoom)*(1-{p})", cy
+    elif motion == "pan_down":
+        z, x, y = f"{zoom:.4f}", cx, f"(ih-ih/zoom)*{p}"
+    elif motion == "pan_up":
+        z, x, y = f"{zoom:.4f}", cx, f"(ih-ih/zoom)*(1-{p})"
+    else:
+        z, x, y = "1", "0", "0"
+    return f"zoompan=z='{z}':x='{x}':y='{y}':d={frames}:s={w}x{h}:fps={fps}"
+
+
+def frame_filter(fit: str, w: int, h: int) -> str:
+    """Frame the photo at 2x the output size (smooth zoompan sub-pixel steps)."""
+    W, H = 2 * w, 2 * h
+    if fit == "blur":
+        return (f"split[a][b];[a]scale={W // 8}:{H // 8}:force_original_aspect_ratio=increase,"
+                f"crop={W // 8}:{H // 8},gblur=sigma=6,eq=brightness=-0.08,scale={W}:{H}[bg];"
+                f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1")
+    if fit == "bars":
+        return (f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1")
+    return f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
+
+
+def timeline(n: int, dur: float, trans: float) -> tuple:
+    """(start time of each slide, total length) with overlapping transitions."""
+    starts = [i * (dur - trans) for i in range(n)]
+    return starts, (starts[-1] + dur) if n else 0.0
 
 
 class SlideshowMakerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.image_paths = []     # list of str
-        self.captions    = {}     # idx → str
-        self.music_path  = ""
+        self.slides: list = []
         self._build_ui()
 
+    # ── UI ───────────────────────────────────────────────────────────────────
+
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🖼  " + t("tab.slideshow_maker"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("slideshow.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.slideshow_maker"), "Photos to video with motion, "
+                         "transitions, captions and music.", icon="🖼")
+        body = scroll_body(self)
+        top = tk.Frame(body)
+        top.pack(fill="x", padx=20, pady=(10, 4))
 
-        # ── Main paned layout ─────────────────────────────────────────────
-        paned = tk.PanedWindow(self, orient="horizontal", sashwidth=5,
-                               bg="#888888")
-        paned.pack(fill="both", expand=True, padx=10, pady=6)
+        left = tk.Frame(top)
+        left.pack(side="left", fill="both", expand=True)
+        cols = ("n", "file", "caption")
+        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=10, selectmode="browse")
+        for c, label, w in (("n", "#", 40), ("file", "Photo", 260), ("caption", "Caption", 260)):
+            self.tree.heading(c, text=label)
+            self.tree.column(c, width=w, anchor="w", stretch=c != "n")
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(left, command=self.tree.yview)
+        sb.pack(side="left", fill="y")
+        self.tree.config(yscrollcommand=sb.set)
+        self.tree.bind("<<TreeviewSelect>>", lambda _e: self._selected())
 
-        left  = tk.Frame(paned, width=420)
-        right = tk.Frame(paned, width=480)
-        paned.add(left,  minsize=300)
-        paned.add(right, minsize=340)
+        btns = tk.Frame(top)
+        btns.pack(side="left", fill="y", padx=(8, 0))
+        for text, cmd in (("➕ Add photos", self._add_images), ("📁 Add folder", self._add_folder),
+                          ("⬆ Up", lambda: self._move(-1)), ("⬇ Down", lambda: self._move(1)),
+                          ("🗑 Remove", self._remove), ("🧹 Clear", self._clear),
+                          ("🔤 Sort by name", self._sort)):
+            tk.Button(btns, text=text, relief="flat", anchor="w", width=14, cursor="hand2",
+                      command=cmd).pack(fill="x", pady=1)
+        self.count_lbl = tk.Label(btns, text="0 slides", fg=CLR["fgdim"])
+        self.count_lbl.pack(pady=(6, 0))
 
-        self._build_slide_panel(left)
-        self._build_options_panel(right)
-
-    # ── Slide list ────────────────────────────────────────────────────────
-    def _build_slide_panel(self, parent):
-        tk.Label(parent, text="SLIDES", font=(UI_FONT, 9, "bold"),
-                 fg=CLR["fgdim"]).pack(anchor="w", padx=8, pady=(6, 2))
-
-        # Listbox with scrollbar
-        lf = tk.Frame(parent)
-        lf.pack(fill="both", expand=True, padx=6)
-        self.listbox = tk.Listbox(lf, selectmode="single",
-                                   font=(MONO_FONT, 9), height=16,
-                                   bg=CLR["bg"], fg=CLR["fg"],
-                                   selectbackground=CLR["accent"],
-                                   selectforeground="black")
-        sb = ttk.Scrollbar(lf, command=self.listbox.yview)
-        self.listbox.config(yscrollcommand=sb.set)
-        self.listbox.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        self.listbox.bind("<<ListboxSelect>>", self._on_slide_select)
-
-        # Slide count
-        self.count_lbl = tk.Label(parent, text=t("slideshow.0_slides"), fg=CLR["fgdim"],
-                                   font=(UI_FONT, 9))
-        self.count_lbl.pack(anchor="w", padx=8)
-
-        # Buttons
-        btn_f = tk.Frame(parent); btn_f.pack(fill="x", padx=6, pady=4)
-        for txt, cmd, bg in [
-            ("➕ Add Images",  self._add_images,   "#3A3A3A"),
-            ("📁 Add Folder",  self._add_folder,   "#3A3A3A"),
-            ("⬆",              self._move_up,      "#3A3A3A"),
-            ("⬇",              self._move_down,    "#3A3A3A"),
-            ("🗑 Remove",       self._remove_sel,   "#3A3A3A"),
-            ("🧹 Clear",        self._clear_all,    "#3A3A3A"),
-        ]:
-            tk.Button(btn_f, text=txt, bg=bg, fg=CLR["fg"],
-                      font=(UI_FONT, 8), command=cmd).pack(side="left", padx=2)
-
-        # Per-slide caption editor
-        cap_lf = tk.LabelFrame(parent, text=f"  {t('slideshow.caption_label')}  ",
-                                padx=8, pady=6)
-        cap_lf.pack(fill="x", padx=6, pady=4)
+        cap = tk.Frame(body)
+        cap.pack(fill="x", padx=20, pady=2)
+        tk.Label(cap, text="Caption for the selected photo:").pack(side="left")
         self.cap_var = tk.StringVar()
-        self.cap_entry = tk.Entry(cap_lf, textvariable=self.cap_var, width=40, relief="flat")
-        self.cap_entry.pack(side="left", fill="x", expand=True)
-        tk.Button(cap_lf, text=t("slideshow.apply_button"), bg=CLR["accent"], fg="black",
-                  command=self._save_caption).pack(side="left", padx=4)
+        e = tk.Entry(cap, textvariable=self.cap_var, width=50)
+        e.pack(side="left", padx=6, fill="x", expand=True)
+        e.bind("<Return>", lambda _e: self._save_caption())
+        tk.Button(cap, text="Set", relief="flat", command=self._save_caption).pack(side="left")
 
-        # Music
-        music_lf = tk.LabelFrame(parent, text=f"  🎵  {t('slideshow.background_music_section')}  ",
-                                  padx=8, pady=6)
-        music_lf.pack(fill="x", padx=6, pady=4)
-        m_row = tk.Frame(music_lf); m_row.pack(fill="x")
-        self.music_var = tk.StringVar()
-        tk.Entry(m_row, textvariable=self.music_var, width=34, relief="flat").pack(side="left")
-        tk.Button(m_row, text="…", width=2, command=self._browse_music, cursor="hand2", relief="flat").pack(side="left", padx=4)
-        tk.Button(m_row, text="✕", width=2,
-                  command=lambda: (self.music_var.set(""), setattr(self, "music_path", ""))
-                  ).pack(side="left")
-        m2 = tk.Frame(music_lf); m2.pack(fill="x", pady=4)
-        self.fade_music_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(m2, text=t("slideshow.fade_music_checkbox"),
-                       variable=self.fade_music_var).pack(side="left")
-        tk.Label(m2, text=f"  {t('slideshow.volume_label')}").pack(side="left")
-        self.music_vol_var = tk.DoubleVar(value=0.7)
-        tk.Scale(m2, variable=self.music_vol_var, from_=0.1, to=1.5,
-                 resolution=0.05, orient="horizontal", length=120).pack(side="left")
+        opt = tk.LabelFrame(body, text="  Slideshow  ", padx=10, pady=6)
+        opt.pack(fill="x", padx=20, pady=6)
 
-    # ── Options panel ─────────────────────────────────────────────────────
-    def _build_options_panel(self, parent):
-        tk.Label(parent, text="OPTIONS", font=(UI_FONT, 9, "bold"),
-                 fg=CLR["fgdim"]).pack(anchor="w", padx=8, pady=(6, 2))
+        def row(r, label, *widgets):
+            tk.Label(opt, text=label, anchor="w", width=16).grid(row=r, column=0, sticky="w", pady=2)
+            for i, w in enumerate(widgets):
+                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 8), pady=2)
 
-        # Timing
-        time_lf = tk.LabelFrame(parent, text=f"  ⏱  {t('slideshow.timing_section')}  ",
-                                 padx=12, pady=8)
-        time_lf.pack(fill="x", padx=8, pady=4)
-
-        t0 = tk.Frame(time_lf); t0.pack(fill="x", pady=2)
-        tk.Label(t0, text=t("slideshow.duration_label"),
-                 font=(UI_FONT, 10, "bold")).pack(side="left")
         self.dur_var = tk.StringVar(value="4")
-        tk.Entry(t0, textvariable=self.dur_var, width=5, relief="flat").pack(side="left", padx=6)
-        for d in ["2","3","4","5","6","8","10"]:
-            tk.Button(t0, text=f"{d}s", width=3, bg="#333", fg=CLR["fg"],
-                      font=(UI_FONT, 8),
-                      command=lambda v=d: self.dur_var.set(v)).pack(side="left", padx=1)
-
-        t1 = tk.Frame(time_lf); t1.pack(fill="x", pady=2)
-        tk.Label(t1, text=t("slideshow.transition_duration_label")).pack(side="left")
         self.trans_dur_var = tk.StringVar(value="1.0")
-        tk.Entry(t1, textvariable=self.trans_dur_var, width=5, relief="flat").pack(side="left", padx=6)
-
-        # Ken Burns
-        kb_lf = tk.LabelFrame(parent, text=f"  🎥  {t('slideshow.ken_burns_section')}  ",
-                               padx=12, pady=8)
-        kb_lf.pack(fill="x", padx=8, pady=4)
-
-        self.kb_var = tk.StringVar(value=list(KEN_BURNS_MODES.keys())[0])
-        ttk.Combobox(kb_lf, textvariable=self.kb_var,
-                     values=list(KEN_BURNS_MODES.keys()),
-                     state="readonly", width=32).pack(anchor="w")
-
-        kb_str_row = tk.Frame(kb_lf); kb_str_row.pack(fill="x", pady=4)
-        tk.Label(kb_str_row, text=t("slideshow.zoom_amount_label")).pack(side="left")
-        self.kb_zoom_var = tk.DoubleVar(value=1.1)
-        tk.Scale(kb_str_row, variable=self.kb_zoom_var, from_=1.0, to=1.5,
-                 resolution=0.01, orient="horizontal", length=200).pack(side="left", padx=6)
-        self.kb_lbl = tk.Label(kb_str_row, text="1.10×", width=6, fg=CLR["accent"])
-        self.kb_lbl.pack(side="left")
-        self.kb_zoom_var.trace_add("write", lambda *_: self.kb_lbl.config(
-            text=f"{self.kb_zoom_var.get():.2f}×"))
-
-        # Transitions
-        trans_lf = tk.LabelFrame(parent, text=f"  🔀  {t('slideshow.transition_section')}  ",
-                                  padx=12, pady=8)
-        trans_lf.pack(fill="x", padx=8, pady=4)
-
-        self.trans_var = tk.StringVar(value="Crossfade")
-        ttk.Combobox(trans_lf, textvariable=self.trans_var,
-                     values=list(TRANSITIONS.keys()),
-                     state="readonly", width=24).pack(anchor="w")
-
-        # Resolution & quality
-        rq_lf = tk.LabelFrame(parent, text=f"  📐  {t('slideshow.output_settings_section')}  ",
-                               padx=12, pady=8)
-        rq_lf.pack(fill="x", padx=8, pady=4)
-
-        rq0 = tk.Frame(rq_lf); rq0.pack(fill="x", pady=2)
-        tk.Label(rq0, text=t("common.resolution")).pack(side="left")
-        self.res_var = tk.StringVar(value=list(RESOLUTIONS.keys())[0])
-        ttk.Combobox(rq0, textvariable=self.res_var,
-                     values=list(RESOLUTIONS.keys()),
-                     state="readonly", width=28).pack(side="left", padx=6)
-
-        rq1 = tk.Frame(rq_lf); rq1.pack(fill="x", pady=2)
-        tk.Label(rq1, text=t("batch_joiner.lbl_fps")).pack(side="left")
+        row(0, "Seconds per photo:", tk.Entry(opt, textvariable=self.dur_var, width=6),
+            tk.Label(opt, text="Transition (s):"), tk.Entry(opt, textvariable=self.trans_dur_var, width=6))
+        self.trans_var = tk.StringVar(value=TRANSITIONS["fade"])
+        self.motion_var = tk.StringVar(value=MOTIONS["random"])
+        row(1, "Transition:", ttk.Combobox(opt, textvariable=self.trans_var,
+                                           values=list(TRANSITIONS.values()), state="readonly", width=22),
+            tk.Label(opt, text="Motion:"),
+            ttk.Combobox(opt, textvariable=self.motion_var, values=list(MOTIONS.values()),
+                         state="readonly", width=24))
+        self.fit_var = tk.StringVar(value=FITS["blur"])
+        self.zoom_var = tk.DoubleVar(value=1.2)
+        row(2, "Framing:", ttk.Combobox(opt, textvariable=self.fit_var, values=list(FITS.values()),
+                                        state="readonly", width=28),
+            tk.Label(opt, text="Motion amount:"),
+            tk.Scale(opt, variable=self.zoom_var, from_=1.05, to=1.6, resolution=0.05,
+                     orient="horizontal", length=120))
+        self.res_var = tk.StringVar(value=next(iter(RESOLUTIONS)))
         self.fps_var = tk.StringVar(value="30")
-        ttk.Combobox(rq1, textvariable=self.fps_var,
-                     values=["24","25","30","50","60"],
-                     state="readonly", width=6).pack(side="left", padx=4)
-        tk.Label(rq1, text=t("rotate_flip.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(rq1, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
+        row(3, "Size:", ttk.Combobox(opt, textvariable=self.res_var, values=list(RESOLUTIONS),
+                                     state="readonly", width=28),
+            tk.Label(opt, text="FPS:"),
+            ttk.Combobox(opt, textvariable=self.fps_var, values=["24", "25", "30", "50", "60"],
+                         state="readonly", width=5))
+        self.cap_on = tk.BooleanVar(value=True)
+        self.cap_font = tk.StringVar(value="Montserrat")
+        self.cap_pos = tk.StringVar(value=CAPTION_POS["bottom"])
+        row(4, "Captions:", tk.Checkbutton(opt, text="Show", variable=self.cap_on),
+            ttk.Combobox(opt, textvariable=self.cap_font, values=ass.families(), state="readonly",
+                         width=14),
+            ttk.Combobox(opt, textvariable=self.cap_pos, values=list(CAPTION_POS.values()),
+                         state="readonly", width=16))
+        self.music_row = FileRow(opt, "Music:", kind="audio", label_width=16, width=40)
+        self.music_row.grid(row=5, column=0, columnspan=5, sticky="we")
+        self.music_vol = tk.DoubleVar(value=0.9)
+        row(6, "Music volume:", tk.Scale(opt, variable=self.music_vol, from_=0.1, to=1.5,
+                                         resolution=0.05, orient="horizontal", length=140))
 
-        # Caption style
-        cap_lf2 = tk.LabelFrame(parent, text=f"  💬  {t('slideshow.caption_style_section')}  ",
-                                 padx=12, pady=6)
-        cap_lf2.pack(fill="x", padx=8, pady=4)
-
-        cs = tk.Frame(cap_lf2); cs.pack(fill="x")
-        self.cap_on_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(cs, text=t("slideshow.show_captions_checkbox"),
-                       variable=self.cap_on_var).pack(side="left")
-        tk.Label(cs, text=t("slideshow.size")).pack(side="left")
-        self.cap_size_var = tk.StringVar(value="40")
-        tk.Entry(cs, textvariable=self.cap_size_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Label(cs, text=t("slideshow.position")).pack(side="left")
-        self.cap_pos_var = tk.StringVar(value="Bottom Centre")
-        ttk.Combobox(cs, textvariable=self.cap_pos_var,
-                     values=[t("hard_subber.hard_subber_bottom_centre"),t("hard_subber.hard_subber_top_centre"),t("hard_subber.hard_subber_bottom_left"),t("slideshow.slideshow_lower_third")],
-                     state="readonly", width=14).pack(side="left", padx=4)
-
-        # Output & render
-        of = tk.Frame(parent); of.pack(fill="x", padx=8, pady=6)
-        tk.Label(of, text=t("encode_queue.output_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=36, relief="flat").pack(side="left", padx=6)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        self.btn_render = tk.Button(
-            parent, text=t("slideshow.render_button"),
-            font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-            height=2, command=self._render)
-        self.btn_render.pack(fill="x", padx=8, pady=6)
-
-        self.prog_lbl = tk.Label(parent, text="", fg=CLR["accent"],
-                                  font=(UI_FONT, 9, "bold"))
-        self.prog_lbl.pack()
-
-        cf = tk.Frame(parent); cf.pack(fill="both", expand=True, padx=8, pady=4)
-        self.console, csb = self.make_console(cf, height=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, suggest=self._suggest)
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🎞  CREATE SLIDESHOW", font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=24, cursor="hand2",
+                                    command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ─────────────────────────────────────────────────────────────────────
+    # ── slide list ───────────────────────────────────────────────────────────
+
+    def _refresh_list(self, select=None):
+        self.tree.delete(*self.tree.get_children())
+        for i, s in enumerate(self.slides):
+            self.tree.insert("", "end", iid=str(i),
+                             values=(i + 1, os.path.basename(s.path), s.caption))
+        if select is not None and 0 <= select < len(self.slides):
+            self.tree.selection_set(str(select))
+            self.tree.see(str(select))
+        self.count_lbl.config(text=f"{len(self.slides)} slide{'s' if len(self.slides) != 1 else ''}")
+
+    def _index(self):
+        sel = self.tree.selection()
+        return int(sel[0]) if sel else None
+
+    def add_paths(self, paths):
+        new = [p for p in paths if os.path.splitext(p)[1].lower() in IMAGE_EXTS and os.path.isfile(p)]
+        self.slides += [Slide(p) for p in new]
+        self._refresh_list(len(self.slides) - 1 if new else None)
+        return len(new)
+
+    def load_file(self, path):
+        return self.add_paths([path]) > 0
+
     def _add_images(self):
-        paths = dialogs.askopenfilenames(
-            filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp *.webp *.tiff"),
-                       ("All", t("ducker.item_2"))])
-        for p in paths:
-            if p not in self.image_paths:
-                self.image_paths.append(p)
-                self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
-        self._update_count()
+        self.add_paths(self.pick_sources("image"))
 
     def _add_folder(self):
-        folder = dialogs.askdirectory()
-        if not folder: return
-        exts = {".jpg",".jpeg",".png",".bmp",".webp",".tiff",".tif"}
-        for f in sorted(os.listdir(folder)):
-            if os.path.splitext(f)[1].lower() in exts:
-                full = os.path.join(folder, f)
-                if full not in self.image_paths:
-                    self.image_paths.append(full)
-                    self.listbox.insert(tk.END, f"  {f}")
-        self._update_count()
+        from core import dialogs
+        d = dialogs.ask_directory(parent=self)
+        if d:
+            files = sorted((os.path.join(d, f) for f in os.listdir(d)), key=natural_key)
+            if not self.add_paths(files):
+                messagebox.showinfo(t("common.warning"), "No photos found in that folder.", parent=self)
 
-    def _move_up(self):
-        sel = self.listbox.curselection()
-        if not sel or sel[0] == 0: return
-        i = sel[0]
-        self.image_paths[i], self.image_paths[i-1] = self.image_paths[i-1], self.image_paths[i]
-        txt = self.listbox.get(i); prev = self.listbox.get(i-1)
-        self.listbox.delete(i-1, i)
-        self.listbox.insert(i-1, txt); self.listbox.insert(i, prev)
-        self.listbox.selection_set(i-1)
+    def _move(self, delta):
+        i = self._index()
+        if i is None or not 0 <= i + delta < len(self.slides):
+            return
+        self.slides[i], self.slides[i + delta] = self.slides[i + delta], self.slides[i]
+        self._refresh_list(i + delta)
 
-    def _move_down(self):
-        sel = self.listbox.curselection()
-        if not sel or sel[0] >= self.listbox.size()-1: return
-        i = sel[0]
-        self.image_paths[i], self.image_paths[i+1] = self.image_paths[i+1], self.image_paths[i]
-        txt = self.listbox.get(i); nxt = self.listbox.get(i+1)
-        self.listbox.delete(i, i+1)
-        self.listbox.insert(i, nxt); self.listbox.insert(i+1, txt)
-        self.listbox.selection_set(i+1)
+    def _remove(self):
+        i = self._index()
+        if i is not None:
+            del self.slides[i]
+            self._refresh_list(min(i, len(self.slides) - 1))
 
-    def _remove_sel(self):
-        sel = self.listbox.curselection()
-        if sel:
-            i = sel[0]
-            self.image_paths.pop(i)
-            self.listbox.delete(i)
-            if i in self.captions: del self.captions[i]
-        self._update_count()
+    def _clear(self):
+        self.slides.clear()
+        self._refresh_list()
 
-    def _clear_all(self):
-        self.image_paths.clear()
-        self.captions.clear()
-        self.listbox.delete(0, tk.END)
-        self._update_count()
+    def _sort(self):
+        self.slides.sort(key=lambda s: natural_key(s.path))
+        self._refresh_list()
 
-    def _update_count(self):
-        n = len(self.image_paths)
-        self.count_lbl.config(text=f"{n} slide{'s' if n != 1 else ''}")
-
-    def _on_slide_select(self, _=None):
-        sel = self.listbox.curselection()
-        if sel:
-            self.cap_var.set(self.captions.get(sel[0], ""))
+    def _selected(self):
+        i = self._index()
+        self.cap_var.set(self.slides[i].caption if i is not None else "")
 
     def _save_caption(self):
-        sel = self.listbox.curselection()
-        if sel:
-            self.captions[sel[0]] = self.cap_var.get()
+        i = self._index()
+        if i is not None:
+            self.slides[i].caption = self.cap_var.get()
+            self._refresh_list(i)
 
-    def _browse_music(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Audio", "*.mp3 *.aac *.wav *.flac *.ogg"), ("All",t("ducker.item_2"))])
-        if p:
-            self.music_path = p
-            self.music_var.set(p)
+    def _suggest(self):
+        if self.slides:
+            folder = os.path.dirname(self.slides[0].path)
+            return os.path.join(folder, "slideshow.mp4")
+        from core.paths import user_videos_dir
+        return os.path.join(user_videos_dir(), "slideshow.mp4")
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                          filetypes=[("MP4","*.mp4")])
-        if p: self.out_var.set(p)
+    # ── render ───────────────────────────────────────────────────────────────
 
-    # ── Render ───────────────────────────────────────────────────────────
+    def _key(self, table, var, default):
+        return next((k for k, v in table.items() if v == var.get()), default)
+
     def _render(self):
-        if len(self.image_paths) < 2:
-            messagebox.showwarning(t("common.warning"),
-                                   "Add at least 2 images to create a slideshow.")
+        if len(self.slides) < 1:
+            messagebox.showwarning(t("common.warning"), "Add some photos first.", parent=self)
             return
-        out = self.out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4","*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        self.btn_render.config(state="disabled", text=t("crossfader.rendering"))
-        self.run_in_thread(self._render_worker, out)
-
-    def _render_worker(self, out):
-        ffmpeg  = get_binary_path("ffmpeg.exe")
-        w, h    = RESOLUTIONS[self.res_var.get()]
-        fps     = self.fps_var.get()
-        dur     = float(self.dur_var.get() or "4")
-        td      = float(self.trans_dur_var.get() or "1")
-        crf     = self.crf_var.get()
-        kb_mode = KEN_BURNS_MODES[self.kb_var.get()]
-        zoom    = self.kb_zoom_var.get()
-        trans   = TRANSITIONS[self.trans_var.get()]
-        tmp_dir = tempfile.mkdtemp()
-        n       = len(self.image_paths)
-
         try:
-            # Step 1: render each slide to a short clip
-            slide_clips = []
-            for i, img_path in enumerate(self.image_paths):
-                self.after(0, lambda i=i: self.prog_lbl.config(
-                    text=f"Rendering slide {i+1}/{n}…"))
-                self.log(self.console, f"[{i+1}/{n}] {os.path.basename(img_path)}")
+            dur = common.number(self.dur_var.get(), "Seconds per photo", 0.5, 600)
+            trans_key = self._key(TRANSITIONS, self.trans_var, "fade")
+            td = 0.0 if trans_key == "cut" or len(self.slides) < 2 else \
+                common.number(self.trans_dur_var.get(), "Transition", 0.1, 10)
+            if td >= dur / 2:
+                raise ValueError(f"The transition ({td:g}s) must be shorter than half the time per "
+                                 f"photo ({dur / 2:g}s).")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        missing = [s.path for s in self.slides if not os.path.isfile(s.path)]
+        if missing:
+            messagebox.showwarning(t("common.warning"), f"Missing photo:\n{missing[0]}", parent=self)
+            return
+        out = self.out_row.path or self._suggest()
+        out = self.confirm_output(out, [s.path for s in self.slides] +
+                                  ([self.music_row.path] if self.music_row.path else []))
+        if not out:
+            return
+        self.out_row.set(out)
+        w, h = RESOLUTIONS.get(self.res_var.get(), (1920, 1080))
+        fps = self.fps_var.get() or "30"
+        frames = max(2, round(dur * float(fps)))
+        fit = self._key(FITS, self.fit_var, "blur")
+        motion = self._key(MOTIONS, self.motion_var, "random")
+        zoom = float(self.zoom_var.get())
+        rng = random.Random(len(self.slides))
+        choices = [m for m in MOTIONS if m not in ("random", "static")]
+        motions = [rng.choice(choices) if motion == "random" else motion for _ in self.slides]
+        xf_choices = [k for k in TRANSITIONS if k not in ("random", "cut")]
+        xfades = [rng.choice(xf_choices) if trans_key == "random" else trans_key
+                  for _ in self.slides[1:]]
+        starts, total = timeline(len(self.slides), dur, td)
+        container = common.container_of(out)
+        venc = self.encoder.video_encode(container)
+        slides = list(self.slides)
+        music = self.music_row.path
+        captions = self.cap_on.get() and any(s.caption.strip() for s in slides)
+        cap_font, cap_pos = self.cap_font.get(), self._key(CAPTION_POS, self.cap_pos, "bottom")
+        volume = float(self.music_vol.get())
 
-                clip_path = os.path.join(tmp_dir, f"slide_{i:04d}.mp4")
-                slide_clips.append(clip_path)
-
-                # Ken Burns filter
-                frames = int(dur * int(fps))
-                if kb_mode == "static":
-                    vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1")
-                else:
-                    z_end = zoom
-                    if kb_mode == "zoom_in":
-                        z_expr = f"zoom+0.0015"
-                        x_expr = "iw/2-(iw/zoom/2)"
-                        y_expr = "ih/2-(ih/zoom/2)"
-                    elif kb_mode == "zoom_out":
-                        z_expr = f"if(lte(zoom,1.0),{z_end},{z_end}-0.0015)"
-                        x_expr = "iw/2-(iw/zoom/2)"
-                        y_expr = "ih/2-(ih/zoom/2)"
-                    elif kb_mode == "pan_right":
-                        z_expr = str(z_end)
-                        x_expr = f"if(lte(x,iw-iw/zoom),x+1,iw-iw/zoom)"
-                        y_expr = "ih/2-(ih/zoom/2)"
-                    elif kb_mode == "pan_left":
-                        z_expr = str(z_end)
-                        x_expr = f"if(gte(x,0),x-1,0)"
-                        y_expr = "ih/2-(ih/zoom/2)"
-                    elif kb_mode == "pan_up":
-                        z_expr = str(z_end)
-                        x_expr = "iw/2-(iw/zoom/2)"
-                        y_expr = f"if(gte(y,0),y-1,0)"
-                    else:  # random - alternate
-                        if i % 2 == 0:
-                            z_expr = "zoom+0.001"; x_expr = "iw/2-(iw/zoom/2)"; y_expr = "ih/2-(ih/zoom/2)"
-                        else:
-                            z_expr = str(z_end); x_expr = "if(lte(x,iw-iw/zoom),x+1,iw-iw/zoom)"; y_expr = "ih/2-(ih/zoom/2)"
-
-                    vf = (f"scale={int(w*z_end)}:{int(h*z_end)}:force_original_aspect_ratio=increase,"
-                          f"crop={w}:{h},setsar=1,"
-                          f"zoompan=z='{z_expr}':x='{x_expr}':y='{y_expr}'"
-                          f":d={frames}:s={w}x{h}:fps={fps}")
-
-                # Caption
-                cap = self.captions.get(i, "")
-                if cap and self.cap_on_var.get():
-                    cap_safe  = cap.replace("'", "").replace(":", "\\:")
-                    cap_size  = self.cap_size_var.get()
-                    cap_pos   = self.cap_pos_var.get()
-                    if cap_pos == "Bottom Centre":
-                        cx, cy = "(w-text_w)/2", "h-text_h-30"
-                    elif cap_pos == "Top Centre":
-                        cx, cy = "(w-text_w)/2", "30"
-                    elif cap_pos == "Lower Third":
-                        cx, cy = "80", "h*0.75"
-                    else:
-                        cx, cy = "30", "h-text_h-30"
-                    vf += (f",drawtext=text='{cap_safe}':fontsize={cap_size}:"
-                           f"fontcolor=white:box=1:boxcolor=black@0.5:"
-                           f"x={cx}:y={cy}")
-
-                cmd = [ffmpeg, "-loop", "1", "-i", img_path,
-                       "-vf", vf, "-t", str(dur),
-                       "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                       "-pix_fmt", "yuv420p", "-an", clip_path, "-y"]
-                r = subprocess.run(cmd, capture_output=True,
-                                   creationflags=CREATE_NO_WINDOW)
-                if r.returncode != 0:
-                    self.log(self.console,
-                             f"  ⚠ Slide {i+1} failed:\n{r.stderr.decode()[-300:]}")
-
-            # Step 2: concatenate with transitions (xfade)
-            self.after(0, lambda: self.prog_lbl.config(text=t("slideshow.joining_slides")))
-            self.log(self.console, t("log.slideshow.joining_clips_with_transitions"))
-
-            if trans and len(slide_clips) > 1:
-                # Build filter_complex xfade chain
-                inputs = " ".join(f"-i {c}" for c in slide_clips)
-                n_clips = len(slide_clips)
-                fc_parts = []
-                last = "[0:v]"
-                offset = dur - td
-                for j in range(1, n_clips):
-                    out_tag = "[v]" if j == n_clips-1 else f"[vt{j}]"
-                    fc_parts.append(
-                        f"{last}[{j}:v]xfade=transition={trans}"
-                        f":duration={td}:offset={offset:.3f}{out_tag}")
-                    last = f"[vt{j}]"
-                    offset += dur - td
-                fc = ";".join(fc_parts)
-
-                cmd_join = [ffmpeg]
-                for c in slide_clips:
-                    cmd_join += ["-i", c]
-                cmd_join += ["-filter_complex", fc,
-                             "-map", "[v]",
-                             "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                             "-pix_fmt", "yuv420p"]
+        def work(_p, _c, ctx):
+            tmp = ctx.tempdir()
+            clips = []
+            n = len(slides)
+            for i, s in enumerate(slides):
+                ctx.log(f"Slide {i + 1}/{n}: {os.path.basename(s.path)}")
+                clip = os.path.join(tmp, f"s{i:04d}.mp4")
+                graph = (f"[0:v]{frame_filter(fit, w, h)},"
+                         f"{motion_filter(motions[i], w, h, fps, frames, zoom)},format=yuv420p[v]")
+                ctx.span(0.7 * i / n, 0.7 * (i + 1) / n).run(
+                    [ff.ffmpeg_path(), "-y", "-i", s.path, "-filter_complex", graph, "-map", "[v]",
+                     "-frames:v", str(frames), "-c:v", "libx264", "-preset", "veryfast", "-crf", "14",
+                     "-pix_fmt", "yuv420p", clip], duration=dur)
+                clips.append(clip)
+            cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
+            for c in clips:
+                cmd += ["-i", c]
+            parts, last = [], "[0:v]"
+            if n == 1:
+                parts.append("[0:v]null[xf]")
+            elif td <= 0:
+                parts.append("".join(f"[{i}:v]" for i in range(n)) + f"concat=n={n}:v=1:a=0[xf]")
             else:
-                # Simple concat
-                list_path = os.path.join(tmp_dir, "list.txt")
-                with open(list_path, "w") as f:
-                    for c in slide_clips:
-                        f.write(f"file '{c}'\n")
-                cmd_join = [ffmpeg, "-f", "concat", "-safe", "0",
-                            "-i", list_path,
-                            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-                            "-pix_fmt", "yuv420p"]
+                for i in range(1, n):
+                    label = "[xf]" if i == n - 1 else f"[x{i}]"
+                    parts.append(f"{last}[{i}:v]xfade=transition={xfades[i - 1]}:duration={td:.3f}:"
+                                 f"offset={starts[i]:.3f}{label}")
+                    last = label
+            vout = "[xf]"
+            if captions:
+                sc = ass.Script(w, h)
+                u = min(w, h) / 1080
+                sc.style(ass.Style("Cap", font=cap_font, size=round(46 * u), bold=True, outline=2.5 * u,
+                                   shadow=1.5 * u, back_alpha=0.5,
+                                   alignment={"top": 8, "lower_third": 1}.get(cap_pos, 2),
+                                   margin_l=round(60 * u), margin_r=round(60 * u),
+                                   margin_v=round((h * 0.12) if cap_pos == "lower_third" else 50 * u)))
+                for i, s in enumerate(slides):
+                    if s.caption.strip():
+                        a = starts[i] + (td / 2 if i else 0)
+                        b = starts[i] + dur - (td / 2 if i < n - 1 else 0)
+                        sc.add(a, b, f"{{\\fad(300,300)}}{ass.escape(s.caption)}", "Cap")
+                path = sc.write(os.path.join(tmp, "captions.ass"))
+                parts.append(f"[xf]{ass.subtitles_filter(path)}[cv]")
+                vout = "[cv]"
+            if venc.filter_suffix:
+                parts.append(f"{vout}{venc.filter_suffix}[venc]")
+                vout = "[venc]"
+            amap = []
+            if music and os.path.isfile(music):
+                cmd += ["-stream_loop", "-1", "-i", music]
+                fo = min(3.0, total / 4)
+                parts.append(f"[{n}:a:0]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,volume={volume:.2f},"
+                             f"afade=t=in:st=0:d=0.5,afade=t=out:st={total - fo:.3f}:d={fo:.2f}[a]")
+                amap = ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+            cmd += ["-filter_complex", ";".join(parts), "-map", vout, *amap, *venc.args,
+                    "-t", f"{total:.3f}", ctx.output()]
+            ctx.span(0.7, 1.0).run(cmd, duration=total)
+            return 0
 
-            tmp_vid = os.path.join(tmp_dir, "video_only.mp4")
-            cmd_join += [tmp_vid, "-y"]
-            r = subprocess.run(cmd_join, capture_output=True,
-                               creationflags=CREATE_NO_WINDOW)
-            if r.returncode != 0:
-                self.log(self.console, f"Join failed:\n{r.stderr.decode()[-400:]}")
-                self.after(0, lambda: self.show_result(1))
-                return
-
-            # Step 3: add music if present
-            if self.music_path and os.path.exists(self.music_path):
-                self.log(self.console, t("log.slideshow.adding_music"))
-                vol  = self.music_vol_var.get()
-                fade = self.fade_music_var.get()
-
-                # Get total video duration
-                ffprobe = get_binary_path("ffprobe.exe")
-                rr = subprocess.run(
-                    [ffprobe,"-v","error","-show_entries","format=duration",
-                     "-of","json", tmp_vid],
-                    capture_output=True, text=True,
-                    creationflags=CREATE_NO_WINDOW)
-                total_dur = float(json.loads(rr.stdout).get("format",{}).get("duration",0) or 0)
-
-                af = f"volume={vol:.2f}"
-                if fade and total_dur > 2:
-                    af += f",afade=t=out:st={max(0,total_dur-2):.2f}:d=2"
-
-                cmd_mux = [ffmpeg, "-i", tmp_vid,
-                           "-stream_loop", "-1", "-i", self.music_path,
-                           "-af", af,
-                           "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                           "-shortest", "-movflags", "+faststart", out, "-y"]
-            else:
-                cmd_mux = [ffmpeg, "-i", tmp_vid,
-                           "-c", "copy", "-an", "-movflags", "+faststart", out, "-y"]
-
-            r_final = subprocess.run(cmd_mux, capture_output=True,
-                                     creationflags=CREATE_NO_WINDOW)
-
-            # Cleanup
-            try: shutil.rmtree(tmp_dir)
-            except Exception: pass
-
-            self.after(0, lambda: self.show_result(r_final.returncode, out))
-            self.after(0, lambda: self.prog_lbl.config(
-                text=t("slideshow.slideshow_complete") if r_final.returncode == 0 else "❌  Failed"))
-
-        except Exception as e:
-            self.log(self.console, f"❌  Error: {e}")
-            self.after(0, lambda: self.show_result(1))
-        finally:
-            self.after(0, lambda: self.btn_render.config(
-                state="normal", text=t("slideshow.render_button")))
+        self.log(self.console, f"{len(slides)} photos · {ff.format_time(total)} · {w}×{h} @ {fps} fps")
+        common.queue_job(self, name="Slideshow", out=out, work=work, btn=self.btn_render,
+                         btn_label="🎞  CREATE SLIDESHOW", console=self.console, duration=total,
+                         inputs=[s.path for s in slides] + ([music] if music else []))

@@ -21,7 +21,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.visuals import common
+from tabs import common
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
 
 MIN_SPEED, MAX_SPEED = 0.1, 16.0

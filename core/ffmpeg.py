@@ -913,12 +913,15 @@ def capture(cmd: Sequence[str], *, timeout: float = 60.0,
 
 
 def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
-                   vf: str = "", timeout: float = 20.0) -> Optional[bytes]:
+                   vf: str = "", keep_time: bool = False,
+                   timeout: float = 20.0) -> Optional[bytes]:
     """Return one frame of *path* at *at* seconds as PNG bytes (or None).
 
     Input-side seeking with decoding is frame-accurate in modern FFmpeg.
     *vf* is an optional filter chain applied to the full-size frame first
     (used for live previews of colour grades, keys, scopes...).
+    *keep_time* keeps the source timestamps (``-copyts``) so time-based
+    filters - subtitles, titles, ``enable=`` ranges - see the real time.
     *width*/*height* bound the size (aspect preserved, even dimensions).
     """
     vf = [vf] if vf else []
@@ -927,6 +930,7 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
         h = height or -2
         vf.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2")
     cmd = [ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
+           *(["-copyts"] if keep_time else []),
            "-ss", ts(max(0.0, at)), "-i", path, "-frames:v", "1", "-an", "-sn", "-dn"]
     if vf:
         cmd += ["-vf", ",".join(vf)]

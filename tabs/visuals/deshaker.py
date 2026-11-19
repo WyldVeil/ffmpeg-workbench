@@ -14,7 +14,7 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.visuals import common
+from tabs import common
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
 
 ZOOM_MODES = {

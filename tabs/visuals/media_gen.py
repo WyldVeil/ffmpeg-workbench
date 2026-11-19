@@ -18,7 +18,7 @@ from core import filters as fl
 from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
-from tabs.visuals import common
+from tabs import common
 
 PATTERNS = {
     "smpte_hd": "SMPTE HD colour bars",

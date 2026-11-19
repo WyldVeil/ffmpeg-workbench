@@ -67,6 +67,7 @@ class FramePreview(tk.Frame):
         self._shown_t: Optional[float] = None
         self._last_at = 0.0
         self._vf = ""                               # optional preview filter
+        self._keep_time = False
         self._gen = 0                               # bumps on every load()
         self.canvas = tk.Canvas(self, width=width, height=height, bg="#000000",
                                 highlightthickness=1, highlightbackground=clr["border"],
@@ -121,11 +122,13 @@ class FramePreview(tk.Frame):
     def clear(self) -> None:
         self.load(None)
 
-    def set_filter(self, vf: str) -> None:
-        """Show frames through FFmpeg filter chain *vf* ("" = untouched)."""
-        if (vf or "") == self._vf:
+    def set_filter(self, vf: str, keep_time: bool = False) -> None:
+        """Show frames through FFmpeg filter chain *vf* ("" = untouched).
+        *keep_time* is needed for time-based filters such as subtitles."""
+        if (vf or "") == self._vf and keep_time == self._keep_time:
             return
         self._vf = vf or ""
+        self._keep_time = keep_time
         if self._path:
             self.show(self._last_at)
 
@@ -156,7 +159,7 @@ class FramePreview(tk.Frame):
                     self._busy = False
                     return
             png = ff.grab_frame_png(self._path or "", at, width=self._pw, height=self._ph,
-                                    vf=self._vf)
+                                    vf=self._vf, keep_time=self._keep_time)
             self._deliver(gen, at, png)
 
     def _deliver(self, gen: int, at: float, png: Optional[bytes]) -> None:
@@ -227,8 +230,8 @@ class CompareView(tk.Frame):
             view.load(path, self._duration, pos)
         self._time.config(text=ff.format_time(pos) if path else "")
 
-    def set_filter(self, vf: str) -> None:
-        self.view_after.set_filter(vf)
+    def set_filter(self, vf: str, keep_time: bool = False) -> None:
+        self.view_after.set_filter(vf, keep_time)
 
     @property
     def position(self) -> float:

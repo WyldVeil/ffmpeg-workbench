@@ -16,7 +16,7 @@ from tkinter import messagebox, ttk
 from core import filters as fl
 from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.visuals import common
+from tabs import common
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 INTERPOLATIONS = ["tetrahedral", "trilinear", "pyramid", "prism", "nearest"]

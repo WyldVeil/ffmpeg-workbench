@@ -20,7 +20,7 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core.i18n import t
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.visuals import common
+from tabs import common
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 _SQ = [i * i for i in range(256)]
