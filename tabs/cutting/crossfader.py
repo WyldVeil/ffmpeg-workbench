@@ -1,100 +1,257 @@
 """
-tab_crossfader.py  ─  Crossfader
-Join multiple video clips with smooth transitions (xfade + acrossfade).
+tabs/cutting/crossfader.py  -  Crossfader
 
-Encoding modes
-──────────────
-• Standard  - re-encodes every frame. Simple, always works.
-• Fast       - stream-copies the untouched middle of each clip (instant),
-               re-encodes ONLY the T-second overlap windows, then
-               concatenates. Audio is intelligently matched to the first 
-               clip's codec to preserve maximum original quality.
+Join up to 20 clips with smooth video transitions (xfade) and audio
+crossfades (acrossfade) in a single FFmpeg pass.
+
+* Clips of different sizes, frame rates, aspect ratios and sample rates are
+  normalised to the first clip (letter/pillar-boxed, never stretched).
+* Each clip is cut to its *video* length so audio can never drift, and clips
+  without an audio track get matching silence instead of muting the result.
+* "Overlap" transitions eat into both clips; "Freeze" holds the last/first
+  frame so no action is lost.
+* Any encoder the machine supports (x264/x265/SVT-AV1/VP9, NVENC/QSV/VAAPI/
+  AMF/VideoToolbox) via the shared encoder panel; a quick low-resolution
+  Preview renders the transitions before committing to the full render.
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
 import os
-import json
-import threading
-import tempfile
+import tkinter as tk
+from dataclasses import dataclass
+from tkinter import messagebox, ttk
+from typing import Optional
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (
-    detect_gpu, get_binary_path, CREATE_NO_WINDOW,
-    get_latest_online_version, get_local_version,
-    download_and_extract_ffmpeg,
-)
+from core import dialogs
+from core import encoders as enc
+from core import ffmpeg as ff
+from core.hardware import launch_preview
 from core.i18n import t
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel
 
-# ── Transition catalogue ──────────────────────────────────────────────────
 TRANSITIONS = [
-    "fade", "fadeblack", "fadewhite", "fadegrays",
-    "wipeleft", "wiperight", "wipeup", "wipedown",
+    "fade", "dissolve", "fadeblack", "fadewhite", "fadegrays", "fadefast", "fadeslow",
+    "wipeleft", "wiperight", "wipeup", "wipedown", "wipetl", "wipetr", "wipebl", "wipebr",
     "slideleft", "slideright", "slideup", "slidedown",
-    "circlecrop", "circleopen", "circleclose",
-    "dissolve", "pixelize", "radial",
-    "smoothleft", "smoothright", "hblur",
+    "smoothleft", "smoothright", "smoothup", "smoothdown",
+    "coverleft", "coverright", "coverup", "coverdown",
+    "revealleft", "revealright", "revealup", "revealdown",
+    "circlecrop", "rectcrop", "circleopen", "circleclose",
+    "vertopen", "vertclose", "horzopen", "horzclose",
+    "diagtl", "diagtr", "diagbl", "diagbr",
+    "hlslice", "hrslice", "vuslice", "vdslice",
+    "hlwind", "hrwind", "vuwind", "vdwind",
+    "radial", "pixelize", "distance", "hblur", "squeezeh", "squeezev", "zoomin",
 ]
 TRANS_DEFAULT = "fade"
+AUDIO_CURVES = ["tri", "qsin", "hsin", "esin", "log", "ipar", "qua", "cub", "squ", "cbr", "par", "exp"]
+MAX_CLIPS = 20
 
-AUDIO_CURVES = [
-    "tri", "qsin", "hsin", "esinc", "log", "ipar", "qua", "cub", "squ", "cbr"
-]
+AUDIO_MODES = [("none", "crossfader.audio_none", "No Audio"),
+               ("normal", "crossfader.audio_normal", "Normal Audio"),
+               ("hq", "crossfader.audio_hq", "HQ Audio")]
 
-MAX_CLIPS = 10
 
+def _tr(key: str, fallback: str) -> str:
+    text = t(key)
+    return fallback if text == key else text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Pure command building (unit-tested without any UI)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class Clip:
+    path: str
+    duration: float          # video length in seconds
+    width: int
+    height: int
+    fps: float
+    fps_str: str             # exact rational, e.g. "30000/1001"
+    has_audio: bool
+    summary: str = ""
+
+    @classmethod
+    def from_info(cls, info: ff.MediaInfo) -> "Clip":
+        v = info.video
+        if v is None:
+            raise ValueError(_tr("crossfader.no_video_stream", "No video stream in this file."))
+        dur = v.duration if v.duration > 0.05 else info.duration
+        rate = v.raw.get("avg_frame_rate") or v.raw.get("r_frame_rate") or "30/1"
+        if not v.fps or v.fps > 240 or rate in ("0/0", ""):
+            rate = "30/1"
+        w, h = v.display_size
+        return cls(path=info.path, duration=float(dur), width=w, height=h,
+                   fps=v.fps or 30.0, fps_str=rate, has_audio=info.has_audio,
+                   summary=info.summary())
+
+
+def _even(n: float) -> int:
+    return max(2, int(round(n)) // 2 * 2)
+
+
+def segment_lengths(clips: list, T: float, freeze: bool) -> list:
+    """Length of each clip as it enters the xfade chain (freeze pads it)."""
+    n = len(clips)
+    out = []
+    for i, c in enumerate(clips):
+        length = c.duration
+        if freeze:
+            length += (T if i > 0 else 0.0) + (T if i < n - 1 else 0.0)
+        out.append(length)
+    return out
+
+
+def validate(clips: list, T: float, freeze: bool) -> Optional[str]:
+    """Return a user-facing problem description, or None when renderable."""
+    if len(clips) < 2:
+        return _tr("crossfader.need_two", "Add at least two clips.")
+    if not (0.04 <= T <= 30):
+        return _tr("crossfader.bad_duration", "The transition must last between 0.04 and 30 seconds.")
+    if freeze:
+        return None
+    n = len(clips)
+    for i, c in enumerate(clips):
+        need = T if i in (0, n - 1) else 2 * T
+        if c.duration + 1e-3 < need:
+            return _tr("crossfader.clip_too_short",
+                       "Clip {n} is {d:.2f} s long but needs at least {need:.2f} s for "
+                       "{t:.2f} s transitions. Shorten the transition or use Freeze mode."
+                       ).format(n=i + 1, d=c.duration, need=need, t=T)
+    return None
+
+
+def total_duration(clips: list, T: float, freeze: bool) -> float:
+    lengths = segment_lengths(clips, T, freeze)
+    return max(0.0, sum(lengths) - T * (len(clips) - 1))
+
+
+def build_command(clips: list, out: str, *, T: float, transitions: list,
+                  freeze: bool = False, audio_mode: str = "normal",
+                  audio_curve: str = "tri", venc: Optional[enc.VideoEncode] = None,
+                  size: Optional[tuple] = None, extra_output_args: Optional[list] = None
+                  ) -> tuple[list, float]:
+    """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
+    n = len(clips)
+    if venc is None:
+        venc = enc.video("h264", "high", hw="off", container=os.path.splitext(out)[1] or "mp4")
+    W, H = size or (_even(clips[0].width), _even(clips[0].height))
+    fps = clips[0].fps_str
+    pix = venc.pix_fmt or "yuv420p"
+    lengths = segment_lengths(clips, T, freeze)
+    use_audio = audio_mode != "none" and any(c.has_audio for c in clips)
+
+    argv = [ff.ffmpeg_path(), "-y", *venc.pre_input]
+    for c in clips:
+        argv += ["-i", c.path]
+    silent_index = {}
+    if use_audio:
+        for i, c in enumerate(clips):
+            if not c.has_audio:
+                silent_index[i] = n + len(silent_index)
+                argv += ["-f", "lavfi", "-t", ff.ts(c.duration),
+                         "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+
+    graph = []
+    for i, c in enumerate(clips):
+        chain = (f"[{i}:v]setpts=PTS-STARTPTS,"
+                 f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                 f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},"
+                 f"trim=duration={c.duration:.6f},setpts=PTS-STARTPTS,format={pix}")
+        if freeze:
+            pads = []
+            if i > 0:
+                pads.append(f"start_mode=clone:start_duration={T:.6f}")
+            if i < n - 1:
+                pads.append(f"stop_mode=clone:stop_duration={T:.6f}")
+            chain += ",tpad=" + ":".join(pads)
+        graph.append(chain + f",settb=AVTB[v{i}]")
+
+    last = "[v0]"
+    offset = 0.0
+    for i in range(1, n):
+        offset += lengths[i - 1] - T
+        trans = transitions[i - 1] if i - 1 < len(transitions) else TRANS_DEFAULT
+        label = f"[x{i}]"
+        graph.append(f"{last}[v{i}]xfade=transition={trans}:duration={T:.6f}:"
+                     f"offset={offset:.6f}{label}")
+        last = label
+    if venc.filter_suffix:
+        graph.append(f"{last}{venc.filter_suffix}[vout]")
+    else:
+        graph.append(f"{last}null[vout]")
+
+    if use_audio:
+        for i, c in enumerate(clips):
+            src = f"[{silent_index[i]}:a]" if i in silent_index else f"[{i}:a]"
+            chain = (f"{src}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                     f"asetpts=PTS-STARTPTS,apad,atrim=duration={c.duration:.6f}")
+            if freeze:
+                if i > 0:
+                    chain += f",adelay=delays={int(round(T * 1000))}:all=1"
+                if i < n - 1:
+                    chain += f",apad=pad_dur={T:.6f}"
+                chain += f",atrim=duration={lengths[i]:.6f}"
+            graph.append(chain + f",asetpts=PTS-STARTPTS[a{i}]")
+        last = "[a0]"
+        for i in range(1, n):
+            label = f"[ax{i}]" if i < n - 1 else "[aout]"
+            graph.append(f"{last}[a{i}]acrossfade=d={T:.6f}:c1={audio_curve}:c2={audio_curve}{label}")
+            last = label
+
+    argv += ["-filter_complex", ";".join(graph), "-map", "[vout]"]
+    if use_audio:
+        container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
+        bitrate = "320k" if audio_mode == "hq" else "192k"
+        argv += ["-map", "[aout]",
+                 *enc.audio("opus" if container == "webm" else "aac",
+                            "256k" if (container == "webm" and audio_mode == "hq") else bitrate,
+                            container=container)]
+    else:
+        argv += ["-an"]
+    argv += [*venc.args, *(extra_output_args or []), "-map_metadata", "-1", "-sn", out]
+    return argv, total_duration(clips, T, freeze)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Tab
+# ─────────────────────────────────────────────────────────────────────────────
 
 class CrossfaderTab(BaseTab):
+    TOOL_NAME = "Crossfader"
+    accepted_kinds = ("video",)
+
     def __init__(self, parent):
         super().__init__(parent)
-
-        self.current_mode   = detect_gpu()
-        self.clip_rows      = []   # list of dicts: {frame, var, lbl, trans_var}
-        self.clip_data      = []   # ffprobe metadata cache
-
-        self.quality_var    = tk.StringVar(value="High")
-        self.audio_var      = tk.StringVar(value="Normal Audio")
-        self.audio_curve_var= tk.StringVar(value="tri")
-        self.bit_depth_var  = tk.StringVar(value="8-bit")
-        self.trans_dur_var  = tk.StringVar(value="2")
+        self.clip_rows: list = []    # dicts: frame, var, lbl, trans_var, trans_cb, num_lbl, clip
+        self.audio_var = tk.StringVar()
+        self.audio_curve_var = tk.StringVar(value="tri")
+        self.trans_dur_var = tk.StringVar(value="1.0")
         self.trans_type_var = tk.StringVar(value=TRANS_DEFAULT)
         self.per_clip_trans = tk.BooleanVar(value=False)
-        self.encode_mode    = tk.StringVar(value="fast")
-
+        self.trans_behavior_var = tk.StringVar(value="overlap")
+        self._audio_labels = {key: _tr(k, fb) for key, k, fb in AUDIO_MODES}
+        self.audio_var.set(self._audio_labels["normal"])
         self._build_ui()
 
-    # ── Empty metadata template ───────────────────────────────────────────
-    @staticmethod
-    def _empty_meta():
-        return {"path": "", "dur": 0, "fps": 60, "w": 1920,
-                "h": 1080, "size": 0, "bit_depth": 8, "has_audio": False,
-                "a_codec": ""}
+    # ── compatibility shims used by older code / tests ─────────────────────
+    @property
+    def clip_data(self) -> list:
+        return [r["clip"] for r in self.clip_rows]
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  UI construction
-    # ─────────────────────────────────────────────────────────────────────
+    # ── UI ───────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # ── Header ───────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=CLR.get("panel", "#222222"))
-        hdr.pack(fill="x")
-        tk.Label(hdr, text="✦  " + t("tab.crossfader"),
-                 font=(UI_FONT, 16, "bold"),
-                 bg=CLR.get("panel", "#222222"), fg=CLR.get("accent", "#0078D7")).pack(side="left", padx=20, pady=12)
-        tk.Label(hdr,
-                 text=t("crossfader.join_clips_with_smooth_transitions"),
-                 bg=CLR.get("panel", "#222222"), fg=CLR.get("fgdim", "#888888")).pack(side="left")
-
-        # ── Scrollable body ───────────────────────────────────────────────
-        body_canvas = tk.Canvas(self, highlightthickness=0)
-        body_sb     = ttk.Scrollbar(self, orient="vertical",
-                                    command=body_canvas.yview)
-        self._inner = tk.Frame(body_canvas)
-        body_canvas.create_window((0, 0), window=self._inner, anchor="nw")
-        self._inner.bind("<Configure>",
-                         lambda e: body_canvas.configure(
-                             scrollregion=body_canvas.bbox("all")))
+        self.make_header(self, t("tab.crossfader"),
+                         t("crossfader.join_clips_with_smooth_transitions"), icon="✦")
+        body_canvas = tk.Canvas(self, highlightthickness=0, bg=CLR["bg"])
+        body_sb = ttk.Scrollbar(self, orient="vertical", command=body_canvas.yview)
+        self._inner = tk.Frame(body_canvas, bg=CLR["bg"])
+        win = body_canvas.create_window((0, 0), window=self._inner, anchor="nw")
+        self._inner.bind("<Configure>", lambda e: body_canvas.configure(
+            scrollregion=body_canvas.bbox("all")))
+        body_canvas.bind("<Configure>", lambda e: body_canvas.itemconfigure(win, width=e.width))
         body_canvas.configure(yscrollcommand=body_sb.set)
         body_sb.pack(side="right", fill="y")
         body_canvas.pack(side="left", fill="both", expand=True)
@@ -105,821 +262,356 @@ class CrossfaderTab(BaseTab):
         self._build_output_section(self._inner)
         self._build_render_section(self._inner)
 
-    # ── Clips section ─────────────────────────────────────────────────────
     def _build_clips_section(self, parent):
-        lf = tk.LabelFrame(parent, text=" 🎬  " + t("section.clips"),
-                            padx=10, pady=8)
-        lf.pack(fill="x", padx=16, pady=8)
-
-        # Column headers
-        hdr = tk.Frame(lf); hdr.pack(fill="x", pady=(0, 4))
-        for txt, w in [("#", 3), ("File", 55), ("Metadata", 38),
-                        ("Transition ↓", 16), ("", 14)]:
-            tk.Label(hdr, text=txt, width=w, font=(UI_FONT, 8, "bold"),
-                     fg=CLR.get("fgdim", "#888888"), anchor="w").pack(side="left", padx=2)
-
-        self._clips_frame = tk.Frame(lf)
+        lf = self.make_section(parent, "\U0001F3AC  " + t("section.clips"), padx=16)
+        self._clips_frame = tk.Frame(lf, bg=CLR["bg"])
         self._clips_frame.pack(fill="x")
-
-        # Add clip button
-        btn_row = tk.Frame(lf); btn_row.pack(fill="x", pady=(6, 0))
-        self.btn_add_clip = tk.Button(btn_row,
-                                       text=t("crossfader.add_clip"),
-                                       bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"),
-                                       relief="flat", cursor="hand2",
-                                       command=self._add_clip_row)
+        btn_row = tk.Frame(lf, bg=CLR["bg"])
+        btn_row.pack(fill="x", pady=(6, 0))
+        self.btn_add_clip = tk.Button(btn_row, text=t("crossfader.add_clip"), bg=CLR["panel"],
+                                      fg=CLR["fg"], relief="flat", cursor="hand2",
+                                      command=self._add_clip_row)
         self.btn_add_clip.pack(side="left", padx=4)
-        tk.Label(btn_row,
-                 text=t("crossfader.max_10_clips"),
-                 fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 8)).pack(side="left", padx=8)
-
-        # Seed with 2 rows
+        tk.Button(btn_row, text=_tr("crossfader.add_many", "➕  Add several…"),
+                  bg=CLR["panel"], fg=CLR["fg"], relief="flat", cursor="hand2",
+                  command=self._add_many).pack(side="left", padx=4)
+        tk.Label(btn_row, text=_tr("crossfader.max_clips", "Up to {n} clips").format(n=MAX_CLIPS),
+                 fg=CLR["fgdim"], bg=CLR["bg"], font=(UI_FONT, 8)).pack(side="left", padx=8)
         self._add_clip_row()
         self._add_clip_row()
 
-    # ── Transition section ────────────────────────────────────────────────
     def _build_transition_section(self, parent):
-        lf = tk.LabelFrame(parent, text=" 🎞  " + t("section.transition"), padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
-
-        row1 = tk.Frame(lf); row1.pack(fill="x", pady=2)
-
-        # Duration
+        lf = self.make_section(parent, "\U0001F39E  " + t("section.transition"), padx=16)
+        row1 = tk.Frame(lf, bg=CLR["bg"])
+        row1.pack(fill="x", pady=2)
         tk.Label(row1, text=t("gif_maker.duration_label"), font=(UI_FONT, 10, "bold"),
-                 width=16, anchor="e").pack(side="left")
-        tk.Spinbox(row1, from_=1, to=10,
-                   textvariable=self.trans_dur_var,
-                   command=self._rebuild_clip_trans_labels,
-                   width=6, font=(UI_FONT, 11)).pack(side="left", padx=8)
-        self.trans_dur_var.trace_add("write",
-            lambda *_: self._rebuild_clip_trans_labels())
-
-        # Global type
-        tk.Label(row1, text=t("crossfader.video_type"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._global_trans_cb = ttk.Combobox(
-            row1, textvariable=self.trans_type_var,
-            values=TRANSITIONS, state="readonly", width=16)
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Spinbox(row1, from_=0.1, to=10, increment=0.1, format="%.1f",
+                   textvariable=self.trans_dur_var, width=6,
+                   font=(UI_FONT, 11)).pack(side="left", padx=8)
+        tk.Label(row1, text=t("crossfader.video_type"), font=(UI_FONT, 10, "bold"),
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=(12, 0))
+        self._global_trans_cb = ttk.Combobox(row1, textvariable=self.trans_type_var,
+                                             values=TRANSITIONS, state="readonly", width=16)
         self._global_trans_cb.pack(side="left", padx=8)
-        self.trans_type_var.trace_add("write",
-            lambda *_: self._apply_global_trans())
+        self.trans_type_var.trace_add("write", lambda *_: self._apply_global_trans())
+        tk.Label(row1, text=t("crossfader.audio_curve"), font=(UI_FONT, 10, "bold"),
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=(12, 0))
+        ttk.Combobox(row1, textvariable=self.audio_curve_var, values=AUDIO_CURVES,
+                     state="readonly", width=8).pack(side="left", padx=8)
 
-        # Audio Curve
-        tk.Label(row1, text=t("crossfader.audio_curve"), font=(UI_FONT, 10, "bold")).pack(side="left", padx=(16, 0))
-        ttk.Combobox(row1, textvariable=self.audio_curve_var, values=AUDIO_CURVES, state="readonly", width=8).pack(side="left", padx=8)
+        row2 = tk.Frame(lf, bg=CLR["bg"])
+        row2.pack(fill="x", pady=(4, 0))
+        tk.Checkbutton(row2, text=t("crossfader.use_different_transition_for_each_clip_pair"),
+                       variable=self.per_clip_trans, command=self._toggle_per_clip_trans,
+                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["input_bg"],
+                       activebackground=CLR["bg"], font=(UI_FONT, 10)).pack(side="left")
 
-        # Per-clip toggle
-        row2 = tk.Frame(lf); row2.pack(fill="x", pady=(4, 0))
-        tk.Checkbutton(row2,
-                       text=t("crossfader.use_different_transition_for_each_clip_pair"),
-                       variable=self.per_clip_trans,
-                       command=self._toggle_per_clip_trans,
-                       font=(UI_FONT, 10)).pack(side="left")
-        tk.Label(row2,
-                 text=t("crossfader.overrides_the_global_setting_above_per_pair"),
-                 fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 8)).pack(side="left")
+        row3 = tk.Frame(lf, bg=CLR["bg"])
+        row3.pack(fill="x", pady=(6, 0))
+        tk.Label(row3, text=t("crossfader.behavior"), font=(UI_FONT, 10, "bold"),
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        for value, key in (("overlap", "crossfader.overlap_standard_merges_action_consumes_time"),
+                           ("freeze", "crossfader.freeze_frame_preserves_action_freezes_video_at_c")):
+            tk.Radiobutton(row3, text=t(key), variable=self.trans_behavior_var, value=value,
+                           command=self._update_summary, bg=CLR["bg"], fg=CLR["fg"],
+                           selectcolor=CLR["input_bg"], activebackground=CLR["bg"],
+                           font=(UI_FONT, 10)).pack(side="left", padx=8)
+        self.trans_dur_var.trace_add("write", lambda *_: self._update_summary())
 
-        # Transition Behavior
-        row3 = tk.Frame(lf); row3.pack(fill="x", pady=(8, 0))
-        tk.Label(row3, text=t("crossfader.behavior"), font=(UI_FONT, 10, "bold"), width=16, anchor="e").pack(side="left")
-
-        self.trans_behavior_var = tk.StringVar(value="overlap")
-        def _on_behavior_change(*args):
-            if self.trans_behavior_var.get() == "freeze":
-                self.encode_mode.set("standard")
-
-        tk.Radiobutton(row3, text=t("crossfader.overlap_standard_merges_action_consumes_time"),
-                       variable=self.trans_behavior_var, value="overlap",
-                       command=_on_behavior_change,
-                       font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Radiobutton(row3, text=t("crossfader.freeze_frame_preserves_action_freezes_video_at_c"),
-                       variable=self.trans_behavior_var, value="freeze",
-                       command=_on_behavior_change,
-                       font=(UI_FONT, 10)).pack(side="left", padx=8)
-
-    # ── Encoding section ──────────────────────────────────────────────────
     def _build_encoding_section(self, parent):
-        lf = tk.LabelFrame(parent, text=" ⚙  " + t("section.encoding"), padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
+        lf = self.make_section(parent, "⚙  " + t("section.encoding"), padx=16)
+        self.encoder = EncoderPanel(lf, codecs=("h264", "hevc", "av1", "vp9"), default_quality="high")
+        self.encoder.pack(anchor="w")
+        a_row = tk.Frame(lf, bg=CLR["bg"])
+        a_row.pack(fill="x", pady=(8, 0))
+        tk.Label(a_row, text=t("crossfader.audio"), font=(UI_FONT, 9, "bold"),
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        for key, _k, _fb in AUDIO_MODES:
+            tk.Radiobutton(a_row, text=self._audio_labels[key], variable=self.audio_var,
+                           value=self._audio_labels[key], bg=CLR["bg"], fg=CLR["fg"],
+                           selectcolor=CLR["input_bg"], activebackground=CLR["bg"],
+                           font=(UI_FONT, 9)).pack(side="left", padx=6)
 
-        mode_row = tk.Frame(lf); mode_row.pack(fill="x", pady=2)
-
-        tk.Radiobutton(mode_row,
-                       text=t("crossfader.fast_stream_copy_whole_clips_re_encode"),
-                       variable=self.encode_mode, value="fast",
-                       font=(UI_FONT, 10)).pack(anchor="w")
-        tk.Label(mode_row,
-                 text=t("crossfader.10_100_faster_than_standard_for_long_clips"),
-                 fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 8)).pack(anchor="w")
-
-        tk.Radiobutton(mode_row,
-                       text=t("crossfader.standard_re_encode_every_frame"),
-                       variable=self.encode_mode, value="standard",
-                       font=(UI_FONT, 10)).pack(anchor="w", pady=(6, 0))
-        tk.Label(mode_row,
-                 text=t("crossfader.needed_if_clips_have_different_codecs"),
-                 fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 8)).pack(anchor="w")
-
-        sep = tk.Frame(lf, bg="#333", height=1)
-        sep.pack(fill="x", pady=6)
-
-        opts = tk.Frame(lf); opts.pack(fill="x")
-
-        # Quality
-        q_frame = tk.Frame(opts); q_frame.pack(side="left", padx=(0, 20))
-        tk.Label(q_frame, text=t("crossfader.quality_standard_mode"),
-                 font=(UI_FONT, 9, "bold")).pack(anchor="w")
-        for q in [("Very High", "Very High (Slowest)"),
-                  ("High",      "High"),
-                  ("Good",      "Good"),
-                  ("Low",       "Low"),
-                  ("Lowest",    "Lowest (Fastest)")]:
-            tk.Radiobutton(q_frame, text=q[1],
-                           variable=self.quality_var, value=q[0],
-                           font=(UI_FONT, 9)).pack(anchor="w")
-
-        # Audio
-        a_frame = tk.Frame(opts); a_frame.pack(side="left", padx=(0, 20))
-        tk.Label(a_frame, text=t("crossfader.audio"), font=(UI_FONT, 9, "bold")).pack(anchor="w")
-        for a in ["No Audio", "Normal Audio", "HQ Audio"]:
-            tk.Radiobutton(a_frame, text=a,
-                           variable=self.audio_var, value=a,
-                           font=(UI_FONT, 9)).pack(anchor="w")
-
-        # Bit depth
-        bd_frame = tk.Frame(opts); bd_frame.pack(side="left", padx=(0, 20))
-        self.bd_label = tk.Label(bd_frame, text=t("crossfader.bit_depth"),
-                                  font=(UI_FONT, 9, "bold"))
-        self.bd_label.pack(anchor="w")
-        for bd in ["8-bit", "10-bit"]:
-            tk.Radiobutton(bd_frame, text=bd,
-                           variable=self.bit_depth_var, value=bd,
-                           font=(UI_FONT, 9)).pack(anchor="w")
-
-        # Hardware
-        hw_frame = tk.Frame(opts); hw_frame.pack(side="left")
-        tk.Label(hw_frame, text=t("crossfader.hardware"),
-                 font=(UI_FONT, 9, "bold")).pack(anchor="w")
-        tk.Label(hw_frame, text=self.current_mode.upper(),
-                 fg=CLR.get("accent", "#0078D7"), font=(MONO_FONT, 10)).pack(anchor="w")
-        tk.Label(hw_frame, text=t("crossfader.auto_detected"),
-                 fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 7)).pack(anchor="w")
-
-    # ── Output section ────────────────────────────────────────────────────
     def _build_output_section(self, parent):
-        lf = tk.LabelFrame(parent, text=" 💾  " + t("section.output"), padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
-
-        row = tk.Frame(lf); row.pack(fill="x")
+        lf = self.make_section(parent, "\U0001F4BE  " + t("section.output"), padx=16)
+        row = tk.Frame(lf, bg=CLR["bg"])
+        row.pack(fill="x")
         tk.Label(row, text=t("crossfader.output_file"), font=(UI_FONT, 10, "bold"),
-                 width=14, anchor="e").pack(side="left")
-        self.entry_out = tk.Entry(row, width=64, relief="flat")
-        self.entry_out.pack(side="left", padx=8)
-        tk.Button(row, text=t("common.save_as"),
-                  command=self._browse_output).pack(side="left")
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        self.out_var = tk.StringVar()
+        self.entry_out = tk.Entry(row, textvariable=self.out_var, width=70, relief="flat",
+                                  bg=CLR["input_bg"], fg=CLR["input_fg"],
+                                  insertbackground=CLR["accent"])
+        self.entry_out.pack(side="left", padx=8, fill="x", expand=True)
+        tk.Button(row, text=t("common.save_as"), command=self._browse_output,
+                  relief="flat", bg=CLR["panel"], fg=CLR["fg"]).pack(side="left")
 
-    # ── Render section ────────────────────────────────────────────────────
     def _build_render_section(self, parent):
-        btn_row = tk.Frame(parent); btn_row.pack(pady=10, padx=16, fill="x")
-
-        self.run_btn = tk.Button(
-            btn_row,
-            text=t("crossfader.render_crossfade"),
-            font=(UI_FONT, 14, "bold"),
-            bg=CLR.get("green", "#4CAF50"), fg="white",
-            height=2, width=28,
-            state="disabled",
-            command=self._start_render)
+        btn_row = tk.Frame(parent, bg=CLR["bg"])
+        btn_row.pack(pady=10, padx=16, fill="x")
+        self._render_label = t("crossfader.render_crossfade")
+        self.run_btn = self.make_render_btn(btn_row, self._render_label, self._start_render,
+                                            color=CLR["green"], width=26)
+        self.run_btn.config(state="disabled")
         self.run_btn.pack(side="left", padx=6)
-
-        self._status_lbl = tk.Label(btn_row, text="",
-                                     fg=CLR.get("accent", "#0078D7"), font=(UI_FONT, 9))
+        self._preview_label = _tr("crossfader.preview_button", "\U0001F441  Quick preview")
+        self.preview_btn = tk.Button(btn_row, text=self._preview_label, font=(UI_FONT, 10, "bold"),
+                                     bg=CLR["panel"], fg=CLR["fg"], relief="flat", cursor="hand2",
+                                     state="disabled", command=self._start_preview)
+        self.preview_btn.pack(side="left", padx=6, ipady=8)
+        self._status_lbl = tk.Label(btn_row, text="", fg=CLR["accent"], bg=CLR["bg"],
+                                    font=(UI_FONT, 9), justify="left")
         self._status_lbl.pack(side="left", padx=12)
-
-        cf = tk.Frame(parent); cf.pack(fill="both", expand=True, padx=16, pady=4)
+        cf = tk.Frame(parent, bg=CLR["bg"])
+        cf.pack(fill="both", expand=True, padx=16, pady=4)
         self.console, csb = self.make_console(cf, height=10)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  Clip row management
-    # ─────────────────────────────────────────────────────────────────────
-    def _add_clip_row(self):
+    # ── clip rows ────────────────────────────────────────────────────────────
+    def _row_index(self, row) -> int:
+        return self.clip_rows.index(row)
+
+    def _add_clip_row(self, path: str = ""):
         if len(self.clip_rows) >= MAX_CLIPS:
-            return
-
-        idx = len(self.clip_rows)
-        self.clip_data.append(self._empty_meta())
-
-        row = tk.Frame(self._clips_frame, relief="groove", bd=1)
-        row.pack(fill="x", pady=2)
-
-        # Index label
-        num_lbl = tk.Label(row, text=f"{idx+1}", width=3,
-                           font=(UI_FONT, 9, "bold"),
-                           fg=CLR.get("accent", "#0078D7"))
-        num_lbl.pack(side="left", padx=4)
-
-        # Path entry
-        var = tk.StringVar()
-        entry = tk.Entry(row, textvariable=var, width=52,
-                         font=(MONO_FONT, 9))
-        entry.pack(side="left", padx=4)
-        entry.bind("<FocusOut>", lambda e, i=idx: self._on_entry_update(i))
-        entry.bind("<Return>",   lambda e, i=idx: self._on_entry_update(i))
-
-        tk.Button(row, text="…", width=3,
-                  command=lambda i=idx: self._browse_clip(i)).pack(side="left")
-
-        # Metadata label
-        meta_lbl = tk.Label(row, text=t("common.no_file_loaded"),
-                             fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 8),
-                             width=36, anchor="w")
-        meta_lbl.pack(side="left", padx=6)
-
-        # Per-pair transition (hidden unless per_clip_trans is on)
-        trans_var = tk.StringVar(value=self.trans_type_var.get())
-        trans_cb  = ttk.Combobox(row, textvariable=trans_var,
-                                  values=TRANSITIONS,
-                                  state="readonly", width=14)
-        if idx > 0 and self.per_clip_trans.get():
-            trans_cb.pack(side="left", padx=4)
-
-        # Reorder + remove buttons
-        ctrl = tk.Frame(row); ctrl.pack(side="right", padx=4)
-        tk.Button(ctrl, text="↑", width=2,
-                  command=lambda i=idx: self._move_clip(i, -1)).pack(side="left")
-        tk.Button(ctrl, text="↓", width=2,
-                  command=lambda i=idx: self._move_clip(i, +1)).pack(side="left")
-        tk.Button(ctrl, text="✕", width=2, fg=CLR.get("red", "#EF5350"),
-                  command=lambda i=idx: self._remove_clip(i)).pack(side="left", padx=(4, 0))
-
-        self.clip_rows.append({
-            "frame":    row,
-            "var":      var,
-            "lbl":      meta_lbl,
-            "trans_var":trans_var,
-            "trans_cb": trans_cb,
-            "num_lbl":  num_lbl,
-        })
-
+            return None
+        frame = tk.Frame(self._clips_frame, relief="groove", bd=1, bg=CLR["panel"])
+        frame.pack(fill="x", pady=2)
+        row = {"frame": frame, "clip": None}
+        row["num_lbl"] = tk.Label(frame, text=str(len(self.clip_rows) + 1), width=3,
+                                  font=(UI_FONT, 9, "bold"), fg=CLR["accent"], bg=CLR["panel"])
+        row["num_lbl"].pack(side="left", padx=4)
+        row["var"] = tk.StringVar(value=path)
+        entry = tk.Entry(frame, textvariable=row["var"], width=48, font=(MONO_FONT, 9),
+                         relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"])
+        entry.pack(side="left", padx=4, pady=3)
+        entry.bind("<FocusOut>", lambda e, r=row: self._on_entry_update(r))
+        entry.bind("<Return>", lambda e, r=row: self._on_entry_update(r))
+        tk.Button(frame, text="…", width=3, relief="flat",
+                  command=lambda r=row: self._browse_clip(r)).pack(side="left")
+        row["lbl"] = tk.Label(frame, text=t("common.no_file_loaded"), fg=CLR["fgdim"],
+                              bg=CLR["panel"], font=(UI_FONT, 8), anchor="w")
+        row["lbl"].pack(side="left", padx=6, fill="x", expand=True)
+        ctrl = tk.Frame(frame, bg=CLR["panel"])
+        ctrl.pack(side="right", padx=4)
+        row["ctrl"] = ctrl
+        row["trans_var"] = tk.StringVar(value=self.trans_type_var.get())
+        row["trans_cb"] = ttk.Combobox(frame, textvariable=row["trans_var"], values=TRANSITIONS,
+                                       state="readonly", width=13)
+        for txt, cmd in (("↑", lambda r=row: self._move_clip(r, -1)),
+                         ("↓", lambda r=row: self._move_clip(r, +1)),
+                         ("✕", lambda r=row: self._remove_clip(r))):
+            tk.Button(ctrl, text=txt, width=2, relief="flat", command=cmd,
+                      fg=CLR["red"] if txt == "✕" else CLR["fg"],
+                      bg=CLR["panel"]).pack(side="left", padx=1)
+        self.clip_rows.append(row)
         if len(self.clip_rows) >= MAX_CLIPS:
             self.btn_add_clip.config(state="disabled")
-
+        self._toggle_per_clip_trans()
+        if path:
+            self._on_entry_update(row)
         self._validate()
+        return row
 
-    def _remove_clip(self, idx):
+    def _add_many(self):
+        paths = dialogs.ask_open_many("video", title=t("crossfader.add_clip"), parent=self)
+        for p in paths:
+            self.load_file(p)
+
+    def _remove_clip(self, row):
         if len(self.clip_rows) <= 2:
-            messagebox.showwarning(t("common.warning"),
-                                   "At least 2 clips are required.")
+            row["var"].set("")
+            row["clip"] = None
+            row["lbl"].config(text=t("common.no_file_loaded"), fg=CLR["fgdim"])
+            self._validate()
             return
-        self.clip_rows[idx]["frame"].destroy()
-        self.clip_rows.pop(idx)
-        self.clip_data.pop(idx)
+        row["frame"].destroy()
+        self.clip_rows.remove(row)
         self.btn_add_clip.config(state="normal")
-        self._renumber_clips()
+        self._renumber()
         self._validate()
 
-    def _move_clip(self, idx, direction):
-        new_idx = idx + direction
-        if new_idx < 0 or new_idx >= len(self.clip_rows):
+    def _move_clip(self, row, direction):
+        idx = self._row_index(row)
+        new = idx + direction
+        if not 0 <= new < len(self.clip_rows):
             return
-        # Swap data
-        self.clip_rows[idx], self.clip_rows[new_idx] = \
-            self.clip_rows[new_idx], self.clip_rows[idx]
-        self.clip_data[idx], self.clip_data[new_idx] = \
-            self.clip_data[new_idx], self.clip_data[idx]
-
-        # Re-pack in new order
+        self.clip_rows[idx], self.clip_rows[new] = self.clip_rows[new], self.clip_rows[idx]
         for r in self.clip_rows:
             r["frame"].pack_forget()
         for r in self.clip_rows:
             r["frame"].pack(fill="x", pady=2)
-
-        self._renumber_clips()
+        self._renumber()
         self._validate()
 
-    def _renumber_clips(self):
+    def _renumber(self):
         for i, r in enumerate(self.clip_rows):
             r["num_lbl"].config(text=str(i + 1))
-            # Rebind callbacks with correct index
-            for widget in r["frame"].winfo_children():
-                if isinstance(widget, tk.Entry):
-                    widget.unbind("<FocusOut>")
-                    widget.unbind("<Return>")
-                    widget.bind("<FocusOut>", lambda e, i=i: self._on_entry_update(i))
-                    widget.bind("<Return>",   lambda e, i=i: self._on_entry_update(i))
-
-    def _rebuild_clip_trans_labels(self):
-        """Called when per_clip_trans or global type changes - show/hide per-pair dropdowns."""
         self._toggle_per_clip_trans()
 
     def _toggle_per_clip_trans(self):
         show = self.per_clip_trans.get()
         for i, r in enumerate(self.clip_rows):
-            if i == 0:
-                r["trans_cb"].pack_forget()  # no transition before clip 0
-                continue
-            if show:
-                r["trans_cb"].pack(side="left", padx=4,
-                                   before=self._find_ctrl_frame(r))
-            else:
-                r["trans_cb"].pack_forget()
-
-    def _find_ctrl_frame(self, row_dict):
-        """Find the ctrl frame (↑↓✕ buttons) inside a row frame."""
-        for widget in row_dict["frame"].winfo_children():
-            if isinstance(widget, tk.Frame):
-                return widget
-        return row_dict["frame"]
+            r["trans_cb"].pack_forget()
+            if show and i > 0:
+                r["trans_cb"].pack(side="right", padx=4, before=r["ctrl"])
 
     def _apply_global_trans(self):
-        """Copy global transition type to all per-clip dropdowns."""
-        val = self.trans_type_var.get()
         for r in self.clip_rows:
-            r["trans_var"].set(val)
+            r["trans_var"].set(self.trans_type_var.get())
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  File handling & metadata
-    # ─────────────────────────────────────────────────────────────────────
-    def _browse_clip(self, idx):
-        path = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mkv *.avi *.mov *.webm"),
-                       ("All", t("ducker.item_2"))])
+    # ── files ────────────────────────────────────────────────────────────────
+    def _browse_clip(self, row):
+        path = dialogs.ask_open("video", title=t("crossfader.add_clip"), parent=self)
         if path:
-            self.clip_rows[idx]["var"].set(path)
-            self._on_entry_update(idx)
-            # Auto-suggest output path from first clip
-            if idx == 0 and not self.entry_out.get().strip():
-                base = os.path.splitext(path)[0]
-                self.entry_out.delete(0, tk.END)
-                self.entry_out.insert(0, base + "_crossfaded.mp4")
+            row["var"].set(path)
+            self._on_entry_update(row)
 
-    def _on_entry_update(self, idx):
-        path = self.clip_rows[idx]["var"].get().strip()
-        if self.clip_data[idx].get("path") != path:
-            self._load_metadata(path, idx)
-            self._suggest_bit_depth()
-            self._validate()
+    def load_file(self, path: str) -> bool:
+        """Drag-and-drop / File > Open: fill the first empty row or add one."""
+        for row in self.clip_rows:
+            if not row["var"].get().strip():
+                row["var"].set(path)
+                self._on_entry_update(row)
+                return True
+        return self._add_clip_row(path) is not None
 
-    def _load_metadata(self, path, idx):
-        if not path or not os.path.exists(path):
-            self.clip_data[idx] = self._empty_meta()
-            self.clip_rows[idx]["lbl"].config(text=t("crossfader.file_not_found"), fg="#EF5350")
+    def _on_entry_update(self, row):
+        path = row["var"].get().strip()
+        current = row["clip"].path if row["clip"] else ""
+        if path == current:
             return
-        try:
-            ffprobe = get_binary_path("ffprobe.exe")
-            cmd = [ffprobe, "-v", "error",
-                   "-show_entries",
-                   "format=duration,size:stream=codec_type,codec_name,r_frame_rate,width,height,pix_fmt",
-                   "-of", "json", path]
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                                    creationflags=CREATE_NO_WINDOW)
-            data   = json.loads(result.stdout)
-            fmt    = data.get("format", {})
-            streams= data.get("streams", [])
-            vs     = next((s for s in streams
-                           if s.get("codec_type") == "video"), {})
-            
-            # Smart Audio Match Setup: Extract specific audio codec
-            audio_s = next((s for s in streams if s.get("codec_type") == "audio"), {})
-            a_codec = audio_s.get("codec_name", "")
-
-            num, den = map(int, vs.get("r_frame_rate", "60/1").split("/"))
-            fps      = num / den if den else 60.0
-            pix      = vs.get("pix_fmt", "")
-
-            self.clip_data[idx] = {
-                "path":      path,
-                "dur":       float(fmt.get("duration", 0)),
-                "fps":       round(fps, 3),
-                "w":         int(vs.get("width", 1920)),
-                "h":         int(vs.get("height", 1080)),
-                "size":      int(fmt.get("size", 0)) / (1024 * 1024),
-                "bit_depth": 10 if ("10" in pix or "12" in pix) else 8,
-                "has_audio": bool(a_codec),
-                "a_codec":   a_codec,
-            }
-            self.clip_rows[idx]["lbl"].config(
-                text=self._fmt_meta(self.clip_data[idx]),
-                fg=CLR.get("fgdim", "#888888"))
-        except Exception as e:
-            self.clip_data[idx] = self._empty_meta()
-            self.clip_rows[idx]["lbl"].config(
-                text=f"Error reading file: {e}", fg="#EF5350")
-
-    @staticmethod
-    def _fmt_meta(d):
-        if not d["dur"]:
-            return "No file loaded."
-        m, s = divmod(int(d["dur"]), 60)
-        a_info = f"🔊 ({d['a_codec']})" if d['has_audio'] else '🔇'
-        return (f"{d['w']}×{d['h']}  {d['fps']:.2f}fps  "
-                f"{m}m{s:02d}s  {d['size']:.1f}MB  "
-                f"{d['bit_depth']}-bit  "
-                f"{a_info}")
-
-    def _suggest_bit_depth(self):
-        valid = [d for d in self.clip_data if d["dur"] > 0]
-        if any(c["bit_depth"] == 10 for c in valid):
-            self.bit_depth_var.set("10-bit")
-            self.bd_label.config(text=t("crossfader.bit_depth_10_bit_suggested"))
+        row["clip"] = None
+        if not path:
+            row["lbl"].config(text=t("common.no_file_loaded"), fg=CLR["fgdim"])
         else:
-            self.bit_depth_var.set("8-bit")
-            self.bd_label.config(text=t("crossfader.bit_depth"))
+            try:
+                row["clip"] = Clip.from_info(ff.probe(path))
+                row["lbl"].config(text=row["clip"].summary, fg=CLR["fgdim"])
+            except (ff.ProbeError, ValueError) as exc:
+                row["lbl"].config(text=str(exc)[:90], fg=CLR["red"])
+        if row is self.clip_rows[0] and row["clip"] and not self.out_var.get().strip():
+            self.out_var.set(self.suggest_output(path, "crossfaded", ".mp4"))
+        self._validate()
 
     def _browse_output(self):
-        path = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
+        current = self.out_var.get().strip()
+        path = dialogs.ask_save(os.path.basename(current) or "crossfaded.mp4", kind="video",
+                                defaultextension=".mp4", parent=self,
+                                initialdir=os.path.dirname(current) or None)
         if path:
-            self.entry_out.delete(0, tk.END)
-            self.entry_out.insert(0, path)
-            self._validate()
+            self.out_var.set(path)
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  Validation
-    # ─────────────────────────────────────────────────────────────────────
+    # ── state ────────────────────────────────────────────────────────────────
+    def _clips(self) -> list:
+        return [r["clip"] for r in self.clip_rows if r["clip"] is not None]
+
+    def _transitions(self) -> list:
+        rows = [r for r in self.clip_rows if r["clip"] is not None]
+        if self.per_clip_trans.get():
+            return [r["trans_var"].get() for r in rows[1:]]
+        return [self.trans_type_var.get()] * max(0, len(rows) - 1)
+
+    def _duration(self) -> Optional[float]:
+        try:
+            return float(str(self.trans_dur_var.get()).replace(",", "."))
+        except ValueError:
+            return None
+
+    def _audio_mode(self) -> str:
+        rev = {v: k for k, v in self._audio_labels.items()}
+        return rev.get(self.audio_var.get(), "normal")
+
     def _validate(self):
         if not hasattr(self, "run_btn"):
             return
-        valid = [i for i, d in enumerate(self.clip_data) if d["dur"] > 0]
-        if len(valid) >= 2:
-            self.run_btn.config(state="normal")
+        ok = len(self._clips()) >= 2
+        state = "normal" if ok else "disabled"
+        if str(self.run_btn.cget("text")) == self._render_label:
+            self.run_btn.config(state=state)
+        self.preview_btn.config(state=state)
+        self._update_summary()
+
+    def _update_summary(self):
+        clips = self._clips()
+        T = self._duration()
+        if len(clips) < 2 or T is None:
+            self._status_lbl.config(text="")
+            return
+        freeze = self.trans_behavior_var.get() == "freeze"
+        problem = validate(clips, T, freeze)
+        if problem:
+            self._status_lbl.config(text="⚠ " + problem, fg=CLR["orange"])
         else:
-            self.run_btn.config(state="disabled")
+            total = total_duration(clips, T, freeze)
+            note = _tr("crossfader.summary", "{n} clips → {d} total").format(
+                n=len(clips), d=ff.format_time(total, ms=False))
+            if any(not c.has_audio for c in clips) and any(c.has_audio for c in clips):
+                note += "  ·  " + _tr("crossfader.silence_note", "silence added for clips without audio")
+            self._status_lbl.config(text=note, fg=CLR["accent"])
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  Render dispatch
-    # ─────────────────────────────────────────────────────────────────────
-    def _active_clips(self):
-        return [(i, self.clip_data[i], self.clip_rows[i])
-                for i in range(len(self.clip_rows))
-                if self.clip_data[i]["dur"] > 0]
-
-    def _get_trans_dur(self):
-        try:
-            return max(1, int(self.trans_dur_var.get()))
-        except ValueError:
-            return 2
-
-    def _get_video_codec(self, pix_fmt):
-        q = self.quality_var.get()
-        if self.current_mode == "nvidia":
-            preset, cq = {"Very High": ("p7", 10), "High": ("p6", 15),
-                           "Good": ("p4", 20), "Low": ("p2", 28),
-                           "Lowest": ("p1", 35)}.get(q, ("p6", 15))
-            return (f"-c:v hevc_nvenc -preset {preset} "
-                    f"-rc vbr -cq {cq} -pix_fmt {pix_fmt}")
-        elif self.current_mode == "amd":
-            qp = {"Very High": 12, "High": 18, "Good": 24,
-                  "Low": 30, "Lowest": 40}.get(q, 18)
-            return (f"-c:v hevc_amf -quality quality -rc cqp "
-                    f"-qp_i {qp} -qp_p {qp} -pix_fmt {pix_fmt}")
+    # ── rendering ────────────────────────────────────────────────────────────
+    def _prepare(self, out: str, preview: bool = False):
+        clips = self._clips()
+        T = self._duration()
+        if T is None:
+            messagebox.showwarning(t("common.warning"),
+                                   _tr("crossfader.bad_duration", "Enter a valid transition length."), parent=self)
+            return None
+        freeze = self.trans_behavior_var.get() == "freeze"
+        problem = validate(clips, T, freeze)
+        if problem:
+            messagebox.showwarning(t("common.warning"), problem, parent=self)
+            return None
+        container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
+        if preview:
+            venc = enc.video("h264", "low", speed="fastest", hw="auto", container="mp4")
+            w0, h0 = clips[0].width, clips[0].height
+            scale = min(1.0, 640 / max(w0, 1), 360 / max(h0, 1))
+            size = (_even(w0 * scale), _even(h0 * scale))
         else:
-            preset, crf = {"Very High": ("slow", 10), "High": ("medium", 16),
-                           "Good": ("fast", 22), "Low": ("faster", 28),
-                           "Lowest": ("veryfast", 34)}.get(q, ("medium", 16))
-            return (f"-c:v libx265 -crf {crf} "
-                    f"-preset {preset} -pix_fmt {pix_fmt}")
+            if not enc.video_ok_for(container, self.encoder.codec):
+                messagebox.showwarning(t("common.warning"), _tr(
+                    "crossfader.codec_container",
+                    "{codec} can't be stored in a .{ext} file. Pick another codec or file type.").format(
+                    codec=self.encoder.codec.upper(), ext=container), parent=self)
+                return None
+            venc = self.encoder.video_encode(container)
+            size = None
+        return build_command(clips, out, T=T, transitions=self._transitions(), freeze=freeze,
+                             audio_mode=self._audio_mode(), audio_curve=self.audio_curve_var.get(),
+                             venc=venc, size=size)
 
     def _start_render(self):
-        clips = self._active_clips()
+        clips = self._clips()
         if len(clips) < 2:
-            messagebox.showwarning(t("common.warning"),
-                                   "Add at least 2 clips with valid files.")
+            messagebox.showwarning(t("common.warning"), _tr("crossfader.need_two", "Add at least two clips."),
+                                   parent=self)
             return
-        out = self.entry_out.get().strip() or "crossfaded_output.mp4"
-        self.entry_out.delete(0, tk.END)
-        self.entry_out.insert(0, out)
+        out = self.out_var.get().strip() or self.suggest_output(clips[0].path, "crossfaded", ".mp4")
+        out = self.confirm_output(out, [c.path for c in clips])
+        if not out:
+            return
+        self.out_var.set(out)
+        built = self._prepare(out)
+        if not built:
+            return
+        cmd, seconds = built
+        self.log(self.console, f"Rendering {len(clips)} clips → {os.path.basename(out)} "
+                               f"({ff.format_time(seconds, ms=False)}, {self.encoder.video_encode().label})")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self.run_btn, btn_label=self._render_label, duration=seconds,
+                        output=out, inputs=[c.path for c in clips], name="Crossfader")
 
-        if self.encode_mode.get() == "fast":
-            if getattr(self, "trans_behavior_var", None) and self.trans_behavior_var.get() == "freeze":
-                self.log(self.console, t("log.crossfader.freeze_frame_mode_requires_standard_encoding_switc"))
-                self.encode_mode.set("standard")
-                self._render_standard(clips, out)
-            else:
-                self._render_fast(clips, out)
-        else:
-            self._render_standard(clips, out)
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Standard render  (full re-encode, single FFmpeg pass)
-    # ─────────────────────────────────────────────────────────────────────
-    def _render_standard(self, clips, out):
-        ffmpeg      = get_binary_path("ffmpeg.exe")
-        T           = self._get_trans_dur()
-        pix_fmt     = "yuv420p10le" if self.bit_depth_var.get() == "10-bit" else "yuv420p"
-        audio_curve = self.audio_curve_var.get()
-
-        target_w   = max(c[1]["w"]   for c in clips)
-        target_h   = max(c[1]["h"]   for c in clips)
-        target_fps = max(c[1]["fps"] for c in clips)
-
-        scale = (f"scale={target_w}:{target_h}:"
-                 f"force_original_aspect_ratio=decrease,"
-                 f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2")
-        vprep = f"{scale},fps={target_fps},setpts=PTS-STARTPTS,settb=AVTB"
-
-        is_freeze = getattr(self, "trans_behavior_var", None) and self.trans_behavior_var.get() == "freeze"
-
-        inputs = []
-        for _, d, _ in clips:
-            inputs += ["-i", d["path"]]
-
-        fc = ""
-        for i, (_, d, r) in enumerate(clips):
-            vf = vprep
-            if is_freeze:
-                tpad_args = []
-                if i > 0:
-                    tpad_args.append(f"start_mode=clone:start_duration={T}")
-                if i < len(clips) - 1:
-                    tpad_args.append(f"stop_mode=clone:stop_duration={T}")
-                if tpad_args:
-                    vf += f",tpad={':'.join(tpad_args)}"
-
-            fc += f"[{i}:v]{vf}[v{i}]; "
-
-        last_v  = "[v0]"
-        offset  = 0
-        dur_accum = 0
-
-        for i in range(1, len(clips)):
-            trans = (clips[i][2]["trans_var"].get()
-                     if self.per_clip_trans.get()
-                     else self.trans_type_var.get())
-
-            if is_freeze:
-                dur_accum += clips[i-1][1]["dur"]
-                offset = dur_accum + (i - 1) * T
-            else:
-                offset += clips[i-1][1]["dur"] - T
-
-            out_tag = f"[xf{i}]" if i < len(clips) - 1 else "[vout]"
-            fc += (f"{last_v}[v{i}]xfade=transition={trans}:"
-                   f"duration={T}:offset={offset:.3f}{out_tag}; ")
-            last_v = f"[xf{i}]"
-
-        map_args   = ["-map", "[vout]"]
-        audio_args = []
-        audio_mode = self.audio_var.get()
-        all_audio  = all(c[1]["has_audio"] for c in clips)
-
-        if audio_mode != "No Audio" and all_audio:
-            for i in range(len(clips)):
-                af = ""
-                if is_freeze:
-                    apad_args = []
-                    if i > 0:
-                        apad_args.append(f"delays={T*1000}:all=1")
-                    if apad_args:
-                        af += f"adelay={':'.join(apad_args)}"
-
-                    if i < len(clips) - 1:
-                        if af: af += ","
-                        af += f"apad=pad_dur={T}"
-
-                if af:
-                    fc += f"[{i}:a]{af}[a_pad{i}]; "
-                else:
-                    fc += f"[{i}:a]anull[a_pad{i}]; "
-
-            last_a = "[a_pad0]"
-            for i in range(1, len(clips)):
-                out_a = f"[a{i}]" if i < len(clips) - 1 else "[aout]"
-                fc += f"{last_a}[a_pad{i}]acrossfade=d={T}:curve1={audio_curve}:curve2={audio_curve}{out_a}; "
-                last_a = f"[a{i}]"
-            
-            map_args  += ["-map", "[aout]"]
-            brate      = "320k" if audio_mode == "HQ Audio" else "192k"
-            
-            # Use the Smart Audio Match logic even in standard mode!
-            codec_map = {
-                "aac": "aac", "mp3": "libmp3lame", "opus": "libopus",
-                "vorbis": "libvorbis", "flac": "flac", "ac3": "ac3"
-            }
-            target_acodec = clips[0][1].get("a_codec") or "aac"
-            target_encoder = codec_map.get(target_acodec, "aac")
-            
-            audio_args = ["-c:a", target_encoder, "-b:a", brate]
-
-        vcodec = self._get_video_codec(pix_fmt).split()
-
-        cmd = ([ffmpeg] + inputs
-               + ["-filter_complex", fc.rstrip("; ")]
-               + map_args + vcodec + audio_args
-               + [out, "-y"])
-
-        mode_str = "Freeze-Frame" if is_freeze else "Standard"
-        self.log(self.console,
-                 f"{mode_str} mode: re-encoding {len(clips)} clips…")
+    def _start_preview(self):
+        from core.paths import temp_dir
+        out = os.path.join(temp_dir("crossfade_preview_"), "preview.mp4")
+        built = self._prepare(out, preview=True)
+        if not built:
+            return
+        cmd, seconds = built
         self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.run_btn,
-                        btn_label="🚀  RENDER CROSSFADE")
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Fast render  (stream-copy bodies, re-encode ONLY overlap windows)
-    # ─────────────────────────────────────────────────────────────────────
-    def _render_fast(self, clips, out):
-        ffmpeg      = get_binary_path("ffmpeg.exe")
-        T           = self._get_trans_dur()
-        tmpdir      = tempfile.mkdtemp(prefix="crossfader_")
-        pix_fmt     = "yuv420p10le" if self.bit_depth_var.get() == "10-bit" else "yuv420p"
-        audio_mode  = self.audio_var.get()
-        audio_curve = self.audio_curve_var.get()
-        all_audio   = all(c[1]["has_audio"] for c in clips)
-        do_audio    = (audio_mode != "No Audio" and all_audio)
-        brate       = "320k" if audio_mode == "HQ Audio" else "192k"
-        
-        target_w   = max(c[1]["w"]   for c in clips) or 1920
-        target_h   = max(c[1]["h"]   for c in clips) or 1080
-        target_fps = max(c[1]["fps"] for c in clips) or 30
-
-        # SMART AUDIO MATCH: Determine Master Audio Codec from Clip 1
-        codec_map = {
-            "aac": "aac", "mp3": "libmp3lame", "opus": "libopus",
-            "vorbis": "libvorbis", "flac": "flac", "ac3": "ac3"
-        }
-        target_acodec = clips[0][1].get("a_codec") or "aac"
-        target_aencoder = codec_map.get(target_acodec, "aac")
-
-        self.log(self.console,
-                 f"Fast mode: {len(clips)} clips, {T}s transitions.")
-        if do_audio:
-            self.log(self.console, f"Smart Audio Match active: Aligning project to '{target_acodec}' format.")
-        
-        self.run_btn.config(state="disabled", text=t("app.status.queued_btn"))
-
-        def _task(progress_cb, cancel_fn):
-            """worker_fn for the global render queue."""
-            try:
-                raw_body_segs = []
-                trans_segs    = []
-
-                scale_vf = (f"scale={target_w}:{target_h}:"
-                            f"force_original_aspect_ratio=decrease,"
-                            f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2,"
-                            f"fps={target_fps:.3f},"
-                            f"setpts=PTS-STARTPTS,settb=AVTB")
-
-                for i, (_, d, r) in enumerate(clips):
-                    path_i = d["path"]
-                    dur_i  = d["dur"]
-                    clip_acodec = d.get("a_codec")
-
-                    if not do_audio:
-                        body_a_args = ["-an"]
-                    elif clip_acodec == target_acodec:
-                        body_a_args = ["-c:a", "copy"]
-                    else:
-                        body_a_args = ["-c:a", target_aencoder, "-b:a", brate]
-
-                    body_start = T if i > 0 else 0.0
-                    body_end   = dur_i - T if i < len(clips) - 1 else dur_i
-                    body_dur   = body_end - body_start
-
-                    if body_dur > 0.05:
-                        body_path = os.path.join(tmpdir, f"body_{i}.mkv")
-                        self._run_cmd_queued(
-                            [ffmpeg,
-                             "-ss", f"{body_start:.4f}",
-                             "-i",  path_i,
-                             "-t",  f"{body_dur:.4f}",
-                             "-c:v", "copy"] + body_a_args +
-                            ["-avoid_negative_ts", "make_zero",
-                             "-reset_timestamps",  "1",
-                             body_path, "-y"],
-                            progress_cb, cancel_fn)
-                        raw_body_segs.append((i, body_path))
-
-                    if i < len(clips) - 1:
-                        next_path  = clips[i + 1][1]["path"]
-                        trans_type = (r["trans_var"].get()
-                                      if self.per_clip_trans.get()
-                                      else self.trans_type_var.get())
-
-                        tail_p = os.path.join(tmpdir, f"tail_{i}.mkv")
-                        head_p = os.path.join(tmpdir, f"head_{i+1}.mkv")
-                        trans_a_args = (["-c:a", target_aencoder, "-b:a", brate]
-                                        if do_audio else ["-an"])
-
-                        self._run_cmd_queued(
-                            [ffmpeg, "-sseof", f"-{T:.4f}", "-i", path_i,
-                             "-t", f"{T:.4f}", "-vf", scale_vf,
-                             "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast",
-                             "-pix_fmt", pix_fmt] + trans_a_args +
-                            ["-avoid_negative_ts", "make_zero",
-                             "-reset_timestamps", "1", tail_p, "-y"],
-                            progress_cb, cancel_fn)
-
-                        self._run_cmd_queued(
-                            [ffmpeg, "-i", next_path, "-t", f"{T:.4f}",
-                             "-vf", scale_vf,
-                             "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast",
-                             "-pix_fmt", pix_fmt] + trans_a_args +
-                            ["-avoid_negative_ts", "make_zero",
-                             "-reset_timestamps", "1", head_p, "-y"],
-                            progress_cb, cancel_fn)
-
-                        trans_p = os.path.join(tmpdir, f"trans_{i}.mkv")
-                        fc = (f"[0:v][1:v]xfade=transition={trans_type}:"
-                              f"duration={T}:offset=0[vout]")
-                        x_map   = ["-map", "[vout]"]
-                        x_audio: list = []
-                        if do_audio:
-                            fc      += (f";[0:a][1:a]acrossfade=d={T}:"
-                                        f"curve1={audio_curve}:curve2={audio_curve}[aout]")
-                            x_map   += ["-map", "[aout]"]
-                            x_audio  = ["-c:a", target_aencoder, "-b:a", brate]
-
-                        self._run_cmd_queued(
-                            [ffmpeg, "-i", tail_p, "-i", head_p,
-                             "-filter_complex", fc]
-                            + x_map
-                            + ["-c:v", "libx264", "-crf", "18", "-preset", "ultrafast",
-                               "-pix_fmt", pix_fmt] + x_audio
-                            + ["-avoid_negative_ts", "make_zero",
-                               "-reset_timestamps", "1",
-                               trans_p, "-y"],
-                            progress_cb, cancel_fn)
-                        trans_segs.append((i, trans_p))
-
-                body_dict = dict(raw_body_segs)
-                final_segs = []
-                trans_dict = dict(trans_segs)
-                for i in range(len(clips)):
-                    if i in body_dict:
-                        final_segs.append(body_dict[i])
-                    if i in trans_dict:
-                        final_segs.append(trans_dict[i])
-
-                list_path = os.path.join(tmpdir, "concat_list.txt")
-                with open(list_path, "w", encoding='utf-8') as lf:
-                    for seg in final_segs:
-                        safe_seg = seg.replace("'", "'\\''")
-                        lf.write(f"file '{safe_seg}'\n")
-
-                progress_cb(f"Concatenating {len(final_segs)} segments…")
-                a_out = (["-c:a", "copy"] if do_audio else ["-an"])
-
-                self._run_cmd_queued(
-                    [ffmpeg, "-f", "concat", "-safe", "0",
-                     "-i", list_path, "-c", "copy"] + a_out +
-                    ["-movflags", "+faststart", out, "-y"],
-                    progress_cb, cancel_fn)
-                return 0
-
-            except RuntimeError as e:
-                progress_cb(f"[ERROR] {e}")
-                return 1
-            except Exception as e:
-                progress_cb(f"[ERROR] {e}")
-                return 1
-
-        def _on_start(tid):
-            self.run_btn.config(text=t("crossfader.rendering"))
-
-        def _on_progress(tid, line):
-            self.log(self.console, line)
-
-        def _on_complete(tid, rc):
-            self.run_btn.config(state="normal", text=t("crossfader.u0001f680_render_crossfade"))
-            self.show_result(rc, out)
-
-        self.enqueue_render(
-            "Crossfader",
-            output_path=out,
-            worker_fn=_task,
-            on_start=_on_start,
-            on_progress=_on_progress,
-            on_complete=_on_complete,
-        )
-
-    def _run_cmd_queued(self, cmd, progress_cb, cancel_fn):
-        """Run one FFmpeg command synchronously inside a queue worker_fn."""
-        progress_cb("$ " + " ".join(
-            f'"{a}"' if " " in str(a) else str(a) for a in cmd))
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, creationflags=CREATE_NO_WINDOW)
-        for line in iter(proc.stdout.readline, ""):
-            if cancel_fn():
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
-                proc.stdout.close()
-                proc.wait()
-                raise RuntimeError("Cancelled")
-            stripped = line.rstrip()
-            if stripped:
-                progress_cb(stripped)
-        proc.stdout.close()
-        proc.wait()
-        if proc.returncode != 0:
-            raise RuntimeError(f"FFmpeg exited {proc.returncode}")
-
-    def _log_main(self, msg):
-        self.after(0, lambda m=msg: self.log(self.console, m))
+                        on_done=lambda rc: launch_preview(out) if rc == 0 else self.show_result(rc, out),
+                        btn=self.preview_btn, btn_label=self._preview_label, duration=seconds,
+                        output=out, name="Crossfader preview")
