@@ -82,6 +82,20 @@ The five RNNoise models used by Voice Isolation (`bd`, `cb`, `lq`, `mp` and `sh`
 are not subject to copyright. The repository's README is included next to
 them.
 
+## Upscaling shaders (`bin/<platform>/shaders`)
+
+Used by the Resolution Scaler's FSR, NIS, ArtCNN and Anime4K upscalers
+(through FFmpeg's libplacebo filter). Each file is pinned by SHA-256 in
+`scripts/binaries.lock.json`; licence texts are in `licenses/shaders` and in
+the headers of FSR.glsl and NVScaler.glsl.
+
+| File | Licence | Source |
+|---|---|---|
+| `FSR.glsl` - AMD FidelityFX Super Resolution 1.0, mpv port by agyild | MIT (Copyright (c) 2021 Advanced Micro Devices, Inc.) | https://gist.github.com/agyild/82219c545228d70c5604f865ce0b0ce5 |
+| `NVScaler.glsl` - NVIDIA Image Scaling 1.0.3, mpv port by agyild | MIT (Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES) | https://gist.github.com/agyild/7e8951915b2bf24526a9343d951db214 |
+| `ArtCNN_C4F16.glsl`, `ArtCNN_C4F32.glsl` | MIT (Copyright (c) 2024 João Chrisóstomo) | https://github.com/Artoriuz/ArtCNN |
+| `Anime4K_Upscale_CNN_x2_M.glsl` | MIT (Copyright (c) 2019 bloc97) | https://github.com/bloc97/Anime4K |
+
 ## Optional components downloaded on demand
 
 * **Whisper speech-recognition models** (Auto-Subtitles): ggml conversions of

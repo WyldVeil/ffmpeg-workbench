@@ -146,8 +146,9 @@ TOOLS: dict = {
                                   "side by side a/b"),
     "Format Converter": ToolInfo("🔄", "Convert to MP4, MKV, MOV, WebM, MP3... copying what fits.",
                                  "convert format mp4 mkv mov webm avi container change"),
-    "Resolution Scaler": ToolInfo("📐", "Upscale or downscale to any resolution.",
-                                  "resolution resize scale upscale downscale 4k 1080p 720p bigger sharper"),
+    "Resolution Scaler": ToolInfo("📐", "Upscale or downscale to any resolution - FSR, NIS and AI upscalers.",
+                                  "resolution resize scale upscale downscale 4k 1080p 720p bigger sharper "
+                                  "enhance ai super resolution fsr nis anime4k artcnn old low quality"),
     "Framerate Interpolator": ToolInfo("🎞", "Change the frame rate smoothly, or make true slow motion.",
                                        "framerate fps 60fps smooth slow motion slowmo interpolate"),
     "Proxy Generator": ToolInfo("🪶", "Light copies for smooth editing in other editors.",

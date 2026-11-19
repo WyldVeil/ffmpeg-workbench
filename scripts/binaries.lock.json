@@ -108,6 +108,43 @@
           "sha256": "9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe"
         }
       }
+    },
+    "shaders": {
+      "version": "2026-11-19",
+      "license": "MIT (each file)",
+      "license_urls": [
+        "https://raw.githubusercontent.com/Artoriuz/ArtCNN/0837e5326e710f49e2ab0a8d995da0708047442e/LICENSE",
+        "https://raw.githubusercontent.com/bloc97/Anime4K/7684e9586f8dcc738af08a1cdceb024cc184f426/LICENSE"
+      ],
+      "assets": {
+        "any": {
+          "FSR.glsl": {
+            "url": "https://gist.githubusercontent.com/agyild/82219c545228d70c5604f865ce0b0ce5/raw/2623d743b9c23f500ba086f05b385dcb1557e15d/FSR.glsl",
+            "sha256": "56d8597fc6b7bf6d13f8c3b2bdf1cdc43b06175d51746aab44cf1dca16929b9e",
+            "license": "MIT (AMD FidelityFX Super Resolution 1.0, mpv port by agyild; licence in the file)"
+          },
+          "NVScaler.glsl": {
+            "url": "https://gist.githubusercontent.com/agyild/7e8951915b2bf24526a9343d951db214/raw/9d270a444d3c6938f8a73e883220b6d0e083e6b9/NVScaler.glsl",
+            "sha256": "cd897c1f1cce62dbb62a145a8398f781f94cc2421306cbb0005b075e9c385c78",
+            "license": "MIT (NVIDIA Image Scaling, mpv port by agyild; licence in the file)"
+          },
+          "ArtCNN_C4F16.glsl": {
+            "url": "https://raw.githubusercontent.com/Artoriuz/ArtCNN/0837e5326e710f49e2ab0a8d995da0708047442e/GLSL/ArtCNN_C4F16.glsl",
+            "sha256": "03d0b3d31cb82c898a94a46663021a3e8f02c5a21d69c5cfdf0208de4bfd453e",
+            "license": "MIT"
+          },
+          "ArtCNN_C4F32.glsl": {
+            "url": "https://raw.githubusercontent.com/Artoriuz/ArtCNN/0837e5326e710f49e2ab0a8d995da0708047442e/GLSL/ArtCNN_C4F32.glsl",
+            "sha256": "f773bce6cf5fe7e5e5d599a695edd40df5cd7a20c3d08c4d164d07591d5bead3",
+            "license": "MIT"
+          },
+          "Anime4K_Upscale_CNN_x2_M.glsl": {
+            "url": "https://raw.githubusercontent.com/bloc97/Anime4K/7684e9586f8dcc738af08a1cdceb024cc184f426/glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl",
+            "sha256": "716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e",
+            "license": "MIT"
+          }
+        }
+      }
     }
   }
 }

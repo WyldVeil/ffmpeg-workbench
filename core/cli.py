@@ -508,6 +508,11 @@ def op_convert(ctx):
 @options(lambda p: (_in(p, 1), p.add_argument("--size"), p.add_argument("--factor", type=float),
                     p.add_argument("--height", type=int),
                     p.add_argument("--fit", default="fit", choices=["fit", "pad", "crop", "stretch"]),
+                    p.add_argument("--method", default="auto",
+                                   choices=["auto", "lanczos", "bicubic", "area", "gpu", "fsr", "nis", "artcnn",
+                                            "artcnn_best", "anime4k"],
+                                   help="auto = FSR on a GPU for upscaling, else Lanczos; artcnn/anime4k suit "
+                                        "animation"),
                     p.add_argument("--sharpen", type=float, default=0.3), _video_opts(p)))
 def op_scale(ctx):
     from core import filters as fl
@@ -523,8 +528,15 @@ def op_scale(ctx):
         bw, bh = w * ctx.args.height / h, ctx.args.height
     else:
         raise CliError("Give --size, --factor or --height.")
+    from core import upscale
     gpu = fl.vulkan_ok() and ctx.args.gpu != "off"
-    chain = sc.scale_chain((w // 2 * 2, h // 2 * 2), (bw, bh), ctx.args.fit, "auto", sharpen=ctx.args.sharpen, gpu=gpu)
+    if ctx.args.method in sc.GPU_METHODS and not gpu:
+        raise CliError(f"--method {ctx.args.method} needs a Vulkan graphics driver (and not --gpu off).")
+    try:
+        chain = sc.scale_chain((w // 2 * 2, h // 2 * 2), (bw, bh), ctx.args.fit, ctx.args.method,
+                               sharpen=ctx.args.sharpen, gpu=gpu, tags=upscale.tags_of(info.video))
+    except ValueError as exc:
+        raise CliError(str(exc)) from None
     out = output_path(ctx, [src], "scaled")
     render_chain(ctx, src, info, out, chain, pre=["-init_hw_device", "vulkan"] if "libplacebo" in chain else None)
     return result(out)

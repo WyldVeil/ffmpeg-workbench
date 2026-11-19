@@ -19,10 +19,12 @@ import math
 import os
 import tkinter as tk
 from fractions import Fraction
+from typing import Optional
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
+from core import upscale
 from core.i18n import t
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -37,6 +39,8 @@ SHAPES = {"fit": "Keep the shape (fit inside the size)", "pad": "Keep the shape,
 METHODS = {"auto": "Automatic (best for the direction)", "gpu": "GPU - libplacebo EWA Lanczos sharp",
            "lanczos": "Lanczos (sharp)", "bicubic": "Bicubic (soft)", "area": "Area (smooth downscale)",
            "neighbor": "Nearest (pixel art)"}
+METHODS.update({key: "Upscale: " + spec[0] for key, spec in upscale.SHADERS.items()})
+GPU_METHODS = {"gpu", *upscale.SHADERS}
 
 
 def _even(x: float) -> int:
@@ -57,17 +61,25 @@ def geometry(src: tuple, box: tuple, shape: str) -> tuple:
 
 
 def scale_chain(src: tuple, box: tuple, shape: str, method: str, *, sharpen: float = 0.0,
-                gpu: bool = False, pix_fmt: str = "yuv420p") -> str:
+                gpu: bool = False, pix_fmt: str = "yuv420p", tags: Optional[dict] = None) -> str:
+    """Filter graph scaling *src* into *box*.  GPU methods (libplacebo, with
+    or without an upscaling shader) process the brightness plane only, see
+    core/upscale.py; they need ``-init_hw_device vulkan``."""
     (w, h), (ow, oh) = geometry(src, box, shape)
     up = w * h > src[0] * src[1]
     if method == "auto":
-        method = ("gpu" if gpu else "lanczos") if up else ("area" if w * 2 <= src[0] else "lanczos")
-    if method == "gpu":
-        chain = [f"libplacebo=w={w}:h={h}:upscaler=ewa_lanczossharp:downscaler=ewa_lanczos:format={pix_fmt}"]
+        if up:
+            method = "fsr" if gpu and upscale.shader_path("fsr") else "lanczos"
+        else:
+            method = "area" if w * 2 <= src[0] else "lanczos"
+    if method in upscale.SHADERS and not up:
+        method = "gpu"                      # upscaling shaders do nothing when shrinking
+    if method in GPU_METHODS:
+        chain = [upscale.plane_graph((w, h), shader=method if method in upscale.SHADERS else None,
+                                     deep=pix_fmt.endswith("10le"), tags=tags), "setsar=1"]
     else:
-        chain = [f"scale={w}:{h}:flags={method}+accurate_rnd+full_chroma_int"]
-    chain.append("setsar=1")
-    if sharpen > 0 and up:
+        chain = [f"scale={w}:{h}:flags={method}+accurate_rnd+full_chroma_int", "setsar=1"]
+    if sharpen > 0 and up and method not in upscale.SHADERS:
         chain.append(f"cas=strength={min(1.0, sharpen):.2f}")
     if shape == "pad":
         chain.append(f"pad={ow}:{oh}:(ow-iw)/2:(oh-ih)/2:color=black")
@@ -107,13 +119,16 @@ class ResolutionScalerTab(BaseTab):
         row(1, "Shape:", ttk.Combobox(opt, textvariable=self.shape_var, values=list(SHAPES.values()),
                                       state="readonly", width=40))
         self.method_var = tk.StringVar(value=METHODS["auto"])
-        methods = [v for k, v in METHODS.items() if k != "gpu" or fl.vulkan_ok()]
+        have = set(upscale.available()) if fl.vulkan_ok() else set()
+        methods = [v for k, v in METHODS.items()
+                   if k not in GPU_METHODS or (k == "gpu" and fl.vulkan_ok()) or k in have]
         row(2, "Method:", ttk.Combobox(opt, textvariable=self.method_var, values=methods, state="readonly",
                                        width=40))
         self.sharpen_var = tk.DoubleVar(value=0.3)
         row(3, "Sharpen:", tk.Scale(opt, variable=self.sharpen_var, from_=0, to=1, resolution=0.05,
                                     orient="horizontal", length=200),
-            tk.Label(opt, text="(upscaling only)", fg=CLR["fgdim"]))
+            tk.Label(opt, text="(upscaling with Lanczos/Bicubic/GPU; FSR, NIS and the AI shaders sharpen "
+                               "already)", fg=CLR["fgdim"]))
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
         self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=(4, 0))
         for v in (self.size_var, self.shape_var, self.w_var, self.h_var):
@@ -198,8 +213,14 @@ class ResolutionScalerTab(BaseTab):
             return
         method = self._method()
         gpu = fl.vulkan_ok()
-        chain = scale_chain(common.even_size(info), box, self._shape(), method, sharpen=float(self.sharpen_var.get()),
-                            gpu=gpu, pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p")
+        try:
+            chain = scale_chain(common.even_size(info), box, self._shape(), method,
+                                sharpen=float(self.sharpen_var.get()), gpu=gpu,
+                                pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
+                                tags=upscale.tags_of(info.video))
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
         if "libplacebo" in chain and not gpu:
             messagebox.showwarning(t("common.warning"), "GPU scaling isn't available on this computer.", parent=self)
             return

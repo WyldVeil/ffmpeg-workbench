@@ -74,7 +74,7 @@ be left out.
 | `remove-silence` | Cut out silent pauses | `--threshold -40`, `--min-silence 0.6`, `--padding 0.15` | Silence Remover |
 | `compress` | Fit a size limit at the best quality it can | `--size 10MB`, `--codec`, `--fast`, `--start/--end` | Universal Downsizer |
 | `convert` | Change the format, copying streams where possible | `--to mp4\|mkv\|mov\|webm\|mp3\|m4a\|wav\|flac\|ogg\|opus...`, `--reencode` | Format Converter |
-| `scale` | Resize | `--size 1280x720`, `--height 720`, `--factor 2`, `--fit fit\|pad\|crop\|stretch` | Resolution Scaler |
+| `scale` | Resize; upscale with FSR, NIS or AI shaders on a GPU | `--size 1280x720`, `--height 720`, `--factor 2`, `--fit fit\|pad\|crop\|stretch`, `--method auto\|lanczos\|fsr\|nis\|artcnn\|anime4k` | Resolution Scaler |
 | `framerate` | New frame rate or slow motion | `--rate 60`, `--method motion\|blend\|dup`, `--slowmo 2` | Framerate Interpolator |
 | `hdr-to-sdr` | Fix washed-out HDR video (HDR10, HDR10+, HLG, Dolby Vision) for normal screens | `--curve bt2390\|spline\|hable\|mobius\|...`, `--assume pq\|hlg` (for untagged files) | HDR to SDR |
 | `compare` | Measure how much quality a copy lost against its original (VMAF, SSIM, PSNR), with the worst moments | `ORIGINAL COPY`, `--model hd\|4k\|neg`, `--skip-original/--skip-copy`, `--seconds`, `--every N`, `--csv FILE` | Compare & Quality |

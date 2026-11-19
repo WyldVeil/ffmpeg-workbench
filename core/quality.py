@@ -68,6 +68,13 @@ def build(ref: str, dist: str, ref_info: ff.MediaInfo, dist_info: ff.MediaInfo, 
     d_trim = f"trim=start={skip_dist:.3f}," if skip_dist > 0 else ""
     r_trim = f"trim=start={skip_ref:.3f}," if skip_ref > 0 else ""
     n = len(metrics)
+    # FFmpeg converts between differently tagged inputs and treats untagged video as SD (BT.601): a copy
+    # that merely gained or lost its colour tags would be scored as colour-shifted.  Where only one side
+    # is tagged, both are measured as tagged.
+    tags = shared_tags(ref_info.video, dist_info.video)
+    tag = ("setparams=" + ":".join(f"{k}={v}" for k, v in tags.items()) + ",") if tags else ""
+    d_trim += tag
+    r_trim += tag
     parts = [f"[0:v]{d_trim}setpts=PTS-STARTPTS,scale={w}:{h}:flags=bicubic,setsar=1,fps={rate},format={fmt}"
              f"{limit},setpts=PTS-STARTPTS" + (f",split={n}" + "".join(f"[d{i}]" for i in range(n)) if n > 1
                                                else "[d0]"),
@@ -91,6 +98,18 @@ def build(ref: str, dist: str, ref_info: ff.MediaInfo, dist_info: ff.MediaInfo, 
     argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", dist, "-i", ref,
             "-filter_complex", ";".join(parts), "-an", "-sn", "-f", "null", "-"]
     return argv, files
+
+
+def shared_tags(a, b) -> dict:
+    """setparams values for colour tags present on only one of two streams."""
+    out = {}
+    for key, attr in (("range", "color_range"), ("color_primaries", "color_primaries"),
+                      ("color_trc", "color_transfer"), ("colorspace", "color_space")):
+        va, vb = (getattr(a, attr, "") or ""), (getattr(b, attr, "") or "")
+        va, vb = ("" if v in ("unknown", "reserved") else v for v in (va, vb))
+        if bool(va) != bool(vb):
+            out[key] = va or vb
+    return out
 
 
 @dataclass

@@ -312,6 +312,41 @@ def resolve_soundfont(cache: str) -> dict:
     }
 
 
+SHADER_SOURCES = (
+    # (name in the bundle, how to find it, licence)
+    ("FSR.glsl", ("gist", "agyild", "82219c545228d70c5604f865ce0b0ce5", "FSR.glsl"),
+     "MIT (AMD FidelityFX Super Resolution 1.0, mpv port by agyild; licence in the file)"),
+    ("NVScaler.glsl", ("gist", "agyild", "7e8951915b2bf24526a9343d951db214", "NVScaler.glsl"),
+     "MIT (NVIDIA Image Scaling, mpv port by agyild; licence in the file)"),
+    ("ArtCNN_C4F16.glsl", ("repo", "Artoriuz/ArtCNN", "GLSL/ArtCNN_C4F16.glsl", "LICENSE"), "MIT"),
+    ("ArtCNN_C4F32.glsl", ("repo", "Artoriuz/ArtCNN", "GLSL/ArtCNN_C4F32.glsl", "LICENSE"), "MIT"),
+    ("Anime4K_Upscale_CNN_x2_M.glsl", ("repo", "bloc97/Anime4K", "glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl",
+                                       "LICENSE"), "MIT"),
+)
+
+
+def resolve_shaders(cache: str) -> dict:
+    """Upscaling shaders for the Resolution Scaler (libplacebo / mpv hook
+    format), each pinned to a commit or gist revision and verified by hash.
+    Only MIT-licensed ones: FSRCNNX was left out because it is GPL-3.0."""
+    assets, licences, commits = {}, [], {}
+    for name, (kind, *where), licence in SHADER_SOURCES:
+        if kind == "gist":
+            owner, gist, file = where
+            rev = get_json(f"https://api.github.com/gists/{gist}")["history"][0]["version"]
+            url = f"https://gist.githubusercontent.com/{owner}/{gist}/raw/{rev}/{file}"
+        else:
+            repo, path, lic = where
+            if repo not in commits:
+                commits[repo] = get_json(f"https://api.github.com/repos/{repo}/commits?per_page=1")[0]["sha"]
+                licences.append(f"https://raw.githubusercontent.com/{repo}/{commits[repo]}/{lic}")
+            url = f"https://raw.githubusercontent.com/{repo}/{commits[repo]}/{path}"
+        local = download(url, os.path.join(cache, "shaders", name))
+        assets[name] = {"url": url, "sha256": sha256_file(local), "license": licence}
+    return {"version": time.strftime("%Y-%m-%d"), "license": "MIT (each file)", "license_urls": licences,
+            "assets": {"any": assets}}
+
+
 def refresh_lock(cache: str) -> dict:
     print("Resolving latest versions …")
     lock = {
@@ -323,6 +358,7 @@ def refresh_lock(cache: str) -> dict:
             "fluidsynth": resolve_fluidsynth(cache),
             "whisper": resolve_whisper(),
             "soundfont": resolve_soundfont(cache),
+            "shaders": resolve_shaders(cache),
         },
     }
     with open(LOCK, "w", encoding="utf-8", newline="\n") as fh:
@@ -547,6 +583,16 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
         fetch_licence_texts("generaluser-gs", sf["license_urls"], out)
         versions["GeneralUser GS"] = {"version": sf["version"], "url": a["url"], "sha256": a["sha256"],
                                       "license": sf["license"]}
+
+    sh = tools.get("shaders", {})
+    for name, a in sh.get("assets", {}).get("any", {}).items():
+        path = download(a["url"], os.path.join(cache, "shaders", f"{a['sha256'][:12]}-{name}"), a["sha256"])
+        os.makedirs(os.path.join(out, "shaders"), exist_ok=True)
+        shutil.copyfile(path, os.path.join(out, "shaders", name))
+        versions[f"shader {name}"] = {"version": sh["version"], "url": a["url"], "sha256": a["sha256"],
+                                      "license": a["license"]}
+    if sh:
+        fetch_licence_texts("shaders", sh.get("license_urls", []), out)
 
     with open(os.path.join(out, "VERSIONS.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump({"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2)
