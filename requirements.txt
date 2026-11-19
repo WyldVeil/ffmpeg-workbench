@@ -1,0 +1,2 @@
+# Runtime dependencies (bundled into the frozen builds).
+tkinterdnd2>=0.7.0

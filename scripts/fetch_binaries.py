@@ -1,0 +1,478 @@
+#!/usr/bin/env python3
+"""
+scripts/fetch_binaries.py - Download the third-party tools bundled with the app.
+
+Everything is pinned in ``scripts/binaries.lock.json`` (exact URLs + SHA-256)
+so builds are reproducible.  Each archive is verified before extraction, only
+the files we need are extracted (with path-traversal protection), and the
+licence texts are collected next to the binaries together with a
+``VERSIONS.json`` provenance record.
+
+Layout produced::
+
+    bin/windows-x64/ffmpeg.exe ffprobe.exe ffplay.exe *.dll yt-dlp.exe deno.exe
+    bin/windows-x64/fluidsynth/fluidsynth.exe *.dll
+    bin/linux-x64/ffmpeg ffprobe ffplay yt-dlp deno
+    bin/<platform>/licenses/<tool>/...
+    bin/<platform>/VERSIONS.json
+
+Usage::
+
+    python scripts/fetch_binaries.py                      # both platforms from the lock
+    python scripts/fetch_binaries.py --platform linux-x64 # one platform
+    python scripts/fetch_binaries.py --refresh            # re-resolve latest versions into the lock
+    python scripts/fetch_binaries.py --sources dist/sources   # also fetch FFmpeg source (GPL)
+
+Network access uses GITHUB_TOKEN (or `gh auth token`) when available to avoid
+API rate limits.  Requires only the Python standard library.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import io
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import time
+import urllib.error
+import urllib.request
+import zipfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOCK = os.path.join(ROOT, "scripts", "binaries.lock.json")
+PLATFORMS = ("windows-x64", "linux-x64")
+UA = "binary-fetcher/1.0 (+https://github.com/WyldVeil/wyldveils-media-editor)"
+
+# Which FFmpeg release line to track and which BtbN variant to use per platform.
+# Shared builds on both platforms: ffmpeg/ffprobe/ffplay share one set of
+# libraries, roughly halving the size versus three static executables.
+# The FFmpeg tree is kept intact under bin/<platform>/ffmpeg/{bin,lib}
+# (Linux binaries find their libraries through RPATH $ORIGIN/../lib).
+FFMPEG_LINE = "9.0"
+FFMPEG_VARIANT = {"windows-x64": "win64-gpl-shared", "linux-x64": "linux64-gpl-shared"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HTTP helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _token() -> str | None:
+    tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if tok:
+        return tok
+    if shutil.which("gh"):
+        try:
+            r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+            return r.stdout.strip() or None
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+    return None
+
+
+def _request(url: str, *, api: bool = False) -> urllib.request.Request:
+    headers = {"User-Agent": UA}
+    if api:
+        headers["Accept"] = "application/vnd.github+json"
+        tok = _token()
+        if tok:
+            headers["Authorization"] = f"Bearer {tok}"
+    return urllib.request.Request(url, headers=headers)
+
+
+def get_json(url: str):
+    with urllib.request.urlopen(_request(url, api=True), timeout=60) as r:
+        return json.load(r)
+
+
+def get_text(url: str) -> str:
+    with urllib.request.urlopen(_request(url), timeout=60) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def download(url: str, dest: str, expected_sha256: str | None = None) -> str:
+    """Download *url* to *dest* (resumable cache) and verify SHA-256."""
+    if os.path.isfile(dest) and expected_sha256 and sha256_file(dest) == expected_sha256.lower():
+        print(f"  cached  {os.path.basename(dest)}")
+        return dest
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = dest + ".part"
+    print(f"  fetch   {url}")
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(_request(url), timeout=120) as r, open(tmp, "wb") as fh:
+                total = int(r.headers.get("Content-Length") or 0)
+                done = 0
+                last = time.monotonic()
+                while True:
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+                    done += len(chunk)
+                    if total and time.monotonic() - last > 2:
+                        print(f"          {done / total:5.1%} of {total / 1e6:.0f} MB", flush=True)
+                        last = time.monotonic()
+            break
+        except (urllib.error.URLError, OSError) as exc:
+            if attempt == 3:
+                raise
+            print(f"          retry after error: {exc}")
+            time.sleep(3 * (attempt + 1))
+    digest = sha256_file(tmp)
+    if expected_sha256 and digest != expected_sha256.lower():
+        os.remove(tmp)
+        raise SystemExit(f"SHA-256 mismatch for {url}\n  expected {expected_sha256}\n  got      {digest}")
+    os.replace(tmp, dest)
+    return dest
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Resolving latest versions (writes the lock file)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_sums(text: str) -> dict:
+    out = {}
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and re.fullmatch(r"[0-9a-fA-F]{64}", parts[0]):
+            out[parts[-1].lstrip("*")] = parts[0].lower()
+    return out
+
+
+def resolve_ffmpeg() -> dict:
+    releases = get_json("https://api.github.com/repos/BtbN/FFmpeg-Builds/releases?per_page=10")
+    pattern = re.compile(r"^ffmpeg-(n" + re.escape(FFMPEG_LINE) + r"[^-]*-\d+-g[0-9a-f]+)-(.+)-"
+                         + re.escape(FFMPEG_LINE) + r"\.(zip|tar\.xz)$")
+    for rel in releases:
+        if not rel["tag_name"].startswith("autobuild-"):
+            continue
+        assets = {a["name"]: a["browser_download_url"] for a in rel["assets"]}
+        found = {}
+        version = None
+        for name, url in assets.items():
+            m = pattern.match(name)
+            if not m:
+                continue
+            version = m.group(1)
+            for plat, variant in FFMPEG_VARIANT.items():
+                if m.group(2) == variant:
+                    found[plat] = {"name": name, "url": url}
+        if len(found) == len(FFMPEG_VARIANT) and "checksums.sha256" in assets:
+            sums = _parse_sums(get_text(assets["checksums.sha256"]))
+            for plat in found:
+                found[plat]["sha256"] = sums[found[plat]["name"]]
+            commit = version.rsplit("-g", 1)[-1] if version else ""
+            return {
+                "version": version.lstrip("n") if version else "",
+                "release": rel["tag_name"],
+                "source": f"https://github.com/FFmpeg/FFmpeg/commit/{commit}",
+                "source_tarball": f"https://github.com/FFmpeg/FFmpeg/archive/{commit}.tar.gz",
+                "build_scripts": f"https://github.com/BtbN/FFmpeg-Builds/tree/{rel.get('target_commitish', 'master')}",
+                "license": "GPL-3.0-or-later",
+                "assets": found,
+            }
+    raise SystemExit("Could not find a BtbN autobuild with FFmpeg " + FFMPEG_LINE)
+
+
+def resolve_ytdlp() -> dict:
+    rel = get_json("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest")
+    tag = rel["tag_name"]
+    assets = {a["name"]: a["browser_download_url"] for a in rel["assets"]}
+    sums = _parse_sums(get_text(assets["SHA2-256SUMS"]))
+    want = {"windows-x64": "yt-dlp.exe", "linux-x64": "yt-dlp_linux"}
+    return {
+        "version": tag,
+        "license": "Unlicense (bundled third-party components: see THIRD_PARTY_LICENSES.txt)",
+        "license_urls": [f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/LICENSE",
+                         f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/THIRD_PARTY_LICENSES.txt"],
+        "assets": {p: {"name": n, "url": assets[n], "sha256": sums[n]} for p, n in want.items()},
+    }
+
+
+def resolve_deno() -> dict:
+    rel = get_json("https://api.github.com/repos/denoland/deno/releases/latest")
+    tag = rel["tag_name"]
+    assets = {a["name"]: a["browser_download_url"] for a in rel["assets"]}
+    want = {"windows-x64": "deno-x86_64-pc-windows-msvc.zip",
+            "linux-x64": "deno-x86_64-unknown-linux-gnu.zip"}
+    out = {}
+    for plat, name in want.items():
+        text = get_text(assets[name + ".sha256sum"])
+        m = re.search(r"\b([0-9a-fA-F]{64})\b", text)
+        out[plat] = {"name": name, "url": assets[name], "sha256": m.group(1).lower() if m else None}
+    return {
+        "version": tag.lstrip("v"),
+        "license": "MIT",
+        "license_urls": [f"https://raw.githubusercontent.com/denoland/deno/{tag}/LICENSE.md"],
+        "assets": out,
+    }
+
+
+def resolve_fluidsynth(cache: str) -> dict:
+    rel = get_json("https://api.github.com/repos/FluidSynth/fluidsynth/releases/latest")
+    tag = rel["tag_name"]
+    asset = next(a for a in rel["assets"] if re.search(r"win10-x64.*\.zip$", a["name"]))
+    # FluidSynth publishes no checksums: pin the hash of what we download now.
+    dest = download(asset["browser_download_url"], os.path.join(cache, asset["name"]))
+    return {
+        "version": tag.lstrip("v"),
+        "license": "LGPL-2.1-or-later (bundled DLLs: SDL3 - zlib licence; libsndfile - LGPL-2.1-or-later)",
+        "license_urls": [f"https://raw.githubusercontent.com/FluidSynth/fluidsynth/{tag}/LICENSE"],
+        "assets": {"windows-x64": {"name": asset["name"], "url": asset["browser_download_url"],
+                                   "sha256": sha256_file(dest)}},
+    }
+
+
+def refresh_lock(cache: str) -> dict:
+    print("Resolving latest versions …")
+    lock = {
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "tools": {
+            "ffmpeg": resolve_ffmpeg(),
+            "yt-dlp": resolve_ytdlp(),
+            "deno": resolve_deno(),
+            "fluidsynth": resolve_fluidsynth(cache),
+        },
+    }
+    with open(LOCK, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(lock, fh, indent=2)
+        fh.write("\n")
+    for name, info in lock["tools"].items():
+        print(f"  {name:<11} {info['version']}")
+    return lock
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Extraction
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _safe_name(name: str) -> str:
+    norm = os.path.normpath(name).replace("\\", "/")
+    if norm.startswith("/") or norm.startswith("../") or "/../" in norm or re.match(r"^[A-Za-z]:", norm):
+        raise SystemExit(f"refusing unsafe archive member: {name}")
+    return norm
+
+
+def _members(archive: str):
+    """Yield (member_name, reader) for each regular file in a zip or tar.xz."""
+    if archive.endswith(".zip"):
+        with zipfile.ZipFile(archive) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                name = _safe_name(info.filename)
+                yield name, (lambda i=info: zf.read(i))
+    else:
+        with tarfile.open(archive, "r:*") as tf:
+            for m in tf.getmembers():
+                if not m.isfile():
+                    continue
+                name = _safe_name(m.name)
+                yield name, (lambda mm=m: (tf.extractfile(mm) or io.BytesIO()).read())
+
+
+def _write(dest: str, data: bytes, executable: bool = False) -> None:
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as fh:
+        fh.write(data)
+    if executable and os.name != "nt":
+        os.chmod(dest, os.stat(dest).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+_SONAME_RE = re.compile(r"^(lib[\w.+-]+?\.so\.\d+)\.\d+\.\d+$")
+
+
+def install_ffmpeg(info: dict, plat: str, archive: str, out: str) -> list:
+    """Extract the FFmpeg tree to OUT/ffmpeg/{bin,lib}.
+
+    Windows: executables + DLLs side by side in bin/.  Linux: executables in
+    bin/, shared libraries in lib/ stored under their SONAME (``libavcodec.so.63``)
+    only - the development symlinks are dropped so packagers never copy the
+    same 100 MB library three times.
+    """
+    wanted_bins = {"ffmpeg", "ffprobe", "ffplay"}
+    root = os.path.join(out, "ffmpeg")
+    placed = []
+    for name, read in _members(archive):
+        base = os.path.basename(name)
+        stem, ext = os.path.splitext(base)
+        parent = os.path.basename(os.path.dirname(name))
+        if parent == "bin" and (stem in wanted_bins and ext in ("", ".exe") or ext == ".dll"):
+            _write(os.path.join(root, "bin", base), read(), executable=True)
+            placed.append(base)
+        elif parent == "lib":
+            m = _SONAME_RE.match(base)
+            if m:
+                _write(os.path.join(root, "lib", m.group(1)), read())
+                placed.append(m.group(1))
+        elif base in ("LICENSE.txt", "LICENSE") and name.count("/") <= 1:
+            _write(os.path.join(out, "licenses", "ffmpeg", "LICENSE.txt"), read())
+    missing = [b for b in wanted_bins if not any(p.startswith(b) for p in placed)]
+    if missing:
+        raise SystemExit(f"FFmpeg archive lacks {missing}")
+    note = (f"FFmpeg {info['version']} ({plat}) - built by BtbN/FFmpeg-Builds\n"
+            f"Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/{info['release']}\n"
+            f"Corresponding source (FFmpeg): {info['source']}\n"
+            f"Source tarball: {info['source_tarball']}\n"
+            f"Build scripts (exact library versions and configure flags): {info['build_scripts']}\n"
+            f"Licence: {info['license']} - see LICENSE.txt in this folder.\n")
+    _write(os.path.join(out, "licenses", "ffmpeg", "SOURCE.txt"), note.encode())
+    return placed
+
+
+def install_single(archive_or_file: str, out: str, target_name: str, member_suffix: str | None = None) -> None:
+    if member_suffix is None:
+        shutil.copyfile(archive_or_file, os.path.join(out, target_name))
+        os.chmod(os.path.join(out, target_name), 0o755)
+        return
+    for name, read in _members(archive_or_file):
+        if name.endswith(member_suffix):
+            _write(os.path.join(out, target_name), read(), executable=True)
+            return
+    raise SystemExit(f"{member_suffix} not found in {archive_or_file}")
+
+
+def install_fluidsynth(archive: str, out: str) -> None:
+    dest = os.path.join(out, "fluidsynth")
+    if os.path.isdir(dest):
+        shutil.rmtree(dest)
+    for name, read in _members(archive):
+        base = os.path.basename(name)
+        if base.lower().endswith((".exe", ".dll")) and "/bin/" in "/" + name:
+            _write(os.path.join(dest, base), read(), executable=True)
+        elif base.upper().startswith(("LICENSE", "COPYING")):
+            _write(os.path.join(out, "licenses", "fluidsynth", base), read())
+
+
+def fetch_licence_texts(tool: str, urls: list, out: str) -> None:
+    for url in urls:
+        try:
+            text = get_text(url)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                continue
+            raise
+        _write(os.path.join(out, "licenses", tool, os.path.basename(url)), text.encode("utf-8"))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
+    out = os.path.join(dest_root, plat)
+    print(f"\n== {plat} -> {out}")
+    if os.path.isdir(out):
+        for entry in os.listdir(out):
+            p = os.path.join(out, entry)
+            if os.path.isdir(p):
+                shutil.rmtree(p)
+            else:
+                os.remove(p)
+    os.makedirs(out, exist_ok=True)
+    tools = lock["tools"]
+    exe = ".exe" if plat.startswith("windows") else ""
+    versions = {}
+
+    ff = tools["ffmpeg"]
+    a = ff["assets"][plat]
+    path = download(a["url"], os.path.join(cache, a["name"]), a["sha256"])
+    install_ffmpeg(ff, plat, path, out)
+    versions["ffmpeg"] = {"version": ff["version"], "url": a["url"], "sha256": a["sha256"],
+                          "license": ff["license"], "source": ff["source"]}
+
+    yt = tools["yt-dlp"]
+    a = yt["assets"][plat]
+    path = download(a["url"], os.path.join(cache, f"{yt['version']}-{a['name']}"), a["sha256"])
+    install_single(path, out, "yt-dlp" + exe)
+    fetch_licence_texts("yt-dlp", yt["license_urls"], out)
+    versions["yt-dlp"] = {"version": yt["version"], "url": a["url"], "sha256": a["sha256"],
+                          "license": yt["license"]}
+
+    dn = tools["deno"]
+    a = dn["assets"][plat]
+    path = download(a["url"], os.path.join(cache, f"{dn['version']}-{a['name']}"), a["sha256"])
+    install_single(path, out, "deno" + exe, member_suffix="deno" + exe)
+    fetch_licence_texts("deno", dn["license_urls"], out)
+    versions["deno"] = {"version": dn["version"], "url": a["url"], "sha256": a["sha256"],
+                        "license": dn["license"]}
+
+    fs = tools.get("fluidsynth", {})
+    if plat in fs.get("assets", {}):
+        a = fs["assets"][plat]
+        path = download(a["url"], os.path.join(cache, a["name"]), a["sha256"])
+        install_fluidsynth(path, out)
+        fetch_licence_texts("fluidsynth", fs["license_urls"], out)
+        versions["fluidsynth"] = {"version": fs["version"], "url": a["url"], "sha256": a["sha256"],
+                                  "license": fs["license"]}
+
+    with open(os.path.join(out, "VERSIONS.json"), "w", encoding="utf-8", newline="\n") as fh:
+        json.dump({"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2)
+        fh.write("\n")
+
+    # Smoke-test what we can run on this machine.
+    host = ("windows-x64" if os.name == "nt" else "linux-x64" if sys.platform.startswith("linux") else "")
+    if host == plat:
+        for tool, args in (("ffmpeg", ["-version"]), ("ffprobe", ["-version"]),
+                           ("yt-dlp", ["--version"]), ("deno", ["--version"])):
+            folder = os.path.join(out, "ffmpeg", "bin") if tool.startswith("ff") else out
+            r = subprocess.run([os.path.join(folder, tool + exe), *args], capture_output=True, text=True, timeout=60)
+            first = (r.stdout or r.stderr).splitlines()[:1]
+            print(f"  ok      {tool:<8} {first[0] if first else '?'}" if r.returncode == 0
+                  else f"  FAILED  {tool}: {r.stderr[:200]}")
+            if r.returncode != 0:
+                raise SystemExit(1)
+
+
+def fetch_sources(lock: dict, dest: str) -> None:
+    """Download the FFmpeg source matching the bundled build (GPL obligation)."""
+    ff = lock["tools"]["ffmpeg"]
+    os.makedirs(dest, exist_ok=True)
+    name = f"ffmpeg-{ff['version']}-source.tar.gz"
+    download(ff["source_tarball"], os.path.join(dest, name))
+    print(f"  source  {os.path.join(dest, name)}")
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--platform", choices=PLATFORMS + ("all",), default="all")
+    ap.add_argument("--refresh", action="store_true", help="resolve the latest versions into the lock file")
+    ap.add_argument("--dest", default=os.path.join(ROOT, "bin"))
+    ap.add_argument("--cache", default=os.path.join(ROOT, ".cache", "downloads"))
+    ap.add_argument("--sources", metavar="DIR", help="also download FFmpeg source to DIR")
+    ap.add_argument("--lock-only", action="store_true", help="with --refresh: only update the lock")
+    args = ap.parse_args(argv)
+
+    os.makedirs(args.cache, exist_ok=True)
+    if args.refresh:
+        lock = refresh_lock(args.cache)
+        if args.lock_only:
+            return 0
+    else:
+        with open(LOCK, encoding="utf-8") as fh:
+            lock = json.load(fh)
+    plats = PLATFORMS if args.platform == "all" else (args.platform,)
+    for plat in plats:
+        install_platform(lock, plat, args.cache, args.dest)
+    if args.sources:
+        fetch_sources(lock, args.sources)
+    print("\nDone.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2A2E3F"/>
+      <stop offset="1" stop-color="#14161F"/>
+    </linearGradient>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4FD8FF"/>
+      <stop offset="1" stop-color="#1E9BD7"/>
+    </linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF5C8D"/>
+      <stop offset="1" stop-color="#D62A65"/>
+    </linearGradient>
+    <linearGradient id="mix" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9B7BFF"/>
+      <stop offset="1" stop-color="#7B4FE0"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#bg)"/>
+  <rect x="40" y="58" width="128" height="92" rx="16" fill="url(#a)"/>
+  <rect x="88" y="106" width="128" height="92" rx="16" fill="url(#b)"/>
+  <path d="M104 106 H152 a16 16 0 0 1 16 16 V150 H104 a16 16 0 0 1 -16 -16 V122 a16 16 0 0 1 16 -16 Z" fill="url(#mix)"/>
+  <path d="M117 115 L117 141 L140 128 Z" fill="#FFFFFF"/>
+  <rect x="56" y="214" width="144" height="8" rx="4" fill="#3A3F55"/>
+  <rect x="112" y="206" width="32" height="24" rx="6" fill="#E9ECF5"/>
+</svg>

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=WyldVeil Media Editor
+GenericName=Video and Audio Editor
+Comment=Free video and audio toolkit: cut, crossfade, convert, subtitle, grade and more
+Exec=wyldveil-media-editor %F
+TryExec=wyldveil-media-editor
+Icon=io.github.wyldveil.MediaEditor
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+Keywords=video;audio;editor;ffmpeg;convert;trim;crossfade;subtitles;gif;webm;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;audio/mpeg;audio/x-wav;audio/flac;audio/ogg;audio/mp4;
+StartupNotify=true
+StartupWMClass=wyldveil-media-editor

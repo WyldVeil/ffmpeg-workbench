@@ -1,0 +1,10 @@
+{
+  "include": ["core", "tabs", "tests", "scripts", "main.py"],
+  "exclude": ["**/__pycache__", ".venv", "build", "dist", "libs", "bin"],
+  "extraPaths": ["."],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "none"
+}

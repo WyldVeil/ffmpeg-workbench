@@ -24,14 +24,16 @@ platforms it is defined as 0 so it can be passed safely without guards.
 
 import os
 import platform
+import shutil
 import subprocess
-import urllib.request
+import sys
 import zipfile
 from typing import Optional
 
 # ── Platform constants ────────────────────────────────────────────────────────
 _IS_WIN = platform.system() == "Windows"
 _IS_MAC = platform.system() == "Darwin"
+_IS_LINUX = platform.system() == "Linux"
 
 # Suppress the console window on Windows; harmless (0) elsewhere.
 CREATE_NO_WINDOW: int = 0x08000000 if _IS_WIN else 0
@@ -39,55 +41,134 @@ CREATE_NO_WINDOW: int = 0x08000000 if _IS_WIN else 0
 # Binary extension depends on platform
 _EXE = ".exe" if _IS_WIN else ""
 
+# Project / bundle root (works from source and from a PyInstaller bundle,
+# where __file__ lives under sys._MEIPASS).
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Global cache to prevent redundant, slow hardware polling
 _CACHED_GPU: Optional[str] = None
 
 
 # ── Binary path resolution ────────────────────────────────────────────────────
 
-def get_binary_path(name: str) -> str:
-    """
-    Return the absolute path to a bundled binary.
+def platform_tag() -> str:
+    """Return the bundle sub-folder name for this OS/CPU, e.g. ``linux-x64``."""
+    machine = platform.machine().lower()
+    arch = {"amd64": "x64", "x86_64": "x64", "aarch64": "arm64",
+            "arm64": "arm64"}.get(machine, machine or "x64")
+    if _IS_WIN:
+        osname = "windows"
+    elif _IS_MAC:
+        osname = "macos"
+    else:
+        osname = "linux"
+    return f"{osname}-{arch}"
 
-    *name* should be the bare binary name, e.g. ``"ffmpeg"``.  The correct
-    platform extension (.exe on Windows, nothing elsewhere) is appended
-    automatically.  Passing ``"ffmpeg.exe"`` is also accepted for backwards
-    compatibility - the extension is stripped and re-applied.
+
+def bundled_bin_dirs() -> list:
+    """Folders searched for bundled tools, most specific first.
+
+    ``bin/<platform-tag>/`` holds the per-platform downloads made by
+    ``scripts/fetch_binaries.py``; plain ``bin/`` is the legacy flat layout
+    used by older Windows builds.
     """
-    base     = os.path.splitext(name)[0]
-    filename = base + _EXE
-    root     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(root, "bin", filename)
+    roots = [APP_ROOT]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass and os.path.abspath(meipass) != APP_ROOT:
+        roots.append(meipass)
+    dirs = []
+    for root in roots:
+        tag_dir = os.path.join(root, "bin", platform_tag())
+        # FFmpeg's own tree (shared build: executables + DLLs, or bin/ + lib/).
+        dirs.append(os.path.join(tag_dir, "ffmpeg", "bin"))
+        dirs.append(tag_dir)
+        dirs.append(os.path.join(root, "bin"))
+    return dirs
+
+
+def _exe_name(name: str) -> str:
+    base = os.path.basename(name)
+    if base.lower().endswith(".exe"):
+        base = base[:-4]
+    return base + _EXE
+
+
+def _is_executable(path: str) -> bool:
+    return os.path.isfile(path) and (_IS_WIN or os.access(path, os.X_OK))
 
 
 def _check_settings_override(name: str) -> Optional[str]:
-    """Return a user-overridden binary path from settings, or None."""
+    """Return a user-chosen binary from settings, or None.
+
+    ``ffmpeg_path_override`` may point at the ffmpeg executable itself or at
+    the folder containing it; sibling tools (ffprobe/ffplay) are looked up
+    next to it.
+    """
     try:
         from core.settings import load_settings
-        override = load_settings().get("ffmpeg_path_override", "").strip()
-        if override and os.path.isfile(override):
-            parent    = os.path.dirname(override)
-            base      = os.path.splitext(name)[0]
-            candidate = os.path.join(parent, base + _EXE)
-            if os.path.isfile(candidate):
-                return candidate
+        override = str(load_settings().get("ffmpeg_path_override", "") or "").strip()
     except Exception:
-        pass
-    return None
+        return None
+    if not override:
+        return None
+    folder = override if os.path.isdir(override) else os.path.dirname(override)
+    candidate = os.path.join(folder, _exe_name(name))
+    return candidate if _is_executable(candidate) else None
 
 
-def _resolve(name: str) -> str:
-    """
-    Resolve the best available path for binary *name* (e.g. ``"ffmpeg"``).
-    Priority: settings override → bundled bin/ → system PATH fallback.
+def _binary_source_pref() -> str:
+    """'auto' (bundled, then system), 'bundled' or 'system'."""
+    try:
+        from core.settings import load_settings
+        pref = str(load_settings().get("binary_source", "auto") or "auto").lower()
+    except Exception:
+        pref = "auto"
+    return pref if pref in ("auto", "bundled", "system") else "auto"
+
+
+def find_binary(name: str) -> Optional[str]:
+    """Locate *name* (``"ffmpeg"``, ``"ffprobe"``, ``"yt-dlp"`` …).
+
+    Priority: explicit settings override → bundled ``bin/`` folders →
+    system ``PATH``.  With ``binary_source = "system"`` the PATH is tried
+    before the bundled copy.  Returns None when the tool is not found.
     """
     override = _check_settings_override(name)
     if override:
         return override
-    bundled = get_binary_path(name)
-    if os.path.isfile(bundled):
-        return bundled
-    return os.path.splitext(name)[0] + _EXE
+
+    exe = _exe_name(name)
+    bundled = None
+    for folder in bundled_bin_dirs():
+        candidate = os.path.join(folder, exe)
+        if _is_executable(candidate):
+            bundled = candidate
+            break
+    system = shutil.which(exe)
+
+    if _binary_source_pref() == "system":
+        return system or bundled
+    return bundled or system
+
+
+def get_binary_path(name: str) -> str:
+    """
+    Return the path to use for tool *name* (``"ffmpeg"``, ``"ffprobe"`` …).
+
+    The platform extension is handled automatically, so ``"ffmpeg.exe"`` and
+    ``"ffmpeg"`` are equivalent.  When the tool cannot be found anywhere the
+    expected bundled location is returned so error messages point somewhere
+    meaningful; callers can check ``os.path.isfile`` / :func:`find_binary`.
+    """
+    found = find_binary(name)
+    if found:
+        return found
+    return os.path.join(APP_ROOT, "bin", platform_tag(), _exe_name(name))
+
+
+def _resolve(name: str) -> str:
+    """Backwards-compatible alias of :func:`get_binary_path`."""
+    return get_binary_path(name)
 
 
 # ── GPU detection ─────────────────────────────────────────────────────────────

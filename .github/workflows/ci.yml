@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, modernize-v2]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+        python: ["3.13", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb python3-tk fonts-dejavu-core
+      - name: Bundled tools for this platform
+        shell: bash
+        run: |
+          plat=$([ "$RUNNER_OS" = "Windows" ] && echo windows-x64 || echo linux-x64)
+          python scripts/fetch_binaries.py --platform "$plat"
+          bindir="$PWD/bin/$plat"
+          echo "$bindir/ffmpeg/bin" >> "$GITHUB_PATH"
+          echo "$bindir" >> "$GITHUB_PATH"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Python dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Lint (pyflakes rules)
+        run: python -m ruff check --select F --exclude libs,bin,build,dist .
+      - name: Tests
+        run: python -m pytest -q -p no:cacheprovider
+        env:
+          CROSSFADER_NATIVE_DIALOGS: "0"
