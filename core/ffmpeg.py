@@ -793,7 +793,9 @@ def run(cmd: Sequence[str], *,
 
     def _handle_progress_line(text: str) -> bool:
         key, sep, val = text.partition("=")
-        if not sep or key not in _PROGRESS_KEYS:
+        # per-stream keys (stream_0_0_q, stream_0_1_psnr_y...) come once per output stream in every
+        # block: as log lines they'd flood the console and push real errors out of the log tail
+        if not sep or (key not in _PROGRESS_KEYS and not key.startswith("stream_")):
             return False
         block[key] = val.strip()
         if key == "progress":

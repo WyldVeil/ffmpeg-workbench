@@ -172,3 +172,16 @@ def test_version_of():
 def test_format_cmd_round_trips_quotes():
     s = ff.format_cmd(["ffmpeg", "-i", "a b'c.mp4"])
     assert "a b" in s
+
+
+@pytest.mark.ffmpeg
+def test_progress_keys_stay_out_of_the_log(tmp_path):
+    """FFmpeg's per-stream progress keys (stream_0_0_q=...) arrive in every progress
+    block; they must not reach the log or crowd the real messages out of its tail."""
+    lines = []
+    cmd = [ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=3",
+           "-filter_complex", "[0:v]split[a][b]", "-map", "[a]", "-map", "[b]", "-c:v", "libx264",
+           "-preset", "ultrafast", "-stats_period", "0.05", "-f", "null", "-"]
+    res = ff.run(cmd, on_line=lines.append)
+    assert res.returncode == 0
+    assert not [line for line in lines + res.log_tail if line.startswith("stream_")]

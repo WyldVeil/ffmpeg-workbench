@@ -12,6 +12,7 @@ _EXPORTS = {
     "CodecCruncherTab": "tabs.transcoder.codec",
     "HdrToSdrTab": "tabs.transcoder.hdr",
     "TracksRemuxTab": "tabs.transcoder.tracks",
+    "CompareQualityTab": "tabs.transcoder.compare",
     "FormatConverterTab": "tabs.transcoder.converter",
     "ResolutionScalerTab": "tabs.transcoder.scaler",
     "FPSInterpolatorTab": "tabs.transcoder.scaler",

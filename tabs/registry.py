@@ -111,6 +111,7 @@ TOOLS = {
         ("Codec Cruncher",         _lazy("tabs.transcoder.codec", "CodecCruncherTab")),
         ("HDR to SDR",             _lazy("tabs.transcoder.hdr", "HdrToSdrTab")),
         ("Tracks & Remux",         _lazy("tabs.transcoder.tracks", "TracksRemuxTab")),
+        ("Compare & Quality",      _lazy("tabs.transcoder.compare", "CompareQualityTab")),
         ("Format Converter",       _lazy("tabs.transcoder.converter", "FormatConverterTab")),
         ("Resolution Scaler",      _lazy("tabs.transcoder.scaler", "ResolutionScalerTab")),
         ("Framerate Interpolator", _lazy("tabs.transcoder.scaler", "FPSInterpolatorTab")),

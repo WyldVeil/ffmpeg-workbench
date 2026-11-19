@@ -77,6 +77,7 @@ be left out.
 | `scale` | Resize | `--size 1280x720`, `--height 720`, `--factor 2`, `--fit fit\|pad\|crop\|stretch` | Resolution Scaler |
 | `framerate` | New frame rate or slow motion | `--rate 60`, `--method motion\|blend\|dup`, `--slowmo 2` | Framerate Interpolator |
 | `hdr-to-sdr` | Fix washed-out HDR video (HDR10, HDR10+, HLG, Dolby Vision) for normal screens | `--curve bt2390\|spline\|hable\|mobius\|...`, `--assume pq\|hlg` (for untagged files) | HDR to SDR |
+| `compare` | Measure how much quality a copy lost against its original (VMAF, SSIM, PSNR), with the worst moments | `ORIGINAL COPY`, `--model hd\|4k\|neg`, `--skip-original/--skip-copy`, `--seconds`, `--every N`, `--csv FILE` | Compare & Quality |
 | `remux` | Keep only some audio/subtitle tracks, set languages and defaults, add tracks, change MKV/MP4/MOV - no re-encoding | `--to`, `--keep-languages eng,spa`, `--drop-subtitles`, `--default-audio eng`, `--default-subtitles none`, `--add FILE:LANG:DELAY` | Tracks & Remux |
 | `extract-track` | Save one track (audio, subtitles, video or an attached font) as its own file | `--track N` (stream index from `info`) | Tracks & Remux |
 | `extract-audio` | Save the sound | `--format mp3\|m4a\|wav\|flac\|opus\|ogg`, `--copy` | Audio Extractor |

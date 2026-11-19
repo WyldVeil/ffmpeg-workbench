@@ -554,6 +554,42 @@ def op_framerate(ctx):
     return result(out)
 
 
+@operation("compare", "Measure how much quality a copy lost against its original: VMAF, SSIM, PSNR", "Convert")
+@options(lambda p: (p.add_argument("original"), p.add_argument("copy"),
+                    p.add_argument("--model", default="hd", choices=["hd", "4k", "neg"]),
+                    p.add_argument("--metrics", default="vmaf,ssim,psnr"),
+                    p.add_argument("--skip-original", type=float, default=0.0),
+                    p.add_argument("--skip-copy", type=float, default=0.0),
+                    p.add_argument("--seconds", type=float), p.add_argument("--every", type=int, default=1,
+                                                                           help="VMAF on every Nth frame (faster)"),
+                    p.add_argument("--csv", help="also save per-frame scores here")))
+def op_compare(ctx):
+    from core import quality as qual
+    a = ctx.args
+    ri, di = probe(a.original, video=True), probe(a.copy, video=True)
+    try:
+        argv, files = qual.build(a.original, a.copy, ri, di, metrics=[m.strip() for m in a.metrics.split(",")],
+                                 model=a.model, skip_ref=a.skip_original, skip_dist=a.skip_copy,
+                                 seconds=a.seconds, subsample=a.every)
+    except ValueError as exc:
+        raise CliError(str(exc)) from None
+    span = min(ri.duration - a.skip_original, di.duration - a.skip_copy)
+    tmp = ctx.tmp()
+    res = ff.run(argv, duration=min(span, a.seconds) if a.seconds else span, cwd=tmp)
+    if res.returncode != 0:
+        raise CliError("Measuring failed:\n" + "\n".join(res.log_tail[-6:]))
+    result = qual.read(tmp, files, ri.video.fps or 30.0, a.skip_original)
+    summary = result.summary()
+    out = {"ok": True, "original": os.path.abspath(a.original), "copy": os.path.abspath(a.copy), **summary}
+    if "vmaf" in summary and isinstance(summary["vmaf"]["mean"], float):
+        out["verdict"] = qual.verdict(summary["vmaf"]["mean"])
+        out["worst_moments"] = [{"time": round(t, 2), "vmaf": round(v, 1)} for t, v in result.worst(5)]
+    if a.csv:
+        result.to_csv(a.csv)
+        out["csv"] = os.path.abspath(a.csv)
+    return out
+
+
 @operation("remux", "Keep only some audio/subtitle tracks, set languages/defaults, change MKV/MP4/MOV - no "
            "re-encoding", "Convert")
 @options(lambda p: (_in(p, 1), p.add_argument("--to", choices=["mkv", "mp4", "mov", "webm"]),

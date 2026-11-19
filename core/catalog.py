@@ -140,6 +140,10 @@ TOOLS: dict = {
                                      "MKV/MP4 - no re-encoding.",
                                "tracks audio track subtitle track language dub remux mkv mp4 default forced "
                                "add subtitles extract streams remove track commentary"),
+    "Compare & Quality": ToolInfo("📊", "How much quality did an encode lose? VMAF, SSIM, PSNR and the two "
+                                        "side by side.",
+                                  "compare quality vmaf ssim psnr difference before after check encode loss "
+                                  "side by side a/b"),
     "Format Converter": ToolInfo("🔄", "Convert to MP4, MKV, MOV, WebM, MP3... copying what fits.",
                                  "convert format mp4 mkv mov webm avi container change"),
     "Resolution Scaler": ToolInfo("📐", "Upscale or downscale to any resolution.",
@@ -216,7 +220,8 @@ GOALS = (
          ("Quick Trimmer", "Batch Joiner", "Crossfader", "The Splicer", "Manual Multi-Splitter",
           "Multi-Clip Sequencer", "Scene Detector", "Silence Remover")),
     Goal("smaller", "📉", "Make a file smaller", "Fit a size limit or save space",
-         ("Universal Downsizer", "Codec Cruncher", "Resolution Scaler", "WebM Maker", "Proxy Generator")),
+         ("Universal Downsizer", "Codec Cruncher", "Resolution Scaler", "WebM Maker", "Proxy Generator",
+          "Compare & Quality")),
     Goal("social", "📱", "Post on social media", "Vertical versions, GIFs, thumbnails, chapters",
          ("The Shortifier", "Smart Reframe", "Pro GIF Maker", "Thumbnail Maker", "Chapter Markers",
           "Auto-Subtitles", "Universal Downsizer")),
@@ -249,7 +254,8 @@ GOALS = (
     Goal("get", "⬇", "Download & record", "From YouTube and 1000+ sites, or your screen",
          ("Video Downloader", "Screen Recorder", "Frame Extractor")),
     Goal("manage", "🧰", "Inspect, batch & automate", "File details, folders of files, job queue",
-         ("Media Inspector", "Batch Processor", "Encode Queue", "Preset Manager", "Advanced Settings")),
+         ("Media Inspector", "Compare & Quality", "Batch Processor", "Encode Queue", "Preset Manager",
+          "Advanced Settings")),
 )
 
 
