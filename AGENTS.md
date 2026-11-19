@@ -1,7 +1,7 @@
 # AGENTS.md: WyldVeil's Media Editor
 
 This is a guide for AI assistants and scripts. **WyldVeil's Media Editor** is a
-desktop video and audio editing suite with 77 tools. It ships its own FFmpeg 9,
+desktop video and audio editing suite with 80 tools. It ships its own FFmpeg 9,
 yt-dlp, whisper.cpp (offline speech-to-text) and Deno.
 
 Everything below runs from a terminal **without opening the window**. If a
@@ -13,9 +13,8 @@ can be done, use this file.
 | What the person has | Command (called `wme` below) |
 |---|---|
 | The source code (this folder) | `python main.py --cli ...` (Python 3.10+) |
-| Linux AppImage | `./WyldVeil_Media_Editor-<version>-x86_64.AppImage --cli ...` |
-| Linux folder or installed copy | `wyldveil-media-editor --cli ...` |
-| Windows | `WyldVeilMediaEditor-cli.exe ...` in the install folder (the `--cli` is optional) |
+| Linux package (Debian, Ubuntu, Arch, Fedora) | `wyldveils-media-editor --cli ...` |
+| Windows (installed) | `"C:\Program Files\WyldVeil Media Editor\wme-cli.bat" ...` (the `--cli` is optional). Earlier versions were installed under `C:\Program Files\DoffysApp`, and an upgrade stays there. |
 
 Start with these:
 
@@ -27,8 +26,8 @@ wme --cli paths --json         # where the bundled ffmpeg, ffprobe and yt-dlp li
 wme --cli guide                # print this file
 ```
 
-On Windows the `wme` part is `WyldVeilMediaEditor-cli.exe`, and the `--cli` can
-be left out.
+On Windows the `wme` part is the `wme-cli.bat` in the install folder, and the
+`--cli` can be left out.
 
 ## 2. Rules the command line follows, and you should too
 
@@ -129,7 +128,7 @@ files you created. Never delete the person's own files.
 
 ## 5. Things the command line doesn't cover
 
-- The app has 77 tools. If a request needs one that isn't listed above, tell
+- The app has 80 tools. If a request needs one that isn't listed above, tell
   the person which tool to open from the sidebar. Some examples: Beat Sync
   Cutter, Smart Reframe, Green Screen Keyer, Colour Match, Speed Ramper (with
   speed curves), Deshaker, Animated Titles, Slideshow Maker, Karaoke Generator,

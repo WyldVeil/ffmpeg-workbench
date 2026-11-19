@@ -1,3 +1,4 @@
 edge-tts==7.3.1
 truststore==0.10.5
 PySocks==1.7.1
+tkinterdnd2==0.7.0

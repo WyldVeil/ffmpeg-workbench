@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>io.github.wyldveil.MediaEditor</id>
-  <name>WyldVeil Media Editor</name>
+  <name>WyldVeil's Media Editor</name>
   <summary>Video and audio toolkit powered by FFmpeg</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <developer id="io.github.wyldveil">
@@ -19,6 +19,14 @@
   <url type="homepage">https://github.com/WyldVeil/wyldveils-media-editor</url>
   <url type="bugtracker">https://github.com/WyldVeil/wyldveils-media-editor/issues</url>
   <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.2.0" date="2026-11-19">
+      <description>
+        <p>Every tool rebuilt and tested; a Start page; new HDR to SDR, Tracks &amp; Remux, Compare &amp; Quality
+        and Metadata Cleaner tools; FSR, NIS and AI upscaling; automatic collage layouts; a command line.</p>
+      </description>
+    </release>
+  </releases>
   <categories>
     <category>AudioVideo</category>
     <category>Video</category>

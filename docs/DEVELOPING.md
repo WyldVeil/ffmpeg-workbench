@@ -182,3 +182,22 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - Every tab should have an end-to-end test. It loads a file through Browse,
   sets options, clicks Render, waits with `ui.wait_idle()`, and checks the
   output with `ui.assert_media(...)`.
+
+## Making a release
+
+1. Set the version in `core/__init__.py` (`APP_VERSION`) and `pyproject.toml`, add it to
+   `CHANGELOG.md` and to `packaging/linux/io.github.wyldveil.MediaEditor.metainfo.xml`.
+2. Fetch the pinned tools for each platform (checked against `scripts/binaries.lock.json`):
+   `python scripts/fetch_binaries.py --platform linux-x64` and `--platform windows-x64`.
+   `--refresh` resolves newer versions into the lock file first.
+3. Linux packages (Debian and Ubuntu `.deb`, Arch and Fedora `.tar.gz`):
+   `python packaging/release.py --linux`. They run on the system's Python 3.10+ with Tk and
+   include `bin/linux-x64`. Try them in containers before publishing, e.g.
+   `podman run --rm -v ./dist/release:/r:Z debian:12 sh -c "apt update && apt install -y /r/*debian*.deb && wyldveils-media-editor --cli tools"`.
+4. Windows installer: `python packaging/release.py --windows --python-embed DIR --iscc "ISCC.exe"`.
+   DIR is an embeddable Python (same minor version every release) with tkinter added:
+   `pythonw.exe`, `python3XX.dll`, `_tkinter.pyd`, `tcl86t.dll`, `tk86t.dll` and the `tcl` folder
+   copied from a regular Windows install of that Python. On Linux, Inno Setup runs under Wine:
+   `--iscc "wine '<prefix>/drive_c/users/<you>/AppData/Local/Programs/Inno Setup 7/ISCC.exe'"`.
+   The installer keeps the AppId of earlier releases, so it upgrades them in place.
+5. Everything lands in `dist/release/` with its SHA-256 printed; upload those files to the GitHub release.

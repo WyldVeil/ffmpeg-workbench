@@ -10,7 +10,7 @@ Submodules
 """
 
 # ── Application identity (single source of truth) ────────────────────────────
-APP_VERSION = "2.0.0"
+APP_VERSION = "1.2.0"
 APP_NAME = "WyldVeil's Media Editor"
 APP_ID = "io.github.wyldveil.MediaEditor"     # Linux desktop/AppStream id
 APP_SLUG = "wyldveil-media-editor"            # Linux executable / folder names
