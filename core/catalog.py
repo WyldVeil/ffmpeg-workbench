@@ -136,6 +136,10 @@ TOOLS: dict = {
     "HDR to SDR": ToolInfo("🌗", "Make HDR video from phones and cameras look right on normal screens.",
                            "hdr sdr washed out grey gray faded dull iphone dolby vision hlg hdr10 tone map "
                            "colours look wrong"),
+    "Tracks & Remux": ToolInfo("🗂", "Keep, drop or label audio and subtitle tracks, add new ones, change "
+                                     "MKV/MP4 - no re-encoding.",
+                               "tracks audio track subtitle track language dub remux mkv mp4 default forced "
+                               "add subtitles extract streams remove track commentary"),
     "Format Converter": ToolInfo("🔄", "Convert to MP4, MKV, MOV, WebM, MP3... copying what fits.",
                                  "convert format mp4 mkv mov webm avi container change"),
     "Resolution Scaler": ToolInfo("📐", "Upscale or downscale to any resolution.",
@@ -217,11 +221,11 @@ GOALS = (
          ("The Shortifier", "Smart Reframe", "Pro GIF Maker", "Thumbnail Maker", "Chapter Markers",
           "Auto-Subtitles", "Universal Downsizer")),
     Goal("convert", "🔄", "Convert to another format", "MP4, MKV, MOV, WebM, MP3, GIF...",
-         ("Format Converter", "Audio Converter", "Codec Cruncher", "HDR to SDR", "Audio Extractor",
-          "WebM Maker", "Pro GIF Maker")),
+         ("Format Converter", "Tracks & Remux", "Audio Converter", "Codec Cruncher", "HDR to SDR",
+          "Audio Extractor", "WebM Maker", "Pro GIF Maker")),
     Goal("text", "💬", "Subtitles, titles & text", "Captions from speech, titles, watermarks",
-         ("Auto-Subtitles", "Hard-Subber", "Animated Titles", "Intro/Outro Maker", "Watermarker",
-          "Image Watermark", "Karaoke Generator")),
+         ("Auto-Subtitles", "Hard-Subber", "Tracks & Remux", "Animated Titles", "Intro/Outro Maker",
+          "Watermarker", "Image Watermark", "Karaoke Generator")),
     Goal("sound", "🔊", "Fix the sound", "Too quiet, noisy, out of sync, long pauses",
          ("Loudness Normalizer", "Voice Isolation", "Silence Remover", "Audio Sync Shifter", "Audio Dynamics",
           "The Muter", "Laugh Track Remover", "Waveform Editor")),
@@ -388,6 +392,12 @@ def suggest(info, limit: int = 8) -> list:
             add("HDR to SDR", "It's HDR - convert it so it doesn't look washed out on normal screens")
         if info.size > 25_000_000:
             add("Universal Downsizer", f"It's {_size(info.size)} - shrink it to fit Discord, email or WhatsApp")
+        n_audio = sum(1 for s in info.streams if s.type == "audio")
+        n_subs = sum(1 for s in info.streams if s.type == "subtitle")
+        if n_audio > 1 or n_subs:
+            what = ", ".join(x for x in (f"{n_audio} audio tracks" if n_audio > 1 else "",
+                                          f"{n_subs} subtitle track{'s' if n_subs > 1 else ''}" if n_subs else "") if x)
+            add("Tracks & Remux", f"It has {what} - choose which to keep, label them, or add more")
         if (v.field_order or "") in ("tt", "bb", "tb", "bt"):
             add("Deinterlace", "It's interlaced - remove the comb lines")
         if w > h:

@@ -11,6 +11,7 @@ _EXPORTS = {
     "ProxyGenTab": "tabs.transcoder.proxy",
     "CodecCruncherTab": "tabs.transcoder.codec",
     "HdrToSdrTab": "tabs.transcoder.hdr",
+    "TracksRemuxTab": "tabs.transcoder.tracks",
     "FormatConverterTab": "tabs.transcoder.converter",
     "ResolutionScalerTab": "tabs.transcoder.scaler",
     "FPSInterpolatorTab": "tabs.transcoder.scaler",

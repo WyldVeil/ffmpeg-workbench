@@ -554,6 +554,111 @@ def op_framerate(ctx):
     return result(out)
 
 
+@operation("remux", "Keep only some audio/subtitle tracks, set languages/defaults, change MKV/MP4/MOV - no "
+           "re-encoding", "Convert")
+@options(lambda p: (_in(p, 1), p.add_argument("--to", choices=["mkv", "mp4", "mov", "webm"]),
+                    p.add_argument("--keep-languages", help="e.g. eng,spa: keep only audio/subtitles in these"),
+                    p.add_argument("--drop-subtitles", action="store_true"),
+                    p.add_argument("--drop-audio-except", help="keep only this audio track number (0 = first)",
+                                   type=int),
+                    p.add_argument("--default-audio", help="language code (eng) or track number"),
+                    p.add_argument("--default-subtitles", help="language code, track number, or 'none'"),
+                    p.add_argument("--add", action="append", default=[],
+                                   help="FILE[:LANG[:DELAY]] - add audio/subtitle tracks from a file (repeatable)"),
+                    p.add_argument("--title"), p.add_argument("--drop-chapters", action="store_true")))
+def op_remux(ctx):
+    from core import remux
+    a = ctx.args
+    src = a.inputs[0]
+    probe(src)
+    plan = remux.Plan()
+    plan.load(src)
+    langs = {x.strip() for x in (a.keep_languages or "").split(",") if x.strip()}
+    audio_n = 0
+    for tr in plan.tracks:
+        if tr.kind == "audio":
+            if a.drop_audio_except is not None and audio_n != a.drop_audio_except:
+                tr.keep = False
+            audio_n += 1
+        if tr.kind == "subtitle" and a.drop_subtitles:
+            tr.keep = False
+        if langs and tr.kind in ("audio", "subtitle") and tr.language not in langs:
+            tr.keep = False
+    for spec in a.add:                       # added afterwards: what's asked for explicitly is always kept
+        path, lang, delay = _split_add(spec)
+        try:
+            plan.add_file(path, delay=delay, language=lang)
+        except (ValueError, ff.ProbeError) as exc:
+            raise CliError(str(exc)) from None
+
+    def choose_default(kind, wanted):
+        if wanted is None:
+            return
+        same = [i for i, tr in enumerate(plan.tracks) if tr.kind == kind and tr.keep]
+        if wanted == "none":
+            for i in same:
+                plan.tracks[i].default = False
+            return
+        pick = [i for i in same if plan.tracks[i].language == wanted]
+        if not pick and wanted.isdigit() and int(wanted) < len(same):
+            pick = [same[int(wanted)]]
+        if not pick:
+            raise CliError(f"No kept {kind} track matches '{wanted}'.")
+        plan.set_default(pick[0])
+    choose_default("audio", a.default_audio)
+    choose_default("subtitle", a.default_subtitles)
+    container = a.to or (os.path.splitext(src)[1].lstrip(".").lower() if os.path.splitext(src)[1].lower() in (
+        ".mkv", ".mp4", ".mov", ".webm") else "mkv")
+    out = output_path(ctx, plan.inputs, "remux", "." + container)
+    part = part_of(out)
+    try:
+        argv, notes = remux.remux_command(plan.inputs, plan.tracks, part, keep_chapters=not a.drop_chapters,
+                                          title=a.title)
+    except ValueError as exc:
+        raise CliError(str(exc)) from None
+    ctx.run(argv, probe(src).duration)
+    finish(part, out)
+    kept = [tr.describe() + (" [default]" if tr.default else "") for tr in plan.tracks if tr.keep]
+    return result(out, tracks=kept, notes=notes)
+
+
+def _split_add(spec: str) -> tuple:
+    """FILE[:LANG[:DELAY]] -> (file, lang, delay); FILE may itself contain ':' (C:\\...)."""
+    if os.path.isfile(spec):
+        return spec, "", 0.0
+    head, _sep, last = spec.rpartition(":")
+    if os.path.isfile(head):
+        return head, last, 0.0
+    head2, _sep, mid = head.rpartition(":")
+    if os.path.isfile(head2):
+        try:
+            return head2, mid, float(last or 0)
+        except ValueError:
+            raise CliError(f"Not a delay in seconds: {last}") from None
+    raise CliError(f"File not found: {spec}")
+
+
+@operation("extract-track", "Save one track (audio, subtitles, video, attached font) as its own file, as it is",
+           "Convert")
+@options(lambda p: (_in(p, 1), p.add_argument("--track", type=int, required=True,
+                                              help="stream index, as listed by info")))
+def op_extract_track(ctx):
+    from core import remux
+    src = ctx.args.inputs[0]
+    info = probe(src)
+    tracks = {tr.index: tr for tr in remux.tracks_of(info, 0, src)}
+    tr = tracks.get(ctx.args.track)
+    if tr is None:
+        raise CliError(f"No track {ctx.args.track} - tracks are {sorted(tracks)} (see info).")
+    out = output_path(ctx, [src], f"track{tr.index}" + (f"_{tr.language}" if tr.language else ""),
+                      remux.extract_ext(tr))
+    part = out if tr.kind == "attachment" else part_of(out)
+    ctx.run(remux.extract_command(src, tr, part), info.duration if tr.kind in ("audio", "video") else None)
+    if part != out:
+        finish(part, out)
+    return result(out, track=tr.describe())
+
+
 @operation("hdr-to-sdr", "Convert HDR video (HDR10, HDR10+, HLG, Dolby Vision) to normal SDR for phones/TVs/web",
            "Convert")
 @options(lambda p: (_in(p, 1), p.add_argument("--curve", default="bt2390",
