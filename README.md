@@ -1,5 +1,7 @@
 # WyldVeil's Media Editor
 
+[![Found it useful? Buy me a coffee](https://img.shields.io/badge/Found_it_useful%3F-Buy_me_a_coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/wyldveil)
+
 A completely free, open-source video and audio processing suite with 70+ tools, 28 languages, and a skinnable UI.
 
 ![screenshot](screenshots/screenshot.png)
