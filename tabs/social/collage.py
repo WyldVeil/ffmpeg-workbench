@@ -12,15 +12,15 @@ Uses FFmpeg's xstack filter for precise grid positioning.
 """
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
-import subprocess
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, get_video_duration, CREATE_NO_WINDOW,
+from core.hardware import (    get_video_duration,
 )
 from core.i18n import t
+from tabs.widgets import EncoderPanel
 
 
 def _fmt(seconds):
@@ -28,16 +28,67 @@ def _fmt(seconds):
     return f"{int(m):02d}:{s:05.2f}"
 
 
-LAYOUTS = {
-    t("collage.2_1_side_by_side"):    {"cols": 2, "rows": 1, "slots": 2},
-    "1×2 (Stacked)":         {"cols": 1, "rows": 2, "slots": 2},
-    "2×2 (Quad Grid)":       {"cols": 2, "rows": 2, "slots": 4},
-    "3×1 (Triple Wide)":     {"cols": 3, "rows": 1, "slots": 3},
-    "1×3 (Triple Tall)":     {"cols": 1, "rows": 3, "slots": 3},
-    "3×2 (Six Pack)":        {"cols": 3, "rows": 2, "slots": 6},
-    "3×3 (Nine Grid)":       {"cols": 3, "rows": 3, "slots": 9},
-    "2×1 + 1 (PiP Style)":  {"cols": 2, "rows": 2, "slots": 3, "custom": "pip"},
+LAYOUTS = {   # stable ids; labels are what the user sees
+    "2x1": {"label": "2×1 (Side by side)", "cols": 2, "rows": 1, "slots": 2},
+    "1x2": {"label": "1×2 (Stacked)", "cols": 1, "rows": 2, "slots": 2},
+    "2x2": {"label": "2×2 (Quad grid)", "cols": 2, "rows": 2, "slots": 4},
+    "3x1": {"label": "3×1 (Triple wide)", "cols": 3, "rows": 1, "slots": 3},
+    "1x3": {"label": "1×3 (Triple tall)", "cols": 1, "rows": 3, "slots": 3},
+    "3x2": {"label": "3×2 (Six pack)", "cols": 3, "rows": 2, "slots": 6},
+    "3x3": {"label": "3×3 (Nine grid)", "cols": 3, "rows": 3, "slots": 9},
+    "pip": {"label": "Main video + 2 picture-in-picture", "cols": 2, "rows": 2, "slots": 3, "custom": "pip"},
 }
+BACKGROUNDS = {"Black": "black", "White": "white", "Grey": "gray", "Charcoal": "0x1E1E1E"}
+AUDIO_MODES = {"first": "Audio from clip 1", "mix": "Mix all clips", "none": "No audio"}
+
+
+def collage_graph(layout: dict, n_inputs: int, total_w: int, total_h: int, pad: int, bg: str,
+                  fps: str, shortest: bool, audio: str, has_audio: list) -> tuple:
+    """(filter_complex, audio_out) with exact, even geometry."""
+    total_w, total_h = total_w // 2 * 2, total_h // 2 * 2
+    parts = []
+    if layout.get("custom") == "pip":
+        sw, sh = (total_w // 4) // 2 * 2, (total_h // 4) // 2 * 2
+        m = max(pad, total_h // 30)
+        parts.append(f"[0:v]scale={total_w}:{total_h}:force_original_aspect_ratio=decrease,"
+                     f"pad={total_w}:{total_h}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
+                     f"format=yuv420p[base]")
+        last = "[base]"
+        corners = [(f"W-w-{m}", f"H-h-{m}"), (f"W-w-{m}", f"{m}")]
+        for i in range(1, n_inputs):
+            parts.append(f"[{i}:v]scale={sw}:{sh}:force_original_aspect_ratio=decrease,"
+                         f"pad={sw}:{sh}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
+                         f"format=yuv420p[p{i}]")
+            x, y = corners[(i - 1) % len(corners)]
+            parts.append(f"{last}[p{i}]overlay=x={x}:y={y}:shortest={1 if shortest else 0}:"
+                         f"eof_action=repeat[o{i}]")
+            last = f"[o{i}]"
+        parts.append(f"{last}null[v]")
+    else:
+        cols, rows = layout["cols"], layout["rows"]
+        cell_w = ((total_w - pad * (cols + 1)) // cols) // 2 * 2
+        cell_h = ((total_h - pad * (rows + 1)) // rows) // 2 * 2
+        spots = []
+        for i in range(n_inputs):
+            r, c = divmod(i, cols)
+            spots.append(f"{pad + c * (cell_w + pad)}_{pad + r * (cell_h + pad)}")
+            parts.append(f"[{i}:v]scale={cell_w}:{cell_h}:force_original_aspect_ratio=decrease,"
+                         f"pad={cell_w}:{cell_h}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
+                         f"format=yuv420p[c{i}]")
+        cells = "".join(f"[c{i}]" for i in range(n_inputs))
+        parts.append(f"{cells}xstack=inputs={n_inputs}:layout={'|'.join(spots)}:fill={bg}:"
+                     f"shortest={1 if shortest else 0}[grid]")
+        parts.append(f"[grid]pad={total_w}:{total_h}:0:0:color={bg},setsar=1[v]")
+    srcs = [i for i in range(n_inputs) if has_audio[i]]
+    if audio == "none" or not srcs:
+        return ";".join(parts), False
+    if audio == "first" or len(srcs) == 1:
+        parts.append(f"[{srcs[0]}:a:0]aresample=48000[a]")
+    else:
+        parts.append("".join(f"[{i}:a:0]" for i in srcs) +
+                     f"amix=inputs={len(srcs)}:duration={'shortest' if shortest else 'longest'}:"
+                     f"normalize=0,aresample=48000[a]")
+    return ";".join(parts), True
 
 
 class VideoCollageTab(BaseTab):
@@ -56,12 +107,12 @@ class VideoCollageTab(BaseTab):
                                   font=(UI_FONT, 9, "bold"))
         layout_lf.pack(fill="x", padx=20, pady=(10, 6))
 
-        self._layout_var = tk.StringVar(value="2×2 (Quad Grid)")
+        self._layout_var = tk.StringVar(value="2x2")
         lr = tk.Frame(layout_lf)
         lr.pack(fill="x")
-        for layout_name in LAYOUTS:
-            tk.Radiobutton(lr, text=layout_name, variable=self._layout_var,
-                           value=layout_name, font=(UI_FONT, 10),
+        for key, spec in LAYOUTS.items():
+            tk.Radiobutton(lr, text=spec["label"], variable=self._layout_var,
+                           value=key, font=(UI_FONT, 10),
                            command=self._on_layout_change).pack(anchor="w", pady=1)
 
         # ── Grid preview canvas ───────────────────────────────────────────
@@ -137,10 +188,12 @@ class VideoCollageTab(BaseTab):
 
         or2 = tk.Frame(out_lf)
         or2.pack(fill="x", pady=3)
-        tk.Label(or2, text=t("common.crf"), font=(UI_FONT, 10)).pack(side="left")
-        self._crf_var = tk.StringVar(value="18")
-        tk.Entry(or2, textvariable=self._crf_var, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
+        tk.Label(or2, text="Audio:", font=(UI_FONT, 10)).pack(side="left")
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
+        self.encoder.pack(anchor="w", before=or2)
+        self._audio_mode = tk.StringVar(value=AUDIO_MODES["first"])
+        ttk.Combobox(or2, textvariable=self._audio_mode, values=list(AUDIO_MODES.values()),
+                     state="readonly", width=18).pack(side="left", padx=6)
 
         tk.Label(or2, text=t("collage.grid_padding_label"), font=(UI_FONT, 10)).pack(side="left", padx=(16, 0))
         self._pad_var = tk.StringVar(value="4")
@@ -149,9 +202,8 @@ class VideoCollageTab(BaseTab):
         tk.Label(or2, text=t("collage.px_label"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
 
         tk.Label(or2, text="  " + t("collage.bg_color_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
-        self._bg_color = tk.StringVar(value="black")
-        ttk.Combobox(or2, textvariable=self._bg_color, width=8,
-                     values=["black", "white", "gray", t("collage.collage_1e1e1e")],
+        self._bg_color = tk.StringVar(value="Black")
+        ttk.Combobox(or2, textvariable=self._bg_color, width=9, values=list(BACKGROUNDS),
                      state="readonly").pack(side="left", padx=4)
 
         self._duration_mode = tk.StringVar(value="shortest")
@@ -202,7 +254,7 @@ class VideoCollageTab(BaseTab):
         cw, ch = 280, 160
 
         layout_name = self._layout_var.get()
-        info = LAYOUTS.get(layout_name, {"cols": 2, "rows": 2, "slots": 4})
+        info = LAYOUTS.get(layout_name, LAYOUTS["2x2"])
         cols, rows = info["cols"], info["rows"]
         pad = 4
         cell_w = (cw - pad * (cols + 1)) // cols
@@ -286,98 +338,55 @@ class VideoCollageTab(BaseTab):
 
     # ── Render ────────────────────────────────────────────────────────
     def _render(self):
-        layout_name = self._layout_var.get()
-        info = LAYOUTS.get(layout_name, {"cols": 2, "rows": 2, "slots": 4})
+        from core import ffmpeg as ff
+        from core import encoders as enc
+        from tabs import common
+        info = LAYOUTS.get(self._layout_var.get(), LAYOUTS["2x2"])
         needed = info["slots"]
-
         if len(self._slots) < needed:
             messagebox.showwarning(t("collage.not_enough_title"),
-                f"This layout needs {needed} videos. "
-                f"You have {len(self._slots)}.")
+                                   f"This layout needs {needed} videos. You have {len(self._slots)}.",
+                                   parent=self)
             return
-
-        out = self._out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        paths = [self._slots[i]["path"] for i in range(needed)]
+        infos = []
+        for i, path in enumerate(paths):
+            pi = common.check_source(self, path, what=f"Clip {i + 1}")
+            if pi is None:
+                return
+            infos.append(pi)
+        try:
+            total_w = int(common.number(self._out_w.get(), "Width", 64, 8192))
+            total_h = int(common.number(self._out_h.get(), "Height", 64, 8192))
+            pad = int(common.number(self._pad_var.get() or "0", "Padding", 0, 200))
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = self._out_var.get().strip() or self.suggest_output(paths[0], "collage")
+        out = self.confirm_output(out, paths)
         if not out:
             return
         self._out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg")
-        cols, rows = info["cols"], info["rows"]
-
-        try:
-            total_w = int(self._out_w.get())
-            total_h = int(self._out_h.get())
-            pad = int(self._pad_var.get())
-        except ValueError:
-            messagebox.showerror(t("common.error"), "Check resolution/padding values.")
-            return
-
-        crf = self._crf_var.get()
-        bg = self._bg_color.get()
-
-        # Cell dimensions
-        cell_w = (total_w - pad * (cols + 1)) // cols
-        cell_h = (total_h - pad * (rows + 1)) // rows
-
-        # Build FFmpeg command
-        cmd = []
-        for i in range(needed):
-            cmd += ["-i", self._slots[i]["path"]]
-
-        # Build filter_complex
-        # 1. Scale each input to cell size
-        fc_parts = []
-        for i in range(needed):
-            fc_parts.append(
-                f"[{i}:v]scale={cell_w}:{cell_h}:force_original_aspect_ratio=decrease,"
-                f"pad={cell_w}:{cell_h}:(ow-iw)/2:(oh-ih)/2:{bg},"
-                f"setsar=1[v{i}]")
-
-        # 2. Build xstack layout string
-        layout_strs = []
-        idx = 0
-        for r in range(rows):
-            for c in range(cols):
-                if idx >= needed:
-                    break
-                x = pad + c * (cell_w + pad)
-                y = pad + r * (cell_h + pad)
-                layout_strs.append(f"{x}_{y}")
-                idx += 1
-
-        inputs_str = "".join(f"[v{i}]" for i in range(needed))
-        layout_str = "|".join(layout_strs)
-
-        fc_parts.append(
-            f"{inputs_str}xstack=inputs={needed}:layout={layout_str}:fill={bg}[vout]"
-        )
-
-        # Scale to final output size
-        fc_parts.append(
-            f"[vout]scale={total_w}:{total_h}:force_original_aspect_ratio=decrease,"
-            f"pad={total_w}:{total_h}:(ow-iw)/2:(oh-ih)/2:{bg}[final]"
-        )
-
-        fc = ";".join(fc_parts)
-
-        shortest = "-shortest" if self._duration_mode.get() == "shortest" else ""
-
-        full_cmd = [ffmpeg] + cmd + [
-            "-filter_complex", fc,
-            "-map", "[final]",
-            "-map", "0:a?",
-            "-c:v", "libx264", "-crf", crf, "-preset", "fast",
-            "-c:a", "aac", "-b:a", "192k",
-            "-movflags", "+faststart",
-        ]
-        if shortest:
-            full_cmd.append("-shortest")
-        full_cmd += [out, "-y"]
-
-        self.log(self.console, f"Building {cols}×{rows} collage ({cell_w}×{cell_h} per cell)…")
-        self.run_ffmpeg(full_cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label="🎞  BUILD COLLAGE")
+        shortest = self._duration_mode.get() == "shortest"
+        audio = next((k for k, v in AUDIO_MODES.items() if v == self._audio_mode.get()), "first")
+        fps = common.frame_rate(infos[0])
+        graph, has_a = collage_graph(info, needed, total_w, total_h, pad,
+                                     BACKGROUNDS.get(self._bg_color.get(), "black"), fps, shortest, audio,
+                                     [pi.has_audio for pi in infos])
+        container = common.container_of(out)
+        venc = self.encoder.video_encode(container)
+        if venc.filter_suffix:
+            graph += f";[v]{venc.filter_suffix}[venc]"
+        cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
+        for path in paths:
+            cmd += ["-i", path]
+        durs = [pi.duration for pi in infos]
+        total = min(durs) if shortest else max(durs)
+        cmd += ["-filter_complex", graph, "-map", "[venc]" if venc.filter_suffix else "[v]"]
+        cmd += (["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+                if has_a else ["-an"])
+        cmd += [*venc.args, "-t", f"{total:.3f}", out]
+        self.log(self.console, f"Building a {info['label']} collage at {total_w // 2 * 2}×{total_h // 2 * 2}…")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self._btn_run, btn_label=t("collage.build_collage"), duration=total,
+                        output=out, inputs=paths, name="Collage")

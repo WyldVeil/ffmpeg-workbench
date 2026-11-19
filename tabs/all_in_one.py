@@ -25,17 +25,13 @@ Sections (all optional, all combinable):
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 from core import dialogs
 import os
 import shlex
-import subprocess
 import threading
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, CREATE_NO_WINDOW,
-    get_video_duration,
-)
 from core.i18n import t
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
@@ -63,6 +59,9 @@ _VCODECS = {
     "H.265 / HEVC (AMD HW)": "hevc_amf",
     "H.264 (Intel HW)": "h264_qsv",
     "H.265 / HEVC (Intel HW)": "hevc_qsv",
+    "H.264 (best GPU available)": "auto_h264",
+    "H.265 / HEVC (best GPU available)": "auto_hevc",
+    "AV1 (CPU, smallest files)": "libsvtav1",
     "VP9 (CPU)": "libvpx-vp9",
     "ProRes (CPU)": "prores_ks",
     "Copy (No re-encode)": "copy"
@@ -74,15 +73,76 @@ _PRESETS   = ["ultrafast","superfast","veryfast","faster",
 _ABITRATES = ["96k","128k","192k","256k","320k"]
 _FPS_VALS  = ["23.976","24","25","29.97","30","48","50","59.94","60","120"]
 
-_TEXT_POSITIONS = {
-    "Bottom Centre": "x=(w-text_w)/2:y=h-text_h-30",
-    "Top Centre":    "x=(w-text_w)/2:y=30",
-    "Bottom Left":   "x=30:y=h-text_h-30",
-    "Bottom Right":  "x=w-text_w-30:y=h-text_h-30",
-    "Centre":        "x=(w-text_w)/2:y=(h-text_h)/2",
-    "Top Left":      "x=30:y=30",
-    "Top Right":     "x=w-text_w-30:y=30",
+_TEXT_POSITIONS = {      # (x, y) drawtext expressions; margins scale with the frame
+    "Bottom Centre": ("(w-text_w)/2", "h-text_h-h*0.04"),
+    "Top Centre":    ("(w-text_w)/2", "h*0.04"),
+    "Bottom Left":   ("w*0.03", "h-text_h-h*0.04"),
+    "Bottom Right":  ("w-text_w-w*0.03", "h-text_h-h*0.04"),
+    "Centre":        ("(w-text_w)/2", "(h-text_h)/2"),
+    "Top Left":      ("w*0.03", "h*0.04"),
+    "Top Right":     ("w-text_w-w*0.03", "h*0.04"),
 }
+_NVENC_PRESET = {"ultrafast": "p1", "superfast": "p2", "veryfast": "p3", "faster": "p3", "fast": "p4",
+                 "medium": "p5", "slow": "p6", "slower": "p7", "veryslow": "p7"}
+_AMF_QUALITY = {"ultrafast": "speed", "superfast": "speed", "veryfast": "speed", "faster": "speed",
+                "fast": "balanced", "medium": "balanced", "slow": "quality", "slower": "quality",
+                "veryslow": "quality"}
+_SVT_PRESET = {"ultrafast": 12, "superfast": 11, "veryfast": 10, "faster": 9, "fast": 8, "medium": 7,
+               "slow": 6, "slower": 5, "veryslow": 4}
+
+
+def _video_codec_args(vcodec: str, crf: str, preset: str, container: str) -> list:
+    """Encoder arguments per encoder family (x264 preset names and CRF are
+    translated - NVENC/AMF/QSV reject x264 names)."""
+    q = int(crf) if str(crf).isdigit() else 18
+    if vcodec in ("libx264", "libx265"):
+        args = ["-c:v", vcodec, "-crf", str(q), "-preset", preset, "-pix_fmt", "yuv420p"]
+        if vcodec == "libx265":
+            args += ["-x265-params", "log-level=error"]
+    elif vcodec.endswith("_nvenc"):
+        args = ["-c:v", vcodec, "-preset", _NVENC_PRESET.get(preset, "p5"), "-tune", "hq", "-rc", "vbr",
+                "-cq", str(q), "-b:v", "0", "-pix_fmt", "yuv420p"]
+    elif vcodec.endswith("_amf"):
+        args = ["-c:v", vcodec, "-quality", _AMF_QUALITY.get(preset, "balanced"), "-rc", "cqp",
+                "-qp_i", str(q), "-qp_p", str(q + 2), "-pix_fmt", "yuv420p"]
+    elif vcodec.endswith("_qsv"):
+        qsv_preset = preset if preset in ("veryfast", "faster", "fast", "medium", "slow", "slower",
+                                          "veryslow") else "medium"
+        args = ["-c:v", vcodec, "-preset", qsv_preset, "-global_quality", str(q), "-pix_fmt", "nv12"]
+    elif vcodec == "libsvtav1":
+        args = ["-c:v", "libsvtav1", "-crf", str(min(63, round(q * 1.6))), "-preset",
+                str(_SVT_PRESET.get(preset, 8)), "-pix_fmt", "yuv420p"]
+    elif vcodec in ("libvpx-vp9", "libvpx"):
+        args = ["-c:v", vcodec, "-b:v", "0", "-crf", str(min(63, round(q * 1.65))), "-row-mt", "1",
+                "-deadline", "good", "-cpu-used", "2" if preset in ("slow", "slower", "veryslow") else "4",
+                "-pix_fmt", "yuv420p"]
+    elif vcodec == "prores_ks":
+        args = ["-c:v", "prores_ks", "-profile:v", "3", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"]
+    else:
+        args = ["-c:v", vcodec]
+    if container in ("mp4", "mov", "m4v") and ("265" in vcodec or "hevc" in vcodec):
+        args += ["-tag:v", "hvc1"]
+    return args
+
+
+def _resolve_auto(vcodec: str) -> str:
+    """'auto_h264' / 'auto_hevc' -> the best working encoder on this machine."""
+    if not vcodec.startswith("auto_"):
+        return vcodec
+    from core import encoders
+    enc, _hw = encoders.choose_encoder(vcodec[5:], "auto")
+    return enc
+
+
+def _codec_container(vcodec: str, out: str) -> str:
+    """Output path with an extension the codec can live in."""
+    base, ext = os.path.splitext(out)
+    ext = ext.lower()
+    if vcodec == "prores_ks" and ext not in (".mov", ".mkv"):
+        return base + ".mov"
+    if vcodec in ("libvpx-vp9", "libvpx") and ext not in (".webm", ".mkv"):
+        return base + ".webm"
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -267,6 +327,9 @@ class AllInOneTab(BaseTab):
                                  fg=CLR["accent"], font=(MONO_FONT, 9))
         self._dur_lbl.pack(side="left", padx=10)
 
+        self._src_job = None
+        self._src_var.trace_add("write", lambda *_a: self._src_typed())
+
         r2 = _row(parent, pady=2)
         _lbl(r2, t("common.output_file"), bold=True).pack(side="left")
         _entry(r2, self._out_var, width=62).pack(side="left", padx=8)
@@ -288,9 +351,27 @@ class AllInOneTab(BaseTab):
                          args=(p,), daemon=True).start()
         self._rebuild_cmd()
 
+    def _src_typed(self):
+        """Typed / pasted / dropped paths are probed too (debounced)."""
+        if self._src_job is not None:
+            self.after_cancel(self._src_job)
+
+        def go():
+            self._src_job = None
+            p = self._src_var.get().strip()
+            if p and os.path.isfile(p) and p != getattr(self, "_probed_path", None):
+                self._probed_path = p
+                if not self._out_var.get():
+                    self._out_var.set(self.suggest_output(p, "pipeline"))
+                threading.Thread(target=self._load_duration, args=(p,), daemon=True).start()
+        self._src_job = self.after(400, go)
+
     def _load_duration(self, path):
-        dur = get_video_duration(path)
+        from core import ffmpeg as _ff
+        info = _ff.try_probe(path)
+        dur = info.duration if info else 0.0
         self._duration = dur
+        self._sample_rate = info.audio.sample_rate if info is not None and info.audio else 0
         self.after(0, lambda: self._dur_lbl.config(
             text="{:.2f}s".format(dur) if dur else ""))
         self.after(0, self._rebuild_cmd)
@@ -787,7 +868,10 @@ class AllInOneTab(BaseTab):
                   command=self._copy_cmd).pack(side="right", padx=4)
         tk.Button(cmd_hdr, text="Reset command",
                   bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._rebuild_cmd).pack(side="right", padx=4)
+                  command=self._reset_cmd).pack(side="right", padx=4)
+        self._edit_lbl = tk.Label(cmd_hdr, text="", bg=CLR["panel"], fg=CLR["orange"],
+                                  font=(UI_FONT, 8))
+        self._edit_lbl.pack(side="right", padx=8)
 
         # ── Command text widget (editable) ────────────────────────────────
         cmd_frame = tk.Frame(bottom, bg=CLR["panel"])
@@ -810,6 +894,7 @@ class AllInOneTab(BaseTab):
                                   yscrollcommand=cmd_sb_y.set)
         cmd_sb_y.pack(side="right", fill="y")
         self._cmd_text.pack(side="left", fill="x", expand=True)
+        self._cmd_text.bind("<<Modified>>", self._on_cmd_modified)
         cmd_sb_x.pack(side="bottom", fill="x")
 
         # ── Action buttons ────────────────────────────────────────────────
@@ -868,300 +953,232 @@ class AllInOneTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
 
     def _rebuild_cmd(self, *_):
-        """
-        Assemble an FFmpeg command from all enabled sections and update
-        the editable command display.  Called whenever any variable changes.
-        """
-        # Guards against variables attempting to update text box before UI creation
+        """Assemble one FFmpeg command from every enabled section and show it.
+
+        Order matters: trim on the INPUT side (source time), then rotate,
+        scale, speed, frame rate, colour, denoise, sharpen, text and fades
+        (fade times are in OUTPUT time, i.e. after the speed change)."""
         if not hasattr(self, "_cmd_text"):
             return
-
+        if getattr(self, "_cmd_dirty", False):
+            self._edit_lbl.config(text="✎ Edited by hand - press 'Reset command' to regenerate")
+            return
         src = self._src_var.get().strip()
         out = self._out_var.get().strip()
-
         if not src or not out:
-            self._set_cmd_text(
-                "# Select a source video and output file above\n"
-                "# to generate the FFmpeg command.")
+            self._last_cmd = []
+            self._set_cmd_text("# Select a source video and output file above\n"
+                               "# to generate the FFmpeg command.")
             return
+        from core import ffmpeg as _ff
+        from core import filters as _fl
+        parts = [_ff.ffmpeg_path(), "-y"]
+        vf, af, notes = [], [], []
+        dur = float(getattr(self, "_duration", 0.0) or 0.0)
 
-        ff      = get_binary_path("ffmpeg")
-        parts   = [ff, "-y"]
-        vf      = []     # video filter chain parts
-        af      = []     # audio filter chain parts
-
-        # ── Trim: -ss before -i for fast keyframe seek ────────────────────
-        trim_en    = self._sec_trim.get()
-        trim_start = 0.0
-        trim_dur   = None
-
-        if trim_en:
+        # ── Trim (input side, source time) ───────────────────────────────
+        start, end = 0.0, None
+        if self._sec_trim.get():
             try:
-                trim_start = float(self._trim_start.get())
+                start = max(0.0, _ff.parse_time(self._trim_start.get() or "0"))
             except ValueError:
-                trim_start = 0.0
+                notes.append("trim start is not a time")
             try:
-                trim_end_val = float(self._trim_end.get())
-                trim_dur = max(0.01, trim_end_val - trim_start)
+                if self._trim_end.get().strip():
+                    end = _ff.parse_time(self._trim_end.get())
             except ValueError:
-                trim_dur = None
-
-            if trim_start > 0:
-                parts += ["-ss", "{:.3f}".format(trim_start)]
-
+                notes.append("trim end is not a time")
+            if end is not None and end <= start:
+                notes.append("trim end must be after the start")
+                end = None
+            if start > 0:
+                parts += ["-ss", _ff.ts(start)]
+            if end is not None:
+                parts += ["-to", _ff.ts(end)]
         parts += ["-i", src]
+        src_len = ((end if end is not None else dur) - start) if dur or end else 0.0
 
-        if trim_en and trim_dur is not None:
-            parts += ["-t", "{:.3f}".format(trim_dur)]
-
-        # ── Scale ─────────────────────────────────────────────────────────
-        if self._sec_scale.get():
-            w   = self._scale_w.get() or "1920"
-            h   = self._scale_h.get() or "1080"
-            alg = _SCALE_ALGO.get(self._scale_algo.get(), "lanczos")
-            if self._scale_pad.get():
-                vf.append(
-                    "scale={w}:{h}:force_original_aspect_ratio=decrease"
-                    ":flags={a},pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
-                    ":color=black".format(w=w, h=h, a=alg))
-            else:
-                vf.append("scale={w}:{h}:flags={a}".format(w=w, h=h, a=alg))
-
-        # ── FPS ───────────────────────────────────────────────────────────
-        if self._sec_fps.get():
-            fps = self._fps_val.get().strip() or "30"
-            vf.append("fps={f}".format(f=fps))
-
-        # ── Speed (video part) ────────────────────────────────────────────
-        speed     = 1.0
-        speed_en  = self._sec_speed.get()
-        if speed_en:
+        # ── Speed factor (needed for output-time fades) ───────────────────
+        speed = 1.0
+        if self._sec_speed.get():
             try:
-                speed = float(self._speed_val.get())
+                speed = max(0.05, min(float(self._speed_val.get()), 64.0))
             except ValueError:
-                speed = 1.0
-            speed = max(0.05, min(speed, 64.0))
-            if abs(speed - 1.0) > 0.001:
-                vf.append("setpts={:.4f}*PTS".format(1.0 / speed))
+                notes.append("speed is not a number")
+        out_len = src_len / speed if src_len else 0.0
 
-        # ── Rotate & Flip ─────────────────────────────────────────────────
+        # ── Rotate & flip ──────────────────────────────────────────────────
         if self._sec_rotate.get():
             rot = self._rotate_val.get()
-            if rot == "90":
-                vf.append("transpose=1")
-            elif rot == "180":
-                vf.append("hflip")
-                vf.append("vflip")
-            elif rot == "270":
-                vf.append("transpose=2")
+            vf += {"90": ["transpose=clock"], "180": ["hflip", "vflip"],
+                   "270": ["transpose=cclock"]}.get(rot, [])
             if self._flip_h.get():
                 vf.append("hflip")
             if self._flip_v.get():
                 vf.append("vflip")
 
-        # ── Color & Image ─────────────────────────────────────────────────
+        # ── Scale ─────────────────────────────────────────────────────────
+        if self._sec_scale.get():
+            w = (self._scale_w.get() or "1920").strip()
+            h = (self._scale_h.get() or "1080").strip()
+            w, h = ("-2" if w in ("-1", "") else w), ("-2" if h in ("-1", "") else h)
+            alg = _SCALE_ALGO.get(self._scale_algo.get(), "lanczos")
+            if self._scale_pad.get() and "-2" not in (w, h):
+                vf.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags={alg},"
+                          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black")
+            else:
+                if self._scale_pad.get():
+                    notes.append("letterboxing needs both width and height")
+                vf.append(f"scale={w}:{h}:flags={alg}")
+            vf.append("setsar=1")
+
+        # ── Speed (video) then frame rate ─────────────────────────────────
+        if abs(speed - 1.0) > 1e-3:
+            vf.append(f"setpts=(PTS-STARTPTS)/{speed:.4f}")
+        if self._sec_fps.get():
+            vf.append(f"fps={(self._fps_val.get().strip() or '30')}")
+
+        # ── Colour ────────────────────────────────────────────────────────
         if self._sec_color.get():
             try:
-                bri = float(self._bri.get())
-                con = float(self._con.get())
-                sat = float(self._sat.get())
-                gam = float(self._gam.get())
-                hue = float(self._hue.get())
+                bri, con, sat, gam, hue = (float(v.get()) for v in
+                                           (self._bri, self._con, self._sat, self._gam, self._hue))
             except ValueError:
                 bri, con, sat, gam, hue = 0, 1, 1, 1, 0
-
-            eq_parts = []
-            if abs(bri)       > 0.001: eq_parts.append("brightness={:.3f}".format(bri))
-            if abs(con - 1.0) > 0.001: eq_parts.append("contrast={:.3f}".format(con))
-            if abs(sat - 1.0) > 0.001: eq_parts.append("saturation={:.3f}".format(sat))
-            if abs(gam - 1.0) > 0.001: eq_parts.append("gamma={:.3f}".format(gam))
-            if eq_parts:
-                vf.append("eq=" + ":".join(eq_parts))
+            eq = [f"{k}={v:.3f}" for k, v, d in (("brightness", bri, 0), ("contrast", con, 1),
+                                                   ("saturation", sat, 1), ("gamma", gam, 1))
+                  if abs(v - d) > 1e-3]
+            if eq:
+                vf.append("eq=" + ":".join(eq))
             if abs(hue) > 0.1:
-                vf.append("hue=h={:.1f}".format(hue))
+                vf.append(f"hue=h={hue:.1f}")
 
-        # ── Denoise ───────────────────────────────────────────────────────
+        # ── Denoise / sharpen ─────────────────────────────────────────────
         if self._sec_denoise.get():
-            algo = self._denoise_algo.get()
-            str_map = {
-                "Light":      (2,  2,  3,  3),
-                "Medium":     (4,  4,  6,  6),
-                "Strong":     (8,  8, 12, 12),
-                "Aggressive": (14,14, 20, 20),
-            }
-            p = str_map.get(self._denoise_str.get(), (4, 4, 6, 6))
-            if algo == "hqdn3d":
-                vf.append("hqdn3d={}:{}:{}:{}".format(*p))
-            else:
-                vf.append("nlmeans={}".format(p[0]))
-
-        # ── Sharpen ───────────────────────────────────────────────────────
+            p = {"Light": (2, 2, 3, 3), "Medium": (4, 4, 6, 6), "Strong": (8, 8, 12, 12),
+                 "Aggressive": (14, 14, 20, 20)}.get(self._denoise_str.get(), (4, 4, 6, 6))
+            vf.append("hqdn3d={}:{}:{}:{}".format(*p) if self._denoise_algo.get() == "hqdn3d"
+                      else f"nlmeans=s={p[0]}")
         if self._sec_sharpen.get():
             try:
-                lx = int(self._sharp_lx.get())
-                la = float(self._sharp_la.get())
+                lx, la = int(self._sharp_lx.get()) | 1, float(self._sharp_la.get())
             except ValueError:
                 lx, la = 5, 1.0
-            vf.append("unsharp={lx}:{lx}:{la}:{lx}:{lx}:0".format(
-                lx=lx, la=la))
+            vf.append(f"unsharp={lx}:{lx}:{la}:{lx}:{lx}:0")
 
-        # ── Fade In / Out (video) ─────────────────────────────────────────
+        # ── Text (drawtext from a UTF-8 file: any characters are safe) ─────
+        if self._sec_text.get() and self._text_val.get().strip():
+            if getattr(self, "_aio_tmp", None) is None:
+                from core.paths import temp_dir
+                self._aio_tmp = temp_dir("allinone_")
+            textfile = os.path.join(self._aio_tmp, "caption.txt")
+            with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(self._text_val.get())
+            x, y = _TEXT_POSITIONS.get(self._text_pos.get(), _TEXT_POSITIONS["Bottom Right"])
+            enable = None
+            try:
+                st = _ff.parse_time(self._text_start.get().strip() or "0")
+                if self._text_end.get().strip():
+                    enable = f"between(t,{st:.3f},{_ff.parse_time(self._text_end.get()):.3f})"
+                elif st > 0:
+                    enable = f"gte(t,{st:.3f})"
+            except ValueError:
+                notes.append("text times are not valid times")
+            vf.append(_fl.drawtext_filter(textfile=textfile, font="sans bold",
+                                          fontsize=(self._text_size.get() or "42").strip(),
+                                          fontcolor=self._text_color.get() or "white",
+                                          borderw=3, x=x, y=y, enable=enable))
+
+        # ── Fades (output time) ───────────────────────────────────────────
+        def _num(var, default):
+            try:
+                return float(var.get())
+            except ValueError:
+                return default
         if self._sec_fade.get():
             if self._fi_en.get():
-                try:
-                    fd = float(self._fi_dur.get())
-                except ValueError:
-                    fd = 1.5
-                vf.append("fade=type=in:st=0:d={:.2f}".format(fd))
-
-            if self._fo_en.get():
-                try:
-                    fd = float(self._fo_dur.get())
-                except ValueError:
-                    fd = 2.0
-                # Calculate total duration for fade-out start
-                total = self._duration
-                if trim_en and trim_dur is not None:
-                    total = trim_dur
-                elif trim_en:
-                    total = max(0, self._duration - trim_start)
-                if total > 0:
-                    st = max(0, total - fd)
-                    vf.append("fade=type=out:st={:.2f}:d={:.2f}".format(st, fd))
-
-        # ── Text Overlay ──────────────────────────────────────────────────
-        if self._sec_text.get():
-            txt   = (self._text_val.get()
-                     .replace("'", r"\'")
-                     .replace(":", r"\:"))
-            sz    = self._text_size.get() or "42"
-            col   = self._text_color.get() or "white"
-            pos   = _TEXT_POSITIONS.get(
-                self._text_pos.get(), _TEXT_POSITIONS["Bottom Right"])
-            t_st  = self._text_start.get().strip() or "0"
-            t_en  = self._text_end.get().strip()
-
-            enable = ""
-            try:
-                st_f = float(t_st)
-                if t_en:
-                    en_f = float(t_en)
-                    enable = ":enable='between(t,{st},{en})'".format(
-                        st=st_f, en=en_f)
-                elif st_f > 0:
-                    enable = ":enable='gte(t,{st})'".format(st=st_f)
-            except ValueError:
-                pass
-
-            vf.append(
-                "drawtext=text='{txt}':fontsize={sz}:fontcolor={col}"
-                ":bordercolor=black:borderw=3:{pos}{en}".format(
-                    txt=txt, sz=sz, col=col, pos=pos, en=enable))
+                vf.append(f"fade=t=in:st=0:d={_num(self._fi_dur, 1.5):.2f}")
+            if self._fo_en.get() and out_len > 0:
+                fd = _num(self._fo_dur, 2.0)
+                vf.append(f"fade=t=out:st={max(0.0, out_len - fd):.3f}:d={fd:.2f}")
 
         # ── Audio filters ─────────────────────────────────────────────────
-
-        # Speed (audio part - atempo chains for extreme values)
-        if speed_en and abs(speed - 1.0) > 0.001:
+        if abs(speed - 1.0) > 1e-3:
             if self._speed_pitch.get():
-                remaining = speed
-                chain = []
-                while remaining > 2.0:
+                rem, chain = speed, []
+                while rem > 2.0:
                     chain.append("atempo=2.0")
-                    remaining /= 2.0
-                while remaining < 0.5:
+                    rem /= 2.0
+                while rem < 0.5:
                     chain.append("atempo=0.5")
-                    remaining *= 2.0
-                chain.append("atempo={:.4f}".format(remaining))
-                af.extend(chain)
-
-        # Volume
+                    rem *= 2.0
+                af += chain + [f"atempo={rem:.4f}"]
+            else:
+                sr = int(getattr(self, "_sample_rate", 0) or 48000)
+                af += [f"asetrate={round(sr * speed)}", f"aresample={sr}"]
         if self._sec_audio.get():
             if self._vol_en.get():
-                try:
-                    vol = float(self._vol_val.get())
-                    af.append("volume={:.2f}".format(vol))
-                except ValueError:
-                    pass
+                af.append(f"volume={_num(self._vol_val, 1.0):.2f}")
             if self._norm_en.get():
-                lufs = self._norm_lufs.get() or "-23"
-                af.append(
-                    "loudnorm=I={l}:TP=-1:LRA=11".format(l=lufs))
-
-        # Audio fade in/out
+                af += [f"loudnorm=I={self._norm_lufs.get() or '-23'}:TP=-1:LRA=11", "aresample=48000"]
         if self._sec_fade.get() and self._fade_audio.get():
             if self._fi_en.get():
-                try:
-                    fd = float(self._fi_dur.get())
-                    af.append("afade=type=in:st=0:d={:.2f}".format(fd))
-                except ValueError:
-                    pass
-            if self._fo_en.get():
-                try:
-                    fd   = float(self._fo_dur.get())
-                    total = self._duration
-                    if trim_en and trim_dur is not None:
-                        total = trim_dur
-                    elif trim_en:
-                        total = max(0, self._duration - trim_start)
-                    if total > 0:
-                        st = max(0, total - fd)
-                        af.append("afade=type=out:st={:.2f}:d={:.2f}".format(
-                            st, fd))
-                except ValueError:
-                    pass
+                af.append(f"afade=t=in:st=0:d={_num(self._fi_dur, 1.5):.2f}")
+            if self._fo_en.get() and out_len > 0:
+                fd = _num(self._fo_dur, 2.0)
+                af.append(f"afade=t=out:st={max(0.0, out_len - fd):.3f}:d={fd:.2f}")
 
-        # ── Attach filters to command ──────────────────────────────────────
+        # ── Codecs ────────────────────────────────────────────────────────
+        enc_on = self._sec_encode.get()
+        vcodec = _resolve_auto(_VCODECS.get(self._vcodec.get(), "libx264")) if enc_on else "libx264"
+        acodec = self._acodec.get() if enc_on else "aac"
+        if vcodec == "copy" and vf:
+            notes.append("'Copy' can't apply video changes - encoding with H.264")
+            vcodec = "libx264"
+        if not enc_on and not vf:
+            vcodec = "copy"
+        fixed = _codec_container(vcodec, out)
+        if fixed != out:
+            notes.append(f"{os.path.splitext(fixed)[1]} is required for this codec")
+            out = fixed
+        container = os.path.splitext(out)[1].lower().lstrip(".")
+        if acodec == "copy" and af:
+            notes.append("'copy' can't apply audio changes - encoding audio")
+            acodec = "libopus" if container == "webm" else "aac"
+        if container == "webm" and acodec in ("aac", "libmp3lame"):
+            acodec = "libopus"
+
+        parts += ["-map", "0:v:0"]
+        if acodec != "none":
+            parts += ["-map", "0:a?"]
+        if container in ("mkv",):
+            parts += ["-map", "0:s?", "-c:s", "copy"]
         if vf:
             parts += ["-vf", ",".join(vf)]
-        if af:
+        if af and acodec != "none":
             parts += ["-af", ",".join(af)]
-
-        # ── Codec & output ────────────────────────────────────────────────
-        if self._sec_encode.get():
-            # Translate friendly UI name to real ffmpeg codec
-            vcodec_friendly = self._vcodec.get()
-            vcodec = _VCODECS.get(vcodec_friendly, "libx264")
-            acodec = self._acodec.get()
-
-            if vf or vcodec != "copy":
-                parts += ["-c:v", vcodec]
-                
-                # Apply appropriate quality parameters depending on hardware/software
-                if vcodec in ("libx264", "libx265"):
-                    parts += ["-crf", self._crf.get(), "-preset", self._preset.get()]
-                elif "nvenc" in vcodec:
-                    parts += ["-preset", self._preset.get(), "-cq", self._crf.get()]
-                elif "amf" in vcodec or "qsv" in vcodec:
-                    parts += ["-preset", self._preset.get(), "-q:v", self._crf.get()]
-                elif vcodec in ("libvpx-vp9", "libvpx"):
-                    parts += ["-b:v", "0", "-crf", self._crf.get()]
-            else:
-                parts += ["-c:v", "copy"]
-
-            if acodec == "none":
-                parts += ["-an"]
-            elif af or acodec != "copy":
-                parts += ["-c:a", acodec]
-                if acodec in ("aac", "libmp3lame", "libopus", "libvorbis"):
-                    parts += ["-b:a", self._abitrate.get()]
-            else:
-                parts += ["-c:a", "copy"]
+        if vcodec == "copy":
+            parts += ["-c:v", "copy"]
         else:
-            # No encode section - sensible defaults
-            if vf:
-                parts += ["-c:v", "libx264", "-crf", "18",
-                          "-preset", "fast"]
-            else:
-                parts += ["-c:v", "copy"]
-            if af:
-                parts += ["-c:a", "aac", "-b:a", "192k"]
-            else:
-                parts += ["-c:a", "copy"]
-
-        parts += ["-movflags", "+faststart", out]
+            parts += _video_codec_args(vcodec, self._crf.get() if enc_on else "18",
+                                       self._preset.get() if enc_on else "fast", container)
+        if acodec == "none":
+            parts += ["-an"]
+        elif acodec == "copy":
+            parts += ["-c:a", "copy"]
+        else:
+            parts += ["-c:a", acodec]
+            if acodec in ("aac", "libmp3lame", "libopus", "libvorbis"):
+                parts += ["-b:a", self._abitrate.get() if enc_on else "192k"]
+        parts += ["-map_metadata", "0", "-map_chapters", "0"]
+        if container in ("mp4", "mov", "m4v"):
+            parts += ["-movflags", "+faststart"]
+        parts.append(out)
 
         self._last_cmd = parts
+        self._expected_len = out_len or None
         self._set_cmd_text(self._format_cmd(parts))
+        self._edit_lbl.config(text=("⚠ " + "; ".join(notes)) if notes else "")
 
     # ─────────────────────────────────────────────────────────────────────
     #  Command display helpers
@@ -1197,21 +1214,36 @@ class AllInOneTab(BaseTab):
         return " \\\n".join(lines)
 
     def _set_cmd_text(self, text):
+        self._setting_text = True
         self._cmd_text.config(state="normal")
         self._cmd_text.delete("1.0", "end")
         self._cmd_text.insert("1.0", text)
+        self._cmd_text.edit_modified(False)
+        self._setting_text = False
+
+    def _on_cmd_modified(self, _event=None):
+        if self._cmd_text.edit_modified() and not getattr(self, "_setting_text", False):
+            self._cmd_dirty = True
+            self._edit_lbl.config(text="✎ Edited by hand - your edits are used; 'Reset command' "
+                                       "regenerates it")
+        self._cmd_text.edit_modified(False)
+
+    def _reset_cmd(self):
+        self._cmd_dirty = False
+        self._rebuild_cmd()
 
     def _get_cmd_from_text(self):
-        """Parse the (possibly user-edited) text widget back into a list."""
+        """The exact argv list, or the user's edited text parsed back."""
+        if not getattr(self, "_cmd_dirty", False):
+            return list(getattr(self, "_last_cmd", []) or [])
+        import re
         raw = self._cmd_text.get("1.0", "end").strip()
-        # Remove backslash line continuations
-        raw = raw.replace("\\\n", " ").replace("\\n", " ")
+        raw = re.sub(r"\\\r?\n", " ", raw)          # only line continuations
         try:
             return shlex.split(raw)
         except ValueError as exc:
-            messagebox.showerror(
-                t("msg.command_parse_error_title"),
-                t("msg.command_parse_error", cmd=str(exc)))
+            messagebox.showerror(t("msg.command_parse_error_title"),
+                                 t("msg.command_parse_error", cmd=str(exc)), parent=self)
             return []
 
     # ─────────────────────────────────────────────────────────────────────
@@ -1247,12 +1279,20 @@ class AllInOneTab(BaseTab):
             self._btn_stop.config(state="disabled")
             self.show_result(rc, out)
 
+        final = cmd[-1]
+        checked = self.confirm_output(final, [src], default_ext=os.path.splitext(final)[1] or ".mp4")
+        if not checked:
+            self._btn_stop.config(state="disabled")
+            return
+        cmd[-1] = checked
         self.run_ffmpeg(
             cmd,
             self.console,
             on_done=_on_done_wrapper,
             btn=self._btn_render,
             btn_label="▶  RENDER",
+            duration=getattr(self, "_expected_len", None),
+            output=checked, inputs=[src], name="All-in-One",
         )
 
     def _stop_render(self):
@@ -1270,32 +1310,34 @@ class AllInOneTab(BaseTab):
         self.log(self.console, t("log.all_in_one.command_copied_to_clipboard"))
 
     def _save_bat(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".bat",
-            filetypes=[("Batch file", "*.bat"), ("All", "*.*")])
+        argv = self._get_cmd_from_text()
+        if not argv:
+            return
+        p = dialogs.ask_save("render.bat", kind="any", defaultextension=".bat", parent=self)
         if not p:
             return
-        raw = self._cmd_text.get("1.0", "end").strip()
+        import subprocess as _sp
         try:
-            with open(p, "w", encoding="utf-8") as f:
-                f.write("@echo off\n")
-                f.write(raw.replace("\\\n", "^\n") + "\n")
+            with open(p, "w", encoding="utf-8", newline="\r\n") as f:
+                f.write("@echo off\nchcp 65001 >nul\n")
+                f.write(_sp.list2cmdline(argv).replace("%", "%%") + "\n")
                 f.write("pause\n")
             self.log(self.console, "✅  Saved: {}".format(p))
         except OSError as exc:
-            messagebox.showerror(t("common.error"), str(exc))
+            messagebox.showerror(t("common.error"), str(exc), parent=self)
 
     def _save_sh(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".sh",
-            filetypes=[("Shell script", "*.sh"), ("All", "*.*")])
+        argv = self._get_cmd_from_text()
+        if not argv:
+            return
+        p = dialogs.ask_save("render.sh", kind="any", defaultextension=".sh", parent=self)
         if not p:
             return
-        raw = self._cmd_text.get("1.0", "end").strip()
         try:
             with open(p, "w", encoding="utf-8", newline="\n") as f:
-                f.write("#!/usr/bin/env bash\n")
-                f.write(raw + "\n")
+                f.write("#!/usr/bin/env bash\nset -euo pipefail\n")
+                f.write(shlex.join(argv) + "\n")
+            os.chmod(p, 0o755)
             self.log(self.console, "✅  Saved: {}".format(p))
         except OSError as exc:
-            messagebox.showerror(t("common.error"), str(exc))
+            messagebox.showerror(t("common.error"), str(exc), parent=self)

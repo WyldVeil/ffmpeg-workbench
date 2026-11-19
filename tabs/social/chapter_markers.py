@@ -16,14 +16,13 @@ Features:
   • Validates YouTube's requirements (≥3 chapters, first at 0:00)
 """
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
 import os
 import re
 import json
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration
 from core.i18n import t
 
 
@@ -43,14 +42,55 @@ def _fmt_srt_tc(secs: float) -> str:
     h = int(secs) // 3600
     m = (int(secs) % 3600) // 60
     s = int(secs) % 60
-    ms = int((secs - int(secs)) * 1000)
+    ms = min(999, int(round((secs - int(secs)) * 1000)))
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
 class Chapter:
-    def __init__(self, time_secs: float, title: str):
+    def __init__(self, time_secs: float, title: str, auto: bool = False):
         self.time  = time_secs
         self.title = title
+        self.auto  = auto          # auto-numbered: renumbered after every change
+
+
+def parse_chapter_text(content: str) -> list:
+    """[(seconds, title)] from SRT/VTT cues or 'H:MM:SS Title' / 'MM:SS - Title' lines."""
+    out = []
+    cue = re.compile(r"(\d+:\d{2}:\d{2}(?:[.,]\d{1,3})?)\s*-->.*\n(.+)")
+    found = cue.findall(content)
+    if found:
+        for tc, title in found:
+            out.append((_parse_tc(tc), re.sub(r"<[^>]+>", "", title).strip()))
+        return out
+    line_re = re.compile(r"^\s*\(?((?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d+)?)\)?\s*[-–—:|]?\s*(.*)$")
+    for line in content.splitlines():
+        m = line_re.match(line)
+        if m and m.group(2).strip():
+            out.append((_parse_tc(m.group(1)), m.group(2).strip()))
+    return out
+
+
+def _parse_tc(tc: str) -> float:
+    from core import ffmpeg as ff
+    return ff.parse_time(tc.replace(",", "."))
+
+
+def youtube_issues(chapters, duration: float) -> list:
+    """Why YouTube would reject these chapters (empty list = fine)."""
+    issues = []
+    if len(chapters) < 3:
+        issues.append(f"YouTube needs at least 3 chapters (you have {len(chapters)}).")
+    if chapters and int(chapters[0].time) != 0:
+        issues.append("The first chapter must start at 0:00.")
+    secs = [int(c.time) for c in chapters]
+    if len(set(secs)) != len(secs):
+        issues.append("Two chapters share the same second.")
+    for i, c in enumerate(chapters):
+        end = chapters[i + 1].time if i + 1 < len(chapters) else (duration or c.time + 10)
+        if end - c.time < 10:
+            issues.append(f"'{c.title}' is shorter than 10 seconds.")
+            break
+    return issues
 
 
 class ChapterMarkersTab(BaseTab):
@@ -76,6 +116,7 @@ class ChapterMarkersTab(BaseTab):
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
         tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
+        self.src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
         self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
         self.dur_lbl.pack(side="left", padx=8)
@@ -191,6 +232,7 @@ class ChapterMarkersTab(BaseTab):
             (f"📄  {t('chapter_markers.save_srt_button')}",     self._save_srt),
             ("📄  Save .vtt",                                    self._save_vtt),
             ("📄  Save .json",                                   self._save_json),
+            ("🎞  Embed into video…",                            self._embed),
         ]:
             tk.Button(exp_row, text=fmt, bg=CLR["accent"], fg="black",
                       font=(UI_FONT, 9, "bold"), width=18,
@@ -207,53 +249,59 @@ class ChapterMarkersTab(BaseTab):
 
     # ─────────────────────────────────────────────────────────────────────
     def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
+        p = dialogs.ask_open("video", parent=self)
         if p:
-            self.file_path = p
             self.src_var.set(p)
-            self._duration = get_video_duration(p)
-            m, s = divmod(int(self._duration), 60)
-            self.dur_lbl.config(text=f"{m}m {s}s", fg=CLR["fgdim"])
-            self.timeline.config(to=self._duration)
+            self._src_typed()
+
+    def _src_typed(self):
+        p = self.src_var.get().strip()
+        if p and os.path.isfile(p) and p != getattr(self, "file_path", ""):
+            from core import ffmpeg as ff
+            self.file_path = p
+            self._duration = ff.duration_of(p)
+            m, sec = divmod(int(self._duration), 60)
+            self.dur_lbl.config(text=f"{m}m {sec}s", fg=CLR["fgdim"])
+            self.timeline.config(to=max(self._duration, 0.01))
+            self._validate()
 
     def _on_scrub(self, val):
-        t = float(val)
-        self.pos_lbl.config(text=_fmt_yt(t))
+        self.pos_lbl.config(text=_fmt_yt(float(val)))
 
     def _jump(self):
+        from core import ffmpeg as ff
         try:
-            t = float(self.jump_var.get())
-            self.timeline.set(min(t, self._duration))
+            secs = ff.parse_time(self.jump_var.get())
+            self.timeline.set(min(secs, self._duration))
         except ValueError:
             pass
 
     def _jump_pct(self, pct):
-        t = self._duration * pct / 100
-        self.timeline.set(t)
+        self.timeline.set(self._duration * pct / 100)
 
     def _mark_here(self):
-        t     = float(self.timeline.get())
+        secs = float(self.timeline.get())
         title = self.new_title_var.get().strip()
-        if not title:
-            title = f"Chapter {len(self.chapters)+1}"
-        if self.autonumber_var.get():
-            prefix = self.prefix_var.get().strip() or "Chapter"
-            title  = f"{prefix} {len(self.chapters)+1}"
-        self._add_chapter(t, title)
+        prefix = self.prefix_var.get().strip() or "Chapter"
+        auto = self.autonumber_var.get() and (not title or title == prefix)
+        self._add_chapter(secs, title or prefix, auto=auto)
 
-    def _add_chapter(self, ts: float, title: str):
+    def _add_chapter(self, ts: float, title: str, auto: bool = False):
         # Prevent duplicate timestamps
         if any(abs(c.time - ts) < 0.5 for c in self.chapters):
             messagebox.showwarning(t("common.warning"),
                                    f"A chapter already exists near {_fmt_yt(ts)}.")
             return
-        c = Chapter(ts, title)
+        c = Chapter(ts, title, auto)
         self.chapters.append(c)
         self.chapters.sort(key=lambda x: x.time)
         self._refresh_tree()
 
     def _refresh_tree(self):
+        prefix = self.prefix_var.get().strip() or "Chapter"
+        for i, c in enumerate(self.chapters, 1):
+            if c.auto:
+                c.title = f"{prefix} {i}"
         self.tree.delete(*self.tree.get_children())
         for i, c in enumerate(self.chapters):
             self.tree.insert("", tk.END, iid=str(i),
@@ -264,16 +312,11 @@ class ChapterMarkersTab(BaseTab):
         self._update_preview()
 
     def _validate(self):
-        issues = []
-        n = len(self.chapters)
-        if n < 3:
-            issues.append(f"⚠  YouTube requires at least 3 chapters (you have {n}).")
-        if self.chapters and self.chapters[0].time > 0.5:
-            issues.append("⚠  First chapter must start at 0:00.")
-        if n >= 3 and not issues:
+        issues = youtube_issues(self.chapters, self._duration)
+        if not issues:
             self.valid_lbl.config(text=t("chapter_markers.valid_for_youtube_chapters"), fg=CLR["green"])
         else:
-            self.valid_lbl.config(text="  ".join(issues), fg=CLR["orange"])
+            self.valid_lbl.config(text="⚠  " + "  ".join(issues), fg=CLR["orange"])
 
     def _update_preview(self):
         self.preview_text.config(state="normal")
@@ -299,8 +342,10 @@ class ChapterMarkersTab(BaseTab):
         tk.Entry(dlg, textvariable=ti_var, width=34).pack()
 
         def _save():
+            from core import ffmpeg as ff
             try:
-                c.time  = float(ts_var.get())
+                c.time  = ff.parse_time(ts_var.get())
+                c.auto  = False
                 c.title = ti_var.get().strip()
                 self.chapters.sort(key=lambda x: x.time)
                 self._refresh_tree()
@@ -337,27 +382,54 @@ class ChapterMarkersTab(BaseTab):
             self._refresh_tree()
 
     def _import_srt(self):
-        p = dialogs.askopenfilename(
-            filetypes=[(t("chapter_markers.srt_text"), "*.srt *.txt"), ("All", t("ducker.item_2"))])
-        if not p: return
-        with open(p) as f:
-            content = f.read()
-        # Try SRT format: 00:01:23,000 --> ...
-        srt_re = re.compile(
-            r"(\d+:\d{2}:\d{2}),\d{3}\s*-->\s*.*\n(.*)")
-        matches = srt_re.findall(content)
-        if matches:
-            for tc, title in matches:
-                h, m, s = map(int, tc.split(":"))
-                t = h*3600 + m*60 + s
-                self._add_chapter(float(t), title.strip())
-        else:
-            # Plain text: MM:SS Title
-            for line in content.splitlines():
-                m = re.match(r"(\d+):(\d{2})\s+(.*)", line.strip())
-                if m:
-                    t = int(m.group(1))*60 + int(m.group(2))
-                    self._add_chapter(float(t), m.group(3).strip())
+        p = dialogs.ask_open("subtitle", parent=self)
+        if not p:
+            return
+        try:
+            with open(p, encoding="utf-8-sig", errors="replace") as f:
+                content = f.read()
+        except OSError as exc:
+            messagebox.showerror(t("common.error"), str(exc), parent=self)
+            return
+        found = parse_chapter_text(content)
+        if not found:
+            messagebox.showwarning(t("common.warning"), "No chapter times found in that file.",
+                                   parent=self)
+            return
+        for secs, title in found:
+            if not any(abs(c.time - secs) < 0.5 for c in self.chapters):
+                self.chapters.append(Chapter(secs, title))
+        self.chapters.sort(key=lambda x: x.time)
+        self._refresh_tree()
+
+    def _embed(self):
+        """Write the chapters into a copy of the video (lossless remux)."""
+        from core import ffmpeg as ff
+        from core import filters as fl
+        from core.paths import temp_dir
+        src = self.src_var.get().strip()
+        if not src or not os.path.isfile(src):
+            messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
+            return
+        if not self.chapters:
+            messagebox.showwarning(t("common.warning"), "Add some chapters first.", parent=self)
+            return
+        ext = os.path.splitext(src)[1].lower()
+        if ext not in (".mp4", ".m4v", ".mov", ".mkv"):
+            ext = ".mkv"
+        out = self.confirm_output(self.suggest_output(src, "chapters", ext), [src], default_ext=ext)
+        if not out:
+            return
+        dur = self._duration or ff.duration_of(src)
+        chaps = []
+        for i, c in enumerate(self.chapters):
+            end = self.chapters[i + 1].time if i + 1 < len(self.chapters) else dur
+            chaps.append((c.time, max(end, c.time + 0.001), c.title))
+        meta = fl.write_ffmetadata(os.path.join(temp_dir("chapters_"), "meta.txt"), chapters=chaps)
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-f", "ffmetadata", "-i", meta, "-map", "0",
+               "-map_metadata", "0", "-map_chapters", "1", "-c", "copy", out]
+        self.run_ffmpeg(cmd, None, on_done=lambda rc: self.show_result(rc, out), duration=dur,
+                        output=out, inputs=[src], name="Embed chapters")
 
     # ── Export methods ────────────────────────────────────────────────────
     def _yt_text(self):
@@ -373,8 +445,8 @@ class ChapterMarkersTab(BaseTab):
         p = dialogs.asksaveasfilename(defaultextension=".txt",
                                           filetypes=[("Text", "*.txt")])
         if p:
-            with open(p, "w") as f:
-                f.write(self._yt_text())
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(self._yt_text() + "\n")
             messagebox.showinfo("Saved", f"Saved to {os.path.basename(p)}")
 
     def _save_srt(self):
@@ -390,9 +462,9 @@ class ChapterMarkersTab(BaseTab):
             lines.append(f"{_fmt_srt_tc(c.time)} --> {_fmt_srt_tc(end_t)}")
             lines.append(c.title)
             lines.append("")
-        with open(p, "w") as f:
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
-        messagebox.showinfo("Saved", f"SRT saved to {os.path.basename(p)}")
+        messagebox.showinfo("Saved", f"SRT saved to {os.path.basename(p)}", parent=self)
 
     def _save_vtt(self):
         p = dialogs.asksaveasfilename(defaultextension=".vtt",
@@ -410,9 +482,9 @@ class ChapterMarkersTab(BaseTab):
             lines.append(f"{vtt_tc(c.time)} --> {vtt_tc(end_t)}")
             lines.append(c.title)
             lines.append("")
-        with open(p, "w") as f:
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
-        messagebox.showinfo("Saved", f"VTT saved to {os.path.basename(p)}")
+        messagebox.showinfo("Saved", f"VTT saved to {os.path.basename(p)}", parent=self)
 
     def _save_json(self):
         p = dialogs.asksaveasfilename(defaultextension=".json",
@@ -420,6 +492,6 @@ class ChapterMarkersTab(BaseTab):
         if not p: return
         data = [{"time": c.time, "timestamp": _fmt_yt(c.time),
                  "title": c.title} for c in self.chapters]
-        with open(p, "w") as f:
-            json.dump(data, f, indent=2)
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
         messagebox.showinfo("Saved", f"JSON saved to {os.path.basename(p)}")

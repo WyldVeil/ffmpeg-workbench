@@ -12,13 +12,12 @@ image suitable for YouTube/TikTok thumbnails.  Options for:
 """
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from core import dialogs
-import subprocess
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, get_video_duration, launch_preview, CREATE_NO_WINDOW,
+from core.hardware import (    launch_preview,
 )
 from core.i18n import t
 
@@ -28,13 +27,13 @@ def _fmt(seconds):
     return f"{int(m):02d}:{s:05.2f}"
 
 
-PRESETS = {
-    t("thumbnail.youtube_1280_720"):   (1280, 720),
-    t("thumbnail.youtube_hd_1920_1080"): (1920, 1080),
-    t("thumbnail.tiktok_shorts_1080_1920"): (1080, 1920),
-    t("thumbnail.instagram_1080_1080"): (1080, 1080),
-    t("thumbnail.twitter_x_1200_675"): (1200, 675),
-    t("thumbnail.original_resolution"):  (0, 0),
+PRESETS = {           # stable id: (label, (width, height)); (0, 0) = original size
+    "yt": ("YouTube (1280×720)", (1280, 720)),
+    "yt_hd": ("YouTube HD (1920×1080)", (1920, 1080)),
+    "vertical": ("TikTok / Shorts (1080×1920)", (1080, 1920)),
+    "square": ("Instagram (1080×1080)", (1080, 1080)),
+    "x": ("X / Twitter (1200×675)", (1200, 675)),
+    "original": ("Original resolution", (0, 0)),
 }
 
 
@@ -58,6 +57,7 @@ class ThumbnailMakerTab(BaseTab):
         self._src_var = tk.StringVar()
         tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat",
                  font=(UI_FONT, 10)).pack(side="left", padx=8)
+        self._src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
                   relief="flat", font=(UI_FONT, 9)).pack(side="left")
         self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
@@ -107,12 +107,12 @@ class ThumbnailMakerTab(BaseTab):
                                 font=(UI_FONT, 9, "bold"))
         size_lf.pack(fill="x", padx=20, pady=6)
 
-        self._size_var = tk.StringVar(value="YouTube HD (1920×1080)")
+        self._size_var = tk.StringVar(value="yt_hd")
         sz_row = tk.Frame(size_lf)
         sz_row.pack(fill="x")
-        for preset_name in PRESETS:
-            tk.Radiobutton(sz_row, text=preset_name, variable=self._size_var,
-                           value=preset_name, font=(UI_FONT, 9)).pack(anchor="w")
+        for key, (label, _wh) in PRESETS.items():
+            tk.Radiobutton(sz_row, text=label, variable=self._size_var,
+                           value=key, font=(UI_FONT, 9)).pack(anchor="w")
 
         # ── Image adjustments ─────────────────────────────────────────────
         adj_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.adjustments_section')}  ",
@@ -235,13 +235,21 @@ class ThumbnailMakerTab(BaseTab):
 
     # ── Callbacks ──────────────────────────────────────────────────────
     def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
+        p = dialogs.ask_open("video", parent=self)
         if p:
-            self.file_path = p
             self._src_var.set(p)
-            self.duration = get_video_duration(p)
+            self._src_typed()
+
+    def _src_typed(self):
+        p = self._src_var.get().strip()
+        if p and os.path.isfile(p) and p != getattr(self, "file_path", ""):
+            from core import ffmpeg as ff
+            info = ff.try_probe(p)
+            if info is None or not info.has_video:
+                return
+            self.file_path = p
+            self.duration = info.duration
+            self._fps = info.video.fps or 30.0
             self._dur_lbl.config(text=_fmt(self.duration))
             self._scrub.config(to=max(0.1, self.duration))
 
@@ -259,91 +267,83 @@ class ThumbnailMakerTab(BaseTab):
             pass
 
     def _nudge(self, delta):
-        t = self._scrub_var.get() + delta
-        t = max(0.0, min(t, self.duration))
-        self._scrub_var.set(t)
-        self._time_lbl.config(text=_fmt(t))
+        pos = max(0.0, min(self._scrub_var.get() + delta, self.duration))
+        self._scrub_var.set(pos)
+        self._time_lbl.config(text=_fmt(pos))
 
     def _preview_frame(self):
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
-        t = self._scrub_var.get()
+        pos = self._scrub_var.get()
         if self.preview_proc:
             try:
                 self.preview_proc.terminate()
             except Exception:
                 pass
-        self.preview_proc = launch_preview(self.file_path, start_time=t)
+        self.preview_proc = launch_preview(self.file_path, start_time=pos)
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        from core import ffmpeg as ff
+        src = self._src_var.get().strip()
+        if not src or not os.path.isfile(src):
+            messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
-
-        ffmpeg = get_binary_path("ffmpeg")
-        batch = self._batch_mode.get()
-
-        if batch:
-            # Batch: export frames to a folder
-            out_dir = dialogs.askdirectory(title="Choose folder for thumbnails")
-            if not out_dir:
-                return
-
+        if src != getattr(self, "file_path", ""):
+            self._src_typed()
+        ffmpeg = ff.ffmpeg_path()
+        ext = self._get_ext()
+        vf_parts = self._build_vf()
+        if self._batch_mode.get():
             try:
                 interval = float(self._batch_interval.get())
+                if not 0 < interval < max(self.duration, 0.1):
+                    raise ValueError
             except ValueError:
-                interval = 10.0
-
-            vf_parts = self._build_vf()
-            vf = ",".join(vf_parts) if vf_parts else None
-
-            ext = self._get_ext()
-            out_pattern = os.path.join(out_dir, f"thumb_%04d{ext}")
-
-            cmd = [ffmpeg, "-i", self.file_path,
-                   "-vf", f"fps=1/{interval}" + ("," + vf if vf else "")]
-            cmd += self._get_format_args()
-            cmd += [out_pattern, "-y"]
-
-            self.log(self.console, f"Batch export: every {interval}s → {out_dir}")
-            self.run_ffmpeg(cmd, self.console,
-                            on_done=lambda rc: self.show_result(rc, out_dir),
-                            btn=self._btn_run, btn_label="🖼  EXPORT THUMBNAIL")
+                messagebox.showwarning(t("common.warning"), "The interval must be a number of seconds "
+                                       "shorter than the video.", parent=self)
+                return
+            out_root = dialogs.ask_directory(title="Choose a folder for the thumbnails", parent=self)
+            if not out_root:
+                return
+            from tabs.social.frame_extractor import fresh_folder
+            base = os.path.splitext(os.path.basename(src))[0]
+            out_dir = fresh_folder(out_root, f"{base} thumbnails")
+            pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%04d{ext}"
+            cmd = [ffmpeg, "-y", "-i", src, "-an", "-vf", ",".join([f"fps=1/{interval:g}", *vf_parts]),
+                   *self._get_format_args(), pattern]
+            self.log(self.console, f"Batch export: every {interval:g}s → {out_dir}")
+            self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out_dir),
+                            btn=self._btn_run, btn_label="🖼  EXPORT THUMBNAIL", duration=self.duration,
+                            output=out_dir, inputs=[src], name="Thumbnails")
             return
-
-        # Single frame
-        out = self._out_var.get().strip()
-        if not out:
-            ext = self._get_ext()
-            out = dialogs.asksaveasfilename(
-                defaultextension=ext,
-                filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("WebP", "*.webp")])
+        out = self._out_var.get().strip() or self.suggest_output(src, "thumb", ext)
+        out = os.path.splitext(out)[0] + ext                 # the chosen format decides the extension
+        out = self.confirm_output(out, [src], default_ext=ext)
         if not out:
             return
         self._out_var.set(out)
-
-        t = self._scrub_var.get()
-        vf_parts = self._build_vf()
-        vf = ",".join(vf_parts) if vf_parts else None
-
-        cmd = [ffmpeg, "-ss", str(t), "-i", self.file_path, "-vframes", "1"]
-        if vf:
-            cmd += ["-vf", vf]
-        cmd += self._get_format_args()
-        cmd += [out, "-y"]
-
-        self.log(self.console, f"Extracting frame at {_fmt(t)}")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label="🖼  EXPORT THUMBNAIL")
+        pos = max(0.0, self._scrub_var.get())
+        if pos >= self.duration - 0.5:
+            # the very end: decode the last half second and keep overwriting the image,
+            # so whatever the timestamps say, the final frame is what remains
+            pos = self.duration
+            cmd = [ffmpeg, "-y", "-sseof", "-0.5", "-i", src, "-an"]
+        else:
+            cmd = [ffmpeg, "-y", "-ss", ff.ts(pos), "-i", src, "-frames:v", "1", "-an"]
+        if vf_parts:
+            cmd += ["-vf", ",".join(vf_parts)]
+        cmd += self._get_format_args() + ["-update", "1", out]
+        self.log(self.console, f"Extracting frame at {_fmt(pos)}")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
+                        btn=self._btn_run, btn_label="🖼  EXPORT THUMBNAIL", duration=0.1,
+                        output=out, inputs=[src], name="Thumbnail")
 
     def _build_vf(self):
         parts = []
 
         # Size
-        preset = self._size_var.get()
-        w, h = PRESETS.get(preset, (0, 0))
+        _label, (w, h) = PRESETS.get(self._size_var.get(), PRESETS["original"])
         if w > 0 and h > 0:
             parts.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
                          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black")
@@ -355,34 +355,23 @@ class ThumbnailMakerTab(BaseTab):
         if br != 0.0 or ct != 1.0 or sat != 1.0:
             parts.append(f"eq=brightness={br}:contrast={ct}:saturation={sat}")
 
-        # Text overlay
-        if self._use_text.get():
-            text = self._text_var.get().replace("'", "\\'").replace(":", "\\:")
-            if text:
-                size = self._text_size.get()
-                color = self._text_color.get()
-                pos = self._text_pos.get()
-
-                if pos == "center":
-                    x_expr, y_expr = "(w-text_w)/2", "(h-text_h)/2"
-                elif pos == "top":
-                    x_expr, y_expr = "(w-text_w)/2", "40"
-                elif pos == "bottom":
-                    x_expr, y_expr = "(w-text_w)/2", "h-text_h-40"
-                elif pos == "top-left":
-                    x_expr, y_expr = "40", "40"
-                elif pos == "top-right":
-                    x_expr, y_expr = "w-text_w-40", "40"
-                else:
-                    x_expr, y_expr = "(w-text_w)/2", "(h-text_h)/2"
-
-                stroke = ""
-                if self._text_stroke.get():
-                    stroke = ":borderw=4:bordercolor=black"
-
-                parts.append(
-                    f"drawtext=text='{text}':fontsize={size}:"
-                    f"fontcolor={color}:x={x_expr}:y={y_expr}{stroke}")
+        # Text overlay (from a UTF-8 file: quotes, %, colons are all safe)
+        if self._use_text.get() and self._text_var.get().strip():
+            from core import filters as fl
+            if getattr(self, "_tmp", None) is None:
+                from core.paths import temp_dir
+                self._tmp = temp_dir("thumb_")
+            textfile = os.path.join(self._tmp, "caption.txt")
+            with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(self._text_var.get())
+            x, y = {"center": ("(w-text_w)/2", "(h-text_h)/2"), "top": ("(w-text_w)/2", "h*0.05"),
+                    "bottom": ("(w-text_w)/2", "h-text_h-h*0.05"), "top-left": ("w*0.04", "h*0.05"),
+                    "top-right": ("w-text_w-w*0.04", "h*0.05")}.get(self._text_pos.get(),
+                                                                    ("(w-text_w)/2", "(h-text_h)/2"))
+            parts.append(fl.drawtext_filter(
+                textfile=textfile, font="impact", fontsize=self._text_size.get() or "64",
+                fontcolor=self._text_color.get() or "white", x=x, y=y,
+                borderw=4 if self._text_stroke.get() else 0, bordercolor="black"))
 
         return parts
 
@@ -398,11 +387,11 @@ class ThumbnailMakerTab(BaseTab):
     def _get_format_args(self):
         fmt = self._fmt_var.get()
         if "PNG" in fmt:
-            return []
+            return ["-c:v", "png"]
         elif "q95" in fmt:
-            return ["-q:v", "2"]
+            return ["-c:v", "mjpeg", "-q:v", "2"]
         elif "q85" in fmt:
-            return ["-q:v", "5"]
+            return ["-c:v", "mjpeg", "-q:v", "5"]
         elif "WebP" in fmt:
-            return ["-quality", "90"]
-        return []
+            return ["-c:v", "libwebp", "-quality", "90"]
+        return ["-c:v", "png"]
