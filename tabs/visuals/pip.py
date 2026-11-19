@@ -1,403 +1,294 @@
 """
-tab_pip.py  ─  Picture-in-Picture (PIP)
-Overlay a foreground video (e.g. face-cam, reaction box) on top of a
-background video. Full control over position, size, border, opacity,
-corner rounding, and optional slide-in animation.
+tabs/visuals/pip.py  -  Picture-in-Picture
+
+Put one video inside another: size as a share of the background's width
+(the inset keeps its own shape), any corner or a custom spot, border,
+rounded corners, opacity, and a time window - the inset starts playing when
+it appears, can fade or slide in and out, and the background's length and
+sound are kept (or the inset's sound, or both mixed).
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
+from dataclasses import dataclass
+from tkinter import colorchooser, messagebox, ttk
+from typing import Optional
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, get_video_duration, CREATE_NO_WINDOW
+from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
-
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 POSITIONS = {
-    "Top-Left":      ("20",              "20"),
-    "Top-Right":     ("W-w-20",          "20"),
-    "Bottom-Left":   ("20",              "H-h-20"),
-    "Bottom-Right":  ("W-w-20",          "H-h-20"),
-    "Centre":        ("(W-w)/2",         "(H-h)/2"),
-    "Top-Centre":    ("(W-w)/2",         "20"),
-    "Bottom-Centre": ("(W-w)/2",         "H-h-20"),
-    "Custom":        ("custom",          "custom"),
+    "tl": "Top left", "tc": "Top centre", "tr": "Top right", "ml": "Middle left", "c": "Centre",
+    "mr": "Middle right", "bl": "Bottom left", "bc": "Bottom centre", "br": "Bottom right", "custom": "Custom (%)",
 }
+ANIMS = {"none": "Just appear", "fade": "Fade in and out", "left": "Slide in from the left",
+         "right": "Slide in from the right", "top": "Slide in from the top", "bottom": "Slide in from the bottom"}
+AUDIO = {"bg": "Background's sound", "fg": "Inset's sound", "mix": "Both mixed", "none": "No sound"}
 
-ANIMATIONS = {
-    "None  (static)":                  None,
-    t("pip.slide_in_from_right"):             "slide_right",
-    t("pip.slide_in_from_left"):              "slide_left",
-    t("pip.slide_in_from_bottom"):            "slide_bottom",
-    t("pip.fade_in"):                         "fade",
-}
+
+@dataclass
+class PipSpec:
+    bg_size: tuple
+    fg_size: tuple
+    pct: float = 30.0
+    place: str = "br"
+    custom: tuple = (50.0, 50.0)
+    margin_pct: float = 3.0
+    border: int = 0
+    border_colour: str = "FFFFFF"
+    radius: int = 0
+    opacity: float = 1.0
+    start: float = 0.0
+    end: Optional[float] = None
+    anim: str = "none"
+    anim_dur: float = 0.5
+
+    def inset_size(self) -> tuple:
+        bw, _bh = self.bg_size
+        fw, fh = self.fg_size
+        w = max(16, int(bw * self.pct / 100) // 2 * 2)
+        h = max(16, int(round(w * fh / max(1, fw) / 2)) * 2)
+        return w, h
+
+    def target_xy(self) -> tuple:
+        bw, bh = self.bg_size
+        w, h = self.inset_size()
+        w, h = w + 2 * self.border, h + 2 * self.border
+        m = int(min(bw, bh) * self.margin_pct / 100)
+        if self.place == "custom":
+            return int((bw - w) * self.custom[0] / 100), int((bh - h) * self.custom[1] / 100)
+        col = {"l": m, "c": (bw - w) // 2, "r": bw - w - m}
+        row = {"t": m, "m": (bh - h) // 2, "b": bh - h - m}
+        key = {"c": "mc"}.get(self.place, self.place)
+        return col[key[1]], row[key[0]]
+
+
+def pip_graph(spec: PipSpec, bg: str = "[0:v]", fg: str = "[1:v]", out: str = "[v]") -> str:
+    w, h = spec.inset_size()
+    x, y = spec.target_xy()
+    bw, bh = spec.bg_size
+    fgc = [f"setpts=PTS-STARTPTS+{spec.start:.3f}/TB", f"scale={w}:{h}:flags=lanczos", "setsar=1", "format=yuva420p"]
+    if spec.radius > 0:
+        r = min(spec.radius, w // 2, h // 2)
+        fgc.append(f"geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':"
+                   f"a='255*lte(hypot(max(0,abs(X-W/2)-(W/2-{r})),max(0,abs(Y-H/2)-(H/2-{r}))),{r})'")
+    if spec.border > 0:
+        b = spec.border
+        fgc.append(f"pad={w + 2 * b}:{h + 2 * b}:{b}:{b}:color=0x{spec.border_colour}")
+    if spec.opacity < 0.999:
+        fgc.append(f"colorchannelmixer=aa={spec.opacity:.3f}")
+    end = spec.end
+    d = max(0.05, spec.anim_dur)
+    if spec.anim == "fade":
+        fgc.append(f"fade=t=in:st={spec.start:.3f}:d={d:.2f}:alpha=1")
+        if end is not None:
+            fgc.append(f"fade=t=out:st={max(spec.start, end - d):.3f}:d={d:.2f}:alpha=1")
+    xe, ye = str(x), str(y)
+    if spec.anim in ("left", "right", "top", "bottom"):
+        ow, oh = w + 2 * spec.border, h + 2 * spec.border
+        p = f"min(1,max(0,(t-{spec.start:.3f})/{d:.3f}))"
+        ease = f"(1-pow(1-{p},3))"                      # ease-out cubic
+        if spec.anim == "left":
+            xe = f"{-ow}+({x}+{ow})*{ease}"
+        elif spec.anim == "right":
+            xe = f"{bw}-({bw}-{x})*{ease}"
+        elif spec.anim == "top":
+            ye = f"{-oh}+({y}+{oh})*{ease}"
+        else:
+            ye = f"{bh}-({bh}-{y})*{ease}"
+    enable = f"between(t,{spec.start:.3f},{end:.3f})" if end is not None else f"gte(t,{spec.start:.3f})"
+    return (f"{fg}{','.join(fgc)}[pipfg];{bg}[pipfg]overlay=x='{xe}':y='{ye}':eof_action=pass:format=auto:"
+            f"enable='{enable}',format=yuv420p{out}")
 
 
 class PIPTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.bg_path   = ""
-        self.fg_path   = ""
-        self.preview_proc = None
-        self._bg_dur   = 0.0
+        self.src_var = tk.StringVar()
+        self._bg = self._fg = None
+        self.colour = "FFFFFF"
+        self._job = None
         self._build_ui()
 
-    # ═══════════════════════════════════════════════════════════════════════
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="📺  " + t("tab.picture_in_picture"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("pip.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.picture_in_picture"), "Put one video inside another.", icon="🖼")
+        body = scroll_body(self)
+        self.bg_row = FileRow(body, "Background video:", self.src_var, on_change=self._bg_changed, label_width=18)
+        self.bg_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row = self.bg_row
+        self.fg_row = FileRow(body, "Inset video:", on_change=self._fg_changed, label_width=18)
+        self.fg_row.pack(fill="x", padx=20, pady=2)
+        self.compare = CompareView(body, 400, 225, after_label="Result")
+        self.compare.pack(pady=4)
+        opt = tk.LabelFrame(body, text="  Inset  ", padx=12, pady=6)
+        opt.pack(fill="x", padx=20, pady=4)
 
-        # ── Input files ───────────────────────────────────────────────────
-        inp = tk.LabelFrame(self, text=t("section.input_files"), padx=14, pady=8)
-        inp.pack(fill="x", padx=16, pady=8)
+        def ch(*_a):
+            self._changed()
 
-        for row_idx, (label, attr, color_hint) in enumerate([
-            (t("pip.background_label"), "bg_path", CLR["fg"]),
-            (t("pip.foreground_label"), "fg_path", CLR["accent"]),
-        ]):
-            row = tk.Frame(inp); row.pack(fill="x", pady=3)
-            tk.Label(row, text=label, font=(UI_FONT, 9, "bold"),
-                     fg=color_hint, width=30, anchor="w").pack(side="left")
-            var = tk.StringVar()
-            setattr(self, attr + "_var", var)
-            tk.Entry(row, textvariable=var, width=52, relief="flat").pack(side="left", padx=6)
-
-            def _b(a=attr, v=var):
-                p = dialogs.askopenfilename(
-                    filetypes=[(t("color_match.video_image"),
-                                "*.mp4 *.mov *.mkv *.avi *.webm *.png *.jpg"),
-                               ("All", t("ducker.item_2"))])
-                if p:
-                    setattr(self, a, p)
-                    v.set(p)
-                    if a == "bg_path":
-                        self._bg_dur = get_video_duration(p)
-            tk.Button(row, text=t("btn.browse"), command=_b, cursor="hand2", relief="flat").pack(side="left")
-
-        # ── Layout ────────────────────────────────────────────────────────
-        cols = tk.Frame(self)
-        cols.pack(fill="x", padx=16, pady=4)
-        left  = tk.Frame(cols); left.pack(side="left", fill="both",
-                                          expand=True, padx=(0, 8))
-        right = tk.Frame(cols); right.pack(side="left", fill="both",
-                                           expand=True, padx=(8, 0))
-
-        # ════ LEFT ════════════════════════════════════════════════════════
-
-        # ── Size ──────────────────────────────────────────────────────────
-        size_lf = tk.LabelFrame(left, text=f"  {t('pip.size_section')}  ", padx=14, pady=10)
-        size_lf.pack(fill="x", pady=(0, 6))
-
-        self.size_mode_var = tk.StringVar(value="percent")
-        tk.Radiobutton(size_lf, text=t("pip.of_background_width"),
-                       variable=self.size_mode_var, value="percent",
-                       command=self._on_size_mode).pack(anchor="w")
-        tk.Radiobutton(size_lf, text=t("pip.exact_pixels"),
-                       variable=self.size_mode_var, value="pixels",
-                       command=self._on_size_mode).pack(anchor="w")
-
-        pct_row = tk.Frame(size_lf); pct_row.pack(fill="x", pady=4)
-        tk.Label(pct_row, text=t("pip.width")).pack(side="left")
-        self.size_pct_var = tk.IntVar(value=30)
-        tk.Scale(pct_row, variable=self.size_pct_var, from_=5, to=95,
-                 orient="horizontal", length=200).pack(side="left", padx=6)
-        self.size_pct_lbl = tk.Label(pct_row, text="30%", width=5, fg=CLR["accent"])
-        self.size_pct_lbl.pack(side="left")
-        self.size_pct_var.trace_add("write", lambda *_: self.size_pct_lbl.config(
-            text=f"{self.size_pct_var.get()}%"))
-
-        self.px_row = tk.Frame(size_lf)
-        tk.Label(self.px_row, text="W:").pack(side="left")
-        self.px_w_var = tk.StringVar(value="400")
-        tk.Entry(self.px_row, textvariable=self.px_w_var, width=6, relief="flat").pack(side="left", padx=4)
-        tk.Label(self.px_row, text="H:").pack(side="left")
-        self.px_h_var = tk.StringVar(value="300")
-        tk.Entry(self.px_row, textvariable=self.px_h_var, width=6, relief="flat").pack(side="left", padx=4)
-        tk.Label(self.px_row, text=t("pip.1_auto_aspect"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # ── Position ──────────────────────────────────────────────────────
-        pos_lf = tk.LabelFrame(left, text=f"  {t('pip.position_section')}  ", padx=14, pady=10)
-        pos_lf.pack(fill="x", pady=(0, 6))
-
-        self.pos_var = tk.StringVar(value="Bottom-Right")
-        pos_cb = ttk.Combobox(pos_lf, textvariable=self.pos_var,
-                               values=list(POSITIONS.keys()),
-                               state="readonly", width=22)
-        pos_cb.pack(anchor="w")
-        pos_cb.bind("<<ComboboxSelected>>", self._on_pos_change)
-
-        self.custom_pos_f = tk.Frame(pos_lf)
-        tk.Label(self.custom_pos_f, text="X:").pack(side="left")
-        self.custom_x_var = tk.StringVar(value="20")
-        tk.Entry(self.custom_pos_f, textvariable=self.custom_x_var, width=8, relief="flat").pack(side="left", padx=4)
-        tk.Label(self.custom_pos_f, text="Y:").pack(side="left")
-        self.custom_y_var = tk.StringVar(value="20")
-        tk.Entry(self.custom_pos_f, textvariable=self.custom_y_var, width=8, relief="flat").pack(side="left", padx=4)
-        tk.Label(self.custom_pos_f, text=t("pip.px_or_ffmpeg_expr_w_h_w_h"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # ── Margin ────────────────────────────────────────────────────────
-        marg_row = tk.Frame(pos_lf); marg_row.pack(fill="x", pady=4)
-        tk.Label(marg_row, text=t("pip.edge_margin_px")).pack(side="left")
-        self.margin_var = tk.StringVar(value="20")
-        tk.Entry(marg_row, textvariable=self.margin_var, width=5, relief="flat").pack(side="left", padx=4)
-
-        # ════ RIGHT ═══════════════════════════════════════════════════════
-
-        # ── Border ────────────────────────────────────────────────────────
-        border_lf = tk.LabelFrame(right, text=f"  {t('pip.border_section')}  ", padx=14, pady=10)
-        border_lf.pack(fill="x", pady=(0, 6))
-
-        b0 = tk.Frame(border_lf); b0.pack(fill="x", pady=2)
-        tk.Label(b0, text=t("pip.border_thickness_label")).pack(side="left")
-        self.border_var = tk.StringVar(value="3")
-        tk.Entry(b0, textvariable=self.border_var, width=4, relief="flat").pack(side="left", padx=4)
-
-        b1 = tk.Frame(border_lf); b1.pack(fill="x", pady=2)
-        tk.Label(b1, text=t("pip.border_colour_label")).pack(side="left")
-        self.border_color_btn = tk.Button(
-            b1, text="  White  ", bg="#FFFFFF", fg="black", width=10,
-            command=self._pick_border_color)
-        self.border_color_btn.pack(side="left", padx=6)
-        self.border_color = "#FFFFFF"
-
-        b2 = tk.Frame(border_lf); b2.pack(fill="x", pady=2)
-        tk.Label(b2, text=t("pip.corner_radius_0_square")).pack(side="left")
-        self.corner_var = tk.StringVar(value="0")
-        tk.Entry(b2, textvariable=self.corner_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Label(b2, text=t("pip.rounded_corners_via_crop_pad"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # ── Opacity ───────────────────────────────────────────────────────
-        op_lf = tk.LabelFrame(right, text=f"  {t('pip.opacity_section')}  ", padx=14, pady=8)
-        op_lf.pack(fill="x", pady=(0, 6))
-
-        op_row = tk.Frame(op_lf); op_row.pack(fill="x")
+        self.size_var = tk.DoubleVar(value=30)
+        tk.Scale(opt, variable=self.size_var, from_=5, to=90, orient="horizontal", length=180,
+                 label="Width (% of background)", command=ch).grid(row=0, column=0, sticky="w")
+        self.margin_var = tk.DoubleVar(value=3)
+        tk.Scale(opt, variable=self.margin_var, from_=0, to=15, resolution=0.5, orient="horizontal", length=140,
+                 label="Margin (%)", command=ch).grid(row=0, column=1, sticky="w")
         self.opacity_var = tk.DoubleVar(value=1.0)
-        tk.Scale(op_row, variable=self.opacity_var, from_=0.1, to=1.0,
-                 resolution=0.05, orient="horizontal", length=240).pack(side="left")
-        self.op_lbl = tk.Label(op_row, text="100%", width=5, fg=CLR["accent"])
-        self.op_lbl.pack(side="left")
-        self.opacity_var.trace_add("write", lambda *_: self.op_lbl.config(
-            text=f"{int(self.opacity_var.get()*100)}%"))
-
-        # ── Animation ─────────────────────────────────────────────────────
-        anim_lf = tk.LabelFrame(right, text=f"  {t('pip.animation_section')}  ", padx=14, pady=8)
-        anim_lf.pack(fill="x", pady=(0, 6))
-
-        self.anim_var = tk.StringVar(value=list(ANIMATIONS.keys())[0])
-        ttk.Combobox(anim_lf, textvariable=self.anim_var,
-                     values=list(ANIMATIONS.keys()),
-                     state="readonly", width=32).pack(anchor="w")
-        anim_dur_row = tk.Frame(anim_lf); anim_dur_row.pack(anchor="w", pady=4)
-        tk.Label(anim_dur_row, text=t("pip.animation_duration_label")).pack(side="left")
+        tk.Scale(opt, variable=self.opacity_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
+                 length=140, label="Opacity", command=ch).grid(row=0, column=2, sticky="w")
+        pr = tk.Frame(opt)
+        pr.grid(row=1, column=0, columnspan=3, sticky="w", pady=3)
+        tk.Label(pr, text="Position:").pack(side="left")
+        self.place_var = tk.StringVar(value=POSITIONS["br"])
+        pb = ttk.Combobox(pr, textvariable=self.place_var, values=list(POSITIONS.values()), state="readonly",
+                          width=16)
+        pb.pack(side="left", padx=4)
+        pb.bind("<<ComboboxSelected>>", ch)
+        self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
+        for label, var in (("X %", self.cx_var), ("Y %", self.cy_var)):
+            tk.Label(pr, text=label).pack(side="left", padx=(6, 2))
+            tk.Entry(pr, textvariable=var, width=5).pack(side="left")
+            var.trace_add("write", ch)
+        br = tk.Frame(opt)
+        br.grid(row=2, column=0, columnspan=3, sticky="w", pady=3)
+        tk.Label(br, text="Border (px):").pack(side="left")
+        self.border_var = tk.StringVar(value="0")
+        tk.Entry(br, textvariable=self.border_var, width=4).pack(side="left", padx=4)
+        self.colour_btn = tk.Button(br, text="Colour…", bg="#FFFFFF", relief="flat", command=self._pick_colour)
+        self.colour_btn.pack(side="left")
+        tk.Label(br, text="  Rounded corners (px):").pack(side="left")
+        self.radius_var = tk.StringVar(value="0")
+        tk.Entry(br, textvariable=self.radius_var, width=4).pack(side="left", padx=4)
+        for v in (self.border_var, self.radius_var):
+            v.trace_add("write", ch)
+        tr = tk.Frame(opt)
+        tr.grid(row=3, column=0, columnspan=3, sticky="w", pady=3)
+        tk.Label(tr, text="Show from").pack(side="left")
+        self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
+        tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=2)
+        tk.Label(tr, text="until").pack(side="left")
+        tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=2)
+        tk.Label(tr, text="(empty = until the inset ends)", fg=CLR["fgdim"]).pack(side="left")
+        ar = tk.Frame(opt)
+        ar.grid(row=4, column=0, columnspan=3, sticky="w", pady=3)
+        self.anim_var = tk.StringVar(value=ANIMS["none"])
+        ttk.Combobox(ar, textvariable=self.anim_var, values=list(ANIMS.values()), state="readonly",
+                     width=22).pack(side="left")
+        tk.Label(ar, text="over").pack(side="left", padx=4)
         self.anim_dur_var = tk.StringVar(value="0.5")
-        tk.Entry(anim_dur_row, textvariable=self.anim_dur_var, width=5, relief="flat").pack(side="left", padx=4)
+        tk.Entry(ar, textvariable=self.anim_dur_var, width=5).pack(side="left")
+        tk.Label(ar, text="s    Sound:").pack(side="left")
+        self.audio_var = tk.StringVar(value=AUDIO["bg"])
+        ttk.Combobox(ar, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly",
+                     width=20).pack(side="left", padx=4)
 
-        # ── Timing ────────────────────────────────────────────────────────
-        time_lf = tk.LabelFrame(right, text=f"  {t('pip.timing_section')}  ", padx=14, pady=8)
-        time_lf.pack(fill="x", pady=(0, 6))
-
-        t_row = tk.Frame(time_lf); t_row.pack(fill="x")
-        self.always_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(t_row, text=t("pip.always_visible_checkbox"),
-                       variable=self.always_var,
-                       command=self._toggle_timing).pack(side="left")
-
-        self.timing_f = tk.Frame(time_lf)
-        tk.Label(self.timing_f, text=t("pip.show_from_label")).pack(side="left")
-        self.t_start_var = tk.StringVar(value="0")
-        tk.Entry(self.timing_f, textvariable=self.t_start_var, width=7, relief="flat").pack(side="left", padx=4)
-        tk.Label(self.timing_f, text=t("pip.show_to_label")).pack(side="left")
-        self.t_end_var = tk.StringVar(value="30")
-        tk.Entry(self.timing_f, textvariable=self.t_end_var, width=7, relief="flat").pack(side="left", padx=4)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self); of.pack(pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=62, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        btn_row = tk.Frame(self); btn_row.pack(pady=6)
-        tk.Label(btn_row, text=t("common.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(btn_row, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Button(btn_row, text=t("rotate_flip.preview_button"), bg=CLR["accent"], fg="white",
-                  width=12, command=self._preview).pack(side="left", padx=12)
-        self.btn_render = tk.Button(
-            btn_row, text=t("pip.render_button"),
-            font=(UI_FONT, 12, "bold"), bg="#7B1FA2", fg="white",
-            height=2, width=22, command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=16, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.bg_row.path, "pip"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🖼  MAKE PICTURE-IN-PICTURE", font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=28, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-        self._on_size_mode()
+    def _pick_colour(self):
+        res = colorchooser.askcolor(f"#{self.colour}", parent=self)
+        if res and res[1]:
+            self.colour = res[1].lstrip("#").upper()
+            self.colour_btn.config(bg=res[1])
+            self._changed()
 
-    # ─────────────────────────────────────────────────────────────────────
-    def _on_size_mode(self):
-        if self.size_mode_var.get() == "pixels":
-            self.px_row.pack(fill="x", pady=4)
-        else:
-            self.px_row.pack_forget()
+    def _bg_changed(self, path):
+        self._bg = ff.try_probe(path)
+        self.compare.load(path)
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "pip"))
+        self._changed()
 
-    def _on_pos_change(self, *_):
-        if self.pos_var.get() == "Custom":
-            self.custom_pos_f.pack(fill="x", pady=4)
-        else:
-            self.custom_pos_f.pack_forget()
+    def _fg_changed(self, path):
+        self._fg = ff.try_probe(path)
+        self._changed()
 
-    def _toggle_timing(self):
-        if self.always_var.get():
-            self.timing_f.pack_forget()
-        else:
-            self.timing_f.pack(fill="x", pady=4)
+    def spec(self) -> PipSpec:
+        if self._bg is None or not self._bg.has_video or self._fg is None or not self._fg.has_video:
+            raise ValueError("Choose a background video and an inset video.")
+        start = ff.parse_time(self.from_var.get() or "0")
+        end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else None
+        if end is not None and end <= start:
+            raise ValueError("'until' must be after 'show from'.")
+        if end is None and self._fg.duration:
+            end = min(start + self._fg.duration, self._bg.duration or start + self._fg.duration)
+        return PipSpec(
+            bg_size=common.even_size(self._bg), fg_size=common.even_size(self._fg), pct=float(self.size_var.get()),
+            place=next((k for k, v in POSITIONS.items() if v == self.place_var.get()), "br"),
+            custom=(common.number(self.cx_var.get() or "50", "X %", 0, 100),
+                    common.number(self.cy_var.get() or "50", "Y %", 0, 100)),
+            margin_pct=float(self.margin_var.get()),
+            border=int(common.number(self.border_var.get() or "0", "Border", 0, 100)),
+            border_colour=self.colour, radius=int(common.number(self.radius_var.get() or "0", "Corners", 0, 500)),
+            opacity=float(self.opacity_var.get()), start=start, end=end,
+            anim=next((k for k, v in ANIMS.items() if v == self.anim_var.get()), "none"),
+            anim_dur=common.number(self.anim_dur_var.get() or "0.5", "Animation length", 0.05, 10))
 
-    def _pick_border_color(self):
-        from tkinter import colorchooser
-        c = colorchooser.askcolor()
-        if c[1]:
-            self.border_color = c[1]
-            self.border_color_btn.config(
-                bg=c[1],
-                text=f"  {c[1]}  ",
-                fg="black" if sum(int(c[1][i:i+2], 16) for i in (1,3,5)) > 400 else "white")
+    def _changed(self, *_a):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(300, self._refresh)
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                          filetypes=[("MP4", "*.mp4")])
-        if p: self.out_var.set(p)
-
-    def _build_filter(self, preview=False):
-        """Construct the FFmpeg filter_complex string."""
-        margin = self.margin_var.get()
-
-        # FG scale - use scale2ref to scale FG as a % of BG width
-        if self.size_mode_var.get() == "percent":
-            pct_val = self.size_pct_var.get()
-            # scale2ref: scale FG width to pct% of BG width, height proportional
-            scale_filter = (f"[1:v][0:v]scale2ref="
-                            f"w=trunc(main_w*{pct_val/100:.4f}/2)*2:"
-                            f"h=trunc(ow/dar/2)*2"
-                            f"[fg_scaled][bg_ref]")
-        else:
-            w = self.px_w_var.get()
-            h = self.px_h_var.get()
-            scale_filter = f"[1:v]scale={w}:{h}[fg_scaled];[0:v]null[bg_ref]"
-
-        # Border
-        border_thick = int(self.border_var.get() or "0")
-        border_color = self.border_color.lstrip("#")
-        if border_thick > 0:
-            pad_expr = (f"[fg_scaled]pad=iw+{border_thick*2}:ih+{border_thick*2}"
-                        f":{border_thick}:{border_thick}:color={border_color}[fg_bordered]")
-        else:
-            pad_expr = "[fg_scaled]copy[fg_bordered]"
-
-        # Position
-        pos_key = self.pos_var.get()
-        if pos_key == "Custom":
-            x_expr = self.custom_x_var.get()
-            y_expr = self.custom_y_var.get()
-        else:
-            x_tpl, y_tpl = POSITIONS[pos_key]
-            # Replace margin placeholder
-            x_expr = x_tpl.replace("20", margin)
-            y_expr = y_tpl.replace("20", margin)
-
-        # Opacity
-        opacity = self.opacity_var.get()
-        if opacity < 1.0:
-            alpha_filter = f"[fg_bordered]format=rgba,colorchannelmixer=aa={opacity:.2f}[fg_alpha]"
-            overlay_in = "[fg_alpha]"
-        else:
-            alpha_filter = None
-            overlay_in = "[fg_bordered]"
-
-        # Timing
-        if not self.always_var.get():
-            ts = self.t_start_var.get()
-            te = self.t_end_var.get()
-            enable_expr = f":enable='between(t,{ts},{te})'"
-        else:
-            enable_expr = ""
-
-        # Animation
-        anim_key = self.anim_var.get()
-        anim_type = ANIMATIONS[anim_key]
-        anim_dur  = float(self.anim_dur_var.get() or "0.5")
-        if anim_type and not preview:
-            if anim_type == "slide_right":
-                x_expr = f"'if(lt(t,{anim_dur}),W-w*t/{anim_dur},{x_expr})'"
-            elif anim_type == "slide_left":
-                x_expr = f"'if(lt(t,{anim_dur}),-(w)*(1-t/{anim_dur}),{x_expr})'"
-            elif anim_type == "slide_bottom":
-                y_expr = f"'if(lt(t,{anim_dur}),H-h*t/{anim_dur},{y_expr})'"
-            elif anim_type == "fade":
-                # override opacity with animated alpha
-                alpha_filter = (f"[fg_bordered]format=rgba,"
-                                f"colorchannelmixer=aa='if(lt(t,{anim_dur}),t/{anim_dur},{opacity:.2f})'[fg_alpha]")
-                overlay_in = "[fg_alpha]"
-
-        overlay_expr = f"overlay={x_expr}:{y_expr}{enable_expr}"
-
-        # Build full filter chain
-        parts = [scale_filter, pad_expr]
-        if alpha_filter:
-            parts.append(alpha_filter)
-        parts.append(f"[bg_ref]{overlay_in}{overlay_expr}")
-
-        return ";".join(parts)
-
-    def _preview(self):
-        if not self.bg_path or not self.fg_path:
-            messagebox.showwarning(t("pip.missing_files_title"), t("pip.missing_files_message"))
+    def _refresh(self):
+        self._job = None
+        try:
+            spec = self.spec()
+        except ValueError:
             return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-        ffplay  = get_binary_path("ffplay.exe")
-        fc = self._build_filter(preview=True)
-        cmd = [ffplay, "-i", self.bg_path, "-i", self.fg_path,
-               "-filter_complex", fc,
-               "-window_title", t("pip.pip_preview"), "-x", "960", "-autoexit"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+        fg = f"movie=filename={fl.filter_path(self.fg_row.path)},"
+        g = pip_graph(spec, "[in]", fg, "")
+        self.compare.set_filter(g, keep_time=True)
 
     def _render(self):
-        if not self.bg_path or not self.fg_path:
-            messagebox.showwarning(t("pip.missing_files_title"), t("pip.missing_files_message"))
+        src, fg = self.bg_row.path, self.fg_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
+        fginfo = common.check_source(self, fg, what="Inset video")
+        if fginfo is None:
+            return
+        self._bg, self._fg = info, fginfo
+        try:
+            spec = self.spec()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        out = common.output_for(self, self.out_row, src, "pip", inputs=[fg])
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        fc     = self._build_filter()
-
-        cmd = [ffmpeg, "-i", self.bg_path, "-i", self.fg_path,
-               "-filter_complex", fc,
-               "-c:v", "libx264", "-crf", self.crf_var.get(), "-preset", "fast",
-               "-c:a", "copy", "-shortest", "-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console, t("log.pip.building_pip_composite"))
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("pip.render_button"))
+            return
+        graph = pip_graph(spec)
+        mode = next((k for k, v in AUDIO.items() if v == self.audio_var.get()), "bg")
+        dur = info.duration
+        st = "aresample=48000,aformat=channel_layouts=stereo"
+        if mode == "fg" and fginfo.has_audio:
+            graph += (f";[1:a:0]{st},adelay=delays={round(spec.start * 1000)}:all=1,apad,"
+                      f"atrim=duration={dur:.3f}[a]")
+            audio = ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
+        elif mode == "mix" and fginfo.has_audio and info.has_audio:
+            graph += (f";[1:a:0]{st},adelay=delays={round(spec.start * 1000)}:all=1,apad,atrim=duration={dur:.3f}[fa];"
+                      f"[0:a:0]{st}[ba];[ba][fa]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[a]")
+            audio = ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
+        elif mode == "none" or not info.has_audio:
+            audio = ["-an"]
+        else:
+            audio = None                                  # background sound, kept as is when possible
+        common.render(self, src=src, info=info, out=out, graph=graph, extra_inputs=["-i", fg],
+                      encoder=self.encoder, console=self.console, btn=self.btn_render,
+                      btn_label="🖼  MAKE PICTURE-IN-PICTURE", name="Picture-in-Picture", audio=audio,
+                      extra_args=["-t", f"{dur:.3f}"], duration=dur, inputs=[fg])

@@ -1,301 +1,130 @@
 """
-tab_denoise.py  ─  Denoise
-Two industry-standard denoising algorithms:
-  • HQDN3D  - fast, good for moderate noise (compression artefacts, mild grain)
-  • NLMeans - slow, excellent quality (film grain, low-light sensor noise)
+tabs/visuals/denoise.py  -  Video Denoiser
 
-Per-channel luma/chroma control, live preview, strength presets.
+Remove sensor noise, grain and compression mush with a before/after view:
+
+* Fast (hqdn3d) - quick spatial + temporal smoothing, fine for most clips.
+* Best quality (non-local means) - keeps detail; on the GPU (Vulkan) when
+  available, which is many times faster than the CPU version.
+* Temporal (atadenoise) - averages over time; ideal for locked-off shots.
+* Grain (fftdnoiz) - frequency-domain cleaning for film grain.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
+from tkinter import ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import filters as fl
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+
+METHODS = {"fast": "Fast - spatial + temporal (hqdn3d)", "nlm": "Best quality - non-local means",
+           "temporal": "Temporal - static / tripod shots (atadenoise)", "grain": "Film grain - frequency domain"}
+PRESETS = {"Light": 2.5, "Medium": 5.0, "Strong": 7.5, "Very strong": 10.0}
 
 
-PRESETS = {
-    t("denoise.light_touch_compression_artefacts"):  ("hqdn3d", 2, 2, 3, 3),
-    t("denoise.moderate_webcam_phone_noise"):   ("hqdn3d", 4, 4, 6, 6),
-    t("denoise.strong_low_light_footage"):      ("hqdn3d", 8, 8, 12, 12),
-    t("denoise.aggressive_very_noisy_old_vhs"):   ("hqdn3d", 14, 14, 20, 20),
-    t("denoise.nlmeans_light_film_grain_subtle"):   ("nlmeans", 4, 4, None, None),
-    t("denoise.nlmeans_strong_heavy_sensor_noise"):   ("nlmeans", 8, 8, None, None),
-    "Custom":                                  None,
-}
+def denoise_chain(method: str, strength: float, *, gpu: bool = False) -> str:
+    """Filter chain for *strength* 1..10 (CPU chain unless *gpu*)."""
+    s = max(0.5, min(10.0, strength))
+    if method == "nlm":
+        sigma = 1.0 + s * 0.8
+        if gpu:
+            return f"format=yuv420p,hwupload,nlmeans_vulkan=s={sigma:.2f}:p=7:r=15,hwdownload,format=yuv420p"
+        return f"nlmeans=s={sigma:.2f}:p=7:r=15"
+    if method == "temporal":
+        return (f"atadenoise=0a={0.01 + s * 0.006:.3f}:0b={0.02 + s * 0.012:.3f}:"
+                f"1a={0.01 + s * 0.006:.3f}:1b={0.02 + s * 0.012:.3f}:s={min(99, 5 + int(s) * 2) | 1}")
+    if method == "grain":
+        return f"fftdnoiz=sigma={s * 2.5:.1f}:amount=1:overlap=0.5"
+    return f"hqdn3d={s * 0.8:.2f}:{s * 0.6:.2f}:{s * 1.2:.2f}:{s * 0.9:.2f}"
 
 
 class DenoiseTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path   = ""
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self._info = None
+        self._job = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🌫  " + t("tab.denoise"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("denoise.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
-
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=10)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=60, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
-
-        # ── Algorithm choice ─────────────────────────────────────────────
-        algo_lf = tk.LabelFrame(self, text=t("section.algorithm"), padx=16, pady=10)
-        algo_lf.pack(fill="x", padx=20, pady=6)
-
-        self.algo_var = tk.StringVar(value="hqdn3d")
-        algo_row = tk.Frame(algo_lf); algo_row.pack(fill="x")
-        for val, label, desc in [
-            ("hqdn3d",  t("denoise.hqdn3d_option"),
-             t("denoise.hqdn3d_hint")),
-            ("nlmeans", t("denoise.nlmeans_option"),
-             t("denoise.nlmeans_hint")),
-        ]:
-            col = tk.Frame(algo_row)
-            col.pack(side="left", padx=20)
-            tk.Radiobutton(col, text=label, variable=self.algo_var, value=val,
-                           font=(UI_FONT, 11, "bold"),
-                           command=self._on_algo_change).pack(anchor="w")
-            tk.Label(col, text=desc, fg=CLR["fgdim"],
-                     font=(UI_FONT, 8), wraplength=260, justify="left").pack(anchor="w")
-
-        # ── Strength presets ─────────────────────────────────────────────
-        preset_lf = tk.LabelFrame(self, text=f"  {t('denoise.strength_presets_section')}  ", padx=16, pady=8)
-        preset_lf.pack(fill="x", padx=20, pady=4)
-
-        self.preset_var = tk.StringVar(value=list(PRESETS.keys())[1])
-        preset_cb = ttk.Combobox(preset_lf, textvariable=self.preset_var,
-                                  values=list(PRESETS.keys()),
-                                  state="readonly", width=44)
-        preset_cb.pack(side="left")
-        preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
-
-        # ── HQDN3D manual controls ────────────────────────────────────────
-        self.hqdn3d_lf = tk.LabelFrame(self, text=f"  {t('denoise.hqdn3d_controls_section')}  ",
-                                        padx=16, pady=10)
-        self.hqdn3d_lf.pack(fill="x", padx=20, pady=4)
-
-        slider_info = [
-            (t("denoise.denoise_luma_spatial_label"),   "hs_luma_s",   0, 20, 4.0,
-             t("denoise.removes_static_luma_brightness_noise_within_each")),
-            (t("denoise.denoise_luma_temporal_label"),  "hs_luma_t",   0, 20, 6.0,
-             t("denoise.blends_luma_across_frames_great_for_flickering_f")),
-            (t("denoise.denoise_chroma_spatial_label"), "hs_chroma_s", 0, 20, 4.0,
-             t("denoise.removes_colour_noise_within_each_frame")),
-            (t("denoise.denoise_chroma_temporal_label"),"hs_chroma_t", 0, 20, 6.0,
-             t("denoise.blends_colour_noise_across_frames")),
-        ]
-
-        self._hqdn3d_vars = {}
-        self._hqdn3d_lbls = {}
-
-        for label, attr, lo, hi, default, tip in slider_info:
-            row = tk.Frame(self.hqdn3d_lf); row.pack(fill="x", pady=3)
-            tk.Label(row, text=label, width=16, anchor="e").pack(side="left")
-            var = tk.DoubleVar(value=default)
-            self._hqdn3d_vars[attr] = var
-            sl = tk.Scale(row, variable=var, from_=lo, to=hi,
-                          resolution=0.5, orient="horizontal", length=260,
-                          command=lambda v, a=attr: self._on_slider(a))
-            sl.pack(side="left", padx=6)
-            lbl = tk.Label(row, text=str(default), width=5, fg=CLR["accent"])
-            lbl.pack(side="left")
-            self._hqdn3d_lbls[attr] = lbl
-            tk.Label(row, text=tip, fg=CLR["fgdim"],
-                     font=(UI_FONT, 8)).pack(side="left", padx=6)
-
-        # ── NLMeans controls ──────────────────────────────────────────────
-        self.nlmeans_lf = tk.LabelFrame(self, text=f"  {t('denoise.nlmeans_controls_section')}  ",
-                                         padx=16, pady=10)
-        # (shown only when NLMeans selected)
-
-        nm_slider_info = [
-            (t("denoise.denoise_nlmeans_luma_label"),   "nm_luma",   1, 20, 4,
-             t("denoise.denoising_strength_for_brightness_channel_h_para")),
-            (t("denoise.denoise_nlmeans_chroma_label"), "nm_chroma", 1, 20, 4,
-             t("denoise.denoising_strength_for_colour_channels")),
-        ]
-        self._nlmeans_vars = {}
-        self._nlmeans_lbls = {}
-
-        for label, attr, lo, hi, default, tip in nm_slider_info:
-            row = tk.Frame(self.nlmeans_lf); row.pack(fill="x", pady=3)
-            tk.Label(row, text=label, width=16, anchor="e").pack(side="left")
-            var = tk.IntVar(value=default)
-            self._nlmeans_vars[attr] = var
-            sl = tk.Scale(row, variable=var, from_=lo, to=hi,
-                          resolution=1, orient="horizontal", length=260,
-                          command=lambda v, a=attr: self._on_nm_slider(a))
-            sl.pack(side="left", padx=6)
-            lbl = tk.Label(row, text=str(default), width=5, fg=CLR["accent"])
-            lbl.pack(side="left")
-            self._nlmeans_lbls[attr] = lbl
-            tk.Label(row, text=tip, fg=CLR["fgdim"],
-                     font=(UI_FONT, 8)).pack(side="left", padx=6)
-
-        tk.Label(self.nlmeans_lf,
-                 text=t("denoise.nlmeans_warning"),
-                 fg=CLR["orange"], font=(UI_FONT, 9, "bold")).pack(anchor="w", pady=4)
-
-        # ── Live filter string display ────────────────────────────────────
-        self.filter_lbl = tk.Label(self,
-                                    text="", fg=CLR["fgdim"],
-                                    font=(MONO_FONT, 9))
-        self.filter_lbl.pack(anchor="w", padx=22, pady=(0, 4))
-
-        # ── Encode options ────────────────────────────────────────────────
-        enc_f = tk.Frame(self); enc_f.pack(padx=20, fill="x")
-        tk.Label(enc_f, text=t("common.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(enc_f, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Label(enc_f, text=t("rotate_flip.preset")).pack(side="left")
-        self.preset_enc_var = tk.StringVar(value="medium")
-        ttk.Combobox(enc_f, textvariable=self.preset_enc_var,
-                     values=["ultrafast","fast","medium","slow","slower"],
-                     state="readonly", width=10).pack(side="left", padx=4)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self); of.pack(pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=62, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        btn_row = tk.Frame(self); btn_row.pack(pady=8)
-        tk.Button(btn_row, text=t("denoise.preview_button"), bg=CLR["accent"], fg="white",
-                  width=14, command=self._preview).pack(side="left", padx=8)
-        self.btn_render = tk.Button(
-            btn_row, text=t("denoise.apply_button"),
-            font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-            height=2, width=22, command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
+        self.make_header(self, t("tab.denoise"), "Clean up noisy, grainy or blocky video.", icon="✨")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.compare = CompareView(body, 400, 225, after_label="Denoised")
+        self.compare.pack(pady=4)
+        opt = tk.LabelFrame(body, text="  Denoise  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=4)
+        self.method_var = tk.StringVar(value=METHODS["fast"])
+        mb = ttk.Combobox(opt, textvariable=self.method_var, values=list(METHODS.values()), state="readonly",
+                          width=44)
+        mb.grid(row=0, column=0, columnspan=3, sticky="w")
+        mb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+        self.gpu_lbl = tk.Label(opt, text="", fg=CLR["fgdim"])
+        self.gpu_lbl.grid(row=0, column=3, sticky="w", padx=8)
+        self.strength_var = tk.DoubleVar(value=PRESETS["Medium"])
+        tk.Scale(opt, variable=self.strength_var, from_=1, to=10, resolution=0.5, orient="horizontal", length=260,
+                 label="Strength", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w", pady=4)
+        pf = tk.Frame(opt)
+        pf.grid(row=1, column=1, columnspan=3, sticky="w")
+        for name, val in PRESETS.items():
+            tk.Button(pf, text=name, relief="flat", command=lambda v=val: (self.strength_var.set(v),
+                                                                          self._changed())).pack(side="left", padx=2)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "denoised"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="✨  DENOISE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
+        self._changed()
 
-        self._on_algo_change()
-        self._update_filter_lbl()
+    def _method(self):
+        return next((k for k, v in METHODS.items() if v == self.method_var.get()), "fast")
 
-    # ─────────────────────────────────────────────────────────────────────
-    def _on_algo_change(self):
-        if self.algo_var.get() == "hqdn3d":
-            self.nlmeans_lf.pack_forget()
-            self.hqdn3d_lf.pack(fill="x", padx=20, pady=4)
-        else:
-            self.hqdn3d_lf.pack_forget()
-            self.nlmeans_lf.pack(fill="x", padx=20, pady=4)
-        self._update_filter_lbl()
+    def _source_changed(self, path):
+        self._info = ff.try_probe(path)
+        self.compare.load(path)
+        self._changed()
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "denoised"))
 
-    def _on_slider(self, attr):
-        val = self._hqdn3d_vars[attr].get()
-        self._hqdn3d_lbls[attr].config(text=f"{val:.1f}")
-        self._update_filter_lbl()
+    def _changed(self):
+        nlm = self._method() == "nlm"
+        self.gpu_lbl.config(text=("GPU (Vulkan) will be used" if fl.vulkan_ok() else "CPU - slow on long clips")
+                            if nlm else "")
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(300, self._refresh)
 
-    def _on_nm_slider(self, attr):
-        val = self._nlmeans_vars[attr].get()
-        self._nlmeans_lbls[attr].config(text=str(val))
-        self._update_filter_lbl()
-
-    def _apply_preset(self, *_):
-        p = PRESETS.get(self.preset_var.get())
-        if not p: return
-        algo, ls, lt, cs, ct = p[0], p[1], p[2], p[3], p[4]
-        self.algo_var.set(algo)
-        self._on_algo_change()
-        if algo == "hqdn3d":
-            self._hqdn3d_vars["hs_luma_s"].set(ls)
-            self._hqdn3d_vars["hs_luma_t"].set(lt)
-            self._hqdn3d_vars["hs_chroma_s"].set(cs or ls)
-            self._hqdn3d_vars["hs_chroma_t"].set(ct or lt)
-            for a in self._hqdn3d_lbls:
-                self._hqdn3d_lbls[a].config(text=f"{self._hqdn3d_vars[a].get():.1f}")
-        elif algo == "nlmeans":
-            self._nlmeans_vars["nm_luma"].set(ls)
-            self._nlmeans_vars["nm_chroma"].set(lt)
-            for a in self._nlmeans_lbls:
-                self._nlmeans_lbls[a].config(text=str(self._nlmeans_vars[a].get()))
-        self._update_filter_lbl()
-
-    def _build_filter(self):
-        if self.algo_var.get() == "hqdn3d":
-            ls = self._hqdn3d_vars["hs_luma_s"].get()
-            lt = self._hqdn3d_vars["hs_luma_t"].get()
-            cs = self._hqdn3d_vars["hs_chroma_s"].get()
-            ct = self._hqdn3d_vars["hs_chroma_t"].get()
-            return f"hqdn3d={ls:.1f}:{cs:.1f}:{lt:.1f}:{ct:.1f}"
-        else:
-            h  = self._nlmeans_vars["nm_luma"].get()
-            hc = self._nlmeans_vars["nm_chroma"].get()
-            return f"nlmeans=s={h}:sp=7:r=15:sc={hc}"
-
-    def _update_filter_lbl(self):
-        self.filter_lbl.config(text=f"Filter:  {self._build_filter()}")
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            base = os.path.splitext(p)[0]
-            self.out_var.set(base + "_denoised.mp4")
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p: self.out_var.set(p)
-
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("denoise.no_file_title"), t("denoise.no_file_message"))
-            return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-        ffplay = get_binary_path("ffplay.exe")
-        vf = self._build_filter()
-        cmd = [ffplay, "-i", self.file_path, "-vf", vf,
-               "-window_title", t("denoise.denoise_preview"), "-x", "800", "-autoexit"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+    def _refresh(self):
+        self._job = None
+        self.compare.set_filter(denoise_chain(self._method(), float(self.strength_var.get())))
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
+        out = common.output_for(self, self.out_row, src, "denoised")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        vf = self._build_filter()
-        if self.algo_var.get() == "nlmeans":
-            self.log(self.console, t("log.denoise.nlmeans_is_slow_this_will_take_a_while"))
-
-        cmd = [ffmpeg, "-i", self.file_path, "-vf", vf,
-               "-c:v", "libx264", "-crf", self.crf_var.get(),
-               "-preset", self.preset_enc_var.get(),
-               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-        self.log(self.console, f"Filter: {vf}")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("denoise.apply_button"))
+            return
+        gpu = self._method() == "nlm" and fl.vulkan_ok()
+        chain = denoise_chain(self._method(), float(self.strength_var.get()), gpu=gpu)
+        if gpu and self.encoder.ten_bit:
+            chain = chain.replace("format=yuv420p", "format=yuv420p10le")
+        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder, console=self.console,
+                      btn=self.btn_render, btn_label="✨  DENOISE", name="Denoise",
+                      pre_input=["-init_hw_device", "vulkan"] if gpu else ())

@@ -1,330 +1,206 @@
 """
-tab_transitionstudio.py  ─  Transition Studio
+tabs/visuals/transitions.py  -  Transition Studio
 
-Apply cinematic transitions between two clips: wipes, slides, zooms,
-spins, blur dissolves, glitch cuts, and more.  Preview any transition
-before rendering.
-
-Unlike the Crossfader (which joins N clips with one global transition),
-the Transition Studio is designed for precise, per-cut transition work
-with a visual preview of each effect.
+One cut between two clips, done with care: pick any of FFmpeg's 50+
+transitions by family, its length and the audio crossfade curve, preview
+just the seconds around the cut, then render.  Clips of different sizes,
+frame rates, formats or without sound are normalised automatically (the
+same engine as the Crossfader, which joins many clips at once).
 """
+from __future__ import annotations
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
 import os
-import threading
+import shutil
 import tempfile
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, get_video_duration, launch_preview, CREATE_NO_WINDOW,
-)
+from core import ffmpeg as ff
+from core import ui
+from core.hardware import launch_preview
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.cutting import crossfader as xf
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
 
-
-# ── Transition catalogue ─────────────────────────────────────────────────
-TRANSITIONS = {
-    "Dissolves": [
-        ("fade",       "Fade",          "Classic opacity crossfade"),
-        ("fadeblack",  "Fade to Black", "Fade through solid black"),
-        ("fadewhite",  "Fade to White", "Fade through solid white"),
-        ("fadegrays",  "Fade Grays",    "Fade through desaturated gray"),
-        ("dissolve",   "Dissolve",      "Random pixel dissolve"),
-    ],
-    "Wipes": [
-        ("wipeleft",   "Wipe Left",     "Wipe revealing from right to left"),
-        ("wiperight",  "Wipe Right",    "Wipe revealing from left to right"),
-        ("wipeup",     "Wipe Up",       "Wipe revealing from bottom to top"),
-        ("wipedown",   "Wipe Down",     "Wipe revealing from top to bottom"),
-    ],
-    "Slides": [
-        ("slideleft",  "Slide Left",    "Clip B slides in from the right"),
-        ("slideright", "Slide Right",   "Clip B slides in from the left"),
-        ("slideup",    "Slide Up",      "Clip B slides in from below"),
-        ("slidedown",  "Slide Down",    "Clip B slides in from above"),
-    ],
-    "Shape": [
-        ("circlecrop",  "Circle Crop",   "Circular reveal from center"),
-        ("circleopen",  "Circle Open",   "Circle expanding outward"),
-        ("circleclose", "Circle Close",  "Circle shrinking inward"),
-        ("radial",      "Radial",        "Clock-wipe radial sweep"),
-    ],
-    "Stylized": [
-        ("pixelize",    "Pixelize",      "Pixelation transition"),
-        ("smoothleft",  "Smooth Left",   "Smooth directional blur left"),
-        ("smoothright", "Smooth Right",  "Smooth directional blur right"),
-        ("hblur",       "H-Blur",        "Horizontal blur transition"),
-    ],
+FAMILIES = {
+    "Dissolves": [("fade", "Fade"), ("dissolve", "Dissolve"), ("fadeblack", "Through black"),
+                  ("fadewhite", "Through white"), ("fadegrays", "Through grey"), ("fadefast", "Fast fade"),
+                  ("fadeslow", "Slow fade")],
+    "Wipes": [("wipeleft", "Wipe left"), ("wiperight", "Wipe right"), ("wipeup", "Wipe up"),
+              ("wipedown", "Wipe down"), ("wipetl", "Wipe to top-left"), ("wipetr", "Wipe to top-right"),
+              ("wipebl", "Wipe to bottom-left"), ("wipebr", "Wipe to bottom-right"), ("radial", "Clock wipe")],
+    "Slides & pushes": [("slideleft", "Slide left"), ("slideright", "Slide right"), ("slideup", "Slide up"),
+                        ("slidedown", "Slide down"), ("coverleft", "Cover left"), ("coverright", "Cover right"),
+                        ("revealleft", "Reveal left"), ("revealright", "Reveal right")],
+    "Shapes": [("circleopen", "Circle open"), ("circleclose", "Circle close"), ("circlecrop", "Circle crop"),
+               ("rectcrop", "Rectangle crop"), ("vertopen", "Doors open (vertical)"),
+               ("horzopen", "Doors open (horizontal)"), ("diagtl", "Diagonal")],
+    "Stylised": [("smoothleft", "Smooth left"), ("smoothright", "Smooth right"), ("pixelize", "Pixelate"),
+                 ("hblur", "Blur"), ("zoomin", "Zoom in"), ("distance", "Distance"), ("squeezeh", "Squeeze"),
+                 ("hlslice", "Slices"), ("hlwind", "Wind")],
 }
+CURVES = {"tri": "Linear", "qsin": "Smooth (quarter sine)", "hsin": "Smooth (half sine)", "exp": "Exponential",
+          "log": "Logarithmic"}
 
 
 class TransitionStudioTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_a = ""
-        self.file_b = ""
-        self.dur_a = 0.0
-        self.dur_b = 0.0
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self._preview_dir = None
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.transition_studio"),
-                         t("transitions.subtitle"),
-                         icon="🎞")
+        self.make_header(self, t("tab.transition_studio"), "One polished transition between two clips.", icon="🎬")
+        body = scroll_body(self)
+        self.a_row = FileRow(body, "First clip (A):", self.src_var, label_width=16,
+                             on_change=lambda p: self.out_row.path or self.out_row.set(
+                                 self.suggest_output(p, "transition")))
+        self.a_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row = self.a_row
+        self.b_row = FileRow(body, "Second clip (B):", label_width=16)
+        self.b_row.pack(fill="x", padx=20, pady=2)
 
-        # ── Clip A & B ────────────────────────────────────────────────────
-        clips_lf = tk.LabelFrame(self, text=f"  {t('transitions.source_clips_section')}  ", padx=15, pady=8,
-                                 font=(UI_FONT, 9, "bold"))
-        clips_lf.pack(fill="x", padx=20, pady=(10, 4))
+        opt = tk.LabelFrame(body, text="  Transition  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=6)
+        top = tk.Frame(opt)
+        top.pack(fill="x")
+        self.family_var = tk.StringVar(value="Dissolves")
+        fb = ttk.Combobox(top, textvariable=self.family_var, values=list(FAMILIES), state="readonly", width=16)
+        fb.pack(side="left")
+        fb.bind("<<ComboboxSelected>>", lambda _e: self._family_changed())
+        self.trans_list = tk.Listbox(opt, height=6, exportselection=False)
+        self.trans_list.pack(fill="x", pady=4)
+        r = tk.Frame(opt)
+        r.pack(fill="x", pady=2)
+        tk.Label(r, text="Length (s):").pack(side="left")
+        self.dur_var = tk.StringVar(value="1.0")
+        ttk.Combobox(r, textvariable=self.dur_var, values=["0.3", "0.5", "0.75", "1.0", "1.5", "2.0", "3.0"],
+                     width=6).pack(side="left", padx=4)
+        self.freeze_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(r, text="Hold the end of A / start of B (don't overlap the footage)",
+                       variable=self.freeze_var).pack(side="left", padx=10)
+        r2 = tk.Frame(opt)
+        r2.pack(fill="x", pady=2)
+        tk.Label(r2, text="Sound:").pack(side="left")
+        self.audio_var = tk.StringVar(value="normal")
+        for key, label in (("normal", "crossfade"), ("none", "no sound")):
+            tk.Radiobutton(r2, text=label, variable=self.audio_var, value=key).pack(side="left")
+        tk.Label(r2, text="  curve:").pack(side="left")
+        self.curve_var = tk.StringVar(value=CURVES["tri"])
+        ttk.Combobox(r2, textvariable=self.curve_var, values=list(CURVES.values()), state="readonly",
+                     width=22).pack(side="left", padx=4)
+        self.btn_preview = tk.Button(opt, text="▶  Preview the cut", relief="flat", command=self._preview)
+        self.btn_preview.pack(anchor="w", pady=4)
 
-        # Clip A
-        ra = tk.Frame(clips_lf)
-        ra.pack(fill="x", pady=3)
-        tk.Label(ra, text=t("transitions.clip_a_label"), font=(UI_FONT, 10, "bold"),
-                 width=16, anchor="e").pack(side="left")
-        self._src_a_var = tk.StringVar()
-        tk.Entry(ra, textvariable=self._src_a_var, width=50, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(ra, text=t("btn.browse"), command=lambda: self._browse("a"),
-                  cursor="hand2", relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._dur_a_lbl = tk.Label(ra, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_a_lbl.pack(side="left", padx=8)
-
-        # Clip B
-        rb = tk.Frame(clips_lf)
-        rb.pack(fill="x", pady=3)
-        tk.Label(rb, text=t("transitions.clip_b_label"), font=(UI_FONT, 10, "bold"),
-                 width=16, anchor="e").pack(side="left")
-        self._src_b_var = tk.StringVar()
-        tk.Entry(rb, textvariable=self._src_b_var, width=50, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(rb, text=t("btn.browse"), command=lambda: self._browse("b"),
-                  cursor="hand2", relief="flat", font=(UI_FONT, 9)).pack(side="left")
-        self._dur_b_lbl = tk.Label(rb, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_b_lbl.pack(side="left", padx=8)
-
-        # ── Transition picker ─────────────────────────────────────────────
-        pick_lf = tk.LabelFrame(self, text=f"  {t('transitions.type_section')}  ", padx=15, pady=8,
-                                font=(UI_FONT, 9, "bold"))
-        pick_lf.pack(fill="x", padx=20, pady=6)
-
-        # Category tabs
-        self._trans_nb = ttk.Notebook(pick_lf)
-        self._trans_nb.pack(fill="x")
-
-        self._trans_var = tk.StringVar(value="fade")
-        for cat_name, effects in TRANSITIONS.items():
-            tab_f = tk.Frame(self._trans_nb, bg=CLR["bg"])
-            self._trans_nb.add(tab_f, text=f"  {cat_name}  ")
-
-            for i, (val, label, desc) in enumerate(effects):
-                row = tk.Frame(tab_f, bg=CLR["bg"])
-                row.pack(fill="x", pady=1, padx=4)
-                tk.Radiobutton(row, text=label, variable=self._trans_var, value=val,
-                               font=(UI_FONT, 10), bg=CLR["bg"],
-                               activebackground=CLR["bg"]).pack(side="left")
-                tk.Label(row, text=f"  {desc}", fg=CLR["fgdim"],
-                         font=(UI_FONT, 9), bg=CLR["bg"]).pack(side="left")
-
-        # ── Duration ──────────────────────────────────────────────────────
-        dur_f = tk.Frame(self)
-        dur_f.pack(fill="x", padx=20, pady=6)
-
-        tk.Label(dur_f, text=t("transitions.duration_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._trans_dur = tk.DoubleVar(value=1.0)
-        tk.Scale(dur_f, variable=self._trans_dur, from_=0.1, to=5.0,
-                 resolution=0.1, orient="horizontal", length=250,
-                 bg=CLR["panel"], fg=CLR["fg"], troughcolor=CLR["bg"],
-                 highlightthickness=0).pack(side="left", padx=8)
-        self._dur_val_lbl = tk.Label(dur_f, text=t("transitions.1_0s"), fg=CLR["accent"],
-                                     font=(MONO_FONT, 11, "bold"), width=5)
-        self._dur_val_lbl.pack(side="left")
-        self._trans_dur.trace_add("write",
-            lambda *_: self._dur_val_lbl.config(
-                text=f"{self._trans_dur.get():.1f}s"))
-
-        # Quick buttons
-        for val in [0.3, 0.5, 1.0, 1.5, 2.0, 3.0]:
-            tk.Button(dur_f, text=f"{val}s", width=4, bg=CLR["panel"], fg=CLR["fg"],
-                      font=(UI_FONT, 9), cursor="hand2",
-                      command=lambda v=val: self._trans_dur.set(v)
-                      ).pack(side="left", padx=2)
-
-        # ── Options ───────────────────────────────────────────────────────
-        opt_f = tk.Frame(self)
-        opt_f.pack(fill="x", padx=20, pady=4)
-        tk.Label(opt_f, text=t("common.crf"), font=(UI_FONT, 10)).pack(side="left")
-        self._crf_var = tk.StringVar(value="18")
-        tk.Entry(opt_f, textvariable=self._crf_var, width=4, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-        self._audio_xfade = tk.BooleanVar(value=True)
-        tk.Checkbutton(opt_f, text=t("transitions.audio_xfade_checkbox"),
-                       variable=self._audio_xfade,
-                       font=(UI_FONT, 10)).pack(side="left", padx=20)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
-                  relief="flat", font=(UI_FONT, 9)).pack(side="left")
-
-        # ── Buttons ───────────────────────────────────────────────────────
-        bf = tk.Frame(self)
-        bf.pack(pady=8)
-        tk.Button(bf, text=t("transitions.preview_button"), bg=CLR["accent"], fg="white",
-                  width=22, font=(UI_FONT, 10), cursor="hand2",
-                  command=self._preview).pack(side="left", padx=8)
-        self._btn_run = tk.Button(
-            bf, text=t("transitions.render_button"), font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white", height=2, width=26,
-            cursor="hand2", command=self._render)
-        self._btn_run.pack(side="left", padx=8)
-
-        # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.a_row.path, "transition"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🎬  RENDER TRANSITION", font=(UI_FONT, 12, "bold"),
+                                    bg=CLR["green"], fg="white", width=24, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
+        self._family_changed()
 
-    # ── Helpers ────────────────────────────────────────────────────────
-    def _has_audio(self, path):
-        """Return True if the file has at least one audio stream."""
-        if not path:
-            return False
-        try:
-            ffprobe = get_binary_path("ffprobe.exe")
-            r = subprocess.run(
-                [ffprobe, "-v", "error", "-select_streams", "a",
-                 "-show_entries", "stream=codec_type",
-                 "-of", "csv=p=0", path],
-                capture_output=True, text=True,
-                creationflags=CREATE_NO_WINDOW)
-            return bool(r.stdout.strip())
-        except Exception:
-            return False
+    def _family_changed(self):
+        self.trans_list.delete(0, "end")
+        for _key, label in FAMILIES[self.family_var.get()]:
+            self.trans_list.insert("end", label)
+        self.trans_list.selection_set(0)
 
-    # ── Callbacks ──────────────────────────────────────────────────────
-    def _browse(self, which):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"),
-                       ("All", t("ducker.item_2"))])
-        if not p:
-            return
-        if which == "a":
-            self.file_a = p
-            self._src_a_var.set(p)
-            self.dur_a = get_video_duration(p)
-            self._dur_a_lbl.config(text=f"{self.dur_a:.1f}s")
-        else:
-            self.file_b = p
-            self._src_b_var.set(p)
-            self.dur_b = get_video_duration(p)
-            self._dur_b_lbl.config(text=f"{self.dur_b:.1f}s")
+    def _transition(self) -> str:
+        items = FAMILIES[self.family_var.get()]
+        sel = self.trans_list.curselection()
+        return items[sel[0] if sel else 0][0]
 
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4")])
-        if p:
-            self._out_var.set(p)
+    def _settings(self):
+        a, b = self.a_row.path, self.b_row.path
+        for path, what in ((a, "First clip"), (b, "Second clip")):
+            if not path or not os.path.isfile(path):
+                raise ValueError(f"{what}: choose a video file.")
+        T = common.number(self.dur_var.get(), "Length", 0.04, 30)
+        clips = [xf.Clip.from_info(ff.probe(a)), xf.Clip.from_info(ff.probe(b))]
+        problem = xf.validate(clips, T, self.freeze_var.get())
+        if problem:
+            raise ValueError(problem)
+        curve = next((k for k, v in CURVES.items() if v == self.curve_var.get()), "tri")
+        return clips, T, curve
 
-    def _build_cmd(self, out):
-        ffmpeg = get_binary_path("ffmpeg")
-        trans = self._trans_var.get()
-        dur = self._trans_dur.get()
-        crf = self._crf_var.get()
-
-        # xfade offset = duration of clip A minus transition duration
-        offset = max(0.0, self.dur_a - dur)
-
-        fc_parts = [
-            f"[0:v][1:v]xfade=transition={trans}:duration={dur}:offset={offset}[vout]"
-        ]
-
-        maps = ["-map", "[vout]"]
-
-        if self._audio_xfade.get():
-            # Only add audio crossfade if both clips have audio streams
-            has_audio_a = self._has_audio(self.file_a)
-            has_audio_b = self._has_audio(self.file_b)
-            if has_audio_a and has_audio_b:
-                fc_parts.append(
-                    f"[0:a][1:a]acrossfade=d={dur}[aout]"
-                )
-                maps += ["-map", "[aout]"]
-
-        cmd = [ffmpeg, "-i", self.file_a, "-i", self.file_b,
-               "-filter_complex", ";".join(fc_parts)]
-        cmd += maps
-        cmd += ["-c:v", "libx264", "-crf", crf, "-preset", "fast"]
-        if self._audio_xfade.get():
-            cmd += ["-c:a", "aac", "-b:a", "192k"]
-        else:
-            cmd += ["-an"]
-        cmd += ["-movflags", "+faststart", out, "-y"]
-        return cmd
-
-    def _validate(self):
-        if not self.file_a:
-            messagebox.showwarning(t("transitions.missing_title"), t("transitions.missing_clip_a"))
-            return False
-        if not self.file_b:
-            messagebox.showwarning(t("transitions.missing_title"), t("transitions.missing_clip_b"))
-            return False
-        dur = self._trans_dur.get()
-        if dur >= self.dur_a or dur >= self.dur_b:
-            messagebox.showerror(t("transitions.too_long_title"), t("transitions.too_long_message"))
-            return False
-        return True
-
+    # ── Preview: only the seconds around the cut, small and fast ───────
     def _preview(self):
-        if not self._validate():
-            return
-        tmp = os.path.join(tempfile.gettempdir(), "_xfpro_trans_preview.mp4")
         try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except Exception:
-            pass
-        cmd = self._build_cmd(tmp)
-        self.log(self.console, f"Building preview: {self._trans_var.get()} ({self._trans_dur.get():.1f}s)…")
+            clips, T, curve = self._settings()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        if self._preview_dir:
+            shutil.rmtree(self._preview_dir, ignore_errors=True)
+        self._preview_dir = tmp = tempfile.mkdtemp(prefix="wme_transition_")
+        trans, freeze, audio = self._transition(), self.freeze_var.get(), self.audio_var.get()
+        self.btn_preview.config(state="disabled", text="Making the preview…")
 
-        def _done(rc):
-            if rc == 0:
-                if self.preview_proc:
-                    try:
-                        self.preview_proc.terminate()
-                    except Exception:
-                        pass
-                self.preview_proc = launch_preview(tmp)
-            else:
-                self.log(self.console, t("log.transitions.preview_build_failed"))
+        def make():
+            a, b = clips
+            ctx_len = T + 1.5
+            parts = []
+            for i, (c, start) in enumerate(((a, max(0.0, a.duration - ctx_len)), (b, 0.0))):
+                piece = os.path.join(tmp, f"{i}.mp4")
+                res = ff.run([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-ss", f"{start:.3f}",
+                              "-t", f"{ctx_len:.3f}", "-i", c.path, "-vf", "scale=-2:360", "-c:v", "libx264",
+                              "-preset", "ultrafast", "-crf", "26", "-c:a", "aac", piece])
+                if res.returncode != 0:
+                    raise RuntimeError("\n".join(res.log_tail[-4:]))
+                parts.append(xf.Clip.from_info(ff.probe(piece)))
+            out = os.path.join(tmp, "preview.mp4")
+            from core import encoders as enc
+            venc = enc.video("h264", "low", speed="fastest", hw="off", container="mp4")
+            argv, _secs = xf.build_command(parts, out, T=T, transitions=[trans], freeze=freeze, audio_mode=audio,
+                                           audio_curve=curve, venc=venc)
+            res = ff.run(argv)
+            if res.returncode != 0:
+                raise RuntimeError("\n".join(res.log_tail[-4:]))
+            return out
 
-        self.run_ffmpeg(cmd, self.console, on_done=_done)
+        def done(path):
+            self.btn_preview.config(state="normal", text="▶  Preview the cut")
+            launch_preview(path)
 
+        def failed(exc):
+            self.btn_preview.config(state="normal", text="▶  Preview the cut")
+            messagebox.showerror(t("common.error"), f"The preview could not be made:\n{exc}", parent=self)
+
+        ui.run_in_thread(make, on_done=done, on_error=failed, name="TransitionPreview")
+
+    def destroy(self):
+        if self._preview_dir:
+            shutil.rmtree(self._preview_dir, ignore_errors=True)
+        super().destroy()
+
+    # ── Render ────────────────────────────────────────────────────────
     def _render(self):
-        if not self._validate():
+        try:
+            clips, T, curve = self._settings()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        out = self._out_var.get().strip()
-        if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
+        out = common.output_for(self, self.out_row, clips[0].path, "transition", inputs=[clips[1].path])
         if not out:
             return
-        self._out_var.set(out)
-
-        cmd = self._build_cmd(out)
-        trans = self._trans_var.get()
-        dur = self._trans_dur.get()
-        self.log(self.console, f"Rendering: {trans} ({dur:.1f}s)")
-
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label=t("transitions.render_button"))
+        venc = self.encoder.video_encode(common.container_of(out))
+        argv, secs = xf.build_command(clips, out, T=T, transitions=[self._transition()],
+                                      freeze=self.freeze_var.get(), audio_mode=self.audio_var.get(),
+                                      audio_curve=curve, venc=venc)
+        self.log(self.console, f"{self._transition()} · {T:g} s · {ff.format_time(secs)} total")
+        self.run_ffmpeg(argv, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
+                        btn_label="🎬  RENDER TRANSITION", duration=secs, output=out,
+                        inputs=[c.path for c in clips], name="Transition Studio")

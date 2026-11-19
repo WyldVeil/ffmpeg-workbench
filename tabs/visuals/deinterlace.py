@@ -1,243 +1,139 @@
 """
-tab_deinterlace.py  ─  Deinterlace
-Fix interlaced content from broadcast TV, VHS captures, camcorders.
-Supports Yadif (fast), BWDIF (best quality), and frame-doubling for
-buttery-smooth output from 50i/60i sources.
+tabs/visuals/deinterlace.py  -  Deinterlace
+
+Turn interlaced video (TV, camcorder, DVD) into clean progressive frames:
+
+* Smart - finds the frames that are actually interlaced (idet) and fixes
+  only those; progressive frames pass through untouched.  Recommended.
+* Every frame - deinterlace everything (for files with wrong flags).
+* Double rate - one frame per field: 25i -> 50p / 29.97i -> 59.94p, the
+  smoothest motion, like the original broadcast.
+* Undo telecine - film transferred to 29.97 fps (3:2 pulldown) back to its
+  original 23.976 progressive frames.
+
+The field order is read from the file; it can be forced when the file lies.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
-import re
+from tkinter import ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+
+MODES = {"smart": "Smart - only frames that are interlaced (recommended)", "all": "Every frame",
+         "double": "Double frame rate (smoothest motion)", "ivtc": "Undo telecine (film at 29.97 → 23.976)"}
+ENGINES = {"bwdif": "BWDIF (best)", "yadif": "YADIF (classic)", "w3fdif": "W3FDIF (BBC)",
+           "estdif": "ESTDIF (edge-directed)"}
+ORDERS = {"auto": "From the file", "tff": "Top field first", "bff": "Bottom field first"}
 
 
-ALGORITHMS = {
-    t("deinterlace.bwdif_best_quality_recommended"): {
-        "filter":  "bwdif",
-        "desc":    ("Bob Weaver Deinterlacing Filter. Motion-adaptive, edge-aware. "
-                    "The gold standard. Slightly slower than yadif."),
-    },
-    "Yadif  (fast, good quality)": {
-        "filter":  "yadif",
-        "desc":    ("Yet Another DeInterlacing Filter. Excellent balance of speed "
-                    "and quality. The FFmpeg default."),
-    },
-    "Yadif 2× (frame-doubling)": {
-        "filter":  "yadif=mode=1",
-        "desc":    ("Outputs EVERY field as a full frame. 50i → 100fps, 60i → 120fps. "
-                    "Buttery smooth motion. Large output files."),
-    },
-    "BWDIF 2× (frame-doubling, best)": {
-        "filter":  "bwdif=mode=1",
-        "desc":    "Same as BWDIF but doubles frame rate. Best quality + smooth motion.",
-    },
-    "Decomb  (smart, only deinterlaces when needed)": {
-        "filter":  "yadif=mode=0:parity=-1:deint=1",
-        "desc":    ("Analyses each frame and only deinterlaces combed frames. "
-                    "Good for hybrid progressive/interlaced content."),
-    },
-}
-
-SOURCE_TYPES = {
-    "Auto-detect":           "parity=-1",
-    t("deinterlace.top_field_first_tff"): "parity=0",
-    t("deinterlace.bottom_field_first_bff"): "parity=1",
-}
+def deinterlace_chain(mode: str, engine: str = "bwdif", order: str = "auto") -> str:
+    parts = [] if order == "auto" else [f"setfield={order}"]
+    if mode == "ivtc":
+        parts += ["fieldmatch=order=" + ("auto" if order == "auto" else order[:3]),
+                  "yadif=deint=interlaced", "decimate"]
+        return ",".join(parts)
+    rate = "send_field" if mode == "double" else "send_frame"
+    deint = "interlaced" if mode == "smart" else "all"
+    if mode == "smart":
+        parts.append("idet")
+    if engine == "w3fdif":
+        parts.append(f"w3fdif=filter=complex:mode={'field' if mode == 'double' else 'frame'}:deint={deint}")
+    elif engine == "estdif":
+        parts.append(f"estdif=mode={'field' if mode == 'double' else 'frame'}:deint={deint}")
+    else:
+        parts.append(f"{engine}=mode={rate}:deint={deint}")
+    return ",".join(p for p in parts if p)
 
 
 class DeinterlaceTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path    = ""
-        self.preview_proc = None
+        self.src_var = tk.StringVar()
+        self._info = None
+        self._job = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="📺  " + t("tab.deinterlace"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("deinterlace.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.deinterlace"), "Remove the comb lines from interlaced video.", icon="〰")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
+        self.info_lbl.pack(fill="x", padx=20)
+        self.compare = CompareView(body, 400, 225, after_label="Deinterlaced")
+        self.compare.pack(pady=4)
+        opt = tk.LabelFrame(body, text="  Deinterlace  ", padx=12, pady=8)
+        opt.pack(fill="x", padx=20, pady=4)
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=12)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=60, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
+        def row(r, label, var, values, width):
+            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+            cb = ttk.Combobox(opt, textvariable=var, values=values, state="readonly", width=width)
+            cb.grid(row=r, column=1, sticky="w")
+            cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
 
-        # ── Algorithm picker ─────────────────────────────────────────────
-        algo_lf = tk.LabelFrame(self, text=f"  {t('deinterlace.algorithm_section')}  ",
-                                padx=16, pady=12)
-        algo_lf.pack(fill="x", padx=20, pady=6)
-
-        self.algo_var = tk.StringVar(value=list(ALGORITHMS.keys())[0])
-        for name in ALGORITHMS:
-            rb = tk.Radiobutton(algo_lf, text=name, variable=self.algo_var,
-                                value=name, font=(UI_FONT, 10),
-                                command=self._on_algo_change)
-            rb.pack(anchor="w", pady=1)
-
-        self.algo_desc_lbl = tk.Label(algo_lf, text="", fg=CLR["accent"],
-                                       font=(UI_FONT, 9), wraplength=700,
-                                       justify="left")
-        self.algo_desc_lbl.pack(anchor="w", pady=(8, 0))
-
-        # ── Source field order ────────────────────────────────────────────
-        field_lf = tk.LabelFrame(self, text=f"  {t('deinterlace.field_order_section')}  ",
-                                  padx=16, pady=8)
-        field_lf.pack(fill="x", padx=20, pady=4)
-
-        field_row = tk.Frame(field_lf); field_row.pack(fill="x")
-        self.field_var = tk.StringVar(value="Auto-detect")
-        for label in SOURCE_TYPES:
-            tk.Radiobutton(field_row, text=label, variable=self.field_var,
-                           value=label).pack(side="left", padx=16)
-        tk.Label(field_lf,
-                 text=t("deinterlace.field_order_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w", pady=2)
-
-        # ── Output FPS option ─────────────────────────────────────────────
-        fps_lf = tk.LabelFrame(self, text=t("section.output_options"), padx=16, pady=8)
-        fps_lf.pack(fill="x", padx=20, pady=4)
-
-        fps_row = tk.Frame(fps_lf); fps_row.pack(fill="x")
-        tk.Label(fps_row, text=t("deinterlace.output_fps_label")).pack(side="left")
-        self.fps_var = tk.StringVar(value="Source")
-        ttk.Combobox(fps_row, textvariable=self.fps_var,
-                     values=["Source", "23.976", "24", "25", "29.97", "30", "50", "60"],
-                     state="normal", width=10).pack(side="left", padx=6)
-        tk.Label(fps_row, text=t("deinterlace.output_fps_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-
-        # ── Encode settings ───────────────────────────────────────────────
-        enc_f = tk.Frame(self); enc_f.pack(padx=22, pady=4, fill="x")
-        tk.Label(enc_f, text=t("common.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="16")  # slightly lower - deinterlacing loses some quality
-        tk.Entry(enc_f, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Label(enc_f, text=t("rotate_flip.preset")).pack(side="left")
-        self.preset_var = tk.StringVar(value="medium")
-        ttk.Combobox(enc_f, textvariable=self.preset_var,
-                     values=["ultrafast","fast","medium","slow"],
-                     state="readonly", width=10).pack(side="left", padx=4)
-        tk.Label(enc_f, text=t("webm_maker.pixel_format")).pack(side="left", padx=(12, 0))
-        self.pixfmt_var = tk.StringVar(value="yuv420p")
-        ttk.Combobox(enc_f, textvariable=self.pixfmt_var,
-                     values=["yuv420p", "yuv422p"],
-                     state="readonly", width=10).pack(side="left", padx=4)
-
-        # Filter display
-        self.filter_lbl = tk.Label(self, text="", fg=CLR["fgdim"],
-                                    font=(MONO_FONT, 9))
-        self.filter_lbl.pack(anchor="w", padx=22)
-
-        # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self); of.pack(pady=6)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=62, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        btn_row = tk.Frame(self); btn_row.pack(pady=8)
-        tk.Button(btn_row, text=t("rotate_flip.preview_button"), bg=CLR["accent"], fg="white",
-                  width=14, command=self._preview).pack(side="left", padx=8)
-        self.btn_render = tk.Button(
-            btn_row, text=t("deinterlace.apply_button"),
-            font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-            height=2, width=22, command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
-        self.console, csb = self.make_console(cf, height=6)
+        self.mode_var = tk.StringVar(value=MODES["smart"])
+        row(0, "Mode:", self.mode_var, list(MODES.values()), 46)
+        self.engine_var = tk.StringVar(value=ENGINES["bwdif"])
+        row(1, "Method:", self.engine_var, list(ENGINES.values()), 24)
+        self.order_var = tk.StringVar(value=ORDERS["auto"])
+        row(2, "Field order:", self.order_var, list(ORDERS.values()), 24)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "progressive"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="〰  DEINTERLACE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-        self._on_algo_change()
+    def _keys(self):
+        mode = next((k for k, v in MODES.items() if v == self.mode_var.get()), "smart")
+        engine = next((k for k, v in ENGINES.items() if v == self.engine_var.get()), "bwdif")
+        order = next((k for k, v in ORDERS.items() if v == self.order_var.get()), "auto")
+        return mode, engine, order
 
-    def _on_algo_change(self):
-        info = ALGORITHMS.get(self.algo_var.get(), {})
-        self.algo_desc_lbl.config(text=info.get("desc", ""))
-        self._update_filter_lbl()
+    def _chain(self):
+        return deinterlace_chain(*self._keys())
 
-    def _build_filter(self):
-        info   = ALGORITHMS[self.algo_var.get()]
-        base   = info["filter"]
-        parity = SOURCE_TYPES[self.field_var.get()]
+    def _source_changed(self, path):
+        self._info = info = ff.try_probe(path)
+        if info is not None and info.has_video:
+            fo = info.video.field_order or "unknown"
+            label = {"progressive": "progressive", "tt": "interlaced, top field first",
+                     "bb": "interlaced, bottom field first", "tb": "interlaced (top coded first)",
+                     "bt": "interlaced (bottom coded first)"}.get(fo, fo)
+            self.info_lbl.config(text=f"{info.video.width}×{info.video.height} · {info.video.fps:.3f} fps · "
+                                      f"the file says: {label}")
+        self.compare.load(path)
+        self._changed()
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "progressive"))
 
-        # Inject parity unless already parameterised
-        if "=" in base:
-            # e.g. yadif=mode=0:parity=-1:deint=1 - replace parity
-            base = re.sub(r"parity=[^:)]+", parity, base)
-        else:
-            base = f"{base}={parity}"
-
-        fps = self.fps_var.get()
-        if fps not in ("Source", "0", ""):
-            return f"{base},fps={fps}"
-        return base
-
-    def _update_filter_lbl(self):
-        self.filter_lbl.config(text=f"Filter:  {self._build_filter()}")
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.ts *.mpg *.vob"),
-                       ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            base = os.path.splitext(p)[0]
-            self.out_var.set(base + "_deinterlaced.mp4")
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                         filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
-        if p: self.out_var.set(p)
-
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("deinterlace.no_file_title"), t("deinterlace.no_file_message"))
-            return
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
-        ffplay = get_binary_path("ffplay.exe")
-        vf = self._build_filter()
-        cmd = [ffplay, "-i", self.file_path, "-vf", vf,
-               "-window_title", t("deinterlace.deinterlace_preview"), "-x", "800", "-autoexit"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+    def _changed(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+        self._job = self.after(250, lambda: (setattr(self, "_job", None), self.compare.set_filter(self._chain())))
 
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        out = self.out_var.get().strip()
+        out = common.output_for(self, self.out_row, src, "progressive")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        vf = self._build_filter()
-        cmd = [ffmpeg, "-i", self.file_path,
-               "-vf", vf,
-               "-c:v", "libx264", "-crf", self.crf_var.get(),
-               "-preset", self.preset_var.get(),
-               "-pix_fmt", self.pixfmt_var.get(),
-               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-        self.log(self.console, f"Algorithm: {self.algo_var.get()}")
-        self.log(self.console, f"Filter:    {vf}")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label="📺  DEINTERLACE")
+            return
+        self.log(self.console, self._chain())
+        common.render(self, src=src, info=info, out=out, chain=self._chain(), encoder=self.encoder,
+                      console=self.console, btn=self.btn_render, btn_label="〰  DEINTERLACE", name="Deinterlace")

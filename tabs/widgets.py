@@ -69,6 +69,7 @@ class FramePreview(tk.Frame):
         self._vf = ""                               # optional preview filter
         self._keep_time = False
         self._gen = 0                               # bumps on every load()
+        self.after_draw: Optional[Callable[[], None]] = None   # called after each new frame
         self.canvas = tk.Canvas(self, width=width, height=height, bg="#000000",
                                 highlightthickness=1, highlightbackground=clr["border"],
                                 cursor="hand2" if on_click else "")
@@ -183,6 +184,15 @@ class FramePreview(tk.Frame):
         self._shown_t = at
         if self._time_lbl is not None:
             self._time_lbl.config(text=ff.format_time(at))
+        if self.after_draw is not None:
+            self.after_draw()
+
+    def image_box(self) -> Optional[tuple]:
+        """(x0, y0, width, height) of the frame on the canvas, None before one is shown."""
+        if self._photo is None:
+            return None
+        w, h = self._photo.width(), self._photo.height()
+        return (self._pw - w) // 2, (self._ph - h) // 2, w, h
 
 
 # ─────────────────────────────────────────────────────────────────────────────

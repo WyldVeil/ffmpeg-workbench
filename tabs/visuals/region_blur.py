@@ -1,328 +1,314 @@
 """
-tab_regionblur.py  ─  Privacy / Region Blur
-Blur one or more rectangular regions permanently into a video.
-Use cases: blur faces, license plates, screens, sensitive documents.
+tabs/visuals/region_blur.py  -  Privacy Blur
 
-Multiple regions supported. Each region has its own:
-  • Position (x, y) and size (w, h)
-  • Blur strength
-  • Time range (always or start–end seconds)
-  • Blur type: Gaussian, Mosaic/Pixelate, or Black box
+Hide faces, number plates, names or screens: drag rectangles on the frame,
+choose blur, pixelate or a solid box for each, and when it applies (from /
+to, mm:ss or seconds).  Regions are stored relative to the frame, so they fit
+any resolution; any number of regions of any kind can be combined.
 """
+from __future__ import annotations
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from core import dialogs
-import subprocess
-import os
-import json
+from dataclasses import dataclass
+from tkinter import messagebox, ttk
+from typing import Optional
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import ffmpeg as ff
 from core.i18n import t
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
-
-BLUR_TYPES = {
-    t("region_blur.gaussian_smooth_blur"):   "gaussian",
-    t("region_blur.mosaic_pixelate"):         "mosaic",
-    t("region_blur.black_box_solid_fill"):    "black",
-    t("region_blur.white_box"):                 "white",
+KINDS = {"blur": "Blur", "pixelate": "Pixelate", "box": "Solid black box"}
+PRESETS = {   # name: (x, y, w, h) as fractions of the frame
+    "Face (centre)": (0.38, 0.18, 0.24, 0.40), "Number plate (lower centre)": (0.40, 0.70, 0.20, 0.08),
+    "Bottom strip (names, captions)": (0.0, 0.82, 1.0, 0.18), "Top-left corner": (0.0, 0.0, 0.25, 0.18),
+    "Top-right corner": (0.75, 0.0, 0.25, 0.18), "Whole frame": (0.0, 0.0, 1.0, 1.0),
 }
+PW, PH = 480, 270
+
+
+@dataclass
+class Region:
+    x: float
+    y: float
+    w: float
+    h: float
+    kind: str = "blur"
+    strength: float = 0.6
+    start: float = 0.0
+    end: Optional[float] = None
+
+    def pixels(self, width: int, height: int) -> tuple:
+        x = min(max(0, int(self.x * width) // 2 * 2), width - 4)
+        y = min(max(0, int(self.y * height) // 2 * 2), height - 4)
+        w = max(4, min(width - x, int(round(self.w * width / 2)) * 2))
+        h = max(4, min(height - y, int(round(self.h * height / 2)) * 2))
+        return x, y, w, h
+
+    def enable(self) -> str:
+        return f"between(t,{self.start:.3f},{self.end:.3f})" if self.end is not None else f"gte(t,{self.start:.3f})"
+
+    def label(self) -> str:
+        span = f"{ff.format_time(self.start)} → {ff.format_time(self.end) if self.end is not None else 'end'}"
+        return f"{KINDS[self.kind]:<16} {span}   at {self.x * 100:.0f}%,{self.y * 100:.0f}%  " \
+               f"{self.w * 100:.0f}×{self.h * 100:.0f}%"
+
+
+def blur_graph(regions, width: int, height: int, src: str = "[0:v]", out: str = "[v]") -> str:
+    """filter_complex applying every region in order."""
+    soft = [r for r in regions if r.kind != "box"]
+    parts = []
+    cur = src
+    if soft:
+        parts.append(f"{src}split={len(soft) + 1}[base]" + "".join(f"[c{i}]" for i in range(len(soft))))
+        cur = "[base]"
+    for i, r in enumerate(soft):
+        x, y, w, h = r.pixels(width, height)
+        if r.kind == "pixelate":
+            block = max(4, int(min(w, h) * (0.04 + r.strength * 0.16)))
+            fx = f"scale={max(1, w // block)}:{max(1, h // block)}:flags=area,scale={w}:{h}:flags=neighbor"
+        else:
+            fx = f"gblur=sigma={max(2.0, r.strength * min(w, h) / 5):.1f}:steps=3"
+        parts.append(f"[c{i}]crop={w}:{h}:{x}:{y},{fx}[e{i}]")
+        parts.append(f"{cur}[e{i}]overlay={x}:{y}:enable='{r.enable()}'[o{i}]")
+        cur = f"[o{i}]"
+    for j, r in enumerate(x for x in regions if x.kind == "box"):
+        x, y, w, h = r.pixels(width, height)
+        parts.append(f"{cur}drawbox=x={x}:y={y}:w={w}:h={h}:color=black@1:t=fill:enable='{r.enable()}'[d{j}]")
+        cur = f"[d{j}]"
+    parts.append(f"{cur}null{out}")
+    return ";".join(parts)
 
 
 class RegionBlurTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.file_path = ""
-        self.preview_proc = None
-        self.regions = []   # list of region dicts
+        self.src_var = tk.StringVar()
+        self._info = None
+        self.regions: list[Region] = []
+        self._drag = None
+        self._job = None
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
-        tk.Label(hdr_inner, text="🔲  " + t("tab.privacy_blur"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("region_blur.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        self.make_header(self, t("tab.privacy_blur"), "Hide faces, plates, names or screens.", icon="🕶")
+        body = scroll_body(self)
+        self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
+        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        top = tk.Frame(body)
+        top.pack(fill="x", padx=20, pady=4)
+        left = tk.Frame(top)
+        left.pack(side="left")
+        self.preview = FramePreview(left, PW, PH)
+        self.preview.pack()
+        self.preview.after_draw = self._draw_regions
+        c = self.preview.canvas
+        c.config(cursor="crosshair")
+        c.bind("<ButtonPress-1>", self._press)
+        c.bind("<B1-Motion>", self._move)
+        c.bind("<ButtonRelease-1>", self._release)
+        self.pos_var = tk.DoubleVar(value=0)
+        self.slider = ttk.Scale(left, from_=0, to=1, variable=self.pos_var, length=PW,
+                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider.pack(fill="x")
+        self.result_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(left, text="Show the result in the preview", variable=self.result_var,
+                       command=self._refresh_preview).pack(anchor="w")
+        tk.Label(left, text="Drag on the picture to add a region.", fg=CLR["fgdim"],
+                 font=(UI_FONT, 8)).pack(anchor="w")
 
-        # Source
-        sf = tk.Frame(self); sf.pack(pady=10)
-        tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
-        self.dim_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
-        self.dim_lbl.pack(side="left", padx=8)
+        right = tk.Frame(top)
+        right.pack(side="left", fill="both", expand=True, padx=(12, 0))
+        tk.Label(right, text="Regions", font=(UI_FONT, 10, "bold")).pack(anchor="w")
+        self.listbox = tk.Listbox(right, height=7, font=(MONO_FONT, 9), exportselection=False)
+        self.listbox.pack(fill="both", expand=True)
+        self.listbox.bind("<<ListboxSelect>>", lambda _e: self._select())
+        pr = tk.Frame(right)
+        pr.pack(fill="x", pady=2)
+        self.preset_var = tk.StringVar(value="Add a preset region…")
+        pb = ttk.Combobox(pr, textvariable=self.preset_var, values=list(PRESETS), state="readonly", width=28)
+        pb.pack(side="left")
+        pb.bind("<<ComboboxSelected>>", lambda _e: self._add_preset())
+        tk.Button(pr, text="Remove", relief="flat", command=self._remove).pack(side="left", padx=4)
+        ed = tk.LabelFrame(right, text="  Selected region  ", padx=8, pady=4)
+        ed.pack(fill="x", pady=4)
+        self.kind_var = tk.StringVar(value=KINDS["blur"])
+        ttk.Combobox(ed, textvariable=self.kind_var, values=list(KINDS.values()), state="readonly",
+                     width=16).grid(row=0, column=0, sticky="w")
+        self.strength_var = tk.DoubleVar(value=0.6)
+        tk.Scale(ed, variable=self.strength_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
+                 length=140, label="Strength").grid(row=0, column=1, sticky="w", padx=6)
+        self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
+        tf = tk.Frame(ed)
+        tf.grid(row=1, column=0, columnspan=2, sticky="w")
+        tk.Label(tf, text="From").pack(side="left")
+        tk.Entry(tf, textvariable=self.from_var, width=9).pack(side="left", padx=2)
+        tk.Label(tf, text="to").pack(side="left")
+        tk.Entry(tf, textvariable=self.to_var, width=9).pack(side="left", padx=2)
+        tk.Label(tf, text="(empty = to the end)", fg=CLR["fgdim"]).pack(side="left")
+        tk.Button(ed, text="Apply to region", relief="flat", command=self._apply_edit).grid(row=2, column=0,
+                                                                                            sticky="w", pady=2)
+        tk.Button(ed, text="From here", relief="flat",
+                  command=lambda: self.from_var.set(ff.format_time(float(self.pos_var.get())))).grid(
+            row=2, column=1, sticky="w")
 
-        # ── Regions list ──────────────────────────────────────────────────
-        list_lf = tk.LabelFrame(self, text=f"  {t('region_blur.blur_regions_section')}  ", padx=10, pady=8)
-        list_lf.pack(fill="both", expand=True, padx=16, pady=6)
-
-        # Column headers
-        h_row = tk.Frame(list_lf); h_row.pack(fill="x", pady=(0, 4))
-        for txt, w in [("#", 3), (t("region_blur.type_col"), 14), (t("region_blur.x_col"), 7), (t("region_blur.y_col"), 7),
-                        (t("region_blur.width_col"), 7), (t("region_blur.height_col"), 7), (t("region_blur.strength_col"), 9),
-                        (t("region_blur.from_col"), 8), (t("region_blur.to_col"), 8), (t("region_blur.always_col"), 7)]:
-            tk.Label(h_row, text=txt, width=w, font=(UI_FONT, 8, "bold"),
-                     anchor="w", fg=CLR["fgdim"]).pack(side="left", padx=2)
-
-        # Scrollable region rows
-        canvas = tk.Canvas(list_lf, height=200, highlightthickness=0)
-        sb = ttk.Scrollbar(list_lf, orient="vertical", command=canvas.yview)
-        self.rows_frame = tk.Frame(canvas)
-        canvas.create_window((0, 0), window=self.rows_frame, anchor="nw")
-        self.rows_frame.bind("<Configure>",
-                             lambda e: canvas.configure(
-                                 scrollregion=canvas.bbox("all")))
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-
-        # Buttons
-        btn_f = tk.Frame(self); btn_f.pack(pady=4)
-        tk.Button(btn_f, text=t("region_blur.add_region_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._add_region).pack(side="left", padx=6)
-        tk.Button(btn_f, text=t("region_blur.remove_last_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._remove_last).pack(side="left", padx=6)
-        tk.Button(btn_f, text=t("region_blur.fullwidth_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._add_fullwidth).pack(side="left", padx=6)
-        tk.Button(btn_f, text=t("region_blur.auto_detect_faces_hint"), bg=CLR["panel"],
-                  fg=CLR["fgdim"], font=(UI_FONT, 8),
-                  command=self._face_hint).pack(side="left", padx=6)
-
-        # Quick presets
-        preset_row = tk.Frame(self); preset_row.pack(pady=2)
-        tk.Label(preset_row, text=t("region_blur.quick_region_presets"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
-        for label, x, y, w, h in [
-            (t("region_blur.preset_top_left"), 0, 0, 200, 200),
-            (t("region_blur.preset_license_plate"), 0, -100, 300, 80),
-            (t("region_blur.preset_screen"), 100, 100, 600, 400),
-            (t("region_blur.preset_bottom_strip"), 0, -100, 1920, 100),
-        ]:
-            tk.Button(preset_row, text=label, bg=CLR["panel"], fg=CLR["fgdim"],
-                      font=(UI_FONT, 8),
-                      command=lambda x=x, y=y, w=w, h=h: self._add_preset_region(x,y,w,h)
-                      ).pack(side="left", padx=3)
-
-        # Options
-        opt_f = tk.Frame(self); opt_f.pack(pady=4)
-        tk.Label(opt_f, text=t("common.crf")).pack(side="left")
-        self.crf_var = tk.StringVar(value="18")
-        tk.Entry(opt_f, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
-        tk.Label(opt_f, text=t("rotate_flip.preset")).pack(side="left")
-        self.preset_var = tk.StringVar(value="fast")
-        ttk.Combobox(opt_f, textvariable=self.preset_var,
-                     values=["ultrafast","fast","medium","slow"],
-                     state="readonly", width=10).pack(side="left", padx=4)
-
-        # Output
-        of = tk.Frame(self); of.pack(pady=5)
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=8)
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
-
-        btn_row2 = tk.Frame(self); btn_row2.pack(pady=6)
-        tk.Button(btn_row2, text=t("rotate_flip.preview_button"), bg=CLR["accent"], fg="white",
-                  width=12, command=self._preview).pack(side="left", padx=8)
-        self.btn_render = tk.Button(
-            btn_row2, text=t("region_blur.apply_button"),
-            font=(UI_FONT, 12, "bold"), bg=CLR["red"], fg="white",
-            height=2, width=22, command=self._render)
-        self.btn_render.pack(side="left", padx=8)
-
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=16, pady=4)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
+        out_lf.pack(fill="x", padx=20, pady=6)
+        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        self.encoder.pack(anchor="w")
+        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
+                               suggest=lambda: self.suggest_output(self.src_row.path, "blurred"))
+        self.out_row.pack(fill="x", pady=(8, 0))
+        self.btn_render = tk.Button(body, text="🕶  APPLY BLUR", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
+                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render.pack(pady=8)
+        cf = tk.Frame(body)
+        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
-        # Seed one region
-        self._add_region()
+    # ── Source / preview ──────────────────────────────────────────────
+    def _source_changed(self, path):
+        self._info = info = ff.try_probe(path)
+        dur = info.duration if info else 0.0
+        self.slider.configure(to=max(dur, 0.01))
+        self.preview.load(path, dur, 0.0)
+        if not self.out_row.path:
+            self.out_row.set(self.suggest_output(path, "blurred"))
+        self._refresh_preview()
 
-    # ─────────────────────────────────────────────────────────────────────
-    def _add_region(self, x=100, y=100, w=200, h=200,
-                    blur_type="Gaussian (smooth blur)", strength=20,
-                    t_start="0", t_end="0", always=True):
-        idx = len(self.regions)
-        row = tk.Frame(self.rows_frame, relief="groove", bd=1)
-        row.pack(fill="x", pady=2)
+    def _size(self):
+        return common.even_size(self._info) if self._info and self._info.has_video else (1920, 1080)
 
-        type_var    = tk.StringVar(value=blur_type)
-        x_var       = tk.StringVar(value=str(x))
-        y_var       = tk.StringVar(value=str(y))
-        w_var       = tk.StringVar(value=str(w))
-        h_var       = tk.StringVar(value=str(h))
-        str_var     = tk.StringVar(value=str(strength))
-        ts_var      = tk.StringVar(value=t_start)
-        te_var      = tk.StringVar(value=t_end)
-        always_var  = tk.BooleanVar(value=always)
+    def _refresh_preview(self):
+        if self.result_var.get() and self.regions:
+            w, h = self._size()
+            self.preview.set_filter(blur_graph(self.regions, w, h, "[in]", ""), keep_time=True)
+        else:
+            self.preview.set_filter("", keep_time=False)
+        self._draw_regions()
 
-        tk.Label(row, text=str(idx+1), width=3).pack(side="left", padx=2)
-        ttk.Combobox(row, textvariable=type_var,
-                     values=list(BLUR_TYPES.keys()),
-                     state="readonly", width=22).pack(side="left", padx=2)
-        for var, w_ in [(x_var,6),(y_var,6),(w_var,6),(h_var,6),(str_var,7)]:
-            tk.Entry(row, textvariable=var, width=w_, relief="flat").pack(side="left", padx=2)
-        tk.Entry(row, textvariable=ts_var, width=7, relief="flat").pack(side="left", padx=2)
-        tk.Entry(row, textvariable=te_var, width=7, relief="flat").pack(side="left", padx=2)
-        tk.Checkbutton(row, variable=always_var).pack(side="left", padx=4)
-
-        self.regions.append({
-            "type": type_var, "x": x_var, "y": y_var,
-            "w": w_var, "h": h_var, "strength": str_var,
-            "t_start": ts_var, "t_end": te_var,
-            "always": always_var, "row": row,
-        })
-
-    def _add_preset_region(self, x, y, w, h):
-        self._add_region(x=x, y=y, w=w, h=h)
-
-    def _add_fullwidth(self):
-        self._add_region(x=0, y=50, w=1920, h=100,
-                         blur_type="Black box (solid fill)")
-
-    def _remove_last(self):
-        if self.regions:
-            r = self.regions.pop()
-            r["row"].destroy()
-
-    def _face_hint(self):
-        messagebox.showinfo(t("msg.face_detection_tip_title"), t("msg.face_detection_tip"))
-
-    def _browse(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
-        if p:
-            self.file_path = p
-            self.src_var.set(p)
-            base = os.path.splitext(p)[0]
-            self.out_var.set(base + "_censored.mp4")
-            # Try to read dimensions
-            self._probe_dims(p)
-
-    def _probe_dims(self, path):
-        ffprobe = get_binary_path("ffprobe.exe")
-        if not os.path.exists(ffprobe): return
-        r = subprocess.run([ffprobe, "-v", "error", "-show_entries",
-                    "stream=width,height", "-of", "json", path],
-                   capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-        try:
-            d = json.loads(r.stdout)
-            s = next(s for s in d["streams"] if s.get("width"))
-            self.dim_lbl.config(
-                text=f"{s['width']}×{s['height']}", fg=CLR["accent"])
-        except Exception:
-            pass
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                          filetypes=[("MP4", "*.mp4")])
-        if p: self.out_var.set(p)
-
-    def _build_filter(self):
-        """Build the FFmpeg filter_complex string for all regions."""
-        if not self.regions:
-            return None
-
-        parts = []
-
+    def _draw_regions(self):
+        c = self.preview.canvas
+        c.delete("region")
+        box = self.preview.image_box()
+        if box is None:
+            return
+        x0, y0, bw, bh = box
+        sel = self._selected()
         for i, r in enumerate(self.regions):
-            try:
-                x       = int(r["x"].get())
-                y       = int(r["y"].get())
-                w       = int(r["w"].get())
-                h       = int(r["h"].get())
-                strength= int(r["strength"].get())
-                blur_t  = BLUR_TYPES[r["type"].get()]
-                always  = r["always"].get()
-                ts      = r["t_start"].get()
-                te      = r["t_end"].get()
-            except (ValueError, KeyError):
-                continue
+            colour = CLR["accent"] if i == sel else CLR["orange"]
+            c.create_rectangle(x0 + r.x * bw, y0 + r.y * bh, x0 + (r.x + r.w) * bw, y0 + (r.y + r.h) * bh,
+                               outline=colour, width=2, dash=() if i == sel else (4, 2), tags="region")
+            c.create_text(x0 + r.x * bw + 4, y0 + r.y * bh + 2, text=str(i + 1), anchor="nw", fill=colour,
+                          font=(UI_FONT, 9, "bold"), tags="region")
+        if self._drag and self._drag.get("rect"):
+            a, b, cc, d = self._drag["rect"]
+            c.create_rectangle(a, b, cc, d, outline="white", width=1, dash=(3, 3), tags="region")
 
-            enable = "" if always else f":enable='between(t,{ts},{te})'"
-
-            if blur_t == "gaussian":
-                # crop region, boxblur it, overlay back
-                filt = (f"[v{i}]crop={w}:{h}:{x}:{y},"
-                        f"boxblur={strength}:{strength}[blurred{i}];"
-                        f"[v{i}][blurred{i}]overlay={x}:{y}{enable}[v{i+1}]")
-            elif blur_t == "mosaic":
-                scale_down = max(1, strength // 3)
-                filt = (f"[v{i}]crop={w}:{h}:{x}:{y},"
-                        f"scale=iw/{scale_down}:ih/{scale_down}:flags=neighbor,"
-                        f"scale={w}:{h}:flags=neighbor[blurred{i}];"
-                        f"[v{i}][blurred{i}]overlay={x}:{y}{enable}[v{i+1}]")
-            elif blur_t == "black":
-                filt = (f"[v{i}]drawbox={x}:{y}:{w}:{h}:black:fill{enable}[v{i+1}]")
-            else:  # white
-                filt = (f"[v{i}]drawbox={x}:{y}:{w}:{h}:white:fill{enable}[v{i+1}]")
-
-            parts.append(filt)
-
-        if not parts:
+    def _frac(self, ex, ey):
+        box = self.preview.image_box()
+        if box is None:
             return None
+        x0, y0, bw, bh = box
+        return min(1.0, max(0.0, (ex - x0) / bw)), min(1.0, max(0.0, (ey - y0) / bh))
 
-        # Chain: [0:v] → [v0], then each filter advances [vi] → [v{i+1}]
-        n = len([r for r in self.regions])
-        header = f"[0:v]copy[v0]"
-        chain  = ";".join(parts)
-        # The final output is [v{n}]
-        return header + ";" + chain, f"[v{n}]"
+    def _press(self, ev):
+        if self.preview.image_box() is not None:
+            self._drag = {"start": (ev.x, ev.y), "rect": None}
 
-    def _preview(self):
-        if not self.file_path:
-            messagebox.showwarning(t("region_blur.no_file_title"), t("region_blur.no_file_message"))
+    def _move(self, ev):
+        if self._drag:
+            sx, sy = self._drag["start"]
+            self._drag["rect"] = (min(sx, ev.x), min(sy, ev.y), max(sx, ev.x), max(sy, ev.y))
+            self._draw_regions()
+
+    def _release(self, ev):
+        drag, self._drag = self._drag, None
+        if not drag or not drag.get("rect"):
             return
-        result = self._build_filter()
-        if not result:
-            messagebox.showwarning(t("region_blur.no_regions_title"), t("region_blur.no_regions_message"))
+        a = self._frac(drag["rect"][0], drag["rect"][1])
+        b = self._frac(drag["rect"][2], drag["rect"][3])
+        if a and b and (b[0] - a[0]) > 0.01 and (b[1] - a[1]) > 0.01:
+            self._add(Region(a[0], a[1], b[0] - a[0], b[1] - a[1]))
+        self._draw_regions()
+
+    # ── Regions ───────────────────────────────────────────────────────
+    def _selected(self):
+        sel = self.listbox.curselection()
+        return sel[0] if sel else None
+
+    def _add(self, region):
+        region.kind = next((k for k, v in KINDS.items() if v == self.kind_var.get()), "blur")
+        region.strength = float(self.strength_var.get())
+        self.regions.append(region)
+        self._relist(len(self.regions) - 1)
+
+    def _add_preset(self):
+        frac = PRESETS.get(self.preset_var.get())
+        if frac:
+            self._add(Region(*frac))
+        self.preset_var.set("Add a preset region…")
+
+    def _remove(self):
+        i = self._selected()
+        if i is not None:
+            self.regions.pop(i)
+            self._relist(min(i, len(self.regions) - 1))
+
+    def _relist(self, select=None):
+        self.listbox.delete(0, "end")
+        for i, r in enumerate(self.regions):
+            self.listbox.insert("end", f"{i + 1}. {r.label()}")
+        if select is not None and select >= 0 and self.regions:
+            self.listbox.selection_set(select)
+            self._select()
+        self._refresh_preview()
+
+    def _select(self):
+        i = self._selected()
+        if i is None:
             return
-        fc, out_stream = result
+        r = self.regions[i]
+        self.kind_var.set(KINDS[r.kind])
+        self.strength_var.set(r.strength)
+        self.from_var.set(ff.format_time(r.start) if r.start else "0")
+        self.to_var.set(ff.format_time(r.end) if r.end is not None else "")
+        self._draw_regions()
 
-        if self.preview_proc:
-            try: self.preview_proc.terminate()
-            except Exception: pass
+    def _apply_edit(self):
+        i = self._selected()
+        if i is None:
+            return
+        try:
+            start = ff.parse_time(self.from_var.get() or "0")
+            end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else None
+            if end is not None and end <= start:
+                raise ValueError("'to' must be after 'from'.")
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return
+        r = self.regions[i]
+        r.kind = next((k for k, v in KINDS.items() if v == self.kind_var.get()), "blur")
+        r.strength, r.start, r.end = float(self.strength_var.get()), start, end
+        self._relist(i)
 
-        ffplay = get_binary_path("ffplay.exe")
-        cmd = [ffplay, "-i", self.file_path,
-               "-filter_complex", fc,
-               "-map", out_stream,
-               "-window_title", t("region_blur.region_blur_preview"),
-               "-x", "800", "-autoexit"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
-
+    # ── Render ────────────────────────────────────────────────────────
     def _render(self):
-        if not self.file_path:
-            messagebox.showwarning(t("common.warning"), t("common.no_input"))
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        if info is None:
             return
-        result = self._build_filter()
-        if not result:
-            messagebox.showwarning(t("region_blur.no_regions_title"), t("region_blur.no_regions_message"))
+        if not self.regions:
+            messagebox.showwarning(t("common.warning"), "Add at least one region (drag on the picture).",
+                                   parent=self)
             return
-        fc, out_stream = result
-
-        out = self.out_var.get().strip()
+        out = common.output_for(self, self.out_row, src, "blurred")
         if not out:
-            out = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                               filetypes=[("MP4", "*.mp4")])
-        if not out: return
-        self.out_var.set(out)
-
-        ffmpeg = get_binary_path("ffmpeg.exe")
-        cmd = [ffmpeg, "-i", self.file_path,
-               "-filter_complex", fc,
-               "-map", out_stream, "-map", "0:a?",
-               "-c:v", "libx264", "-crf", self.crf_var.get(),
-               "-preset", self.preset_var.get(),
-               "-c:a", "copy", "-movflags", "+faststart", out, "-y"]
-
-        self.log(self.console, f"Applying {len(self.regions)} blur region(s)…")
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("region_blur.apply_button"))
+            return
+        w, h = common.even_size(info)
+        graph = blur_graph(self.regions, w, h)
+        common.render(self, src=src, info=info, out=out, graph=graph, encoder=self.encoder, console=self.console,
+                      btn=self.btn_render, btn_label="🕶  APPLY BLUR", name="Privacy Blur")

@@ -19,16 +19,13 @@ effects overlay onto the existing video so no content is lost.
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import ttk, messagebox
 from core import dialogs
 import os
-import subprocess
 import threading
-import tempfile
-import math
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, CREATE_NO_WINDOW, get_video_duration, open_in_explorer,
+from tabs.base_tab import BaseTab, CLR, UI_FONT
+from core.hardware import (    get_binary_path,
 )
 from core.i18n import t
 from core import ffmpeg as ff
