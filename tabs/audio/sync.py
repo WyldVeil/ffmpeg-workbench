@@ -141,14 +141,14 @@ class AudioSyncTab(BaseTab):
                 # Delay audio: offset the audio input
                 cmd = [ffmpeg, "-i", self.file_path,
                        "-itsoffset", str(offset), "-i", self.file_path,
-                       "-map", t("sync.1_v_0"), "-map", t("sync.0_a_0"),
+                       "-map", "1:v:0", "-map", "0:a:0",
                        "-c", "copy", "-shortest", "-movflags", "+faststart", out, "-y"]
             else:
                 # Advance audio: offset the video
                 cmd = [ffmpeg,
                        "-itsoffset", str(-offset), "-i", self.file_path,
                        "-i", self.file_path,
-                       "-map", t("muter.0_v_0"), "-map", t("sync.1_a_0"),
+                       "-map", "0:v:0", "-map", "1:a:0",
                        "-c", "copy", "-shortest", "-movflags", "+faststart", out, "-y"]
         else:
             # adelay filter - positive ms only; advance done by trim

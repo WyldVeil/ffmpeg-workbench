@@ -317,7 +317,7 @@ class RegionBlurTab(BaseTab):
         ffmpeg = get_binary_path("ffmpeg.exe")
         cmd = [ffmpeg, "-i", self.file_path,
                "-filter_complex", fc,
-               "-map", out_stream, "-map", t("region_blur.0_a"),
+               "-map", out_stream, "-map", "0:a?",
                "-c:v", "libx264", "-crf", self.crf_var.get(),
                "-preset", self.preset_var.get(),
                "-c:a", "copy", "-movflags", "+faststart", out, "-y"]

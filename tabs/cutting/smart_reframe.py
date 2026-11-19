@@ -225,7 +225,7 @@ class SmartReframeTab(BaseTab):
         """Uses ffprobe to detect if the source video has a 10-bit or higher pixel format."""
         ffprobe = get_binary_path("ffprobe.exe")
         cmd = [
-            ffprobe, "-v", "error", "-select_streams", t("freeze_frame.v_0"),
+            ffprobe, "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=pix_fmt", "-of", "json", file_path
         ]
         try:

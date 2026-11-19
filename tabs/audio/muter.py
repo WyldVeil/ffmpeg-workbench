@@ -217,7 +217,7 @@ class MuterTab(BaseTab):
                   f"[muted][beep]amix=inputs=2:duration=first[aout]")
             cmd = [ffmpeg, "-i", self.file_path,
                    "-filter_complex", fc,
-                   "-map", t("muter.0_v_0"), "-map", "[aout]",
+                   "-map", "0:v:0", "-map", "[aout]",
                    "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
                    "-movflags", "+faststart", out, "-y"]
         else:

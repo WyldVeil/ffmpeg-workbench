@@ -172,7 +172,7 @@ class AudioReplacerTab(BaseTab):
                           f"[orig][new]amix=inputs=2:duration=first[aout]")
             cmd = [ffmpeg, "-i", self.video_path, "-i", self.audio_path,
                    "-filter_complex", mix_filter,
-                   "-map", t("muter.0_v_0"), "-map", "[aout]",
+                   "-map", "0:v:0", "-map", "[aout]",
                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                    "-movflags", "+faststart", out, "-y"]
 

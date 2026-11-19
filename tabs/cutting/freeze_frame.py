@@ -255,7 +255,7 @@ class FreezeFrameTab(BaseTab):
             # tpad filter: freeze at the specified frame
             # Use trim to split, then tpad to insert freeze
             fps_cmd = [get_binary_path("ffprobe"), "-v", "error",
-                       "-select_streams", t("freeze_frame.v_0"),
+                       "-select_streams", "v:0",
                        "-show_entries", "stream=r_frame_rate",
                        "-of", "csv=p=0", self.file_path]
             try:
