@@ -188,12 +188,20 @@ def _ar(out: str, members: list) -> None:
                 fh.write(b"\n")
 
 
-def build_deb(distro: str) -> str:
+_DEB_DATA = None
+
+
+def deb_data() -> tuple:
+    """(data.tar.xz path, md5sums text, installed bytes) - shared by the Debian and
+    Ubuntu packages; compressed with a multi-threaded xz when available."""
+    global _DEB_DATA
+    if _DEB_DATA is not None:
+        return _DEB_DATA
     tree = app_tree("linux-x64")
-    data_buf = io.BytesIO()
+    raw = os.path.join(ROOT, "build", "release-deb-data.tar")
     md5 = []
     size = 0
-    with tarfile.open(fileobj=data_buf, mode="w:xz", preset=6) as tf:
+    with tarfile.open(raw, mode="w") as tf:
         names = [f"opt/{PKG}/{rel}" for _src, rel in tree] + [p for _d, p, _m in system_files()]
         for d in _dirs_for(names):
             info = tarfile.TarInfo("./" + d)
@@ -208,6 +216,19 @@ def build_deb(distro: str) -> str:
             _add_bytes(tf, "./" + path, data, mode)
             md5.append(f"{hashlib.md5(data).hexdigest()}  {path}")
             size += len(data)
+    if shutil.which("xz"):
+        subprocess.run(["xz", "-T0", "-6", "-f", raw], check=True)
+    else:
+        import lzma
+        with open(raw, "rb") as src, lzma.open(raw + ".xz", "wb", preset=6) as dst:
+            shutil.copyfileobj(src, dst, 1 << 20)
+        os.remove(raw)
+    _DEB_DATA = (raw + ".xz", "\n".join(md5) + "\n", size)
+    return _DEB_DATA
+
+
+def build_deb(distro: str) -> str:
+    data_path, md5sums, size = deb_data()
     control = (f"Package: {PKG}\nVersion: {EPOCH}:{APP_VERSION}\nArchitecture: amd64\nMaintainer: {MAINTAINER}\n"
                f"Installed-Size: {size // 1024}\nDepends: python3 (>= 3.10), python3-tk\n"
                f"Recommends: python3-pip, espeak-ng, fluidsynth, xdg-utils\nSection: video\nPriority: optional\n"
@@ -216,10 +237,11 @@ def build_deb(distro: str) -> str:
     ctrl_buf = io.BytesIO()
     with tarfile.open(fileobj=ctrl_buf, mode="w:gz") as tf:
         _add_bytes(tf, "./control", control.encode())
-        _add_bytes(tf, "./md5sums", ("\n".join(md5) + "\n").encode())
+        _add_bytes(tf, "./md5sums", md5sums.encode())
+    with open(data_path, "rb") as fh:
+        data = fh.read()
     out = os.path.join(OUT, f"{PKG}_{APP_VERSION}_{distro}_amd64.deb")
-    _ar(out, [("debian-binary", b"2.0\n"), ("control.tar.gz", ctrl_buf.getvalue()),
-              ("data.tar.xz", data_buf.getvalue())])
+    _ar(out, [("debian-binary", b"2.0\n"), ("control.tar.gz", ctrl_buf.getvalue()), ("data.tar.xz", data)])
     return out
 
 
@@ -250,7 +272,8 @@ echo "Removed."
 def _tarball(distro: str, extras: dict, deps: str) -> str:
     prefix = f"{PKG}-{APP_VERSION}"
     out = os.path.join(OUT, f"{PKG}-{APP_VERSION}-{distro}.tar.gz")
-    with tarfile.open(out, "w:gz", compresslevel=6) as tf:
+    raw = out[:-3]
+    with tarfile.open(raw, "w") as tf:
         for src, rel in app_tree("linux-x64"):
             _add_file(tf, src, f"{prefix}/app/{rel}")
         for data, path, mode in system_files():
@@ -260,6 +283,13 @@ def _tarball(distro: str, extras: dict, deps: str) -> str:
         _add_bytes(tf, f"{prefix}/uninstall.sh", UNINSTALL_SH.format(pkg=PKG, app_id=APP_ID).encode(), 0o755)
         for name, text in extras.items():
             _add_bytes(tf, f"{prefix}/{name}", text.encode())
+    if shutil.which("pigz"):                    # multi-threaded gzip
+        subprocess.run(["pigz", "-6", "-f", raw], check=True)
+    else:
+        import gzip
+        with open(raw, "rb") as src, gzip.open(out, "wb", compresslevel=6) as dst:
+            shutil.copyfileobj(src, dst, 1 << 20)
+        os.remove(raw)
     return out
 
 
