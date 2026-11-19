@@ -36,10 +36,13 @@ if os.path.isdir(os.path.join(ROOT, "soundfonts")):
 
 # Bundled tools for THIS platform only, keeping the folder layout that
 # core/hardware.py searches (bin/<platform>/ffmpeg/bin, bin/<platform>).
+# They are added to COLLECT as an unanalysed Tree: PyInstaller 6 otherwise
+# "helpfully" resolves the bundled FFmpeg's libraries against the build
+# machine's system copies and drags hundreds of MB of duplicates in.
 bin_src = os.path.join(ROOT, "bin", PLAT)
 if not os.path.isdir(bin_src):
     raise SystemExit(f"{bin_src} is missing - run scripts/fetch_binaries.py --platform {PLAT}")
-datas.append((bin_src, os.path.join("bin", PLAT)))
+tools_tree = Tree(bin_src, prefix=os.path.join("bin", PLAT), typecode="DATA")
 
 datas += collect_data_files("tkinterdnd2")
 
@@ -78,6 +81,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
+    tools_tree,
     strip=False,
     upx=False,
     name=NAME,
