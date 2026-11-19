@@ -27,7 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence  # noqa: F401
 
 _IS_WIN = sys.platform.startswith("win")
 
@@ -288,21 +288,66 @@ def _system_font_dirs() -> list:
 
 _FONT_CACHE: dict = {}
 
-# Reasonable cross-platform stand-ins for commonly requested fonts.
+# Cross-platform stand-ins for commonly requested fonts.  The first entries
+# are metric-compatible system fonts (Liberation/DejaVu/Nimbus on Linux),
+# then bundled look-alikes.
 _ALIASES = {
-    "arial": ("Arial", "LiberationSans-Regular", "DejaVuSans", "Inter", "OpenSans"),
-    "arial bold": ("Arial Bold", "arialbd", "LiberationSans-Bold", "DejaVuSans-Bold", "Inter-Bold"),
-    "impact": ("Impact", "Anton", "BebasNeue", "LeagueGothic"),
-    "sans": ("Inter", "OpenSans", "DejaVuSans", "LiberationSans-Regular", "Arial"),
-    "sans bold": ("Inter-Bold", "OpenSans-Bold", "DejaVuSans-Bold", "Arial Bold"),
-    "mono": ("DejaVuSansMono", "LiberationMono-Regular", "Consolas", "Menlo"),
+    "arial": ("Arial", "Liberation Sans", "Arimo", "Nimbus Sans", "DejaVu Sans", "Inter"),
+    "arial bold": ("Arial Bold", "Liberation Sans:bold", "Arimo:bold", "DejaVu Sans:bold", "Inter-Bold"),
+    "helvetica": ("Helvetica", "Liberation Sans", "Nimbus Sans", "Arimo", "Inter"),
+    "verdana": ("Verdana", "DejaVu Sans", "Inter"),
+    "times new roman": ("Times New Roman", "Liberation Serif", "Tinos", "Nimbus Roman", "DejaVu Serif"),
+    "georgia": ("Georgia", "Gelasio", "Liberation Serif", "DejaVu Serif"),
+    "courier new": ("Courier New", "Liberation Mono", "Cousine", "Nimbus Mono PS", "DejaVu Sans Mono"),
+    "comic sans ms": ("Comic Sans MS", "Comic Neue", "Bangers"),
+    "impact": ("Impact", "Anton", "BebasNeue"),
+    "sans": ("Inter", "OpenSans", "DejaVu Sans", "Liberation Sans", "Arial"),
+    "sans bold": ("Inter-Bold", "OpenSans-Bold", "DejaVu Sans:bold", "Arial Bold"),
+    "mono": ("DejaVu Sans Mono", "Liberation Mono", "Consolas", "Menlo"),
 }
 
 
+def _norm(name: str) -> str:
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+def _fc_match(pattern: str) -> Optional[str]:
+    """fontconfig lookup that only accepts a REAL match for *pattern*
+    (fc-match otherwise returns a generic fallback for anything)."""
+    if _IS_WIN or not shutil.which("fc-match"):
+        return None
+    try:
+        r = subprocess.run(["fc-match", "-f", "%{file}\t%{family}\t%{fullname}", pattern],
+                           capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    parts = r.stdout.split("\t")
+    if len(parts) < 2 or not os.path.isfile(parts[0]):
+        return None
+    wanted = _norm(pattern.split(":")[0])
+    names = [_norm(x) for x in ",".join(parts[1:]).split(",")]
+    return parts[0] if any(wanted and (wanted in n or n in wanted) for n in names if n) else None
+
+
+def _system_file(name: str) -> Optional[str]:
+    wanted = _norm(name.split(":")[0]) + ("bold" if ":bold" in name else "")
+    for d in _system_font_dirs():
+        if not d or not os.path.isdir(d):
+            continue
+        for root, _dirs, files in os.walk(d):
+            for f in files:
+                stem, ext = os.path.splitext(f)
+                if ext.lower() in (".ttf", ".otf") and _norm(stem) in (wanted, wanted + "regular"):
+                    return os.path.join(root, f)
+    return None
+
+
 def find_font(name: str = "sans") -> Optional[str]:
-    """Return a font file for *name* (a bundled font name such as
-    ``"Montserrat-Bold"``, a family such as ``"Arial"``, an alias like
-    ``"sans bold"``, or a path).  Never returns a path that does not exist."""
+    """Return a font file for *name*: a bundled font (``"Montserrat-Bold"``),
+    a family (``"Arial"``), an alias (``"sans bold"``) or a path.  Tries the
+    exact font first (bundled, then system), then metric-compatible and
+    look-alike substitutes, then a bundled sans.  Never returns a path that
+    does not exist (None only if no font is available at all)."""
     if not name:
         name = "sans"
     if os.path.isfile(name):
@@ -310,45 +355,18 @@ def find_font(name: str = "sans") -> Optional[str]:
     key = name.lower().strip()
     if key in _FONT_CACHE:
         return _FONT_CACHE[key]
-    candidates = list(_ALIASES.get(key, ())) + [name]
-    bundled = {k.lower(): v for k, v in bundled_fonts().items()}
+    bundled = {_norm(k): v for k, v in bundled_fonts().items()}
+    candidates = [name] + [c for c in _ALIASES.get(key, ()) if c.lower() != key]
     result = None
     for cand in candidates:
-        c = cand.lower()
-        if c in bundled:
-            result = bundled[c]
+        base = cand.split(":")[0]
+        if _norm(base) in bundled and ":" not in cand:
+            result = bundled[_norm(base)]
+        else:
+            result = _fc_match(cand) or _system_file(cand)
+        if result:
             break
-        if c.replace(" ", "") in bundled:
-            result = bundled[c.replace(" ", "")]
-            break
-    if result is None and not _IS_WIN and shutil.which("fc-match"):
-        for cand in candidates:
-            try:
-                r = subprocess.run(["fc-match", "-f", "%{file}", cand], capture_output=True,
-                                   text=True, timeout=5, stdin=subprocess.DEVNULL)
-                path = r.stdout.strip()
-                if path and os.path.isfile(path):
-                    result = path
-                    break
-            except (OSError, subprocess.TimeoutExpired):
-                pass
     if result is None:
-        wanted = [c.lower().replace(" ", "") for c in candidates]
-        for d in _system_font_dirs():
-            if not d or not os.path.isdir(d):
-                continue
-            for root, _dirs, files in os.walk(d):
-                for f in files:
-                    stem, ext = os.path.splitext(f)
-                    if ext.lower() in (".ttf", ".otf") and stem.lower().replace(" ", "") in wanted:
-                        result = os.path.join(root, f)
-                        break
-                if result:
-                    break
-            if result:
-                break
-    if result is None:
-        fallback = bundled.get("inter") or next(iter(bundled.values()), None)
-        result = fallback
+        result = bundled.get("inter") or next(iter(bundled.values()), None)
     _FONT_CACHE[key] = result
     return result
