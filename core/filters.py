@@ -301,6 +301,9 @@ _ALIASES = {
     "courier new": ("Courier New", "Liberation Mono", "Cousine", "Nimbus Mono PS", "DejaVu Sans Mono"),
     "comic sans ms": ("Comic Sans MS", "Comic Neue", "Bangers"),
     "impact": ("Impact", "Anton", "BebasNeue"),
+    # Only scalable outline fonts: bitmap colour-emoji fonts (Noto Color Emoji,
+    # Apple Color Emoji) can't be sized by drawtext.
+    "emoji": ("Noto Emoji", "Segoe UI Emoji", "Symbola", "DejaVu Sans"),
     "sans": ("Inter", "OpenSans", "DejaVu Sans", "Liberation Sans", "Arial"),
     "sans bold": ("Inter-Bold", "OpenSans-Bold", "DejaVu Sans:bold", "Arial Bold"),
     "mono": ("DejaVu Sans Mono", "Liberation Mono", "Consolas", "Menlo"),
@@ -356,7 +359,9 @@ def find_font(name: str = "sans") -> Optional[str]:
     if key in _FONT_CACHE:
         return _FONT_CACHE[key]
     bundled = {_norm(k): v for k, v in bundled_fonts().items()}
-    candidates = [name] + [c for c in _ALIASES.get(key, ()) if c.lower() != key]
+    # Alias keys (sans, mono, emoji, arial…) use only their curated list, so a
+    # generic family is never resolved by fontconfig's own (possibly bitmap) pick.
+    candidates = list(_ALIASES[key]) if key in _ALIASES else [name]
     result = None
     for cand in candidates:
         base = cand.split(":")[0]
