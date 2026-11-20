@@ -53,11 +53,6 @@ class MIDIfierTab(BaseTab):
         canvas.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-        def _on_mw(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<MouseWheel>", _on_mw)
-        self._inner.bind("<MouseWheel>", _on_mw)
-
         # ── Dependencies status ──────────────────────────────────────────
         dep_sec = self.make_section(self._inner, title=t("midifier.section.deps"))
         self._dep_lbl = tk.Label(

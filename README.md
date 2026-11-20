@@ -18,16 +18,14 @@ Get the file for your system from the **[Releases page](https://github.com/WyldV
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.0_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `wyldveils-media-editor_1.2.0_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.0_ubuntu_amd64.deb` |
-| **Debian** | `wyldveils-media-editor_1.2.0_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.0_debian_amd64.deb` |
-| **Fedora** | `wyldveils-media-editor-1.2.0-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `wyldveils-media-editor-1.2.0-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.1_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `wyldveils-media-editor_1.2.1_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.1_ubuntu_amd64.deb` |
+| **Debian** | `wyldveils-media-editor_1.2.1_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.1_debian_amd64.deb` |
+| **Fedora** | `wyldveils-media-editor-1.2.1-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `wyldveils-media-editor-1.2.1-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
-Everything is included: FFmpeg, the downloader, offline speech recognition and
-the upscalers. Nothing else needs to be set up. On Linux the app uses your
-system's Python (3.10 or newer) with Tk, which the package manager installs for
-you.
+Everything is included: FFmpeg, the downloader, offline speech recognition, the
+upscalers and the app's own Python. Nothing else needs to be set up.
 
 ## What's new in 1.2.0
 

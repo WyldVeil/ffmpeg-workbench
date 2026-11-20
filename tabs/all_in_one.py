@@ -299,12 +299,6 @@ class AllInOneTab(BaseTab):
         _sb.pack(side="right", fill="y")
         self._canvas.pack(side="left", fill="both", expand=True)
 
-        # Mousewheel scrolling
-        def _on_mousewheel(event):
-            self._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        self._canvas.bind("<MouseWheel>", _on_mousewheel)
-        self._scroll_inner.bind("<MouseWheel>", _on_mousewheel)
-
         self._build_sections(self._scroll_inner)
 
         # ── Fixed bottom: command display + render ─────────────────────────

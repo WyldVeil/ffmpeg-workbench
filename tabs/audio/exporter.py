@@ -175,11 +175,6 @@ class AudioExporterTab(BaseTab):
         canvas.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-        # Mousewheel scrolling
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel, add=True)
-
         self._build_source_section()
         self._build_source_info_section()
         self._build_format_section()

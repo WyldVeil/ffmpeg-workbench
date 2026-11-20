@@ -52,6 +52,18 @@ from tabs.registry import TOOLS, PINNED, HIDDEN
 # ── Sidebar width ─────────────────────────────────────────────────────────────
 SB_WIDTH = 272
 
+# ── Mouse wheel: units scrolled per notch (Windows' default is 3 lines) ──────
+WHEEL_UNITS = 3
+
+
+def _can_scroll(widget) -> bool:
+    """True when *widget* has more content than it shows vertically."""
+    try:
+        first, last = widget.yview()
+    except (tk.TclError, ValueError):
+        return False
+    return first > 0.0 or last < 1.0
+
 # ── Category header → i18n key ────────────────────────────────────────────────
 _CAT_I18N = {
     "✂  CUTTING ROOM":       "cat.cutting",
@@ -214,9 +226,20 @@ class App(tk.Tk):
         self._build_sidebar()
 
         # ── Mousewheel ────────────────────────────────────────────────────────
+        self._wheel_carry = 0
         self.bind_all("<MouseWheel>", self._on_mousewheel)
-        self.bind_all("<Button-4>",   self._on_mousewheel)
-        self.bind_all("<Button-5>",   self._on_mousewheel)
+        if tk.TkVersion < 9:      # Tk 9 reports the X11 wheel as <MouseWheel> too, and uses
+            self.bind_all("<Button-4>", self._on_mousewheel)    # buttons 4/5 for the mouse's
+            self.bind_all("<Button-5>", self._on_mousewheel)    # back/forward side buttons
+        # Tk lets the wheel change a drop-down's or number box's value even
+        # when the pointer is just passing over it while scrolling the page.
+        # Only let it when that box has keyboard focus (as Windows does);
+        # otherwise the wheel scrolls the page.
+        for cls in ("TCombobox", "TSpinbox"):
+            for seq in self.bind_class(cls):
+                if "Wheel" in seq or seq.endswith(("Button-4>", "Button-5>")):
+                    script = self.bind_class(cls, seq)
+                    self.bind_class(cls, seq, f'if {{[focus] eq "%W"}} {{{script}; break}}')
 
         # Commit the sidebar scrollregion after the window is fully laid out.
         # <Configure> bindings fire during construction before the canvas is
@@ -675,42 +698,60 @@ class App(tk.Tk):
     #  Mousewheel
     # ─────────────────────────────────────────────────────────────────────────
     def _on_mousewheel(self, event):
-        # Cross-platform delta mapping - 3 units per notch matches typical
-        # desktop scroll speed (Windows default is 3 lines per notch).
+        """Scroll whatever is under the pointer: the sidebar's tool list or
+        the page (or panel) the pointer is over.  Wheel down scrolls down."""
+        units = self._wheel_units(event)
+        if units:
+            target = self._wheel_target(event)
+            if target is not None:
+                target.yview_scroll(units, "units")
+
+    def _wheel_units(self, event) -> int:
+        """Units to scroll for one wheel event: positive = down, negative = up.
+
+        X11 with Tk 8.6 reports the wheel as button 4 (up) and button 5
+        (down).  Windows and Tk 9 send <MouseWheel> with a delta that is
+        positive for up, 120 per notch; touchpads and smooth wheels send
+        smaller steps, so the remainder is kept for the next event.  Tk 8.6
+        on macOS sends small deltas, one per line.
+        """
         if event.num == 4:
-            delta = 3
-        elif event.num == 5:
-            delta = -3
-        elif _IS_MAC:
-            delta = -event.delta * 3
-        else:
-            delta = int(-event.delta / 120) * 3
+            return -WHEEL_UNITS
+        if event.num == 5:
+            return WHEEL_UNITS
+        delta = event.delta
+        if not delta:
+            return 0
+        if _IS_MAC and abs(delta) < 120:
+            return -delta * WHEEL_UNITS
+        carry = self._wheel_carry if (self._wheel_carry > 0) == (delta > 0) else 0
+        carry += delta
+        notches = int(carry / 120)                      # rounds towards zero
+        self._wheel_carry = carry - notches * 120
+        return -notches * WHEEL_UNITS
 
-        # If the cursor is anywhere inside the sidebar, scroll the sidebar canvas
-        # directly - the parent-walk below can miss it when tabs contain canvases.
+    def _wheel_target(self, event):
+        """The widget the wheel should scroll, or None.
+
+        Goes by what is under the pointer rather than ``event.widget``, so a
+        dialog in front of the sidebar scrolls itself, not the sidebar.  Text
+        boxes, lists and tables that have more to show scroll themselves (Tk's
+        own bindings), so the page behind them stays put."""
         try:
-            sc = self.sidebar_container
-            if (sc.winfo_rootx() <= event.x_root < sc.winfo_rootx() + sc.winfo_width()
-                    and sc.winfo_rooty() <= event.y_root < sc.winfo_rooty() + sc.winfo_height()):
-                self._sidebar_canvas.yview_scroll(delta, "units")
-                return
-        except Exception:
-            pass
-
-        # Content area: walk up the widget tree to find the nearest scrollable canvas.
-        widget = event.widget
+            widget = self.winfo_containing(event.x_root, event.y_root)
+        except (KeyError, tk.TclError):
+            return None        # one of Tk's own windows, such as an open drop-down
         while widget is not None:
-            if isinstance(widget, tk.Canvas):
-                try:
-                    if widget.cget("yscrollcommand"):
-                        widget.yview_scroll(delta, "units")
-                        return
-                except Exception:
-                    pass
-            try:
-                widget = widget.master
-            except Exception:
-                break
+            if widget is self.sidebar_container:
+                return self._sidebar_canvas
+            if isinstance(widget, (tk.Text, tk.Listbox, ttk.Treeview)):
+                if _can_scroll(widget):
+                    return None
+            elif isinstance(widget, tk.Canvas):
+                if widget.cget("yscrollcommand") and _can_scroll(widget):
+                    return widget
+            widget = widget.master
+        return None
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Menu bar

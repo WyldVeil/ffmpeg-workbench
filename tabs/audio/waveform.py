@@ -107,7 +107,10 @@ class WaveformEditorTab(BaseTab):
         c.bind("<ButtonRelease-1>", self._release)
         c.bind("<Shift-ButtonPress-1>", self._shift_click)
         c.bind("<Configure>", lambda _e: self._draw())
-        for seq, step in (("<MouseWheel>", None), ("<Button-4>", 1), ("<Button-5>", -1)):
+        wheel = [("<MouseWheel>", None)]
+        if tk.TkVersion < 9:      # X11 wheel on Tk 8.6; Tk 9 uses 4/5 for the back/forward buttons
+            wheel += [("<Button-4>", 1), ("<Button-5>", -1)]
+        for seq, step in wheel:
             c.bind(seq, lambda e, s=step: self._wheel(e, s))
             c.bind("<Shift-" + seq.strip("<>") + ">", lambda e, s=step: self._wheel(e, s, scroll=True))
         tk.Label(wf_lf, text="Drag to select · click = In · Shift+click = Out · wheel = zoom · "

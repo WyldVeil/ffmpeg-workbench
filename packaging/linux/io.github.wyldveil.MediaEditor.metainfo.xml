@@ -20,6 +20,12 @@
   <url type="bugtracker">https://github.com/WyldVeil/wyldveils-media-editor/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.1" date="2026-11-20">
+      <description>
+        <p>The mouse wheel scrolls the right way on Linux, and scrolling a page no longer changes drop-downs
+        under the pointer. The Linux packages include their own Python, so nothing else needs installing.</p>
+      </description>
+    </release>
     <release version="1.2.0" date="2026-11-19">
       <description>
         <p>Every tool rebuilt and tested; a Start page; new HDR to SDR, Tracks &amp; Remux, Compare &amp; Quality

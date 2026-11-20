@@ -51,6 +51,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Type: filesandordirs; Name: "{app}\libs"
 Type: filesandordirs; Name: "{app}\app\tests"
 Type: filesandordirs; Name: "{app}\app\bin"
+; Python is replaced as a whole, so nothing from an older one (such as the Tk 8.6
+; files before 1.2.1) is left behind.
+Type: filesandordirs; Name: "{app}\python"
 
 [Files]
 Source: "{#StageDir}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs

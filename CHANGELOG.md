@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.2.1
+
+### Fixed
+
+- **The mouse wheel scrolled the wrong way on Linux**, in the sidebar and on
+  every page. Wheel down now scrolls down everywhere.
+- **Scrolling a page could change a setting.** When the pointer passed over a
+  drop-down or number box while scrolling, the wheel changed its value (in
+  Universal Downsizer, the size target jumped from 8 MB to 10 MB). Now they only
+  respond to the wheel after you click them, as on Windows, and the page scrolls.
+- A long list or log inside a page scrolls on its own instead of dragging the
+  page with it, and a window in front of the sidebar scrolls itself, not the
+  sidebar.
+- Touchpads and smooth-scrolling mice on Windows now scroll the pages (small
+  steps were ignored). Some pages also scrolled twice as far as others, and the
+  Audio Exporter page scrolled even while another tool was showing.
+
+### Changed
+
+- **The Linux packages include their own Python** (3.14.10), so Python and Tk
+  no longer need to be installed, and the online voices, system certificates and
+  proxy support come included instead of being downloaded on first use. The
+  packages only need the basic X11 and font libraries every Linux desktop has,
+  and work on any distribution from 2018 on (glibc 2.28). Text uses your
+  desktop's fonts, smoothed, as before.
+- **Windows:** the bundled Python is updated from 3.14.3 to 3.14.10 (security
+  and bug fixes), with Tk 9.
+- Mouse back/forward buttons no longer zoom the Waveform Editor (Tk 9 reports
+  them as buttons 4 and 5).
+
 ## 1.2.0
 
 This is the biggest update yet. Every tool was rebuilt and tested on real

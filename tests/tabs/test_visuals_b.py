@@ -183,7 +183,10 @@ def test_green_key(ui, media, outdir, bg):
     ui.reset()
     tab = ui.open("Green Screen Keyer")
     _set_source(ui, tab, media["greenscreen"])
-    ui.wait_for(lambda: tab.key_colour == "007F00", 30)      # auto-sampled from the edges
+    # auto-sampled from the edges: the plate's green (exact value depends on the FFmpeg that made it)
+    plate = green_key.sample_border_colour(media["greenscreen"], tab._info.duration * 0.1)
+    assert plate and green_key.spill_type(plate) == "green" and plate != "00B140"   # not the start colour
+    ui.wait_for(lambda: tab.key_colour == plate, 30)
     ext = ".mp4"
     if bg == "image":
         tab.bg_mode.set(green_key.BACKGROUNDS["file"])

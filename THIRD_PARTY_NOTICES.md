@@ -42,20 +42,33 @@ least three years from the date of each release.
 
 ## Python components in the packaged builds
 
+The Windows and Linux builds both include their own Python 3.14, so it doesn't
+have to be installed. On Windows it is python.org's embeddable package with
+python.org's Tcl/Tk files (licence texts in `python\LICENSE.txt`). On Linux it is
+CPython from python-build-standalone
+(https://github.com/astral-sh/python-build-standalone); its Tk was rebuilt from
+the official Tcl/Tk sources with anti-aliased font support
+(`packaging/linux/build-tk.sh`). The licence texts of everything built into it
+are in `/opt/wyldveils-media-editor/python/licenses/`.
+
 | Component | Licence |
 |-----------|---------|
 | CPython runtime | Python Software Foundation License |
-| Tcl/Tk | Tcl/Tk licence (BSD-style) |
+| Tcl/Tk 9.0 | Tcl/Tk licence (BSD-style) |
+| OpenSSL 3 (built into Python) | Apache-2.0 |
+| SQLite, libffi, XZ, bzip2, zlib, Zstandard, mpdecimal, Expat (built into Python) | public domain, MIT, 0BSD, bzip2 licence, zlib, BSD-3-Clause, BSD-2-Clause and MIT respectively |
+| libedit, ncurses, libuuid (built into the Linux Python) | BSD-3-Clause, X11 (MIT) and BSD-3-Clause |
 | tkinterdnd2 | MIT |
 | tkdnd (native drag-and-drop extension used by tkinterdnd2) | BSD-style (tkdnd licence) |
-| PyInstaller bootloader | GPL-2.0 with the PyInstaller bootloader exception, which allows use in any program |
+| PyInstaller bootloader (only in builds made with `packaging/build.py`, not in the released packages) | GPL-2.0 with the PyInstaller bootloader exception, which allows use in any program |
 
-These packages are loaded at run time from `_internal/libs` as plain files.
-Their licence texts are in each package's `*.dist-info` folder there:
+These packages are loaded at run time from the `libs` folder next to the app
+(`app\libs` on Windows, `/opt/wyldveils-media-editor/libs` on Linux) as plain
+files. Their licence texts are in each package's `*.dist-info` folder there:
 
 | Component | Licence |
 |-----------|---------|
-| edge-tts 7.3.1 (online text-to-speech voices) | LGPL-3.0 (`srt_composer.py`: MIT). It is shipped as unmodified source in `_internal/libs/edge_tts`, and you may replace it with your own version. Source: https://github.com/rany2/edge-tts |
+| edge-tts 7.3.1 (online text-to-speech voices) | LGPL-3.0 (`srt_composer.py`: MIT). It is shipped as unmodified source in `libs/edge_tts`, and you may replace it with your own version. Source: https://github.com/rany2/edge-tts |
 | aiohttp, aiosignal, frozenlist, multidict, propcache, yarl | Apache-2.0 (aiohttp also contains MIT-licensed parts) |
 | aiohappyeyeballs, typing_extensions | Python Software Foundation License 2.0 |
 | attrs, tabulate | MIT |

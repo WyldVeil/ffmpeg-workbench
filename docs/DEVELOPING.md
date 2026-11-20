@@ -191,13 +191,27 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
    `python scripts/fetch_binaries.py --platform linux-x64` and `--platform windows-x64`.
    `--refresh` resolves newer versions into the lock file first.
 3. Linux packages (Debian and Ubuntu `.deb`, Arch and Fedora `.tar.gz`):
-   `python packaging/release.py --linux`. They run on the system's Python 3.10+ with Tk and
-   include `bin/linux-x64`. Try them in containers before publishing, e.g.
+   `python packaging/release.py --linux` (needs Python 3.14+ to run, and podman or docker).
+   They include `bin/linux-x64`, the add-ons from `packaging/bundled-libs.txt`, and their own
+   Python in `/opt/wyldveils-media-editor/python`: CPython from python-build-standalone (pinned
+   with SHA-256 in `LINUX_PYTHON` in `release.py`). Its Tk only knows the X server's bitmap fonts,
+   so `packaging/linux/build-tk.sh` rebuilds the same Tk version with Xft in an AlmaLinux 8
+   container (glibc 2.28) the first time; the result is kept in `build/tk-<version>-xft`. To move
+   to a newer Python, update `LINUX_PYTHON` and `LINUX_PYTHON_LICENSES`, and set `TK_VERSION` and
+   `TK_SOURCES` to the Tcl/Tk that python-build-standalone release uses (its
+   `pythonbuild/downloads.json`). Try the packages in containers before publishing, including
+   ones with no Python at all, e.g.
    `podman run --rm -v ./dist/release:/r:Z debian:12 sh -c "apt update && apt install -y /r/*debian*.deb && wyldveils-media-editor --cli tools"`.
 4. Windows installer: `python packaging/release.py --windows --python-embed DIR --iscc "ISCC.exe"`.
-   DIR is an embeddable Python (same minor version every release) with tkinter added:
-   `pythonw.exe`, `python3XX.dll`, `_tkinter.pyd`, `tcl86t.dll`, `tk86t.dll` and the `tcl` folder
-   copied from a regular Windows install of that Python. On Linux, Inno Setup runs under Wine:
+   DIR is python.org's embeddable package (`python-3.14.x-embed-amd64.zip`, checked against the
+   SHA-256 python.org publishes) with tkinter added from the same version's `amd64/tcltk.msi`
+   (on python.org next to the installer, and identical to the copy inside it). Unpack that with
+   `msiexec /a tcltk.msi /qn TARGETDIR=<folder>` (on Linux: `wine msiexec ...`), then copy its
+   `DLLs\*` next to `python.exe`, `Lib\tkinter` to `Lib\tkinter`, and `libtcl9.*.zip`,
+   `libtk9.*.zip`, `tk9.0`, `dde1.4` and `registry1.3` into a `tcl` folder. Replace
+   `python314._pth` with these lines: `python314.zip`, `.`, `Lib`, `../libs`, `..`, `import site`.
+   On Linux, Inno Setup runs under Wine:
    `--iscc "wine '<prefix>/drive_c/users/<you>/AppData/Local/Programs/Inno Setup 7/ISCC.exe'"`.
-   The installer keeps the AppId of earlier releases, so it upgrades them in place.
+   The installer keeps the AppId of earlier releases, so it upgrades them in place, and it
+   replaces the `python` folder as a whole.
 5. Everything lands in `dist/release/` with its SHA-256 printed; upload those files to the GitHub release.

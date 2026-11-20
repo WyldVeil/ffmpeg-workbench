@@ -891,11 +891,6 @@ class AdvancedSettingsTab(BaseTab):
             canvas.itemconfig(win_id, width=evt.width)
         canvas.bind("<Configure>", _resize_inner)
 
-        def _scroll(evt):
-            canvas.yview_scroll(int(-evt.delta / 120) * 2, "units")
-        canvas.bind("<MouseWheel>", _scroll)
-        inner.bind("<MouseWheel>", _scroll)
-
         # Load current custom colors
         current_custom = get_skin("Custom")
         self._custom_vars: dict[str, tk.StringVar] = {}
@@ -937,12 +932,10 @@ class AdvancedSettingsTab(BaseTab):
             sec_frame = tk.LabelFrame(inner, text=f"  {section_title}  ",
                                       padx=12, pady=10)
             sec_frame.pack(fill="x", padx=8, pady=(8, 4))
-            sec_frame.bind("<MouseWheel>", _scroll)
 
             for label_text, key in props:
                 row = tk.Frame(sec_frame)
                 row.pack(fill="x", pady=3)
-                row.bind("<MouseWheel>", _scroll)
 
                 initial = current_custom.get(key, _CUSTOM_DEFAULTS.get(key, "#222222"))
                 var = tk.StringVar(value=initial)
