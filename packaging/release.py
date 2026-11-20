@@ -6,8 +6,11 @@ packaging/release.py  -  Build the release files (same formats as earlier releas
         wyldveils-media-editor-<v>-arch.tar.gz (PKGBUILD + install.sh),
         wyldveils-media-editor-<v>-fedora.tar.gz (install.sh + .spec)
 
+        wyldveils-media-editor-<v>-linux-x86_64-portable.tar.gz (unpack anywhere and run)
+
     python packaging/release.py --windows --python-embed DIR [--iscc "wine ...ISCC.exe"]
-        WyldVeils-Media-Editor_<v>_Windows_Setup.exe
+        WyldVeils-Media-Editor_<v>_Windows_Setup.exe,
+        WyldVeils-Media-Editor_<v>_Windows_Portable.zip (unpack anywhere and run)
 
 Both bring their own Python, so nothing else has to be installed first:
 Linux packages get CPython from python-build-standalone with its Tk rebuilt
@@ -68,6 +71,12 @@ LINUX_PYTHON_LICENSES = ("cpython-3.14.10+20261110-x86_64-unknown-linux-gnu-pgo+
 TK_VERSION = "9.0.4"
 TK_SOURCES = {f"tcl{TK_VERSION}-src.tar.gz": "d0aed49230bc02a65c1e0229e65f34590a4b037ec40d546f32573b467f7551ea",
               f"tk{TK_VERSION}-src.tar.gz": "d7a146d2917eb8b5cc95276dbf0e3d03c7464d2b19c1675357857c989301dbb4"}
+#: libXft for systems without one (only the portable download uses it): built from source,
+#: because versions before 2.3.5 crash on colour emoji.  Signed by the X.org release manager.
+XFT_VERSION = "2.3.8"
+XFT_SOURCE = (f"libXft-{XFT_VERSION}.tar.xz", "5e8c3c4bc2d4c0a40aef6b4b38ed2fb74301640da29f6528154b5009b1c6dd49")
+#: The X11 libraries the portable download brings along, used only if the system lacks one.
+FALLBACK_LIBS = ("libXft.so.2", "libXrender.so.1", "libXcursor.so.1", "libXfixes.so.3")
 #: Tar format for every archive: dpkg can't read the PAX headers Python's default format uses for
 #: long paths (the bundled Python has plenty), and GNU tar, bsdtar and dpkg all read GNU format.
 TAR_FORMAT = tarfile.GNU_FORMAT
@@ -152,6 +161,7 @@ def linux_python() -> str:
                 os.remove(os.path.join(py, folder, f))
     tk_lib = f"libtcl9tk{TK_VERSION.rsplit('.', 1)[0]}.so"
     shutil.copy2(os.path.join(xft_tk(), tk_lib), os.path.join(py, "lib", tk_lib))
+    shutil.copytree(os.path.join(xft_tk(), "fallback"), os.path.join(py, "lib", "fallback"))
     needed = subprocess.run(["readelf", "-d", os.path.join(py, "lib", tk_lib)], capture_output=True, text=True,
                             check=True).stdout
     if "libXft.so.2" not in needed:
@@ -161,7 +171,9 @@ def linux_python() -> str:
                  "https://github.com/astral-sh/python-build-standalone - these are the licences of the\n"
                  f"libraries built into it.  Tk {TK_VERSION} (lib/{tk_lib}) was rebuilt from the official\n"
                  "sources (https://www.tcl-lang.org) with Xft for anti-aliased fonts; it is under the\n"
-                 "Tcl/Tk licence in LICENSE.tcl.txt.  CPython itself is under LICENSE.cpython.txt.\n")
+                 "Tcl/Tk licence in LICENSE.tcl.txt.  CPython itself is under LICENSE.cpython.txt.\n\n"
+                 "lib/fallback holds libXft, libXrender, libXcursor and libXfixes (MIT licence,\n"
+                 "https://www.x.org), used only on a system that doesn't have them.\n")
     _LINUX_PYTHON = py
     return py
 
@@ -169,11 +181,14 @@ def linux_python() -> str:
 def xft_tk() -> str:
     """Folder with Tk built with Xft (packaging/linux/build-tk.sh), building it if needed."""
     out = os.path.join(ROOT, "build", f"tk-{TK_VERSION}-xft")
-    if os.path.isfile(os.path.join(out, f"libtcl9tk{TK_VERSION.rsplit('.', 1)[0]}.so")):
+    wanted = [f"libtcl9tk{TK_VERSION.rsplit('.', 1)[0]}.so"] + [f"fallback/{lib}" for lib in FALLBACK_LIBS]
+    if all(os.path.isfile(os.path.join(out, f)) for f in wanted):
         return out
     src = os.path.join(ROOT, "build", f"tk-{TK_VERSION}-src")
     for name, sha in TK_SOURCES.items():
         download(f"https://prdownloads.sourceforge.net/tcl/{name}", os.path.join(src, name), sha)
+    download(f"https://www.x.org/releases/individual/lib/{XFT_SOURCE[0]}", os.path.join(src, XFT_SOURCE[0]),
+             XFT_SOURCE[1])
     shutil.copy2(os.path.join(ROOT, "packaging", "linux", "build-tk.sh"), src)
     engine = shutil.which("podman") or shutil.which("docker")
     if not engine:
@@ -183,7 +198,7 @@ def xft_tk() -> str:
     tmp = os.path.join(ROOT, "build", "container-tmp")      # not /tmp: image layers are big
     os.makedirs(tmp, exist_ok=True)
     subprocess.run([engine, "run", "--rm", "-v", f"{src}:/src:ro,Z", "-v", f"{out}:/out:Z",
-                    "docker.io/library/almalinux:8", "sh", "/src/build-tk.sh", TK_VERSION],
+                    "docker.io/library/almalinux:8", "sh", "/src/build-tk.sh", TK_VERSION, XFT_VERSION],
                    check=True, env={**os.environ, "TMPDIR": tmp})
     return out
 
@@ -393,6 +408,11 @@ def _tarball(distro: str, extras: dict, deps: str) -> str:
         _add_bytes(tf, f"{prefix}/uninstall.sh", UNINSTALL_SH.format(pkg=PKG, app_id=APP_ID).encode(), 0o755)
         for name, text in extras.items():
             _add_bytes(tf, f"{prefix}/{name}", text.encode())
+    _gzip(raw, out)
+    return out
+
+
+def _gzip(raw: str, out: str) -> None:
     if shutil.which("pigz"):                    # multi-threaded gzip
         subprocess.run(["pigz", "-6", "-f", raw], check=True)
     else:
@@ -400,7 +420,6 @@ def _tarball(distro: str, extras: dict, deps: str) -> str:
         with open(raw, "rb") as src, gzip.open(out, "wb", compresslevel=6) as dst:
             shutil.copyfileobj(src, dst, 1 << 20)
         os.remove(raw)
-    return out
 
 
 def build_arch() -> str:
@@ -470,19 +489,7 @@ def build_windows(python_embed: str, iscc: str) -> str:
         raise SystemExit(f"{python_embed}: needs an embeddable Python with tkinter (pythonw.exe, _tkinter.pyd, tcl)")
     stage = os.path.join(ROOT, "build", "release-windows")
     shutil.rmtree(stage, ignore_errors=True)
-    shutil.copytree(python_embed, os.path.join(stage, "python"),
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for src, rel in app_tree("windows-x64"):
-        dst = os.path.join(stage, "app", *rel.split("/"))
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(src, dst)
-    # Python add-ons (online voices, system certificates, SOCKS proxies) as Windows wheels
-    ver = "".join(f for f in os.listdir(python_embed) if f.startswith("python3") and f.endswith(".dll")
-                  and f != "python3.dll")[len("python"):-len(".dll")]
-    subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                    "--target", os.path.join(stage, "app", "libs"), "--platform", "win_amd64",
-                    "--python-version", f"{ver[0]}.{ver[1:]}", "--only-binary=:all:", "--no-deps",
-                    "--require-hashes", "-r", os.path.join(ROOT, "packaging", "bundled-libs.txt")], check=True)
+    _stage_windows(python_embed, os.path.join(stage, "python"), os.path.join(stage, "app"))
     with open(os.path.join(stage, "Launch.bat"), "w", encoding="utf-8", newline="\r\n") as fh:
         # kept for shortcuts made by earlier releases (they pointed here)
         fh.write('@echo off\r\nstart "" "%~dp0python\\pythonw.exe" "%~dp0app\\main.py" %*\r\n')
@@ -494,6 +501,125 @@ def build_windows(python_embed: str, iscc: str) -> str:
                                 f"/O{_win_path(OUT)}", _win_path(iss)]
     subprocess.run(argv, check=True)
     return os.path.join(OUT, f"WyldVeils-Media-Editor_{APP_VERSION}_Windows_Setup.exe")
+
+
+def _stage_windows(python_embed: str, python_dir: str, app_dir: str) -> None:
+    """Copy the embeddable Python, the app with its tools, and the Python add-ons (online
+    voices, system certificates, SOCKS proxies, drag and drop) as Windows wheels."""
+    shutil.copytree(python_embed, python_dir, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    for src, rel in app_tree("windows-x64"):
+        dst = os.path.join(app_dir, *rel.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
+    ver = "".join(f for f in os.listdir(python_embed) if f.startswith("python3") and f.endswith(".dll")
+                  and f != "python3.dll")[len("python"):-len(".dll")]
+    subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                    "--target", os.path.join(app_dir, "libs"), "--platform", "win_amd64",
+                    "--python-version", f"{ver[0]}.{ver[1:]}", "--only-binary=:all:", "--no-deps",
+                    "--require-hashes", "-r", os.path.join(ROOT, "packaging", "bundled-libs.txt")], check=True)
+
+
+# ── Portable ──────────────────────────────────────────────────────────────────
+
+PORTABLE_TXT = """This copy of WyldVeil's Media Editor is portable: it runs from this folder
+without being installed, and keeps its settings, cache and logs in the
+"userdata" folder here.  Move or copy the whole folder anywhere, e.g. a USB
+stick.  Delete this file to keep settings in your user folder instead.
+"""
+
+WINDOWS_START = ('@echo off\r\nrem WyldVeil\'s Media Editor (portable) - nothing to install\r\n'
+                 'start "" "%~dp0python\\pythonw.exe" "%~dp0main.py" %*\r\n')
+WINDOWS_CLI = ('@echo off\r\nrem Command line for scripts and AI assistants - see AGENTS.md\r\n'
+               '"%~dp0python\\python.exe" "%~dp0main.py" --cli %*\r\n')
+
+LINUX_START = """#!/bin/sh
+# WyldVeil's Media Editor (portable): runs from this folder, nothing to install.
+# Settings, cache and logs are kept in the userdata folder next to this script.
+here=$(dirname "$(readlink -f "$0")")
+# A few X11 libraries come along in case this system lacks one (every desktop has them)
+have() {
+    { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null; } | grep -q "[[:space:]]$1 " && return 0
+    for d in /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/lib64 /lib64 /usr/lib /lib; do
+        [ -e "$d/$1" ] && return 0
+    done
+    return 1
+}
+for lib in __LIBS__; do
+    if ! have "$lib"; then
+        LD_LIBRARY_PATH="$here/python/lib/fallback${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        export LD_LIBRARY_PATH
+        break
+    fi
+done
+exec "$here/python/bin/python3" -I "$here/main.py" "$@"
+"""
+
+
+def linux_add_to_menu() -> str:
+    """add-to-menu.sh: a menu entry for the current user (no password); --remove takes it out."""
+    entry = [line for line in desktop_entry().splitlines()
+             if not line.startswith(("Exec=", "TryExec=", "Icon=", "StartupWMClass="))]
+    body = "\n".join(entry)
+    return f"""#!/bin/sh
+# Adds WyldVeil's Media Editor to your applications menu - just for you, no password needed.
+# Run it again after moving this folder.  "./add-to-menu.sh --remove" takes it out again.
+set -e
+here=$(cd "$(dirname "$0")" && pwd)
+apps="${{XDG_DATA_HOME:-$HOME/.local/share}}/applications"
+file="$apps/{APP_ID}.portable.desktop"
+if [ "${{1:-}}" = "--remove" ]; then
+    rm -f "$file"
+    echo "Removed from the applications menu."
+    exit 0
+fi
+mkdir -p "$apps"
+cat > "$file" <<EOF
+{body}
+Exec="$here/{PKG}" %F
+Icon=$here/assets/icons/app_256.png
+EOF
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q "$apps" || true
+echo "Added to your applications menu (as WyldVeil's Media Editor)."
+"""
+
+
+def build_portable_linux() -> str:
+    """One folder with the app, its Python and tools: unpack anywhere and run."""
+    top = f"{PKG}-{APP_VERSION}"
+    out = os.path.join(OUT, f"{PKG}-{APP_VERSION}-linux-x86_64-portable.tar.gz")
+    raw = out[:-3]
+    with tarfile.open(raw, "w", format=TAR_FORMAT) as tf:
+        for src, rel in app_tree("linux-x64"):
+            _add_file(tf, src, f"{top}/{rel}")
+        _add_bytes(tf, f"{top}/{PKG}", LINUX_START.replace("__LIBS__", " ".join(FALLBACK_LIBS)).encode(), 0o755)
+        _add_bytes(tf, f"{top}/add-to-menu.sh", linux_add_to_menu().encode(), 0o755)
+        _add_bytes(tf, f"{top}/portable.txt", PORTABLE_TXT.encode())
+    _gzip(raw, out)
+    return out
+
+
+def build_portable_windows(python_embed: str) -> str:
+    """One folder with the app, its Python and tools: unzip anywhere and run."""
+    import zipfile
+    top = "WyldVeils-Media-Editor"
+    stage = os.path.join(ROOT, "build", "release-windows-portable")
+    shutil.rmtree(stage, ignore_errors=True)
+    folder = os.path.join(stage, top)
+    # Same layout as Linux: the app at the top, Python in python\ (its ._pth finds ..\libs and ..)
+    _stage_windows(python_embed, os.path.join(folder, "python"), folder)
+    for name, text in (("Start WyldVeil Media Editor.bat", WINDOWS_START), ("wme-cli.bat", WINDOWS_CLI),
+                       ("portable.txt", PORTABLE_TXT.replace("\n", "\r\n"))):
+        with open(os.path.join(folder, name), "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+    out = os.path.join(OUT, f"WyldVeils-Media-Editor_{APP_VERSION}_Windows_Portable.zip")
+    with zipfile.ZipFile(out + ".part", "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        for dirpath, dirs, files in os.walk(folder):
+            dirs.sort()
+            for f in sorted(files):
+                full = os.path.join(dirpath, f)
+                zf.write(full, os.path.relpath(full, stage).replace(os.sep, "/"))
+    os.replace(out + ".part", out)
+    return out
 
 
 def _win_path(path: str) -> str:
@@ -513,11 +639,11 @@ def main(argv=None) -> int:
     os.makedirs(OUT, exist_ok=True)
     built = []
     if args.linux:
-        built += [build_deb("debian"), build_deb("ubuntu"), build_arch(), build_fedora()]
+        built += [build_portable_linux(), build_deb("debian"), build_deb("ubuntu"), build_arch(), build_fedora()]
     if args.windows:
         if not args.python_embed:
             ap.error("--windows needs --python-embed")
-        built.append(build_windows(args.python_embed, args.iscc))
+        built += [build_portable_windows(args.python_embed), build_windows(args.python_embed, args.iscc)]
     if not built:
         ap.error("choose --linux and/or --windows")
     for path in built:

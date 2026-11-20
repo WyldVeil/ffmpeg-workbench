@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.2
+
+### New
+
+- **Portable downloads for Windows and Linux.** Unpack the `.zip` (Windows) or
+  `.tar.gz` (Linux) anywhere, e.g. your Documents or a USB stick, and run it:
+  nothing is installed, no administrator password is needed, and nothing has
+  to be on the computer first. Settings, cache and logs stay in a `userdata`
+  folder next to the app, so it can be carried between computers. If that
+  folder can't be written to (a read-only drive), the usual user folders are
+  used instead.
+- On Linux, `add-to-menu.sh` puts the portable app in your applications menu,
+  just for you (`--remove` takes it out again). The portable Linux version also
+  brings the few X11 libraries it uses (libXft, libXrender, libXcursor,
+  libXfixes) for systems that lack them; the system's own are used when present.
+
+The installers and Linux packages are still available for anyone who prefers
+them.
+
 ## 1.2.1
 
 ### Fixed

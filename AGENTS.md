@@ -13,6 +13,8 @@ can be done, use this file.
 | What the person has | Command (called `wme` below) |
 |---|---|
 | The source code (this folder) | `python main.py --cli ...` (Python 3.10+) |
+| Portable folder (Linux) | `<folder>/wyldveils-media-editor --cli ...` |
+| Portable folder (Windows) | `<folder>\wme-cli.bat ...` (the `--cli` is optional) |
 | Linux package (Debian, Ubuntu, Arch, Fedora) | `wyldveils-media-editor --cli ...` |
 | Windows (installed) | `"C:\Program Files\WyldVeil Media Editor\wme-cli.bat" ...` (the `--cli` is optional). Earlier versions were installed under `C:\Program Files\DoffysApp`, and an upgrade stays there. |
 

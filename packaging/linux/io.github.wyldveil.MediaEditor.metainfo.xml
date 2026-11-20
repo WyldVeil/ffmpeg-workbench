@@ -20,6 +20,11 @@
   <url type="bugtracker">https://github.com/WyldVeil/wyldveils-media-editor/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.2" date="2026-11-20">
+      <description>
+        <p>Portable downloads for Windows and Linux: unpack anywhere and run, nothing to install.</p>
+      </description>
+    </release>
     <release version="1.2.1" date="2026-11-20">
       <description>
         <p>The mouse wheel scrolls the right way on Linux, and scrolling a page no longer changes drop-downs

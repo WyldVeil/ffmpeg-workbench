@@ -214,4 +214,7 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
    `--iscc "wine '<prefix>/drive_c/users/<you>/AppData/Local/Programs/Inno Setup 7/ISCC.exe'"`.
    The installer keeps the AppId of earlier releases, so it upgrades them in place, and it
    replaces the `python` folder as a whole.
+   Both `--linux` and `--windows` also make the portable download for that system (a `.tar.gz`
+   and a `.zip`): the app at the top of one folder with its Python in `python/`, a start script,
+   and `portable.txt`, which makes `core/paths.py` keep all user data in `userdata/` there.
 5. Everything lands in `dist/release/` with its SHA-256 printed; upload those files to the GitHub release.

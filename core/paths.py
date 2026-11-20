@@ -16,8 +16,10 @@ logs       %LOCALAPPDATA%\\WyldVeil Media Editor\\Logs   ~/.local/state/wyldveil
 
 macOS uses ~/Library/Application Support, ~/Library/Caches and ~/Library/Logs.
 
-Portable mode: if a file named ``portable.txt`` exists next to the program,
-every folder lives inside the program folder instead (USB-stick installs).
+Portable mode: if a file named ``portable.txt`` exists next to the program
+(the portable downloads have one), every folder lives in ``userdata`` inside the
+program folder instead, so it can run from anywhere, e.g. a USB stick.  When
+that folder can't be written to (a read-only drive), the usual folders are used.
 
 Environment overrides (used by the test-suite):
 ``CROSSFADER_CONFIG_DIR``, ``CROSSFADER_DATA_DIR``, ``CROSSFADER_CACHE_DIR``,
@@ -50,6 +52,15 @@ def is_portable() -> bool:
         os.path.isfile(os.path.join(os.path.dirname(sys.executable), "portable.txt"))
 
 
+def _portable_root() -> str | None:
+    """``userdata`` in the program folder, when running portable and it can be written."""
+    if not is_portable():
+        return None
+    root = os.path.join(APP_ROOT, "userdata")
+    probe = root if os.path.isdir(root) else APP_ROOT
+    return root if os.access(probe, os.W_OK) else None
+
+
 def _ensure(path: str) -> str:
     try:
         os.makedirs(path, exist_ok=True)
@@ -62,8 +73,9 @@ def _base(kind: str) -> str:
     env = os.environ.get(f"CROSSFADER_{kind.upper()}_DIR")
     if env:
         return env
-    if is_portable():
-        return os.path.join(APP_ROOT, "userdata", kind)
+    portable = _portable_root()
+    if portable:
+        return os.path.join(portable, kind)
 
     home = os.path.expanduser("~")
     if _IS_WIN:

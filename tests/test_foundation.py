@@ -32,6 +32,27 @@ def test_xdg_layout_on_linux(tmp_path, monkeypatch):
     assert paths.log_dir() == str(tmp_path / "state" / paths.APP_SLUG / "logs")
 
 
+def test_portable_mode_keeps_everything_in_the_program_folder(tmp_path, monkeypatch):
+    for kind in ("CONFIG", "DATA", "CACHE", "LOG"):
+        monkeypatch.delenv(f"CROSSFADER_{kind}_DIR", raising=False)
+    monkeypatch.setattr(paths, "APP_ROOT", str(tmp_path))
+    (tmp_path / "portable.txt").write_text("")
+    assert paths.is_portable()
+    assert paths.config_dir() == str(tmp_path / "userdata" / "config")
+    assert paths.cache_dir() == str(tmp_path / "userdata" / "cache")
+
+
+def test_portable_mode_on_a_read_only_drive_uses_the_usual_folders(tmp_path, monkeypatch):
+    for kind in ("CONFIG", "DATA", "CACHE", "LOG"):
+        monkeypatch.delenv(f"CROSSFADER_{kind}_DIR", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home-cfg"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "home-cfg"))
+    monkeypatch.setattr(paths, "APP_ROOT", str(tmp_path / "app"))
+    monkeypatch.setattr(paths, "is_portable", lambda: True)
+    monkeypatch.setattr(paths.os, "access", lambda path, mode: False)
+    assert paths.config_dir().startswith(str(tmp_path / "home-cfg"))
+
+
 def test_temp_dir_is_private_and_unique():
     a, b = paths.temp_dir(), paths.temp_dir()
     try:

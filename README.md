@@ -16,16 +16,31 @@ suggests what you can do with it.
 
 Get the file for your system from the **[Releases page](https://github.com/WyldVeil/wyldveils-media-editor/releases/latest)**.
 
-| System | Download | Install |
+**Portable: nothing to install.** Unpack it anywhere (your Documents, a USB
+stick...) and run it. No administrator password needed.
+
+| System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.1_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `wyldveils-media-editor_1.2.1_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.1_ubuntu_amd64.deb` |
-| **Debian** | `wyldveils-media-editor_1.2.1_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.1_debian_amd64.deb` |
-| **Fedora** | `wyldveils-media-editor-1.2.1-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `wyldveils-media-editor-1.2.1-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.2_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.2-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
-upscalers and the app's own Python. Nothing else needs to be set up.
+upscalers and the app's own Python. Nothing else needs to be set up. The portable
+version keeps its settings in a `userdata` folder next to it, so you can carry it
+between computers.
+
+<details>
+<summary>Prefer an installer? (Start menu entry, uninstaller, system package)</summary>
+
+| System | Download | Install |
+|---|---|---|
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.2_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `wyldveils-media-editor_1.2.2_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.2_ubuntu_amd64.deb` |
+| **Debian** | `wyldveils-media-editor_1.2.2_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.2_debian_amd64.deb` |
+| **Fedora** | `wyldveils-media-editor-1.2.2-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `wyldveils-media-editor-1.2.2-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+
+</details>
 
 ## What's new in 1.2.0
 
@@ -128,13 +143,15 @@ The interface is available in 28 languages. You can switch at any time in
 
 ## Uninstall
 
-- **Windows:** use *Add or Remove Programs* in Settings, or the uninstaller in
+- **Portable:** delete the folder (`./add-to-menu.sh --remove` first if you
+  added the Linux menu entry). Its settings were in the folder too.
+- **Windows installer:** use *Add or Remove Programs* in Settings, or the uninstaller in
   the Start Menu.
 - **Ubuntu / Debian:** `sudo apt remove wyldveils-media-editor`
 - **Fedora:** run `./uninstall.sh` from the extracted folder.
 - **Arch:** `sudo pacman -R wyldveils-media-editor`, or `./uninstall.sh`
 
-Your settings stay in your user folder in case you come back.
+With the installers, your settings stay in your user folder in case you come back.
 
 ## Under the hood
 
@@ -143,6 +160,7 @@ copies of:
 
 | Tool | Version | Used for |
 |---|---|---|
+| [Python](https://www.python.org/) with Tk | 3.14.10 (Tk 9.0.4) | Runs the app; included, so it doesn't need to be installed |
 | [FFmpeg](https://ffmpeg.org/) | 9.0.2 | All video and audio processing, with libplacebo, libvmaf, rubberband and more |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 2026.10.26 | Video Downloader |
 | [Deno](https://deno.com/) | 2.9.8 | Lets yt-dlp handle YouTube's challenges |
