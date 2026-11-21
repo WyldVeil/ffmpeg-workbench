@@ -108,6 +108,8 @@ a command line for scripts and AI assistants (see below). See the
 
 ## Everything inside
 
+Every tool has a screenshot in [Every tool, up close](#every-tool-up-close).
+
 | | |
 |---|---|
 | ✂ **Cutting room** | Quick Trimmer · Crossfader · Splicer · Batch Joiner · Multi-Splitter · Multi-Clip Sequencer · Scene Detector · Beat Sync Cutter · Smart Reframe · Side-by-Side · Manual Crop · Rotate & Flip · Video Reverser · Freeze Frame · Clip Looper |
@@ -119,11 +121,13 @@ a command line for scripts and AI assistants (see below). See the
 
 ![Home: every tool at a glance](screenshots/home.png)
 
+There's a screenshot of every tool just below.
+
 ## Every tool, up close
 
-Open a category to see a screenshot of each of its tools.
+A screenshot of each tool, by category. Click a category's title to fold it away.
 
-<details>
+<details open>
 <summary><b>✂ Cutting room</b> (15 tools)</summary>
 
 #### Crossfader
@@ -218,7 +222,7 @@ Find every cut in a video, then split it or make chapters.
 
 </details>
 
-<details>
+<details open>
 <summary><b>📱 Social & format</b> (16 tools)</summary>
 
 #### The Shortifier
@@ -319,7 +323,7 @@ Download videos or music from YouTube and 1000+ sites.
 
 </details>
 
-<details>
+<details open>
 <summary><b>🔊 Audio</b> (17 tools)</summary>
 
 #### Silence Remover
@@ -426,7 +430,7 @@ Turn a recording into MIDI notes and play them back with instruments.
 
 </details>
 
-<details>
+<details open>
 <summary><b>⚙ Transcoder</b> (11 tools)</summary>
 
 #### Universal Downsizer
@@ -497,7 +501,7 @@ Save your own FFmpeg recipes and run them on files.
 
 </details>
 
-<details>
+<details open>
 <summary><b>🎨 Colour & visuals</b> (16 tools)</summary>
 
 #### Media Generator
@@ -598,7 +602,7 @@ One polished transition between two clips.
 
 </details>
 
-<details>
+<details open>
 <summary><b>🛠 System</b> (5 tools)</summary>
 
 #### Media Inspector
