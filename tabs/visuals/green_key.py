@@ -236,8 +236,7 @@ class GreenKeyerTab(BaseTab):
             if not bg or not os.path.isfile(bg):
                 kind = "alpha"
             else:
-                src = (f"movie=filename={fl.filter_path(bg)},"
-                       f"{background_chain(w, h, common.frame_rate(info))}[bg]")
+                src = f"{fl.preview_movie(bg)}{background_chain(w, h, common.frame_rate(info))}[bg]"
         if kind == "color":
             src = f"color=c=0x{self.bg_colour}:s={w}x{h}[bg]"
         if kind == "alpha":     # checkerboard so transparency is visible

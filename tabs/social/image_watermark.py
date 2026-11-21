@@ -156,7 +156,7 @@ class ImageWatermarkTab(BaseTab):
         if self._info is None or not logo:
             return
         try:
-            g = self.graph(self._info, logo_input=f"movie=filename={fl.filter_path(logo)},")
+            g = self.graph(self._info, logo_input=fl.preview_movie(logo))
         except ValueError:
             return
         self.compare.set_filter(g.replace("[0:v]", "[in]").replace("[v]", ""), keep_time=True)

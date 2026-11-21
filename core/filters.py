@@ -101,6 +101,23 @@ def movie_source(path: str, *, loop: int = 0, stream: str = "") -> str:
     return s
 
 
+STILL_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".avif", ".heic")
+
+
+def preview_movie(path: str) -> str:
+    """Start of a preview filter chain that reads a second file (logo,
+    background, inset) with ``movie=``, ending in a comma.
+
+    Previews keep the source timestamps, so the frame shown at 0:05 has a
+    timestamp of 5 s.  A still image gives a single frame at 0 s, which
+    runs out before then and the preview shows nothing; stills are
+    therefore repeated for as long as the video needs them."""
+    s = f"movie=filename={filter_path(path)},"
+    if os.path.splitext(path)[1].lower() in STILL_IMAGE_EXTS:
+        s += "loop=loop=-1:size=1,"
+    return s
+
+
 def amovie_source(path: str, *, loop: int = 0) -> str:
     s = f"amovie=filename={filter_path(path)}"
     if loop:

@@ -251,7 +251,7 @@ class PIPTab(BaseTab):
             spec = self.spec()
         except ValueError:
             return
-        fg = f"movie=filename={fl.filter_path(self.fg_row.path)},"
+        fg = fl.preview_movie(self.fg_row.path)
         g = pip_graph(spec, "[in]", fg, "")
         self.compare.set_filter(g, keep_time=True)
 

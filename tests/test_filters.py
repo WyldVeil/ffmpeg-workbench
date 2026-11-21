@@ -72,6 +72,18 @@ def test_lut3d_and_movie_with_hostile_path(media, nasty_dir, outdir):
 
 
 @pytest.mark.ffmpeg
+@pytest.mark.parametrize("at", [0.0, 1.5])
+def test_preview_with_a_still_image_later_in_the_video(media, nasty_dir, at):
+    """A logo / background photo in a preview must still be there after the
+    first frame (previews keep the source timestamps)."""
+    logo = nasty_dir / "logo 'a' [b], c.png"
+    shutil.copy(media["png"], logo)
+    vf = (f"{fl.preview_movie(str(logo))}scale=160:-2[lg];"
+          f"[in][lg]overlay=10:10:shortest=1")
+    assert ff.grab_frame_png(media["h264"], at, width=320, height=180, vf=vf, keep_time=True)
+
+
+@pytest.mark.ffmpeg
 @pytest.mark.parametrize("text", ["Hello: it's 50% off, [now]; ok?", "Ünïcödé — 日本語 \\ back",
                                   "two\nlines"])
 def test_drawtext_textfile_and_inline(text, media, outdir, tmp_path):

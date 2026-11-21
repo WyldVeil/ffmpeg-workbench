@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The preview stayed empty in Image Watermark** whenever a logo was chosen
+  ("Could not decode a frame here"). The same happened in the Green Screen
+  Keyer with a photo as the background, and in Picture-in-Picture with a photo
+  as the inset. Renders were never affected.
+
+### Changed
+
+- The README shows a full-size screenshot of every tool, grouped by category,
+  taken with footage from the 4K version of *Big Buck Bunny*.
+
 ## 1.2.2
 
 ### New
