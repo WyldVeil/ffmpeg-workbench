@@ -29,6 +29,7 @@ import re
 from core import APP_NAME, APP_VERSION
 from core.state import state as _app_state
 from core.i18n import t, init as _i18n_init
+from core.scaling import px
 
 # Initialise i18n before any UI is constructed
 _i18n_init()
@@ -98,19 +99,21 @@ class PlaceholderTab(ttk.Frame):
     def __init__(self, parent, title, error=""):
         super().__init__(parent)
         tk.Label(self, text="\u26a0  {}".format(title),
-                 font=(UI_FONT, 20, "bold"), fg="#C0392B").pack(pady=(120, 10))
+                 font=(UI_FONT, 20, "bold"), fg="#C0392B").pack(pady=px(120, 10))
         msg = ("This tool could not be loaded:\n{}\n\nThe full details were written "
                "to the log file (Help \u203a Open log folder).").format(error) if error \
             else t("app.under_construction")
         tk.Label(self, text=msg, font=(UI_FONT, 11), fg="#808080",
-                 wraplength=700, justify="center").pack()
+                 wraplength=px(700), justify="center").pack()
 
 
 class App(tk.Tk):
     def __init__(self):
         # className sets WM_CLASS so Linux desktops match the .desktop file.
+        from core import scaling as _scaling
+        _scaling.prepare()
         super().__init__(className="wyldveil-media-editor")
-        self._apply_ui_scale()
+        _scaling.apply(self)
         try:
             from core.paths import resource_path
             self._icons = [tk.PhotoImage(master=self, file=resource_path("assets", "icons", f"app_{n}.png"))
@@ -158,14 +161,14 @@ class App(tk.Tk):
         root_frame.pack(fill="both", expand=True)
 
         self.sidebar_container = tk.Frame(
-            root_frame, bg=self._skin_data["sb_bg"], width=SB_WIDTH)
+            root_frame, bg=self._skin_data["sb_bg"], width=px(SB_WIDTH))
         self.sidebar_container.pack(side="left", fill="y")
         self.sidebar_container.pack_propagate(False)
 
         # 1-pixel separator between sidebar and content
         tk.Frame(root_frame,
                  bg=self._skin_data.get("border", "#2C2C2C"),
-                 width=1).pack(side="left", fill="y")
+                 width=px(1)).pack(side="left", fill="y")
 
         self.content_container = tk.Frame(
             root_frame, bg=self._skin_data["content"])
@@ -175,7 +178,7 @@ class App(tk.Tk):
         # every tab so the user can return to the launch screen at any time.
         skin = self._skin_data
         self._content_top_bar = tk.Frame(
-            self.content_container, bg=skin["panel"], height=32)
+            self.content_container, bg=skin["panel"], height=px(32))
         self._content_top_bar.pack(side="top", fill="x")
         self._content_top_bar.pack_propagate(False)
 
@@ -186,9 +189,9 @@ class App(tk.Tk):
             activebackground=skin.get("sb_hover", "#2A2A2A"),
             activeforeground="#FFFFFF",
             relief="flat", cursor="hand2",
-            bd=0, padx=14, pady=4,
+            bd=0, padx=px(14), pady=px(4),
             command=lambda: self.show_page("Start"))
-        self._start_btn.pack(side="left", padx=(10, 0), pady=4)
+        self._start_btn.pack(side="left", padx=px(10, 0), pady=px(4))
 
         self._home_btn = tk.Button(
             self._content_top_bar, text="🏠  Home",
@@ -197,13 +200,13 @@ class App(tk.Tk):
             activebackground=skin.get("sb_hover", "#2A2A2A"),
             activeforeground="#FFFFFF",
             relief="flat", cursor="hand2",
-            bd=0, padx=14, pady=4,
+            bd=0, padx=px(14), pady=px(4),
             command=lambda: self.show_page("Home"))
-        self._home_btn.pack(side="left", padx=4, pady=4)
+        self._home_btn.pack(side="left", padx=px(4), pady=px(4))
 
         tk.Frame(self.content_container,
                  bg=skin.get("border", "#2C2C2C"),
-                 height=1).pack(side="top", fill="x")
+                 height=px(1)).pack(side="top", fill="x")
 
         # Inner content area where the active tab is actually packed.
         # Tabs were previously parented to content_container directly;
@@ -292,38 +295,38 @@ class App(tk.Tk):
         FDM  = skin["fgdim"]
         BDR  = skin.get("border", "#2C2C2C")
 
-        bar = tk.Frame(self, bg=SB, height=26)
+        bar = tk.Frame(self, bg=SB, height=px(26))
         bar.pack(side="bottom", fill="x")
         bar.pack_propagate(False)
-        tk.Frame(bar, bg=BDR, height=1).pack(side="top", fill="x")
+        tk.Frame(bar, bg=BDR, height=px(1)).pack(side="top", fill="x")
         self._status_bar_frame = bar
 
         inner = tk.Frame(bar, bg=SB)
-        inner.pack(fill="both", expand=True, padx=12)
+        inner.pack(fill="both", expand=True, padx=px(12))
 
         self._status_dot = tk.Label(inner, text="●", bg=SB,
                                      fg=skin["green"], font=(UI_FONT, 7))
-        self._status_dot.pack(side="left", pady=5)
+        self._status_dot.pack(side="left", pady=px(5))
 
         self._status_lbl = tk.Label(inner, text="  " + t("app.status.ready"),
                                      bg=SB, fg=FDM, font=(UI_FONT, 8))
         self._status_lbl.pack(side="left")
 
-        tk.Frame(inner, bg=BDR, width=1).pack(side="left", fill="y", pady=5, padx=10)
+        tk.Frame(inner, bg=BDR, width=px(1)).pack(side="left", fill="y", pady=px(5), padx=px(10))
 
         self._status_tool = tk.Label(inner, text="", bg=SB, fg=FDM, font=(UI_FONT, 8))
         self._status_tool.pack(side="left")
 
         # System Updates Section (Right Side)
-        tk.Frame(inner, bg=BDR, width=1).pack(side="right", fill="y", pady=5, padx=10)
+        tk.Frame(inner, bg=BDR, width=px(1)).pack(side="right", fill="y", pady=px(5), padx=px(10))
         
         # FFmpeg Status (Clickable for global updates)
         self._status_ffmpeg = tk.Label(inner, text=t("app.status.ffmpeg_checking"),
                                         bg=SB, fg=FDM, font=(UI_FONT, 8, "bold"), cursor="hand2")
-        self._status_ffmpeg.pack(side="right", padx=6)
+        self._status_ffmpeg.pack(side="right", padx=px(6))
         self._status_ffmpeg.bind("<Button-1>", lambda e: self._prompt_ffmpeg_update())
 
-        tk.Frame(inner, bg=BDR, width=1).pack(side="right", fill="y", pady=5, padx=10)
+        tk.Frame(inner, bg=BDR, width=px(1)).pack(side="right", fill="y", pady=px(5), padx=px(10))
 
         # YT-DLP Status (Hidden by default, shown on YouTube tab)
         self._status_ytdlp = tk.Label(inner, text="", bg=SB, fg=skin["accent"],
@@ -332,26 +335,26 @@ class App(tk.Tk):
         self._status_ytdlp.bind("<Button-1>", lambda e: self._update_ytdlp_process())
 
         # ── Render progress bar ───────────────────────────────────────────────
-        tk.Frame(inner, bg=BDR, width=1).pack(side="left", fill="y", pady=5, padx=10)
+        tk.Frame(inner, bg=BDR, width=px(1)).pack(side="left", fill="y", pady=px(5), padx=px(10))
 
         self._progress_frame = tk.Frame(inner, bg=SB)
         # Hidden by default - shown during renders
         self._progress_bar = ttk.Progressbar(
             self._progress_frame, mode="determinate",
-            length=140, maximum=100)
-        self._progress_bar.pack(side="left", pady=6)
+            length=px(140), maximum=100)
+        self._progress_bar.pack(side="left", pady=px(6))
         self._progress_pct = tk.Label(self._progress_frame, text="",
                                        bg=SB, fg=skin["accent"],
                                        font=(MONO_FONT, 8, "bold"))
-        self._progress_pct.pack(side="left", padx=(4, 0))
+        self._progress_pct.pack(side="left", padx=px(4, 0))
         self._render_duration = 0.0   # total duration for progress calc
 
         # ── Queue Status indicator (always visible) ───────────────────────────
-        tk.Frame(inner, bg=BDR, width=1).pack(side="left", fill="y", pady=5, padx=10)
+        tk.Frame(inner, bg=BDR, width=px(1)).pack(side="left", fill="y", pady=px(5), padx=px(10))
         self._queue_status_lbl = tk.Label(
             inner, text=t("app.queue.idle"),
             bg=SB, fg=FDM, font=(UI_FONT, 8, "bold"), cursor="hand2")
-        self._queue_status_lbl.pack(side="left", padx=4)
+        self._queue_status_lbl.pack(side="left", padx=px(4))
         self._queue_status_lbl.bind(
             "<Button-1>", lambda e: self.show_page("Encode Queue"))
 
@@ -430,54 +433,14 @@ class App(tk.Tk):
         from core import ui as _ui
         _ui.call_soon(fn, *args, **kwargs)
 
-    def _apply_ui_scale(self):
-        """Honour HiDPI scaling on Linux, where Tk ignores the desktop's scale
-        factor (Windows uses per-monitor DPI awareness).  The ``ui_scale``
-        setting (e.g. 1.5) overrides detection."""
-        from core import settings as _settings
-        scale = None
-        try:
-            scale = float(_settings.get("ui_scale", "auto"))
-        except (TypeError, ValueError):
-            scale = None
-        if scale is None and sys.platform.startswith("linux"):
-            for var in ("GDK_SCALE", "QT_SCALE_FACTOR"):
-                try:
-                    val = float(os.environ.get(var, ""))
-                except ValueError:
-                    continue
-                if val > 1.0:
-                    scale = val
-                    break
-            if scale is None:
-                try:
-                    out = subprocess.run(["xrdb", "-query"], capture_output=True, text=True,
-                                         timeout=3).stdout
-                    m = re.search(r"Xft\.dpi:\s*([\d.]+)", out)
-                    if m and float(m.group(1)) > 100:
-                        scale = float(m.group(1)) / 96.0
-                except (OSError, subprocess.TimeoutExpired):
-                    pass
-        if scale and 0.75 <= scale <= 4 and abs(scale - 1.0) > 0.01:
-            self.tk.call("tk", "scaling", 96.0 * scale / 72.0)
-            self._ui_scale = scale
-        else:
-            self._ui_scale = 1.0
-
     def _size_window(self):
-        """Open at 1480x920 at normal scaling and larger on HiDPI screens
-        (Tk draws text bigger there, whether from ``tk scaling`` set above or
-        from the X server's DPI), but never bigger than the screen."""
-        try:
-            scale = float(self.tk.call("tk", "scaling")) / (96.0 / 72.0)
-        except (tk.TclError, ValueError):
-            scale = 1.0
-        scale = min(max(scale, 1.0), 4.0)
+        """Open at 1480x920 design pixels (bigger on HiDPI screens), but never
+        bigger than the screen."""
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        w = min(round(1480 * scale), int(sw * 0.94))
-        h = min(round(920 * scale), int(sh * 0.9))
+        w = min(px(1480), int(sw * 0.94))
+        h = min(px(920), int(sh * 0.9))
         self.geometry(f"{w}x{h}")
-        self.minsize(min(round(1100 * scale), w), min(round(700 * scale), h))
+        self.minsize(min(px(1100), w), min(px(700), h))
 
     def _check_ffmpeg(self):
         """Background: describe the FFmpeg in use (pinned - no online check)."""
@@ -592,7 +555,7 @@ class App(tk.Tk):
                 if pending:
                     parts.append(f"{len(pending)} pending")
                 self._queue_status_lbl.config(text=t("app.queue.busy", n=" | ".join(parts)), fg=skin["orange"])
-                self._progress_frame.pack(side="left", padx=(4, 0))
+                self._progress_frame.pack(side="left", padx=px(4, 0))
                 frac = q.overall_progress()
                 if frac is None:
                     self._progress_bar.config(mode="indeterminate")
@@ -1172,17 +1135,19 @@ class App(tk.Tk):
 
         # Wordmark
         logo_f = tk.Frame(static_top, bg=SB_BG)
-        logo_f.pack(fill="x", padx=16, pady=(20, 0))
+        logo_f.pack(fill="x", padx=px(16), pady=px(20, 0))
 
-        badge = tk.Canvas(logo_f, width=38, height=34, bg=SB_BG,
+        badge = tk.Canvas(logo_f, width=px(38), height=px(34), bg=SB_BG,
                            highlightthickness=0)
-        badge.pack(side="left", padx=(0, 12))
+        badge.pack(side="left", padx=px(0, 12))
         try:
             from core.paths import resource_path
-            self._badge_img = tk.PhotoImage(master=self, file=resource_path("assets", "icons", "app_32.png"))
-            badge.create_image(19, 17, image=self._badge_img)
+            # The icon file nearest the badge's size at this scale, so it stays sharp
+            size = min((32, 48, 64, 128), key=lambda n: (abs(n - px(32)), n))
+            self._badge_img = tk.PhotoImage(master=self, file=resource_path("assets", "icons", f"app_{size}.png"))
+            badge.create_image(px(19), px(17), image=self._badge_img)
         except tk.TclError:
-            badge.create_rectangle(0, 0, 38, 34, fill=ACCENT, outline="")
+            badge.create_rectangle(0, 0, px(38), px(34), fill=ACCENT, outline="")
 
         nf = tk.Frame(logo_f, bg=SB_BG)
         nf.pack(side="left", anchor="w")
@@ -1192,8 +1157,8 @@ class App(tk.Tk):
         tk.Label(nf, text=t("app.subtitle"),
                  font=(UI_FONT, 8), bg=SB_BG, fg="#424242").pack(anchor="w")
 
-        tk.Frame(static_top, bg=BORDER, height=1).pack(fill="x",
-                                                         padx=14, pady=(16, 0))
+        tk.Frame(static_top, bg=BORDER, height=px(1)).pack(fill="x",
+                                                         padx=px(14), pady=px(16, 0))
 
         # All-in-One pinned  (lazy - initialized on first click)
         _aio_key = "⚡ " + PINNED[0]
@@ -1201,8 +1166,8 @@ class App(tk.Tk):
         self.pages[_aio_key] = None
 
         aio_row = tk.Frame(static_top, bg=SB_BG)
-        aio_row.pack(fill="x", padx=6, pady=(8, 5))
-        aio_ind = tk.Frame(aio_row, bg=SB_BG, width=3)
+        aio_row.pack(fill="x", padx=px(6), pady=px(8, 5))
+        aio_ind = tk.Frame(aio_row, bg=SB_BG, width=px(3))
         aio_ind.pack(side="left", fill="y")
         aio_ind.pack_propagate(False)
         aio_btn = tk.Button(
@@ -1212,7 +1177,7 @@ class App(tk.Tk):
             cursor="hand2",
             activebackground=skin["sb_hover"], activeforeground="#FFFFFF",
             command=lambda n=_aio_key: self.show_page(n),
-            bd=0, padx=0, pady=5,
+            bd=0, padx=0, pady=px(5),
         )
         aio_btn.pack(side="left", fill="x", expand=True)
         aio_btn.bind("<Enter>",
@@ -1225,21 +1190,21 @@ class App(tk.Tk):
         self._btn_refs[_aio_key]       = aio_btn
         self._indicator_refs[_aio_key] = aio_ind
 
-        tk.Frame(static_top, bg=BORDER, height=1).pack(fill="x",
-                                                         padx=14, pady=(4, 0))
+        tk.Frame(static_top, bg=BORDER, height=px(1)).pack(fill="x",
+                                                         padx=px(14), pady=px(4, 0))
 
         # Search box
         srch_outer = tk.Frame(static_top, bg=SB_BG)
-        srch_outer.pack(fill="x", padx=12, pady=(10, 8))
+        srch_outer.pack(fill="x", padx=px(12), pady=px(10, 8))
 
         i_bg = skin.get("input_bg", "#1E1E1E")
         srch_bdr = tk.Frame(srch_outer, bg=BORDER)
         srch_bdr.pack(fill="x")
         srch_inner = tk.Frame(srch_bdr, bg=i_bg)
-        srch_inner.pack(fill="x", padx=1, pady=1)
+        srch_inner.pack(fill="x", padx=px(1), pady=px(1))
 
         tk.Label(srch_inner, text="⌕", bg=i_bg, fg="#484848",
-                 font=(UI_FONT, 11)).pack(side="left", padx=(7, 0), pady=3)
+                 font=(UI_FONT, 11)).pack(side="left", padx=px(7, 0), pady=px(3))
 
         self._search_var = tk.StringVar()
         self._search_entry = tk.Entry(
@@ -1250,7 +1215,7 @@ class App(tk.Tk):
             highlightthickness=0,
         )
         self._search_entry.pack(side="left", fill="x", expand=True,
-                                 padx=(4, 6), pady=4)
+                                 padx=px(4, 6), pady=px(4))
         self._search_ph = t("app.search_placeholder")
         self._search_entry.insert(0, self._search_ph)
         self._search_entry.bind("<FocusIn>",  self._on_search_focus)
@@ -1260,25 +1225,27 @@ class App(tk.Tk):
         self._search_clear = tk.Label(srch_inner, text="✕",
                                        bg=i_bg, fg="#484848",
                                        font=(UI_FONT, 8), cursor="hand2")
-        self._search_clear.pack(side="right", padx=(0, 6))
+        self._search_clear.pack(side="right", padx=px(0, 6))
         self._search_clear.pack_forget()
         self._search_clear.bind("<Button-1>", self._clear_search)
 
-        tk.Frame(static_top, bg=BORDER, height=1).pack(fill="x", padx=14)
+        tk.Frame(static_top, bg=BORDER, height=px(1)).pack(fill="x", padx=px(14))
 
         # ── Scrollable tools ──────────────────────────────────────────────────
         scroll_f = tk.Frame(self.sidebar_container, bg=SB_BG)
         scroll_f.pack(fill="both", expand=True)
 
         canvas = tk.Canvas(scroll_f, bg=SB_BG,
-                           highlightthickness=0, yscrollincrement=20)
+                           highlightthickness=0, yscrollincrement=px(20))
         self._sidebar_canvas = canvas
         vsb = ttk.Scrollbar(scroll_f, orient="vertical", command=canvas.yview)
         inner = tk.Frame(canvas, bg=SB_BG)
         self._inner = inner
 
-        _iw = SB_WIDTH - 18
-        canvas.create_window((0, 0), window=inner, anchor="nw", width=_iw)
+        _win = canvas.create_window((0, 0), window=inner, anchor="nw", width=px(SB_WIDTH - 18))
+        # The list is exactly as wide as the visible canvas (whatever the
+        # scrollbar's width at this scale).
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_win, width=e.width), add=True)
         inner.bind("<Configure>",
                    lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.configure(yscrollcommand=vsb.set)
@@ -1294,12 +1261,12 @@ class App(tk.Tk):
 
             # Category header
             hdr_row = tk.Frame(inner, bg=SB_BG, cursor="hand2")
-            hdr_row.pack(fill="x", pady=(10, 0))
+            hdr_row.pack(fill="x", pady=px(10, 0))
 
             arrow_lbl = tk.Label(hdr_row, text="▾", bg=SB_BG,
                                   fg="#484848", font=(UI_FONT, 7),
                                   cursor="hand2")
-            arrow_lbl.pack(side="left", padx=(14, 0), pady=2)
+            arrow_lbl.pack(side="left", padx=px(14, 0), pady=px(2))
             hdr_row._arrow_lbl = arrow_lbl
 
             cat_lbl = tk.Label(hdr_row,
@@ -1307,14 +1274,14 @@ class App(tk.Tk):
                                 font=(UI_FONT, 7, "bold"),
                                 bg=SB_BG, fg=skin["sb_cat"],
                                 anchor="w", cursor="hand2")
-            cat_lbl.pack(side="left", padx=(5, 4), pady=2,
+            cat_lbl.pack(side="left", padx=px(5, 4), pady=px(2),
                           fill="x", expand=True)
 
             count_bg = skin.get("input_bg", "#1E1E1E")
             tk.Label(hdr_row, text=str(len(items)),
                      bg=count_bg, fg="#4A4A4A",
                      font=(UI_FONT, 7),
-                     padx=5, pady=1).pack(side="right", padx=(0, 12), pady=4)
+                     padx=px(5), pady=px(1)).pack(side="right", padx=px(0, 12), pady=px(4))
 
             items_frame = tk.Frame(inner, bg=SB_BG)
             items_frame.pack(fill="x")
@@ -1345,9 +1312,9 @@ class App(tk.Tk):
                 self.pages[name] = None  # sentinel; initialized in show_page()
 
                 row_f = tk.Frame(items_frame, bg=SB_BG)
-                row_f.pack(fill="x", padx=6, pady=0)
+                row_f.pack(fill="x", padx=px(6), pady=0)
 
-                ind = tk.Frame(row_f, bg=SB_BG, width=3)
+                ind = tk.Frame(row_f, bg=SB_BG, width=px(3))
                 ind.pack(side="left", fill="y")
                 ind.pack_propagate(False)
 
@@ -1361,7 +1328,7 @@ class App(tk.Tk):
                     activebackground=skin["sb_hover"],
                     activeforeground="#FFFFFF",
                     command=lambda n=name: self.show_page(n),
-                    bd=0, padx=0, pady=3,
+                    bd=0, padx=0, pady=px(3),
                 )
                 btn.pack(side="left", fill="x", expand=True)
                 btn.bind("<Enter>",
@@ -1377,14 +1344,14 @@ class App(tk.Tk):
                 self._indicator_refs[name] = ind
                 self._tool_rows.append((name.casefold() + " " + _tab_label(name).casefold(), row_f))
 
-        tk.Frame(inner, bg=SB_BG, height=20).pack()
+        tk.Frame(inner, bg=SB_BG, height=px(20)).pack()
 
         # Footer
         footer = tk.Frame(self.sidebar_container, bg=SB_BG)
         footer.pack(side="bottom", fill="x")
-        tk.Frame(footer, bg=BORDER, height=1).pack(fill="x")
+        tk.Frame(footer, bg=BORDER, height=px(1)).pack(fill="x")
         fi = tk.Frame(footer, bg=SB_BG)
-        fi.pack(fill="x", padx=14, pady=7)
+        fi.pack(fill="x", padx=px(14), pady=px(7))
         tk.Label(fi, text="v{}".format(APP_VERSION),
                  bg=SB_BG, fg="#343434",
                  font=(UI_FONT, 8)).pack(side="left")
@@ -1430,7 +1397,7 @@ class App(tk.Tk):
         searching = bool(query) and query != self._search_ph.lower()
 
         if searching:
-            self._search_clear.pack(side="right", padx=(0, 6))
+            self._search_clear.pack(side="right", padx=px(0, 6))
         else:
             self._search_clear.pack_forget()
 
@@ -1440,7 +1407,7 @@ class App(tk.Tk):
             match = not searching or query in tool_name
             try:
                 if match:
-                    row_f.pack(fill="x", padx=6, pady=0)
+                    row_f.pack(fill="x", padx=px(6), pady=0)
                     # Identify which items_frame this belongs to
                     visible_parents.add(row_f.master)
                 else:
@@ -1452,13 +1419,13 @@ class App(tk.Tk):
         for cat, (hdr_row, items_frame, exp_var) in self._cat_sections.items():
             if searching:
                 if items_frame in visible_parents:
-                    hdr_row.pack(fill="x", pady=(10, 0))
+                    hdr_row.pack(fill="x", pady=px(10, 0))
                     items_frame.pack(fill="x", after=hdr_row)
                 else:
                     hdr_row.pack_forget()
                     items_frame.pack_forget()
             else:
-                hdr_row.pack(fill="x", pady=(10, 0))
+                hdr_row.pack(fill="x", pady=px(10, 0))
                 if exp_var.get():
                     items_frame.pack(fill="x", after=hdr_row)
                 else:
@@ -1513,7 +1480,7 @@ class App(tk.Tk):
 
         # Handle Contextual Status Bar items
         if page_name == "Video Downloader":
-            self._status_ytdlp.pack(side="right", padx=(0, 6), before=self._status_ffmpeg)
+            self._status_ytdlp.pack(side="right", padx=px(0, 6), before=self._status_ffmpeg)
         else:
             self._status_ytdlp.pack_forget()
 

@@ -14,6 +14,7 @@ from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs import common
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from core.scaling import px
 
 # key: (label, low, high, default, resolution)
 CONTROLS = {
@@ -112,63 +113,63 @@ class ColorCorrectorTab(BaseTab):
 
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         self.compare = CompareView(body, 400, 225)
-        self.compare.pack(pady=6)
+        self.compare.pack(pady=px(6))
 
         looks = tk.Frame(body, bg=CLR["bg"])
-        looks.pack(fill="x", padx=20, pady=(2, 4))
+        looks.pack(fill="x", padx=px(20), pady=px(2, 4))
         tk.Label(looks, text="Quick look:", bg=CLR["bg"], fg=CLR["fg"],
                  font=(UI_FONT, 10, "bold")).pack(side="left")
         self.look_var = tk.StringVar(value="Neutral (reset)")
         box = ttk.Combobox(looks, textvariable=self.look_var, values=list(LOOKS),
                            state="readonly", width=22)
-        box.pack(side="left", padx=8)
+        box.pack(side="left", padx=px(8))
         box.bind("<<ComboboxSelected>>", lambda _e: self._apply_look(self.look_var.get()))
         tk.Button(looks, text=t("color_correct.btn_reset_all"), relief="flat", cursor="hand2",
-                  command=lambda: self._apply_look("Neutral (reset)")).pack(side="left", padx=6)
+                  command=lambda: self._apply_look("Neutral (reset)")).pack(side="left", padx=px(6))
 
         grid = tk.Frame(body, bg=CLR["bg"])
-        grid.pack(fill="x", padx=20, pady=4)
+        grid.pack(fill="x", padx=px(20), pady=px(4))
         for col, (title, keys) in enumerate((GROUPS[0], GROUPS[2])):
-            self._group(grid, title, keys).grid(row=0, column=col, sticky="nsew", padx=4, pady=4)
+            self._group(grid, title, keys).grid(row=0, column=col, sticky="nsew", padx=px(4), pady=px(4))
         for col, (title, keys) in enumerate((GROUPS[1], GROUPS[3])):
-            self._group(grid, title, keys).grid(row=1, column=col, sticky="nsew", padx=4, pady=4)
+            self._group(grid, title, keys).grid(row=1, column=col, sticky="nsew", padx=px(4), pady=px(4))
         grid.columnconfigure(0, weight=1)
         grid.columnconfigure(1, weight=1)
 
-        enc_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        enc_lf.pack(fill="x", padx=20, pady=6)
+        enc_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        enc_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(enc_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(enc_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "graded"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = tk.Button(body, text=t("color_correct.render_grade"),
                                     font=(UI_FONT, 12, "bold"), bg=CLR["pink"], fg="white",
                                     width=24, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
     def _group(self, parent, title, keys):
-        lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=10, pady=4)
+        lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=px(10), pady=px(4))
         for row, key in enumerate(keys):
             label, lo, hi, default, res = CONTROLS[key]
             var = tk.DoubleVar(value=default)
             self.vars[key] = var
             tk.Label(lf, text=label, anchor="w", width=22).grid(row=row, column=0, sticky="w")
             tk.Scale(lf, variable=var, from_=lo, to=hi, resolution=res, orient="horizontal",
-                     length=190, showvalue=True,
+                     length=px(190), showvalue=True,
                      command=lambda _v: self._schedule_preview()).grid(row=row, column=1)
             tk.Button(lf, text="↺", width=2, relief="flat", cursor="hand2",
                       command=lambda v=var, d=default: (v.set(d), self._schedule_preview())
-                      ).grid(row=row, column=2, padx=2)
+                      ).grid(row=row, column=2, padx=px(2))
         return lf
 
     # ── Behaviour ────────────────────────────────────────────────────────────

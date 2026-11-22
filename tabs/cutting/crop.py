@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -68,15 +69,15 @@ class ManualCropTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self.info_lbl.pack(anchor="w", padx=24)
+        self.info_lbl.pack(anchor="w", padx=px(24))
 
         main = tk.Frame(body)
-        main.pack(fill="both", expand=True, padx=20, pady=6)
+        main.pack(fill="both", expand=True, padx=px(20), pady=px(6))
         left = tk.Frame(main)
         left.pack(side="left", fill="both", expand=True)
-        self.canvas = tk.Canvas(left, bg="#000000", width=560, height=315, highlightthickness=0,
+        self.canvas = tk.Canvas(left, bg="#000000", width=px(560), height=px(315), highlightthickness=0,
                                 cursor="crosshair")
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", lambda _e: self._schedule_frame())
@@ -86,33 +87,33 @@ class ManualCropTab(BaseTab):
         self.pos_var = tk.DoubleVar(value=0)
         self.slider = ttk.Scale(left, from_=0, to=1, variable=self.pos_var,
                                 command=lambda _v: self._schedule_frame())
-        self.slider.pack(fill="x", pady=(4, 0))
+        self.slider.pack(fill="x", pady=px(4, 0))
 
-        ctrl = tk.Frame(main, width=290)
-        ctrl.pack(side="right", fill="y", padx=(10, 0))
-        ar = tk.LabelFrame(ctrl, text=f"  {t('crop.aspect_ratio_section')}  ", padx=8, pady=4)
+        ctrl = tk.Frame(main, width=px(290))
+        ctrl.pack(side="right", fill="y", padx=px(10, 0))
+        ar = tk.LabelFrame(ctrl, text=f"  {t('crop.aspect_ratio_section')}  ", padx=px(8), pady=px(4))
         ar.pack(fill="x")
         self.aspect_var = tk.StringVar(value="free")
         for key, label, _ratio in ASPECTS:
             tk.Radiobutton(ar, text=label, value=key, variable=self.aspect_var,
                            command=self._aspect_changed).pack(anchor="w")
-        num = tk.LabelFrame(ctrl, text=f"  {t('crop.crop_region_section')}  ", padx=8, pady=4)
-        num.pack(fill="x", pady=6)
+        num = tk.LabelFrame(ctrl, text=f"  {t('crop.crop_region_section')}  ", padx=px(8), pady=px(4))
+        num.pack(fill="x", pady=px(6))
         for label, var in (("X:", self._cx), ("Y:", self._cy), ("Width:", self._cw), ("Height:", self._ch)):
             row = tk.Frame(num)
-            row.pack(fill="x", pady=1)
+            row.pack(fill="x", pady=px(1))
             tk.Label(row, text=label, width=8, anchor="e").pack(side="left")
             e = tk.Entry(row, textvariable=var, width=8, font=(MONO_FONT, 10))
-            e.pack(side="left", padx=4)
+            e.pack(side="left", padx=px(4))
             e.bind("<Return>", lambda _e: self._clamp_and_draw())
             e.bind("<FocusOut>", lambda _e: self._clamp_and_draw())
         bt = tk.Frame(num)
-        bt.pack(fill="x", pady=4)
+        bt.pack(fill="x", pady=px(4))
         tk.Button(bt, text="Reset", relief="flat", command=self._reset).pack(side="left")
         self.detect_btn = tk.Button(bt, text="Detect black bars", relief="flat",
                                     command=self._detect_bars)
-        self.detect_btn.pack(side="left", padx=6)
-        sc = tk.LabelFrame(ctrl, text=f"  {t('crop.scale_output_section')}  ", padx=8, pady=4)
+        self.detect_btn.pack(side="left", padx=px(6))
+        sc = tk.LabelFrame(ctrl, text=f"  {t('crop.scale_output_section')}  ", padx=px(8), pady=px(4))
         sc.pack(fill="x")
         self.scale_var = tk.StringVar(value="keep")
         tk.Radiobutton(sc, text="Keep the cropped size", value="keep",
@@ -121,23 +122,23 @@ class ManualCropTab(BaseTab):
         sr.pack(fill="x")
         tk.Radiobutton(sr, text="Scale to", value="scale", variable=self.scale_var).pack(side="left")
         self.sw_var, self.sh_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
-        tk.Entry(sr, textvariable=self.sw_var, width=6).pack(side="left", padx=2)
+        tk.Entry(sr, textvariable=self.sw_var, width=6).pack(side="left", padx=px(2))
         tk.Label(sr, text="×").pack(side="left")
-        tk.Entry(sr, textvariable=self.sh_var, width=6).pack(side="left", padx=2)
+        tk.Entry(sr, textvariable=self.sh_var, width=6).pack(side="left", padx=px(2))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "cropped"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text=t("crop.export_button"), font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=24, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=4)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -220,15 +221,16 @@ class ManualCropTab(BaseTab):
         X2, Y2 = ox + self.vid_w * s, oy + self.vid_h * s
         for box in ((ox, oy, X2, y1), (ox, y2, X2, Y2), (ox, y1, x1, y2), (x2, y1, X2, y2)):
             c.create_rectangle(*box, fill="#000000", stipple="gray50", outline="")
-        c.create_rectangle(x1, y1, x2, y2, outline=CLR["accent"], width=2)
+        c.create_rectangle(x1, y1, x2, y2, outline=CLR["accent"], width=px(2))
         for i in (1, 2):
             c.create_line(x1 + (x2 - x1) * i / 3, y1, x1 + (x2 - x1) * i / 3, y2, fill="#FFFFFF",
-                          dash=(2, 4))
+                          dash=px(2, 4), width=px(1))
             c.create_line(x1, y1 + (y2 - y1) * i / 3, x2, y1 + (y2 - y1) * i / 3, fill="#FFFFFF",
-                          dash=(2, 4))
+                          dash=px(2, 4), width=px(1))
         for hx, hy in ((x1, y1), (x2, y1), (x1, y2), (x2, y2)):
-            c.create_rectangle(hx - 6, hy - 6, hx + 6, hy + 6, fill=CLR["accent"], outline="white")
-        c.create_text((x1 + x2) / 2, max(y1 - 10, 8), text=f"{w}×{h}", fill=CLR["accent"],
+            c.create_rectangle(hx - px(6), hy - px(6), hx + px(6), hy + px(6), fill=CLR["accent"], outline="white",
+                               width=px(1))
+        c.create_text((x1 + x2) / 2, max(y1 - px(10), px(8)), text=f"{w}×{h}", fill=CLR["accent"],
                       font=(MONO_FONT, 9, "bold"))
 
     # ── mouse ────────────────────────────────────────────────────────────────
@@ -239,7 +241,7 @@ class ManualCropTab(BaseTab):
         s, ox, oy = self._view()
         x, y, w, h = self.rect()
         x1, y1, x2, y2 = ox + x * s, oy + y * s, ox + (x + w) * s, oy + (y + h) * s
-        near = lambda a, b: abs(a - b) < 10  # noqa: E731
+        near = lambda a, b: abs(a - b) < px(10)  # noqa: E731
         corners = {"tl": (x1, y1), "tr": (x2, y1), "bl": (x1, y2), "br": (x2, y2)}
         kind = next((k for k, (cx, cy) in corners.items() if near(ev.x, cx) and near(ev.y, cy)), None)
         if kind is None and x1 < ev.x < x2 and y1 < ev.y < y2:

@@ -17,6 +17,7 @@ from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 
 
 VIDEO_CODECS = ["libx264", "libx265", "libvpx-vp9", "libvpx",
@@ -145,24 +146,24 @@ class EncodeQueueTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="📋  " + t("tab.encode_queue"), font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner,
                  text=t("encode_queue.subtitle"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Paned layout
-        paned = tk.PanedWindow(self, orient="horizontal", sashwidth=6,
+        paned = tk.PanedWindow(self, orient="horizontal", sashwidth=px(6),
                                bg="#AAAAAA")
-        paned.pack(fill="both", expand=True, padx=10, pady=8)
+        paned.pack(fill="both", expand=True, padx=px(10), pady=px(8))
 
-        left  = tk.Frame(paned, width=540)
-        paned.add(left, minsize=340)
-        right = tk.Frame(paned, width=480)
-        paned.add(right, minsize=320)
+        left  = tk.Frame(paned, width=px(540))
+        paned.add(left, minsize=px(340))
+        right = tk.Frame(paned, width=px(480))
+        paned.add(right, minsize=px(320))
 
         self._build_queue_panel(left)
         self._build_editor_panel(right)
@@ -170,7 +171,7 @@ class EncodeQueueTab(BaseTab):
     # ── Queue list panel ──────────────────────────────────────────────────
     def _build_queue_panel(self, parent):
         tk.Label(parent, text=t("encode_queue.queue_section"), font=(UI_FONT, 9, "bold"),
-                 fg=CLR["fgdim"]).pack(anchor="w", padx=8, pady=(6, 2))
+                 fg=CLR["fgdim"]).pack(anchor="w", padx=px(8), pady=px(6, 2))
 
         cols = ("status", "name", "output", "elapsed", "progress")
         self.tree = ttk.Treeview(parent, columns=cols, show="headings",
@@ -183,7 +184,7 @@ class EncodeQueueTab(BaseTab):
             ("progress", t("encode_queue.progress_col"), 220, True),
         ]:
             self.tree.heading(col, text=txt)
-            self.tree.column(col, width=w, stretch=stretch)
+            self.tree.column(col, width=px(w), stretch=stretch)
 
         self.tree.tag_configure("done",      foreground="#4CAF50")
         self.tree.tag_configure("failed",    foreground="#F44336")
@@ -199,34 +200,34 @@ class EncodeQueueTab(BaseTab):
 
         # Control buttons
         btn_f = tk.Frame(parent)
-        btn_f.pack(fill="x", padx=4, pady=6)
+        btn_f.pack(fill="x", padx=px(4), pady=px(6))
         self._btn_cancel = tk.Button(
             btn_f, text=t("encode_queue.cancel_button"),
             bg=CLR["red"], fg="white", font=(UI_FONT, 9, "bold"),
             command=self._cancel_selected)
-        self._btn_cancel.pack(side="left", padx=4)
+        self._btn_cancel.pack(side="left", padx=px(4))
         tk.Button(btn_f, text=t("encode_queue.clear_finished_button"),
                   bg=CLR["panel"], fg=CLR["fg"], font=(UI_FONT, 9),
-                  command=self._clear_finished).pack(side="left", padx=4)
+                  command=self._clear_finished).pack(side="left", padx=px(4))
 
         # Stats label
         self._stats_lbl = tk.Label(parent, text="", fg=CLR["fgdim"],
                                     font=(UI_FONT, 9))
-        self._stats_lbl.pack(anchor="w", padx=8)
+        self._stats_lbl.pack(anchor="w", padx=px(8))
 
         # Console for selected task's last progress
         tk.Label(parent, text=t("encode_queue.task_log_section"), font=(UI_FONT, 9, "bold"),
-                 fg=CLR["fgdim"]).pack(anchor="w", padx=8, pady=(6, 2))
+                 fg=CLR["fgdim"]).pack(anchor="w", padx=px(8), pady=px(6, 2))
         self.console = scrolledtext.ScrolledText(
             parent, height=7,
             bg=CLR["console_bg"], fg="#00FF88",
             font=(MONO_FONT, 8))
-        self.console.pack(fill="both", expand=True, padx=4, pady=4)
+        self.console.pack(fill="both", expand=True, padx=px(4), pady=px(4))
 
     # ── Job editor panel ─────────────────────────────────────────────────
     def _build_editor_panel(self, parent):
         tk.Label(parent, text=t("encode_queue.editor_section"), font=(UI_FONT, 9, "bold"),
-                 fg=CLR["fgdim"]).pack(anchor="w", padx=8, pady=(6, 2))
+                 fg=CLR["fgdim"]).pack(anchor="w", padx=px(8), pady=px(6, 2))
 
         scroll_canvas = tk.Canvas(parent, highlightthickness=0)
         sb = ttk.Scrollbar(parent, orient="vertical",
@@ -248,7 +249,7 @@ class EncodeQueueTab(BaseTab):
         f_src = tk.Frame(ef); f_src.pack(fill="x", **pad)
         tk.Label(f_src, text=t("encode_queue.source_label"), width=14, anchor="e").pack(side="left")
         tk.Entry(f_src, textvariable=self.ed_src_var, width=32,
-                 relief="flat").pack(side="left", padx=4)
+                 relief="flat").pack(side="left", padx=px(4))
         tk.Button(f_src, text="…", width=2,
                   command=self._ed_browse_src).pack(side="left")
 
@@ -256,7 +257,7 @@ class EncodeQueueTab(BaseTab):
         f_out = tk.Frame(ef); f_out.pack(fill="x", **pad)
         tk.Label(f_out, text=t("encode_queue.output_label"), width=14, anchor="e").pack(side="left")
         tk.Entry(f_out, textvariable=self.ed_out_var, width=32,
-                 relief="flat").pack(side="left", padx=4)
+                 relief="flat").pack(side="left", padx=px(4))
         tk.Button(f_out, text="…", width=2,
                   command=self._ed_browse_out).pack(side="left")
 
@@ -279,10 +280,10 @@ class EncodeQueueTab(BaseTab):
             tk.Label(f, text=label, width=14, anchor="e").pack(side="left")
             if choices:
                 ttk.Combobox(f, textvariable=var, values=choices,
-                             state="readonly", width=18).pack(side="left", padx=4)
+                             state="readonly", width=18).pack(side="left", padx=px(4))
             else:
                 tk.Entry(f, textvariable=var, width=8,
-                         relief="flat").pack(side="left", padx=4)
+                         relief="flat").pack(side="left", padx=px(4))
 
         for label, attr in [("Extra -vf:",   "ed_evf_var"),
                              ("Extra args:",  "ed_eargs_var")]:
@@ -291,7 +292,7 @@ class EncodeQueueTab(BaseTab):
             f = tk.Frame(ef); f.pack(fill="x", **pad)
             tk.Label(f, text=label, width=14, anchor="e").pack(side="left")
             tk.Entry(f, textvariable=var, width=34,
-                     relief="flat").pack(side="left", padx=4)
+                     relief="flat").pack(side="left", padx=px(4))
 
         # Submit button
         tk.Button(
@@ -299,7 +300,7 @@ class EncodeQueueTab(BaseTab):
             bg=CLR["green"], fg="black",
             font=(UI_FONT, 10, "bold"),
             command=self._add_to_queue,
-        ).pack(pady=10, padx=10, fill="x")
+        ).pack(pady=px(10), padx=px(10), fill="x")
 
         # Add folder button
         tk.Button(
@@ -307,7 +308,7 @@ class EncodeQueueTab(BaseTab):
             bg=CLR["panel"], fg=CLR["fg"],
             font=(UI_FONT, 9),
             command=self._add_folder,
-        ).pack(pady=(0, 6), padx=10, fill="x")
+        ).pack(pady=px(0, 6), padx=px(10), fill="x")
 
     # ═══════════════════════════════════════════════════════════════════════
     #  Queue tree refresh  (called by RenderQueueManager update callback)

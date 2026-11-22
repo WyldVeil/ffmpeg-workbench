@@ -20,6 +20,7 @@ import tkinter as tk
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT
 from core import settings as _settings
+from core.scaling import px
 
 
 # Categories that are valid favourite/jump targets. We re-import lazily
@@ -91,7 +92,7 @@ class HomeTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         inner = tk.Frame(hdr, bg=CLR["panel"])
-        inner.pack(fill="x", padx=22, pady=(16, 14))
+        inner.pack(fill="x", padx=px(22), pady=px(16, 14))
         tk.Label(
             inner, text="🏠  Home",
             font=(UI_FONT, 16, "bold"),
@@ -102,15 +103,15 @@ class HomeTab(BaseTab):
                        "use most to pin them to your Favourites.",
             font=(UI_FONT, 9),
             bg=CLR["panel"], fg=CLR["fgdim"], anchor="w",
-        ).pack(side="top", anchor="w", pady=(2, 0))
+        ).pack(side="top", anchor="w", pady=px(2, 0))
         back = tk.Label(
             inner, text="🧭  Not sure which tool? Start: What do you want to do?  ›",
             font=(UI_FONT, 10, "bold"),
             bg=CLR["panel"], fg=CLR["accent"], anchor="w", cursor="hand2",
         )
-        back.pack(side="top", anchor="w", pady=(8, 0))
+        back.pack(side="top", anchor="w", pady=px(8, 0))
         back.bind("<Button-1>", lambda _e: self._navigate and self._navigate("Start"))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Scrollable content
         outer = tk.Frame(self, bg=CLR["bg"])
@@ -183,7 +184,7 @@ class HomeTab(BaseTab):
             self._render_section_header(body, "⭐  Favourites",
                                         accent=CLR["orange"])
             self._render_grid(body, favs)
-            tk.Frame(body, bg=CLR["bg"], height=10).pack(fill="x")
+            tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
         # 2. Quick Tools row at the top: All-in-One Builder + Advanced
         # Settings, both pinned for fast access. Advanced Settings is
@@ -204,7 +205,7 @@ class HomeTab(BaseTab):
             self._render_section_header(body, "⚡  Quick Tools",
                                         accent=CLR["accent"])
             self._render_grid(body, quick_items)
-            tk.Frame(body, bg=CLR["bg"], height=10).pack(fill="x")
+            tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
         # 3. Each TOOLS category. Skip the items already shown up top so
         # they don't render twice.
@@ -215,21 +216,21 @@ class HomeTab(BaseTab):
                 continue
             self._render_section_header(body, category)
             self._render_grid(body, visible)
-            tk.Frame(body, bg=CLR["bg"], height=10).pack(fill="x")
+            tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
     def _render_section_header(self, parent, label, accent=None):
         if accent is None:
             accent = CLR["accent"]
         row = tk.Frame(parent, bg=CLR["bg"])
-        row.pack(fill="x", padx=20, pady=(14, 6))
+        row.pack(fill="x", padx=px(20), pady=px(14, 6))
         tk.Label(
             row, text=label,
             font=(UI_FONT, 11, "bold"),
             bg=CLR["bg"], fg=accent, anchor="w",
         ).pack(side="left", anchor="w")
         # Thin horizontal rule under header
-        rule = tk.Frame(parent, bg=CLR["border"], height=1)
-        rule.pack(fill="x", padx=20)
+        rule = tk.Frame(parent, bg=CLR["border"], height=px(1))
+        rule.pack(fill="x", padx=px(20))
 
     def _render_grid(self, parent, items):
         """
@@ -240,14 +241,14 @@ class HomeTab(BaseTab):
         if not items:
             return
         grid = tk.Frame(parent, bg=CLR["bg"])
-        grid.pack(fill="x", padx=20, pady=(8, 0))
+        grid.pack(fill="x", padx=px(20), pady=px(8, 0))
 
         # Column count based on parent width.
         try:
-            avail = self._scroll_body.winfo_width() or self.winfo_width() or 1000
+            avail = self._scroll_body.winfo_width() or self.winfo_width() or px(1000)
         except Exception:
             avail = 1000
-        col_w = self._CARD_WIDTH + 2 * self._GRID_PAD_X
+        col_w = px(self._CARD_WIDTH + 2 * self._GRID_PAD_X)
         cols = max(self._MIN_COLS, min(self._MAX_COLS, max(1, avail // col_w)))
 
         for i, item in enumerate(items):
@@ -258,7 +259,7 @@ class HomeTab(BaseTab):
             r, c = divmod(i, cols)
             self._build_card(grid, name, display).grid(
                 row=r, column=c,
-                padx=self._GRID_PAD_X, pady=self._GRID_PAD_Y,
+                padx=px(self._GRID_PAD_X), pady=px(self._GRID_PAD_Y),
                 sticky="nsew",
             )
         for c in range(cols):
@@ -271,11 +272,11 @@ class HomeTab(BaseTab):
         is_fav = self._is_fav(name)
         card = tk.Frame(
             parent, bg=CLR["panel"],
-            highlightthickness=1,
+            highlightthickness=px(1),
             highlightbackground=CLR["border"],
             cursor="hand2",
         )
-        card.config(width=self._CARD_WIDTH, height=self._CARD_HEIGHT)
+        card.config(width=px(self._CARD_WIDTH), height=px(self._CARD_HEIGHT))
         card.pack_propagate(False)
 
         # Tab name (left, fills space)
@@ -283,7 +284,7 @@ class HomeTab(BaseTab):
             card, text=display,
             font=(UI_FONT, 10, "bold"),
             bg=CLR["panel"], fg=CLR["fg"],
-            anchor="w", padx=12,
+            anchor="w", padx=px(12),
             cursor="hand2",
         )
         name_lbl.pack(side="left", fill="both", expand=True)
@@ -295,7 +296,7 @@ class HomeTab(BaseTab):
             card, text=star_text,
             font=(UI_FONT, 14),
             bg=CLR["panel"], fg=star_color,
-            padx=12, cursor="hand2",
+            padx=px(12), cursor="hand2",
         )
         star_lbl.pack(side="right", fill="y")
 

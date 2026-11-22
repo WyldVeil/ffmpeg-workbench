@@ -20,6 +20,7 @@ from core import remux
 from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
+from core.scaling import px
 
 CONTAINERS = {"mkv": "MKV - holds everything", "mp4": "MP4 - plays everywhere", "mov": "MOV - Apple / editing",
               "webm": "WebM - web"}
@@ -54,40 +55,40 @@ class TracksRemuxTab(BaseTab):
                                                 "change the container - without re-encoding.", icon="🗂")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_file"), on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        lf = tk.LabelFrame(body, text="  Tracks (in output order)  ", padx=10, pady=8)
-        lf.pack(fill="x", padx=20, pady=4)
+        lf = tk.LabelFrame(body, text="  Tracks (in output order)  ", padx=px(10), pady=px(8))
+        lf.pack(fill="x", padx=px(20), pady=px(4))
         cols = ("keep", "kind", "what", "lang", "title", "flags", "from")
         self.tree = ttk.Treeview(lf, columns=cols, show="headings", height=9, selectmode="browse")
         for c, label, w in (("keep", "Keep", 50), ("kind", "Type", 80), ("what", "Codec / details", 240),
                             ("lang", "Language", 130), ("title", "Title", 170), ("flags", "Flags", 110),
                             ("from", "From", 140)):
             self.tree.heading(c, text=label)
-            self.tree.column(c, width=w, stretch=c in ("what", "title"))
+            self.tree.column(c, width=px(w), stretch=c in ("what", "title"))
         self.tree.pack(fill="x")
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._selected())
         self.tree.bind("<Double-1>", lambda _e: self._toggle_keep())
         bar = tk.Frame(lf)
-        bar.pack(fill="x", pady=(6, 0))
+        bar.pack(fill="x", pady=px(6, 0))
         for text, cmd in (("✓ / ✗  Keep", self._toggle_keep), ("▲", lambda: self._move(-1)),
                           ("▼", lambda: self._move(1)), ("➕  Add audio or subtitles…", self._add_file),
                           ("💾  Save track as a file…", self._extract)):
-            tk.Button(bar, text=text, relief="flat", cursor="hand2", command=cmd).pack(side="left", padx=(0, 6))
+            tk.Button(bar, text=text, relief="flat", cursor="hand2", command=cmd).pack(side="left", padx=px(0, 6))
 
         ed = tk.Frame(lf)
-        ed.pack(fill="x", pady=(8, 0))
+        ed.pack(fill="x", pady=px(8, 0))
         tk.Label(ed, text="Language:").pack(side="left")
         self.lang_var = tk.StringVar()
         lc = ttk.Combobox(ed, textvariable=self.lang_var, values=LANG_CHOICES, width=20)
-        lc.pack(side="left", padx=(4, 12))
+        lc.pack(side="left", padx=px(4, 12))
         lc.bind("<<ComboboxSelected>>", lambda _e: self._apply_edit())
         lc.bind("<FocusOut>", lambda _e: self._apply_edit())
         lc.bind("<Return>", lambda _e: self._apply_edit())
         tk.Label(ed, text="Title:").pack(side="left")
         self.title_var = tk.StringVar()
         te = tk.Entry(ed, textvariable=self.title_var, width=26)
-        te.pack(side="left", padx=(4, 12))
+        te.pack(side="left", padx=px(4, 12))
         te.bind("<FocusOut>", lambda _e: self._apply_edit())
         te.bind("<Return>", lambda _e: self._apply_edit())
         self.default_var = tk.BooleanVar()
@@ -95,31 +96,31 @@ class TracksRemuxTab(BaseTab):
         tk.Checkbutton(ed, text="Default", variable=self.default_var, command=self._apply_edit).pack(side="left")
         tk.Checkbutton(ed, text="Forced", variable=self.forced_var, command=self._apply_edit).pack(side="left")
 
-        opt = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=6)
+        opt = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
         r1 = tk.Frame(opt)
         r1.pack(fill="x")
         tk.Label(r1, text="Container:").pack(side="left")
         self.container_var = tk.StringVar(value=CONTAINERS["mkv"])
         cb = ttk.Combobox(r1, textvariable=self.container_var, values=list(CONTAINERS.values()), state="readonly",
                           width=26)
-        cb.pack(side="left", padx=6)
+        cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._container_changed())
         self.chapters_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Keep chapters", variable=self.chapters_var).pack(side="left", padx=12)
+        tk.Checkbutton(r1, text="Keep chapters", variable=self.chapters_var).pack(side="left", padx=px(12))
         tk.Label(r1, text="File title:").pack(side="left")
         self.file_title = tk.StringVar()
-        tk.Entry(r1, textvariable=self.file_title, width=24).pack(side="left", padx=4)
-        self.notes = tk.Label(opt, text="", fg=CLR["orange"], justify="left", anchor="w", wraplength=900)
-        self.notes.pack(fill="x", pady=(6, 0))
+        tk.Entry(r1, textvariable=self.file_title, width=24).pack(side="left", padx=px(4))
+        self.notes = tk.Label(opt, text="", fg=CLR["orange"], justify="left", anchor="w", wraplength=px(900))
+        self.notes.pack(fill="x", pady=px(6, 0))
         self.out_row = FileRow(opt, t("common.output_file"), save=True, ext=".mkv",
                                suggest=lambda: self._suggest())
-        self.out_row.pack(fill="x", pady=(6, 0))
+        self.out_row.pack(fill="x", pady=px(6, 0))
         self.btn = tk.Button(body, text="🗂  REMUX  (no re-encoding)", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                              fg="white", width=28, cursor="hand2", command=self._render)
-        self.btn.pack(pady=8)
+        self.btn.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

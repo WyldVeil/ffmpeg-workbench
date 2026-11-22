@@ -20,6 +20,7 @@ import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
@@ -70,29 +71,29 @@ class AudioDynamicsTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="🎛  " + t("tab.audio_dynamics"), font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner, text=t("dynamics.desc_header"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Source
-        sf = tk.Frame(self); sf.pack(pady=8)
+        sf = tk.Frame(self); sf.pack(pady=px(8))
         tk.Label(sf, text=t("common.source_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
+        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
 
         # Preset
-        pre_f = tk.Frame(self); pre_f.pack(fill="x", padx=16, pady=4)
+        pre_f = tk.Frame(self); pre_f.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(pre_f, text=t("dynamics.lbl_quick_preset"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.preset_var = tk.StringVar(value=list(VOICE_PRESETS.keys())[0])
         preset_cb = ttk.Combobox(pre_f, textvariable=self.preset_var,
                                   values=list(VOICE_PRESETS.keys()),
                                   state="readonly", width=34)
-        preset_cb.pack(side="left", padx=8)
+        preset_cb.pack(side="left", padx=px(8))
         preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
 
         # ── Scrollable chain ─────────────────────────────────────────────
@@ -105,7 +106,7 @@ class AudioDynamicsTab(BaseTab):
         canvas.configure(yscrollcommand=sb.set)
 
         # No mousewheel binding here - main.py's _global_mousewheel handles it.
-        canvas.pack(side="left", fill="both", expand=True, padx=(16, 0))
+        canvas.pack(side="left", fill="both", expand=True, padx=px(16, 0))
         sb.pack(side="right", fill="y")
 
         # ── 1. Noise Gate ─────────────────────────────────────────────────
@@ -126,37 +127,37 @@ class AudioDynamicsTab(BaseTab):
         # ── Filter preview ────────────────────────────────────────────────
         self.filter_preview = tk.Label(inner, text="", fg=CLR["fgdim"],
                                         font=(MONO_FONT, 8),
-                                        wraplength=860, justify="left")
-        self.filter_preview.pack(anchor="w", padx=16, pady=4)
+                                        wraplength=px(860), justify="left")
+        self.filter_preview.pack(anchor="w", padx=px(16), pady=px(4))
 
         # ── Output & render ───────────────────────────────────────────────
-        of = tk.Frame(inner); of.pack(pady=6, padx=16, fill="x")
+        of = tk.Frame(inner); of.pack(pady=px(6), padx=px(16), fill="x")
         tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=8)
+        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
 
-        btn_row = tk.Frame(inner); btn_row.pack(pady=8, padx=16)
+        btn_row = tk.Frame(inner); btn_row.pack(pady=px(8), padx=px(16))
         tk.Button(btn_row, text=t("dynamics.btn_preview_10s"),
                   bg=CLR["accent"], fg="white", width=16, font=(UI_FONT, 10),
-                  command=self._preview).pack(side="left", padx=8)
+                  command=self._preview).pack(side="left", padx=px(8))
         self.btn_render = tk.Button(
             btn_row, text=t("dynamics.btn_apply_dynamics"),
             font=(UI_FONT, 12, "bold"),
             bg=CLR["green"], fg="white",
             height=2, width=24,
             command=self._render)
-        self.btn_render.pack(side="left", padx=8)
+        self.btn_render.pack(side="left", padx=px(8))
 
-        cf = tk.Frame(inner); cf.pack(fill="both", padx=16, pady=4)
+        cf = tk.Frame(inner); cf.pack(fill="both", padx=px(16), pady=px(4))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
     # ── Stage builders ────────────────────────────────────────────────────
     def _stage_frame(self, parent, title, bypass_attr):
-        lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
+        lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=px(14), pady=px(8))
+        lf.pack(fill="x", padx=px(16), pady=px(4))
         var = tk.BooleanVar(value=True)
         setattr(self, bypass_attr, var)
         tk.Checkbutton(lf, text=t("common.enable"),
@@ -165,14 +166,14 @@ class AudioDynamicsTab(BaseTab):
         return lf
 
     def _slider_row(self, parent, label, attr, lo, hi, default, res, unit=""):
-        row = tk.Frame(parent); row.pack(fill="x", pady=2)
+        row = tk.Frame(parent); row.pack(fill="x", pady=px(2))
         tk.Label(row, text=label, width=22, anchor="e").pack(side="left")
         var = tk.DoubleVar(value=default)
         setattr(self, attr, var)
         sl = tk.Scale(row, variable=var, from_=lo, to=hi,
-                      resolution=res, orient="horizontal", length=240,
+                      resolution=res, orient="horizontal", length=px(240),
                       command=lambda v: self._update_filter_preview())
-        sl.pack(side="left", padx=6)
+        sl.pack(side="left", padx=px(6))
         lbl = tk.Label(row, text=f"{default}{unit}", width=8, fg=CLR["accent"])
         lbl.pack(side="left")
         var.trace_add("write", lambda *_, l=lbl, v=var, u=unit:
@@ -192,20 +193,20 @@ class AudioDynamicsTab(BaseTab):
         lf = self._stage_frame(parent, "🎚  2. Parametric EQ  (5 bands)", "eq_on")
         self._eq_vars = {}
         for i, (name, ftype, freq, tip) in enumerate(EQ_BANDS):
-            row = tk.Frame(lf); row.pack(fill="x", pady=2)
+            row = tk.Frame(lf); row.pack(fill="x", pady=px(2))
             tk.Label(row, text=f"{name} ({freq} Hz):", width=22, anchor="e").pack(side="left")
             var = tk.DoubleVar(value=0.0)
             self._eq_vars[i] = (var, ftype, freq)
             sl = tk.Scale(row, variable=var, from_=-12, to=12,
-                          resolution=0.5, orient="horizontal", length=240,
+                          resolution=0.5, orient="horizontal", length=px(240),
                           command=lambda v: self._update_filter_preview())
-            sl.pack(side="left", padx=6)
+            sl.pack(side="left", padx=px(6))
             lbl = tk.Label(row, text=t("dynamics.0_0_db"), width=8, fg=CLR["accent"])
             lbl.pack(side="left")
             var.trace_add("write", lambda *_, l=lbl, v=var:
                           l.config(text=f"{v.get():.1f} dB"))
             tk.Label(row, text=tip, fg=CLR["fgdim"],
-                     font=(UI_FONT, 7)).pack(side="left", padx=6)
+                     font=(UI_FONT, 7)).pack(side="left", padx=px(6))
 
     def _build_compressor(self, parent):
         lf = self._stage_frame(parent, "🗜  3. Compressor", "comp_on")

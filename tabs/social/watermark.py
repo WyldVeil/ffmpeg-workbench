@@ -18,6 +18,7 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -140,23 +141,23 @@ class TextBurnerTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="With watermark")
-        self.compare.pack(pady=4)
+        self.compare.pack(pady=px(4))
 
-        ty = tk.LabelFrame(body, text="  Text  ", padx=12, pady=6)
-        ty.pack(fill="x", padx=20, pady=4)
+        ty = tk.LabelFrame(body, text="  Text  ", padx=px(12), pady=px(6))
+        ty.pack(fill="x", padx=px(20), pady=px(4))
         self.text_var = tk.StringVar(value="© My Channel")
         tk.Entry(ty, textvariable=self.text_var, width=40).grid(row=0, column=0, columnspan=3, sticky="w")
         self.font_var = tk.StringVar(value="Montserrat")
         ttk.Combobox(ty, textvariable=self.font_var, values=ass.families(), state="readonly",
-                     width=16).grid(row=1, column=0, sticky="w", pady=4)
+                     width=16).grid(row=1, column=0, sticky="w", pady=px(4))
         self.size_var = tk.IntVar(value=48)
-        tk.Scale(ty, variable=self.size_var, from_=12, to=200, orient="horizontal", length=160,
+        tk.Scale(ty, variable=self.size_var, from_=12, to=200, orient="horizontal", length=px(160),
                  label="Size", command=lambda _v: self._changed()).grid(row=1, column=1, sticky="w")
         self.opacity_var = tk.DoubleVar(value=0.8)
         tk.Scale(ty, variable=self.opacity_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
-                 length=140, label="Opacity", command=lambda _v: self._changed()).grid(row=1, column=2, sticky="w")
+                 length=px(140), label="Opacity", command=lambda _v: self._changed()).grid(row=1, column=2, sticky="w")
         flags = tk.Frame(ty)
         flags.grid(row=2, column=0, columnspan=3, sticky="w")
         self.bold_var, self.italic_var = tk.BooleanVar(value=True), tk.BooleanVar(value=False)
@@ -165,10 +166,10 @@ class TextBurnerTab(BaseTab):
                           ("Outline", self.outline_var)):
             tk.Checkbutton(flags, text=text, variable=var, command=self._changed).pack(side="left")
         self.col_btn = tk.Button(flags, text="Colour…", relief="flat", bg=self.colour, command=self._pick)
-        self.col_btn.pack(side="left", padx=8)
+        self.col_btn.pack(side="left", padx=px(8))
 
-        pos = tk.LabelFrame(body, text="  Position & motion  ", padx=12, pady=6)
-        pos.pack(fill="x", padx=20, pady=4)
+        pos = tk.LabelFrame(body, text="  Position & motion  ", padx=px(12), pady=px(6))
+        pos.pack(fill="x", padx=px(20), pady=px(4))
         self.place_var = tk.StringVar(value=PLACES["br"])
         pb = ttk.Combobox(pos, textvariable=self.place_var, values=list(PLACES.values()), state="readonly",
                           width=24)
@@ -178,17 +179,17 @@ class TextBurnerTab(BaseTab):
         self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
         self.every_var, self.rand_var = tk.StringVar(value="3"), tk.BooleanVar(value=False)
         row = tk.Frame(pos)
-        row.grid(row=1, column=0, sticky="w", pady=4)
+        row.grid(row=1, column=0, sticky="w", pady=px(4))
         for label, var, w in (("Angle°", self.angle_var, 5), ("X %", self.cx_var, 5), ("Y %", self.cy_var, 5),
                               ("Jump every (s)", self.every_var, 5)):
-            tk.Label(row, text=label).pack(side="left", padx=(6, 2))
+            tk.Label(row, text=label).pack(side="left", padx=px(6, 2))
             tk.Entry(row, textvariable=var, width=w).pack(side="left")
             var.trace_add("write", lambda *_a: self._changed())
         tk.Checkbutton(row, text="random (1-2× that)", variable=self.rand_var,
-                       command=self._changed).pack(side="left", padx=6)
+                       command=self._changed).pack(side="left", padx=px(6))
 
-        tm = tk.LabelFrame(body, text="  When  ", padx=12, pady=6)
-        tm.pack(fill="x", padx=20, pady=4)
+        tm = tk.LabelFrame(body, text="  When  ", padx=px(12), pady=px(6))
+        tm.pack(fill="x", padx=px(20), pady=px(4))
         self.always_var = tk.BooleanVar(value=True)
         tk.Radiobutton(tm, text="The whole video", value=True, variable=self.always_var,
                        command=self._changed).grid(row=0, column=0, sticky="w")
@@ -203,18 +204,18 @@ class TextBurnerTab(BaseTab):
         for var in (self.text_var, self.font_var, self.ranges_var):
             var.trace_add("write", lambda *_a: self._changed())
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="©  BURN WATERMARK", font=(UI_FONT, 12, "bold"), bg="#E91E63",
                                     fg="white", width=24, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -20,6 +20,7 @@ import tkinter as tk
 
 from core import catalog
 from core import settings as _settings
+from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import scroll_body
 
@@ -65,7 +66,7 @@ class StartTab(BaseTab):
     def _build_ui(self):
         outer = scroll_body(self)
         self._col = tk.Frame(outer, bg=CLR["bg"])
-        self._col.pack(fill="x", padx=32, pady=(26, 30))
+        self._col.pack(fill="x", padx=px(32), pady=px(26, 30))
         # Centre on the visible width (the scroll canvas), not the inner frame:
         # the padding changes the frame's own width, so reacting to that fed
         # back into itself and grew without end when the content was wider
@@ -74,21 +75,21 @@ class StartTab(BaseTab):
 
         tk.Label(self._col, text="START", font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["accent"]).pack(anchor="w")
         tk.Label(self._col, text="What do you want to do?", font=(UI_FONT, 24, "bold"), bg=CLR["bg"],
-                 fg=CLR["fg"]).pack(anchor="w", pady=(2, 2))
+                 fg=CLR["fg"]).pack(anchor="w", pady=px(2, 2))
         tk.Label(self._col, text="Choose a goal, search, or drop in a file to see what you can do with it. "
                                  "Everything happens on this computer.",
                  font=(UI_FONT, 11), bg=CLR["bg"], fg=CLR["fgdim"], justify="left", anchor="w").pack(anchor="w")
 
         # Search
-        box = tk.Frame(self._col, bg=CLR["input_bg"], highlightthickness=1, highlightbackground=CLR["border"],
+        box = tk.Frame(self._col, bg=CLR["input_bg"], highlightthickness=px(1), highlightbackground=CLR["border"],
                        highlightcolor=CLR["accent"])
-        box.pack(fill="x", pady=(18, 12))
+        box.pack(fill="x", pady=px(18, 12))
         tk.Label(box, text="🔍", font=(UI_FONT, 13), bg=CLR["input_bg"], fg=CLR["fgdim"]).pack(side="left",
-                                                                                              padx=(12, 4))
+                                                                                              padx=px(12, 4))
         self._search_var = tk.StringVar()
         self._search = tk.Entry(box, textvariable=self._search_var, font=(UI_FONT, 13), relief="flat", bd=0,
                                 bg=CLR["input_bg"], fg=CLR["fgdim"], insertbackground=CLR["fg"])
-        self._search.pack(side="left", fill="x", expand=True, ipady=9, padx=(2, 10))
+        self._search.pack(side="left", fill="x", expand=True, ipady=px(9), padx=px(2, 10))
         self._search.insert(0, PLACEHOLDER)
         self._search.bind("<FocusIn>", self._search_focus)
         self._search.bind("<FocusOut>", self._search_blur)
@@ -100,21 +101,21 @@ class StartTab(BaseTab):
         # File drop area + recent
         row = tk.Frame(self._col, bg=CLR["bg"])
         row.pack(fill="x")
-        self._drop = tk.Canvas(row, height=118, bg=CLR["bg"], highlightthickness=0, cursor="hand2")
+        self._drop = tk.Canvas(row, height=px(118), bg=CLR["bg"], highlightthickness=0, cursor="hand2")
         self._drop.pack(side="left", fill="x", expand=True)
         self._drop.bind("<Configure>", lambda _e: self._draw_drop())
         self._drop.bind("<Button-1>", lambda _e: self._choose_file())
-        self._recent = tk.Frame(row, bg=CLR["bg"], width=300)
-        self._recent.pack(side="left", fill="y", padx=(18, 0))
+        self._recent = tk.Frame(row, bg=CLR["bg"], width=px(300))
+        self._recent.pack(side="left", fill="y", padx=px(18, 0))
 
         # Suggestions for the file, then goals / goal tools / search results
         self._suggest_frame = tk.Frame(self._col, bg=CLR["bg"])
         self._suggest_frame.pack(fill="x")
         self._results = tk.Frame(self._col, bg=CLR["bg"])
-        self._results.pack(fill="x", pady=(14, 0))
+        self._results.pack(fill="x", pady=px(14, 0))
 
         foot = tk.Frame(self._col, bg=CLR["bg"])
-        foot.pack(fill="x", pady=(22, 0))
+        foot.pack(fill="x", pady=px(22, 0))
         total = len(catalog.TOOLS)
         home = tk.Label(foot, text=f"🏠  Browse all {total} tools on Home  ›", font=(UI_FONT, 10, "bold"),
                         bg=CLR["bg"], fg=CLR["accent"], cursor="hand2")
@@ -127,16 +128,11 @@ class StartTab(BaseTab):
         self._render_results()
 
     def _on_width(self, event):
-        # Sizes are for normal scaling; HiDPI screens draw everything bigger.
-        try:
-            k = max(1.0, float(self.tk.call("tk", "scaling")) / (96.0 / 72.0))
-        except (tk.TclError, ValueError):
-            k = 1.0
-        max_w, margin = round(MAX_WIDTH * k), round(24 * k)
+        max_w, margin = px(MAX_WIDTH), px(24)
         pad = max(margin, (event.width - max_w) // 2)
         self._col.pack_configure(padx=pad)
         avail = min(event.width, max_w) - 2 * margin
-        cols = max(1, min(4, avail // round(250 * k)))
+        cols = max(1, min(4, avail // px(250)))
         if cols != self._cols:
             self._cols = cols
             if not self._query() and self._goal is None:
@@ -235,26 +231,27 @@ class StartTab(BaseTab):
     def _draw_drop(self, error: str = ""):
         c = self._drop
         c.delete("all")
-        w, h = max(c.winfo_width(), 200), int(c["height"])
+        w, h = max(c.winfo_width(), px(200)), int(c["height"])
         if self._file:
             path, info = self._file
-            c.create_rectangle(1, 1, w - 2, h - 2, outline=CLR["accent"], fill=CLR["panel"], width=1)
+            c.create_rectangle(px(1), px(1), w - px(2), h - px(2), outline=CLR["accent"], fill=CLR["panel"], width=px(1))
             kind = "🎞" if info.has_video else "🎵"
-            c.create_text(26, h / 2, text=kind, font=(UI_FONT, 26), fill=CLR["fg"], anchor="w")
-            c.create_text(82, h / 2 - 16, text=os.path.basename(path), font=(UI_FONT, 12, "bold"),
-                          fill=CLR["fg"], anchor="w", width=w - 200)
-            c.create_text(82, h / 2 + 10, text=catalog.describe(info), font=(UI_FONT, 10), fill=CLR["fgdim"],
-                          anchor="w", width=w - 200)
-            c.create_text(82, h / 2 + 32, text="Click to choose another file", font=(UI_FONT, 9),
+            c.create_text(px(26), h / 2, text=kind, font=(UI_FONT, 26), fill=CLR["fg"], anchor="w")
+            c.create_text(px(82), h / 2 - px(16), text=os.path.basename(path), font=(UI_FONT, 12, "bold"),
+                          fill=CLR["fg"], anchor="w", width=w - px(200))
+            c.create_text(px(82), h / 2 + px(10), text=catalog.describe(info), font=(UI_FONT, 10), fill=CLR["fgdim"],
+                          anchor="w", width=w - px(200))
+            c.create_text(px(82), h / 2 + px(32), text="Click to choose another file", font=(UI_FONT, 9),
                           fill=CLR["fgdim"], anchor="w")
-            clear = c.create_text(w - 22, 20, text="✕", font=(UI_FONT, 12), fill=CLR["fgdim"], anchor="e")
+            clear = c.create_text(w - px(22), px(20), text="✕", font=(UI_FONT, 12), fill=CLR["fgdim"], anchor="e")
             c.tag_bind(clear, "<Button-1>", lambda _e: (self.clear_file(), "break")[1])
             return
-        c.create_rectangle(2, 2, w - 3, h - 3, outline=_mix(CLR["border"], CLR["fg"], 0.25), dash=(6, 4),
-                           fill=CLR["bg"], width=2)
-        c.create_text(w / 2, h / 2 - 14, text="⬇  Drop a video, audio file or photo here",
+        c.create_rectangle(px(2), px(2), w - px(3), h - px(3), outline=_mix(CLR["border"], CLR["fg"], 0.25),
+                           dash=px(6, 4),
+                           fill=CLR["bg"], width=px(2))
+        c.create_text(w / 2, h / 2 - px(14), text="⬇  Drop a video, audio file or photo here",
                       font=(UI_FONT, 12, "bold"), fill=CLR["fg"])
-        c.create_text(w / 2, h / 2 + 12, text=error or "or click to choose one - you'll get suggestions for it",
+        c.create_text(w / 2, h / 2 + px(12), text=error or "or click to choose one - you'll get suggestions for it",
                       font=(UI_FONT, 10), fill=CLR["red"] if error else CLR["fgdim"])
 
     def _render_suggestions(self):
@@ -269,8 +266,8 @@ class StartTab(BaseTab):
         grid = tk.Frame(self._suggest_frame, bg=CLR["bg"])
         grid.pack(fill="x")
         for i, (name, reason) in enumerate(tips):
-            self._tool_row(grid, name, reason).grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0, 10),
-                                                    pady=4)
+            self._tool_row(grid, name, reason).grid(row=i // 2, column=i % 2, sticky="nsew", padx=px(0, 10),
+                                                    pady=px(4))
         for c in (0, 1):
             grid.grid_columnconfigure(c, weight=1, uniform="s")
 
@@ -296,16 +293,16 @@ class StartTab(BaseTab):
                 info = catalog.TOOLS.get(name)
                 lbl = tk.Label(self._recent, text=f"{info.icon if info else '•'}  {name}", font=(UI_FONT, 10),
                                bg=CLR["bg"], fg=CLR["accent"], cursor="hand2")
-                lbl.pack(anchor="w", pady=1)
+                lbl.pack(anchor="w", pady=px(1))
                 lbl.bind("<Button-1>", lambda _e, k=key: self._go(k))
         if files:
             tk.Label(self._recent, text="Recent files", font=(UI_FONT, 10, "bold"), bg=CLR["bg"],
-                     fg=CLR["fg"]).pack(anchor="w", pady=(8 if tools else 0, 0))
+                     fg=CLR["fg"]).pack(anchor="w", pady=px(8 if tools else 0, 0))
             for p in files:
                 name = os.path.basename(p)
                 lbl = tk.Label(self._recent, text="📄  " + (name if len(name) <= 34 else name[:31] + "…"),
                                font=(UI_FONT, 10), bg=CLR["bg"], fg=CLR["accent"], cursor="hand2")
-                lbl.pack(anchor="w", pady=1)
+                lbl.pack(anchor="w", pady=px(1))
                 lbl.bind("<Button-1>", lambda _e, f=p: self.load_file(f))
 
     # ── Goals / results ───────────────────────────────────────────────────
@@ -323,7 +320,7 @@ class StartTab(BaseTab):
             self._section(self._results, f"Tools for “{q}”" if hits else f"Nothing matches “{q}”")
             if not hits:
                 tk.Label(self._results, text="Try other words - or pick a goal below, or browse every tool on Home.",
-                         font=(UI_FONT, 10), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", pady=(0, 6))
+                         font=(UI_FONT, 10), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", pady=px(0, 6))
                 self._goal_grid()
                 return
             self._tool_list(hits)
@@ -345,7 +342,7 @@ class StartTab(BaseTab):
         grid.pack(fill="x")
         cols = self._cols or 3
         for i, g in enumerate(catalog.GOALS):
-            self._goal_card(grid, g).grid(row=i // cols, column=i % cols, sticky="nsew", padx=(0, 10), pady=5)
+            self._goal_card(grid, g).grid(row=i // cols, column=i % cols, sticky="nsew", padx=px(0, 10), pady=px(5))
         for c in range(cols):
             grid.grid_columnconfigure(c, weight=1, uniform="g")
 
@@ -354,20 +351,20 @@ class StartTab(BaseTab):
         grid.pack(fill="x")
         cols = 2 if (self._cols or 3) >= 2 else 1
         for i, name in enumerate(names):
-            self._tool_row(grid, name).grid(row=i // cols, column=i % cols, sticky="nsew", padx=(0, 10), pady=4)
+            self._tool_row(grid, name).grid(row=i // cols, column=i % cols, sticky="nsew", padx=px(0, 10), pady=px(4))
         for c in range(cols):
             grid.grid_columnconfigure(c, weight=1, uniform="t")
 
     # ── Pieces ────────────────────────────────────────────────────────────
     def _section(self, parent, title: str, sub: str = ""):
         tk.Label(parent, text=title, font=(UI_FONT, 13, "bold"), bg=CLR["bg"], fg=CLR["fg"]).pack(
-            anchor="w", pady=(16, 2 if sub else 8))
+            anchor="w", pady=px(16, 2 if sub else 8))
         if sub:
             tk.Label(parent, text=sub, font=(UI_FONT, 10), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w",
-                                                                                             pady=(0, 8))
+                                                                                             pady=px(0, 8))
 
     def _card(self, parent):
-        return tk.Frame(parent, bg=CLR["panel"], highlightthickness=1, highlightbackground=CLR["border"],
+        return tk.Frame(parent, bg=CLR["panel"], highlightthickness=px(1), highlightbackground=CLR["border"],
                         cursor="hand2", takefocus=1, highlightcolor=CLR["accent"])
 
     def _wire(self, card, on_click):
@@ -400,13 +397,13 @@ class StartTab(BaseTab):
         card = self._card(parent)
         card._goal = g.key
         tk.Label(card, text=g.icon, font=(UI_FONT, 22), bg=CLR["panel"], fg=CLR["fg"]).pack(side="left",
-                                                                                           padx=(14, 8), pady=12)
+                                                                                           padx=px(14, 8), pady=px(12))
         text = tk.Frame(card, bg=CLR["panel"])
-        text.pack(side="left", fill="both", expand=True, pady=10, padx=(0, 10))
+        text.pack(side="left", fill="both", expand=True, pady=px(10), padx=px(0, 10))
         tk.Label(text, text=g.title, font=(UI_FONT, 11, "bold"), bg=CLR["panel"], fg=CLR["fg"], anchor="w").pack(
             anchor="w")
         blurb = tk.Label(text, text=g.blurb, font=(UI_FONT, 9), bg=CLR["panel"], fg=CLR["fgdim"], anchor="w",
-                         justify="left", wraplength=190)
+                         justify="left", wraplength=px(190))
         blurb.pack(anchor="w", fill="x")
         self._wrap(text, blurb)
         return self._wire(card, lambda: self.show_goal(g.key))
@@ -416,15 +413,15 @@ class StartTab(BaseTab):
         card = self._card(parent)
         card._tool = name
         tk.Label(card, text=info.icon, font=(UI_FONT, 17), bg=CLR["panel"], fg=CLR["fg"], width=2).pack(
-            side="left", padx=(12, 6), pady=8)
+            side="left", padx=px(12, 6), pady=px(8))
         tk.Label(card, text="Open ›", font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"]).pack(
-            side="right", padx=12)
+            side="right", padx=px(12))
         text = tk.Frame(card, bg=CLR["panel"])
-        text.pack(side="left", fill="both", expand=True, pady=8)
+        text.pack(side="left", fill="both", expand=True, pady=px(8))
         tk.Label(text, text=name, font=(UI_FONT, 10, "bold"), bg=CLR["panel"], fg=CLR["fg"], anchor="w").pack(
             anchor="w")
         blurb = tk.Label(text, text=reason or info.blurb, font=(UI_FONT, 9), bg=CLR["panel"],
-                         fg=CLR["orange"] if reason else CLR["fgdim"], anchor="w", justify="left", wraplength=360)
+                         fg=CLR["orange"] if reason else CLR["fgdim"], anchor="w", justify="left", wraplength=px(360))
         blurb.pack(anchor="w", fill="x")
         self._wrap(text, blurb)
         return self._wire(card, lambda: self.open_tool(name))
@@ -433,7 +430,7 @@ class StartTab(BaseTab):
     def _wrap(frame, label):
         """Wrap *label* to the width its card actually has."""
         def fit(event):
-            width = max(120, event.width - 6)
+            width = max(px(120), event.width - px(6))
             if int(label.cget("wraplength")) != width:
                 label.configure(wraplength=width)
         frame.bind("<Configure>", fit, add=True)

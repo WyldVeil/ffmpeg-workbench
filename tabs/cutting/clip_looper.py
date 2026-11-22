@@ -17,6 +17,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -63,15 +64,15 @@ class ClipLooperTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         pv = tk.Frame(body)
-        pv.pack(pady=4)
+        pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 448, 252)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
         bar = tk.Frame(pv)
         bar.pack(fill="x")
-        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=300,
+        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=px(300),
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(side="left", fill="x", expand=True)
         tk.Button(bar, text="Set start", relief="flat",
@@ -79,8 +80,8 @@ class ClipLooperTab(BaseTab):
         tk.Button(bar, text="Set end", relief="flat",
                   command=lambda: self.end_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
 
-        opt = tk.LabelFrame(body, text="  Loop  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  Loop  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="simple")
         for key, label, desc in MODES:
             row = tk.Frame(opt)
@@ -89,42 +90,42 @@ class ClipLooperTab(BaseTab):
                            command=self._mode_changed).pack(side="left")
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
         r = tk.Frame(opt)
-        r.pack(fill="x", pady=(6, 2))
+        r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="Section from").pack(side="left")
         self.start_var = tk.StringVar(value="0")
-        tk.Entry(r, textvariable=self.start_var, width=11).pack(side="left", padx=4)
+        tk.Entry(r, textvariable=self.start_var, width=11).pack(side="left", padx=px(4))
         self.end_lbl = tk.Label(r, text="to")
         self.end_lbl.pack(side="left")
         self.end_var = tk.StringVar(value="2")
         self.end_entry = tk.Entry(r, textvariable=self.end_var, width=11)
-        self.end_entry.pack(side="left", padx=4)
-        tk.Label(r, text="Repeats:").pack(side="left", padx=(10, 2))
+        self.end_entry.pack(side="left", padx=px(4))
+        tk.Label(r, text="Repeats:").pack(side="left", padx=px(10, 2))
         self.count_var = tk.StringVar(value="4")
         tk.Entry(r, textvariable=self.count_var, width=4).pack(side="left")
         r2 = tk.Frame(opt)
-        r2.pack(fill="x", pady=2)
+        r2.pack(fill="x", pady=px(2))
         tk.Label(r2, text="Stutter slice (s):").pack(side="left")
         self.slice_var = tk.StringVar(value="0.15")
-        tk.Entry(r2, textvariable=self.slice_var, width=6).pack(side="left", padx=4)
-        tk.Label(r2, text="Speed-up per repeat:").pack(side="left", padx=(10, 2))
+        tk.Entry(r2, textvariable=self.slice_var, width=6).pack(side="left", padx=px(4))
+        tk.Label(r2, text="Speed-up per repeat:").pack(side="left", padx=px(10, 2))
         self.factor_var = tk.StringVar(value="1.3")
         tk.Entry(r2, textvariable=self.factor_var, width=6).pack(side="left")
         self.context_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt, text="Keep the rest of the clip before and after the loop",
                        variable=self.context_var).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "looped"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🔁  CREATE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

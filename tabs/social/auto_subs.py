@@ -18,6 +18,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import whisper
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -44,15 +45,15 @@ class AutoSubsTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        eng = tk.LabelFrame(body, text="  Speech recognition  ", padx=12, pady=8)
-        eng.pack(fill="x", padx=20, pady=6)
+        eng = tk.LabelFrame(body, text="  Speech recognition  ", padx=px(12), pady=px(8))
+        eng.pack(fill="x", padx=px(20), pady=px(6))
 
         def row(r, label, *widgets):
-            tk.Label(eng, text=label, anchor="w", width=18).grid(row=r, column=0, sticky="w", pady=3)
+            tk.Label(eng, text=label, anchor="w", width=18).grid(row=r, column=0, sticky="w", pady=px(3))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 8), pady=3)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(3))
 
         self.model_var = tk.StringVar()
         self.model_box = ttk.Combobox(eng, textvariable=self.model_var, state="readonly", width=40)
@@ -70,7 +71,7 @@ class AutoSubsTab(BaseTab):
                                   variable=self.translate_var))
         self.maxlen_var = tk.IntVar(value=42)
         row(4, "Max. characters/line:", tk.Scale(eng, variable=self.maxlen_var, from_=0, to=80,
-                                                 orient="horizontal", length=200),
+                                                 orient="horizontal", length=px(200)),
             tk.Label(eng, text="(0 = whole sentences; 32-42 suits most screens)", fg=CLR["fgdim"],
                      font=(UI_FONT, 8)))
         self.prompt_var = tk.StringVar()
@@ -80,8 +81,8 @@ class AutoSubsTab(BaseTab):
         self.track_box = ttk.Combobox(eng, textvariable=self.track_var, state="readonly", width=40)
         row(6, "Audio track:", self.track_box)
 
-        out = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out.pack(fill="x", padx=20, pady=6)
+        out = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out.pack(fill="x", padx=px(20), pady=px(6))
         self.fmt_var = tk.StringVar(value=FORMATS["srt"])
         fr = tk.Frame(out)
         fr.pack(fill="x")
@@ -90,23 +91,23 @@ class AutoSubsTab(BaseTab):
                      width=34).pack(side="left")
         self.out_row = FileRow(out, "Save as:", save=True, kind="subtitle", ext=".srt",
                                suggest=self._suggest)
-        self.out_row.pack(fill="x", pady=(6, 0))
+        self.out_row.pack(fill="x", pady=px(6, 0))
 
         self.btn_run = tk.Button(body, text="🗣  GENERATE SUBTITLES", font=(UI_FONT, 12, "bold"),
                                  bg="#00695C", fg="white", width=26, cursor="hand2",
                                  command=self._run)
-        self.btn_run.pack(pady=8)
+        self.btn_run.pack(pady=px(8))
         after = tk.Frame(body)
-        after.pack(pady=(0, 6))
+        after.pack(pady=px(0, 6))
         self.burn_btn = tk.Button(after, text="🔥 Burn into the video…", relief="flat",
                                   state="disabled", command=self._burn)
-        self.burn_btn.pack(side="left", padx=6)
+        self.burn_btn.pack(side="left", padx=px(6))
         self.mux_btn = tk.Button(after, text="📎 Add as a subtitle track…", relief="flat",
                                  state="disabled", command=self._mux)
-        self.mux_btn.pack(side="left", padx=6)
+        self.mux_btn.pack(side="left", padx=px(6))
 
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=8)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

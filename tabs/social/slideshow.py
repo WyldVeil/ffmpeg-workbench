@@ -22,6 +22,7 @@ from core import ass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -110,7 +111,7 @@ class SlideshowMakerTab(BaseTab):
                          "transitions, captions and music.", icon="🖼")
         body = scroll_body(self)
         top = tk.Frame(body)
-        top.pack(fill="x", padx=20, pady=(10, 4))
+        top.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         left = tk.Frame(top)
         left.pack(side="left", fill="both", expand=True)
@@ -118,7 +119,7 @@ class SlideshowMakerTab(BaseTab):
         self.tree = ttk.Treeview(left, columns=cols, show="headings", height=10, selectmode="browse")
         for c, label, w in (("n", "#", 40), ("file", "Photo", 260), ("caption", "Caption", 260)):
             self.tree.heading(c, text=label)
-            self.tree.column(c, width=w, anchor="w", stretch=c != "n")
+            self.tree.column(c, width=px(w), anchor="w", stretch=c != "n")
         self.tree.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(left, command=self.tree.yview)
         sb.pack(side="left", fill="y")
@@ -126,32 +127,32 @@ class SlideshowMakerTab(BaseTab):
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._selected())
 
         btns = tk.Frame(top)
-        btns.pack(side="left", fill="y", padx=(8, 0))
+        btns.pack(side="left", fill="y", padx=px(8, 0))
         for text, cmd in (("➕ Add photos", self._add_images), ("📁 Add folder", self._add_folder),
                           ("⬆ Up", lambda: self._move(-1)), ("⬇ Down", lambda: self._move(1)),
                           ("🗑 Remove", self._remove), ("🧹 Clear", self._clear),
                           ("🔤 Sort by name", self._sort)):
             tk.Button(btns, text=text, relief="flat", anchor="w", width=14, cursor="hand2",
-                      command=cmd).pack(fill="x", pady=1)
+                      command=cmd).pack(fill="x", pady=px(1))
         self.count_lbl = tk.Label(btns, text="0 slides", fg=CLR["fgdim"])
-        self.count_lbl.pack(pady=(6, 0))
+        self.count_lbl.pack(pady=px(6, 0))
 
         cap = tk.Frame(body)
-        cap.pack(fill="x", padx=20, pady=2)
+        cap.pack(fill="x", padx=px(20), pady=px(2))
         tk.Label(cap, text="Caption for the selected photo:").pack(side="left")
         self.cap_var = tk.StringVar()
         e = tk.Entry(cap, textvariable=self.cap_var, width=50)
-        e.pack(side="left", padx=6, fill="x", expand=True)
+        e.pack(side="left", padx=px(6), fill="x", expand=True)
         e.bind("<Return>", lambda _e: self._save_caption())
         tk.Button(cap, text="Set", relief="flat", command=self._save_caption).pack(side="left")
 
-        opt = tk.LabelFrame(body, text="  Slideshow  ", padx=10, pady=6)
-        opt.pack(fill="x", padx=20, pady=6)
+        opt = tk.LabelFrame(body, text="  Slideshow  ", padx=px(10), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
 
         def row(r, label, *widgets):
-            tk.Label(opt, text=label, anchor="w", width=16).grid(row=r, column=0, sticky="w", pady=2)
+            tk.Label(opt, text=label, anchor="w", width=16).grid(row=r, column=0, sticky="w", pady=px(2))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 8), pady=2)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(2))
 
         self.dur_var = tk.StringVar(value="4")
         self.trans_dur_var = tk.StringVar(value="1.0")
@@ -170,7 +171,7 @@ class SlideshowMakerTab(BaseTab):
                                         state="readonly", width=28),
             tk.Label(opt, text="Motion amount:"),
             tk.Scale(opt, variable=self.zoom_var, from_=1.05, to=1.6, resolution=0.05,
-                     orient="horizontal", length=120))
+                     orient="horizontal", length=px(120)))
         self.res_var = tk.StringVar(value=next(iter(RESOLUTIONS)))
         self.fps_var = tk.StringVar(value="30")
         row(3, "Size:", ttk.Combobox(opt, textvariable=self.res_var, values=list(RESOLUTIONS),
@@ -190,20 +191,20 @@ class SlideshowMakerTab(BaseTab):
         self.music_row.grid(row=5, column=0, columnspan=5, sticky="we")
         self.music_vol = tk.DoubleVar(value=0.9)
         row(6, "Music volume:", tk.Scale(opt, variable=self.music_vol, from_=0.1, to=1.5,
-                                         resolution=0.05, orient="horizontal", length=140))
+                                         resolution=0.05, orient="horizontal", length=px(140)))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, suggest=self._suggest)
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🎞  CREATE SLIDESHOW", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=24, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

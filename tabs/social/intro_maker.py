@@ -23,6 +23,7 @@ from core import ass, concat
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -135,20 +136,20 @@ class IntroMakerTab(BaseTab):
         body = scroll_body(self)
 
         top = tk.Frame(body)
-        top.pack(fill="x", padx=20, pady=(10, 4))
+        top.pack(fill="x", padx=px(20), pady=px(10, 4))
         left = tk.Frame(top)
         left.pack(side="left", fill="both", expand=True)
-        self.canvas = tk.Canvas(top, width=384, height=216, bg="#000000", highlightthickness=1,
+        self.canvas = tk.Canvas(top, width=px(384), height=px(216), bg="#000000", highlightthickness=px(1),
                                 highlightbackground=CLR["border"])
-        self.canvas.pack(side="right", padx=(10, 0))
+        self.canvas.pack(side="right", padx=px(10, 0))
 
-        design = tk.LabelFrame(left, text="  Card  ", padx=10, pady=6)
+        design = tk.LabelFrame(left, text="  Card  ", padx=px(10), pady=px(6))
         design.pack(fill="x")
 
         def row(r, label, *widgets):
-            tk.Label(design, text=label, anchor="w", width=13).grid(row=r, column=0, sticky="w", pady=2)
+            tk.Label(design, text=label, anchor="w", width=13).grid(row=r, column=0, sticky="w", pady=px(2))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=2)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
 
         self.title_var = tk.StringVar(value="My Channel")
         self.sub_var = tk.StringVar(value="Subscribe for more")
@@ -184,7 +185,7 @@ class IntroMakerTab(BaseTab):
         self.c2_btn = tk.Button(design, text="Colour 2", relief="flat",
                                 command=lambda: self._pick("colour2", self.c2_btn))
         row(6, "", self.c1_btn, self.c2_btn)
-        self.bg_row = FileRow(design, "Background file:", kind="visual", label_width=13, width=30,
+        self.bg_row = FileRow(design, "Background file:", kind="visual", label_width=17, width=30,
                               on_change=lambda _p: self._schedule())
         self.bg_row.grid(row=7, column=0, columnspan=4, sticky="we")
         self.dur_var = tk.StringVar(value="5")
@@ -198,34 +199,34 @@ class IntroMakerTab(BaseTab):
         self.fade_var = tk.BooleanVar(value=True)
         row(10, "", tk.Checkbutton(design, text="Fade from / to black", variable=self.fade_var,
                                    command=self._schedule))
-        self.music_row = FileRow(design, "Music (optional):", kind="audio", label_width=13, width=30)
+        self.music_row = FileRow(design, "Music (optional):", kind="audio", label_width=17, width=30)
         self.music_row.grid(row=11, column=0, columnspan=4, sticky="we")
         for var in (self.title_var, self.sub_var, self.font_var, self.size_var, self.anim_var,
                     self.pos_var, self.grad_var, self.dur_var, self.res_var):
             var.trace_add("write", lambda *_a: self._schedule())
 
-        att = tk.LabelFrame(body, text="  Attach to a video (optional)  ", padx=10, pady=6)
-        att.pack(fill="x", padx=20, pady=6)
+        att = tk.LabelFrame(body, text="  Attach to a video (optional)  ", padx=px(10), pady=px(6))
+        att.pack(fill="x", padx=px(20), pady=px(6))
         self.attach_var = tk.StringVar(value=ATTACH["none"])
         ttk.Combobox(att, textvariable=self.attach_var, values=list(ATTACH.values()),
                      state="readonly", width=34).pack(anchor="w")
         self.main_row = FileRow(att, "Main video:", label_width=13)
-        self.main_row.pack(fill="x", pady=(4, 0))
+        self.main_row.pack(fill="x", pady=px(4, 0))
         tk.Label(att, text="  ℹ  When attaching, the card is made at the video's own size and "
                            "frame rate.", fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, suggest=self._suggest)
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🎬  CREATE", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=24, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -286,7 +287,8 @@ class IntroMakerTab(BaseTab):
             chain += f",fade=t=in:st=0:d={f:.2f},fade=t=out:st={dur - f:.3f}:d={f:.2f}"
         cmd = [ff.ffmpeg_path(), "-y", *args]
         if preview_at is not None:
-            return cmd + ["-filter_complex", chain + ",scale=384:216:force_original_aspect_ratio=decrease[v]",
+            pw, ph = px(384), px(216)                 # the preview box, in screen pixels
+            return cmd + ["-filter_complex", chain + f",scale={pw}:{ph}:force_original_aspect_ratio=decrease[v]",
                           "-map", "[v]", "-ss", f"{preview_at:.3f}", "-frames:v", "1",
                           "-f", "image2pipe", "-c:v", "png", "-"]
         music = self.music_row.path
@@ -351,7 +353,7 @@ class IntroMakerTab(BaseTab):
                 return
             self._photo = tk.PhotoImage(master=self, data=base64.b64encode(png).decode("ascii"))
             self.canvas.delete("all")
-            self.canvas.create_image(192, 108, image=self._photo)
+            self.canvas.create_image(px(192), px(108), image=self._photo)
 
         from core import ui
         ui.run_in_thread(work_fn, on_done=show, name="IntroPreview")

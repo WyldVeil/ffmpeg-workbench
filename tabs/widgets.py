@@ -33,6 +33,7 @@ from typing import Callable, Optional
 from core import encoders
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 
 
@@ -57,7 +58,7 @@ class FramePreview(tk.Frame):
                  show_time: bool = True, on_click: Optional[Callable[[], None]] = None):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
-        self._pw, self._ph = width, height
+        self._pw, self._ph = px(width), px(height)      # design px -> screen px
         self._path: Optional[str] = None
         self._duration = 0.0
         self._photo: Optional[tk.PhotoImage] = None
@@ -70,8 +71,8 @@ class FramePreview(tk.Frame):
         self._keep_time = False
         self._gen = 0                               # bumps on every load()
         self.after_draw: Optional[Callable[[], None]] = None   # called after each new frame
-        self.canvas = tk.Canvas(self, width=width, height=height, bg="#000000",
-                                highlightthickness=1, highlightbackground=clr["border"],
+        self.canvas = tk.Canvas(self, width=self._pw, height=self._ph, bg="#000000",
+                                highlightthickness=px(1), highlightbackground=clr["border"],
                                 cursor="hand2" if on_click else "")
         self.canvas.pack()
         self._time_lbl = None
@@ -215,7 +216,7 @@ class CompareView(tk.Frame):
         for label in (before_label or _tr("preview.before", "Before"),
                       after_label or _tr("preview.after", "After")):
             col = tk.Frame(row, bg=clr["bg"])
-            col.pack(side="left", padx=4)
+            col.pack(side="left", padx=px(4))
             tk.Label(col, text=label, bg=clr["bg"], fg=clr["fgdim"],
                      font=(UI_FONT, 9, "bold")).pack(anchor="w")
             view = FramePreview(col, width, height, show_time=False)
@@ -223,11 +224,11 @@ class CompareView(tk.Frame):
             self.views.append(view)
         self.view_before, self.view_after = self.views
         bar = tk.Frame(self, bg=clr["bg"])
-        bar.pack(fill="x", pady=(4, 0))
+        bar.pack(fill="x", pady=px(4, 0))
         self._pos = tk.DoubleVar(value=0.0)
         self._scale = ttk.Scale(bar, from_=0.0, to=1.0, variable=self._pos,
                                 command=lambda _v: self._moved())
-        self._scale.pack(side="left", fill="x", expand=True, padx=(4, 8))
+        self._scale.pack(side="left", fill="x", expand=True, padx=px(4, 8))
         self._time = tk.Label(bar, text="", width=12, bg=clr["bg"], fg=clr["fgdim"],
                               font=(MONO_FONT, 9))
         self._time.pack(side="right")
@@ -283,7 +284,7 @@ class FileRow(tk.Frame):
         tk.Label(self, text=label, width=label_width, anchor="w", bg=clr["bg"], fg=clr["fg"],
                  font=(UI_FONT, 10, "bold")).pack(side="left")
         self.entry = tk.Entry(self, textvariable=self.var, width=width, relief="flat")
-        self.entry.pack(side="left", fill="x", expand=True, padx=6)
+        self.entry.pack(side="left", fill="x", expand=True, padx=px(6))
         text = (_tr("common.save_as", "Save as…") if save else _tr("btn.browse", "Browse…"))
         tk.Button(self, text=text, command=self._browse, cursor="hand2",
                   relief="flat").pack(side="left")
@@ -334,7 +335,7 @@ def scroll_body(parent) -> tk.Frame:
     clr = _clr()
     outer = tk.Frame(parent, bg=clr["bg"])
     outer.pack(fill="both", expand=True)
-    canvas = tk.Canvas(outer, bg=clr["bg"], highlightthickness=0, yscrollincrement=20)
+    canvas = tk.Canvas(outer, bg=clr["bg"], highlightthickness=0, yscrollincrement=px(20))
     vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
     inner = tk.Frame(canvas, bg=clr["bg"])
     win = canvas.create_window((0, 0), window=inner, anchor="nw")
@@ -385,19 +386,19 @@ class EncoderPanel(tk.Frame):
         def lbl(text):
             return tk.Label(self, text=text, bg=clr["bg"], fg=clr["fg"], font=(UI_FONT, 9))
 
-        lbl(_tr("encoder.codec", "Codec")).grid(row=0, column=0, sticky="w", padx=(0, 6), pady=2)
+        lbl(_tr("encoder.codec", "Codec")).grid(row=0, column=0, sticky="w", padx=px(0, 6), pady=px(2))
         cb = ttk.Combobox(self, textvariable=self._codec_var, state="readonly", width=30,
                           values=[v for _, v in self._codecs])
-        cb.grid(row=0, column=1, sticky="w", pady=2)
-        lbl(_tr("encoder.quality", "Quality")).grid(row=0, column=2, sticky="w", padx=(14, 6))
+        cb.grid(row=0, column=1, sticky="w", pady=px(2))
+        lbl(_tr("encoder.quality", "Quality")).grid(row=0, column=2, sticky="w", padx=px(14, 6))
         qb = ttk.Combobox(self, textvariable=self._quality_var, state="readonly", width=11,
                           values=[v for _, v in _QUALITY_LABELS])
         qb.grid(row=0, column=3, sticky="w")
-        lbl(_tr("encoder.speed", "Speed")).grid(row=1, column=0, sticky="w", padx=(0, 6), pady=2)
+        lbl(_tr("encoder.speed", "Speed")).grid(row=1, column=0, sticky="w", padx=px(0, 6), pady=px(2))
         sb = ttk.Combobox(self, textvariable=self._speed_var, state="readonly", width=30,
                           values=[v for _, v in _SPEED_LABELS])
-        sb.grid(row=1, column=1, sticky="w", pady=2)
-        lbl(_tr("encoder.hardware", "Encoder")).grid(row=1, column=2, sticky="w", padx=(14, 6))
+        sb.grid(row=1, column=1, sticky="w", pady=px(2))
+        lbl(_tr("encoder.hardware", "Encoder")).grid(row=1, column=2, sticky="w", padx=px(14, 6))
         self._hw_box = ttk.Combobox(self, textvariable=self._hw_var, state="readonly", width=26)
         self._hw_box.grid(row=1, column=3, sticky="w")
         if show_ten_bit:
@@ -406,7 +407,7 @@ class EncoderPanel(tk.Frame):
                            selectcolor=clr["input_bg"], activebackground=clr["bg"],
                            command=self._changed).grid(row=2, column=1, columnspan=3, sticky="w")
         self._status = tk.Label(self, text="", bg=clr["bg"], fg=clr["fgdim"], font=(UI_FONT, 8))
-        self._status.grid(row=3, column=0, columnspan=4, sticky="w", pady=(2, 0))
+        self._status.grid(row=3, column=0, columnspan=4, sticky="w", pady=px(2, 0))
         for w in (cb, qb, sb, self._hw_box):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self._hw_choices = [("auto", self._hw_var.get()),

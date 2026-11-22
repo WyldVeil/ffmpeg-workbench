@@ -16,6 +16,7 @@ import tempfile
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import get_binary_path
+from core.scaling import px
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 # ── Engines (core/tts.py): online neural voices + the OS's own offline voice ──
@@ -79,7 +80,7 @@ class TTSVoiceOverTab(BaseTab):
         hdr.pack(fill="x")
         tk.Label(hdr, text="🗣  " + t("tab.tts_voice_over"),
                  font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=20, pady=12)
+                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=px(20), pady=px(12))
         tk.Label(hdr,
                  text=t("tts.subtitle"),
                  bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
@@ -115,20 +116,20 @@ class TTSVoiceOverTab(BaseTab):
     def _build_engine_banner(self):
         engines = [e for e in (ENGINE_EDGE if EDGE_TTS_OK else "", ENGINE_SYSTEM) if e]
         ok = bool(engines)
-        banner = tk.Frame(self, bg="#1A2A1A" if ok else "#2A1A1A", pady=4)
+        banner = tk.Frame(self, bg="#1A2A1A" if ok else "#2A1A1A", pady=px(4))
         banner.pack(fill="x")
         self._engine_var = tk.StringVar(value=engines[0] if engines else "")
         if not ok:
             tk.Label(banner, text="⚠  No voice engine available - the online voices are missing from this "
                                   "copy and the system has no offline voice (on Linux: install espeak-ng).",
-                     bg=banner["bg"], fg="#EF9A9A", font=(UI_FONT, 9)).pack(side="left", padx=16)
+                     bg=banner["bg"], fg="#EF9A9A", font=(UI_FONT, 9)).pack(side="left", padx=px(16))
             return
         tk.Label(banner, text="Voice engine:", bg=banner["bg"], fg=CLR["fgdim"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=(16, 4))
+                 font=(UI_FONT, 9)).pack(side="left", padx=px(16, 4))
         cb = ttk.Combobox(banner, textvariable=self._engine_var, values=engines, state="readonly", width=40)
         cb.pack(side="left")
         self._engine_note = tk.Label(banner, text="", bg=banner["bg"], fg=CLR["fgdim"], font=(UI_FONT, 9))
-        self._engine_note.pack(side="left", padx=8)
+        self._engine_note.pack(side="left", padx=px(8))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._engine_changed())
         self.after(50, self._engine_changed)
 
@@ -146,28 +147,28 @@ class TTSVoiceOverTab(BaseTab):
 
     # ── Text section ──────────────────────────────────────────────────────
     def _build_text_section(self, parent):
-        lf = tk.LabelFrame(parent, text=f"  📝  {t('tts.script_section')}  ", padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=6)
+        lf = tk.LabelFrame(parent, text=f"  📝  {t('tts.script_section')}  ", padx=px(14), pady=px(8))
+        lf.pack(fill="x", padx=px(16), pady=px(6))
 
         # Toolbar
-        tb = tk.Frame(lf); tb.pack(fill="x", pady=(0, 4))
+        tb = tk.Frame(lf); tb.pack(fill="x", pady=px(0, 4))
         tk.Button(tb, text=t("tts.load_file_button"),
-                  command=self._load_text_file).pack(side="left", padx=2)
+                  command=self._load_text_file).pack(side="left", padx=px(2))
         tk.Button(tb, text=t("tts.clear_button"),
-                  command=self._clear_text).pack(side="left", padx=2)
+                  command=self._clear_text).pack(side="left", padx=px(2))
         tk.Button(tb, text=t("tts.paste_button"),
-                  command=self._paste_text).pack(side="left", padx=2)
+                  command=self._paste_text).pack(side="left", padx=px(2))
 
         self._stats_lbl = tk.Label(tb, text="", fg=CLR["fgdim"],
                                     font=(UI_FONT, 9))
-        self._stats_lbl.pack(side="right", padx=8)
+        self._stats_lbl.pack(side="right", padx=px(8))
 
         # Text area
         txt_frame = tk.Frame(lf)
         txt_frame.pack(fill="both", expand=True)
         self.text_box = tk.Text(txt_frame, height=8, wrap="word",
                                 font=(MONO_FONT, 11),
-                                relief="sunken", bd=1,
+                                relief="sunken", bd=px(1),
                                 undo=True)
         txt_sb = ttk.Scrollbar(txt_frame, command=self.text_box.yview)
         self.text_box.configure(yscrollcommand=txt_sb.set)
@@ -184,8 +185,8 @@ class TTSVoiceOverTab(BaseTab):
 
     # ── Voice section ─────────────────────────────────────────────────────
     def _build_voice_section(self, parent):
-        lf = tk.LabelFrame(parent, text=f"  {t('tts.voice_section')}  ", padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
+        lf = tk.LabelFrame(parent, text=f"  {t('tts.voice_section')}  ", padx=px(14), pady=px(8))
+        lf.pack(fill="x", padx=px(16), pady=px(4))
 
         top = tk.Frame(lf); top.pack(fill="x")
 
@@ -195,7 +196,7 @@ class TTSVoiceOverTab(BaseTab):
         self.voice_var = tk.StringVar(value=VOICE_NAMES[0])
         voice_cb = ttk.Combobox(top, textvariable=self.voice_var,
                                  values=VOICE_NAMES, state="readonly", width=28)
-        voice_cb.pack(side="left", padx=8)
+        voice_cb.pack(side="left", padx=px(8))
         voice_cb.bind("<<ComboboxSelected>>", self._on_voice_change)
 
         # Description label
@@ -203,35 +204,35 @@ class TTSVoiceOverTab(BaseTab):
                                          text=VOICE_DESCS[VOICE_NAMES[0]],
                                          fg=CLR["fgdim"], font=(UI_FONT, 9),
                                          anchor="w")
-        self._voice_desc_lbl.pack(side="left", padx=8)
+        self._voice_desc_lbl.pack(side="left", padx=px(8))
 
         # (Preview voice button is in the player bar below)
 
         # Style preset
-        bottom = tk.Frame(lf); bottom.pack(fill="x", pady=(6, 0))
+        bottom = tk.Frame(lf); bottom.pack(fill="x", pady=px(6, 0))
         tk.Label(bottom, text=t("common.preset"), font=(UI_FONT, 10, "bold"),
                  width=8, anchor="e").pack(side="left")
         self.preset_var = tk.StringVar(value="Normal")
         preset_cb = ttk.Combobox(bottom, textvariable=self.preset_var,
                                   values=list(STYLE_PRESETS.keys()),
                                   state="readonly", width=22)
-        preset_cb.pack(side="left", padx=8)
+        preset_cb.pack(side="left", padx=px(8))
         preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
         tk.Label(bottom, text=t("tts.quick_style_presets_apply_rate_pitch_volume_toge"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=4)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(4))
 
     # ── Settings section ──────────────────────────────────────────────────
     def _build_settings_section(self, parent):
-        lf = tk.LabelFrame(parent, text=f"  ⚙  {t('tts.voice_settings_section')}  ", padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
+        lf = tk.LabelFrame(parent, text=f"  ⚙  {t('tts.voice_settings_section')}  ", padx=px(14), pady=px(8))
+        lf.pack(fill="x", padx=px(16), pady=px(4))
 
         def _slider_row(frame, label, var, lo, hi, default, fmt_fn, unit=""):
-            row = tk.Frame(frame); row.pack(fill="x", pady=3)
+            row = tk.Frame(frame); row.pack(fill="x", pady=px(3))
             tk.Label(row, text=label, width=16, anchor="e",
                      font=(UI_FONT, 9)).pack(side="left")
             sl = tk.Scale(row, variable=var, from_=lo, to=hi,
-                          resolution=1, orient="horizontal", length=260)
-            sl.pack(side="left", padx=6)
+                          resolution=1, orient="horizontal", length=px(260))
+            sl.pack(side="left", padx=px(6))
             lbl = tk.Label(row, text=fmt_fn(default) + unit, width=9,
                            fg=CLR["accent"], font=(MONO_FONT, 9))
             lbl.pack(side="left")
@@ -255,82 +256,82 @@ class TTSVoiceOverTab(BaseTab):
         _slider_row(lf, t("tts.pitch_label"),         self.pitch_var, -20,  20, 0, pitch_fmt)
         _slider_row(lf, t("tts.volume_offset_label"), self.vol_var,   -50,  50, 0, vol_fmt)
 
-        note = tk.Frame(lf); note.pack(fill="x", pady=(4, 0))
+        note = tk.Frame(lf); note.pack(fill="x", pady=px(4, 0))
         tk.Label(note,
                  text=t("tts.ℹ_rate_and_pitch_only_apply_with_edge_tts"),
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
     # ── Output section ────────────────────────────────────────────────────
     def _build_output_section(self, parent):
-        lf = tk.LabelFrame(parent, text=f"  🎧  {t('tts.output_mode_section')}  ", padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
+        lf = tk.LabelFrame(parent, text=f"  🎧  {t('tts.output_mode_section')}  ", padx=px(14), pady=px(8))
+        lf.pack(fill="x", padx=px(16), pady=px(4))
 
         self.mode_var = tk.StringVar(value="standalone")
         mode_row = tk.Frame(lf); mode_row.pack(fill="x")
         tk.Radiobutton(mode_row, text=t("tts.standalone_option"),
                        variable=self.mode_var, value="standalone",
                        command=self._on_mode_change,
-                       font=(UI_FONT, 10)).pack(side="left", padx=12)
+                       font=(UI_FONT, 10)).pack(side="left", padx=px(12))
         tk.Radiobutton(mode_row, text=t("tts.burn_into_video_option"),
                        variable=self.mode_var, value="video",
                        command=self._on_mode_change,
-                       font=(UI_FONT, 10)).pack(side="left", padx=12)
+                       font=(UI_FONT, 10)).pack(side="left", padx=px(12))
 
         # Format picker
-        fmt_row = tk.Frame(lf); fmt_row.pack(fill="x", pady=4)
+        fmt_row = tk.Frame(lf); fmt_row.pack(fill="x", pady=px(4))
         tk.Label(fmt_row, text=t("tts.audio_format_label"), width=16, anchor="e").pack(side="left")
         self.audio_fmt_var = tk.StringVar(value="MP3  320k")
         ttk.Combobox(fmt_row, textvariable=self.audio_fmt_var,
                      values=["MP3  320k", "MP3  192k", "WAV  (lossless)",
                               "AAC  256k", "FLAC  (lossless)"],
-                     state="readonly", width=18).pack(side="left", padx=8)
+                     state="readonly", width=18).pack(side="left", padx=px(8))
 
         # Output path
-        out_row = tk.Frame(lf); out_row.pack(fill="x", pady=4)
+        out_row = tk.Frame(lf); out_row.pack(fill="x", pady=px(4))
         tk.Label(out_row, text=t("common.output_file"), width=16, anchor="e").pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(out_row, textvariable=self.out_var, width=52, relief="flat").pack(side="left", padx=8)
+        tk.Entry(out_row, textvariable=self.out_var, width=52, relief="flat").pack(side="left", padx=px(8))
         tk.Button(out_row, text=t("common.save_as"),
                   command=self._browse_out).pack(side="left")
 
     # ── Video section ─────────────────────────────────────────────────────
     def _build_video_section(self, parent):
         self._video_lf = tk.LabelFrame(parent, text=f"  🎬  {t('tts.video_section')}  ",
-                                        padx=14, pady=8)
+                                        padx=px(14), pady=px(8))
         # Packed/hidden by _on_mode_change
 
-        vid_row = tk.Frame(self._video_lf); vid_row.pack(fill="x", pady=2)
+        vid_row = tk.Frame(self._video_lf); vid_row.pack(fill="x", pady=px(2))
         tk.Label(vid_row, text=t("tts.source_video_label"), width=16, anchor="e").pack(side="left")
         self.vid_var = tk.StringVar()
         self._vid_path = ""
-        tk.Entry(vid_row, textvariable=self.vid_var, width=52, relief="flat").pack(side="left", padx=8)
+        tk.Entry(vid_row, textvariable=self.vid_var, width=52, relief="flat").pack(side="left", padx=px(8))
         tk.Button(vid_row, text=t("btn.browse"),
                   command=self._browse_video).pack(side="left")
 
         # Timestamp
-        ts_row = tk.Frame(self._video_lf); ts_row.pack(fill="x", pady=2)
+        ts_row = tk.Frame(self._video_lf); ts_row.pack(fill="x", pady=px(2))
         tk.Label(ts_row, text=t("tts.insert_at_label"), width=16, anchor="e").pack(side="left")
         self.timestamp_var = tk.StringVar(value="0")
-        tk.Entry(ts_row, textvariable=self.timestamp_var, width=10, relief="flat").pack(side="left", padx=8)
+        tk.Entry(ts_row, textvariable=self.timestamp_var, width=10, relief="flat").pack(side="left", padx=px(8))
         tk.Label(ts_row,
                  text=t("tts.insert_hint"),
                  fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
 
         # Mix mode
-        mix_row = tk.Frame(self._video_lf); mix_row.pack(fill="x", pady=2)
+        mix_row = tk.Frame(self._video_lf); mix_row.pack(fill="x", pady=px(2))
         tk.Label(mix_row, text=t("tts.audio_mode_label"), width=16, anchor="e").pack(side="left")
         self.mix_mode_var = tk.StringVar(value="mix")
         tk.Radiobutton(mix_row, text=t("tts.mix_option"),
-                       variable=self.mix_mode_var, value="mix").pack(side="left", padx=8)
+                       variable=self.mix_mode_var, value="mix").pack(side="left", padx=px(8))
         tk.Radiobutton(mix_row, text=t("tts.replace_option"),
-                       variable=self.mix_mode_var, value="replace").pack(side="left", padx=8)
+                       variable=self.mix_mode_var, value="replace").pack(side="left", padx=px(8))
 
         # Original audio volume (only relevant for mix mode)
-        orig_row = tk.Frame(self._video_lf); orig_row.pack(fill="x", pady=2)
+        orig_row = tk.Frame(self._video_lf); orig_row.pack(fill="x", pady=px(2))
         tk.Label(orig_row, text=t("tts.orig_vol_label"), width=16, anchor="e").pack(side="left")
         self.orig_vol_var = tk.DoubleVar(value=0.5)
         tk.Scale(orig_row, variable=self.orig_vol_var, from_=0, to=1.0,
-                 resolution=0.05, orient="horizontal", length=180).pack(side="left", padx=8)
+                 resolution=0.05, orient="horizontal", length=px(180)).pack(side="left", padx=px(8))
         orig_lbl = tk.Label(orig_row, text="50%", fg=CLR["accent"],
                              font=(MONO_FONT, 9), width=6)
         orig_lbl.pack(side="left")
@@ -338,67 +339,67 @@ class TTSVoiceOverTab(BaseTab):
             lambda *_: orig_lbl.config(
                 text=f"{int(self.orig_vol_var.get()*100)}%"))
         tk.Label(orig_row, text=t("tts.original_video_audio_when_mixing"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left", padx=6)
+                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left", padx=px(6))
 
         # Video output format
-        vfmt_row = tk.Frame(self._video_lf); vfmt_row.pack(fill="x", pady=2)
+        vfmt_row = tk.Frame(self._video_lf); vfmt_row.pack(fill="x", pady=px(2))
         tk.Label(vfmt_row, text=t("tts.video_output"), width=16, anchor="e").pack(side="left")
         self.vid_fmt_var = tk.StringVar(value="Copy video stream  (fast, no re-encode)")
         ttk.Combobox(vfmt_row, textvariable=self.vid_fmt_var,
                      values=["Copy video stream  (fast, no re-encode)",
                               t("tts.tts_re_encode_h_264_crf_18_high_quality"),
                               t("tts.tts_re_encode_h_264_crf_23_balanced")],
-                     state="readonly", width=38).pack(side="left", padx=8)
+                     state="readonly", width=38).pack(side="left", padx=px(8))
 
     # ── Extras section ────────────────────────────────────────────────────
     def _build_extras_section(self, parent):
-        lf = tk.LabelFrame(parent, text=f"  {t('tts.extra_options_section')}  ", padx=14, pady=8)
-        lf.pack(fill="x", padx=16, pady=4)
+        lf = tk.LabelFrame(parent, text=f"  {t('tts.extra_options_section')}  ", padx=px(14), pady=px(8))
+        lf.pack(fill="x", padx=px(16), pady=px(4))
 
-        row1 = tk.Frame(lf); row1.pack(fill="x", pady=2)
+        row1 = tk.Frame(lf); row1.pack(fill="x", pady=px(2))
         self.srt_var = tk.BooleanVar(value=False)
         tk.Checkbutton(row1,
                        text=t("tts.export_srt_subtitle_file_alongside_output"),
                        variable=self.srt_var,
                        font=(UI_FONT, 10)).pack(side="left")
 
-        row2 = tk.Frame(lf); row2.pack(fill="x", pady=2)
+        row2 = tk.Frame(lf); row2.pack(fill="x", pady=px(2))
         self.normalise_var = tk.BooleanVar(value=True)
         tk.Checkbutton(row2,
                        text=t("tts.auto_normalise_tts_audio_to_16_lufs_broadcast_st"),
                        variable=self.normalise_var,
                        font=(UI_FONT, 10)).pack(side="left")
 
-        row3 = tk.Frame(lf); row3.pack(fill="x", pady=2)
+        row3 = tk.Frame(lf); row3.pack(fill="x", pady=px(2))
         tk.Label(row3, text=t("tts.silence_padding")).pack(side="left")
-        tk.Label(row3, text=t("tts.before"), fg=CLR["fgdim"]).pack(side="left", padx=(8, 2))
+        tk.Label(row3, text=t("tts.before"), fg=CLR["fgdim"]).pack(side="left", padx=px(8, 2))
         self.pad_before_var = tk.StringVar(value="0.0")
         tk.Entry(row3, textvariable=self.pad_before_var, width=5, relief="flat").pack(side="left")
-        tk.Label(row3, text=t("tts.s_after"), fg=CLR["fgdim"]).pack(side="left", padx=(4, 2))
+        tk.Label(row3, text=t("tts.s_after"), fg=CLR["fgdim"]).pack(side="left", padx=px(4, 2))
         self.pad_after_var = tk.StringVar(value="0.3")
         tk.Entry(row3, textvariable=self.pad_after_var, width=5, relief="flat").pack(side="left")
-        tk.Label(row3, text="s", fg=CLR["fgdim"]).pack(side="left", padx=2)
+        tk.Label(row3, text="s", fg=CLR["fgdim"]).pack(side="left", padx=px(2))
         tk.Label(row3,
                  text=t("tts.adds_silence_before_after_speech_in_the_output_f"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left", padx=8)
+                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left", padx=px(8))
 
     # ── Action buttons ────────────────────────────────────────────────────
     def _build_action_buttons(self, parent):
-        btn_row = tk.Frame(parent); btn_row.pack(pady=(10, 4), padx=16, fill="x")
+        btn_row = tk.Frame(parent); btn_row.pack(pady=px(10, 4), padx=px(16), fill="x")
 
         tk.Button(btn_row,
                   text=t("tts.generate_preview_button"),
                   bg="#1565C0", fg="white",
                   font=(UI_FONT, 11),
                   width=20,
-                  command=self._generate_preview).pack(side="left", padx=6)
+                  command=self._generate_preview).pack(side="left", padx=px(6))
 
         tk.Button(btn_row,
                   text=t("tts.voice_sample"),
                   bg="#37474F", fg="white",
                   font=(UI_FONT, 11),
                   width=16,
-                  command=self._preview_voice).pack(side="left", padx=6)
+                  command=self._preview_voice).pack(side="left", padx=px(6))
 
         self.btn_render = tk.Button(
             btn_row,
@@ -407,17 +408,17 @@ class TTSVoiceOverTab(BaseTab):
             bg=CLR["green"], fg="white",
             height=2, width=26,
             command=self._render)
-        self.btn_render.pack(side="left", padx=6)
+        self.btn_render.pack(side="left", padx=px(6))
 
         # Status label for async feedback
         self._gen_status = tk.Label(btn_row, text="",
                                      fg=CLR["accent"], font=(UI_FONT, 9))
-        self._gen_status.pack(side="left", padx=12)
+        self._gen_status.pack(side="left", padx=px(12))
 
         # ── In-tab player bar ─────────────────────────────────────────────
         player_lf = tk.LabelFrame(parent, text=f"  {t('tts.preview_player_section')}  ",
-                                   padx=12, pady=6)
-        player_lf.pack(fill="x", padx=16, pady=(0, 6))
+                                   padx=px(12), pady=px(6))
+        player_lf.pack(fill="x", padx=px(16), pady=px(0, 6))
 
         ctrl = tk.Frame(player_lf); ctrl.pack(fill="x")
 
@@ -426,24 +427,24 @@ class TTSVoiceOverTab(BaseTab):
                                     width=10, font=(UI_FONT, 10),
                                     state="disabled",
                                     command=self._player_play)
-        self._btn_play.pack(side="left", padx=4)
+        self._btn_play.pack(side="left", padx=px(4))
 
         self._btn_stop = tk.Button(ctrl, text=t("tts.stop_button"),
                                     bg="#B71C1C", fg="white",
                                     width=10, font=(UI_FONT, 10),
                                     state="disabled",
                                     command=self._player_stop)
-        self._btn_stop.pack(side="left", padx=4)
+        self._btn_stop.pack(side="left", padx=px(4))
 
         self._player_time_lbl = tk.Label(ctrl, text="--:--",
                                           fg=CLR["accent"],
                                           font=(MONO_FONT, 10), width=6)
-        self._player_time_lbl.pack(side="left", padx=8)
+        self._player_time_lbl.pack(side="left", padx=px(8))
 
         self._player_file_lbl = tk.Label(ctrl, text=t("tts.no_audio_yet"),
                                           fg=CLR["fgdim"], font=(UI_FONT, 9),
                                           anchor="w")
-        self._player_file_lbl.pack(side="left", padx=4, fill="x", expand=True)
+        self._player_file_lbl.pack(side="left", padx=px(4), fill="x", expand=True)
 
         self._player_proc  = None   # ffplay subprocess
         self._player_path  = ""     # path to currently loaded audio
@@ -451,7 +452,7 @@ class TTSVoiceOverTab(BaseTab):
 
     # ── Console ───────────────────────────────────────────────────────────
     def _build_console_section(self, parent):
-        cf = tk.Frame(parent); cf.pack(fill="both", expand=True, padx=16, pady=6)
+        cf = tk.Frame(parent); cf.pack(fill="both", expand=True, padx=px(16), pady=px(6))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -521,7 +522,7 @@ class TTSVoiceOverTab(BaseTab):
 
     def _on_mode_change(self):
         if self.mode_var.get() == "video":
-            self._video_lf.pack(fill="x", padx=16, pady=4,
+            self._video_lf.pack(fill="x", padx=px(16), pady=px(4),
                                  after=self._video_lf.master.children.get(
                                      list(self._video_lf.master.children)[-2], self._video_lf))
         else:

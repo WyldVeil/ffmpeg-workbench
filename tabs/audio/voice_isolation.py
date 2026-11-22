@@ -23,6 +23,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.paths import resource_path
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -79,9 +80,9 @@ class VoiceIsolationTab(BaseTab):
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
                                on_change=lambda p: self.out_row.path or self.out_row.set(
                                    self.suggest_output(p, "clean")))
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
-        opt = tk.LabelFrame(body, text="  Method  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        opt = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value="neural")
         methods = [("neural", "Neural network (RNNoise) - recommended"), ("fft", "Spectral noise reduction (FFT)")]
         if anlmdn_works():
@@ -89,44 +90,44 @@ class VoiceIsolationTab(BaseTab):
         for key, label in methods:
             tk.Radiobutton(opt, text=label, value=key, variable=self.method_var).pack(anchor="w")
         mr = tk.Frame(opt)
-        mr.pack(fill="x", pady=4)
+        mr.pack(fill="x", pady=px(4))
         tk.Label(mr, text="Model:").pack(side="left")
         self.model_var = tk.StringVar(value=MODELS["sh.rnnn"])
         mb = ttk.Combobox(mr, textvariable=self.model_var, values=[*MODELS.values(), _CUSTOM], state="readonly",
                           width=46)
-        mb.pack(side="left", padx=6)
+        mb.pack(side="left", padx=px(6))
         mb.bind("<<ComboboxSelected>>", lambda _e: self._model_changed())
         self.custom_row = FileRow(opt, "Custom model:", kind="any", label_width=14)
         self.blend_var = tk.DoubleVar(value=0.0)
         tk.Scale(opt, variable=self.blend_var, from_=0.0, to=0.8, resolution=0.05, orient="horizontal",
-                 length=220, label="Keep some original sound (more natural)").pack(anchor="w")
+                 length=px(220), label="Keep some original sound (more natural)").pack(anchor="w")
         fr = tk.Frame(opt)
-        fr.pack(anchor="w", pady=2)
+        fr.pack(anchor="w", pady=px(2))
         self.floor_var, self.red_var = tk.StringVar(value="-30"), tk.StringVar(value="12")
         tk.Label(fr, text="FFT: noise floor (dB)").pack(side="left")
-        tk.Entry(fr, textvariable=self.floor_var, width=5).pack(side="left", padx=4)
+        tk.Entry(fr, textvariable=self.floor_var, width=5).pack(side="left", padx=px(4))
         tk.Label(fr, text="reduction (dB)").pack(side="left")
-        tk.Entry(fr, textvariable=self.red_var, width=5).pack(side="left", padx=4)
+        tk.Entry(fr, textvariable=self.red_var, width=5).pack(side="left", padx=px(4))
         self.rumble_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt, text="Remove low rumble (80 Hz high-pass)", variable=self.rumble_var).pack(anchor="w")
-        tk.Button(opt, text="▶ Preview 12 s", relief="flat", command=self._preview).pack(anchor="w", pady=4)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        tk.Button(opt, text="▶ Preview 12 s", relief="flat", command=self._preview).pack(anchor="w", pady=px(4))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
                                suggest=lambda: self.suggest_output(self.src_row.path, "clean"))
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(body, text="🎤  CLEAN UP", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=20, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
     def _model_changed(self):
         if self.model_var.get() == _CUSTOM:
-            self.custom_row.pack(fill="x", pady=2)
+            self.custom_row.pack(fill="x", pady=px(2))
         else:
             self.custom_row.pack_forget()
 

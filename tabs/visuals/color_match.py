@@ -22,6 +22,7 @@ from core.i18n import t
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs import common
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from core.scaling import px
 
 _SQ = [i * i for i in range(256)]
 _SAMPLE_W, _SAMPLE_H = 160, 90
@@ -96,47 +97,47 @@ class ColorMatchTab(BaseTab):
         self.make_header(self, t("tab.colour_match"), t("color_match.subtitle"), icon="🎨")
         body = scroll_body(self)
 
-        inp = tk.LabelFrame(body, text=f"  {t('section.input_clips')}  ", padx=12, pady=8)
-        inp.pack(fill="x", padx=20, pady=(10, 4))
+        inp = tk.LabelFrame(body, text=f"  {t('section.input_clips')}  ", padx=px(12), pady=px(8))
+        inp.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.src_row = FileRow(inp, "Clip to fix:", self.src_var, on_change=self._inputs_changed)
-        self.src_row.pack(fill="x", pady=2)
+        self.src_row.pack(fill="x", pady=px(2))
         tk.Label(inp, text=f"  ℹ  {t('color_match.source_hint')}", fg=CLR["fgdim"],
                  font=(UI_FONT, 8)).pack(anchor="w")
         self.ref_row = FileRow(inp, "Reference look:", kind="visual",
                                on_change=self._inputs_changed)
-        self.ref_row.pack(fill="x", pady=2)
+        self.ref_row.pack(fill="x", pady=px(2))
         tk.Label(inp, text=f"  ℹ  {t('color_match.reference_hint')}", fg=CLR["fgdim"],
                  font=(UI_FONT, 8)).pack(anchor="w")
 
         self.compare = CompareView(body, 400, 225, after_label="Matched")
-        self.compare.pack(pady=6)
+        self.compare.pack(pady=px(6))
 
         opts = tk.LabelFrame(body, text=f"  {t('color_match.match_options_section')}  ",
-                             padx=12, pady=8)
-        opts.pack(fill="x", padx=20, pady=4)
+                             padx=px(12), pady=px(8))
+        opts.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(opts)
-        r0.pack(fill="x", pady=2)
+        r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text=t("color_match.strength_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.strength_var = tk.DoubleVar(value=1.0)
         tk.Scale(r0, variable=self.strength_var, from_=0.0, to=1.0, resolution=0.05,
-                 orient="horizontal", length=260,
-                 command=lambda _v: self._update_filter()).pack(side="left", padx=8)
+                 orient="horizontal", length=px(260),
+                 command=lambda _v: self._update_filter()).pack(side="left", padx=px(8))
         r1 = tk.Frame(opts)
-        r1.pack(fill="x", pady=2)
+        r1.pack(fill="x", pady=px(2))
         tk.Label(r1, text=t("color_match.channels_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.ch_vars = {}
         for ch in "RGB":
             var = tk.BooleanVar(value=True)
             self.ch_vars[ch] = var
             tk.Checkbutton(r1, text=ch, variable=var, font=(UI_FONT, 10, "bold"),
-                           command=self._update_filter).pack(side="left", padx=6)
+                           command=self._update_filter).pack(side="left", padx=px(6))
         self.contrast_var = tk.BooleanVar(value=True)
         tk.Checkbutton(r1, text="Match contrast too", variable=self.contrast_var,
-                       command=self._update_filter).pack(side="left", padx=(16, 0))
+                       command=self._update_filter).pack(side="left", padx=px(16, 0))
 
         stats_lf = tk.LabelFrame(body, text=f"  {t('color_match.statistics_section')}  ",
-                                 padx=12, pady=6)
-        stats_lf.pack(fill="x", padx=20, pady=4)
+                                 padx=px(12), pady=px(6))
+        stats_lf.pack(fill="x", padx=px(20), pady=px(4))
         self.stats_text = tk.Text(stats_lf, height=5, bg=CLR["console_bg"], fg="#00FF88",
                                   font=(MONO_FONT, 9), relief="flat")
         self.stats_text.pack(fill="x")
@@ -144,22 +145,22 @@ class ColorMatchTab(BaseTab):
         self.btn_analyse = tk.Button(stats_lf, text=t("color_match.analyse_button"),
                                      font=(UI_FONT, 10, "bold"), bg="#37474F", fg="white",
                                      cursor="hand2", command=self._analyse)
-        self.btn_analyse.pack(anchor="w", pady=(6, 0))
+        self.btn_analyse.pack(anchor="w", pady=px(6, 0))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "matched"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = tk.Button(body, text=t("color_match.apply_button"),
                                     font=(UI_FONT, 12, "bold"), bg="#AD1457", fg="white",
                                     width=26, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

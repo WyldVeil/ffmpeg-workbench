@@ -23,6 +23,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -146,47 +147,47 @@ class SmartReframeTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"])
-        self.info_lbl.pack(anchor="w", padx=24)
+        self.info_lbl.pack(anchor="w", padx=px(24))
 
-        opt = tk.LabelFrame(body, text="  Reframe  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=6)
+        opt = tk.LabelFrame(body, text="  Reframe  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
         self.ratio_var = tk.StringVar(value=RATIOS["9:16"][0])
         self.mode_var = tk.StringVar(value=MODES["follow"])
         r0 = tk.Frame(opt)
-        r0.pack(fill="x", pady=2)
+        r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Shape:", width=12, anchor="w").pack(side="left")
         rb = ttk.Combobox(r0, textvariable=self.ratio_var, values=[v[0] for v in RATIOS.values()],
                           state="readonly", width=30)
         rb.pack(side="left")
         rb.bind("<<ComboboxSelected>>", lambda _e: self._ratio_changed())
-        tk.Label(r0, text="Output size:").pack(side="left", padx=(12, 2))
+        tk.Label(r0, text="Output size:").pack(side="left", padx=px(12, 2))
         self.ow_var, self.oh_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
         tk.Entry(r0, textvariable=self.ow_var, width=6).pack(side="left")
         tk.Label(r0, text="×").pack(side="left")
         tk.Entry(r0, textvariable=self.oh_var, width=6).pack(side="left")
         r1 = tk.Frame(opt)
-        r1.pack(fill="x", pady=2)
+        r1.pack(fill="x", pady=px(2))
         tk.Label(r1, text="Camera:", width=12, anchor="w").pack(side="left")
         ttk.Combobox(r1, textvariable=self.mode_var, values=list(MODES.values()), state="readonly",
                      width=40).pack(side="left")
         tk.Label(opt, text="  ℹ  Tracking analyses the whole clip first (about 10-20× faster than "
                            "real time), then renders.", fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "reframed"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🎯  REFRAME", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=22, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

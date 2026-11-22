@@ -22,6 +22,7 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core import ui
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow
@@ -90,15 +91,15 @@ class WaveformEditorTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.waveform_editor"), t("waveform.subtitle"), icon="🎵")
         self.src_row = FileRow(self, t("common.source_file"), kind="media", on_change=self._load)
-        self.src_row.pack(fill="x", padx=20, pady=(12, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(12, 2))
         self._src_var = self.src_row.var
         self._info_lbl = tk.Label(self, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9), anchor="w")
-        self._info_lbl.pack(fill="x", padx=20)
+        self._info_lbl.pack(fill="x", padx=px(20))
 
-        wf_lf = tk.LabelFrame(self, text=f"  {t('waveform.mark_info_section')}  ", padx=8, pady=6,
+        wf_lf = tk.LabelFrame(self, text=f"  {t('waveform.mark_info_section')}  ", padx=px(8), pady=px(6),
                               font=(UI_FONT, 9, "bold"))
-        wf_lf.pack(fill="x", padx=20, pady=6)
-        self._canvas = tk.Canvas(wf_lf, bg=CLR["console_bg"], height=160, highlightthickness=0,
+        wf_lf.pack(fill="x", padx=px(20), pady=px(6))
+        self._canvas = tk.Canvas(wf_lf, bg=CLR["console_bg"], height=px(160), highlightthickness=0,
                                  cursor="xterm")
         self._canvas.pack(fill="x")
         c = self._canvas
@@ -117,63 +118,63 @@ class WaveformEditorTab(BaseTab):
                              "Shift+wheel = scroll", fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
         mk = tk.Frame(self)
-        mk.pack(fill="x", padx=20, pady=4)
+        mk.pack(fill="x", padx=px(20), pady=px(4))
         self._in_var, self._out_var_t = tk.StringVar(value="0"), tk.StringVar(value="0")
         tk.Label(mk, text=t("waveform.in_label"), font=(UI_FONT, 10, "bold"), fg=CLR["green"]).pack(side="left")
         e_in = tk.Entry(mk, textvariable=self._in_var, width=11, font=(MONO_FONT, 10))
-        e_in.pack(side="left", padx=(4, 14))
+        e_in.pack(side="left", padx=px(4, 14))
         tk.Label(mk, text=t("waveform.out_label"), font=(UI_FONT, 10, "bold"), fg=CLR["red"]).pack(side="left")
         e_out = tk.Entry(mk, textvariable=self._out_var_t, width=11, font=(MONO_FONT, 10))
-        e_out.pack(side="left", padx=(4, 14))
+        e_out.pack(side="left", padx=px(4, 14))
         for ent in (e_in, e_out):
             ent.bind("<Return>", lambda _e: self._typed_marks())
             ent.bind("<FocusOut>", lambda _e: self._typed_marks())
         tk.Label(mk, text=t("waveform.selection_label"), font=(UI_FONT, 10)).pack(side="left")
         self._sel_lbl = tk.Label(mk, text="0.00s", font=(MONO_FONT, 10), fg=CLR["accent"], width=10)
         self._sel_lbl.pack(side="left")
-        tk.Button(mk, text="Zoom to selection", relief="flat", command=self._zoom_sel).pack(side="left", padx=4)
+        tk.Button(mk, text="Zoom to selection", relief="flat", command=self._zoom_sel).pack(side="left", padx=px(4))
         tk.Button(mk, text="Show all", relief="flat", command=self._zoom_all).pack(side="left")
 
-        act = tk.LabelFrame(self, text=f"  {t('waveform.region_actions_section')}  ", padx=15, pady=8,
+        act = tk.LabelFrame(self, text=f"  {t('waveform.region_actions_section')}  ", padx=px(15), pady=px(8),
                             font=(UI_FONT, 9, "bold"))
-        act.pack(fill="x", padx=20, pady=6)
+        act.pack(fill="x", padx=px(20), pady=px(6))
         for key, label in (("mute", t("waveform.mute_button")), ("boost", t("waveform.boost_button")),
                            ("duck", t("waveform.duck_button"))):
             tk.Button(act, text=label, bg=CLR[COLOURS[key]], fg="white", font=(UI_FONT, 10, "bold"),
-                      width=16, cursor="hand2", command=lambda k=key: self._add_region(k)).pack(side="left", padx=4)
-        tk.Label(act, text=t("waveform.amount_label"), font=(UI_FONT, 10)).pack(side="left", padx=(20, 0))
+                      width=16, cursor="hand2", command=lambda k=key: self._add_region(k)).pack(side="left", padx=px(4))
+        tk.Label(act, text=t("waveform.amount_label"), font=(UI_FONT, 10)).pack(side="left", padx=px(20, 0))
         self._vol_adj = tk.StringVar(value="6")
-        tk.Entry(act, textvariable=self._vol_adj, width=5, font=(UI_FONT, 10)).pack(side="left", padx=4)
+        tk.Entry(act, textvariable=self._vol_adj, width=5, font=(UI_FONT, 10)).pack(side="left", padx=px(4))
         tk.Label(act, text=t("waveform.db_label"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
 
-        reg = tk.LabelFrame(self, text=f"  {t('waveform.applied_regions_section')}  ", padx=10, pady=6,
+        reg = tk.LabelFrame(self, text=f"  {t('waveform.applied_regions_section')}  ", padx=px(10), pady=px(6),
                             font=(UI_FONT, 9, "bold"))
-        reg.pack(fill="x", padx=20, pady=4)
+        reg.pack(fill="x", padx=px(20), pady=px(4))
         self._region_list = tk.Listbox(reg, bg=CLR["console_bg"], fg=CLR["console_fg"], font=(MONO_FONT, 9),
                                        height=4, relief="flat", bd=0)
         self._region_list.pack(fill="x", side="left", expand=True)
         rb = tk.Frame(reg)
-        rb.pack(side="right", padx=6)
-        tk.Button(rb, text=t("batch_joiner.btn_remove"), command=self._remove_region).pack(pady=2, fill="x")
-        tk.Button(rb, text=t("waveform.clear_all"), command=self._clear_regions).pack(pady=2, fill="x")
+        rb.pack(side="right", padx=px(6))
+        tk.Button(rb, text=t("batch_joiner.btn_remove"), command=self._remove_region).pack(pady=px(2), fill="x")
+        tk.Button(rb, text=t("waveform.clear_all"), command=self._clear_regions).pack(pady=px(2), fill="x")
 
         of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=6)
+        of.pack(fill="x", padx=px(20), pady=px(6))
         self._export_mode = tk.StringVar(value="video")
         tk.Radiobutton(of, text=t("waveform.export_video_option"), variable=self._export_mode, value="video",
-                       command=self._mode_changed).pack(side="left", padx=(0, 20))
+                       command=self._mode_changed).pack(side="left", padx=px(0, 20))
         tk.Radiobutton(of, text=t("waveform.export_audio_option"), variable=self._export_mode, value="audio",
                        command=self._mode_changed).pack(side="left")
         self.out_row = FileRow(self, t("common.output_file"), save=True, kind="media",
                                suggest=lambda: self._suggest())
-        self.out_row.pack(fill="x", padx=20)
+        self.out_row.pack(fill="x", padx=px(20))
         self._out_var = self.out_row.var
         self._btn_run = tk.Button(self, text=t("waveform.apply_button"), font=(UI_FONT, 12, "bold"),
                                   bg=CLR["green"], fg="white", height=2, width=26, cursor="hand2",
                                   command=self._render)
-        self._btn_run.pack(pady=8)
+        self._btn_run.pack(pady=px(8))
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -262,7 +263,7 @@ class WaveformEditorTab(BaseTab):
         c = self._canvas
         c.delete("all")
         w, h = c.winfo_width(), c.winfo_height()
-        if w < 10:
+        if w < px(10):
             return
         mid = h // 2
         if not self._peaks or self.duration <= 0:
@@ -272,14 +273,14 @@ class WaveformEditorTab(BaseTab):
         a, b = self._view
         n = len(self._peaks)
         per = self.duration / n
-        c.create_line(0, mid, w, mid, fill="#333333")
+        c.create_line(0, mid, w, mid, fill="#333333", width=px(1))
         for x in range(w):                                       # one column per pixel: max of its slices
             t0, t1 = a + (b - a) * x / w, a + (b - a) * (x + 1) / w
             i0, i1 = int(t0 / per), max(int(t0 / per) + 1, int(math.ceil(t1 / per)))
             chunk = self._peaks[max(0, i0):min(n, i1)]
             if not chunk:
                 continue
-            amp = int(max(chunk) * (mid - 6))
+            amp = int(max(chunk) * (mid - px(6)))
             colour = CLR["accent"]
             tm = (t0 + t1) / 2
             for rs, re_, act, _db in self._regions:
@@ -289,13 +290,13 @@ class WaveformEditorTab(BaseTab):
             c.create_line(x, mid - amp, x, mid + amp + 1, fill=colour)
         x_in, x_out = self._x(self._mark_in, w), self._x(self._mark_out, w)
         if x_out > x_in:
-            c.create_rectangle(x_in, 0, x_out, h, outline=CLR["accent"], dash=(4, 2))
-        c.create_line(x_in, 0, x_in, h, fill=CLR["green"], width=2)
-        c.create_line(x_out, 0, x_out, h, fill=CLR["red"], width=2)
+            c.create_rectangle(x_in, 0, x_out, h, outline=CLR["accent"], dash=px(4, 2), width=px(1))
+        c.create_line(x_in, 0, x_in, h, fill=CLR["green"], width=px(2))
+        c.create_line(x_out, 0, x_out, h, fill=CLR["red"], width=px(2))
         for i in range(11):                                       # time ruler for the visible range
             tx = int(i * w / 10)
-            c.create_line(tx, h - 12, tx, h - 4, fill="#555555")
-            c.create_text(min(max(tx, 24), w - 24), h - 2, text=_fmt(a + (b - a) * i / 10), fill="#666666",
+            c.create_line(tx, h - px(12), tx, h - px(4), fill="#555555", width=px(1))
+            c.create_text(min(max(tx, px(24)), w - px(24)), h - px(2), text=_fmt(a + (b - a) * i / 10), fill="#666666",
                           font=(UI_FONT, 6), anchor="s")
 
     # ── Mouse / marks ─────────────────────────────────────────────────

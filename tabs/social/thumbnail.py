@@ -20,6 +20,7 @@ from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import (    launch_preview,
 )
 from core.i18n import t
+from core.scaling import px
 
 
 def _fmt(seconds):
@@ -52,59 +53,59 @@ class ThumbnailMakerTab(BaseTab):
 
         # ── Source ────────────────────────────────────────────────────────
         sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(14, 4))
+        sf.pack(fill="x", padx=px(20), pady=px(14, 4))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._src_var = tk.StringVar()
         tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
+                 font=(UI_FONT, 10)).pack(side="left", padx=px(8))
         self._src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
                   relief="flat", font=(UI_FONT, 9)).pack(side="left")
         self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._dur_lbl.pack(side="left", padx=10)
+        self._dur_lbl.pack(side="left", padx=px(10))
 
         # ── Frame selection ───────────────────────────────────────────────
-        frame_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.frame_section')}  ", padx=15, pady=10,
+        frame_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.frame_section')}  ", padx=px(15), pady=px(10),
                                  font=(UI_FONT, 9, "bold"))
-        frame_lf.pack(fill="x", padx=20, pady=8)
+        frame_lf.pack(fill="x", padx=px(20), pady=px(8))
 
         fr1 = tk.Frame(frame_lf)
-        fr1.pack(fill="x", pady=3)
+        fr1.pack(fill="x", pady=px(3))
         tk.Label(fr1, text=t("thumbnail.scrub_label"), font=(UI_FONT, 10, "bold"),
                  width=14, anchor="e").pack(side="left")
         self._scrub_var = tk.DoubleVar(value=0.0)
         self._scrub = tk.Scale(fr1, variable=self._scrub_var, from_=0, to=100,
-                               resolution=0.01, orient="horizontal", length=420,
+                               resolution=0.01, orient="horizontal", length=px(420),
                                bg=CLR["panel"], fg=CLR["fg"], highlightthickness=0,
                                command=self._on_scrub)
-        self._scrub.pack(side="left", padx=8)
+        self._scrub.pack(side="left", padx=px(8))
         self._time_lbl = tk.Label(fr1, text="00:00.00", fg=CLR["accent"],
                                   font=(MONO_FONT, 10, "bold"), width=10)
         self._time_lbl.pack(side="left")
 
         fr2 = tk.Frame(frame_lf)
-        fr2.pack(fill="x", pady=3)
+        fr2.pack(fill="x", pady=px(3))
         tk.Label(fr2, text="", width=14).pack(side="left")
         tk.Button(fr2, text=f"👁 {t('thumbnail.preview_button')}", bg=CLR["accent"], fg="white",
                   font=(UI_FONT, 9), cursor="hand2",
-                  command=self._preview_frame).pack(side="left", padx=4)
+                  command=self._preview_frame).pack(side="left", padx=px(4))
         tk.Button(fr2, text=t("thumbnail.1s"), bg=CLR["panel"], fg=CLR["fg"],
                   font=(UI_FONT, 9), width=5, cursor="hand2",
-                  command=lambda: self._nudge(-1.0)).pack(side="left", padx=2)
+                  command=lambda: self._nudge(-1.0)).pack(side="left", padx=px(2))
         tk.Button(fr2, text=t("thumbnail.0_1s"), bg=CLR["panel"], fg=CLR["fg"],
                   font=(UI_FONT, 9), width=6, cursor="hand2",
-                  command=lambda: self._nudge(-0.1)).pack(side="left", padx=2)
+                  command=lambda: self._nudge(-0.1)).pack(side="left", padx=px(2))
         tk.Button(fr2, text=t("thumbnail.0_1s_2"), bg=CLR["panel"], fg=CLR["fg"],
                   font=(UI_FONT, 9), width=6, cursor="hand2",
-                  command=lambda: self._nudge(0.1)).pack(side="left", padx=2)
+                  command=lambda: self._nudge(0.1)).pack(side="left", padx=px(2))
         tk.Button(fr2, text=t("thumbnail.1s_2"), bg=CLR["panel"], fg=CLR["fg"],
                   font=(UI_FONT, 9), width=5, cursor="hand2",
-                  command=lambda: self._nudge(1.0)).pack(side="left", padx=2)
+                  command=lambda: self._nudge(1.0)).pack(side="left", padx=px(2))
 
         # ── Size preset ───────────────────────────────────────────────────
-        size_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.output_size_section')}  ", padx=15, pady=8,
+        size_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.output_size_section')}  ", padx=px(15), pady=px(8),
                                 font=(UI_FONT, 9, "bold"))
-        size_lf.pack(fill="x", padx=20, pady=6)
+        size_lf.pack(fill="x", padx=px(20), pady=px(6))
 
         self._size_var = tk.StringVar(value="yt_hd")
         sz_row = tk.Frame(size_lf)
@@ -115,77 +116,77 @@ class ThumbnailMakerTab(BaseTab):
 
         # ── Image adjustments ─────────────────────────────────────────────
         adj_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.adjustments_section')}  ",
-                               padx=15, pady=8, font=(UI_FONT, 9, "bold"))
-        adj_lf.pack(fill="x", padx=20, pady=6)
+                               padx=px(15), pady=px(8), font=(UI_FONT, 9, "bold"))
+        adj_lf.pack(fill="x", padx=px(20), pady=px(6))
 
         ar1 = tk.Frame(adj_lf)
-        ar1.pack(fill="x", pady=2)
+        ar1.pack(fill="x", pady=px(2))
 
         tk.Label(ar1, text=t("thumbnail.brightness_label"), font=(UI_FONT, 10), width=12,
                  anchor="e").pack(side="left")
         self._brightness = tk.DoubleVar(value=0.0)
         tk.Scale(ar1, variable=self._brightness, from_=-0.5, to=0.5,
-                 resolution=0.02, orient="horizontal", length=150,
+                 resolution=0.02, orient="horizontal", length=px(150),
                  bg=CLR["panel"], fg=CLR["fg"],
-                 highlightthickness=0).pack(side="left", padx=4)
+                 highlightthickness=0).pack(side="left", padx=px(4))
 
-        tk.Label(ar1, text=t("thumbnail.contrast_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
+        tk.Label(ar1, text=t("thumbnail.contrast_label"), font=(UI_FONT, 10)).pack(side="left", padx=px(12, 0))
         self._contrast = tk.DoubleVar(value=1.0)
         tk.Scale(ar1, variable=self._contrast, from_=0.5, to=2.0,
-                 resolution=0.05, orient="horizontal", length=150,
+                 resolution=0.05, orient="horizontal", length=px(150),
                  bg=CLR["panel"], fg=CLR["fg"],
-                 highlightthickness=0).pack(side="left", padx=4)
+                 highlightthickness=0).pack(side="left", padx=px(4))
 
-        tk.Label(ar1, text=t("thumbnail.saturation_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
+        tk.Label(ar1, text=t("thumbnail.saturation_label"), font=(UI_FONT, 10)).pack(side="left", padx=px(12, 0))
         self._saturation = tk.DoubleVar(value=1.0)
         tk.Scale(ar1, variable=self._saturation, from_=0.0, to=3.0,
-                 resolution=0.05, orient="horizontal", length=150,
+                 resolution=0.05, orient="horizontal", length=px(150),
                  bg=CLR["panel"], fg=CLR["fg"],
-                 highlightthickness=0).pack(side="left", padx=4)
+                 highlightthickness=0).pack(side="left", padx=px(4))
 
         # ── Text overlay ──────────────────────────────────────────────────
         txt_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.text_overlay_section')}  ",
-                               padx=15, pady=8, font=(UI_FONT, 9, "bold"))
-        txt_lf.pack(fill="x", padx=20, pady=6)
+                               padx=px(15), pady=px(8), font=(UI_FONT, 9, "bold"))
+        txt_lf.pack(fill="x", padx=px(20), pady=px(6))
 
         self._use_text = tk.BooleanVar(value=False)
         tk.Checkbutton(txt_lf, text=t("thumbnail.add_text_checkbox"), variable=self._use_text,
                        font=(UI_FONT, 10)).pack(anchor="w")
 
         tr1 = tk.Frame(txt_lf)
-        tr1.pack(fill="x", pady=3)
+        tr1.pack(fill="x", pady=px(3))
         tk.Label(tr1, text=t("thumbnail.text_label"), font=(UI_FONT, 10), width=10,
                  anchor="e").pack(side="left")
         self._text_var = tk.StringVar(value="")
         tk.Entry(tr1, textvariable=self._text_var, width=40, relief="flat",
-                 font=(UI_FONT, 11)).pack(side="left", padx=6)
+                 font=(UI_FONT, 11)).pack(side="left", padx=px(6))
 
         tr2 = tk.Frame(txt_lf)
-        tr2.pack(fill="x", pady=3)
+        tr2.pack(fill="x", pady=px(3))
         tk.Label(tr2, text=t("thumbnail.text_size_label"), font=(UI_FONT, 10), width=10,
                  anchor="e").pack(side="left")
         self._text_size = tk.StringVar(value="64")
         tk.Entry(tr2, textvariable=self._text_size, width=5, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=6)
-        tk.Label(tr2, text=t("thumbnail.text_color_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
+                 font=(UI_FONT, 10)).pack(side="left", padx=px(6))
+        tk.Label(tr2, text=t("thumbnail.text_color_label"), font=(UI_FONT, 10)).pack(side="left", padx=px(12, 0))
         self._text_color = tk.StringVar(value="white")
         ttk.Combobox(tr2, textvariable=self._text_color, width=10,
                      values=["white", "yellow", "red", "black", "cyan", "lime"],
-                     state="readonly").pack(side="left", padx=6)
-        tk.Label(tr2, text=t("thumbnail.text_position_label"), font=(UI_FONT, 10)).pack(side="left", padx=(12, 0))
+                     state="readonly").pack(side="left", padx=px(6))
+        tk.Label(tr2, text=t("thumbnail.text_position_label"), font=(UI_FONT, 10)).pack(side="left", padx=px(12, 0))
         self._text_pos = tk.StringVar(value="center")
         ttk.Combobox(tr2, textvariable=self._text_pos, width=12,
                      values=["center", "top", "bottom", "top-left", "top-right"],
-                     state="readonly").pack(side="left", padx=6)
+                     state="readonly").pack(side="left", padx=px(6))
 
         self._text_stroke = tk.BooleanVar(value=True)
         tk.Checkbutton(tr2, text=t("thumbnail.stroke_checkbox"), variable=self._text_stroke,
-                       font=(UI_FONT, 10)).pack(side="left", padx=12)
+                       font=(UI_FONT, 10)).pack(side="left", padx=px(12))
 
         # ── Batch mode ────────────────────────────────────────────────────
-        batch_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.batch_section')}  ", padx=15, pady=8,
+        batch_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.batch_section')}  ", padx=px(15), pady=px(8),
                                  font=(UI_FONT, 9, "bold"))
-        batch_lf.pack(fill="x", padx=20, pady=6)
+        batch_lf.pack(fill="x", padx=px(20), pady=px(6))
 
         br = tk.Frame(batch_lf)
         br.pack(fill="x")
@@ -194,31 +195,31 @@ class ThumbnailMakerTab(BaseTab):
                        font=(UI_FONT, 10)).pack(side="left")
         self._batch_interval = tk.StringVar(value="10")
         tk.Entry(br, textvariable=self._batch_interval, width=5, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=4)
+                 font=(UI_FONT, 10)).pack(side="left", padx=px(4))
         tk.Label(br, text=t("thumbnail.seconds_to_folder_hint"),
                  fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
 
         # ── Output ────────────────────────────────────────────────────────
         of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=6)
+        of.pack(fill="x", padx=px(20), pady=px(6))
         tk.Label(of, text=t("encode_queue.output_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
         tk.Entry(of, textvariable=self._out_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
+                 font=(UI_FONT, 10)).pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2",
                   relief="flat", font=(UI_FONT, 9)).pack(side="left")
 
         fmt_f = tk.Frame(self)
-        fmt_f.pack(fill="x", padx=20, pady=2)
+        fmt_f.pack(fill="x", padx=px(20), pady=px(2))
         tk.Label(fmt_f, text=t("common.format"), font=(UI_FONT, 10)).pack(side="left")
         self._fmt_var = tk.StringVar(value="PNG")
         for v in ["PNG", "JPEG (q95)", "JPEG (q85)", "WebP"]:
             tk.Radiobutton(fmt_f, text=v, variable=self._fmt_var, value=v,
-                           font=(UI_FONT, 10)).pack(side="left", padx=8)
+                           font=(UI_FONT, 10)).pack(side="left", padx=px(8))
 
         # ── Run ───────────────────────────────────────────────────────────
         bf = tk.Frame(self)
-        bf.pack(pady=8)
+        bf.pack(pady=px(8))
         self._btn_run = tk.Button(
             bf, text="🖼  " + t("tab.thumbnail_maker"), font=(UI_FONT, 12, "bold"),
             bg=CLR["green"], fg="white", height=2, width=26,
@@ -227,7 +228,7 @@ class ThumbnailMakerTab(BaseTab):
 
         # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
         self.console, csb = self.make_console(cf, height=4)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

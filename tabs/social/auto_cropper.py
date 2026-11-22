@@ -15,6 +15,7 @@ from tkinter import messagebox
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -54,26 +55,26 @@ class AutoCropperTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.result_lbl = tk.Label(body, text="", fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
-        self.result_lbl.pack(anchor="w", padx=24)
+        self.result_lbl.pack(anchor="w", padx=px(24))
         self.compare = CompareView(body, 400, 225, after_label="Cropped")
-        self.compare.pack(pady=4)
+        self.compare.pack(pady=px(4))
         self.btn_detect = tk.Button(body, text="🔍 Detect again", relief="flat", command=self._detect)
         self.btn_detect.pack()
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "nobars"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="✂  REMOVE BARS", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -15,6 +15,7 @@ from typing import Optional
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -95,9 +96,9 @@ class RegionBlurTab(BaseTab):
         self.make_header(self, t("tab.privacy_blur"), "Hide faces, plates, names or screens.", icon="🕶")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         top = tk.Frame(body)
-        top.pack(fill="x", padx=20, pady=4)
+        top.pack(fill="x", padx=px(20), pady=px(4))
         left = tk.Frame(top)
         left.pack(side="left")
         self.preview = FramePreview(left, PW, PH)
@@ -109,7 +110,7 @@ class RegionBlurTab(BaseTab):
         c.bind("<B1-Motion>", self._move)
         c.bind("<ButtonRelease-1>", self._release)
         self.pos_var = tk.DoubleVar(value=0)
-        self.slider = ttk.Scale(left, from_=0, to=1, variable=self.pos_var, length=PW,
+        self.slider = ttk.Scale(left, from_=0, to=1, variable=self.pos_var, length=px(PW),
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
         self.result_var = tk.BooleanVar(value=False)
@@ -119,52 +120,52 @@ class RegionBlurTab(BaseTab):
                  font=(UI_FONT, 8)).pack(anchor="w")
 
         right = tk.Frame(top)
-        right.pack(side="left", fill="both", expand=True, padx=(12, 0))
+        right.pack(side="left", fill="both", expand=True, padx=px(12, 0))
         tk.Label(right, text="Regions", font=(UI_FONT, 10, "bold")).pack(anchor="w")
         self.listbox = tk.Listbox(right, height=7, font=(MONO_FONT, 9), exportselection=False)
         self.listbox.pack(fill="both", expand=True)
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._select())
         pr = tk.Frame(right)
-        pr.pack(fill="x", pady=2)
+        pr.pack(fill="x", pady=px(2))
         self.preset_var = tk.StringVar(value="Add a preset region…")
         pb = ttk.Combobox(pr, textvariable=self.preset_var, values=list(PRESETS), state="readonly", width=28)
         pb.pack(side="left")
         pb.bind("<<ComboboxSelected>>", lambda _e: self._add_preset())
-        tk.Button(pr, text="Remove", relief="flat", command=self._remove).pack(side="left", padx=4)
-        ed = tk.LabelFrame(right, text="  Selected region  ", padx=8, pady=4)
-        ed.pack(fill="x", pady=4)
+        tk.Button(pr, text="Remove", relief="flat", command=self._remove).pack(side="left", padx=px(4))
+        ed = tk.LabelFrame(right, text="  Selected region  ", padx=px(8), pady=px(4))
+        ed.pack(fill="x", pady=px(4))
         self.kind_var = tk.StringVar(value=KINDS["blur"])
         ttk.Combobox(ed, textvariable=self.kind_var, values=list(KINDS.values()), state="readonly",
                      width=16).grid(row=0, column=0, sticky="w")
         self.strength_var = tk.DoubleVar(value=0.6)
         tk.Scale(ed, variable=self.strength_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
-                 length=140, label="Strength").grid(row=0, column=1, sticky="w", padx=6)
+                 length=px(140), label="Strength").grid(row=0, column=1, sticky="w", padx=px(6))
         self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
         tf = tk.Frame(ed)
         tf.grid(row=1, column=0, columnspan=2, sticky="w")
         tk.Label(tf, text="From").pack(side="left")
-        tk.Entry(tf, textvariable=self.from_var, width=9).pack(side="left", padx=2)
+        tk.Entry(tf, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
         tk.Label(tf, text="to").pack(side="left")
-        tk.Entry(tf, textvariable=self.to_var, width=9).pack(side="left", padx=2)
+        tk.Entry(tf, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
         tk.Label(tf, text="(empty = to the end)", fg=CLR["fgdim"]).pack(side="left")
         tk.Button(ed, text="Apply to region", relief="flat", command=self._apply_edit).grid(row=2, column=0,
-                                                                                            sticky="w", pady=2)
+                                                                                            sticky="w", pady=px(2))
         tk.Button(ed, text="From here", relief="flat",
                   command=lambda: self.from_var.set(ff.format_time(float(self.pos_var.get())))).grid(
             row=2, column=1, sticky="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "blurred"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🕶  APPLY BLUR", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -201,12 +202,12 @@ class RegionBlurTab(BaseTab):
         for i, r in enumerate(self.regions):
             colour = CLR["accent"] if i == sel else CLR["orange"]
             c.create_rectangle(x0 + r.x * bw, y0 + r.y * bh, x0 + (r.x + r.w) * bw, y0 + (r.y + r.h) * bh,
-                               outline=colour, width=2, dash=() if i == sel else (4, 2), tags="region")
-            c.create_text(x0 + r.x * bw + 4, y0 + r.y * bh + 2, text=str(i + 1), anchor="nw", fill=colour,
+                               outline=colour, width=px(2), dash=() if i == sel else px(4, 2), tags="region")
+            c.create_text(x0 + r.x * bw + px(4), y0 + r.y * bh + px(2), text=str(i + 1), anchor="nw", fill=colour,
                           font=(UI_FONT, 9, "bold"), tags="region")
         if self._drag and self._drag.get("rect"):
             a, b, cc, d = self._drag["rect"]
-            c.create_rectangle(a, b, cc, d, outline="white", width=1, dash=(3, 3), tags="region")
+            c.create_rectangle(a, b, cc, d, outline="white", width=px(1), dash=px(3, 3), tags="region")
 
     def _frac(self, ex, ey):
         box = self.preview.image_box()

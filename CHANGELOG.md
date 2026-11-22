@@ -7,9 +7,8 @@
 - **The app closed straight away on HiDPI Linux screens** (display scaling of
   150% or more, e.g. GNOME at 200%) with "X Error of failed request: BadValue
   ... X_CreatePixmap". The Start page kept widening itself until the window
-  was too big for the X server. It now fits the window, and on HiDPI screens
-  the window opens larger to match the bigger text (never bigger than the
-  screen).
+  was too big for the X server.
+
 - **The preview stayed empty in Image Watermark** whenever a logo was chosen
   ("Could not decode a frame here"). The same happened in the Green Screen
   Keyer with a photo as the background, and in Picture-in-Picture with a photo
@@ -17,6 +16,13 @@
 
 ### Changed
 
+- **Proper HiDPI support.** On a scaled screen (125%, 150%, 200%...) the whole
+  interface now grows with the text: spacing, borders, panels, previews,
+  timelines, waveforms, graphs, table rows, scrollbars and the window itself.
+  Before, only the text grew, so it was cramped and cut off. Linux picks up
+  the scale from the desktop (GNOME, KDE, Xfce, MATE...), Windows from its
+  display settings. The `ui_scale` setting (e.g. `1.5`) overrides it, and on
+  Linux it now makes the text bigger too, not just the spacing.
 - The README shows a full-size screenshot of every tool, grouped by category,
   taken with footage from the 4K version of *Big Buck Bunny*.
 

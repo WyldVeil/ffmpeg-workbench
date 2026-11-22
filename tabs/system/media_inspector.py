@@ -17,6 +17,7 @@ from tkinter import ttk
 from core import dialogs
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FramePreview
 
@@ -111,44 +112,44 @@ class MediaInspectorTab(BaseTab):
                              "Everything inside a media file - streams, codecs, colour, chapters, tags"),
                          icon="\U0001F50D")
         row = tk.Frame(self, bg=CLR["bg"])
-        row.pack(fill="x", padx=20, pady=(12, 6))
+        row.pack(fill="x", padx=px(20), pady=px(12, 6))
         self.src_var = tk.StringVar()
         self.make_file_row(row, _tr("common.source_file", "Source file"), self.src_var,
                            self._browse).pack(side="left")
         tk.Button(row, text=_tr("inspector.copy_report", "Copy report"), relief="flat",
                   bg=CLR["panel"], fg=CLR["fg"], cursor="hand2",
-                  command=self._copy_report).pack(side="left", padx=(8, 0))
+                  command=self._copy_report).pack(side="left", padx=px(8, 0))
         tk.Button(row, text=_tr("inspector.export_json", "Export JSON…"), relief="flat",
                   bg=CLR["panel"], fg=CLR["fg"], cursor="hand2",
-                  command=self._export_json).pack(side="left", padx=(6, 0))
+                  command=self._export_json).pack(side="left", padx=px(6, 0))
 
         top = tk.Frame(self, bg=CLR["bg"])
-        top.pack(fill="x", padx=20, pady=4)
+        top.pack(fill="x", padx=px(20), pady=px(4))
         self.preview = FramePreview(top, width=384, height=216)
         self.preview.pack(side="left", anchor="n")
         side = tk.Frame(top, bg=CLR["bg"])
-        side.pack(side="left", fill="both", expand=True, padx=(16, 0))
+        side.pack(side="left", fill="both", expand=True, padx=px(16, 0))
         self.summary_lbl = tk.Label(side, text=_tr("inspector.drop_hint",
                                     "Open or drop a video, audio or image file."),
                                     bg=CLR["bg"], fg=CLR["accent"], font=(UI_FONT, 11, "bold"),
-                                    justify="left", anchor="w", wraplength=620)
+                                    justify="left", anchor="w", wraplength=px(620))
         self.summary_lbl.pack(fill="x")
         self.notes = tk.Text(side, height=8, wrap="word", bg=CLR["bg"], fg=CLR["fg"],
                              relief="flat", font=(UI_FONT, 9), highlightthickness=0)
         self.notes.tag_configure("warn", foreground=CLR["orange"])
         self.notes.tag_configure("info", foreground=CLR["fgdim"])
         self.notes.tag_configure("ok", foreground=CLR["green"])
-        self.notes.pack(fill="both", expand=True, pady=(6, 0))
+        self.notes.pack(fill="both", expand=True, pady=px(6, 0))
         scrub_row = tk.Frame(side, bg=CLR["bg"])
-        scrub_row.pack(fill="x", pady=(4, 0))
+        scrub_row.pack(fill="x", pady=px(4, 0))
         tk.Label(scrub_row, text=_tr("inspector.scrub", "Preview position"), bg=CLR["bg"],
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
         self.scrub = ttk.Scale(scrub_row, from_=0, to=1, orient="horizontal",
                                command=lambda v: self.preview.show(float(v)))
-        self.scrub.pack(side="left", fill="x", expand=True, padx=6)
+        self.scrub.pack(side="left", fill="x", expand=True, padx=px(6))
 
         self.nb = ttk.Notebook(self)
-        self.nb.pack(fill="both", expand=True, padx=20, pady=(8, 12))
+        self.nb.pack(fill="both", expand=True, padx=px(20), pady=px(8, 12))
 
         streams = tk.Frame(self.nb, bg=CLR["bg"])
         cols = ("idx", "type", "codec", "detail", "rate", "lang", "flags")
@@ -159,7 +160,7 @@ class MediaInspectorTab(BaseTab):
         widths = (40, 80, 150, 420, 100, 180, 120)
         for c, h, w in zip(cols, heads, widths):
             self.tree.heading(c, text=h)
-            self.tree.column(c, width=w, anchor="w", stretch=c == "detail")
+            self.tree.column(c, width=px(w), anchor="w", stretch=c == "detail")
         ysb = ttk.Scrollbar(streams, command=self.tree.yview)
         self.tree.configure(yscrollcommand=ysb.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -174,7 +175,7 @@ class MediaInspectorTab(BaseTab):
     def _text_page(self, title: str) -> tk.Text:
         frame = tk.Frame(self.nb, bg=CLR["bg"])
         txt = tk.Text(frame, wrap="none", bg=CLR["console_bg"], fg=CLR["console_fg"],
-                      font=(MONO_FONT, 9), relief="flat", padx=10, pady=8)
+                      font=(MONO_FONT, 9), relief="flat", padx=px(10), pady=px(8))
         sb = ttk.Scrollbar(frame, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         txt.pack(side="left", fill="both", expand=True)

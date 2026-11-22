@@ -14,6 +14,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import loudness as ln
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -50,9 +51,9 @@ class AudioExtractorTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
-        opt = tk.LabelFrame(body, text="  Extract  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        opt = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.fmt_var = tk.StringVar(value=FORMATS["copy"][0])
         fb = ttk.Combobox(opt, textvariable=self.fmt_var, values=[v[0] for v in FORMATS.values()],
                           state="readonly", width=34)
@@ -62,25 +63,25 @@ class AudioExtractorTab(BaseTab):
         tk.Label(opt, text="Track:").grid(row=1, column=0, sticky="w")
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
-        self.track_box.grid(row=1, column=1, sticky="w", pady=4)
+        self.track_box.grid(row=1, column=1, sticky="w", pady=px(4))
         tk.Label(opt, text="From / to (optional):").grid(row=2, column=0, sticky="w")
         tr = tk.Frame(opt)
         tr.grid(row=2, column=1, sticky="w")
         self.from_var, self.to_var = tk.StringVar(), tk.StringVar()
         tk.Entry(tr, textvariable=self.from_var, width=10).pack(side="left")
-        tk.Entry(tr, textvariable=self.to_var, width=10).pack(side="left", padx=6)
+        tk.Entry(tr, textvariable=self.to_var, width=10).pack(side="left", padx=px(6))
         self.norm_var = tk.BooleanVar(value=False)
         tk.Checkbutton(opt, text="Normalise loudness to -16 LUFS (two-pass, re-encodes)",
                        variable=self.norm_var).grid(row=3, column=1, sticky="w")
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="audio", ext=".m4a")
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(body, text="🎵  EXTRACT", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=20, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

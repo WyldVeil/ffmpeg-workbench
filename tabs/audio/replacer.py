@@ -15,6 +15,7 @@ from tkinter import messagebox, ttk
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -54,38 +55,38 @@ class AudioReplacerTab(BaseTab):
         self.src_row = FileRow(body, "Video:", self.src_var,
                                on_change=lambda p: self.out_row.path or self.out_row.set(
                                    self.suggest_output(p, "new_audio")))
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.audio_row = FileRow(body, "New audio:", kind="media")
-        self.audio_row.pack(fill="x", padx=20, pady=2)
-        opt = tk.LabelFrame(body, text="  Options  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.audio_row.pack(fill="x", padx=px(20), pady=px(2))
+        opt = tk.LabelFrame(body, text="  Options  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value=MODES["replace"])
         ttk.Combobox(opt, textvariable=self.mode_var, values=list(MODES.values()), state="readonly",
                      width=30).grid(row=0, column=0, columnspan=2, sticky="w")
         self.new_vol, self.orig_vol = tk.DoubleVar(value=1.0), tk.DoubleVar(value=0.35)
-        tk.Scale(opt, variable=self.new_vol, from_=0, to=2, resolution=0.05, orient="horizontal", length=180,
+        tk.Scale(opt, variable=self.new_vol, from_=0, to=2, resolution=0.05, orient="horizontal", length=px(180),
                  label="New audio volume").grid(row=1, column=0, sticky="w")
-        tk.Scale(opt, variable=self.orig_vol, from_=0, to=2, resolution=0.05, orient="horizontal", length=180,
+        tk.Scale(opt, variable=self.orig_vol, from_=0, to=2, resolution=0.05, orient="horizontal", length=px(180),
                  label="Original volume (mix)").grid(row=1, column=1, sticky="w")
         r = tk.Frame(opt)
-        r.grid(row=2, column=0, columnspan=2, sticky="w", pady=4)
+        r.grid(row=2, column=0, columnspan=2, sticky="w", pady=px(4))
         tk.Label(r, text="Start the new audio at (s, negative skips its start):").pack(side="left")
         self.offset_var = tk.StringVar(value="0")
-        tk.Entry(r, textvariable=self.offset_var, width=8).pack(side="left", padx=4)
+        tk.Entry(r, textvariable=self.offset_var, width=8).pack(side="left", padx=px(4))
         self.loop_var, self.fade_var = tk.BooleanVar(value=False), tk.BooleanVar(value=True)
         tk.Checkbutton(opt, text="Loop the new audio if it's shorter than the video",
                        variable=self.loop_var).grid(row=3, column=0, columnspan=2, sticky="w")
         tk.Checkbutton(opt, text="Fade in and out (1 s)", variable=self.fade_var).grid(row=4, column=0, sticky="w")
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "new_audio"))
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(body, text="🎼  APPLY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=20, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

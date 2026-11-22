@@ -12,6 +12,7 @@ from core.i18n import t
 from core import concat
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.scaling import px
 
 
 def _tr(key, fallback):
@@ -29,20 +30,20 @@ class BatchJoinerTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="📎  " + t("tab.batch_joiner"), font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner, text=t("batch_joiner.desc"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # File list
         lf = tk.LabelFrame(self, text=t("batch_joiner.sect_video_queue"),
-                           padx=10, pady=6)
-        lf.pack(fill="both", expand=True, padx=20, pady=8)
+                           padx=px(10), pady=px(6))
+        lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
-        self.listbox = tk.Listbox(lf, selectmode="single", font=(MONO_FONT, 10), relief="flat", bd=1,
+        self.listbox = tk.Listbox(lf, selectmode="single", font=(MONO_FONT, 10), relief="flat", bd=px(1),
                                   height=14, activestyle="dotbox",
                                   bg=CLR["bg"], fg=CLR["fg"],
                                   selectbackground=CLR["accent"], selectforeground="black")
@@ -53,7 +54,7 @@ class BatchJoinerTab(BaseTab):
 
         # Buttons row
         btn_f = tk.Frame(self)
-        btn_f.pack(pady=5)
+        btn_f.pack(pady=px(5))
         for txt, cmd, bg in [
             (t("batch_joiner.btn_add_files"),   self._add_files,   "#3A3A3A"),
             (t("batch_joiner.btn_add_folder"),  self._add_folder,  "#3A3A3A"),
@@ -63,14 +64,14 @@ class BatchJoinerTab(BaseTab):
             (t("batch_joiner.btn_clear_all"),   self._clear,       "#3A3A3A"),
         ]:
             tk.Button(btn_f, text=txt, bg=bg, fg=CLR["fg"], width=13,
-                      command=cmd).pack(side="left", padx=4)
+                      command=cmd).pack(side="left", padx=px(4))
 
         # Options
-        opt_lf = tk.LabelFrame(self, text=t("section.output_options"), padx=15, pady=8)
-        opt_lf.pack(fill="x", padx=20, pady=5)
+        opt_lf = tk.LabelFrame(self, text=t("section.output_options"), padx=px(15), pady=px(8))
+        opt_lf.pack(fill="x", padx=px(20), pady=px(5))
 
         # Row 1
-        r1 = tk.Frame(opt_lf); r1.pack(fill="x", pady=3)
+        r1 = tk.Frame(opt_lf); r1.pack(fill="x", pady=px(3))
         self.reencode_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r1, text=t("batch_joiner.opt_reencode"),
                        variable=self.reencode_var,
@@ -85,44 +86,44 @@ class BatchJoinerTab(BaseTab):
                              ("1920x1080", "1920x1080"), ("1280x720", "1280x720"), ("854x480", "854x480")]
         self.res_var = tk.StringVar(value=self._res_choices[0][1])
         ttk.Combobox(self.enc_frame, textvariable=self.res_var, width=18,
-                     values=[lbl for _, lbl in self._res_choices], state="readonly").pack(side="left", padx=4)
+                     values=[lbl for _, lbl in self._res_choices], state="readonly").pack(side="left", padx=px(4))
         tk.Label(self.enc_frame, text=t("batch_joiner.lbl_fps")).pack(side="left")
         self._fps_choices = [("first", _tr("batch_joiner.same_as_first", "Same as first clip")),
                              ("largest", _tr("batch_joiner.highest", "Highest")),
                              ("24", "24"), ("25", "25"), ("30", "30"), ("50", "50"), ("60", "60")]
         self.fps_var = tk.StringVar(value=self._fps_choices[0][1])
         ttk.Combobox(self.enc_frame, textvariable=self.fps_var, width=18,
-                     values=[lbl for _, lbl in self._fps_choices], state="readonly").pack(side="left", padx=4)
+                     values=[lbl for _, lbl in self._fps_choices], state="readonly").pack(side="left", padx=px(4))
         tk.Label(self.enc_frame, text=t("common.crf")).pack(side="left")
         self.crf_var = tk.StringVar(value="18")
-        tk.Entry(self.enc_frame, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
+        tk.Entry(self.enc_frame, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=px(4))
         tk.Label(self.enc_frame, text=t("batch_joiner.lbl_audio")).pack(side="left")
         self.audio_var = tk.StringVar(value="192k")
         ttk.Combobox(self.enc_frame, textvariable=self.audio_var, width=7,
-                     values=["96k", "128k", "192k", "256k", "320k"], state="readonly").pack(side="left", padx=4)
+                     values=["96k", "128k", "192k", "256k", "320k"], state="readonly").pack(side="left", padx=px(4))
 
         # Output
-        out_row = tk.Frame(self); out_row.pack(pady=5)
+        out_row = tk.Frame(self); out_row.pack(pady=px(5))
         tk.Label(out_row, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(out_row, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=8)
+        tk.Entry(out_row, textvariable=self.out_var, width=65, relief="flat").pack(side="left", padx=px(8))
         tk.Button(out_row, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
 
         # Render
         self.btn_render = tk.Button(
             self, text=t("batch_joiner.btn_join"), font=(UI_FONT, 12, "bold"),
             bg=CLR["green"], fg="white", height=2, width=30, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
 
         # Console
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
+        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
     def _toggle_encode_opts(self):
         if self.reencode_var.get():
-            self.enc_frame.pack(fill="x", pady=4)
+            self.enc_frame.pack(fill="x", pady=px(4))
         else:
             self.enc_frame.pack_forget()
 

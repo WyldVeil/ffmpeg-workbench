@@ -21,6 +21,7 @@ from core.i18n import t
 
 
 from core import midi
+from core.scaling import px
 
 class MIDIfierTab(BaseTab):
     def __init__(self, parent):
@@ -59,7 +60,7 @@ class MIDIfierTab(BaseTab):
             dep_sec, text=t("midifier.checking_deps"),
             font=(MONO_FONT, 9), anchor="w", justify="left",
             bg=CLR["bg"], fg=CLR["fgdim"])
-        self._dep_lbl.pack(fill="x", padx=4, pady=2)
+        self._dep_lbl.pack(fill="x", padx=px(4), pady=px(2))
         self._dep_btn = tk.Button(
             dep_sec, text="Choose SoundFont…",
             font=(UI_FONT, 9, "bold"),
@@ -73,7 +74,7 @@ class MIDIfierTab(BaseTab):
         self.src_var = tk.StringVar()
         row = self.make_file_row(src_sec, t("midifier.input_file"), self.src_var,
                                  self._browse_src)
-        row.pack(fill="x", pady=4)
+        row.pack(fill="x", pady=px(4))
 
         # ── Pipeline overview ────────────────────────────────────────────
         pipe_sec = self.make_section(self._inner, title=t("midifier.section.pipeline"))
@@ -84,11 +85,11 @@ class MIDIfierTab(BaseTab):
         ]
         for num, title, desc in steps:
             sf = tk.Frame(pipe_sec, bg=CLR["bg"])
-            sf.pack(fill="x", pady=3, padx=4)
+            sf.pack(fill="x", pady=px(3), padx=px(4))
             tk.Label(sf, text=f"  {num} ",
                      font=(UI_FONT, 11, "bold"),
                      bg=CLR["accent"], fg="white",
-                     width=3).pack(side="left", padx=(0, 8))
+                     width=3).pack(side="left", padx=px(0, 8))
             tf = tk.Frame(sf, bg=CLR["bg"])
             tf.pack(side="left", fill="x", expand=True)
             tk.Label(tf, text=title,
@@ -98,13 +99,13 @@ class MIDIfierTab(BaseTab):
             tk.Label(tf, text=desc,
                      font=(UI_FONT, 8),
                      bg=CLR["bg"], fg=CLR["fgdim"],
-                     anchor="w", wraplength=500).pack(fill="x")
+                     anchor="w", wraplength=px(500)).pack(fill="x")
 
         # ── Options ──────────────────────────────────────────────────────
         opt_sec = self.make_section(self._inner, title=t("midifier.section.options"))
 
         r0 = tk.Frame(opt_sec, bg=CLR["bg"])
-        r0.pack(fill="x", pady=4)
+        r0.pack(fill="x", pady=px(4))
         tk.Label(r0, text=t("midifier.midi_program"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self.program_var = tk.StringVar(value="0 - Acoustic Grand Piano")
@@ -124,34 +125,34 @@ class MIDIfierTab(BaseTab):
         ]
         ttk.Combobox(r0, textvariable=self.program_var,
                      values=programs, state="readonly",
-                     width=30).pack(side="left", padx=8)
+                     width=30).pack(side="left", padx=px(8))
 
         r1 = tk.Frame(opt_sec, bg=CLR["bg"])
-        r1.pack(fill="x", pady=4)
+        r1.pack(fill="x", pady=px(4))
         tk.Label(r1, text=t("midifier.gain_label"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self.gain_var = tk.StringVar(value="1.0")
         tk.Entry(r1, textvariable=self.gain_var, width=6,
                  relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
                  insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=4)
+                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
         tk.Label(r1, text=t("midifier.gain_hint"),
                  font=(UI_FONT, 8), bg=CLR["bg"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=4)
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(4))
 
         r2 = tk.Frame(opt_sec, bg=CLR["bg"])
-        r2.pack(fill="x", pady=4)
+        r2.pack(fill="x", pady=px(4))
         tk.Label(r2, text=t("midifier.sample_rate"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self.sr_var = tk.StringVar(value="44100")
         ttk.Combobox(r2, textvariable=self.sr_var,
                      values=["22050", "44100", "48000"],
-                     state="readonly", width=8).pack(side="left", padx=8)
+                     state="readonly", width=8).pack(side="left", padx=px(8))
         tk.Label(r2, text="Hz", font=(UI_FONT, 8),
                  bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
 
         r3 = tk.Frame(opt_sec, bg=CLR["bg"])
-        r3.pack(fill="x", pady=4)
+        r3.pack(fill="x", pady=px(4))
         self.save_midi_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r3, text=t("midifier.save_midi"),
                        variable=self.save_midi_var,
@@ -160,50 +161,50 @@ class MIDIfierTab(BaseTab):
                        activebackground=CLR["bg"]).pack(side="left")
 
         r4 = tk.Frame(opt_sec, bg=CLR["bg"])
-        r4.pack(fill="x", pady=4)
+        r4.pack(fill="x", pady=px(4))
         tk.Label(r4, text=t("midifier.note_thresh"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self.note_thresh_var = tk.StringVar(value="0.5")
         tk.Entry(r4, textvariable=self.note_thresh_var, width=6,
                  relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
                  insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=4)
+                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
         tk.Label(r4, text=t("midifier.note_thresh_hint"),
                  font=(UI_FONT, 8), bg=CLR["bg"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=4)
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(4))
 
         r5 = tk.Frame(opt_sec, bg=CLR["bg"])
-        r5.pack(fill="x", pady=4)
+        r5.pack(fill="x", pady=px(4))
         tk.Label(r5, text=t("midifier.min_note"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self.min_note_var = tk.StringVar(value="0.05")
         tk.Entry(r5, textvariable=self.min_note_var, width=6,
                  relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
                  insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=4)
+                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
         tk.Label(r5, text=t("midifier.min_note_hint"),
                  font=(UI_FONT, 8), bg=CLR["bg"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=4)
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(4))
 
         # ── Output ───────────────────────────────────────────────────────
         out_sec = self.make_section(self._inner, title=t("midifier.section.output"))
         self.out_var = tk.StringVar()
         out_row = self.make_file_row(out_sec, t("midifier.save_as"), self.out_var,
                                      self._browse_out)
-        out_row.pack(fill="x", pady=4)
+        out_row.pack(fill="x", pady=px(4))
 
         # ── Run button ───────────────────────────────────────────────────
         btn_f = tk.Frame(self._inner, bg=CLR["bg"])
-        btn_f.pack(fill="x", pady=(12, 6))
+        btn_f.pack(fill="x", pady=px(12, 6))
         self.btn_run = self.make_render_btn(
             btn_f, t("midifier.run_btn"),
             self._run, color=CLR["green"], width=30)
-        self.btn_run.pack(pady=4)
+        self.btn_run.pack(pady=px(4))
         add_tooltip(self.btn_run, t("midifier.run_tooltip"))
 
         # ── Console ──────────────────────────────────────────────────────
         cf = tk.Frame(self._inner, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 14))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 14))
         self.console, csb = self.make_console(cf, height=10)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -255,7 +256,7 @@ class MIDIfierTab(BaseTab):
 
         def _update():
             self._dep_lbl.config(text=info, fg=CLR["green"] if ok else CLR["orange"])
-            self._dep_btn.pack(fill="x", padx=4, pady=(6, 4))
+            self._dep_btn.pack(fill="x", padx=px(4), pady=px(6, 4))
         self.after(0, _update)
 
     def _choose_soundfont(self):

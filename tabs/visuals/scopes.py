@@ -17,6 +17,7 @@ from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs import common
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from core.scaling import px
 
 # key: (label, filter chain, display aspect (w/h) or None = same as video, help)
 SCOPES = {
@@ -95,10 +96,10 @@ class VideoScopesTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         pick = tk.Frame(body, bg=CLR["bg"])
-        pick.pack(fill="x", padx=20, pady=4)
+        pick.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(pick, text="Scope:", bg=CLR["bg"], fg=CLR["fg"],
                  font=(UI_FONT, 10, "bold")).pack(side="left")
         self.scope_var = tk.StringVar(value="waveform")
@@ -106,48 +107,48 @@ class VideoScopesTab(BaseTab):
             tk.Radiobutton(pick, text=label, value=key, variable=self.scope_var,
                            bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["input_bg"],
                            activebackground=CLR["bg"],
-                           command=self._scope_changed).pack(side="left", padx=4)
+                           command=self._scope_changed).pack(side="left", padx=px(4))
         self.help_lbl = tk.Label(body, text="", bg=CLR["bg"], fg=CLR["fgdim"],
-                                 font=(UI_FONT, 9), wraplength=820, justify="left")
-        self.help_lbl.pack(anchor="w", padx=24)
+                                 font=(UI_FONT, 9), wraplength=px(820), justify="left")
+        self.help_lbl.pack(anchor="w", padx=px(24))
 
         views = tk.Frame(body, bg=CLR["bg"])
-        views.pack(pady=6)
+        views.pack(pady=px(6))
         self.picture = FramePreview(views, 400, 225, show_time=False)
-        self.picture.pack(side="left", padx=4)
+        self.picture.pack(side="left", padx=px(4))
         self.scope_view = FramePreview(views, 400, 225, show_time=False)
-        self.scope_view.pack(side="left", padx=4)
+        self.scope_view.pack(side="left", padx=px(4))
         bar = tk.Frame(body, bg=CLR["bg"])
-        bar.pack(fill="x", padx=24)
+        bar.pack(fill="x", padx=px(24))
         self.pos_var = tk.DoubleVar(value=0.0)
         self.slider = ttk.Scale(bar, from_=0.0, to=1.0, variable=self.pos_var,
                                 command=lambda _v: self._moved())
         self.slider.pack(side="left", fill="x", expand=True)
         self.time_lbl = tk.Label(bar, text="", width=12, bg=CLR["bg"], fg=CLR["fgdim"])
-        self.time_lbl.pack(side="left", padx=6)
+        self.time_lbl.pack(side="left", padx=px(6))
         tk.Button(bar, text="Save snapshot…", relief="flat", cursor="hand2",
                   command=self._snapshot).pack(side="left")
 
-        vid = tk.LabelFrame(body, text=f"  {t('scopes.scope_video_section')}  ", padx=12, pady=8)
-        vid.pack(fill="x", padx=20, pady=8)
+        vid = tk.LabelFrame(body, text=f"  {t('scopes.scope_video_section')}  ", padx=px(12), pady=px(8))
+        vid.pack(fill="x", padx=px(20), pady=px(8))
         row = tk.Frame(vid)
-        row.pack(fill="x", pady=2)
+        row.pack(fill="x", pady=px(2))
         tk.Label(row, text=t("scopes.layout_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.layout_var = tk.StringVar(value=LAYOUTS["side"])
         ttk.Combobox(row, textvariable=self.layout_var, values=list(LAYOUTS.values()),
-                     state="readonly", width=38).pack(side="left", padx=8)
+                     state="readonly", width=38).pack(side="left", padx=px(8))
         self.encoder = EncoderPanel(vid, codecs=("h264", "hevc", "prores"), show_ten_bit=False)
-        self.encoder.pack(anchor="w", pady=(6, 0))
+        self.encoder.pack(anchor="w", pady=px(6, 0))
         self.out_row = FileRow(vid, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "scopes"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_vid = tk.Button(vid, text=t("scopes.scope_video_button"), bg="#7B1FA2",
                                  fg="white", font=(UI_FONT, 10, "bold"), cursor="hand2",
                                  command=self._render_video)
-        self.btn_vid.pack(pady=6)
+        self.btn_vid.pack(pady=px(6))
 
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

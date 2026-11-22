@@ -19,6 +19,8 @@ import threading
 import time
 import traceback
 
+from core.scaling import px
+
 LOGGER_NAME = "crossfader"
 _configured = False
 _last_dialog = 0.0
@@ -88,15 +90,15 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
             return
         win = tk.Toplevel(root)
         win.title(title)
-        win.geometry("720x420")
-        ttk.Label(win, text=summary, wraplength=680, justify="left").pack(
-            fill="x", padx=14, pady=(12, 6))
+        win.geometry(f"{px(720)}x{px(420)}")
+        ttk.Label(win, text=summary, wraplength=px(680), justify="left").pack(
+            fill="x", padx=px(14), pady=px(12, 6))
         txt = tk.Text(win, height=14, wrap="none")
         txt.insert("1.0", details)
         txt.configure(state="disabled")
-        txt.pack(fill="both", expand=True, padx=14)
+        txt.pack(fill="both", expand=True, padx=px(14))
         row = ttk.Frame(win)
-        row.pack(fill="x", padx=14, pady=10)
+        row.pack(fill="x", padx=px(14), pady=px(10))
 
         def _copy():
             win.clipboard_clear()
@@ -107,7 +109,7 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
             open_in_explorer(os.path.dirname(log_file()))
 
         ttk.Button(row, text="Copy details", command=_copy).pack(side="left")
-        ttk.Button(row, text="Open log folder", command=_open).pack(side="left", padx=6)
+        ttk.Button(row, text="Open log folder", command=_open).pack(side="left", padx=px(6))
         ttk.Button(row, text="Close", command=win.destroy).pack(side="right")
     except Exception:
         pass

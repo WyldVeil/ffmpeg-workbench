@@ -20,6 +20,7 @@ import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -211,90 +212,90 @@ class KaraokeTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="🎤  " + t("tab.karaoke_generator"),
                  font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner,
                  text=t("karaoke.subtitle"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # ── Whisper status banner ──────────────────────────────────────────
-        self._banner = tk.Frame(self, bg="#1A2A1A", relief="groove", bd=1)
-        self._banner.pack(fill="x", padx=16, pady=(8, 4))
+        self._banner = tk.Frame(self, bg="#1A2A1A", relief="groove", bd=px(1))
+        self._banner.pack(fill="x", padx=px(16), pady=px(8, 4))
         self._whisper_lbl = tk.Label(
             self._banner, text=t("karaoke.checking_for_whisper"),
             bg="#1A2A1A", fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self._whisper_lbl.pack(side="left", padx=12, pady=6)
+        self._whisper_lbl.pack(side="left", padx=px(12), pady=px(6))
         tk.Button(self._banner, text=t("karaoke.install_whisper_button"),
                   bg="#2E7D32", fg="white",
-                  command=self._install_whisper).pack(side="right", padx=8, pady=4)
+                  command=self._install_whisper).pack(side="right", padx=px(8), pady=px(4))
         self.after(120, self._check_whisper)
 
         # ── Source ────────────────────────────────────────────────────────
         r1 = tk.Frame(self)
-        r1.pack(fill="x", padx=16, pady=8)
+        r1.pack(fill="x", padx=px(16), pady=px(8))
         tk.Label(r1, text=t("karaoke.music_video_label"),
                  font=(UI_FONT, 10, "bold"), width=16, anchor="e").pack(side="left")
         self._src_var = tk.StringVar()
         tk.Entry(r1, textvariable=self._src_var, width=60,
-                 relief="flat").pack(side="left", padx=8)
+                 relief="flat").pack(side="left", padx=px(8))
         tk.Button(r1, text=t("btn.browse"), command=self._browse_src,
                   cursor="hand2", relief="flat").pack(side="left")
 
         # ── Settings ──────────────────────────────────────────────────────
-        sf = tk.LabelFrame(self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=16, pady=10)
-        sf.pack(fill="x", padx=20, pady=6)
+        sf = tk.LabelFrame(self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10))
+        sf.pack(fill="x", padx=px(20), pady=px(6))
 
         # Whisper model + language
-        ra = tk.Frame(sf); ra.pack(fill="x", pady=3)
+        ra = tk.Frame(sf); ra.pack(fill="x", pady=px(3))
         tk.Label(ra, text=t("karaoke.whisper_model_label"), width=16, anchor="e").pack(side="left")
         self._model_var = tk.StringVar(value=list(MODELS.keys())[2])
         ttk.Combobox(ra, textvariable=self._model_var,
                      values=list(MODELS.keys()),
-                     state="readonly", width=34).pack(side="left", padx=8)
+                     state="readonly", width=34).pack(side="left", padx=px(8))
         tk.Label(ra, text=t("karaoke.language")).pack(side="left")
         self._lang_var = tk.StringVar(value="auto-detect")
         ttk.Combobox(ra, textvariable=self._lang_var, values=LANGUAGES,
-                     state="readonly", width=14).pack(side="left", padx=8)
+                     state="readonly", width=14).pack(side="left", padx=px(8))
 
         # Video darkness
-        rb = tk.Frame(sf); rb.pack(fill="x", pady=3)
+        rb = tk.Frame(sf); rb.pack(fill="x", pady=px(3))
         tk.Label(rb, text=t("karaoke.video_darkness_label"), width=16, anchor="e").pack(side="left")
         self._darkness = tk.DoubleVar(value=0.28)
         tk.Scale(rb, variable=self._darkness, from_=0.05, to=0.65,
                  resolution=0.01, orient="horizontal",
-                 length=200).pack(side="left", padx=8)
+                 length=px(200)).pack(side="left", padx=px(8))
         self._dark_lbl = tk.Label(rb, text="", width=7, fg=CLR["accent"])
         self._dark_lbl.pack(side="left")
         self._darkness.trace_add("write", self._update_dark_lbl)
         self._update_dark_lbl()
         tk.Label(rb, text=t("karaoke.max_brightness_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=12)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
 
         # Font size + colours
-        rc = tk.Frame(sf); rc.pack(fill="x", pady=3)
+        rc = tk.Frame(sf); rc.pack(fill="x", pady=px(3))
         tk.Label(rc, text=t("karaoke.subtitle_font_label"), width=16, anchor="e").pack(side="left")
         self._font_size = tk.StringVar(value="72")
         tk.Entry(rc, textvariable=self._font_size, width=5,
-                 relief="flat").pack(side="left", padx=(8, 16))
+                 relief="flat").pack(side="left", padx=px(8, 16))
         tk.Label(rc, text=f"{t('karaoke.px_label')}   {t('karaoke.unsung_colour_label')}").pack(side="left")
         self._col_unsung = tk.StringVar(value="Yellow")
         ttk.Combobox(rc, textvariable=self._col_unsung,
                      values=list(ASS_COLOURS.keys()),
-                     state="readonly", width=8).pack(side="left", padx=6)
+                     state="readonly", width=8).pack(side="left", padx=px(6))
         tk.Label(rc, text=f"  {t('karaoke.fill_colour_label')}").pack(side="left")
         self._col_sung = tk.StringVar(value="Green")
         ttk.Combobox(rc, textvariable=self._col_sung,
                      values=list(ASS_COLOURS.keys()),
-                     state="readonly", width=8).pack(side="left", padx=6)
+                     state="readonly", width=8).pack(side="left", padx=px(6))
         tk.Label(rc, text=t("karaoke.colour_as_sung_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=8)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(8))
 
         # Vocal removal checkbox
-        rd = tk.Frame(sf); rd.pack(fill="x", pady=3)
+        rd = tk.Frame(sf); rd.pack(fill="x", pady=px(3))
         self._rm_vocals = tk.BooleanVar(value=True)
         tk.Checkbutton(
             rd,
@@ -304,42 +305,42 @@ class KaraokeTab(BaseTab):
 
         # ── Output ────────────────────────────────────────────────────────
         ro = tk.Frame(self)
-        ro.pack(fill="x", padx=16, pady=6)
+        ro.pack(fill="x", padx=px(16), pady=px(6))
         tk.Label(ro, text=t("common.output_file"),
                  font=(UI_FONT, 10, "bold"), width=16, anchor="e").pack(side="left")
         self._out_var = tk.StringVar()
         tk.Entry(ro, textvariable=self._out_var, width=60,
-                 relief="flat").pack(side="left", padx=8)
+                 relief="flat").pack(side="left", padx=px(8))
         tk.Button(ro, text=t("common.save_as"), command=self._browse_out,
                   cursor="hand2", relief="flat").pack(side="left")
 
         # ── Action buttons ─────────────────────────────────────────────────
         btn_row = tk.Frame(self)
-        btn_row.pack(pady=8)
+        btn_row.pack(pady=px(8))
         self._btn_go = tk.Button(
             btn_row, text=t("karaoke.generate_button"),
             font=(UI_FONT, 12, "bold"),
             bg="#7B1FA2", fg="white",
             height=2, width=26,
             command=self._generate)
-        self._btn_go.pack(side="left", padx=8)
+        self._btn_go.pack(side="left", padx=px(8))
         self._btn_stop = tk.Button(
             btn_row, text=t("btn.stop"),
             font=(UI_FONT, 10), bg=CLR["red"], fg="white",
             height=2, width=10, state="disabled",
             command=self._stop)
-        self._btn_stop.pack(side="left", padx=4)
+        self._btn_stop.pack(side="left", padx=px(4))
 
         # Progress
         self._prog_lbl = tk.Label(self, text="",
                                    fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
         self._prog_lbl.pack()
-        self._progress = ttk.Progressbar(self, mode="indeterminate", length=600)
-        self._progress.pack(pady=2)
+        self._progress = ttk.Progressbar(self, mode="indeterminate", length=px(600))
+        self._progress.pack(pady=px(2))
 
         # Console
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=16, pady=4)
+        cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
         self.console, csb = self.make_console(cf, height=8)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

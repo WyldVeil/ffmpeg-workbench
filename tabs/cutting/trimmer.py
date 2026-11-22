@@ -17,6 +17,7 @@ from core.i18n import t
 from core import ffmpeg as ff
 from core import ui as _ui
 from tabs.widgets import FramePreview
+from core.scaling import px
 
 def fmt_time(seconds):
     """Seconds -> MM:SS.mmm (or HH:MM:SS.mmm)."""
@@ -78,29 +79,29 @@ class TrimmerTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="✂  " + t("tab.quick_trimmer"), font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner, text=t("trimmer.subtitle"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Source row
-        sf = tk.Frame(self); sf.pack(fill="x", padx=20, pady=(14, 4))
+        sf = tk.Frame(self); sf.pack(fill="x", padx=px(20), pady=px(14, 4))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._src_var = tk.StringVar()
         src_entry = tk.Entry(sf, textvariable=self._src_var, width=62, relief="flat")
-        src_entry.pack(side="left", padx=8)
+        src_entry.pack(side="left", padx=px(8))
         src_entry.bind("<Return>", lambda _e: self._load_typed_source())
         src_entry.bind("<FocusOut>", lambda _e: self._load_typed_source())
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
 
         # Canvas timeline
         tl_lf = tk.LabelFrame(self, text=t("trimmer.timeline_section"),
-                               padx=8, pady=6)
-        tl_lf.pack(fill="x", padx=20, pady=4)
-        self._canvas = tk.Canvas(tl_lf, bg=CLR["console_bg"], height=110, highlightthickness=0)
+                               padx=px(8), pady=px(6))
+        tl_lf.pack(fill="x", padx=px(20), pady=px(4))
+        self._canvas = tk.Canvas(tl_lf, bg=CLR["console_bg"], height=px(110), highlightthickness=0)
         self._canvas.pack(fill="x")
         self._canvas.bind("<Configure>",     lambda _: self._draw())
         self._canvas.bind("<ButtonPress-1>",  self._on_press)
@@ -108,7 +109,7 @@ class TrimmerTab(BaseTab):
         self._canvas.bind("<ButtonRelease-1>",lambda _: self._release())
 
         # Info strip
-        inf = tk.Frame(self); inf.pack(fill="x", padx=20, pady=2)
+        inf = tk.Frame(self); inf.pack(fill="x", padx=px(20), pady=px(2))
         self._info_lbl = tk.Label(inf, text=t("common.no_file_loaded"), fg=CLR["fgdim"],
                                   font=(MONO_FONT, 9))
         self._info_lbl.pack(side="left")
@@ -117,85 +118,85 @@ class TrimmerTab(BaseTab):
         self._dur_lbl.pack(side="right")
 
         # Marker controls
-        mk = tk.LabelFrame(self, text=t("trimmer.clip_boundaries_section"), padx=14, pady=8)
-        mk.pack(fill="x", padx=20, pady=4)
+        mk = tk.LabelFrame(self, text=t("trimmer.clip_boundaries_section"), padx=px(14), pady=px(8))
+        mk.pack(fill="x", padx=px(20), pady=px(4))
         self.preview = FramePreview(mk, width=320, height=180)
-        self.preview.pack(side="right", anchor="n", padx=(12, 0))
+        self.preview.pack(side="right", anchor="n", padx=px(12, 0))
         self._preview_soon = _ui.debounce(self, 90, lambda: self.preview.show(self._preview_t))
         self._preview_t = 0.0
 
-        r1 = tk.Frame(mk); r1.pack(fill="x", pady=2)
+        r1 = tk.Frame(mk); r1.pack(fill="x", pady=px(2))
         tk.Label(r1, text=t("trimmer.keep_from_label"), font=(UI_FONT, 10, "bold"), width=14, anchor="e").pack(side="left")
         self._start_ent = tk.Entry(r1, textvariable=self._start_var, width=12, font=(MONO_FONT, 10), relief="flat")
-        self._start_ent.pack(side="left", padx=6)
+        self._start_ent.pack(side="left", padx=px(6))
         self._start_ent.bind("<Return>", self._apply_typed_times)
         self._start_ent.bind("<FocusOut>", self._apply_typed_times)
         
         tk.Button(r1, text=t("trimmer.set_to_preview_start"), bg=CLR["panel"], fg="white",
-                  command=lambda: self._start_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()).pack(side="left", padx=4)
+                  command=lambda: self._start_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()).pack(side="left", padx=px(4))
         tk.Label(r1, text=t("trimmer.start_handle_hint"),
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
 
-        r2 = tk.Frame(mk); r2.pack(fill="x", pady=2)
+        r2 = tk.Frame(mk); r2.pack(fill="x", pady=px(2))
         tk.Label(r2, text=t("trimmer.keep_until_label"), font=(UI_FONT, 10, "bold"), width=14, anchor="e").pack(side="left")
         self._end_ent = tk.Entry(r2, textvariable=self._end_var, width=12, font=(MONO_FONT, 10), relief="flat")
-        self._end_ent.pack(side="left", padx=6)
+        self._end_ent.pack(side="left", padx=px(6))
         self._end_ent.bind("<Return>", self._apply_typed_times)
         self._end_ent.bind("<FocusOut>", self._apply_typed_times)
         
         tk.Button(r2, text=t("trimmer.set_to_preview_end"), bg=CLR["panel"], fg="white",
-                  command=lambda: self._end_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()).pack(side="left", padx=4)
+                  command=lambda: self._end_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()).pack(side="left", padx=px(4))
         tk.Label(r2, text=t("trimmer.end_handle_hint"),
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
 
-        r3 = tk.Frame(mk); r3.pack(fill="x", pady=8)
+        r3 = tk.Frame(mk); r3.pack(fill="x", pady=px(8))
         tk.Label(r3, text=t("trimmer.preview_time_label"), font=(UI_FONT, 10, "bold"), width=14, anchor="e").pack(side="left")
         # the button and time stay on the right; the slider takes whatever width is left
         tk.Button(r3, text=t("trimmer.show_frame_button"), bg=CLR["accent"], fg="white",
-                  command=self._preview_at_scrub).pack(side="right", padx=8)
+                  command=self._preview_at_scrub).pack(side="right", padx=px(8))
         self._scrub_lbl = tk.Label(r3, text="00:00.00", fg=CLR["accent"],
                                     font=(MONO_FONT, 10), width=9)
         self._scrub_lbl.pack(side="right")
         self._scrub_sc = tk.Scale(r3, variable=self._scrub, from_=0, to=100,
-                                   resolution=0.05, orient="horizontal", length=200,
+                                   resolution=0.05, orient="horizontal", length=px(200),
                                    command=self._on_scrub, highlightthickness=0)
-        self._scrub_sc.pack(side="left", padx=6, fill="x", expand=True)
+        self._scrub_sc.pack(side="left", padx=px(6), fill="x", expand=True)
 
         # Encode options
-        enc = tk.LabelFrame(self, text=t("section.export_options"), padx=14, pady=6)
-        enc.pack(fill="x", padx=20, pady=4)
+        enc = tk.LabelFrame(self, text=t("section.export_options"), padx=px(14), pady=px(6))
+        enc.pack(fill="x", padx=px(20), pady=px(4))
         er = tk.Frame(enc); er.pack(fill="x")
         tk.Checkbutton(er, text=t("trimmer.stream_copy_checkbox"),
                        variable=self._copy_mode, font=(UI_FONT, 10),
                        command=self._toggle_enc).pack(side="left")
         self._enc_row = tk.Frame(enc)
         tk.Label(self._enc_row, text=t("common.crf")).pack(side="left")
-        tk.Entry(self._enc_row, textvariable=self._crf_var, width=4, relief="flat").pack(side="left", padx=4)
+        tk.Entry(self._enc_row, textvariable=self._crf_var, width=4, relief="flat").pack(side="left", padx=px(4))
         tk.Label(self._enc_row, text=t("trimmer.crf_hint"),
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
 
         # Output + action buttons
-        of = tk.Frame(self); of.pack(fill="x", padx=20, pady=6)
+        of = tk.Frame(self); of.pack(fill="x", padx=px(20), pady=px(6))
         tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=62, relief="flat").pack(side="left", padx=8)
+        tk.Entry(of, textvariable=self._out_var, width=62, relief="flat").pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
 
-        bf = tk.Frame(self); bf.pack(pady=8)
+        bf = tk.Frame(self); bf.pack(pady=px(8))
         prev_btn = tk.Button(bf, text=t("trimmer.preview_selected_button"), bg=CLR["accent"], fg="white",
                   width=28, command=self._preview_selection)
-        prev_btn.pack(side="left", padx=8)
+        prev_btn.pack(side="left", padx=px(8))
         add_tooltip(prev_btn, "Preview the selected region in ffplay (Space)")
         self._btn_trim = tk.Button(bf, text=t("trimmer.export_button"),
                                    font=(UI_FONT, 12, "bold"),
                                    bg=CLR["green"], fg="black",
                                    height=2, width=28,
                                    command=self._run_trim)
-        self._btn_trim.pack(side="left", padx=8)
+        self._btn_trim.pack(side="left", padx=px(8))
         add_tooltip(self._btn_trim, "Export the trimmed clip (Ctrl+S)")
 
         # Console
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
+        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -245,12 +246,12 @@ class TrimmerTab(BaseTab):
     _HR = 9   # handle radius
 
     def _t2x(self, t, w):
-        p = 24
+        p = px(24)
         if self.duration <= 0: return p
         return p + int((t / self.duration) * (w - 2 * p))
 
     def _x2t(self, x, w):
-        p = 24
+        p = px(24)
         if self.duration <= 0: return 0.0
         return max(0.0, min(1.0, (x - p) / max(1, w - 2 * p))) * self.duration
 
@@ -289,7 +290,7 @@ class TrimmerTab(BaseTab):
     def _draw(self, *_):
         c = self._canvas
         w = c.winfo_width(); h = c.winfo_height()
-        if w < 10: return
+        if w < px(10): return
         
         try:
             c.delete("all")
@@ -298,7 +299,7 @@ class TrimmerTab(BaseTab):
                 c.create_text(w // 2, h // 2, text=t("trimmer.load_a_video_to_see_the_timeline"),
                               fill=CLR["fgdim"], font=(UI_FONT, 10)); return
             cy = h // 2
-            
+            hr = px(self._HR)
             s_sec = self._tv(self._start_var, 0.0)
             e_sec = self._tv(self._end_var, self.duration)
             
@@ -307,40 +308,40 @@ class TrimmerTab(BaseTab):
             xp = self._t2x(float(self._scrub.get()), w)
             
             # Track
-            c.create_rectangle(24, cy-4, w-24, cy+4, fill="#2A2A2A", outline="")
+            c.create_rectangle(px(24), cy - px(4), w - px(24), cy + px(4), fill="#2A2A2A", outline="")
             # Selection
-            c.create_rectangle(xs, cy-4, xe, cy+4, fill="#1A5A98", outline="")
+            c.create_rectangle(xs, cy - px(4), xe, cy + px(4), fill="#1A5A98", outline="")
             
             # Tick marks
             for i in range(11):
                 tx = self._t2x(self.duration * i / 10, w)
-                c.create_line(tx, cy+6, tx, cy+14, fill="#444444")
+                c.create_line(tx, cy + px(6), tx, cy + px(14), fill="#444444", width=px(1))
                 tick_time = self.duration * i / 10
-                c.create_text(tx, cy+22, text=f"{int(tick_time//60):02d}:{int(tick_time%60):02d}",
+                c.create_text(tx, cy + px(22), text=f"{int(tick_time//60):02d}:{int(tick_time%60):02d}",
                               fill="#444444", font=(UI_FONT, 7))
                               
             # Playhead (Vertical line + Triangle)
             # Draw line slicing through the track
-            c.create_line(xp, cy-18, xp, cy+18, fill="#FFEB3B", width=2)
+            c.create_line(xp, cy - px(18), xp, cy + px(18), fill="#FFEB3B", width=px(2))
             # Draw downward triangle on top
-            c.create_polygon(xp-7, cy-18, xp+7, cy-18, xp, cy-8,
-                             fill="#FFEB3B", outline="#000000", width=1)
+            c.create_polygon(xp - px(7), cy - px(18), xp + px(7), cy - px(18), xp, cy - px(8),
+                             fill="#FFEB3B", outline="#000000", width=px(1))
                              
             # Start handle (green)
-            c.create_oval(xs-self._HR, cy-self._HR, xs+self._HR, cy+self._HR,
-                          fill="#4CAF50", outline="white", width=2)
-            c.create_text(xs, cy-20, text=f"START {fmt_time(s_sec)}",
+            c.create_oval(xs - hr, cy - hr, xs + hr, cy + hr,
+                          fill="#4CAF50", outline="white", width=px(2))
+            c.create_text(xs, cy - px(20), text=f"START {fmt_time(s_sec)}",
                           fill="#4CAF50", font=(MONO_FONT, 8, "bold"))
                           
             # End handle (red)
-            c.create_oval(xe-self._HR, cy-self._HR, xe+self._HR, cy+self._HR,
-                          fill="#F44336", outline="white", width=2)
-            c.create_text(xe, cy+36, text=f"END {fmt_time(e_sec)}",
+            c.create_oval(xe - hr, cy - hr, xe + hr, cy + hr,
+                          fill="#F44336", outline="white", width=px(2))
+            c.create_text(xe, cy + px(36), text=f"END {fmt_time(e_sec)}",
                           fill="#F44336", font=(MONO_FONT, 8, "bold"))
                           
             # Selection duration header
             sel = max(0.0, e_sec - s_sec)
-            c.create_text((xs+xe)//2, 14, text=f"Clip Length: {fmt_time(sel)}",
+            c.create_text((xs+xe)//2, px(14), text=f"Clip Length: {fmt_time(sel)}",
                           fill="white", font=(UI_FONT, 9, "bold"))
         except Exception as e:
             self.log_debug(f"Canvas draw error: {e}")
@@ -358,7 +359,7 @@ class TrimmerTab(BaseTab):
         except (ValueError, tk.TclError):
             return
             
-        def near(a, b): return abs(a - b) < 14
+        def near(a, b): return abs(a - b) < px(14)
         
         if near(ev.x, xs):   self._dragging = "start"
         elif near(ev.x, xe): self._dragging = "end"
@@ -415,7 +416,7 @@ class TrimmerTab(BaseTab):
         if self._copy_mode.get():
             self._enc_row.pack_forget()
         else:
-            self._enc_row.pack(fill="x", pady=4)
+            self._enc_row.pack(fill="x", pady=px(4))
 
     # ─── Preview ─────────────────────────────────────────────────────────
     def _preview_at_scrub(self):

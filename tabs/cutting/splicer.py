@@ -13,6 +13,7 @@ from core.i18n import t
 from core import concat
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.scaling import px
 
 
 def _tr(key, fallback):
@@ -33,23 +34,23 @@ class SplicerTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x", padx=0, pady=0)
         tk.Label(hdr, text="✂  " + t("tab.the_splicer"), font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=20, pady=12)
+                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=px(20), pady=px(12))
         tk.Label(hdr, text=t("splicer.subtitle"),
-                 bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left", padx=5)
+                 bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left", padx=px(5))
 
         # Segments list area
-        list_outer = tk.LabelFrame(self, text=t("splicer.segment_queue_section"), padx=10, pady=8)
-        list_outer.pack(fill="both", expand=True, padx=20, pady=10)
+        list_outer = tk.LabelFrame(self, text=t("splicer.segment_queue_section"), padx=px(10), pady=px(8))
+        list_outer.pack(fill="both", expand=True, padx=px(20), pady=px(10))
 
         # Column headers
         hf = tk.Frame(list_outer)
-        hf.pack(fill="x", pady=(0, 4))
+        hf.pack(fill="x", pady=px(0, 4))
         for txt, w in [("#", 3), (t("splicer.column_source"), 38), (t("splicer.column_start"), 8),
                        (t("splicer.column_end"), 8), (t("splicer.column_duration"), 9), ("", 12)]:
-            tk.Label(hf, text=txt, font=(UI_FONT, 9, "bold"), width=w, anchor="w").pack(side="left", padx=2)
+            tk.Label(hf, text=txt, font=(UI_FONT, 9, "bold"), width=w, anchor="w").pack(side="left", padx=px(2))
 
         # Scrollable segment rows
-        self.seg_canvas = tk.Canvas(list_outer, height=280, highlightthickness=0)
+        self.seg_canvas = tk.Canvas(list_outer, height=px(280), highlightthickness=0)
         seg_sb = ttk.Scrollbar(list_outer, orient="vertical", command=self.seg_canvas.yview)
         self.seg_frame = tk.Frame(self.seg_canvas)
         self.seg_canvas.create_window((0, 0), window=self.seg_frame, anchor="nw")
@@ -61,54 +62,54 @@ class SplicerTab(BaseTab):
 
         # Timeline
         tl_frame = tk.LabelFrame(self, text=t("splicer.segment_queue_section") + " - Timeline",
-                                 padx=10, pady=8)
-        tl_frame.pack(fill="x", padx=20, pady=(0, 6))
+                                 padx=px(10), pady=px(8))
+        tl_frame.pack(fill="x", padx=px(20), pady=px(0, 6))
         self._timeline = VideoTimeline(tl_frame, on_change=self._on_timeline_change,
                                        height=90, show_handles=True)
         self._timeline.pack(fill="x")
         self._tl_pos_var = tk.StringVar(value="Playhead: -")
         tk.Label(tl_frame, textvariable=self._tl_pos_var,
-                 font=(MONO_FONT, 9), fg=CLR["fgdim"]).pack(anchor="w", pady=(4, 0))
+                 font=(MONO_FONT, 9), fg=CLR["fgdim"]).pack(anchor="w", pady=px(4, 0))
 
         # Buttons
         btn_row = tk.Frame(self)
-        btn_row.pack(pady=8)
+        btn_row.pack(pady=px(8))
         tk.Button(btn_row, text=t("splicer.add_segment_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  width=18, command=self._add_segment).pack(side="left", padx=6)
+                  width=18, command=self._add_segment).pack(side="left", padx=px(6))
         tk.Button(btn_row, text=t("splicer.remove_last_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  width=18, command=self._remove_last).pack(side="left", padx=6)
+                  width=18, command=self._remove_last).pack(side="left", padx=px(6))
         tk.Button(btn_row, text=t("splicer.move_up_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  width=14, command=lambda: self._move(-1)).pack(side="left", padx=6)
+                  width=14, command=lambda: self._move(-1)).pack(side="left", padx=px(6))
         tk.Button(btn_row, text=t("splicer.move_down_button"), bg=CLR["panel"], fg=CLR["fg"],
-                  width=14, command=lambda: self._move(1)).pack(side="left", padx=6)
+                  width=14, command=lambda: self._move(1)).pack(side="left", padx=px(6))
 
         # Output row
         out_f = tk.Frame(self)
-        out_f.pack(pady=5)
+        out_f.pack(pady=px(5))
         tk.Label(out_f, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(out_f, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=8)
+        tk.Entry(out_f, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=px(8))
         tk.Button(out_f, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
 
         # Options
         opt_f = tk.Frame(self)
-        opt_f.pack(pady=4)
+        opt_f.pack(pady=px(4))
         self.reencode_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opt_f, text=t("splicer.reencode_checkbox"),
-                       variable=self.reencode_var).pack(side="left", padx=10)
+                       variable=self.reencode_var).pack(side="left", padx=px(10))
         tk.Label(opt_f, text=t("common.crf")).pack(side="left")
         self.crf_var = tk.StringVar(value="18")
-        tk.Entry(opt_f, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=4)
+        tk.Entry(opt_f, textvariable=self.crf_var, width=4, relief="flat").pack(side="left", padx=px(4))
 
         # Render button
         self.btn_render = tk.Button(
             self, text=t("splicer.splice_export_button"), font=(UI_FONT, 12, "bold"),
             bg=CLR["green"], fg="white", height=2, width=30, command=self._render)
-        self.btn_render.pack(pady=10)
+        self.btn_render.pack(pady=px(10))
 
         # Console
         console_f = tk.Frame(self)
-        console_f.pack(fill="both", expand=True, padx=20, pady=5)
+        console_f.pack(fill="both", expand=True, padx=px(20), pady=px(5))
         self.console, sb = self.make_console(console_f, height=7)
         self.console.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
@@ -129,28 +130,28 @@ class SplicerTab(BaseTab):
         self._select_row(idx)
 
     def _draw_row(self, idx, seg):
-        row = tk.Frame(self.seg_frame, relief="groove", bd=1)
-        row.pack(fill="x", pady=2)
+        row = tk.Frame(self.seg_frame, relief="groove", bd=px(1))
+        row.pack(fill="x", pady=px(2))
         seg["row"] = row
 
-        tk.Label(row, text=str(idx + 1), width=3, anchor="w").pack(side="left", padx=2)
+        tk.Label(row, text=str(idx + 1), width=3, anchor="w").pack(side="left", padx=px(2))
         fname = os.path.basename(seg["path"])
         tk.Label(row, text=fname, width=38, anchor="w",
-                 fg=CLR["accent"]).pack(side="left", padx=2)
+                 fg=CLR["accent"]).pack(side="left", padx=px(2))
 
         for var, tip in [(seg["start"], "Start"), (seg["end"], "End")]:
             tk.Label(row, text=tip + ":").pack(side="left")
-            tk.Entry(row, textvariable=var, width=8, relief="flat").pack(side="left", padx=2)
+            tk.Entry(row, textvariable=var, width=8, relief="flat").pack(side="left", padx=px(2))
             var.trace_add("write", lambda *_: self._refresh_dur(seg))
 
         seg["dur_lbl"] = tk.Label(row, text=self._calc_dur(seg),
                                   width=9, fg=CLR["fgdim"])
-        seg["dur_lbl"].pack(side="left", padx=4)
+        seg["dur_lbl"].pack(side="left", padx=px(4))
 
         if "include" not in seg:
             seg["include"] = tk.BooleanVar(value=True)
         sel_btn = tk.Checkbutton(row, text=t("splicer.include"), variable=seg["include"])
-        sel_btn.pack(side="left", padx=4)
+        sel_btn.pack(side="left", padx=px(4))
         row.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
 
     def _calc_dur(self, seg):
@@ -173,11 +174,11 @@ class SplicerTab(BaseTab):
         if self._sel_idx is not None and self._sel_idx < len(self.segments):
             old = self.segments[self._sel_idx].get("row")
             if old and old.winfo_exists():
-                old.config(relief="groove", bd=1)
+                old.config(relief="groove", bd=px(1))
         self._sel_idx = idx
         new = self.segments[idx].get("row")
         if new and new.winfo_exists():
-            new.config(relief="solid", bd=2)
+            new.config(relief="solid", bd=px(2))
         self._update_timeline_for_segment(idx)
 
     def _on_timeline_change(self, start, end, playhead):

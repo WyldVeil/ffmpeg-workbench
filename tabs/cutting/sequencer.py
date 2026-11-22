@@ -15,6 +15,7 @@ from tkinter import messagebox, ttk
 from core import concat
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -34,7 +35,7 @@ class SequencerTab(BaseTab):
                          "any mix of sizes and formats.", icon="🎞")
         body = scroll_body(self)
         top = tk.Frame(body)
-        top.pack(fill="x", padx=20, pady=(10, 4))
+        top.pack(fill="x", padx=px(20), pady=px(10, 4))
         left = tk.Frame(top)
         left.pack(side="left", fill="both", expand=True)
         self.tree = ttk.Treeview(left, columns=("n", "file", "in", "out", "len"), show="headings",
@@ -42,19 +43,19 @@ class SequencerTab(BaseTab):
         for c, label, w in (("n", "#", 36), ("file", "Clip", 230), ("in", "In", 90), ("out", "Out", 90),
                             ("len", "Length", 70)):
             self.tree.heading(c, text=label)
-            self.tree.column(c, width=w, anchor="w", stretch=c == "file")
+            self.tree.column(c, width=px(w), anchor="w", stretch=c == "file")
         self.tree.pack(fill="both", expand=True)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._selected())
         bt = tk.Frame(left)
-        bt.pack(fill="x", pady=4)
+        bt.pack(fill="x", pady=px(4))
         for text, cmd in (("➕ Add", self._add), ("⬆", lambda: self._move(-1)), ("⬇", lambda: self._move(1)),
                           ("🗑 Remove", self._remove), ("🧹 Clear", self._clear)):
-            tk.Button(bt, text=text, relief="flat", command=cmd).pack(side="left", padx=2)
+            tk.Button(bt, text=text, relief="flat", command=cmd).pack(side="left", padx=px(2))
         self.total_lbl = tk.Label(bt, text="", fg=CLR["accent"])
         self.total_lbl.pack(side="right")
 
         right = tk.Frame(top)
-        right.pack(side="left", padx=(10, 0))
+        right.pack(side="left", padx=px(10, 0))
         self.preview = FramePreview(right, 384, 216)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
@@ -62,37 +63,37 @@ class SequencerTab(BaseTab):
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
         trim = tk.Frame(right)
-        trim.pack(fill="x", pady=2)
+        trim.pack(fill="x", pady=px(2))
         tk.Label(trim, text="In").pack(side="left")
         self.in_var = tk.StringVar()
-        tk.Entry(trim, textvariable=self.in_var, width=11).pack(side="left", padx=2)
+        tk.Entry(trim, textvariable=self.in_var, width=11).pack(side="left", padx=px(2))
         tk.Button(trim, text="⇤", relief="flat", command=lambda: self._mark("in")).pack(side="left")
-        tk.Label(trim, text="Out").pack(side="left", padx=(8, 0))
+        tk.Label(trim, text="Out").pack(side="left", padx=px(8, 0))
         self.out_var = tk.StringVar()
-        tk.Entry(trim, textvariable=self.out_var, width=11).pack(side="left", padx=2)
+        tk.Entry(trim, textvariable=self.out_var, width=11).pack(side="left", padx=px(2))
         tk.Button(trim, text="⇥", relief="flat", command=lambda: self._mark("out")).pack(side="left")
-        tk.Button(trim, text="Apply", relief="flat", command=self._apply_trim).pack(side="left", padx=6)
+        tk.Button(trim, text="Apply", relief="flat", command=self._apply_trim).pack(side="left", padx=px(6))
 
-        opt = tk.LabelFrame(body, text="  Join  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  Join  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         r = tk.Frame(opt)
         r.pack(fill="x")
         tk.Label(r, text="Size:").pack(side="left")
         self.size_var = tk.StringVar(value=SIZES["first"])
         ttk.Combobox(r, textvariable=self.size_var, values=list(SIZES.values()), state="readonly",
-                     width=24).pack(side="left", padx=4)
+                     width=24).pack(side="left", padx=px(4))
         self.lossless_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r, text="Lossless (identical clips only - trims move to keyframes)",
-                       variable=self.lossless_var).pack(side="left", padx=10)
+                       variable=self.lossless_var).pack(side="left", padx=px(10))
         self.encoder = EncoderPanel(opt, codecs=("h264", "hevc", "av1", "vp9"))
-        self.encoder.pack(anchor="w", pady=4)
+        self.encoder.pack(anchor="w", pady=px(4))
         self.out_row = FileRow(opt, t("common.output_file"), save=True, suggest=self._suggest)
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(body, text="🎞  JOIN", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

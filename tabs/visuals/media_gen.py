@@ -19,6 +19,7 @@ from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
 from tabs import common
+from core.scaling import px
 
 PATTERNS = {
     "smpte_hd": "SMPTE HD colour bars",
@@ -148,12 +149,12 @@ class MediaGeneratorTab(BaseTab):
                          "Colour bars, test patterns, countdown leaders, line-up tones and more.",
                          icon="🎨")
         body = scroll_body(self)
-        f = tk.LabelFrame(body, text="  What to generate  ", padx=12, pady=8)
-        f.pack(fill="x", padx=20, pady=(10, 4))
+        f = tk.LabelFrame(body, text="  What to generate  ", padx=px(12), pady=px(8))
+        f.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         def row(r, label, widget):
-            tk.Label(f, text=label, anchor="w", width=16).grid(row=r, column=0, sticky="w", pady=3)
-            widget.grid(row=r, column=1, sticky="w", pady=3)
+            tk.Label(f, text=label, anchor="w", width=16).grid(row=r, column=0, sticky="w", pady=px(3))
+            widget.grid(row=r, column=1, sticky="w", pady=px(3))
 
         self.pattern_var = tk.StringVar(value=PATTERNS["smpte_hd"])
         pb = ttk.Combobox(f, textvariable=self.pattern_var, values=list(PATTERNS.values()),
@@ -162,7 +163,7 @@ class MediaGeneratorTab(BaseTab):
         row(0, t("mgen.visual_pattern"), pb)
         self.colour_btn = tk.Button(f, text="  Colour…  ", bg="#202020", fg="white", relief="flat",
                                     command=self._pick_colour)
-        self.colour_btn.grid(row=0, column=2, sticky="w", padx=8)
+        self.colour_btn.grid(row=0, column=2, sticky="w", padx=px(8))
         self.size_var = tk.StringVar(value="1920×1080 (Full HD)")
         row(1, "Resolution:", ttk.Combobox(f, textvariable=self.size_var, values=list(SIZES),
                                            state="readonly", width=34))
@@ -180,13 +181,13 @@ class MediaGeneratorTab(BaseTab):
         self.freq_row = tk.Frame(f)
         tk.Label(self.freq_row, text="Hz").pack(side="right")
         tk.Entry(self.freq_row, textvariable=self.freq_var, width=8).pack(side="right")
-        self.freq_row.grid(row=4, column=2, sticky="w", padx=8)
+        self.freq_row.grid(row=4, column=2, sticky="w", padx=px(8))
         self.hint = tk.Label(f, text="", fg=CLR["fgdim"], font=(UI_FONT, 8), justify="left",
-                             wraplength=640)
+                             wraplength=px(640))
         self.hint.grid(row=5, column=0, columnspan=3, sticky="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=self._suggest_name)
         self.out_row.pack(fill="x")
@@ -197,9 +198,9 @@ class MediaGeneratorTab(BaseTab):
         self.btn_render = tk.Button(body, text=t("mgen.btn_generate"), font=(UI_FONT, 11, "bold"),
                                     bg=CLR["green"], fg="white", width=24, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=10)
+        self.btn_render.pack(pady=px(10))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

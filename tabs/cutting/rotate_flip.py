@@ -15,6 +15,7 @@ import tkinter as tk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -60,33 +61,33 @@ class RotateFlipTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], font=(UI_FONT, 9))
-        self.info_lbl.pack(anchor="w", padx=24)
+        self.info_lbl.pack(anchor="w", padx=px(24))
 
         self.compare = CompareView(body, 360, 240)
-        self.compare.pack(pady=6)
+        self.compare.pack(pady=px(6))
 
-        opts = tk.LabelFrame(body, text=f"  {t('rotate_flip.rotation_section')}  ", padx=12, pady=8)
-        opts.pack(fill="x", padx=20, pady=4)
+        opts = tk.LabelFrame(body, text=f"  {t('rotate_flip.rotation_section')}  ", padx=px(12), pady=px(8))
+        opts.pack(fill="x", padx=px(20), pady=px(4))
         self.rot_var = tk.IntVar(value=90)
         r0 = tk.Frame(opts)
         r0.pack(fill="x")
         for deg, label in ROTATIONS:
             tk.Radiobutton(r0, text=label, value=deg, variable=self.rot_var, indicatoron=False,
-                           width=18, pady=6, selectcolor=CLR["accent"], cursor="hand2",
-                           command=self._changed).pack(side="left", padx=3)
+                           width=18, pady=px(6), selectcolor=CLR["accent"], cursor="hand2",
+                           command=self._changed).pack(side="left", padx=px(3))
         r1 = tk.Frame(opts)
-        r1.pack(fill="x", pady=(8, 0))
+        r1.pack(fill="x", pady=px(8, 0))
         self.hflip_var = tk.BooleanVar(value=False)
         self.vflip_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r1, text="Mirror left ↔ right", variable=self.hflip_var,
-                       command=self._changed).pack(side="left", padx=4)
+                       command=self._changed).pack(side="left", padx=px(4))
         tk.Checkbutton(r1, text="Flip upside down ↕", variable=self.vflip_var,
-                       command=self._changed).pack(side="left", padx=12)
+                       command=self._changed).pack(side="left", padx=px(12))
 
-        meth = tk.LabelFrame(body, text="  Method  ", padx=12, pady=8)
-        meth.pack(fill="x", padx=20, pady=4)
+        meth = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
+        meth.pack(fill="x", padx=px(20), pady=px(4))
         self.lossless_var = tk.BooleanVar(value=True)
         tk.Radiobutton(meth, text="Lossless - change the orientation flag only (instant, keeps "
                                   "quality and all tracks)", value=True, variable=self.lossless_var,
@@ -96,17 +97,17 @@ class RotateFlipTab(BaseTab):
                        command=self._method_changed).pack(anchor="w")
         self.encoder = EncoderPanel(meth, codecs=("h264", "hevc", "av1", "vp9", "prores"))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self._suggest(self.src_row.path))
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(body, text="🔄  APPLY", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=22, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -130,7 +131,7 @@ class RotateFlipTab(BaseTab):
         if self.lossless_var.get():
             self.encoder.pack_forget()
         else:
-            self.encoder.pack(anchor="w", pady=(6, 0))
+            self.encoder.pack(anchor="w", pady=px(6, 0))
 
     def _changed(self):
         self.compare.set_filter(reencode_chain(self.rot_var.get(), self.hflip_var.get(),

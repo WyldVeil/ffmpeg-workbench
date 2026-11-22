@@ -28,6 +28,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -175,70 +176,70 @@ class BeatSyncCutterTab(BaseTab):
         body = scroll_body(self)
         self.music_row = FileRow(body, "Music:", self.src_var, kind="media",
                                  on_change=lambda _p: self._analyse())
-        self.music_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.music_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        bl = tk.LabelFrame(body, text="  Beats  ", padx=12, pady=6)
-        bl.pack(fill="x", padx=20, pady=4)
+        bl = tk.LabelFrame(body, text="  Beats  ", padx=px(12), pady=px(6))
+        bl.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(bl)
         r0.pack(fill="x")
         self.mode_var = tk.StringVar(value="grid")
         tk.Radiobutton(r0, text="Beat grid (steady tempo)", value="grid", variable=self.mode_var,
                        command=self._analyse).pack(side="left")
         tk.Radiobutton(r0, text="Every hit", value="hits", variable=self.mode_var,
-                       command=self._analyse).pack(side="left", padx=10)
-        tk.Label(r0, text="Sensitivity:").pack(side="left", padx=(10, 2))
+                       command=self._analyse).pack(side="left", padx=px(10))
+        tk.Label(r0, text="Sensitivity:").pack(side="left", padx=px(10, 2))
         self.sens_var = tk.DoubleVar(value=0.5)
         tk.Scale(r0, variable=self.sens_var, from_=0.05, to=0.95, resolution=0.05, orient="horizontal",
-                 length=120, command=lambda _v: self._schedule()).pack(side="left")
+                 length=px(120), command=lambda _v: self._schedule()).pack(side="left")
         self.bpm_lbl = tk.Label(bl, text="Choose a music file.", fg=CLR["accent"], font=(MONO_FONT, 10))
-        self.bpm_lbl.pack(anchor="w", pady=(4, 0))
-        self.canvas = tk.Canvas(bl, height=60, bg=CLR["console_bg"], highlightthickness=0)
-        self.canvas.pack(fill="x", pady=4)
+        self.bpm_lbl.pack(anchor="w", pady=px(4, 0))
+        self.canvas = tk.Canvas(bl, height=px(60), bg=CLR["console_bg"], highlightthickness=0)
+        self.canvas.pack(fill="x", pady=px(4))
         self.canvas.bind("<Configure>", lambda _e: self._draw())
         r1 = tk.Frame(bl)
         r1.pack(fill="x")
         tk.Label(r1, text="Cut every").pack(side="left")
         self.every_var = tk.StringVar(value="2")
         ttk.Combobox(r1, textvariable=self.every_var, values=["1", "2", "4", "8", "16"],
-                     state="readonly", width=4).pack(side="left", padx=4)
+                     state="readonly", width=4).pack(side="left", padx=px(4))
         tk.Label(r1, text="beats").pack(side="left")
         tk.Button(r1, text="Save beat times…", relief="flat", command=self._save_beats).pack(
             side="right")
 
-        cl = tk.LabelFrame(body, text="  Clips  ", padx=12, pady=6)
-        cl.pack(fill="x", padx=20, pady=4)
+        cl = tk.LabelFrame(body, text="  Clips  ", padx=px(12), pady=px(6))
+        cl.pack(fill="x", padx=px(20), pady=px(4))
         top = tk.Frame(cl)
         top.pack(fill="x")
         self.listbox = tk.Listbox(top, height=6)
         self.listbox.pack(side="left", fill="x", expand=True)
         bt = tk.Frame(top)
-        bt.pack(side="left", padx=6)
+        bt.pack(side="left", padx=px(6))
         for text, cmd in (("➕ Add clips", self._add), ("🗑 Remove", self._remove), ("🧹 Clear", self._clear)):
-            tk.Button(bt, text=text, relief="flat", width=12, command=cmd).pack(fill="x", pady=1)
+            tk.Button(bt, text=text, relief="flat", width=12, command=cmd).pack(fill="x", pady=px(1))
         r2 = tk.Frame(cl)
-        r2.pack(fill="x", pady=(4, 0))
+        r2.pack(fill="x", pady=px(4, 0))
         tk.Label(r2, text="Order:").pack(side="left")
         self.order_var = tk.StringVar(value=ORDERS["sequential"])
         ttk.Combobox(r2, textvariable=self.order_var, values=list(ORDERS.values()), state="readonly",
-                     width=36).pack(side="left", padx=4)
-        tk.Label(r2, text="Size:").pack(side="left", padx=(10, 2))
+                     width=36).pack(side="left", padx=px(4))
+        tk.Label(r2, text="Size:").pack(side="left", padx=px(10, 2))
         self.size_var = tk.StringVar(value=next(iter(SIZES)))
         ttk.Combobox(r2, textvariable=self.size_var, values=list(SIZES), state="readonly",
                      width=22).pack(side="left")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.music_row.path, "montage", ".mp4"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🥁  BUILD MONTAGE", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=24, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -322,7 +323,7 @@ class BeatSyncCutterTab(BaseTab):
     def _draw(self):
         c = self.canvas
         c.delete("all")
-        w, h = max(c.winfo_width(), 100), int(c.cget("height"))
+        w, h = max(c.winfo_width(), px(100)), int(c.cget("height"))
         dur = self._music_dur or 1.0
         if self._onset:
             step = max(1, len(self._onset) // w)
@@ -330,11 +331,11 @@ class BeatSyncCutterTab(BaseTab):
             for x in range(0, w):
                 seg = self._onset[x * step:(x + 1) * step]
                 v = (max(seg) if seg else 0) / peak
-                c.create_line(x, h, x, h - v * (h - 4), fill="#335577")
+                c.create_line(x, h, x, h - v * (h - px(4)), fill="#335577")
         every = int(self.every_var.get() or 1)
         for i, b in enumerate(self.beats):
             x = b / dur * w
-            c.create_line(x, 0, x, h, fill=CLR["accent"] if i % every == 0 else "#444444")
+            c.create_line(x, 0, x, h, fill=CLR["accent"] if i % every == 0 else "#444444", width=px(1))
 
     def _save_beats(self):
         if not self.beats:

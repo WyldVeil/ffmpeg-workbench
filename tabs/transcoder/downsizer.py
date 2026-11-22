@@ -30,6 +30,7 @@ from core.i18n import t
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
+from core.scaling import px
 
 TARGETS = [("8 MB", 8), ("10 MB - Discord", 10), ("18 MB - safe for email", 18), ("25 MB", 25),
            ("50 MB - Discord Nitro Basic", 50), ("100 MB", 100), ("500 MB - Discord Nitro", 500),
@@ -125,18 +126,18 @@ class UniversalDownsizerTab(BaseTab):
                          "quality that fits.", icon="🗜")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self._src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
-        self.info_lbl.pack(fill="x", padx=20)
+        self.info_lbl.pack(fill="x", padx=px(20))
 
-        opt = tk.LabelFrame(body, text="  Target  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=6)
+        opt = tk.LabelFrame(body, text="  Target  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
 
         def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=14, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+            tk.Label(opt, text=label, width=14, anchor="w").grid(row=r, column=0, sticky="w", pady=px(3))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=3)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(3))
 
         self.target_var = tk.StringVar(value=TARGETS[1][0])
         tb = ttk.Combobox(opt, textvariable=self.target_var, values=[x[0] for x in TARGETS], state="readonly",
@@ -152,7 +153,7 @@ class UniversalDownsizerTab(BaseTab):
         tk.Radiobutton(sp, text="Best quality (two-pass, CPU)", variable=self.speed_var, value="quality",
                        command=self._changed).pack(side="left")
         tk.Radiobutton(sp, text="Fast (GPU when available)", variable=self.speed_var, value="fast",
-                       command=self._changed).pack(side="left", padx=10)
+                       command=self._changed).pack(side="left", padx=px(10))
         row(2, "Encoding:", sp)
         self.audio_var = tk.StringVar(value=AUDIO_MODES["auto"])
         ab = ttk.Combobox(opt, textvariable=self.audio_var, values=list(AUDIO_MODES.values()), state="readonly",
@@ -164,7 +165,7 @@ class UniversalDownsizerTab(BaseTab):
         tk.Checkbutton(perm, text="May lower the resolution", variable=self._allow_res,
                        command=self._changed).pack(side="left")
         tk.Checkbutton(perm, text="May lower the frame rate (above 30 fps only)", variable=self._allow_fps,
-                       command=self._changed).pack(side="left", padx=10)
+                       command=self._changed).pack(side="left", padx=px(10))
         row(4, "Allowed:", perm)
         self.start_var, self.end_var = tk.StringVar(), tk.StringVar()
         tr = tk.Frame(opt)
@@ -177,20 +178,20 @@ class UniversalDownsizerTab(BaseTab):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         for v in (self._target_mb, self.start_var, self.end_var):
             v.trace_add("write", lambda *_a: self._changed())
-        self.plan_lbl = tk.Label(opt, text="", fg=CLR["accent"], justify="left", anchor="w", wraplength=640)
-        self.plan_lbl.grid(row=6, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        self.plan_lbl = tk.Label(opt, text="", fg=CLR["accent"], justify="left", anchor="w", wraplength=px(640))
+        self.plan_lbl.grid(row=6, column=0, columnspan=6, sticky="w", pady=px(6, 0))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, ext=".mp4",
                                suggest=lambda: self.suggest_output(self.src_row.path, "small", ".mp4"))
         self.out_row.pack(fill="x")
         self._out_var = self.out_row.var
         self._btn_render = tk.Button(body, text=t("downsizer.render_button"), font=(UI_FONT, 12, "bold"),
                                      bg=CLR["green"], fg="white", width=30, cursor="hand2", command=self._start_render)
-        self._btn_render.pack(pady=8)
+        self._btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=7)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

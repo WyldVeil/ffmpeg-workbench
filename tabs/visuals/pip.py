@@ -17,6 +17,7 @@ from typing import Optional
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -118,85 +119,85 @@ class PIPTab(BaseTab):
         self.make_header(self, t("tab.picture_in_picture"), "Put one video inside another.", icon="🖼")
         body = scroll_body(self)
         self.bg_row = FileRow(body, "Background video:", self.src_var, on_change=self._bg_changed, label_width=18)
-        self.bg_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.bg_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_row = self.bg_row
         self.fg_row = FileRow(body, "Inset video:", on_change=self._fg_changed, label_width=18)
-        self.fg_row.pack(fill="x", padx=20, pady=2)
+        self.fg_row.pack(fill="x", padx=px(20), pady=px(2))
         self.compare = CompareView(body, 400, 225, after_label="Result")
-        self.compare.pack(pady=4)
-        opt = tk.LabelFrame(body, text="  Inset  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.compare.pack(pady=px(4))
+        opt = tk.LabelFrame(body, text="  Inset  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def ch(*_a):
             self._changed()
 
         self.size_var = tk.DoubleVar(value=30)
-        tk.Scale(opt, variable=self.size_var, from_=5, to=90, orient="horizontal", length=180,
+        tk.Scale(opt, variable=self.size_var, from_=5, to=90, orient="horizontal", length=px(180),
                  label="Width (% of background)", command=ch).grid(row=0, column=0, sticky="w")
         self.margin_var = tk.DoubleVar(value=3)
-        tk.Scale(opt, variable=self.margin_var, from_=0, to=15, resolution=0.5, orient="horizontal", length=140,
+        tk.Scale(opt, variable=self.margin_var, from_=0, to=15, resolution=0.5, orient="horizontal", length=px(140),
                  label="Margin (%)", command=ch).grid(row=0, column=1, sticky="w")
         self.opacity_var = tk.DoubleVar(value=1.0)
         tk.Scale(opt, variable=self.opacity_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
-                 length=140, label="Opacity", command=ch).grid(row=0, column=2, sticky="w")
+                 length=px(140), label="Opacity", command=ch).grid(row=0, column=2, sticky="w")
         pr = tk.Frame(opt)
-        pr.grid(row=1, column=0, columnspan=3, sticky="w", pady=3)
+        pr.grid(row=1, column=0, columnspan=3, sticky="w", pady=px(3))
         tk.Label(pr, text="Position:").pack(side="left")
         self.place_var = tk.StringVar(value=POSITIONS["br"])
         pb = ttk.Combobox(pr, textvariable=self.place_var, values=list(POSITIONS.values()), state="readonly",
                           width=16)
-        pb.pack(side="left", padx=4)
+        pb.pack(side="left", padx=px(4))
         pb.bind("<<ComboboxSelected>>", ch)
         self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
         for label, var in (("X %", self.cx_var), ("Y %", self.cy_var)):
-            tk.Label(pr, text=label).pack(side="left", padx=(6, 2))
+            tk.Label(pr, text=label).pack(side="left", padx=px(6, 2))
             tk.Entry(pr, textvariable=var, width=5).pack(side="left")
             var.trace_add("write", ch)
         br = tk.Frame(opt)
-        br.grid(row=2, column=0, columnspan=3, sticky="w", pady=3)
+        br.grid(row=2, column=0, columnspan=3, sticky="w", pady=px(3))
         tk.Label(br, text="Border (px):").pack(side="left")
         self.border_var = tk.StringVar(value="0")
-        tk.Entry(br, textvariable=self.border_var, width=4).pack(side="left", padx=4)
+        tk.Entry(br, textvariable=self.border_var, width=4).pack(side="left", padx=px(4))
         self.colour_btn = tk.Button(br, text="Colour…", bg="#FFFFFF", relief="flat", command=self._pick_colour)
         self.colour_btn.pack(side="left")
         tk.Label(br, text="  Rounded corners (px):").pack(side="left")
         self.radius_var = tk.StringVar(value="0")
-        tk.Entry(br, textvariable=self.radius_var, width=4).pack(side="left", padx=4)
+        tk.Entry(br, textvariable=self.radius_var, width=4).pack(side="left", padx=px(4))
         for v in (self.border_var, self.radius_var):
             v.trace_add("write", ch)
         tr = tk.Frame(opt)
-        tr.grid(row=3, column=0, columnspan=3, sticky="w", pady=3)
+        tr.grid(row=3, column=0, columnspan=3, sticky="w", pady=px(3))
         tk.Label(tr, text="Show from").pack(side="left")
         self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
-        tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=2)
+        tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
         tk.Label(tr, text="until").pack(side="left")
-        tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=2)
+        tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
         tk.Label(tr, text="(empty = until the inset ends)", fg=CLR["fgdim"]).pack(side="left")
         ar = tk.Frame(opt)
-        ar.grid(row=4, column=0, columnspan=3, sticky="w", pady=3)
+        ar.grid(row=4, column=0, columnspan=3, sticky="w", pady=px(3))
         self.anim_var = tk.StringVar(value=ANIMS["none"])
         ttk.Combobox(ar, textvariable=self.anim_var, values=list(ANIMS.values()), state="readonly",
                      width=22).pack(side="left")
-        tk.Label(ar, text="over").pack(side="left", padx=4)
+        tk.Label(ar, text="over").pack(side="left", padx=px(4))
         self.anim_dur_var = tk.StringVar(value="0.5")
         tk.Entry(ar, textvariable=self.anim_dur_var, width=5).pack(side="left")
         tk.Label(ar, text="s    Sound:").pack(side="left")
         self.audio_var = tk.StringVar(value=AUDIO["bg"])
         ttk.Combobox(ar, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly",
-                     width=20).pack(side="left", padx=4)
+                     width=20).pack(side="left", padx=px(4))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.bg_row.path, "pip"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🖼  MAKE PICTURE-IN-PICTURE", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=28, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

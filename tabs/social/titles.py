@@ -21,6 +21,7 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -148,58 +149,58 @@ class TitlesGeneratorTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         pv = tk.Frame(body)
-        pv.pack(pady=4)
+        pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 480, 270)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0.0)
-        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=480,
+        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=px(480),
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
 
         look = tk.Frame(body)
-        look.pack(fill="x", padx=20, pady=4)
+        look.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(look, text="Font:").pack(side="left")
         self.font_var = tk.StringVar(value="Montserrat")
         fb = ttk.Combobox(look, textvariable=self.font_var, values=ass.families(), width=18,
                           state="readonly")
-        fb.pack(side="left", padx=6)
+        fb.pack(side="left", padx=px(6))
         fb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
-        tk.Label(look, text="Text size:").pack(side="left", padx=(12, 0))
+        tk.Label(look, text="Text size:").pack(side="left", padx=px(12, 0))
         self.size_var = tk.StringVar(value="Medium")
         sb = ttk.Combobox(look, textvariable=self.size_var, values=list(SIZES), width=8,
                           state="readonly")
-        sb.pack(side="left", padx=6)
+        sb.pack(side="left", padx=px(6))
         sb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
-        tk.Label(look, text="Animation (s):").pack(side="left", padx=(12, 0))
+        tk.Label(look, text="Animation (s):").pack(side="left", padx=px(12, 0))
         self.anim_var = tk.StringVar(value="0.35")
-        tk.Entry(look, textvariable=self.anim_var, width=5).pack(side="left", padx=6)
+        tk.Entry(look, textvariable=self.anim_var, width=5).pack(side="left", padx=px(6))
         self.anim_var.trace_add("write", lambda *_a: self._schedule())
 
         cards_hdr = tk.Frame(body)
-        cards_hdr.pack(fill="x", padx=20, pady=(8, 0))
+        cards_hdr.pack(fill="x", padx=px(20), pady=px(8, 0))
         tk.Label(cards_hdr, text=t("titles.title_cards"), font=(UI_FONT, 9, "bold"),
                  fg=CLR["fgdim"]).pack(side="left")
         tk.Button(cards_hdr, text=f"➕ {t('titles.add_card_button')}", relief="flat",
                   cursor="hand2", command=lambda: self.add_card()).pack(side="right")
         self.cards_frame = tk.Frame(body)
-        self.cards_frame.pack(fill="x", padx=20)
+        self.cards_frame.pack(fill="x", padx=px(20))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "titled"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text=t("titles.render_button"), font=(UI_FONT, 12, "bold"),
                                     bg="#AD1457", fg="white", width=26, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -214,8 +215,8 @@ class TitlesGeneratorTab(BaseTab):
                 card.start = ff.parse_time(card.start) + 5
             except ValueError:
                 card.start = 1.0
-        frame = tk.LabelFrame(self.cards_frame, text=f"  Card {len(self.rows) + 1}  ", padx=8, pady=4)
-        frame.pack(fill="x", pady=3)
+        frame = tk.LabelFrame(self.cards_frame, text=f"  Card {len(self.rows) + 1}  ", padx=px(8), pady=px(4))
+        frame.pack(fill="x", pady=px(3))
         v = {"style": tk.StringVar(value=STYLES.get(card.style, STYLES["lower_third"])),
              "line1": tk.StringVar(value=card.line1), "line2": tk.StringVar(value=card.line2),
              "start": tk.StringVar(value=f"{card.start:g}"),
@@ -225,22 +226,22 @@ class TitlesGeneratorTab(BaseTab):
         r1.pack(fill="x")
         ttk.Combobox(r1, textvariable=v["style"], values=list(STYLES.values()), state="readonly",
                      width=30).pack(side="left")
-        tk.Label(r1, text=t("titles.start_label")).pack(side="left", padx=(10, 2))
+        tk.Label(r1, text=t("titles.start_label")).pack(side="left", padx=px(10, 2))
         tk.Entry(r1, textvariable=v["start"], width=8).pack(side="left")
-        tk.Label(r1, text=t("titles.duration_label")).pack(side="left", padx=(10, 2))
+        tk.Label(r1, text=t("titles.duration_label")).pack(side="left", padx=px(10, 2))
         tk.Entry(r1, textvariable=v["duration"], width=6).pack(side="left")
         swatch = tk.Button(r1, text="  ", bg=card.accent, relief="flat", width=3,
                            command=lambda r=row: self._pick_accent(r))
-        swatch.pack(side="left", padx=10)
+        swatch.pack(side="left", padx=px(10))
         row["swatch"] = swatch
         tk.Button(r1, text="👁", relief="flat", cursor="hand2",
                   command=lambda r=row: self._show_card(r)).pack(side="left")
         tk.Button(r1, text="✕", relief="flat", cursor="hand2",
                   command=lambda r=row: self._remove(r)).pack(side="right")
         r2 = tk.Frame(frame)
-        r2.pack(fill="x", pady=(3, 0))
+        r2.pack(fill="x", pady=px(3, 0))
         tk.Label(r2, text=t("titles.line_1_label"), width=7, anchor="w").pack(side="left")
-        tk.Entry(r2, textvariable=v["line1"], width=34).pack(side="left", padx=(0, 10))
+        tk.Entry(r2, textvariable=v["line1"], width=34).pack(side="left", padx=px(0, 10))
         tk.Label(r2, text=t("titles.line_2_label"), width=7, anchor="w").pack(side="left")
         tk.Entry(r2, textvariable=v["line2"], width=34).pack(side="left")
         for var in v.values():

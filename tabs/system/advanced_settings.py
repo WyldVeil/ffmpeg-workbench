@@ -25,6 +25,7 @@ from core.hardware import (
 from core.settings import load_settings, update
 from core.i18n import SUPPORTED_LANGUAGES, LANGUAGE_NAMES, get_language, set_language
 from core.i18n import t
+from core.scaling import px, scale_drawing
 
 
 class AdvancedSettingsTab(BaseTab):
@@ -39,10 +40,10 @@ class AdvancedSettingsTab(BaseTab):
         tk.Label(hdr, text="⚙  " + t("tab.advanced_settings"),
                  font=(UI_FONT, 16, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(
-            side="left", padx=20, pady=12)
+            side="left", padx=px(20), pady=px(12))
 
         nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=15, pady=10)
+        nb.pack(fill="both", expand=True, padx=px(15), pady=px(10))
 
         self._build_ffmpeg_tab(nb)
         self._build_defaults_tab(nb)
@@ -58,10 +59,10 @@ class AdvancedSettingsTab(BaseTab):
         nb.add(f, text="  FFmpeg  ")
 
         tk.Label(f, text=t("adv.ffmpeg_management"),
-                 font=(UI_FONT, 12, "bold")).pack(pady=(20, 10))
+                 font=(UI_FONT, 12, "bold")).pack(pady=px(20, 10))
 
-        ver_f = tk.LabelFrame(f, text=f"  {t('advanced_settings.version_status_section')}  ", padx=15, pady=10)
-        ver_f.pack(fill="x", padx=20, pady=8)
+        ver_f = tk.LabelFrame(f, text=f"  {t('advanced_settings.version_status_section')}  ", padx=px(15), pady=px(10))
+        ver_f.pack(fill="x", padx=px(20), pady=px(8))
 
         self.local_ver_lbl  = tk.Label(ver_f, text=t("advanced_settings.local_checking"),
                                        font=(MONO_FONT, 11))
@@ -72,22 +73,22 @@ class AdvancedSettingsTab(BaseTab):
 
         tk.Label(ver_f, text="The app ships the FFmpeg build every tool is tested with; it is updated "
                              "together with the app (there is no separate FFmpeg updater, so an FFmpeg "
-                             "change can never break a tool).", fg=CLR["fgdim"], wraplength=640,
-                 justify="left").pack(anchor="w", pady=(4, 0))
+                             "change can never break a tool).", fg=CLR["fgdim"], wraplength=px(640),
+                 justify="left").pack(anchor="w", pady=px(4, 0))
         btn_row = tk.Frame(ver_f)
-        btn_row.pack(anchor="w", pady=8)
+        btn_row.pack(anchor="w", pady=px(8))
         tk.Button(btn_row, text=t("advanced_settings.open_bin_folder"),
                   bg=CLR["panel"], fg=CLR["fg"],
-                  command=self._open_bin).pack(side="left", padx=4)
+                  command=self._open_bin).pack(side="left", padx=px(4))
 
         cust_f = tk.LabelFrame(f, text=f"  {t('advanced_settings.custom_ffmpeg_section')}  ",
-                               padx=15, pady=10)
-        cust_f.pack(fill="x", padx=20, pady=5)
+                               padx=px(15), pady=px(10))
+        cust_f.pack(fill="x", padx=px(20), pady=px(5))
         tk.Label(cust_f,
                  text=t("adv.ffmpeg_path_label"),
                  fg=CLR["fgdim"]).pack(anchor="w")
         path_row = tk.Frame(cust_f)
-        path_row.pack(fill="x", pady=4)
+        path_row.pack(fill="x", pady=px(4))
         self.ffmpeg_path_var = tk.StringVar(
             value=self.settings.get("ffmpeg_path_override", ""))
         tk.Entry(path_row, textvariable=self.ffmpeg_path_var,
@@ -95,11 +96,11 @@ class AdvancedSettingsTab(BaseTab):
         tk.Button(path_row, text=t("btn.browse"),
                   command=lambda: self._browse_binary(
                       "ffmpeg_path_override", self.ffmpeg_path_var)
-                  ).pack(side="left", padx=6)
+                  ).pack(side="left", padx=px(6))
 
         self.upd_console = scrolledtext.ScrolledText(
             f, height=8, bg=CLR["console_bg"], fg="#00FF88", font=(MONO_FONT, 9))
-        self.upd_console.pack(fill="both", expand=True, padx=20, pady=8)
+        self.upd_console.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
         threading.Thread(target=self._check_versions, daemon=True).start()
 
@@ -130,11 +131,11 @@ class AdvancedSettingsTab(BaseTab):
         f = ttk.Frame(nb)
         nb.add(f, text="  Defaults  ")
         tk.Label(f, text=t("adv.encoding_defaults"),
-                 font=(UI_FONT, 12, "bold")).pack(pady=(20, 10))
+                 font=(UI_FONT, 12, "bold")).pack(pady=px(20, 10))
 
         opts = tk.LabelFrame(f, text=f"  {t('advanced_settings.default_encode_section')}  ",
-                             padx=20, pady=12)
-        opts.pack(fill="x", padx=20, pady=8)
+                             padx=px(20), pady=px(12))
+        opts.pack(fill="x", padx=px(20), pady=px(8))
 
         rows = [
             ("Default CRF:", "default_crf", "18", None),
@@ -148,25 +149,25 @@ class AdvancedSettingsTab(BaseTab):
         self._settings_vars = {}
         for i, (label, key, default, choices) in enumerate(rows):
             tk.Label(opts, text=label, width=24, anchor="e").grid(
-                row=i, column=0, pady=6)
+                row=i, column=0, pady=px(6))
             var = tk.StringVar(value=self.settings.get(key, default))
             self._settings_vars[key] = var
             if choices:
                 ttk.Combobox(opts, textvariable=var, values=choices,
                              state="readonly", width=16).grid(
-                    row=i, column=1, sticky="w", padx=8)
+                    row=i, column=1, sticky="w", padx=px(8))
             else:
                 tk.Entry(opts, textvariable=var, width=8, relief="flat").grid(
-                    row=i, column=1, sticky="w", padx=8)
+                    row=i, column=1, sticky="w", padx=px(8))
 
         of = tk.Frame(opts)
-        of.grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=6)
+        of.grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(6))
         tk.Label(of, text="Default Output Folder:",
                  width=24, anchor="e").pack(side="left")
         self.out_folder_var = tk.StringVar(
             value=self.settings.get("default_output_folder", ""))
         tk.Entry(of, textvariable=self.out_folder_var,
-                 width=40).pack(side="left", padx=8)
+                 width=40).pack(side="left", padx=px(8))
         tk.Button(
             of, text=t("btn.browse"),
             command=lambda: self.out_folder_var.set(
@@ -178,12 +179,12 @@ class AdvancedSettingsTab(BaseTab):
         tk.Checkbutton(opts,
                        text="Auto-open output folder after render",
                        variable=self.auto_open_var).grid(
-            row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=4)
+            row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4))
 
         tk.Button(f, text=t("advanced_settings.save_settings"),
                   bg=CLR["green"], fg="white",
                   font=(UI_FONT, 11, "bold"),
-                  command=self._save_settings).pack(pady=15)
+                  command=self._save_settings).pack(pady=px(15))
         self.save_lbl = tk.Label(f, text="", fg=CLR["green"])
         self.save_lbl.pack()
 
@@ -230,28 +231,28 @@ class AdvancedSettingsTab(BaseTab):
             return v
 
         def section(title):
-            lf = tk.LabelFrame(body, text=f"  {title}  ", padx=12, pady=8)
-            lf.pack(fill="x", padx=20, pady=6)
+            lf = tk.LabelFrame(body, text=f"  {title}  ", padx=px(12), pady=px(8))
+            lf.pack(fill="x", padx=px(20), pady=px(6))
             return lf
 
         def hint(parent, text):
             tk.Label(parent, text=text, fg=CLR["fgdim"], font=(UI_FONT, 8), justify="left", anchor="w",
-                     wraplength=760).pack(anchor="w", fill="x")
+                     wraplength=px(760)).pack(anchor="w", fill="x")
 
         # ── What happens now ─────────────────────────────────────────────────
         now = section("Right now")
-        self._net_now_lbl = tk.Label(now, text="Checking…", anchor="w", justify="left", wraplength=760,
+        self._net_now_lbl = tk.Label(now, text="Checking…", anchor="w", justify="left", wraplength=px(760),
                                      font=(UI_FONT, 10, "bold"))
         self._net_now_lbl.pack(anchor="w", fill="x")
-        self._net_sys_lbl = tk.Label(now, text="", anchor="w", justify="left", wraplength=760, fg=CLR["fgdim"])
+        self._net_sys_lbl = tk.Label(now, text="", anchor="w", justify="left", wraplength=px(760), fg=CLR["fgdim"])
         self._net_sys_lbl.pack(anchor="w", fill="x")
         row = tk.Frame(now)
-        row.pack(anchor="w", pady=(6, 0))
+        row.pack(anchor="w", pady=px(6, 0))
         tk.Button(row, text="Test the connection", command=self._net_test).pack(side="left")
-        tk.Button(row, text="Save", bg=CLR["green"], fg="white", command=self._net_save).pack(side="left", padx=6)
+        tk.Button(row, text="Save", bg=CLR["green"], fg="white", command=self._net_save).pack(side="left", padx=px(6))
         tk.Button(row, text="Reset everything", fg=CLR["red"], command=self._net_reset_all).pack(side="left")
-        self._net_status_lbl = tk.Label(now, text="", anchor="w", justify="left", wraplength=760)
-        self._net_status_lbl.pack(anchor="w", fill="x", pady=(4, 0))
+        self._net_status_lbl = tk.Label(now, text="", anchor="w", justify="left", wraplength=px(760))
+        self._net_status_lbl.pack(anchor="w", fill="x", pady=px(4, 0))
 
         special = sysproxy.special_system()
         if special:
@@ -270,7 +271,7 @@ class AdvancedSettingsTab(BaseTab):
 
         def radio(value, text, desc="", extra=None):
             r = tk.Frame(sit)
-            r.pack(anchor="w", fill="x", pady=2)
+            r.pack(anchor="w", fill="x", pady=px(2))
             top = tk.Frame(r)
             top.pack(anchor="w")
             tk.Radiobutton(top, text=text, variable=self._net_situation_var, value=value,
@@ -278,15 +279,15 @@ class AdvancedSettingsTab(BaseTab):
             if extra:
                 extra(top)
             if desc:
-                tk.Label(r, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 8), wraplength=720,
-                         justify="left").pack(anchor="w", padx=(24, 0))
+                tk.Label(r, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 8), wraplength=px(720),
+                         justify="left").pack(anchor="w", padx=px(24, 0))
 
         def app_box(parent):
             self._net_app_var = tk.StringVar(value=next((t_ for t_, i in self._net_app_labels.items()
                                                          if i == current), apps[0][1]))
             cb = ttk.Combobox(parent, textvariable=self._net_app_var, values=list(self._net_app_labels),
                               state="readonly", width=44)
-            cb.pack(side="left", padx=6)
+            cb.pack(side="left", padx=px(6))
             cb.bind("<<ComboboxSelected>>", lambda _e: (self._net_situation_var.set("app"), self._net_choose("app")))
             tk.Button(parent, text="Find…", command=self._net_find_local).pack(side="left")
 
@@ -295,7 +296,7 @@ class AdvancedSettingsTab(BaseTab):
                                                          if i == current), tors[0][1]))
             cb = ttk.Combobox(parent, textvariable=self._net_tor_var, values=list(self._net_tor_labels),
                               state="readonly", width=34)
-            cb.pack(side="left", padx=6)
+            cb.pack(side="left", padx=px(6))
             cb.bind("<<ComboboxSelected>>", lambda _e: (self._net_situation_var.set("tor"), self._net_choose("tor")))
 
         desc = {sid: d for sid, _t, d, _v in _net.SITUATIONS}
@@ -308,9 +309,9 @@ class AdvancedSettingsTab(BaseTab):
         radio("custom", "My own proxy (details below)")
         radio("offline", "Offline - never use the network", desc["offline"])
         self._net_found_lbl = tk.Label(sit, text="", fg=CLR["fgdim"])
-        self._net_found_lbl.pack(anchor="w", padx=(24, 0))
+        self._net_found_lbl.pack(anchor="w", padx=px(24, 0))
         self._net_found_frame = tk.Frame(sit)
-        self._net_found_frame.pack(anchor="w", padx=(24, 0))
+        self._net_found_frame.pack(anchor="w", padx=px(24, 0))
 
         # ── Own proxy ────────────────────────────────────────────────────────
         own = section("Your own proxy")
@@ -320,23 +321,23 @@ class AdvancedSettingsTab(BaseTab):
         tk.Label(g, text="Type").grid(row=0, column=0, sticky="w")
         ttk.Combobox(g, textvariable=var("network.proxy_scheme"), state="readonly", width=9,
                      values=["http", "https", "socks5h", "socks5", "socks4a", "socks4"]).grid(row=0, column=1,
-                                                                                          sticky="w", padx=4)
-        tk.Label(g, text="Address").grid(row=0, column=2, sticky="w", padx=(8, 0))
-        tk.Entry(g, textvariable=var("network.proxy_host"), width=26).grid(row=0, column=3, padx=4)
+                                                                                          sticky="w", padx=px(4))
+        tk.Label(g, text="Address").grid(row=0, column=2, sticky="w", padx=px(8, 0))
+        tk.Entry(g, textvariable=var("network.proxy_host"), width=26).grid(row=0, column=3, padx=px(4))
         tk.Label(g, text="Port").grid(row=0, column=4, sticky="w")
-        tk.Entry(g, textvariable=var("network.proxy_port"), width=7).grid(row=0, column=5, padx=4)
-        tk.Label(g, text="Username").grid(row=1, column=0, sticky="w", pady=4)
+        tk.Entry(g, textvariable=var("network.proxy_port"), width=7).grid(row=0, column=5, padx=px(4))
+        tk.Label(g, text="Username").grid(row=1, column=0, sticky="w", pady=px(4))
         tk.Entry(g, textvariable=var("network.proxy_user"), width=18).grid(row=1, column=1, columnspan=2,
-                                                                          sticky="w", padx=4)
+                                                                          sticky="w", padx=px(4))
         tk.Label(g, text="Password").grid(row=1, column=3, sticky="e")
         tk.Entry(g, textvariable=var("network.proxy_pass"), width=18, show="•").grid(row=1, column=4, columnspan=2,
-                                                                                    sticky="w", padx=4)
+                                                                                    sticky="w", padx=px(4))
         tk.Checkbutton(own, text="Strict: never connect without this proxy (for Tor and privacy proxies)",
                        variable=var("network.strict")).pack(anchor="w")
         r = tk.Frame(own)
-        r.pack(anchor="w", pady=2)
+        r.pack(anchor="w", pady=px(2))
         tk.Label(r, text="When a site blocks Tor, retry through a fresh Tor circuit up to").pack(side="left")
-        tk.Spinbox(r, from_=0, to=50, width=4, textvariable=var("network.tor_retries")).pack(side="left", padx=4)
+        tk.Spinbox(r, from_=0, to=50, width=4, textvariable=var("network.tor_retries")).pack(side="left", padx=px(4))
         tk.Label(r, text="times (0 = off)").pack(side="left")
         hint(own, "Proxies that sign you in automatically with your Windows account (NTLM/Kerberos) need a local "
                   "helper such as Px or CNTLM; then use its local address here. The password is never put on a "
@@ -349,10 +350,10 @@ class AdvancedSettingsTab(BaseTab):
         tk.Checkbutton(cert, text="Trust this computer's certificates (needed on many company and school networks)",
                        variable=var("network.system_certs")).pack(anchor="w")
         r = tk.Frame(cert)
-        r.pack(anchor="w", fill="x", pady=2)
+        r.pack(anchor="w", fill="x", pady=px(2))
         tk.Label(r, text="Extra certificate file (PEM):").pack(side="left")
         ca = var("network.extra_ca")
-        tk.Entry(r, textvariable=ca, width=44).pack(side="left", padx=4)
+        tk.Entry(r, textvariable=ca, width=44).pack(side="left", padx=px(4))
         tk.Button(r, text="Choose…", command=lambda: ca.set(dialogs.askopenfilename(
             filetypes=[("Certificates", "*.pem *.crt *.cer"), ("All files", "*")]) or ca.get())).pack(side="left")
         tk.Checkbutton(cert, text="Check certificates at all (turning this off is unsafe)",
@@ -366,11 +367,11 @@ class AdvancedSettingsTab(BaseTab):
         g.pack(anchor="w")
         tk.Label(g, text="Speech models (Hugging Face) mirror:").grid(row=0, column=0, sticky="w")
         ttk.Combobox(g, textvariable=var("network.hf_mirror"), width=36,
-                     values=["", "https://hf-mirror.com"]).grid(row=0, column=1, padx=4, pady=2)
+                     values=["", "https://hf-mirror.com"]).grid(row=0, column=1, padx=px(4), pady=px(2))
         tk.Label(g, text="GitHub download prefix:").grid(row=1, column=0, sticky="w")
         ttk.Combobox(g, textvariable=var("network.github_mirror"), width=36,
-                     values=["", "https://ghfast.top/", "https://gh-proxy.com/"]).grid(row=1, column=1, padx=4,
-                                                                                    pady=2)
+                     values=["", "https://ghfast.top/", "https://gh-proxy.com/"]).grid(row=1, column=1, padx=px(4),
+                                                                                    pady=px(2))
         hint(mir, "Downloads are checked against fixed SHA-256 sums, so a mirror can't swap the files.")
 
         # ── Connection details ───────────────────────────────────────────────
@@ -384,23 +385,23 @@ class AdvancedSettingsTab(BaseTab):
                 ("Timeout (seconds):", "network.socket_timeout", 6),
                 ("Browser identity (User-Agent), blank = default:", "network.user_agent", 40)]
         for i, (label, key, width) in enumerate(rows):
-            tk.Label(g, text=label).grid(row=i, column=0, sticky="w", pady=2)
+            tk.Label(g, text=label).grid(row=i, column=0, sticky="w", pady=px(2))
             if key == "network.source_address":
                 ttk.Combobox(g, textvariable=var(key), width=width, values=[""] + _local_addresses()).grid(
-                    row=i, column=1, sticky="w", padx=4)
+                    row=i, column=1, sticky="w", padx=px(4))
             elif key == "network.wrapper":
                 ttk.Combobox(g, textvariable=var(key), width=width,
                              values=["", "mullvad-exclude", "proxychains4 -q", "torsocks"]).grid(
-                    row=i, column=1, sticky="w", padx=4)
+                    row=i, column=1, sticky="w", padx=px(4))
             else:
-                tk.Entry(g, textvariable=var(key), width=width).grid(row=i, column=1, sticky="w", padx=4)
+                tk.Entry(g, textvariable=var(key), width=width).grid(row=i, column=1, sticky="w", padx=px(4))
         r = tk.Frame(con)
-        r.pack(anchor="w", pady=2)
+        r.pack(anchor="w", pady=px(2))
         tk.Label(r, text="Internet protocol:").pack(side="left")
         ttk.Combobox(r, textvariable=var("network.ip_version"), values=["auto", "ipv4", "ipv6"], state="readonly",
-                     width=6).pack(side="left", padx=4)
+                     width=6).pack(side="left", padx=px(4))
         tk.Checkbutton(r, text="Allow plain (unencrypted) HTTP", variable=var("network.allow_http")).pack(
-            side="left", padx=10)
+            side="left", padx=px(10))
         hint(con, "The local address only helps where the network allows it (several connections, or a VPN with "
                   "split tunnelling). Where an organisation's VPN sends all traffic through itself, the app "
                   "doesn't try to get around that.")
@@ -479,24 +480,24 @@ class AdvancedSettingsTab(BaseTab):
         self._net_status_lbl.config(text="Filled in - click Test, then Save.", fg=CLR["fgdim"])
 
     def _build_tor_system_section(self, body, special):
-        lf = tk.LabelFrame(body, text="  " + ("Tails" if special == "tails" else "Whonix") + "  ", padx=12, pady=8)
-        lf.pack(fill="x", padx=20, pady=6)
+        lf = tk.LabelFrame(body, text="  " + ("Tails" if special == "tails" else "Whonix") + "  ", padx=px(12), pady=px(8))
+        lf.pack(fill="x", padx=px(20), pady=px(6))
         if special == "whonix":
             tk.Label(lf, text="Whonix's gateway already sends all traffic through Tor - no proxy is needed here.",
-                     wraplength=760, justify="left").pack(anchor="w")
+                     wraplength=px(760), justify="left").pack(anchor="w")
             return
         tk.Label(lf, text="Tails sends everything through Tor, and some sites (YouTube often) block Tor. Downloads "
                           "retry through fresh Tor circuits automatically. If that isn't enough, Tails' own "
                           "mechanism for its Unsafe Browser can be used for downloads only, for this session.",
-                 wraplength=760, justify="left").pack(anchor="w")
-        self._tails_lbl = tk.Label(lf, text="", fg=CLR["fgdim"], wraplength=760, justify="left")
-        self._tails_lbl.pack(anchor="w", pady=4)
+                 wraplength=px(760), justify="left").pack(anchor="w")
+        self._tails_lbl = tk.Label(lf, text="", fg=CLR["fgdim"], wraplength=px(760), justify="left")
+        self._tails_lbl.pack(anchor="w", pady=px(4))
         r = tk.Frame(lf)
         r.pack(anchor="w")
         self._tails_on_btn = tk.Button(r, text="Allow direct downloads (not anonymous)…", fg=CLR["red"],
                                        command=self._tails_enable)
         self._tails_on_btn.pack(side="left")
-        tk.Button(r, text="Turn off", command=self._tails_disable).pack(side="left", padx=6)
+        tk.Button(r, text="Turn off", command=self._tails_disable).pack(side="left", padx=px(6))
         self._tails_refresh()
 
     def _tails_refresh(self):
@@ -526,13 +527,13 @@ class AdvancedSettingsTab(BaseTab):
         dlg = tk.Toplevel(self)
         dlg.title("Administration password")
         dlg.transient(self.winfo_toplevel())
-        tk.Label(dlg, text="Tails' administration password (set at the Welcome Screen):").pack(padx=14, pady=(12, 4))
+        tk.Label(dlg, text="Tails' administration password (set at the Welcome Screen):").pack(padx=px(14), pady=px(12, 4))
         pw = tk.StringVar()
         entry = tk.Entry(dlg, textvariable=pw, show="•", width=30)
-        entry.pack(padx=14)
+        entry.pack(padx=px(14))
         remember = tk.BooleanVar(value=False)
         tk.Checkbutton(dlg, text="Remember it until I close the app (kept in memory only)",
-                       variable=remember).pack(padx=14, pady=4)
+                       variable=remember).pack(padx=px(14), pady=px(4))
         msg = tk.Label(dlg, text="", fg=CLR["red"])
         msg.pack()
 
@@ -547,9 +548,9 @@ class AdvancedSettingsTab(BaseTab):
                 msg.config(text=text)
 
         bf = tk.Frame(dlg)
-        bf.pack(pady=10)
-        tk.Button(bf, text="Turn on", command=ok).pack(side="left", padx=4)
-        tk.Button(bf, text="Cancel", command=lambda: (pw.set(""), dlg.destroy())).pack(side="left", padx=4)
+        bf.pack(pady=px(10))
+        tk.Button(bf, text="Turn on", command=ok).pack(side="left", padx=px(4))
+        tk.Button(bf, text="Cancel", command=lambda: (pw.set(""), dlg.destroy())).pack(side="left", padx=px(4))
         entry.bind("<Return>", ok)
         entry.focus_set()
         dlg.grab_set()
@@ -667,7 +668,7 @@ class AdvancedSettingsTab(BaseTab):
 
         # Inner notebook: Themes | Custom
         inner_nb = ttk.Notebook(outer)
-        inner_nb.pack(fill="both", expand=True, padx=8, pady=8)
+        inner_nb.pack(fill="both", expand=True, padx=px(8), pady=px(8))
 
         self._build_themes_subtab(inner_nb)
         self._build_custom_subtab(inner_nb)
@@ -678,7 +679,7 @@ class AdvancedSettingsTab(BaseTab):
         inner_nb.add(f, text="  Themes  ")
 
         tk.Label(f, text=t("adv.skins_title"),
-                 font=(UI_FONT, 12, "bold")).pack(pady=(16, 4))
+                 font=(UI_FONT, 12, "bold")).pack(pady=px(16, 4))
         tk.Label(f,
                  text=t("adv.skins_subtitle"),
                  fg=CLR["fgdim"]).pack()
@@ -688,7 +689,7 @@ class AdvancedSettingsTab(BaseTab):
 
         # Scrollable card grid
         scroll_canvas = tk.Canvas(f, highlightthickness=0)
-        scroll_canvas.pack(fill="both", expand=True, padx=8, pady=8)
+        scroll_canvas.pack(fill="both", expand=True, padx=px(8), pady=px(8))
         vsb = ttk.Scrollbar(f, orient="vertical", command=scroll_canvas.yview)
         vsb.place(relx=1.0, rely=0, relheight=1.0, anchor="ne")
         scroll_canvas.configure(yscrollcommand=vsb.set)
@@ -710,16 +711,16 @@ class AdvancedSettingsTab(BaseTab):
             row  = idx // COLS
             col  = idx  % COLS
 
-            card = tk.Frame(grid_host, relief="raised", bd=2,
+            card = tk.Frame(grid_host, relief="raised", bd=px(2),
                             bg=skin["sb_bg"],
-                            highlightthickness=3,
+                            highlightthickness=px(3),
                             highlightbackground=skin["accent"])
-            card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+            card.grid(row=row, column=col, padx=px(10), pady=px(10), sticky="nsew")
             grid_host.columnconfigure(col, weight=1)
 
-            c = tk.Canvas(card, width=180, height=80,
+            c = tk.Canvas(card, width=px(180), height=px(80),
                           bg=skin["sb_bg"], highlightthickness=0)
-            c.pack(pady=(8, 4))
+            c.pack(pady=px(8, 4))
             c.create_rectangle(0, 0, 40, 80, fill=skin["sb_bg"], outline="")
             c.create_rectangle(42, 0, 180, 80,
                                fill=skin.get("content", "#1E1E1E"), outline="")
@@ -738,13 +739,14 @@ class AdvancedSettingsTab(BaseTab):
                                (155, 30), (80, 55), (30, 65)]:
                     c.create_text(sx, sy, text="✦", fill=skin["accent"],
                                   font=(UI_FONT, 6))
+            scale_drawing(c)
             self._skin_previews[name] = c
 
             tk.Label(card, text=name, font=(UI_FONT, 11, "bold"),
                      bg=skin["sb_bg"], fg=skin["accent"]).pack()
             tk.Label(card, text=skin["desc"], font=(UI_FONT, 8),
                      bg=skin["sb_bg"], fg=skin["sb_btn"],
-                     wraplength=170, justify="center").pack(pady=(2, 6))
+                     wraplength=px(170), justify="center").pack(pady=px(2, 6))
 
             rb = tk.Radiobutton(
                 card, text=t("advanced_settings.select_this_skin"),
@@ -754,16 +756,16 @@ class AdvancedSettingsTab(BaseTab):
                 activebackground=skin["sb_hover"],
                 font=(UI_FONT, 9),
                 command=lambda n=name: self._on_skin_select(n))
-            rb.pack(pady=(0, 8))
+            rb.pack(pady=px(0, 8))
 
         apply_f = tk.Frame(f)
-        apply_f.pack(pady=10)
+        apply_f.pack(pady=px(10))
         tk.Button(apply_f, text=t("advanced_settings.apply_skin_now"),
                   bg=CLR["accent"], fg="black",
                   font=(UI_FONT, 12, "bold"),
-                  command=self._apply_skin).pack(side="left", padx=8)
+                  command=self._apply_skin).pack(side="left", padx=px(8))
         self._skin_status = tk.Label(apply_f, text="", fg=CLR["green"])
-        self._skin_status.pack(side="left", padx=8)
+        self._skin_status.pack(side="left", padx=px(8))
 
         tk.Label(
             f,
@@ -772,11 +774,11 @@ class AdvancedSettingsTab(BaseTab):
                 "All skins apply instantly. No restart required."
             ),
             fg=CLR["fgdim"], font=(UI_FONT, 8),
-        ).pack(pady=(2, 6))
+        ).pack(pady=px(2, 6))
 
         # ── Star speed control (only visible when Mystical is active) ─────────
         self._star_speed_frame = tk.LabelFrame(
-            f, text=t("advanced_settings.star_speed"), padx=16, pady=10)
+            f, text=t("advanced_settings.star_speed"), padx=px(16), pady=px(10))
 
         speed_row = tk.Frame(self._star_speed_frame)
         speed_row.pack(fill="x")
@@ -794,14 +796,14 @@ class AdvancedSettingsTab(BaseTab):
             orient="horizontal",
             variable=self._star_speed_var,
             showvalue=False,
-            length=280,
+            length=px(280),
             command=self._on_star_speed_change,
             bg="#3D1060", activebackground="#A840BC",
             troughcolor="#28184A",
-            highlightthickness=1, highlightbackground="#6A2F8A",
-            sliderrelief="raised", bd=2,
+            highlightthickness=px(1), highlightbackground="#6A2F8A",
+            sliderrelief="raised", bd=px(2),
         )
-        speed_slider.pack(side="left", padx=8, fill="x", expand=True)
+        speed_slider.pack(side="left", padx=px(8), fill="x", expand=True)
         tk.Label(speed_row, text="Fast", font=(UI_FONT, 8),
                  fg=CLR["fgdim"]).pack(side="left")
 
@@ -812,7 +814,7 @@ class AdvancedSettingsTab(BaseTab):
         self._star_speed_lbl.pack()
 
         # ── Star density (count) ───────────────────────────────────────────
-        tk.Frame(self._star_speed_frame, height=6).pack()  # spacer
+        tk.Frame(self._star_speed_frame, height=px(6)).pack()  # spacer
 
         density_row = tk.Frame(self._star_speed_frame)
         density_row.pack(fill="x")
@@ -829,14 +831,14 @@ class AdvancedSettingsTab(BaseTab):
             orient="horizontal",
             variable=self._star_count_var,
             showvalue=False,
-            length=280,
+            length=px(280),
             command=self._on_star_count_change,
             bg="#3D1060", activebackground="#A840BC",
             troughcolor="#28184A",
-            highlightthickness=1, highlightbackground="#6A2F8A",
-            sliderrelief="raised", bd=2,
+            highlightthickness=px(1), highlightbackground="#6A2F8A",
+            sliderrelief="raised", bd=px(2),
         )
-        density_slider.pack(side="left", padx=8, fill="x", expand=True)
+        density_slider.pack(side="left", padx=px(8), fill="x", expand=True)
         tk.Label(density_row, text="Many", font=(UI_FONT, 8),
                  fg=CLR["fgdim"]).pack(side="left")
 
@@ -856,23 +858,23 @@ class AdvancedSettingsTab(BaseTab):
 
         # Header
         hdr = tk.Frame(f)
-        hdr.pack(fill="x", padx=16, pady=(14, 4))
+        hdr.pack(fill="x", padx=px(16), pady=px(14, 4))
         tk.Label(hdr, text=t("adv.custom_title"),
                  font=(UI_FONT, 12, "bold")).pack(side="left")
         tk.Button(hdr, text=t("advanced_settings.apply_custom_skin"),
                   bg=CLR["accent"], fg="black",
                   font=(UI_FONT, 10, "bold"),
-                  command=self._apply_custom_skin).pack(side="right", padx=4)
+                  command=self._apply_custom_skin).pack(side="right", padx=px(4))
         self._custom_status = tk.Label(hdr, text="", fg=CLR["green"])
-        self._custom_status.pack(side="right", padx=8)
+        self._custom_status.pack(side="right", padx=px(8))
 
         tk.Label(f,
                  text=t("adv.custom_subtitle"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(pady=(0, 8))
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(pady=px(0, 8))
 
         # Scrollable area
         wrapper = tk.Frame(f)
-        wrapper.pack(fill="both", expand=True, padx=12)
+        wrapper.pack(fill="both", expand=True, padx=px(12))
 
         canvas = tk.Canvas(wrapper, highlightthickness=0)
         vsb    = ttk.Scrollbar(wrapper, orient="vertical", command=canvas.yview)
@@ -930,12 +932,12 @@ class AdvancedSettingsTab(BaseTab):
 
         for section_title, props in sections:
             sec_frame = tk.LabelFrame(inner, text=f"  {section_title}  ",
-                                      padx=12, pady=10)
-            sec_frame.pack(fill="x", padx=8, pady=(8, 4))
+                                      padx=px(12), pady=px(10))
+            sec_frame.pack(fill="x", padx=px(8), pady=px(8, 4))
 
             for label_text, key in props:
                 row = tk.Frame(sec_frame)
-                row.pack(fill="x", pady=3)
+                row.pack(fill="x", pady=px(3))
 
                 initial = current_custom.get(key, _CUSTOM_DEFAULTS.get(key, "#222222"))
                 var = tk.StringVar(value=initial)
@@ -945,13 +947,13 @@ class AdvancedSettingsTab(BaseTab):
                          anchor="w", font=(UI_FONT, 9)).pack(side="left")
 
                 # Color swatch
-                swatch = tk.Label(row, width=4, bg=initial, relief="solid", bd=1)
-                swatch.pack(side="left", padx=(4, 2))
+                swatch = tk.Label(row, width=4, bg=initial, relief="solid", bd=px(1))
+                swatch.pack(side="left", padx=px(4, 2))
 
                 # Hex entry
                 entry = tk.Entry(row, textvariable=var, width=9,
                                  font=(MONO_FONT, 9))
-                entry.pack(side="left", padx=2)
+                entry.pack(side="left", padx=px(2))
 
                 # Pick button - closure captures key, var, swatch
                 def _pick(k=key, v=var, sw=swatch):
@@ -975,7 +977,7 @@ class AdvancedSettingsTab(BaseTab):
                             text=t("advanced_settings.saved"), fg=CLR["green"])
 
                 tk.Button(row, text=t("advanced_settings.pick"), command=_pick,
-                          font=(UI_FONT, 8)).pack(side="left", padx=4)
+                          font=(UI_FONT, 8)).pack(side="left", padx=px(4))
 
                 # Keep swatch in sync when user types directly in entry
                 def _sync_swatch(evt, sw=swatch, v=var, k=key):
@@ -993,7 +995,7 @@ class AdvancedSettingsTab(BaseTab):
 
         # Reset to defaults button
         reset_row = tk.Frame(inner)
-        reset_row.pack(fill="x", padx=8, pady=(12, 8))
+        reset_row.pack(fill="x", padx=px(8), pady=px(12, 8))
         tk.Button(reset_row, text=t("advanced_settings.reset_to_defaults"),
                   bg=CLR["panel"], fg=CLR["fgdim"],
                   font=(UI_FONT, 9),
@@ -1046,7 +1048,7 @@ class AdvancedSettingsTab(BaseTab):
         try:
             skin = get_skin(skin_name)
             if skin.get("stars"):
-                self._star_speed_frame.pack(padx=20, pady=(0, 12), fill="x")
+                self._star_speed_frame.pack(padx=px(20), pady=px(0, 12), fill="x")
             else:
                 self._star_speed_frame.pack_forget()
         except Exception:
@@ -1096,17 +1098,17 @@ class AdvancedSettingsTab(BaseTab):
         nb.add(f, text=t("advanced_settings.language"))
 
         tk.Label(f, text=t("advanced_settings.language_langue_idioma"),
-                 font=(UI_FONT, 12, "bold")).pack(pady=(20, 4))
+                 font=(UI_FONT, 12, "bold")).pack(pady=px(20, 4))
         tk.Label(f, text=t("lang.subtitle"),
-                 font=(UI_FONT, 9), fg=CLR["fgdim"]).pack(pady=(0, 18))
+                 font=(UI_FONT, 9), fg=CLR["fgdim"]).pack(pady=px(0, 18))
 
         info_f = tk.Frame(f)
         info_f.pack(anchor="center")
 
         # Current language row
         row1 = tk.Frame(info_f)
-        row1.pack(anchor="w", pady=4)
-        tk.Label(row1, text=t("lang.current"), font=(UI_FONT, 10)).pack(side="left", padx=(0, 8))
+        row1.pack(anchor="w", pady=px(4))
+        tk.Label(row1, text=t("lang.current"), font=(UI_FONT, 10)).pack(side="left", padx=px(0, 8))
         cur_code = get_language()
         cur_name = LANGUAGE_NAMES.get(cur_code, cur_code)
         tk.Label(row1, text=cur_name, font=(UI_FONT, 10, "bold"),
@@ -1114,8 +1116,8 @@ class AdvancedSettingsTab(BaseTab):
 
         # Select language row
         row2 = tk.Frame(info_f)
-        row2.pack(anchor="w", pady=(12, 4))
-        tk.Label(row2, text=t("advanced_settings.select_language"), font=(UI_FONT, 10)).pack(side="left", padx=(0, 8))
+        row2.pack(anchor="w", pady=px(12, 4))
+        tk.Label(row2, text=t("advanced_settings.select_language"), font=(UI_FONT, 10)).pack(side="left", padx=px(0, 8))
 
         display_names = [LANGUAGE_NAMES.get(c, c) for c in SUPPORTED_LANGUAGES]
         self._lang_var = tk.StringVar(value=LANGUAGE_NAMES.get(cur_code, cur_code))
@@ -1139,12 +1141,12 @@ class AdvancedSettingsTab(BaseTab):
 
         tk.Button(info_f, text=t("advanced_settings.save_language"),
                   bg=CLR["accent"], fg="white",
-                  font=(UI_FONT, 10), padx=14, pady=4,
+                  font=(UI_FONT, 10), padx=px(14), pady=px(4),
                   relief="flat", cursor="hand2",
-                  command=_save_language).pack(pady=14)
+                  command=_save_language).pack(pady=px(14))
 
         msg_lbl = tk.Label(info_f, text="", font=(UI_FONT, 9), fg=CLR["green"],
-                           wraplength=400, justify="center")
+                           wraplength=px(400), justify="center")
         msg_lbl.pack()
 
     # ─── System Info ──────────────────────────────────────────────────────────
@@ -1154,7 +1156,7 @@ class AdvancedSettingsTab(BaseTab):
         self.system_info_page = (nb, f)          # Help → System Info selects it by widget
 
         hdr2 = tk.Frame(f)
-        hdr2.pack(fill="x", padx=20, pady=(16, 4))
+        hdr2.pack(fill="x", padx=px(20), pady=px(16, 4))
         tk.Label(hdr2, text=t("adv.sys_hardware"),
                  font=(UI_FONT, 12, "bold")).pack(side="left")
         tk.Button(hdr2, text=t("advanced_settings.refresh"),
@@ -1167,7 +1169,7 @@ class AdvancedSettingsTab(BaseTab):
         info_area = scrolledtext.ScrolledText(
             f, height=28, bg=CLR["console_bg"], fg="#00FF88",
             font=(MONO_FONT, 10), insertbackground="#00FF88")
-        info_area.pack(fill="both", expand=True, padx=20, pady=8)
+        info_area.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
         threading.Thread(
             target=lambda: self._load_sysinfo(info_area),
@@ -1435,39 +1437,39 @@ class AdvancedSettingsTab(BaseTab):
         nb.add(f, text="  Developer  ")
 
         tk.Label(f, text=t("advanced_settings.ffmpeg_command_runner"),
-                 font=(UI_FONT, 12, "bold")).pack(pady=(20, 10))
+                 font=(UI_FONT, 12, "bold")).pack(pady=px(20, 10))
         tk.Label(f, text=t("advanced_settings.run_any_custom_ffmpeg_command"),
-                 fg=CLR["fgdim"]).pack(anchor="w", padx=20)
+                 fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
 
         self.dev_cmd_var = tk.StringVar()
         cmd_entry = tk.Entry(f, textvariable=self.dev_cmd_var,
                              font=(MONO_FONT, 10), width=100)
-        cmd_entry.pack(fill="x", padx=20, pady=4)
+        cmd_entry.pack(fill="x", padx=px(20), pady=px(4))
         cmd_entry.bind("<Return>", lambda _: self._run_dev_cmd())
 
         btn_row = tk.Frame(f)
-        btn_row.pack(anchor="w", padx=20, pady=4)
+        btn_row.pack(anchor="w", padx=px(20), pady=px(4))
         tk.Button(btn_row, text=t("advanced_settings.run"),
                   bg=CLR["green"], fg="white",
-                  command=self._run_dev_cmd).pack(side="left", padx=4)
+                  command=self._run_dev_cmd).pack(side="left", padx=px(4))
         tk.Button(btn_row, text=t("advanced_settings.clear"),
                   bg=CLR["panel"], fg=CLR["fg"],
                   command=lambda: self.dev_console.delete(
-                      "1.0", tk.END)).pack(side="left", padx=4)
+                      "1.0", tk.END)).pack(side="left", padx=px(4))
         tk.Button(btn_row, text=t("advanced_settings.paste_version"),
                   command=lambda: self.dev_cmd_var.set(
                       '"{}" -version'.format(get_binary_path("ffmpeg"))),
-                  bg=CLR["panel"], fg=CLR["fg"]).pack(side="left", padx=4)
+                  bg=CLR["panel"], fg=CLR["fg"]).pack(side="left", padx=px(4))
         tk.Button(btn_row, text=t("advanced_settings.paste_codecs"),
                   command=lambda: self.dev_cmd_var.set(
                       '"{}" -codecs'.format(get_binary_path("ffmpeg"))),
-                  bg=CLR["panel"], fg=CLR["fg"]).pack(side="left", padx=4)
+                  bg=CLR["panel"], fg=CLR["fg"]).pack(side="left", padx=px(4))
 
         tk.Label(f, text=t("encode_queue.output_label"), fg=CLR["fgdim"]).pack(
-            anchor="w", padx=20, pady=(8, 2))
+            anchor="w", padx=px(20), pady=px(8, 2))
         self.dev_console = scrolledtext.ScrolledText(
             f, height=20, bg=CLR["console_bg"], fg="#00FF88", font=(MONO_FONT, 9))
-        self.dev_console.pack(fill="both", expand=True, padx=20, pady=4)
+        self.dev_console.pack(fill="both", expand=True, padx=px(20), pady=px(4))
 
     def _run_dev_cmd(self):
         cmd_str = self.dev_cmd_var.get().strip()

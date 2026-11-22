@@ -14,6 +14,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -45,11 +46,11 @@ class SharpenTab(BaseTab):
         self.make_header(self, t("tab.sharpen"), "Bring back detail in soft or upscaled video.", icon="🔪")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="Sharpened")
-        self.compare.pack(pady=4)
-        opt = tk.LabelFrame(body, text="  Sharpen  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.compare.pack(pady=px(4))
+        opt = tk.LabelFrame(body, text="  Sharpen  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value=METHODS["cas"])
         mb = ttk.Combobox(opt, textvariable=self.method_var, values=list(METHODS.values()), state="readonly",
                           width=36)
@@ -57,29 +58,29 @@ class SharpenTab(BaseTab):
         mb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.amount_var = tk.DoubleVar(value=PRESETS["Light"])
         tk.Scale(opt, variable=self.amount_var, from_=0.05, to=1.0, resolution=0.05, orient="horizontal",
-                 length=240, label="Amount", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w")
+                 length=px(240), label="Amount", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w")
         self.radius_var = tk.IntVar(value=5)
         self.radius_scale = tk.Scale(opt, variable=self.radius_var, from_=3, to=13, resolution=2,
-                                     orient="horizontal", length=160, label="Radius (unsharp)",
+                                     orient="horizontal", length=px(160), label="Radius (unsharp)",
                                      command=lambda _v: self._changed())
-        self.radius_scale.grid(row=1, column=1, sticky="w", padx=10)
+        self.radius_scale.grid(row=1, column=1, sticky="w", padx=px(10))
         pf = tk.Frame(opt)
-        pf.grid(row=2, column=0, columnspan=3, sticky="w", pady=4)
+        pf.grid(row=2, column=0, columnspan=3, sticky="w", pady=px(4))
         for name, val in PRESETS.items():
             tk.Button(pf, text=name, relief="flat",
-                      command=lambda v=val: (self.amount_var.set(v), self._changed())).pack(side="left", padx=2)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+                      command=lambda v=val: (self.amount_var.set(v), self._changed())).pack(side="left", padx=px(2))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "sharp"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🔪  SHARPEN", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -19,6 +19,7 @@ from core import ass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -163,33 +164,33 @@ class SideBySideTab(BaseTab):
         self.make_header(self, t("tab.side_by_side"), "Comparison, reaction and before/after "
                          "layouts from two to four clips.", icon="◫")
         body = scroll_body(self)
-        clips = tk.LabelFrame(body, text="  Clips  ", padx=12, pady=6)
-        clips.pack(fill="x", padx=20, pady=(10, 4))
+        clips = tk.LabelFrame(body, text="  Clips  ", padx=px(12), pady=px(6))
+        clips.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.rows, self.label_vars, self.speed_vars = [], [], []
         for i in range(4):
             line = tk.Frame(clips)
-            line.pack(fill="x", pady=2)
+            line.pack(fill="x", pady=px(2))
             fr = FileRow(line, f"Clip {i + 1}{'' if i < 2 else ' (grid)'}:", self.src_var if i == 0 else None,
                          label_width=12, width=40)
             fr.pack(side="left", fill="x", expand=True)
             lv = tk.StringVar(value=("Before", "After", "", "")[i])
-            tk.Label(line, text="Label:").pack(side="left", padx=(6, 2))
+            tk.Label(line, text="Label:").pack(side="left", padx=px(6, 2))
             tk.Entry(line, textvariable=lv, width=12).pack(side="left")
             sv = tk.StringVar(value="1.0")
-            tk.Label(line, text="Speed:").pack(side="left", padx=(6, 2))
+            tk.Label(line, text="Speed:").pack(side="left", padx=px(6, 2))
             ttk.Combobox(line, textvariable=sv, values=["0.25", "0.5", "0.75", "1.0", "1.25", "1.5", "2.0"],
                          width=5).pack(side="left")
             self.rows.append(fr)
             self.label_vars.append(lv)
             self.speed_vars.append(sv)
 
-        lay = tk.LabelFrame(body, text="  Layout  ", padx=12, pady=6)
-        lay.pack(fill="x", padx=20, pady=4)
+        lay = tk.LabelFrame(body, text="  Layout  ", padx=px(12), pady=px(6))
+        lay.pack(fill="x", padx=px(20), pady=px(4))
 
         def row(r, label, *widgets):
-            tk.Label(lay, text=label, width=14, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
+            tk.Label(lay, text=label, width=14, anchor="w").grid(row=r, column=0, sticky="w", pady=px(2))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 8), pady=2)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(2))
 
         self.layout_var = tk.StringVar(value=LAYOUTS["side"])
         self.size_var = tk.StringVar(value="1920×1080")
@@ -206,7 +207,7 @@ class SideBySideTab(BaseTab):
         self.wipe_pos = tk.DoubleVar(value=0.5)
         self.wipe_period = tk.StringVar(value="0")
         row(2, "Wipe:", tk.Scale(lay, variable=self.wipe_pos, from_=0.05, to=0.95, resolution=0.05,
-                                 orient="horizontal", length=160),
+                                 orient="horizontal", length=px(160)),
             tk.Label(lay, text="Sweep every (s, 0 = fixed):"), tk.Entry(lay, textvariable=self.wipe_period,
                                                                         width=5))
         self.audio_var = tk.StringVar(value=AUDIO["0"])
@@ -216,18 +217,18 @@ class SideBySideTab(BaseTab):
         row(4, "Length:", ttk.Combobox(lay, textvariable=self.length_var, values=list(LENGTH.values()),
                                        state="readonly", width=44))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.rows[0].path, "side_by_side"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="◫  CREATE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

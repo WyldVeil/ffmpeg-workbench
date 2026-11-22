@@ -25,6 +25,7 @@ from core.i18n import t
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs import common
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from core.scaling import px
 
 METHODS = {
     "chroma": "Chroma key (green / blue screens)",
@@ -123,26 +124,26 @@ class GreenKeyerTab(BaseTab):
         self.make_header(self, t("tab.green_screen_keyer"), t("green_key.subtitle"), icon="🟩")
         body = scroll_body(self)
 
-        pick = tk.LabelFrame(body, text=f"  {t('section.input_files')}  ", padx=12, pady=8)
-        pick.pack(fill="x", padx=20, pady=(10, 4))
+        pick = tk.LabelFrame(body, text=f"  {t('section.input_files')}  ", padx=px(12), pady=px(8))
+        pick.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.src_row = FileRow(pick, t("green_key.foreground_label"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", pady=2)
+        self.src_row.pack(fill="x", pady=px(2))
         brow = tk.Frame(pick)
-        brow.pack(fill="x", pady=2)
+        brow.pack(fill="x", pady=px(2))
         tk.Label(brow, text="Background:", width=16, anchor="w",
                  font=(UI_FONT, 10, "bold")).pack(side="left")
         self.bg_mode = tk.StringVar(value=BACKGROUNDS["file"])
         bm = ttk.Combobox(brow, textvariable=self.bg_mode, values=list(BACKGROUNDS.values()),
                           state="readonly", width=32)
-        bm.pack(side="left", padx=6)
+        bm.pack(side="left", padx=px(6))
         bm.bind("<<ComboboxSelected>>", lambda _e: self._bg_mode_changed())
         self.bg_colour = "202020"
         self.bg_swatch = tk.Button(brow, text="  Colour…  ", bg="#202020", fg="white",
                                    relief="flat", command=self._pick_bg_colour)
         self.bg_row = FileRow(pick, t("green_key.background_label"), kind="visual",
                               on_change=lambda _p: self._schedule())
-        self.bg_row.pack(fill="x", pady=2)
+        self.bg_row.pack(fill="x", pady=px(2))
         self.loop_var = tk.BooleanVar(value=True)
         self.loop_chk = tk.Checkbutton(pick, text=t("green_key.loop_bg_checkbox"),
                                        variable=self.loop_var)
@@ -150,27 +151,27 @@ class GreenKeyerTab(BaseTab):
 
         self.compare = CompareView(body, 400, 225, before_label="Before - click to pick the key colour",
                                    after_label="Result")
-        self.compare.pack(pady=6)
+        self.compare.pack(pady=px(6))
         self.compare.view_before.canvas.bind("<Button-1>", self._eyedropper)
         self.compare.view_before.canvas.config(cursor="crosshair")
 
-        opts = tk.LabelFrame(body, text=f"  {t('green_key.key_options_section')}  ", padx=12, pady=8)
-        opts.pack(fill="x", padx=20, pady=4)
+        opts = tk.LabelFrame(body, text=f"  {t('green_key.key_options_section')}  ", padx=px(12), pady=px(8))
+        opts.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(opts)
-        r0.pack(fill="x", pady=2)
+        r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Method:", font=(UI_FONT, 10, "bold")).pack(side="left")
         self.method_var = tk.StringVar(value=METHODS["chroma"])
         mb = ttk.Combobox(r0, textvariable=self.method_var, values=list(METHODS.values()),
                           state="readonly", width=34)
-        mb.pack(side="left", padx=6)
+        mb.pack(side="left", padx=px(6))
         mb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
         tk.Label(r0, text=t("green_key.key_colour_label"), font=(UI_FONT, 10, "bold")).pack(
-            side="left", padx=(16, 4))
+            side="left", padx=px(16, 4))
         self.swatch = tk.Button(r0, text=f"  #{self.key_colour}  ", bg=f"#{self.key_colour}",
                                 fg="black", relief="flat", command=self._pick_key_colour)
         self.swatch.pack(side="left")
         tk.Button(r0, text="Auto-detect", relief="flat", cursor="hand2",
-                  command=lambda: self._auto_sample(force=True)).pack(side="left", padx=6)
+                  command=lambda: self._auto_sample(force=True)).pack(side="left", padx=px(6))
 
         self.sim_var = tk.DoubleVar(value=0.12)
         self.blend_var = tk.DoubleVar(value=0.08)
@@ -179,18 +180,18 @@ class GreenKeyerTab(BaseTab):
                                      (t("green_key.blend_label"), self.blend_var, 0.5,
                                       t("green_key.blend_hint"))):
             row = tk.Frame(opts)
-            row.pack(fill="x", pady=2)
+            row.pack(fill="x", pady=px(2))
             tk.Label(row, text=label, width=14, anchor="w").pack(side="left")
             tk.Scale(row, variable=var, from_=0.0, to=hi, resolution=0.005,
-                     orient="horizontal", length=260,
-                     command=lambda _v: self._schedule()).pack(side="left", padx=6)
+                     orient="horizontal", length=px(260),
+                     command=lambda _v: self._schedule()).pack(side="left", padx=px(6))
             tk.Label(row, text=hint, fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
         self.despill_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opts, text="Remove colour spill from the subject (green/blue screens)",
                        variable=self.despill_var, command=self._schedule).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
         self.encoder.pack(anchor="w")
         self.alpha_note = tk.Label(out_lf, text="Transparent output: save as .mov (ProRes 4444) "
@@ -198,14 +199,14 @@ class GreenKeyerTab(BaseTab):
                                    fg=CLR["fgdim"], font=(UI_FONT, 8))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self._suggest(self.src_row.path))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = tk.Button(body, text=t("green_key.composite_button"),
                                     font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
                                     width=28, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -323,12 +324,12 @@ class GreenKeyerTab(BaseTab):
         self.bg_swatch.pack_forget()
         self.alpha_note.pack_forget()
         if kind == "file":
-            self.bg_row.pack(fill="x", pady=2)
+            self.bg_row.pack(fill="x", pady=px(2))
             self.loop_chk.pack(anchor="w")
         elif kind == "color":
-            self.bg_swatch.pack(side="left", padx=6)
+            self.bg_swatch.pack(side="left", padx=px(6))
         else:
-            self.alpha_note.pack(anchor="w", pady=(4, 0))
+            self.alpha_note.pack(anchor="w", pady=px(4, 0))
         out = self.out_row.path
         if out:
             base, ext = os.path.splitext(out)

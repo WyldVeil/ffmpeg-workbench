@@ -24,6 +24,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
@@ -83,36 +84,36 @@ class FrameExtractorTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         pv = tk.Frame(body)
-        pv.pack(pady=4)
+        pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 480, 270)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0.0)
         bar = tk.Frame(pv)
         bar.pack(fill="x")
-        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=400,
+        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=px(400),
                                 command=lambda _v: self._moved())
         self.slider.pack(side="left", fill="x", expand=True)
         for label, step in (("◀◀", -1.0), ("◀", None), ("▶", None), ("▶▶", 1.0)):
             tk.Button(bar, text=label, relief="flat", width=3,
                       command=lambda s=step, lb=label: self._step(s, lb)).pack(side="left")
 
-        opts = tk.LabelFrame(body, text="  Extract  ", padx=12, pady=8)
-        opts.pack(fill="x", padx=20, pady=6)
+        opts = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
+        opts.pack(fill="x", padx=px(20), pady=px(6))
         self.mode_var = tk.StringVar(value="single")
         mrow = tk.Frame(opts)
         mrow.pack(fill="x")
         for key, label in MODES.items():
             tk.Radiobutton(mrow, text=label, value=key, variable=self.mode_var,
-                           command=self._mode_changed).pack(side="left", padx=6)
+                           command=self._mode_changed).pack(side="left", padx=px(6))
 
         self.panels = {}
         p = self.panels["single"] = tk.Frame(opts)
         tk.Label(p, text="Time:").pack(side="left")
         self.time_var = tk.StringVar(value="0")
-        tk.Entry(p, textvariable=self.time_var, width=14).pack(side="left", padx=6)
+        tk.Entry(p, textvariable=self.time_var, width=14).pack(side="left", padx=px(6))
         tk.Label(p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"],
                  font=(UI_FONT, 8)).pack(side="left")
         self.time_var.trace_add("write", lambda *_a: self._time_typed())
@@ -123,17 +124,17 @@ class FrameExtractorTab(BaseTab):
         self.to_var = tk.StringVar(value="")
         for label, var, w in (("Every (s):", self.every_var, 6), ("From:", self.from_var, 10),
                               ("To (empty = end):", self.to_var, 10)):
-            tk.Label(p, text=label).pack(side="left", padx=(8, 2))
+            tk.Label(p, text=label).pack(side="left", padx=px(8, 2))
             tk.Entry(p, textvariable=var, width=w).pack(side="left")
 
         p = self.panels["scenes"] = tk.Frame(opts)
         tk.Label(p, text="Sensitivity:").pack(side="left")
         self.scene_var = tk.DoubleVar(value=0.3)
         tk.Scale(p, variable=self.scene_var, from_=0.05, to=0.8, resolution=0.05,
-                 orient="horizontal", length=180).pack(side="left", padx=6)
+                 orient="horizontal", length=px(180)).pack(side="left", padx=px(6))
         tk.Label(p, text="(lower = more scenes)   Min. scene (s):").pack(side="left")
         self.min_scene_var = tk.StringVar(value="2")
-        tk.Entry(p, textvariable=self.min_scene_var, width=5).pack(side="left", padx=4)
+        tk.Entry(p, textvariable=self.min_scene_var, width=5).pack(side="left", padx=px(4))
 
         p = self.panels["sheet"] = tk.Frame(opts)
         self.cols_var, self.rows_var, self.tile_w_var = (tk.StringVar(value="5"),
@@ -141,36 +142,36 @@ class FrameExtractorTab(BaseTab):
                                                          tk.StringVar(value="320"))
         for label, var in (("Columns:", self.cols_var), ("Rows:", self.rows_var),
                            ("Thumb width:", self.tile_w_var)):
-            tk.Label(p, text=label).pack(side="left", padx=(8, 2))
+            tk.Label(p, text=label).pack(side="left", padx=px(8, 2))
             tk.Entry(p, textvariable=var, width=5).pack(side="left")
         self.stamp_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(p, text="Timestamps", variable=self.stamp_var).pack(side="left", padx=8)
+        tk.Checkbutton(p, text="Timestamps", variable=self.stamp_var).pack(side="left", padx=px(8))
 
         frow = tk.Frame(opts)
-        frow.pack(fill="x", pady=(8, 0))
+        frow.pack(fill="x", pady=px(8, 0))
         tk.Label(frow, text="Format:").pack(side="left")
         self.fmt_var = tk.StringVar(value=FORMATS["png"])
         ttk.Combobox(frow, textvariable=self.fmt_var, values=list(FORMATS.values()),
-                     state="readonly", width=16).pack(side="left", padx=6)
-        tk.Label(frow, text="Quality (1-100):").pack(side="left", padx=(10, 2))
+                     state="readonly", width=16).pack(side="left", padx=px(6))
+        tk.Label(frow, text="Quality (1-100):").pack(side="left", padx=px(10, 2))
         self.quality_var = tk.IntVar(value=92)
         tk.Scale(frow, variable=self.quality_var, from_=1, to=100, orient="horizontal",
-                 length=160).pack(side="left")
+                 length=px(160)).pack(side="left")
 
         drow = tk.Frame(opts)
-        drow.pack(fill="x", pady=(6, 0))
+        drow.pack(fill="x", pady=px(6, 0))
         tk.Label(drow, text="Save to folder:", width=14, anchor="w").pack(side="left")
         self.dir_var = tk.StringVar()
-        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(side="left", padx=6, fill="x",
+        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(side="left", padx=px(6), fill="x",
                                                                  expand=True)
         tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(side="left")
 
         self.btn_render = tk.Button(body, text=t("frame_extractor.extract_button"),
                                     font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
                                     width=24, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -181,7 +182,7 @@ class FrameExtractorTab(BaseTab):
     def _mode_changed(self):
         for p in self.panels.values():
             p.pack_forget()
-        self.panels[self.mode_var.get()].pack(fill="x", pady=(6, 0))
+        self.panels[self.mode_var.get()].pack(fill="x", pady=px(6, 0))
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)

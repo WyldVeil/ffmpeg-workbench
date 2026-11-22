@@ -13,6 +13,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -65,22 +66,22 @@ class VoiceChangerTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, "Input:", self.src_var, kind="media",
                                on_change=lambda p: setattr(self, "_info", ff.try_probe(p)))
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
-        opt = tk.LabelFrame(body, text="  Effect  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        opt = tk.LabelFrame(body, text="  Effect  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.preset_var = tk.StringVar(value=PRESETS["chipmunk"][0])
         ttk.Combobox(opt, textvariable=self.preset_var, values=[v[0] for v in PRESETS.values()],
                      state="readonly", width=32).grid(row=0, column=0, sticky="w")
         self.semi_var = tk.DoubleVar(value=4)
         tk.Scale(opt, variable=self.semi_var, from_=-12, to=12, resolution=0.5, orient="horizontal",
-                 length=220, label="Custom pitch (semitones)").grid(row=1, column=0, sticky="w", pady=4)
+                 length=px(220), label="Custom pitch (semitones)").grid(row=1, column=0, sticky="w", pady=px(4))
         self.formant_var = tk.BooleanVar(value=False)
         tk.Checkbutton(opt, text="Keep the voice's character (formants) - sounds more natural",
                        variable=self.formant_var).grid(row=2, column=0, sticky="w")
         tk.Button(opt, text="▶ Preview 12 s", relief="flat", cursor="hand2",
-                  command=self._preview).grid(row=0, column=1, padx=12)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+                  command=self._preview).grid(row=0, column=1, padx=px(12))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
                                suggest=lambda: self.suggest_output(self.src_row.path, "voice"))
         self.out_row.pack(fill="x")
@@ -88,9 +89,9 @@ class VoiceChangerTab(BaseTab):
                               "the picture.", fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
         self.btn_render = tk.Button(body, text=t("voice_changer.apply_button"), font=(UI_FONT, 11, "bold"),
                                     bg=CLR["green"], fg="white", width=22, command=self._render)
-        self.btn_render.pack(pady=10)
+        self.btn_render.pack(pady=px(10))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -21,6 +21,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.social.frame_extractor import keep_scenes
@@ -47,61 +48,61 @@ class SceneDetectTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         det = tk.Frame(body)
-        det.pack(fill="x", padx=20, pady=4)
+        det.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(det, text="Sensitivity:").pack(side="left")
         self.sens_var = tk.DoubleVar(value=0.3)
         tk.Scale(det, variable=self.sens_var, from_=0.05, to=0.8, resolution=0.05, orient="horizontal",
-                 length=160).pack(side="left", padx=4)
+                 length=px(160)).pack(side="left", padx=px(4))
         tk.Label(det, text="(lower finds more cuts)   Shortest scene (s):").pack(side="left")
         self.min_var = tk.StringVar(value="1.0")
-        tk.Entry(det, textvariable=self.min_var, width=5).pack(side="left", padx=4)
+        tk.Entry(det, textvariable=self.min_var, width=5).pack(side="left", padx=px(4))
         self.btn_detect = tk.Button(det, text="🔍 Find scenes", relief="flat", cursor="hand2",
                                     command=self._detect)
-        self.btn_detect.pack(side="left", padx=10)
+        self.btn_detect.pack(side="left", padx=px(10))
 
         mid = tk.Frame(body)
-        mid.pack(fill="x", padx=20, pady=4)
+        mid.pack(fill="x", padx=px(20), pady=px(4))
         self.tree = ttk.Treeview(mid, columns=("n", "start", "end", "len"), show="headings", height=9)
         for c, label, w in (("n", "#", 40), ("start", "Start", 110), ("end", "End", 110),
                             ("len", "Length", 90)):
             self.tree.heading(c, text=label)
-            self.tree.column(c, width=w, anchor="w")
+            self.tree.column(c, width=px(w), anchor="w")
         self.tree.pack(side="left", fill="y")
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._selected())
         self.preview = FramePreview(mid, 400, 225)
-        self.preview.pack(side="left", padx=10)
+        self.preview.pack(side="left", padx=px(10))
 
-        act = tk.LabelFrame(body, text="  Use the scenes  ", padx=12, pady=8)
-        act.pack(fill="x", padx=20, pady=6)
+        act = tk.LabelFrame(body, text="  Use the scenes  ", padx=px(12), pady=px(8))
+        act.pack(fill="x", padx=px(20), pady=px(6))
         r = tk.Frame(act)
         r.pack(fill="x")
         self.lossless_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r, text="Lossless split (fast, but each cut moves to the next keyframe)",
                        variable=self.lossless_var).pack(side="left")
         self.encoder = EncoderPanel(act, codecs=("h264", "hevc", "av1"))
-        self.encoder.pack(anchor="w", pady=4)
+        self.encoder.pack(anchor="w", pady=px(4))
         drow = tk.Frame(act)
         drow.pack(fill="x")
         tk.Label(drow, text="Save files to:", width=14, anchor="w").pack(side="left")
         self.dir_var = tk.StringVar()
-        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(side="left", fill="x", expand=True, padx=6)
+        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(side="left", fill="x", expand=True, padx=px(6))
         tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(side="left")
         btns = tk.Frame(act)
-        btns.pack(pady=(8, 0))
+        btns.pack(pady=px(8, 0))
         self.btn_split = tk.Button(btns, text="✂  SPLIT INTO SCENES", font=(UI_FONT, 11, "bold"),
                                    bg=CLR["green"], fg="white", cursor="hand2", command=self._split)
-        self.btn_split.pack(side="left", padx=4)
+        self.btn_split.pack(side="left", padx=px(4))
         self.btn_chapters = tk.Button(btns, text="📑 Add as chapters…", relief="flat",
                                       command=self._chapters)
-        self.btn_chapters.pack(side="left", padx=4)
+        self.btn_chapters.pack(side="left", padx=px(4))
         tk.Button(btns, text="💾 Save list (CSV)…", relief="flat", command=self._save_csv).pack(
-            side="left", padx=4)
+            side="left", padx=px(4))
 
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -29,6 +29,7 @@ from core.i18n import t
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from core.scaling import px
 
 SIZES = [("8K (7680×4320)", 7680, 4320), ("4K UHD (3840×2160)", 3840, 2160), ("1440p (2560×1440)", 2560, 1440),
          ("1080p (1920×1080)", 1920, 1080), ("720p (1280×720)", 1280, 720), ("480p (854×480)", 854, 480),
@@ -98,20 +99,20 @@ class ResolutionScalerTab(BaseTab):
         self.make_header(self, t("tab.resolution_scaler"), t("scaler.subtitle"), icon="📐")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
-        self.info_lbl.pack(fill="x", padx=20)
-        opt = tk.LabelFrame(body, text=f"  {t('scaler.scale_options_section')}  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=6)
+        self.info_lbl.pack(fill="x", padx=px(20))
+        opt = tk.LabelFrame(body, text=f"  {t('scaler.scale_options_section')}  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
 
         def row(r, label, *widgets):
             # each row lays out on its own, so a wide widget in one row can't push another row's apart
-            tk.Label(opt, text=label, width=10, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+            tk.Label(opt, text=label, width=10, anchor="w").grid(row=r, column=0, sticky="w", pady=px(3))
             holder = tk.Frame(opt)
-            holder.grid(row=r, column=1, sticky="w", pady=3)
+            holder.grid(row=r, column=1, sticky="w", pady=px(3))
             for w in widgets:
-                w.pack(in_=holder, side="left", padx=(0, 6))
+                w.pack(in_=holder, side="left", padx=px(0, 6))
                 w.lift(holder)
 
         self.size_var = tk.StringVar(value=SIZES[3][0])
@@ -130,26 +131,26 @@ class ResolutionScalerTab(BaseTab):
                                        width=40))
         self.sharpen_var = tk.DoubleVar(value=0.3)
         row(3, "Sharpen:", tk.Scale(opt, variable=self.sharpen_var, from_=0, to=1, resolution=0.05,
-                                    orient="horizontal", length=200),
+                                    orient="horizontal", length=px(200)),
             tk.Label(opt, text="(when upscaling with Lanczos, Bicubic or GPU)", fg=CLR["fgdim"]))
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
-        self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=(4, 0))
+        self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=px(4, 0))
         for v in (self.size_var, self.shape_var, self.w_var, self.h_var):
             v.trace_add("write", lambda *_a: self._update())
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "ffv1"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, self._suffix()))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
         self.btn_render = tk.Button(body, text="📐  SCALE VIDEO", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=26, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -301,30 +302,30 @@ class FPSInterpolatorTab(BaseTab):
                          "Change the frame rate smoothly, or make true slow motion.", icon="🎞")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
-        self.info_lbl.pack(fill="x", padx=20)
-        opt = tk.LabelFrame(body, text="  Frame rate  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=6)
+        self.info_lbl.pack(fill="x", padx=px(20))
+        opt = tk.LabelFrame(body, text="  Frame rate  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
         r0 = tk.Frame(opt)
-        r0.pack(anchor="w", pady=2)
+        r0.pack(anchor="w", pady=px(2))
         tk.Label(r0, text="New frame rate:").pack(side="left")
         self.fps_var = tk.StringVar(value="60")
-        ttk.Combobox(r0, textvariable=self.fps_var, values=RATES, width=8).pack(side="left", padx=6)
+        ttk.Combobox(r0, textvariable=self.fps_var, values=RATES, width=8).pack(side="left", padx=px(6))
         tk.Label(r0, text="fps").pack(side="left")
         self.method_var = tk.StringVar(value=FPS_METHODS["motion"])
         ttk.Combobox(opt, textvariable=self.method_var, values=list(FPS_METHODS.values()), state="readonly",
-                     width=52).pack(anchor="w", pady=4)
+                     width=52).pack(anchor="w", pady=px(4))
         r1 = tk.Frame(opt)
-        r1.pack(anchor="w", pady=2)
+        r1.pack(anchor="w", pady=px(2))
         self.slowmo_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r1, text="Slow motion: play", variable=self.slowmo_var).pack(side="left")
         self.factor_var = tk.StringVar(value="2")
         ttk.Combobox(r1, textvariable=self.factor_var, values=["1.5", "2", "3", "4", "8"], width=4).pack(side="left")
-        tk.Label(r1, text="× slower (new frames are made in between)").pack(side="left", padx=4)
+        tk.Label(r1, text="× slower (new frames are made in between)").pack(side="left", padx=px(4))
         r2 = tk.Frame(opt)
-        r2.pack(anchor="w", pady=2)
+        r2.pack(anchor="w", pady=px(2))
         self.audio_var = tk.StringVar(value="slow")
         tk.Label(r2, text="Slow-motion audio:").pack(side="left")
         tk.Radiobutton(r2, text="slow it down too (same pitch)", variable=self.audio_var, value="slow").pack(
@@ -334,19 +335,19 @@ class FPSInterpolatorTab(BaseTab):
         tk.Checkbutton(opt, text=f"Use all processor cores for motion interpolation ({os.cpu_count() or 1} "
                                  "available)", variable=self.parallel_var).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "interp"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
         self.btn_render = tk.Button(body, text="🎞  CHANGE FRAME RATE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=26, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

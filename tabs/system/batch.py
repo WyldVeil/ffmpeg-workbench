@@ -13,6 +13,7 @@ import threading
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 
 
 # (id, label) - looked up by position, so translations can never mix them up
@@ -45,17 +46,17 @@ class BatchTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="🗂  " + t("tab.batch_processor"), font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner, text=t("batch.desc_subtitle"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # ── Input files ───────────────────────────────────────────────────
-        inp_lf = tk.LabelFrame(self, text=t("section.input_files"), padx=12, pady=8)
-        inp_lf.pack(fill="both", expand=True, padx=20, pady=8)
+        inp_lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(12), pady=px(8))
+        inp_lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
         self.listbox = tk.Listbox(
             inp_lf, selectmode="extended", font=(MONO_FONT, 9),
@@ -67,7 +68,7 @@ class BatchTab(BaseTab):
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        btn_f = tk.Frame(self); btn_f.pack(pady=4)
+        btn_f = tk.Frame(self); btn_f.pack(pady=px(4))
         for txt, cmd, bg in [
             ("➕ Add Files",     self._add_files,  "#3A3A3A"),
             ("📁 Add Folder",    self._add_folder, "#3A3A3A"),
@@ -75,78 +76,78 @@ class BatchTab(BaseTab):
             ("🧹 Clear All",     self._clear,      "#3A3A3A"),
         ]:
             tk.Button(btn_f, text=txt, bg=bg, fg=CLR["fg"], width=14,
-                      command=cmd).pack(side="left", padx=4)
+                      command=cmd).pack(side="left", padx=px(4))
 
         self._count_lbl = tk.Label(self, text=t("batch.0_files_queued"),
                                     fg=CLR["fgdim"], font=(UI_FONT, 9))
         self._count_lbl.pack()
 
         # ── Operation ─────────────────────────────────────────────────────
-        op_lf = tk.LabelFrame(self, text=f"  {t('batch.operation_section')}  ", padx=14, pady=10)
-        op_lf.pack(fill="x", padx=20, pady=4)
+        op_lf = tk.LabelFrame(self, text=f"  {t('batch.operation_section')}  ", padx=px(14), pady=px(10))
+        op_lf.pack(fill="x", padx=px(20), pady=px(4))
 
-        op_row = tk.Frame(op_lf); op_row.pack(fill="x", pady=4)
+        op_row = tk.Frame(op_lf); op_row.pack(fill="x", pady=px(4))
         tk.Label(op_row, text=t("batch.operation"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._op_var = tk.StringVar(value=list(OPERATIONS.keys())[0])
         op_cb = ttk.Combobox(op_row, textvariable=self._op_var,
                               values=list(OPERATIONS.keys()),
                               state="readonly", width=28)
-        op_cb.pack(side="left", padx=8)
+        op_cb.pack(side="left", padx=px(8))
         op_cb.bind("<<ComboboxSelected>>", self._on_op_change)
 
         # Dynamic options frame
         self._op_opts = tk.Frame(op_lf)
-        self._op_opts.pack(fill="x", pady=4)
+        self._op_opts.pack(fill="x", pady=px(4))
 
         # CRF / preset (for re-encode)
         self._enc_row = tk.Frame(self._op_opts)
         tk.Label(self._enc_row, text=t("common.crf")).pack(side="left")
         self._crf_var = tk.StringVar(value="18")
-        tk.Entry(self._enc_row, textvariable=self._crf_var, width=4, relief="flat").pack(side="left", padx=4)
+        tk.Entry(self._enc_row, textvariable=self._crf_var, width=4, relief="flat").pack(side="left", padx=px(4))
         tk.Label(self._enc_row, text=t("rotate_flip.preset")).pack(side="left")
         self._preset_var = tk.StringVar(value="fast")
         ttk.Combobox(self._enc_row, textvariable=self._preset_var,
                      values=["ultrafast","fast","medium","slow"],
-                     state="readonly", width=10).pack(side="left", padx=4)
-        self._enc_row.pack(fill="x", pady=2)
+                     state="readonly", width=10).pack(side="left", padx=px(4))
+        self._enc_row.pack(fill="x", pady=px(2))
 
         # Resolution (for resize)
         self._res_row = tk.Frame(self._op_opts)
         tk.Label(self._res_row, text=t("batch.target_resolution")).pack(side="left")
         self._res_var = tk.StringVar(value="1920x1080")
         ttk.Combobox(self._res_row, textvariable=self._res_var,
-                     values=RESOLUTIONS, state="readonly", width=12).pack(side="left", padx=4)
+                     values=RESOLUTIONS, state="readonly", width=12).pack(side="left", padx=px(4))
         tk.Label(self._res_row, text=t("batch.scale_down_keeps_aspect_ratio"),
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
 
         # ── Output folder ─────────────────────────────────────────────────
-        out_lf = tk.LabelFrame(self, text=t("section.output"), padx=14, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=4)
+        out_lf = tk.LabelFrame(self, text=t("section.output"), padx=px(14), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(4))
 
-        of = tk.Frame(out_lf); of.pack(fill="x", pady=4)
+        of = tk.Frame(out_lf); of.pack(fill="x", pady=px(4))
         tk.Label(of, text=t("common.output_folder"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=52, relief="flat").pack(side="left", padx=8)
+        tk.Entry(of, textvariable=self._out_var, width=52, relief="flat").pack(side="left", padx=px(8))
         tk.Button(of, text=t("btn.browse"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
         tk.Label(out_lf, text=t("batch.output_files_are_saved_as_originalname_batch_ext"),
                  fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
 
         # ── Controls ─────────────────────────────────────────────────────
-        ctrl_f = tk.Frame(self); ctrl_f.pack(pady=8)
+        ctrl_f = tk.Frame(self); ctrl_f.pack(pady=px(8))
         self._btn_run = tk.Button(
             ctrl_f, text=t("batch.process_all_files"),
             font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
             height=2, width=24, command=self._run)
-        self._btn_run.pack(side="left", padx=8)
+        self._btn_run.pack(side="left", padx=px(8))
         tk.Button(ctrl_f, text=t("batch.cancel"),
                   bg=CLR["red"], fg="white", width=10,
-                  command=self._cancel).pack(side="left", padx=4)
+                  command=self._cancel).pack(side="left", padx=px(4))
         self._prog_lbl = tk.Label(ctrl_f, text="", fg=CLR["accent"],
                                    font=(UI_FONT, 10))
-        self._prog_lbl.pack(side="left", padx=12)
+        self._prog_lbl.pack(side="left", padx=px(12))
 
         # Console
-        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=20, pady=4)
+        cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.console, csb = self.make_console(cf, height=8)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -217,10 +218,10 @@ class BatchTab(BaseTab):
         self._enc_row.pack_forget()
         self._res_row.pack_forget()
         if op in ("reencode", "to_mp4"):
-            self._enc_row.pack(fill="x", pady=2)
+            self._enc_row.pack(fill="x", pady=px(2))
         elif op == "resize":
-            self._res_row.pack(fill="x", pady=2)
-            self._enc_row.pack(fill="x", pady=2)
+            self._res_row.pack(fill="x", pady=px(2))
+            self._enc_row.pack(fill="x", pady=px(2))
 
     # ─── Render ──────────────────────────────────────────────────────────
     def _run(self):

@@ -16,6 +16,7 @@ from tkinter import messagebox, ttk
 from core import dialogs
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.transcoder.converter import free_name
@@ -72,37 +73,37 @@ class ProxyGenTab(BaseTab):
 
     def _build_ui(self):
         self.make_header(self, t("tab.proxy_generator"), t("proxy.subtitle"), icon="⚙")
-        lf = tk.LabelFrame(self, text=t("section.input_files"), padx=10, pady=6)
-        lf.pack(fill="both", expand=True, padx=20, pady=8)
+        lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(10), pady=px(6))
+        lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
         self.listbox = tk.Listbox(lf, height=7, font=(MONO_FONT, 10), selectmode="extended")
         sb = ttk.Scrollbar(lf, command=self.listbox.yview)
         self.listbox.config(yscrollcommand=sb.set)
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         bf = tk.Frame(self)
-        bf.pack(pady=4)
+        bf.pack(pady=px(4))
         for label, cmd in ((t("converter.btn_add_files"), self._add), ("Add a folder…", self._add_folder),
                            (t("converter.btn_remove"), self._remove), (t("converter.btn_clear"), self._clear)):
-            tk.Button(bf, text=label, command=cmd, relief="flat", cursor="hand2").pack(side="left", padx=4)
+            tk.Button(bf, text=label, command=cmd, relief="flat", cursor="hand2").pack(side="left", padx=px(4))
 
-        opt = tk.LabelFrame(self, text=f"  {t('proxy.proxy_options_section')}  ", padx=15, pady=8)
-        opt.pack(fill="x", padx=20, pady=5)
+        opt = tk.LabelFrame(self, text=f"  {t('proxy.proxy_options_section')}  ", padx=px(15), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(5))
         r0 = tk.Frame(opt)
-        r0.pack(fill="x", pady=3)
+        r0.pack(fill="x", pady=px(3))
         tk.Label(r0, text=t("proxy.preset_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.preset_var = tk.StringVar(value=PRESETS["prores"][0])
         ttk.Combobox(r0, textvariable=self.preset_var, values=[v[0] for v in PRESETS.values()], state="readonly",
-                     width=50).pack(side="left", padx=8)
+                     width=50).pack(side="left", padx=px(8))
         r1 = tk.Frame(opt)
-        r1.pack(fill="x", pady=3)
+        r1.pack(fill="x", pady=px(3))
         tk.Label(r1, text="Size:").pack(side="left")
         self.size_var = tk.StringVar(value=SIZES["half"][0])
         ttk.Combobox(r1, textvariable=self.size_var, values=[v[0] for v in SIZES.values()], state="readonly",
-                     width=12).pack(side="left", padx=8)
+                     width=12).pack(side="left", padx=px(8))
         self.audio_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Include every audio track", variable=self.audio_var).pack(side="left", padx=12)
+        tk.Checkbutton(r1, text="Include every audio track", variable=self.audio_var).pack(side="left", padx=px(12))
         r2 = tk.Frame(opt)
-        r2.pack(fill="x", pady=3)
+        r2.pack(fill="x", pady=px(3))
         self.place_var = tk.StringVar(value="folder")
         tk.Radiobutton(r2, text="Same name in a “Proxy” folder next to each file (easy relinking)",
                        variable=self.place_var, value="folder").pack(anchor="w")
@@ -111,20 +112,20 @@ class ProxyGenTab(BaseTab):
         tk.Radiobutton(r3, text="Next to the originals, with the suffix", variable=self.place_var,
                        value="suffix").pack(side="left")
         self.suffix_var = tk.StringVar(value="_proxy")
-        tk.Entry(r3, textvariable=self.suffix_var, width=12).pack(side="left", padx=4)
+        tk.Entry(r3, textvariable=self.suffix_var, width=12).pack(side="left", padx=px(4))
         r4 = tk.Frame(r2)
         r4.pack(anchor="w")
         tk.Radiobutton(r4, text="In this folder:", variable=self.place_var, value="dir").pack(side="left")
         self.out_dir_var = tk.StringVar()
-        tk.Entry(r4, textvariable=self.out_dir_var, width=44).pack(side="left", padx=4)
+        tk.Entry(r4, textvariable=self.out_dir_var, width=44).pack(side="left", padx=px(4))
         tk.Button(r4, text=t("btn.browse"), relief="flat",
                   command=lambda: self.out_dir_var.set(dialogs.ask_directory(parent=self) or
                                                        self.out_dir_var.get())).pack(side="left")
         self.btn_render = tk.Button(self, text=t("proxy.render_button"), font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
+        self.btn_render.pack(pady=px(10))
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=4)
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

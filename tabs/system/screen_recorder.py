@@ -20,6 +20,7 @@ import threading
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ class AreaSelector(tk.Toplevel):
     def on_press(self, event):
         self.start_x, self.start_y = event.x, event.y
         self.rect = self.canvas.create_rectangle(
-            self.start_x, self.start_y, 1, 1, outline="red", width=3)
+            self.start_x, self.start_y, 1, 1, outline="red", width=px(3))
 
     def on_drag(self, event):
         self.canvas.coords(self.rect, self.start_x, self.start_y, event.x, event.y)
@@ -83,12 +84,12 @@ class WindowPicker(tk.Toplevel):
         self.overrideredirect(True)
 
         # Instruction banner centred on screen
-        banner = tk.Frame(self, bg="#1a1a2e", padx=30, pady=20)
+        banner = tk.Frame(self, bg="#1a1a2e", padx=px(30), pady=px(20))
         banner.place(relx=0.5, rely=0.5, anchor="center")
         tk.Label(banner, text=t("screen_recorder.click_on_the_window_you_want_to_record"),
                  font=(UI_FONT, 18, "bold"), bg="#1a1a2e", fg="white").pack()
         tk.Label(banner, text=t("screen_recorder.press_esc_to_cancel"),
-                 font=(UI_FONT, 10), bg="#1a1a2e", fg="#aaaaaa").pack(pady=(6, 0))
+                 font=(UI_FONT, 10), bg="#1a1a2e", fg="#aaaaaa").pack(pady=px(6, 0))
 
         self.bind("<ButtonPress-1>", self._on_click)
         self.bind("<Escape>",        lambda e: self.destroy())
@@ -195,22 +196,22 @@ class ScreenRecorderTab(BaseTab):
                          icon="🖥️")
 
         nb_frame = tk.Frame(self, bg=CLR["bg"])
-        nb_frame.pack(fill="x", padx=20, pady=10)
+        nb_frame.pack(fill="x", padx=px(20), pady=px(10))
 
         self.notebook = ttk.Notebook(nb_frame)
         self.notebook.pack(fill="x", expand=True)
 
-        self.tab_express = tk.Frame(self.notebook, bg=CLR["bg"], padx=20, pady=30)
+        self.tab_express = tk.Frame(self.notebook, bg=CLR["bg"], padx=px(20), pady=px(30))
         self.notebook.add(self.tab_express, text=t("screen_recorder.simple"))
         self._build_express_tab()
 
-        self.tab_studio = tk.Frame(self.notebook, bg=CLR["bg"], padx=20, pady=15)
+        self.tab_studio = tk.Frame(self.notebook, bg=CLR["bg"], padx=px(20), pady=px(15))
         self.notebook.add(self.tab_studio, text=t("screen_recorder.advanced"))
         self._build_studio_tab()
 
         # Universal stop button
         ctl_f = tk.Frame(self, bg=CLR["bg"])
-        ctl_f.pack(pady=(10, 5))
+        ctl_f.pack(pady=px(10, 5))
         self.btn_stop = tk.Button(
             ctl_f, text=t("screen_recorder.stop_recording"),
             font=(UI_FONT, 12, "bold"), bg=CLR["panel"], fg=CLR["fg"],
@@ -218,7 +219,7 @@ class ScreenRecorderTab(BaseTab):
         self.btn_stop.pack()
 
         cf = tk.Frame(self, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=20, pady=(5, 20))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(5, 20))
         self.console, csb = self.make_console(cf, height=8)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -230,29 +231,29 @@ class ScreenRecorderTab(BaseTab):
         tk.Label(self.tab_express,
                  text=t("screen_recorder.instant_screen_capture_with_sensible_defaults"),
                  font=(UI_FONT, 14, "italic"),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(pady=(0, 20))
+                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(pady=px(0, 20))
 
         self.btn_start_express = tk.Button(
             self.tab_express, text=t("screen_recorder.quick_record_full_screen"),
             font=(UI_FONT, 12, "bold"), bg=CLR["red"], fg="white",
             height=2, width=40, cursor="hand2", command=self._start_express)
-        self.btn_start_express.pack(pady=5)
+        self.btn_start_express.pack(pady=px(5))
 
         self.btn_start_express_area = tk.Button(
             self.tab_express, text=t("screen_recorder.record_a_specific_area"),
             font=(UI_FONT, 10, "bold"), bg=CLR["panel"], fg=CLR["accent"],
             height=2, width=45, cursor="hand2", command=self._start_express_area)
-        self.btn_start_express_area.pack(pady=5)
+        self.btn_start_express_area.pack(pady=px(5))
 
         self.btn_start_express_window = tk.Button(
             self.tab_express, text=t("screen_recorder.record_a_specific_window"),
             font=(UI_FONT, 10, "bold"), bg=CLR["panel"], fg=CLR["accent"],
             height=2, width=45, cursor="hand2", command=self._start_express_window)
-        self.btn_start_express_window.pack(pady=5)
+        self.btn_start_express_window.pack(pady=px(5))
 
         tk.Label(self.tab_express,
                  text=t("screen_recorder.30fps_x264_ultrafast_output_saved_to_desktop"),
-                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]).pack(pady=(15, 0))
+                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]).pack(pady=px(15, 0))
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Pro Studio Tab
@@ -261,8 +262,8 @@ class ScreenRecorderTab(BaseTab):
         # ── Capture source ────────────────────────────────────────────────────
         src_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.capture_source_section')} ",
                               bg=CLR["bg"], fg=CLR["fgdim"],
-                              font=(UI_FONT, 9), padx=10, pady=8)
-        src_f.pack(fill="x", pady=(0, 8))
+                              font=(UI_FONT, 9), padx=px(10), pady=px(8))
+        src_f.pack(fill="x", pady=px(0, 8))
 
         # Row 0: desktop vs window radio
         mode_row = tk.Frame(src_f, bg=CLR["bg"])
@@ -274,25 +275,25 @@ class ScreenRecorderTab(BaseTab):
         tk.Radiobutton(mode_row, text=t("screen_recorder.specific_window"),
                        variable=self.capture_mode_var, value="window",
                        bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"],
-                       command=self._on_mode_change).pack(side="left", padx=(20, 0))
+                       command=self._on_mode_change).pack(side="left", padx=px(20, 0))
 
         # Row 1: Region selector (visible in desktop mode)
         self.region_row = tk.Frame(src_f, bg=CLR["bg"])
-        self.region_row.pack(fill="x", pady=(6, 0))
+        self.region_row.pack(fill="x", pady=px(6, 0))
         tk.Button(self.region_row, text=t("screen_recorder.select_area"),
                   font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"],
                   cursor="hand2", command=self._pick_area).pack(side="left")
         self.lbl_region = tk.Label(self.region_row,
                                    text=t("screen_recorder.current_full_screen"),
                                    font=(MONO_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"])
-        self.lbl_region.pack(side="left", padx=8)
+        self.lbl_region.pack(side="left", padx=px(8))
         tk.Button(self.region_row, text="Reset",
                   font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"],
                   relief="flat", cursor="hand2", command=self._reset_area).pack(side="left")
 
         # Row 2: Window picker (visible in window mode)
         self.window_row = tk.Frame(src_f, bg=CLR["bg"])
-        self.window_row.pack(fill="x", pady=(6, 0))
+        self.window_row.pack(fill="x", pady=px(6, 0))
         tk.Button(self.window_row, text=t("screen_recorder.click_a_window"),
                   font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"],
                   cursor="hand2", command=self._pick_window_studio).pack(side="left")
@@ -301,81 +302,81 @@ class ScreenRecorderTab(BaseTab):
         self._win_entry = tk.Entry(self.window_row, textvariable=self.window_title_var,
                                    width=30, bg=CLR["panel"], fg=CLR["fg"],
                                    insertbackground=CLR["fg"])
-        self._win_entry.pack(side="left", padx=4)
+        self._win_entry.pack(side="left", padx=px(4))
         self.lbl_window = tk.Label(self.window_row, text="",
                                    font=(MONO_FONT, 8), bg=CLR["bg"], fg=CLR["green"])
-        self.lbl_window.pack(side="left", padx=4)
+        self.lbl_window.pack(side="left", padx=px(4))
 
         self._on_mode_change()   # set initial visibility
 
         # ── Video Settings ────────────────────────────────────────────────────
-        tk.Frame(self.tab_studio, bg=CLR["border"], height=1).pack(fill="x", pady=6)
+        tk.Frame(self.tab_studio, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
         vid_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.video_section')} ",
                               bg=CLR["bg"], fg=CLR["fgdim"],
-                              font=(UI_FONT, 9), padx=10, pady=8)
-        vid_f.pack(fill="x", pady=(0, 6))
+                              font=(UI_FONT, 9), padx=px(10), pady=px(8))
+        vid_f.pack(fill="x", pady=px(0, 6))
 
         tk.Label(vid_f, text=t("common.codec"), bg=CLR["bg"], fg=CLR["fg"],
-                 width=12, anchor="e").grid(row=0, column=0, pady=4)
+                 width=12, anchor="e").grid(row=0, column=0, pady=px(4))
         ttk.Combobox(vid_f, textvariable=self.vcodec_var, width=32, state="readonly",
                      values=["libx264 (CPU - High Compatibility)",
                              "libx265 (CPU - High Efficiency)",
                              "h264_nvenc (NVIDIA GPU)", "hevc_nvenc (NVIDIA GPU)",
                              "h264_amf (AMD GPU)",      "libsvtav1 (AV1 - Next Gen)",
-                             ]).grid(row=0, column=1, padx=5)
+                             ]).grid(row=0, column=1, padx=px(5))
 
         tk.Label(vid_f, text=t("screen_recorder.framerate"), bg=CLR["bg"], fg=CLR["fg"],
-                 width=10, anchor="e").grid(row=0, column=2, pady=4)
+                 width=10, anchor="e").grid(row=0, column=2, pady=px(4))
         ttk.Combobox(vid_f, textvariable=self.fps_var, width=8,
-                     values=["24", "30", "60", "120"]).grid(row=0, column=3, padx=5)
+                     values=["24", "30", "60", "120"]).grid(row=0, column=3, padx=px(5))
 
         tk.Label(vid_f, text=t("codec.lbl_crf_quality"), bg=CLR["bg"], fg=CLR["fg"],
-                 width=12, anchor="e").grid(row=1, column=0, pady=4)
+                 width=12, anchor="e").grid(row=1, column=0, pady=px(4))
         crf_row = tk.Frame(vid_f, bg=CLR["bg"])
-        crf_row.grid(row=1, column=1, sticky="w", padx=5)
+        crf_row.grid(row=1, column=1, sticky="w", padx=px(5))
         tk.Scale(crf_row, variable=self.crf_var, from_=0, to=51,
-                 orient="horizontal", length=150,
+                 orient="horizontal", length=px(150),
                  bg=CLR["bg"], fg=CLR["fg"], highlightthickness=0).pack(side="left")
         tk.Label(crf_row, text=t("screen_recorder.lower_better_18_lossless"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=5)
+                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(5))
 
         tk.Label(vid_f, text=t("codec.lbl_pixel_format"), bg=CLR["bg"], fg=CLR["fg"],
-                 width=12, anchor="e").grid(row=2, column=0, pady=4)
+                 width=12, anchor="e").grid(row=2, column=0, pady=px(4))
         ttk.Combobox(vid_f, textvariable=self.pix_fmt_var, width=32, state="readonly",
                      values=["yuv420p (Standard)",
-                             "yuv444p (Full Color, large file)"]).grid(row=2, column=1, padx=5)
+                             "yuv444p (Full Color, large file)"]).grid(row=2, column=1, padx=px(5))
 
         tk.Label(vid_f, text=t("screen_recorder.encoder_preset"), bg=CLR["bg"], fg=CLR["fg"],
-                 width=10, anchor="e").grid(row=2, column=2, pady=4)
+                 width=10, anchor="e").grid(row=2, column=2, pady=px(4))
         ttk.Combobox(vid_f, textvariable=self.preset_var, width=12, state="readonly",
                      values=["ultrafast", "superfast", "veryfast",
-                             "faster", "fast", "medium", "slow"]).grid(row=2, column=3, padx=5)
+                             "faster", "fast", "medium", "slow"]).grid(row=2, column=3, padx=px(5))
 
         # ── Audio Devices (Dynamic) ────────────────────────────────────────────
         aud_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.audio_sources_section')} ",
                               bg=CLR["bg"], fg=CLR["fgdim"],
-                              font=(UI_FONT, 9), padx=10, pady=8)
-        aud_f.pack(fill="x", pady=(0, 6))
+                              font=(UI_FONT, 9), padx=px(10), pady=px(8))
+        aud_f.pack(fill="x", pady=px(0, 6))
 
-        tk.Label(aud_f, text=t("screen_recorder.source_1"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=0, column=0, sticky="e", pady=4)
+        tk.Label(aud_f, text=t("screen_recorder.source_1"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=0, column=0, sticky="e", pady=px(4))
         self.cb_audio1 = ttk.Combobox(aud_f, textvariable=self.audio_src1_var, width=28, state="readonly")
-        self.cb_audio1.grid(row=0, column=1, padx=5, sticky="w")
+        self.cb_audio1.grid(row=0, column=1, padx=px(5), sticky="w")
         
-        tk.Label(aud_f, text=t("screen_recorder.source_2"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=0, column=2, sticky="e", padx=(15, 0))
+        tk.Label(aud_f, text=t("screen_recorder.source_2"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=0, column=2, sticky="e", padx=px(15, 0))
         self.cb_audio2 = ttk.Combobox(aud_f, textvariable=self.audio_src2_var, width=28, state="readonly")
-        self.cb_audio2.grid(row=0, column=3, padx=5, sticky="w")
+        self.cb_audio2.grid(row=0, column=3, padx=px(5), sticky="w")
 
-        tk.Label(aud_f, text=t("codec.lbl_audio"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=1, column=0, sticky="e", pady=8)
+        tk.Label(aud_f, text=t("codec.lbl_audio"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=1, column=0, sticky="e", pady=px(8))
         ttk.Combobox(aud_f, textvariable=self.acodec_var, width=10, state="readonly",
-                     values=["aac", "flac", "libopus", "pcm_s16le"]).grid(row=1, column=1, sticky="w", padx=5)
+                     values=["aac", "flac", "libopus", "pcm_s16le"]).grid(row=1, column=1, sticky="w", padx=px(5))
 
         tk.Checkbutton(aud_f, text=t("screen_recorder.capture_mouse_cursor"),
                        variable=self.cursor_var,
-                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"]).grid(row=1, column=2, columnspan=2, sticky="w", padx=15)
+                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"]).grid(row=1, column=2, columnspan=2, sticky="w", padx=px(15))
 
         tk.Label(aud_f, text=t("screen_recorder.container"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=2, column=0, sticky="e")
         ttk.Combobox(aud_f, textvariable=self.container_var, width=10, state="readonly",
-                     values=[".mp4", ".mkv", ".mov"]).grid(row=2, column=1, sticky="w", padx=5)
+                     values=[".mp4", ".mkv", ".mov"]).grid(row=2, column=1, sticky="w", padx=px(5))
 
         # Start the background scan for audio hardware
         self.cb_audio1.set("Loading devices...")
@@ -384,46 +385,46 @@ class ScreenRecorderTab(BaseTab):
         # ── OBS Feature 1 – Global Hotkey ─────────────────────────────────────
         hotkey_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.hotkey_section')} ",
                                  bg=CLR["bg"], fg=CLR["fgdim"],
-                                 font=(UI_FONT, 9), padx=10, pady=8)
-        hotkey_f.pack(fill="x", pady=(0, 6))
+                                 font=(UI_FONT, 9), padx=px(10), pady=px(8))
+        hotkey_f.pack(fill="x", pady=px(0, 6))
 
         tk.Checkbutton(hotkey_f, text=t("screen_recorder.enable_global_start_stop_hotkey"),
                        variable=self.hotkey_enabled_var,
                        bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["panel"],
                        command=self._on_hotkey_toggle).pack(side="left")
-        tk.Label(hotkey_f, text=t("screen_recorder.hotkey"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=(20, 4))
+        tk.Label(hotkey_f, text=t("screen_recorder.hotkey"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(20, 4))
         ttk.Combobox(hotkey_f, textvariable=self.hotkey_var, width=10, state="readonly",
                      values=["Alt+F9", "Alt+F10", "Ctrl+Alt+R"]).pack(side="left")
         self.lbl_hotkey_status = tk.Label(hotkey_f, text=t("screen_recorder.inactive"),
                                           font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"])
-        self.lbl_hotkey_status.pack(side="left", padx=8)
+        self.lbl_hotkey_status.pack(side="left", padx=px(8))
 
         # ── OBS Feature 2 – Output Path ───────────────────────────────────────
         path_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.output_path_section')} ",
                                bg=CLR["bg"], fg=CLR["fgdim"],
-                               font=(UI_FONT, 9), padx=10, pady=8)
-        path_f.pack(fill="x", pady=(0, 6))
+                               font=(UI_FONT, 9), padx=px(10), pady=px(8))
+        path_f.pack(fill="x", pady=px(0, 6))
 
         r0 = tk.Frame(path_f, bg=CLR["bg"]); r0.pack(fill="x")
         tk.Label(r0, text=t("screen_recorder.folder"), bg=CLR["bg"], fg=CLR["fg"], width=10, anchor="e").pack(side="left")
         tk.Entry(r0, textvariable=self.out_folder_var, width=38,
-                 bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"]).pack(side="left", padx=4)
+                 bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"]).pack(side="left", padx=px(4))
         tk.Button(r0, text=t("btn.browse"), font=(UI_FONT, 8),
                   bg=CLR["panel"], fg=CLR["accent"], cursor="hand2",
                   command=self._browse_output_folder).pack(side="left")
 
-        r1 = tk.Frame(path_f, bg=CLR["bg"]); r1.pack(fill="x", pady=(6, 0))
+        r1 = tk.Frame(path_f, bg=CLR["bg"]); r1.pack(fill="x", pady=px(6, 0))
         tk.Label(r1, text=t("screen_recorder.filename"), bg=CLR["bg"], fg=CLR["fg"], width=10, anchor="e").pack(side="left")
         tk.Entry(r1, textvariable=self.out_template_var, width=38,
-                 bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"]).pack(side="left", padx=4)
+                 bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"]).pack(side="left", padx=px(4))
         tk.Label(r1, text="tokens: {date}  {time}  {counter}",
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=4)
+                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(4))
 
         # ── OBS Feature 3 – Auto-Stop Timer ───────────────────────────────────
         timer_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.auto_stop_section')} ",
                                 bg=CLR["bg"], fg=CLR["fgdim"],
-                                font=(UI_FONT, 9), padx=10, pady=8)
-        timer_f.pack(fill="x", pady=(0, 8))
+                                font=(UI_FONT, 9), padx=px(10), pady=px(8))
+        timer_f.pack(fill="x", pady=px(0, 8))
 
         tk.Checkbutton(timer_f, text="Auto-stop recording after:",
                        variable=self.autostop_var,
@@ -431,7 +432,7 @@ class ScreenRecorderTab(BaseTab):
 
         def _hms_entry(var, label):
             tk.Label(timer_f, text=label, bg=CLR["bg"], fg=CLR["fgdim"],
-                     font=(UI_FONT, 9)).pack(side="left", padx=(8, 2))
+                     font=(UI_FONT, 9)).pack(side="left", padx=px(8, 2))
             e = tk.Entry(timer_f, textvariable=var, width=3,
                          bg=CLR["panel"], fg=CLR["fg"],
                          insertbackground=CLR["fg"], justify="center")
@@ -442,14 +443,14 @@ class ScreenRecorderTab(BaseTab):
         _hms_entry(self.autostop_mm_var, "MM:")
         _hms_entry(self.autostop_ss_var, "SS")
         tk.Label(timer_f, text=t("screen_recorder.00_05_00_5_minutes"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=6)
+                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(6))
 
         # ── Start button ──────────────────────────────────────────────────────
         self.btn_start_pro = tk.Button(
             self.tab_studio, text=t("screen_recorder.start_studio_recording"),
             font=(UI_FONT, 12, "bold"), bg=CLR["red"], fg="white",
             cursor="hand2", command=self._start_pro)
-        self.btn_start_pro.pack(pady=(10, 0))
+        self.btn_start_pro.pack(pady=px(10, 0))
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Audio Hardware Scanning
@@ -484,11 +485,11 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     def _on_mode_change(self):
         if self.capture_mode_var.get() == "desktop":
-            self.region_row.pack(fill="x", pady=(6, 0))
+            self.region_row.pack(fill="x", pady=px(6, 0))
             self.window_row.pack_forget()
         else:
             self.region_row.pack_forget()
-            self.window_row.pack(fill="x", pady=(6, 0))
+            self.window_row.pack(fill="x", pady=px(6, 0))
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Region selection

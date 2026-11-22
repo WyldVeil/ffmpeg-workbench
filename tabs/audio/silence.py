@@ -17,6 +17,7 @@ from tkinter import messagebox
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -91,36 +92,36 @@ class SilenceTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
-        opt = tk.LabelFrame(body, text="  Detection  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        opt = tk.LabelFrame(body, text="  Detection  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.thr_var, self.min_var, self.pad_var = (tk.StringVar(value="-35"), tk.StringVar(value="0.6"),
                                                     tk.StringVar(value="0.15"))
         for col, (label, var, hint) in enumerate((("Silence below (dB)", self.thr_var, "-30 noisy room … -45 studio"),
                                                   ("Shortest pause (s)", self.min_var, "pauses shorter than this stay"),
                                                   ("Keep around speech (s)", self.pad_var, "breathing room"))):
-            tk.Label(opt, text=label).grid(row=0, column=col, sticky="w", padx=6)
-            tk.Entry(opt, textvariable=var, width=8).grid(row=1, column=col, sticky="w", padx=6)
-            tk.Label(opt, text=hint, fg=CLR["fgdim"], font=(UI_FONT, 8)).grid(row=2, column=col, sticky="w", padx=6)
+            tk.Label(opt, text=label).grid(row=0, column=col, sticky="w", padx=px(6))
+            tk.Entry(opt, textvariable=var, width=8).grid(row=1, column=col, sticky="w", padx=px(6))
+            tk.Label(opt, text=hint, fg=CLR["fgdim"], font=(UI_FONT, 8)).grid(row=2, column=col, sticky="w", padx=px(6))
         self.report = tk.Label(body, text="", fg=CLR["accent"], font=(MONO_FONT, 10))
-        self.report.pack(anchor="w", padx=24, pady=4)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        self.report.pack(anchor="w", padx=px(24), pady=px(4))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
                                suggest=lambda: self.suggest_output(self.src_row.path, "tight"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         row = tk.Frame(body)
-        row.pack(pady=8)
+        row.pack(pady=px(8))
         self.btn_analyse = tk.Button(row, text="🔍  ANALYSE", font=(UI_FONT, 11, "bold"), width=14,
                                      command=self._analyse)
-        self.btn_analyse.pack(side="left", padx=6)
+        self.btn_analyse.pack(side="left", padx=px(6))
         self.btn_render = tk.Button(row, text="✂  REMOVE SILENCES", font=(UI_FONT, 11, "bold"), bg=CLR["green"],
                                     fg="white", width=20, command=self._render)
-        self.btn_render.pack(side="left", padx=6)
+        self.btn_render.pack(side="left", padx=px(6))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

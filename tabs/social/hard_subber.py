@@ -23,6 +23,7 @@ from core.i18n import t
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from core.scaling import px
 
 POSITIONS = {"bottom": ("Bottom centre", 2), "top": ("Top centre", 8),
              "middle": ("Middle", 5), "bottom_left": ("Bottom left", 1),
@@ -90,85 +91,85 @@ class HardSubberTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         srow = tk.Frame(body)
-        srow.pack(fill="x", padx=20, pady=2)
+        srow.pack(fill="x", padx=px(20), pady=px(2))
         tk.Label(srow, text="Subtitles:", width=16, anchor="w",
                  font=(UI_FONT, 10, "bold")).pack(side="left")
         self.track_var = tk.StringVar(value=_EXTERNAL)
         self.track_box = ttk.Combobox(srow, textvariable=self.track_var, values=[_EXTERNAL],
                                       state="readonly", width=40)
-        self.track_box.pack(side="left", padx=6)
+        self.track_box.pack(side="left", padx=px(6))
         self.track_box.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
         self.sub_row = FileRow(body, "Subtitle file:", kind="subtitle",
                                on_change=lambda _p: self._subs_changed())
-        self.sub_row.pack(fill="x", padx=20, pady=2)
+        self.sub_row.pack(fill="x", padx=px(20), pady=px(2))
 
         pv = tk.Frame(body)
-        pv.pack(pady=6)
+        pv.pack(pady=px(6))
         self.preview = FramePreview(pv, 480, 270)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
-        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=480,
+        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=px(480),
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
 
-        st = tk.LabelFrame(body, text="  Style (SRT / VTT, or override ASS)  ", padx=10, pady=6)
-        st.pack(fill="x", padx=20, pady=4)
+        st = tk.LabelFrame(body, text="  Style (SRT / VTT, or override ASS)  ", padx=px(10), pady=px(6))
+        st.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(st)
-        r0.pack(fill="x", pady=2)
+        r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Font:").pack(side="left")
         self.font_var = tk.StringVar(value="Open Sans")
         ttk.Combobox(r0, textvariable=self.font_var, values=ass.families(["Arial", "DejaVu Sans"]),
-                     width=16).pack(side="left", padx=6)
-        tk.Label(r0, text="Size:").pack(side="left", padx=(8, 0))
+                     width=16).pack(side="left", padx=px(6))
+        tk.Label(r0, text="Size:").pack(side="left", padx=px(8, 0))
         self.size_var = tk.IntVar(value=22)
-        tk.Scale(r0, variable=self.size_var, from_=10, to=48, orient="horizontal", length=140,
-                 command=lambda _v: self._schedule()).pack(side="left", padx=4)
+        tk.Scale(r0, variable=self.size_var, from_=10, to=48, orient="horizontal", length=px(140),
+                 command=lambda _v: self._schedule()).pack(side="left", padx=px(4))
         self.col_btn = tk.Button(r0, text="Text", relief="flat",
                                  command=lambda: self._pick("colour"))
-        self.col_btn.pack(side="left", padx=4)
+        self.col_btn.pack(side="left", padx=px(4))
         self.out_btn = tk.Button(r0, text="Outline / box", relief="flat",
                                  command=lambda: self._pick("outline_colour"))
-        self.out_btn.pack(side="left", padx=4)
+        self.out_btn.pack(side="left", padx=px(4))
         r1 = tk.Frame(st)
-        r1.pack(fill="x", pady=2)
+        r1.pack(fill="x", pady=px(2))
         tk.Label(r1, text="Outline:").pack(side="left")
         self.outline_var = tk.DoubleVar(value=2.0)
         tk.Scale(r1, variable=self.outline_var, from_=0, to=6, resolution=0.5, orient="horizontal",
-                 length=110, command=lambda _v: self._schedule()).pack(side="left", padx=4)
+                 length=px(110), command=lambda _v: self._schedule()).pack(side="left", padx=px(4))
         self.box_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r1, text="Background box", variable=self.box_var,
-                       command=self._schedule).pack(side="left", padx=8)
+                       command=self._schedule).pack(side="left", padx=px(8))
         tk.Label(r1, text="Position:").pack(side="left")
         self.position_var = tk.StringVar(value=POSITIONS["bottom"][0])
         pb = ttk.Combobox(r1, textvariable=self.position_var,
                           values=[v[0] for v in POSITIONS.values()], state="readonly", width=14)
-        pb.pack(side="left", padx=4)
+        pb.pack(side="left", padx=px(4))
         pb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
-        tk.Label(r1, text="Margin:").pack(side="left", padx=(8, 0))
+        tk.Label(r1, text="Margin:").pack(side="left", padx=px(8, 0))
         self.margin_var = tk.IntVar(value=20)
-        tk.Scale(r1, variable=self.margin_var, from_=0, to=120, orient="horizontal", length=110,
-                 command=lambda _v: self._schedule()).pack(side="left", padx=4)
+        tk.Scale(r1, variable=self.margin_var, from_=0, to=120, orient="horizontal", length=px(110),
+                 command=lambda _v: self._schedule()).pack(side="left", padx=px(4))
         self.override_var = tk.BooleanVar(value=False)
         tk.Checkbutton(st, text="Apply this style to .ass subtitles too (replaces their styling)",
                        variable=self.override_var, command=self._schedule).pack(anchor="w")
         for var in (self.font_var,):
             var.trace_add("write", lambda *_a: self._schedule())
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "subbed"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🔥  BURN SUBTITLES", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["pink"], fg="white", width=24, cursor="hand2",
                                     command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -16,6 +16,7 @@ from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core import ffmpeg as ff
 from core.i18n import t
 from tabs.widgets import FileRow, scroll_body
+from core.scaling import px
 
 
 # ─── Quality preset definitions ──────────────────────────────────────────────
@@ -225,18 +226,18 @@ class WebMTab(BaseTab):
         self.make_header(self, t("tab.webm_maker"), t("webm_maker.subtitle"), icon="🌐")
         outer = scroll_body(self)
 
-        src_lf = tk.LabelFrame(outer, text=t("section.source_file"), padx=14, pady=8)
-        src_lf.pack(fill="x", padx=18, pady=(10, 4))
+        src_lf = tk.LabelFrame(outer, text=t("section.source_file"), padx=px(14), pady=px(8))
+        src_lf.pack(fill="x", padx=px(18), pady=px(10, 4))
         self.src_var = tk.StringVar()
         self.src_row = FileRow(src_lf, t("webm_maker.input"), self.src_var,
                                on_change=self._source_changed)
         self.src_row.pack(fill="x")
         self.src_info_lbl = tk.Label(src_lf, text=t("common.no_file_loaded"),
                                      fg=CLR["fgdim"], font=(MONO_FONT, 9))
-        self.src_info_lbl.pack(anchor="w", pady=(4, 0))
+        self.src_info_lbl.pack(anchor="w", pady=px(4, 0))
 
         self.notebook = ttk.Notebook(outer)
-        self.notebook.pack(fill="x", padx=18, pady=4)
+        self.notebook.pack(fill="x", padx=px(18), pady=px(4))
         simple = tk.Frame(self.notebook)
         advanced = tk.Frame(self.notebook)
         self.notebook.add(simple, text="Simple")
@@ -245,30 +246,30 @@ class WebMTab(BaseTab):
         self._build_advanced_tab(advanced)
         self.notebook.bind("<<NotebookTabChanged>>", lambda _e: self._tab_changed())
 
-        out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=14, pady=8)
-        out_lf.pack(fill="x", padx=18, pady=(2, 6))
+        out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=px(14), pady=px(8))
+        out_lf.pack(fill="x", padx=px(18), pady=px(2, 6))
         self.out_var = tk.StringVar()
         self.out_row = FileRow(out_lf, t("webm_maker.save_as"), self.out_var, save=True,
                                kind="video", ext=".webm", suggest=self._suggest_out)
         self.out_row.pack(fill="x")
 
         render_row = tk.Frame(outer)
-        render_row.pack(pady=8)
+        render_row.pack(pady=px(8))
         self.btn_render = tk.Button(render_row, text="▶ ENCODE (Simple)", font=(UI_FONT, 12, "bold"),
                                     bg="#5C6BC0", fg="white", height=2, width=26,
                                     command=self._start_render)
-        self.btn_render.pack(side="left", padx=8)
+        self.btn_render.pack(side="left", padx=px(8))
         self.btn_cancel = tk.Button(render_row, text=t("webm_maker.cancel"), font=(UI_FONT, 10),
                                     bg=CLR["red"], fg="white", height=2, width=10, state="disabled",
                                     command=self._cancel)
-        self.btn_cancel.pack(side="left", padx=4)
+        self.btn_cancel.pack(side="left", padx=px(4))
         self.status_var = tk.StringVar(value="Ready.")
         tk.Label(outer, textvariable=self.status_var, fg=CLR["accent"],
                  font=(UI_FONT, 10, "bold")).pack()
-        self.progress = ttk.Progressbar(outer, mode="determinate", length=600, maximum=100)
-        self.progress.pack(pady=(2, 6))
+        self.progress = ttk.Progressbar(outer, mode="determinate", length=px(600), maximum=100)
+        self.progress.pack(pady=px(2, 6))
         con_f = tk.Frame(outer)
-        con_f.pack(fill="both", expand=True, padx=18, pady=(0, 8))
+        con_f.pack(fill="both", expand=True, padx=px(18), pady=px(0, 8))
         self.console, csb = self.make_console(con_f, height=9)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -276,8 +277,8 @@ class WebMTab(BaseTab):
         self._update_simple_estimate()
 
     def _build_simple_tab(self, parent):
-        prof = tk.LabelFrame(parent, text="  Profile (size · audio · max duration)  ", padx=14, pady=8)
-        prof.pack(fill="x", padx=8, pady=(8, 4))
+        prof = tk.LabelFrame(parent, text="  Profile (size · audio · max duration)  ", padx=px(14), pady=px(8))
+        prof.pack(fill="x", padx=px(8), pady=px(8, 4))
         self.simple_profile_var = tk.StringVar(value="6mb_audio")
         for key, label in _PROFILE_LABELS.items():
             tk.Radiobutton(prof, text=label, value=key, variable=self.simple_profile_var,
@@ -285,40 +286,40 @@ class WebMTab(BaseTab):
         self.simple_music_var = tk.BooleanVar(value=False)
         tk.Checkbutton(parent, text="Prioritize audio quality (music mode)",
                        variable=self.simple_music_var,
-                       command=self._update_simple_estimate).pack(anchor="w", padx=14)
+                       command=self._update_simple_estimate).pack(anchor="w", padx=px(14))
         tk.Label(parent, text="     Boosts audio bitrate; video quality drops.", fg=CLR["fgdim"],
-                 font=(UI_FONT, 8)).pack(anchor="w", padx=14)
-        trim = tk.LabelFrame(parent, text="  Trim (optional)  ", padx=14, pady=6)
-        trim.pack(fill="x", padx=8, pady=4)
+                 font=(UI_FONT, 8)).pack(anchor="w", padx=px(14))
+        trim = tk.LabelFrame(parent, text="  Trim (optional)  ", padx=px(14), pady=px(6))
+        trim.pack(fill="x", padx=px(8), pady=px(4))
         row = tk.Frame(trim)
         row.pack(fill="x")
         tk.Label(row, text="Start").pack(side="left")
         self.simple_start_var = tk.StringVar(value="0")
         e1 = tk.Entry(row, textvariable=self.simple_start_var, width=10)
-        e1.pack(side="left", padx=4)
+        e1.pack(side="left", padx=px(4))
         tk.Label(row, text="s    End").pack(side="left")
         self.simple_end_var = tk.StringVar(value="0")
         e2 = tk.Entry(row, textvariable=self.simple_end_var, width=10)
-        e2.pack(side="left", padx=4)
+        e2.pack(side="left", padx=px(4))
         tk.Label(row, text="(0 = full) s").pack(side="left")
         for e in (e1, e2):
             e.bind("<KeyRelease>", lambda _e: self._update_simple_estimate())
         self.simple_est_lbl = tk.Label(parent, text="", fg=CLR["accent"], font=(MONO_FONT, 10),
                                        justify="left")
-        self.simple_est_lbl.pack(anchor="w", padx=14, pady=(4, 8))
+        self.simple_est_lbl.pack(anchor="w", padx=px(14), pady=px(4, 8))
 
     def _build_advanced_tab(self, parent):
         # ── Two-column layout for the main controls ───────────────────────
         cols = tk.Frame(parent)
-        cols.pack(fill="x", padx=8, pady=4)
-        left  = tk.Frame(cols); left.pack(side="left", fill="both", expand=True, padx=(0, 6))
-        right = tk.Frame(cols); right.pack(side="left", fill="both", expand=True, padx=(6, 0))
+        cols.pack(fill="x", padx=px(8), pady=px(4))
+        left  = tk.Frame(cols); left.pack(side="left", fill="both", expand=True, padx=px(0, 6))
+        right = tk.Frame(cols); right.pack(side="left", fill="both", expand=True, padx=px(6, 0))
 
         # ════ LEFT COLUMN ═════════════════════════════════════════════════
 
         # ── Size limit ────────────────────────────────────────────────────
-        size_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.target_size_section')}  ", padx=14, pady=10)
-        size_lf.pack(fill="x", pady=(0, 6))
+        size_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.target_size_section')}  ", padx=px(14), pady=px(10))
+        size_lf.pack(fill="x", pady=px(0, 6))
 
         # Toggle: enable size limit (defaults ON — preserves existing behavior)
         self.size_limit_enabled_var = tk.BooleanVar(value=True)
@@ -326,7 +327,7 @@ class WebMTab(BaseTab):
                        text=t("webm_maker.enable_size_limit_checkbox"),
                        variable=self.size_limit_enabled_var,
                        command=self._on_size_limit_toggle
-                       ).pack(anchor="w", pady=(0, 6))
+                       ).pack(anchor="w", pady=px(0, 6))
 
         # Container holding the size controls (shown only when toggle is ON)
         self.size_controls = tk.Frame(size_lf)
@@ -337,18 +338,18 @@ class WebMTab(BaseTab):
         size_entry = tk.Entry(size_row, textvariable=self.size_limit_var,
                               width=7, font=(UI_FONT, 14, "bold"), justify="center")
         size_entry.pack(side="left")
-        tk.Label(size_row, text="MB", font=(UI_FONT, 13)).pack(side="left", padx=4)
+        tk.Label(size_row, text="MB", font=(UI_FONT, 13)).pack(side="left", padx=px(4))
 
         # Quick-pick buttons
-        quick = tk.Frame(self.size_controls); quick.pack(anchor="w", pady=(6, 0))
+        quick = tk.Frame(self.size_controls); quick.pack(anchor="w", pady=px(6, 0))
         for mb in [4, 8, 10, 25, 50, 100, 200]:
             tk.Button(quick, text=f"{mb} MB", width=6, bg="#333", fg=CLR["fg"],
                       font=(UI_FONT, 8),
                       command=lambda v=mb: self.size_limit_var.set(str(v))
-                      ).pack(side="left", padx=2)
+                      ).pack(side="left", padx=px(2))
 
         self.budget_lbl = tk.Label(self.size_controls, text="", fg=CLR["fgdim"], font=(UI_FONT, 9))
-        self.budget_lbl.pack(anchor="w", pady=(4, 0))
+        self.budget_lbl.pack(anchor="w", pady=px(4, 0))
         # Update budget estimate whenever size or duration changes
         self.size_limit_var.trace_add("write", lambda *_: self._update_budget_label())
 
@@ -357,22 +358,22 @@ class WebMTab(BaseTab):
         self.crf_controls = tk.Frame(size_lf)   # NOT packed yet — _on_size_limit_toggle handles visibility
         tk.Label(self.crf_controls, text=t("webm_maker.crf_section"),
                  font=(UI_FONT, 10, "bold")).pack(anchor="w")
-        crf_row = tk.Frame(self.crf_controls); crf_row.pack(fill="x", pady=(4, 0))
+        crf_row = tk.Frame(self.crf_controls); crf_row.pack(fill="x", pady=px(4, 0))
         self.crf_var = tk.IntVar(value=31)   # preset will reseed in _on_quality_change
         tk.Scale(crf_row, variable=self.crf_var,
                  from_=0, to=63, resolution=1,
-                 orient="horizontal", length=240,
+                 orient="horizontal", length=px(240),
                  command=lambda *_: self._update_budget_label()
-                 ).pack(side="left", padx=6)
+                 ).pack(side="left", padx=px(6))
         tk.Entry(crf_row, textvariable=self.crf_var, width=4,
                  justify="center").pack(side="left")
         tk.Label(self.crf_controls, text=t("webm_maker.crf_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w", pady=(2, 0))
+                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w", pady=px(2, 0))
 
         # ── Quality preset ────────────────────────────────────────────────
         qual_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.speed_section')}  ",
-                                padx=14, pady=10)
-        qual_lf.pack(fill="x", pady=(0, 6))
+                                padx=px(14), pady=px(10))
+        qual_lf.pack(fill="x", pady=px(0, 6))
 
         self.quality_var = tk.StringVar(value=QUALITY_LABELS[3])
         qual_cb = ttk.Combobox(qual_lf, textvariable=self.quality_var,
@@ -381,26 +382,26 @@ class WebMTab(BaseTab):
         qual_cb.bind("<<ComboboxSelected>>", lambda *_: self._on_quality_change())
         tk.Label(qual_lf,
                  text=t("webm_maker.lower_quality_faster_encode_higher_quality_very"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w", pady=(4, 0))
+                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w", pady=px(4, 0))
 
         # ── Codec ─────────────────────────────────────────────────────────
-        codec_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.video_codec_section')}  ", padx=14, pady=10)
-        codec_lf.pack(fill="x", pady=(0, 6))
+        codec_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.video_codec_section')}  ", padx=px(14), pady=px(10))
+        codec_lf.pack(fill="x", pady=px(0, 6))
 
         self.codec_var = tk.StringVar(value="VP9")
         for label, val in [("VP9  (better compression, recommended)", "VP9"),
                             ("VP8  (wider legacy compatibility)",      "VP8")]:
             tk.Radiobutton(codec_lf, text=label, variable=self.codec_var, value=val,
-                           command=self._on_codec_change).pack(anchor="w", pady=1)
+                           command=self._on_codec_change).pack(anchor="w", pady=px(1))
 
         self.twopass_var = tk.BooleanVar(value=True)
         tk.Checkbutton(codec_lf,
                        text=t("webm_maker.two_pass_checkbox"),
-                       variable=self.twopass_var).pack(anchor="w", pady=(6, 0))
+                       variable=self.twopass_var).pack(anchor="w", pady=px(6, 0))
 
         # ── Audio ─────────────────────────────────────────────────────────
-        audio_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.audio_section')}  ", padx=14, pady=10)
-        audio_lf.pack(fill="x", pady=(0, 6))
+        audio_lf = tk.LabelFrame(left, text=f"  {t('webm_maker.audio_section')}  ", padx=px(14), pady=px(10))
+        audio_lf.pack(fill="x", pady=px(0, 6))
 
         self.audio_codec_var = tk.StringVar(value="Opus  (recommended)")
         audio_cb = ttk.Combobox(audio_lf, textvariable=self.audio_codec_var,
@@ -409,17 +410,17 @@ class WebMTab(BaseTab):
         audio_cb.pack(side="left")
         audio_cb.bind("<<ComboboxSelected>>", self._on_audio_change)
 
-        tk.Label(audio_lf, text=t("webm_maker.bitrate")).pack(side="left", padx=(12, 0))
+        tk.Label(audio_lf, text=t("webm_maker.bitrate")).pack(side="left", padx=px(12, 0))
         self.audio_br_var = tk.StringVar(value="128k")
         self.audio_br_cb = ttk.Combobox(audio_lf, textvariable=self.audio_br_var,
                                          values=AUDIO_BITRATES, state="readonly", width=7)
-        self.audio_br_cb.pack(side="left", padx=4)
+        self.audio_br_cb.pack(side="left", padx=px(4))
 
         # ════ RIGHT COLUMN ════════════════════════════════════════════════
 
         # ── Resolution ────────────────────────────────────────────────────
-        res_lf = tk.LabelFrame(right, text=f"  {t('webm_maker.output_resolution_section')}  ", padx=14, pady=10)
-        res_lf.pack(fill="x", pady=(0, 6))
+        res_lf = tk.LabelFrame(right, text=f"  {t('webm_maker.output_resolution_section')}  ", padx=px(14), pady=px(10))
+        res_lf.pack(fill="x", pady=px(0, 6))
 
         # "Use source resolution" lock — when checked, all child controls
         # below are disabled and the encoder skips the scale= filter.
@@ -428,7 +429,7 @@ class WebMTab(BaseTab):
                        text=t("webm_maker.use_source_resolution_checkbox"),
                        variable=self.use_source_res_var,
                        command=self._on_use_source_res_toggle
-                       ).pack(anchor="w", pady=(0, 4))
+                       ).pack(anchor="w", pady=px(0, 4))
 
         # Lock aspect ratio
         self.lock_ar_var = tk.BooleanVar(value=True)
@@ -440,15 +441,15 @@ class WebMTab(BaseTab):
         # The slider's IntVar drives the encoder. The entry has its own
         # StringVar so typing doesn't ping-pong against the slider on every
         # keystroke. They sync only at commit time (Return / FocusOut).
-        w_row = tk.Frame(res_lf); w_row.pack(fill="x", pady=(8, 2))
+        w_row = tk.Frame(res_lf); w_row.pack(fill="x", pady=px(8, 2))
         tk.Label(w_row, text=t("crop.width_label"), width=7, anchor="e").pack(side="left")
         self.res_w_var = tk.IntVar(value=1920)
         self.res_w_entry_var = tk.StringVar(value="1920")
         self.w_slider = tk.Scale(w_row, variable=self.res_w_var,
                                   from_=128, to=7680, resolution=2,
-                                  orient="horizontal", length=200,
+                                  orient="horizontal", length=px(200),
                                   command=self._on_w_slider)
-        self.w_slider.pack(side="left", padx=6)
+        self.w_slider.pack(side="left", padx=px(6))
         vcmd_w = (self.register(self._validate_int_or_empty), "%P")
         self.w_entry = tk.Entry(w_row, textvariable=self.res_w_entry_var, width=6,
                                  justify="center",
@@ -461,15 +462,15 @@ class WebMTab(BaseTab):
         self.res_w_var.trace_add("write", self._mirror_w_to_entry)
 
         # Height slider + entry — symmetric to width
-        h_row = tk.Frame(res_lf); h_row.pack(fill="x", pady=(2, 4))
+        h_row = tk.Frame(res_lf); h_row.pack(fill="x", pady=px(2, 4))
         tk.Label(h_row, text=t("crop.height_label"), width=7, anchor="e").pack(side="left")
         self.res_h_var = tk.IntVar(value=1080)
         self.res_h_entry_var = tk.StringVar(value="1080")
         self.h_slider = tk.Scale(h_row, variable=self.res_h_var,
                                   from_=128, to=4320, resolution=2,
-                                  orient="horizontal", length=200,
+                                  orient="horizontal", length=px(200),
                                   command=self._on_h_slider)
-        self.h_slider.pack(side="left", padx=6)
+        self.h_slider.pack(side="left", padx=px(6))
         vcmd_h = (self.register(self._validate_int_or_empty), "%P")
         self.h_entry = tk.Entry(h_row, textvariable=self.res_h_entry_var, width=6,
                                  justify="center",
@@ -480,10 +481,10 @@ class WebMTab(BaseTab):
         self.res_h_var.trace_add("write", self._mirror_h_to_entry)
 
         # Resolution presets
-        preset_row = tk.Frame(res_lf); preset_row.pack(anchor="w", pady=(4, 0))
+        preset_row = tk.Frame(res_lf); preset_row.pack(anchor="w", pady=px(4, 0))
         self._res_preset_label = tk.Label(preset_row, text=t("scene_detect.presets_label"),
                                            fg=CLR["fgdim"], font=(UI_FONT, 8))
-        self._res_preset_label.pack(side="left", padx=(0, 4))
+        self._res_preset_label.pack(side="left", padx=px(0, 4))
         self._res_preset_btns = []
         for label, w, h in [("8K", 7680, 4320), ("4K", 3840, 2160),
                               ("1440p", 2560, 1440), ("1080p", 1920, 1080),
@@ -492,34 +493,34 @@ class WebMTab(BaseTab):
             btn = tk.Button(preset_row, text=label, width=5, bg="#333", fg=CLR["fg"],
                             font=(UI_FONT, 7),
                             command=lambda ww=w, hh=h: self._apply_res_preset(ww, hh))
-            btn.pack(side="left", padx=1)
+            btn.pack(side="left", padx=px(1))
             self._res_preset_btns.append(btn)
 
         # ── Trim ──────────────────────────────────────────────────────────
-        trim_lf = tk.LabelFrame(right, text=f"  {t('webm_maker.trim_section')}  ", padx=14, pady=8)
-        trim_lf.pack(fill="x", pady=(0, 6))
+        trim_lf = tk.LabelFrame(right, text=f"  {t('webm_maker.trim_section')}  ", padx=px(14), pady=px(8))
+        trim_lf.pack(fill="x", pady=px(0, 6))
 
         trim_row = tk.Frame(trim_lf); trim_row.pack(fill="x")
         tk.Label(trim_row, text=t("common.start_s")).pack(side="left")
         self.trim_start_var = tk.StringVar(value="0")
-        tk.Entry(trim_row, textvariable=self.trim_start_var, width=8, relief="flat").pack(side="left", padx=4)
-        tk.Label(trim_row, text=t("webm_maker.end_s_0_full")).pack(side="left", padx=(12, 0))
+        tk.Entry(trim_row, textvariable=self.trim_start_var, width=8, relief="flat").pack(side="left", padx=px(4))
+        tk.Label(trim_row, text=t("webm_maker.end_s_0_full")).pack(side="left", padx=px(12, 0))
         self.trim_end_var = tk.StringVar(value="0")
-        tk.Entry(trim_row, textvariable=self.trim_end_var, width=8, relief="flat").pack(side="left", padx=4)
+        tk.Entry(trim_row, textvariable=self.trim_end_var, width=8, relief="flat").pack(side="left", padx=px(4))
 
         # ── Extra options ─────────────────────────────────────────────────
-        extra_lf = tk.LabelFrame(right, text=f"  {t('webm_maker.extra_options_section')}  ", padx=14, pady=8)
-        extra_lf.pack(fill="x", pady=(0, 6))
+        extra_lf = tk.LabelFrame(right, text=f"  {t('webm_maker.extra_options_section')}  ", padx=px(14), pady=px(8))
+        extra_lf.pack(fill="x", pady=px(0, 6))
 
         # Row 1
-        ex1 = tk.Frame(extra_lf); ex1.pack(fill="x", pady=2)
+        ex1 = tk.Frame(extra_lf); ex1.pack(fill="x", pady=px(2))
         tk.Label(ex1, text=t("webm_maker.fps_label")).pack(side="left")
         self.fps_var = tk.StringVar(value="0")
         ttk.Combobox(ex1, textvariable=self.fps_var,
                      values=["0", "24", "25", "30", "50", "60"],
-                     width=6, state="normal").pack(side="left", padx=4)
+                     width=6, state="normal").pack(side="left", padx=px(4))
 
-        tk.Label(ex1, text=t("webm_maker.pixel_format")).pack(side="left", padx=(12, 0))
+        tk.Label(ex1, text=t("webm_maker.pixel_format")).pack(side="left", padx=px(12, 0))
         # Default value used until ffprobe relabels it after a file loads.
         self.pixfmt_var = tk.StringVar(value="Source (auto-detect)")
         self.pixfmt_cb  = ttk.Combobox(
@@ -528,19 +529,19 @@ class WebMTab(BaseTab):
                     "yuv420p", "yuva420p (transparency)",
                     "yuv444p", "gbrp"],
             state="readonly", width=22)
-        self.pixfmt_cb.pack(side="left", padx=4)
+        self.pixfmt_cb.pack(side="left", padx=px(4))
 
         # Row 2
-        ex2 = tk.Frame(extra_lf); ex2.pack(fill="x", pady=2)
+        ex2 = tk.Frame(extra_lf); ex2.pack(fill="x", pady=px(2))
         self.strip_meta_var = tk.BooleanVar(value=True)
         tk.Checkbutton(ex2, text=t("webm_maker.strip_metadata_checkbox"),
                        variable=self.strip_meta_var).pack(side="left")
         self.loop_var = tk.BooleanVar(value=False)
         tk.Checkbutton(ex2, text=t("webm_maker.loop_flag_checkbox"),
-                       variable=self.loop_var).pack(side="left", padx=20)
+                       variable=self.loop_var).pack(side="left", padx=px(20))
 
         # Row 3 - VP9-specific
-        ex3 = tk.Frame(extra_lf); ex3.pack(fill="x", pady=2)
+        ex3 = tk.Frame(extra_lf); ex3.pack(fill="x", pady=px(2))
 
         tile_lbl = tk.Label(ex3, text=t("webm_maker.tile_columns_vp9"))
         tile_lbl.pack(side="left")
@@ -548,12 +549,12 @@ class WebMTab(BaseTab):
         tile_cb = ttk.Combobox(ex3, textvariable=self.tile_col_var,
                                 values=["0", "1", "2", "3", "4", "6"],
                                 state="readonly", width=4)
-        tile_cb.pack(side="left", padx=4)
+        tile_cb.pack(side="left", padx=px(4))
         self.add_tooltip(tile_lbl, t("webm_maker.tile_columns_tooltip"))
         self.add_tooltip(tile_cb,  t("webm_maker.tile_columns_tooltip"))
 
         rowmt_lbl = tk.Label(ex3, text="  Row-MT", fg=CLR["fgdim"])
-        rowmt_lbl.pack(side="left", padx=(10, 0))
+        rowmt_lbl.pack(side="left", padx=px(10, 0))
         self.rowmt_var = tk.BooleanVar(value=True)
         rowmt_cb = tk.Checkbutton(ex3, variable=self.rowmt_var)
         rowmt_cb.pack(side="left")
@@ -835,7 +836,7 @@ class WebMTab(BaseTab):
         is_vp9 = self.codec_var.get() == "VP9"
         for w in self.vp9_extra_widgets:
             if is_vp9:
-                w.pack(fill="x", pady=2)
+                w.pack(fill="x", pady=px(2))
             else:
                 w.pack_forget()
 

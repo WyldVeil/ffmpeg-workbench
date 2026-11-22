@@ -20,6 +20,7 @@ from core.i18n import t
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from core.scaling import px
 
 METHODS = {"fast": "Fast - spatial + temporal (hqdn3d)", "nlm": "Best quality - non-local means",
            "temporal": "Temporal - static / tripod shots (atadenoise)", "grain": "Film grain - frequency domain"}
@@ -54,38 +55,38 @@ class DenoiseTab(BaseTab):
         self.make_header(self, t("tab.denoise"), "Clean up noisy, grainy or blocky video.", icon="✨")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="Denoised")
-        self.compare.pack(pady=4)
-        opt = tk.LabelFrame(body, text="  Denoise  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.compare.pack(pady=px(4))
+        opt = tk.LabelFrame(body, text="  Denoise  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value=METHODS["fast"])
         mb = ttk.Combobox(opt, textvariable=self.method_var, values=list(METHODS.values()), state="readonly",
                           width=44)
         mb.grid(row=0, column=0, columnspan=3, sticky="w")
         mb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.gpu_lbl = tk.Label(opt, text="", fg=CLR["fgdim"])
-        self.gpu_lbl.grid(row=0, column=3, sticky="w", padx=8)
+        self.gpu_lbl.grid(row=0, column=3, sticky="w", padx=px(8))
         self.strength_var = tk.DoubleVar(value=PRESETS["Medium"])
-        tk.Scale(opt, variable=self.strength_var, from_=1, to=10, resolution=0.5, orient="horizontal", length=260,
-                 label="Strength", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w", pady=4)
+        tk.Scale(opt, variable=self.strength_var, from_=1, to=10, resolution=0.5, orient="horizontal", length=px(260),
+                 label="Strength", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w", pady=px(4))
         pf = tk.Frame(opt)
         pf.grid(row=1, column=1, columnspan=3, sticky="w")
         for name, val in PRESETS.items():
             tk.Button(pf, text=name, relief="flat", command=lambda v=val: (self.strength_var.set(v),
-                                                                          self._changed())).pack(side="left", padx=2)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+                                                                          self._changed())).pack(side="left", padx=px(2))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "denoised"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="✨  DENOISE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

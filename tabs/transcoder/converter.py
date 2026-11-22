@@ -22,6 +22,7 @@ from core import dialogs
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
@@ -143,43 +144,43 @@ class FormatConverterTab(BaseTab):
 
     def _build_ui(self):
         self.make_header(self, t("tab.format_converter"), t("converter.desc_subtitle"), icon="🔄")
-        lf = tk.LabelFrame(self, text=t("section.input_files"), padx=10, pady=6)
-        lf.pack(fill="both", expand=True, padx=20, pady=8)
+        lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(10), pady=px(6))
+        lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
         self.listbox = tk.Listbox(lf, height=7, font=(MONO_FONT, 10), selectmode="extended")
         sb = ttk.Scrollbar(lf, command=self.listbox.yview)
         self.listbox.config(yscrollcommand=sb.set)
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         btn_f = tk.Frame(self)
-        btn_f.pack(pady=4)
+        btn_f.pack(pady=px(4))
         for label, cmd in ((t("converter.btn_add_files"), self._add), (t("converter.btn_remove"), self._remove),
                            (t("converter.btn_clear"), self._clear)):
-            tk.Button(btn_f, text=label, command=cmd, cursor="hand2", relief="flat").pack(side="left", padx=4)
-        tk.Label(btn_f, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=6)
+            tk.Button(btn_f, text=label, command=cmd, cursor="hand2", relief="flat").pack(side="left", padx=px(4))
+        tk.Label(btn_f, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=px(6))
 
-        opts = tk.LabelFrame(self, text=t("converter.sect_conversion_options"), padx=15, pady=8)
-        opts.pack(fill="x", padx=20, pady=5)
+        opts = tk.LabelFrame(self, text=t("converter.sect_conversion_options"), padx=px(15), pady=px(8))
+        opts.pack(fill="x", padx=px(20), pady=px(5))
         r0 = tk.Frame(opts)
-        r0.pack(fill="x", pady=4)
+        r0.pack(fill="x", pady=px(4))
         tk.Label(r0, text=t("converter.lbl_output_format"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.fmt_var = tk.StringVar(value=FORMATS["mp4"][0])
         ttk.Combobox(r0, textvariable=self.fmt_var, values=[v[0] for v in FORMATS.values()], state="readonly",
-                     width=30).pack(side="left", padx=8)
+                     width=30).pack(side="left", padx=px(8))
         self.copy_var = tk.BooleanVar(value=True)
         tk.Checkbutton(opts, text="Smart: keep streams the new format can hold as they are (fast, no quality "
                                   "loss) and convert only the rest", variable=self.copy_var).pack(anchor="w")
         r2 = tk.Frame(opts)
-        r2.pack(fill="x", pady=4)
+        r2.pack(fill="x", pady=px(4))
         tk.Label(r2, text=t("common.output_folder")).pack(side="left")
         self.out_dir_var = tk.StringVar()
-        tk.Entry(r2, textvariable=self.out_dir_var, width=50).pack(side="left", padx=6)
+        tk.Entry(r2, textvariable=self.out_dir_var, width=50).pack(side="left", padx=px(6))
         tk.Button(r2, text=t("btn.browse"), command=self._browse_dir, relief="flat").pack(side="left")
-        tk.Label(r2, text=t("converter.lbl_blank_hint"), fg=CLR["fgdim"]).pack(side="left", padx=6)
+        tk.Label(r2, text=t("converter.lbl_blank_hint"), fg=CLR["fgdim"]).pack(side="left", padx=px(6))
         self.btn_render = tk.Button(self, text=t("converter.btn_convert_all"), font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", height=2, width=28, command=self._render)
-        self.btn_render.pack(pady=10)
+        self.btn_render.pack(pady=px(10))
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=4)
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -15,6 +15,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import loudness as ln
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -31,9 +32,9 @@ class LoudnessNormTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
-        opt = tk.LabelFrame(body, text="  Target  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        opt = tk.LabelFrame(body, text="  Target  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.preset_var = tk.StringVar(value=ln.TARGETS["youtube"][0])
         pb = ttk.Combobox(opt, textvariable=self.preset_var, values=[v[0] for v in ln.TARGETS.values()],
                           state="readonly", width=56)
@@ -43,29 +44,29 @@ class LoudnessNormTab(BaseTab):
                                                  tk.StringVar(value="11"))
         for col, (label, var) in enumerate((("Loudness (LUFS)", self.i_var), ("True peak (dBTP)", self.tp_var),
                                             ("Range (LU)", self.lra_var))):
-            tk.Label(opt, text=label).grid(row=1, column=col * 2, sticky="w", pady=4)
-            tk.Entry(opt, textvariable=var, width=7).grid(row=1, column=col * 2 + 1, sticky="w", padx=(4, 12))
+            tk.Label(opt, text=label).grid(row=1, column=col * 2, sticky="w", pady=px(4))
+            tk.Entry(opt, textvariable=var, width=7).grid(row=1, column=col * 2 + 1, sticky="w", padx=px(4, 12))
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
         tk.Label(opt, text="Audio track:").grid(row=2, column=0, sticky="w")
-        self.track_box.grid(row=2, column=1, columnspan=5, sticky="w", pady=4)
+        self.track_box.grid(row=2, column=1, columnspan=5, sticky="w", pady=px(4))
         self.report = tk.Label(body, text="", fg=CLR["accent"], font=(MONO_FONT, 10), justify="left")
-        self.report.pack(anchor="w", padx=24, pady=4)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        self.report.pack(anchor="w", padx=px(24), pady=px(4))
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
                                suggest=lambda: self.suggest_output(self.src_row.path, "normalised"))
         self.out_row.pack(fill="x")
         row = tk.Frame(body)
-        row.pack(pady=8)
+        row.pack(pady=px(8))
         self.btn_analyse = tk.Button(row, text="📏  ANALYSE", font=(UI_FONT, 11, "bold"), width=14,
                                      command=self._analyse)
-        self.btn_analyse.pack(side="left", padx=6)
+        self.btn_analyse.pack(side="left", padx=px(6))
         self.btn_render = tk.Button(row, text="📢  NORMALISE", font=(UI_FONT, 11, "bold"), bg=CLR["green"],
                                     fg="white", width=18, command=self._render)
-        self.btn_render.pack(side="left", padx=6)
+        self.btn_render.pack(side="left", padx=px(6))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

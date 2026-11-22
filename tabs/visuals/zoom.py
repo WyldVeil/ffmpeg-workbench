@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -96,20 +97,20 @@ class AnimatedZoomTab(BaseTab):
         self.make_header(self, t("tab.animated_zoom"), "Punch-ins, Ken Burns moves and smooth pans.", icon="🔍")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         pv = tk.Frame(body)
-        pv.pack(pady=4)
+        pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 400, 225)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
-        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=400,
+        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=px(400),
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
         tk.Label(pv, text="Move the slider to see the zoom at any moment.", fg=CLR["fgdim"],
                  font=(UI_FONT, 8)).pack()
 
-        opt = tk.LabelFrame(body, text="  Move  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  Move  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value=MODES["punch"])
         mb = ttk.Combobox(opt, textvariable=self.mode_var, values=list(MODES.values()), state="readonly", width=46)
         mb.pack(anchor="w")
@@ -124,9 +125,9 @@ class AnimatedZoomTab(BaseTab):
 
         def labelled(parent, *items):
             row = tk.Frame(parent)
-            row.pack(anchor="w", pady=2)
+            row.pack(anchor="w", pady=px(2))
             for item in items:
-                (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(side="left", padx=2)
+                (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(side="left", padx=px(2))
 
         f = self.frames["punch"] = tk.Frame(opt)
         labelled(f, "From", lambda r: entry(r, "p_start", "1", 8), "to", lambda r: entry(r, "p_end", "3", 8),
@@ -148,27 +149,27 @@ class AnimatedZoomTab(BaseTab):
                  "s   zoom ×", lambda r: entry(r, "u_zoom", "1.3", 5))
         labelled(f, "Keep in view - X %", lambda r: entry(r, "u_x", "50", 5), "Y %", lambda r: entry(r, "u_y", "50", 5))
         er = self._ease_row = tk.Frame(opt)
-        er.pack(anchor="w", pady=4)
+        er.pack(anchor="w", pady=px(4))
         tk.Label(er, text="Motion:").pack(side="left")
         self.ease_var = tk.StringVar(value=EASES["smooth"])
         eb = ttk.Combobox(er, textvariable=self.ease_var, values=list(EASES.values()), state="readonly", width=10)
-        eb.pack(side="left", padx=4)
+        eb.pack(side="left", padx=px(4))
         eb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         tk.Label(er, text="GPU (smoothest)" if fl.vulkan_ok() else "CPU", fg=CLR["fgdim"]).pack(side="left",
-                                                                                                padx=10)
+                                                                                                padx=px(10))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "zoom"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🔍  RENDER ZOOM", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -180,7 +181,7 @@ class AnimatedZoomTab(BaseTab):
     def _mode_changed(self):
         for key, frame in self.frames.items():
             if key == self._mode():
-                frame.pack(anchor="w", pady=4, before=self._ease_row)
+                frame.pack(anchor="w", pady=px(4), before=self._ease_row)
             else:
                 frame.pack_forget()
         self._changed()

@@ -25,6 +25,7 @@ from core import grid
 from core.i18n import t
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from tabs.widgets import EncoderPanel
+from core.scaling import px
 
 
 def _fmt(seconds):
@@ -110,9 +111,9 @@ class VideoCollageTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.video_collage"), "Any number of clips on one screen, playing together.",
                          icon="🎞")
-        layout_lf = tk.LabelFrame(self, text=f"  {t('collage.grid_layout_section')}  ", padx=15, pady=8,
+        layout_lf = tk.LabelFrame(self, text=f"  {t('collage.grid_layout_section')}  ", padx=px(15), pady=px(8),
                                   font=(UI_FONT, 9, "bold"))
-        layout_lf.pack(fill="x", padx=20, pady=(10, 6))
+        layout_lf.pack(fill="x", padx=px(20), pady=px(10, 6))
         left = tk.Frame(layout_lf)
         left.pack(side="left", fill="y")
         self._layout_var = tk.StringVar(value=LAYOUTS["auto"]["label"])
@@ -122,26 +123,26 @@ class VideoCollageTab(BaseTab):
         lb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self._mode_var = tk.StringVar(value="fit")
         tk.Radiobutton(left, text="Show whole clips (bars where shapes differ)", variable=self._mode_var,
-                       value="fit", command=self._changed).pack(anchor="w", pady=(6, 0))
+                       value="fit", command=self._changed).pack(anchor="w", pady=px(6, 0))
         tk.Radiobutton(left, text="Fill each space (crop the edges)", variable=self._mode_var, value="fill",
                        command=self._changed).pack(anchor="w")
-        self._layout_lbl = tk.Label(left, text="", fg=CLR["accent"], justify="left", wraplength=330)
-        self._layout_lbl.pack(anchor="w", pady=(6, 0))
-        self._grid_canvas = tk.Canvas(layout_lf, bg=CLR["console_bg"], width=320, height=180,
+        self._layout_lbl = tk.Label(left, text="", fg=CLR["accent"], justify="left", wraplength=px(330))
+        self._layout_lbl.pack(anchor="w", pady=px(6, 0))
+        self._grid_canvas = tk.Canvas(layout_lf, bg=CLR["console_bg"], width=px(320), height=px(180),
                                       highlightthickness=0)
-        self._grid_canvas.pack(side="right", padx=10, pady=4)
+        self._grid_canvas.pack(side="right", padx=px(10), pady=px(4))
 
-        slots_lf = tk.LabelFrame(self, text=f"  {t('collage.video_slots_section')}  ", padx=15, pady=6,
+        slots_lf = tk.LabelFrame(self, text=f"  {t('collage.video_slots_section')}  ", padx=px(15), pady=px(6),
                                  font=(UI_FONT, 9, "bold"))
-        slots_lf.pack(fill="both", expand=True, padx=20, pady=4)
+        slots_lf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         stb = tk.Frame(slots_lf)
-        stb.pack(fill="x", pady=(0, 4))
+        stb.pack(fill="x", pady=px(0, 4))
         for text, cmd in (("➕ " + t("collage.add_videos_button"), self._add_videos),
                           ("🗑 " + t("collage.remove_button"), self._remove_selected), ("⬆", self._move_up),
                           ("⬇", self._move_down), (t("collage.clear_button"), self._clear_all)):
-            tk.Button(stb, text=text, relief="flat", cursor="hand2", command=cmd).pack(side="left", padx=2)
+            tk.Button(stb, text=text, relief="flat", cursor="hand2", command=cmd).pack(side="left", padx=px(2))
         self._slot_count_lbl = tk.Label(stb, text=t("collage.0_videos_loaded"), fg=CLR["fgdim"])
-        self._slot_count_lbl.pack(side="right", padx=8)
+        self._slot_count_lbl.pack(side="right", padx=px(8))
         list_f = tk.Frame(slots_lf)
         list_f.pack(fill="both", expand=True)
         self._slot_list = tk.Listbox(list_f, bg=CLR["console_bg"], fg=CLR["console_fg"], font=(MONO_FONT, 9),
@@ -151,49 +152,49 @@ class VideoCollageTab(BaseTab):
         self._slot_list.pack(side="left", fill="both", expand=True)
         lsb.pack(side="right", fill="y")
 
-        out_lf = tk.LabelFrame(self, text=f"  {t('collage.output_settings_section')}  ", padx=15, pady=6,
+        out_lf = tk.LabelFrame(self, text=f"  {t('collage.output_settings_section')}  ", padx=px(15), pady=px(6),
                                font=(UI_FONT, 9, "bold"))
-        out_lf.pack(fill="x", padx=20, pady=4)
+        out_lf.pack(fill="x", padx=px(20), pady=px(4))
         or1 = tk.Frame(out_lf)
-        or1.pack(fill="x", pady=2)
+        or1.pack(fill="x", pady=px(2))
         tk.Label(or1, text=t("collage.output_resolution_label")).pack(side="left")
         self._out_w, self._out_h = tk.StringVar(value="1920"), tk.StringVar(value="1080")
-        tk.Entry(or1, textvariable=self._out_w, width=6).pack(side="left", padx=4)
+        tk.Entry(or1, textvariable=self._out_w, width=6).pack(side="left", padx=px(4))
         tk.Label(or1, text="×").pack(side="left")
-        tk.Entry(or1, textvariable=self._out_h, width=6).pack(side="left", padx=4)
+        tk.Entry(or1, textvariable=self._out_h, width=6).pack(side="left", padx=px(4))
         for w, h, lbl in [(1920, 1080, "1080p"), (1280, 720, "720p"), (3840, 2160, "4K"), (1080, 1920, "9:16"),
                           (1080, 1080, "1:1")]:
             tk.Button(or1, text=lbl, relief="flat", width=5,
                       command=lambda _w=w, _h=h: (self._out_w.set(str(_w)), self._out_h.set(str(_h)))).pack(
-                side="left", padx=2)
+                side="left", padx=px(2))
         for v in (self._out_w, self._out_h):
             v.trace_add("write", lambda *_a: self._changed())
         or2 = tk.Frame(out_lf)
-        or2.pack(fill="x", pady=2)
+        or2.pack(fill="x", pady=px(2))
         tk.Label(or2, text=t("collage.grid_padding_label")).pack(side="left")
         self._pad_var = tk.StringVar(value="4")
-        tk.Entry(or2, textvariable=self._pad_var, width=4).pack(side="left", padx=4)
+        tk.Entry(or2, textvariable=self._pad_var, width=4).pack(side="left", padx=px(4))
         self._pad_var.trace_add("write", lambda *_a: self._changed())
         tk.Label(or2, text="px   Background:").pack(side="left")
         self._bg_color = tk.StringVar(value="Black")
         ttk.Combobox(or2, textvariable=self._bg_color, width=9, values=list(BACKGROUNDS), state="readonly").pack(
-            side="left", padx=4)
+            side="left", padx=px(4))
         tk.Label(or2, text="  Sound:").pack(side="left")
         self._audio_mode = tk.StringVar(value=AUDIO_MODES["first"])
         ttk.Combobox(or2, textvariable=self._audio_mode, values=list(AUDIO_MODES.values()), state="readonly",
-                     width=16).pack(side="left", padx=4)
+                     width=16).pack(side="left", padx=px(4))
         or3 = tk.Frame(out_lf)
-        or3.pack(fill="x", pady=2)
+        or3.pack(fill="x", pady=px(2))
         tk.Label(or3, text="Length:").pack(side="left")
         self._length_var = tk.StringVar(value=LENGTHS["longest"])
         lc = ttk.Combobox(or3, textvariable=self._length_var, values=list(LENGTHS.values()), state="readonly",
                           width=28)
-        lc.pack(side="left", padx=4)
+        lc.pack(side="left", padx=px(4))
         lc.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self._custom_len = tk.StringVar(value="30")
         tk.Entry(or3, textvariable=self._custom_len, width=7).pack(side="left")
         or4 = tk.Frame(out_lf)
-        or4.pack(fill="x", pady=2)
+        or4.pack(fill="x", pady=px(2))
         self._loop_var = tk.BooleanVar(value=True)
         tk.Checkbutton(or4, text="Loop shorter clips", variable=self._loop_var, command=self._changed).pack(
             side="left")
@@ -201,22 +202,22 @@ class VideoCollageTab(BaseTab):
         self._end_var = tk.StringVar(value=ENDS["hold"])
         self._end_cb = ttk.Combobox(or4, textvariable=self._end_var, values=list(ENDS.values()), state="readonly",
                                     width=24)
-        self._end_cb.pack(side="left", padx=4)
+        self._end_cb.pack(side="left", padx=px(4))
         self._end_cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
-        self.encoder.pack(anchor="w", pady=(4, 0))
+        self.encoder.pack(anchor="w", pady=px(4, 0))
 
         of = tk.Frame(self)
-        of.pack(fill="x", padx=20, pady=4)
+        of.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55).pack(side="left", padx=8)
+        tk.Entry(of, textvariable=self._out_var, width=55).pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out, relief="flat").pack(side="left")
         self._btn_run = tk.Button(self, text=t("collage.build_collage"), font=(UI_FONT, 12, "bold"),
                                   bg=CLR["green"], fg="white", width=26, cursor="hand2", command=self._render)
-        self._btn_run.pack(pady=6)
+        self._btn_run.pack(pady=px(6))
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(2, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(2, 10))
         self.console, csb = self.make_console(cf, height=4)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -272,10 +273,10 @@ class VideoCollageTab(BaseTab):
         key = self._layout_key()
         spec = LAYOUTS[key]
         W, H = self._canvas_size()
-        cw, ch = 320, 180
+        cw, ch = px(320), px(180)
         scale = min(cw / W, ch / H)
         ox, oy = (cw - W * scale) / 2, (ch - H * scale) / 2
-        c.create_rectangle(ox, oy, ox + W * scale, oy + H * scale, outline="#444444")
+        c.create_rectangle(ox, oy, ox + W * scale, oy + H * scale, outline="#444444", width=px(1))
         if spec.get("custom") == "pip":
             self._layout_lbl.config(text="Main video full screen, the others in the corners.")
             return
@@ -292,7 +293,7 @@ class VideoCollageTab(BaseTab):
         for i, (x, y, w, h) in enumerate(lay.rects):
             x1, y1 = ox + x * scale, oy + y * scale
             c.create_rectangle(x1, y1, x1 + w * scale, y1 + h * scale, fill=colors[i % len(colors)],
-                               outline="#222222")
+                               outline="#222222", width=px(1))
             name = clips[i]["name"][:10] if i < len(clips) else f"#{i + 1}"
             c.create_text(x1 + w * scale / 2, y1 + h * scale / 2, text=name, fill="white", font=(UI_FONT, 7, "bold"))
         extra = ""

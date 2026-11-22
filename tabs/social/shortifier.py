@@ -13,6 +13,7 @@ from tkinter import colorchooser, messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -81,17 +82,17 @@ class ShortifierTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 300, 300, after_label="Result")
-        self.compare.pack(pady=4)
+        self.compare.pack(pady=px(4))
 
-        opt = tk.LabelFrame(body, text="  Format  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  Format  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
+            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=px(2))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=2)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
 
         self.platform_var = tk.StringVar(value=platform_label("shorts"))
         pb = ttk.Combobox(opt, textvariable=self.platform_var, values=[platform_label(k) for k in PLATFORMS],
@@ -119,18 +120,18 @@ class ShortifierTab(BaseTab):
         for var in (self.cw_var, self.ch_var):
             var.trace_add("write", lambda *_a: self._changed())
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, self._key()))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="📱  SHORTIFY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

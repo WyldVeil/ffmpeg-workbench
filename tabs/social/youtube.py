@@ -36,6 +36,7 @@ from core import dialogs
 from core.hardware import CREATE_NO_WINDOW, get_binary_path
 from tabs.base_tab import BaseTab, CLR, MONO_FONT, UI_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -171,7 +172,7 @@ class YouTubeDownloaderTab(BaseTab):
         # Tails: a clear warning while downloads bypass Tor (Settings → Network)
         self._route_banner = tk.Label(self, text="⚠  DIRECT CONNECTION - NOT ANONYMOUS: downloads are bypassing "
                                                  "Tor for this session (Settings → Network to turn off)",
-                                      bg="#B71C1C", fg="white", font=(UI_FONT, 10, "bold"), pady=6)
+                                      bg="#B71C1C", fg="white", font=(UI_FONT, 10, "bold"), pady=px(6))
         self._poll_route_banner()
         # Outer scrollable frame
         outer = tk.Frame(self, bg=CLR["bg"])
@@ -234,7 +235,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         # 10. Console
         cf = tk.Frame(root, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 6))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 6))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -256,13 +257,13 @@ class YouTubeDownloaderTab(BaseTab):
         """
         outer = tk.Frame(
             root, bg=CLR["bg"],
-            highlightthickness=1,
+            highlightthickness=px(1),
             highlightbackground=CLR["orange"],
         )
-        outer.pack(fill="x", padx=20, pady=(10, 4))
+        outer.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         inner = tk.Frame(outer, bg=CLR["bg"])
-        inner.pack(fill="x", padx=12, pady=8)
+        inner.pack(fill="x", padx=px(12), pady=px(8))
 
         tk.Label(
             inner,
@@ -313,14 +314,14 @@ class YouTubeDownloaderTab(BaseTab):
             font=(UI_FONT, 8),
             bg=CLR["bg"], fg=CLR["fgdim"],
             anchor="w", justify="left",
-            wraplength=900,
-        ).pack(fill="x", pady=(4, 0))
+            wraplength=px(900),
+        ).pack(fill="x", pady=px(4, 0))
 
     # ── URL row ──────────────────────────────────────────────────────────────
 
     def _build_url_row(self, root):
         url_f = tk.Frame(root, bg=CLR["bg"])
-        url_f.pack(fill="x", padx=20, pady=(14, 8))
+        url_f.pack(fill="x", padx=px(20), pady=px(14, 8))
 
         tk.Label(url_f, text=t("youtube.url"), font=(UI_FONT, 10, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
@@ -331,10 +332,10 @@ class YouTubeDownloaderTab(BaseTab):
             relief="flat", font=(UI_FONT, 10),
             bg=CLR["input_bg"], fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
-            highlightthickness=1,
+            highlightthickness=px(1),
             highlightbackground=CLR["border"],
             highlightcolor=CLR["accent"])
-        self._url_entry.pack(side="left", padx=8)
+        self._url_entry.pack(side="left", padx=px(8))
         self._url_entry.bind("<<Paste>>", self._on_paste)
 
         # Playlist Toggle
@@ -344,15 +345,15 @@ class YouTubeDownloaderTab(BaseTab):
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"],
             cursor="hand2"
-        ).pack(side="left", padx=(0, 8))
+        ).pack(side="left", padx=px(0, 8))
 
         def _btn(text, cmd, bg=None):
             b = tk.Button(url_f, text=text, relief="flat",
                           font=(UI_FONT, 9), cursor="hand2",
                           bg=bg or CLR["panel"], fg=CLR["fg"] if not bg else "white",
                           activebackground=CLR["accent"], activeforeground="white",
-                          padx=8, pady=3, command=cmd)
-            b.pack(side="left", padx=(0, 5))
+                          padx=px(8), pady=px(3), command=cmd)
+            b.pack(side="left", padx=px(0, 5))
             return b
 
         self._btn_fetch   = _btn("🔍 Fetch Info", self._on_fetch)
@@ -363,26 +364,26 @@ class YouTubeDownloaderTab(BaseTab):
             font=(UI_FONT, 9), cursor="hand2",
             bg=CLR["red"], fg="white",
             activebackground=CLR["pink"], activeforeground="white",
-            padx=8, pady=3, state="disabled",
+            padx=px(8), pady=px(3), state="disabled",
             command=self._start_record)
-        self._btn_record.pack(side="left", padx=(0, 5))
+        self._btn_record.pack(side="left", padx=px(0, 5))
 
     # ── Info panel ───────────────────────────────────────────────────────────
 
     def _build_info_panel(self, root):
         info_lf = tk.LabelFrame(
             root, text=t("youtube.video_info"),
-            padx=10, pady=8,
+            padx=px(10), pady=px(8),
             font=(UI_FONT, 9, "bold"),
             bg=CLR["bg"], fg=CLR["fgdim"],
-            bd=1, relief="solid")
-        info_lf.pack(fill="x", padx=20, pady=(0, 8))
+            bd=px(1), relief="solid")
+        info_lf.pack(fill="x", padx=px(20), pady=px(0, 8))
 
         self._thumb_canvas = tk.Canvas(
-            info_lf, width=256, height=144, bg="#0A0A0A",
-            highlightthickness=1, highlightbackground=CLR["border"])
-        self._thumb_canvas.pack(side="left", padx=(0, 14))
-        self._thumb_canvas.create_text(128, 72, text="...",
+            info_lf, width=px(256), height=px(144), bg="#0A0A0A",
+            highlightthickness=px(1), highlightbackground=CLR["border"])
+        self._thumb_canvas.pack(side="left", padx=px(0, 14))
+        self._thumb_canvas.create_text(px(128), px(72), text="...",
                                        fill=CLR["fgdim"], font=(UI_FONT, 13))
 
         meta_right = tk.Frame(info_lf, bg=CLR["bg"])
@@ -401,18 +402,18 @@ class YouTubeDownloaderTab(BaseTab):
             ("Views:",    self._views_var),
         ]:
             row = tk.Frame(meta_right, bg=CLR["bg"])
-            row.pack(fill="x", pady=2)
+            row.pack(fill="x", pady=px(2))
             tk.Label(row, text=lbl_text, font=(UI_FONT, 9, "bold"),
                      width=10, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
             tk.Label(row, textvariable=var, font=(UI_FONT, 9),
-                     wraplength=400, justify="left", anchor="w",
-                     bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=6)
+                     wraplength=px(400), justify="left", anchor="w",
+                     bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(6))
 
         live_row = tk.Frame(meta_right, bg=CLR["bg"])
-        live_row.pack(fill="x", pady=2)
+        live_row.pack(fill="x", pady=px(2))
         self._live_badge = tk.Label(live_row, textvariable=self._live_var,
                                     font=(UI_FONT, 9, "bold"),
-                                    bg=CLR["red"], fg="white", padx=6, pady=1)
+                                    bg=CLR["red"], fg="white", padx=px(6), pady=px(1))
 
         thumb_btn = tk.Button(
             meta_right, text=t("youtube.save_thumbnail"), relief="flat",
@@ -420,19 +421,19 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["panel"], fg=CLR["fg"],
             activebackground=CLR["accent"], activeforeground="white",
             command=self._save_thumbnail)
-        thumb_btn.pack(anchor="w", pady=(6, 0))
+        thumb_btn.pack(anchor="w", pady=px(6, 0))
 
     # ── Settings notebook ────────────────────────────────────────────────────
 
     def _build_settings_notebook(self, root):
         nb_frame = tk.Frame(root, bg=CLR["bg"])
-        nb_frame.pack(fill="x", padx=20, pady=(0, 8))
+        nb_frame.pack(fill="x", padx=px(20), pady=px(0, 8))
 
         style = ttk.Style()
         try:
             style.configure("YT.TNotebook", background=CLR["bg"])
             style.configure("YT.TNotebook.Tab", font=(UI_FONT, 9),
-                            padding=[8, 4])
+                            padding=px(8, 4))
         except Exception:
             pass
 
@@ -440,39 +441,39 @@ class YouTubeDownloaderTab(BaseTab):
         self._settings_nb.pack(fill="x")
 
         # Tab 1: Quality
-        self._tab_quality = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=10, pady=8)
+        self._tab_quality = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
         self._settings_nb.add(self._tab_quality, text="Quality")
         self._build_quality_tab(self._tab_quality)
 
         # Tab 2: Encode
-        self._tab_encode = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=10, pady=8)
+        self._tab_encode = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
         self._settings_nb.add(self._tab_encode, text="Encode")
         self._build_encode_tab(self._tab_encode)
 
         # Tab 3: Audio Only
-        self._tab_audio = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=10, pady=8)
+        self._tab_audio = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
         self._settings_nb.add(self._tab_audio, text=t("youtube.audio_only"))
         self._build_audio_tab(self._tab_audio)
 
         # Tab 4: Subtitles & Meta (Upgraded)
-        self._tab_subs = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=10, pady=8)
+        self._tab_subs = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
         self._settings_nb.add(self._tab_subs, text=t("youtube.subs_meta"))
         self._build_subs_tab(self._tab_subs)
 
         # Tab 5: SponsorBlock
-        self._tab_sponsor = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=10, pady=8)
+        self._tab_sponsor = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
         self._settings_nb.add(self._tab_sponsor, text="SponsorBlock")
         self._build_sponsorblock_tab(self._tab_sponsor)
 
         # Tab 6: Auth / Network (Upgraded)
-        self._tab_auth = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=10, pady=8)
+        self._tab_auth = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
         self._settings_nb.add(self._tab_auth, text=t("youtube.network_advanced"))
         self._build_auth_tab(self._tab_auth)
 
     def _build_quality_tab(self, parent):
         # Format filter radios
         filter_row = tk.Frame(parent, bg=CLR["bg"])
-        filter_row.pack(fill="x", pady=(0, 6))
+        filter_row.pack(fill="x", pady=px(0, 6))
         tk.Label(filter_row, text=t("youtube.filter"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
 
@@ -483,18 +484,18 @@ class YouTubeDownloaderTab(BaseTab):
                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
                 activebackground=CLR["bg"], selectcolor=CLR["panel"],
                 command=self._apply_format_filter
-            ).pack(side="left", padx=4)
+            ).pack(side="left", padx=px(4))
 
         # Quality combobox + size estimate
         q_row = tk.Frame(parent, bg=CLR["bg"])
-        q_row.pack(fill="x", pady=(0, 6))
+        q_row.pack(fill="x", pady=px(0, 6))
         tk.Label(q_row, text=t("common.quality"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self._format_cb = ttk.Combobox(q_row, state="readonly", width=58,
                                        font=(UI_FONT, 9))
         self._format_cb["values"] = ["(fetch video info first)"]
         self._format_cb.current(0)
-        self._format_cb.pack(side="left", padx=8)
+        self._format_cb.pack(side="left", padx=px(8))
         self._format_cb.bind("<<ComboboxSelected>>", self._on_format_selected)
 
         self._size_var = tk.StringVar(value="")
@@ -505,8 +506,8 @@ class YouTubeDownloaderTab(BaseTab):
         mode_lf = tk.LabelFrame(parent, text=f"  {t('youtube.download_mode_section')}  ",
                                 font=(UI_FONT, 8, "bold"),
                                 bg=CLR["bg"], fg=CLR["fgdim"],
-                                bd=1, relief="solid", padx=10, pady=6)
-        mode_lf.pack(fill="x", pady=(4, 0))
+                                bd=px(1), relief="solid", padx=px(10), pady=px(6))
+        mode_lf.pack(fill="x", pady=px(4, 0))
 
         self._dl_mode = tk.StringVar(value="copy")
         modes = [
@@ -519,12 +520,12 @@ class YouTubeDownloaderTab(BaseTab):
                 mode_lf, text=label, variable=self._dl_mode, value=val,
                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
                 activebackground=CLR["bg"], selectcolor=CLR["panel"]
-            ).pack(anchor="w", pady=1)
+            ).pack(anchor="w", pady=px(1))
 
     def _build_encode_tab(self, parent):
         def _row(p, lbl, widget_factory, pady=3):
             r = tk.Frame(p, bg=CLR["bg"])
-            r.pack(fill="x", pady=pady)
+            r.pack(fill="x", pady=px(pady))
             tk.Label(r, text=lbl, font=(UI_FONT, 9),
                      width=18, anchor="e",
                      bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
@@ -534,11 +535,11 @@ class YouTubeDownloaderTab(BaseTab):
         def _combo(parent_row, var, values, width=22):
             cb = ttk.Combobox(parent_row, textvariable=var, values=values,
                               state="readonly", width=width, font=(UI_FONT, 9))
-            cb.pack(side="left", padx=6)
+            cb.pack(side="left", padx=px(6))
             return cb
 
         col_left  = tk.Frame(parent, bg=CLR["bg"])
-        col_left.pack(side="left", fill="both", expand=True, padx=(0, 16))
+        col_left.pack(side="left", fill="both", expand=True, padx=px(0, 16))
         col_right = tk.Frame(parent, bg=CLR["bg"])
         col_right.pack(side="left", fill="both", expand=True)
 
@@ -569,7 +570,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         self._res_var = tk.StringVar(value="Original")
         res_row = tk.Frame(col_left, bg=CLR["bg"])
-        res_row.pack(fill="x", pady=3)
+        res_row.pack(fill="x", pady=px(3))
         tk.Label(res_row, text=t("common.resolution"), font=(UI_FONT, 9),
                  width=18, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
         res_cb = ttk.Combobox(
@@ -577,7 +578,7 @@ class YouTubeDownloaderTab(BaseTab):
             values=["Original", "3840×2160", "2560×1440", "1920×1080",
                     "1280×720", "854×480", "640×360", t("youtube.smart_reframe_custom")],
             state="readonly", width=14, font=(UI_FONT, 9))
-        res_cb.pack(side="left", padx=6)
+        res_cb.pack(side="left", padx=px(6))
         self._custom_res_var = tk.StringVar(value="1280×720")
         self._custom_res_entry = tk.Entry(
             res_row, textvariable=self._custom_res_var, width=10,
@@ -585,28 +586,28 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["input_bg"], fg=CLR["input_fg"],
             insertbackground=CLR["accent"])
         res_cb.bind("<<ComboboxSelected>>",
-                    lambda e: (self._custom_res_entry.pack(side="left", padx=4)
+                    lambda e: (self._custom_res_entry.pack(side="left", padx=px(4))
                                if self._res_var.get() == "Custom…"
                                else self._custom_res_entry.pack_forget()))
 
         # Right column
         crf_row = tk.Frame(col_right, bg=CLR["bg"])
-        crf_row.pack(fill="x", pady=3)
+        crf_row.pack(fill="x", pady=px(3))
         tk.Label(crf_row, text=t("youtube.crf_0_51"), font=(UI_FONT, 9),
                  width=16, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
         self._crf_var = tk.IntVar(value=18)
         crf_scale = tk.Scale(
             crf_row, variable=self._crf_var, from_=0, to=51,
-            orient="horizontal", length=120,
+            orient="horizontal", length=px(120),
             bg=CLR["panel"], fg=CLR["fg"],
             highlightthickness=0, command=lambda v: self._crf_entry_var.set(str(int(float(v)))))
-        crf_scale.pack(side="left", padx=4)
+        crf_scale.pack(side="left", padx=px(4))
         self._crf_entry_var = tk.StringVar(value="18")
         crf_entry = tk.Entry(crf_row, textvariable=self._crf_entry_var,
                              width=4, relief="flat", font=(UI_FONT, 9),
                              bg=CLR["input_bg"], fg=CLR["input_fg"],
                              insertbackground=CLR["accent"])
-        crf_entry.pack(side="left", padx=4)
+        crf_entry.pack(side="left", padx=px(4))
         crf_entry.bind("<Return>", lambda e: self._crf_var.set(
             max(0, min(51, int(self._crf_entry_var.get() or 18)))))
 
@@ -623,7 +624,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _build_audio_tab(self, parent):
         r1 = tk.Frame(parent, bg=CLR["bg"])
-        r1.pack(fill="x", pady=4)
+        r1.pack(fill="x", pady=px(4))
         tk.Label(r1, text=t("tts.audio_format_label"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self._audio_fmt_var = tk.StringVar(value="mp3")
@@ -631,10 +632,10 @@ class YouTubeDownloaderTab(BaseTab):
             r1, textvariable=self._audio_fmt_var,
             values=["mp3", "aac", "flac", "opus", "wav", "m4a"],
             state="readonly", width=10, font=(UI_FONT, 9)
-        ).pack(side="left", padx=8)
+        ).pack(side="left", padx=px(8))
 
         r2 = tk.Frame(parent, bg=CLR["bg"])
-        r2.pack(fill="x", pady=4)
+        r2.pack(fill="x", pady=px(4))
         tk.Label(r2, text=t("youtube.audio_quality"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self._audio_quality_var = tk.StringVar(value="0")
@@ -642,10 +643,10 @@ class YouTubeDownloaderTab(BaseTab):
             r2, textvariable=self._audio_quality_var,
             values=[t("youtube.youtube_0_best"), "2", "4", t("youtube.youtube_5_medium"), "7", t("youtube.youtube_9_worst")],
             state="readonly", width=14, font=(UI_FONT, 9)
-        ).pack(side="left", padx=8)
+        ).pack(side="left", padx=px(8))
 
         r3 = tk.Frame(parent, bg=CLR["bg"])
-        r3.pack(fill="x", pady=4)
+        r3.pack(fill="x", pady=px(4))
         self._embed_thumb_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             r3, text=t("youtube.embed_thumbnail"), variable=self._embed_thumb_var,
@@ -657,12 +658,12 @@ class YouTubeDownloaderTab(BaseTab):
             r3, text=t("youtube.add_metadata_tags"), variable=self._add_metadata_var,
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=16)
+        ).pack(side="left", padx=px(16))
 
     def _build_subs_tab(self, parent):
         # Subtitles logic
         r1 = tk.Frame(parent, bg=CLR["bg"])
-        r1.pack(fill="x", pady=4)
+        r1.pack(fill="x", pady=px(4))
         self._dl_subs_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             r1, text=t("youtube.download_subtitles"), variable=self._dl_subs_var,
@@ -671,7 +672,7 @@ class YouTubeDownloaderTab(BaseTab):
         ).pack(side="left")
 
         r2 = tk.Frame(parent, bg=CLR["bg"])
-        r2.pack(fill="x", pady=4)
+        r2.pack(fill="x", pady=px(4))
         tk.Label(r2, text=t("common.language"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
         self._sub_lang_var = tk.StringVar(value="en")
@@ -679,17 +680,17 @@ class YouTubeDownloaderTab(BaseTab):
             r2, textvariable=self._sub_lang_var,
             values=["en", "es", "fr", "de", "ja", "zh", "pt", "ar"],
             width=14, font=(UI_FONT, 9))
-        self._sub_lang_cb.pack(side="left", padx=6)
+        self._sub_lang_cb.pack(side="left", padx=px(6))
 
         self._sub_auto_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             r2, text=t("youtube.include_auto_generated"), variable=self._sub_auto_var,
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=10)
+        ).pack(side="left", padx=px(10))
 
         r3 = tk.Frame(parent, bg=CLR["bg"])
-        r3.pack(fill="x", pady=4)
+        r3.pack(fill="x", pady=px(4))
         tk.Label(r3, text=t("common.format"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
         self._sub_fmt_var = tk.StringVar(value="srt")
@@ -697,10 +698,10 @@ class YouTubeDownloaderTab(BaseTab):
             r3, textvariable=self._sub_fmt_var,
             values=["srt", "vtt", "ass"],
             state="readonly", width=8, font=(UI_FONT, 9)
-        ).pack(side="left", padx=6)
+        ).pack(side="left", padx=px(6))
 
         r4 = tk.Frame(parent, bg=CLR["bg"])
-        r4.pack(fill="x", pady=4)
+        r4.pack(fill="x", pady=px(4))
         self._embed_subs_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             r4, text=t("youtube.embed_subtitles_in_container"), variable=self._embed_subs_var,
@@ -712,12 +713,12 @@ class YouTubeDownloaderTab(BaseTab):
             r4, text=t("youtube.burn_into_video_hardcode"), variable=self._burn_subs_var,
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=16)
+        ).pack(side="left", padx=px(16))
 
         # Metadata & Chapters (Upgraded features)
-        tk.Frame(parent, bg=CLR["border"], height=1).pack(fill="x", pady=8)
+        tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(8))
         tk.Label(parent, text=t("youtube.metadata_extra"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=(0, 4))
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=px(0, 4))
                  
         meta_r = tk.Frame(parent, bg=CLR["bg"])
         meta_r.pack(fill="x")
@@ -733,12 +734,12 @@ class YouTubeDownloaderTab(BaseTab):
             meta_r, text=t("youtube.embed_video_metadata"), variable=self._embed_metadata_var,
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=16)
+        ).pack(side="left", padx=px(16))
 
     def _build_sponsorblock_tab(self, parent):
         tk.Label(parent, text=t("youtube.skip_remove_these_segment_types"),
                  font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=(0, 6))
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=px(0, 6))
 
         cats = [
             ("sponsor",        "Sponsor"),
@@ -759,10 +760,10 @@ class YouTubeDownloaderTab(BaseTab):
                 grid, text=label, variable=var,
                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
                 activebackground=CLR["bg"], selectcolor=CLR["panel"]
-            ).grid(row=i // 4, column=i % 4, sticky="w", padx=8, pady=2)
+            ).grid(row=i // 4, column=i % 4, sticky="w", padx=px(8), pady=px(2))
 
         action_row = tk.Frame(parent, bg=CLR["bg"])
-        action_row.pack(fill="x", pady=(8, 0))
+        action_row.pack(fill="x", pady=px(8, 0))
         tk.Label(action_row, text=t("youtube.action"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
         self._sb_action_var = tk.StringVar(value="remove")
@@ -771,18 +772,18 @@ class YouTubeDownloaderTab(BaseTab):
             variable=self._sb_action_var, value="remove",
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=8)
+        ).pack(side="left", padx=px(8))
         tk.Radiobutton(
             action_row, text=t("youtube.mark_as_chapters"),
             variable=self._sb_action_var, value="mark",
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=px(4))
 
     def _build_auth_tab(self, parent):
         def _labeled_entry(parent_row, lbl, var, width=32, show=None):
             r = tk.Frame(parent_row, bg=CLR["bg"])
-            r.pack(fill="x", pady=3)
+            r.pack(fill="x", pady=px(3))
             tk.Label(r, text=lbl, font=(UI_FONT, 9),
                      width=14, anchor="e",
                      bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
@@ -791,9 +792,9 @@ class YouTubeDownloaderTab(BaseTab):
                      relief="flat", font=(UI_FONT, 9),
                      bg=CLR["input_bg"], fg=CLR["input_fg"],
                      insertbackground=CLR["accent"],
-                     highlightthickness=1,
+                     highlightthickness=px(1),
                      highlightbackground=CLR["border"],
-                     highlightcolor=CLR["accent"], **kw).pack(side="left", padx=6)
+                     highlightcolor=CLR["accent"], **kw).pack(side="left", padx=px(6))
             return r
 
         self._cookies_var   = tk.StringVar()
@@ -805,7 +806,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         # Cookies file row
         cookies_row = tk.Frame(parent, bg=CLR["bg"])
-        cookies_row.pack(fill="x", pady=3)
+        cookies_row.pack(fill="x", pady=px(3))
         tk.Label(cookies_row, text=t("youtube.cookies_txt"), font=(UI_FONT, 9),
                  width=14, anchor="e",
                  bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
@@ -813,9 +814,9 @@ class YouTubeDownloaderTab(BaseTab):
                  relief="flat", font=(UI_FONT, 9),
                  bg=CLR["input_bg"], fg=CLR["input_fg"],
                  insertbackground=CLR["accent"],
-                 highlightthickness=1,
+                 highlightthickness=px(1),
                  highlightbackground=CLR["border"],
-                 highlightcolor=CLR["accent"]).pack(side="left", padx=6)
+                 highlightcolor=CLR["accent"]).pack(side="left", padx=px(6))
         tk.Button(cookies_row, text=t("btn.browse"), relief="flat",
                   font=(UI_FONT, 9), cursor="hand2",
                   bg=CLR["panel"], fg=CLR["fg"],
@@ -826,27 +827,27 @@ class YouTubeDownloaderTab(BaseTab):
         _labeled_entry(parent, "Password:", self._password_var, show="*")
         _labeled_entry(parent, "Rate limit:", self._ratelimit_var, width=14)
         tk.Label(parent, text=t("youtube.e_g_1m_500k_leave_blank_for_unlimited"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=20)
+                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
         _labeled_entry(parent, "Proxy:", self._proxy_var, width=28)
         tk.Label(parent, text=t("youtube.e_g_socks5_127_0_0_1_1080"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=20)
+                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
 
-        tk.Frame(parent, bg=CLR["border"], height=1).pack(fill="x", pady=6)
+        tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
         
         # Advanced: Aria2c & Custom arguments
         aria_row = tk.Frame(parent, bg=CLR["bg"])
-        aria_row.pack(fill="x", pady=3)
+        aria_row.pack(fill="x", pady=px(3))
         self._use_aria2c_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             aria_row, text=t("youtube.use_aria2c_fast_external_downloader_requires_ari"), 
             variable=self._use_aria2c_var,
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=px(4))
 
         _labeled_entry(parent, "Custom yt-dlp args:", self._custom_args_var, width=40)
         tk.Label(parent, text=t("youtube.e_g_write_comments_dateafter_now_7days"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=20)
+                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
 
 
     # ── Time range / chapters ────────────────────────────────────────────────
@@ -854,17 +855,17 @@ class YouTubeDownloaderTab(BaseTab):
     def _build_time_range(self, root):
         trim_lf = tk.LabelFrame(
             root, text=t("youtube.time_range"),
-            padx=10, pady=8,
+            padx=px(10), pady=px(8),
             font=(UI_FONT, 9, "bold"),
             bg=CLR["bg"], fg=CLR["fgdim"],
-            bd=1, relief="solid")
-        trim_lf.pack(fill="x", padx=20, pady=(0, 8))
+            bd=px(1), relief="solid")
+        trim_lf.pack(fill="x", padx=px(20), pady=px(0, 8))
 
         left_f = tk.Frame(trim_lf, bg=CLR["bg"])
         left_f.pack(side="left", fill="both", expand=True)
 
         right_f = tk.Frame(trim_lf, bg=CLR["bg"])
-        right_f.pack(side="right", fill="y", padx=(16, 0))
+        right_f.pack(side="right", fill="y", padx=px(16, 0))
 
         # Trim controls
         trim_row = tk.Frame(left_f, bg=CLR["bg"])
@@ -879,7 +880,7 @@ class YouTubeDownloaderTab(BaseTab):
         ).pack(side="left")
 
         tk.Label(trim_row, text=t("youtube.from"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=(16, 0))
+                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(16, 0))
         self._start_var = tk.StringVar(value="00:00:00")
         self._start_ent = tk.Entry(
             trim_row, textvariable=self._start_var,
@@ -887,7 +888,7 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["input_bg"], fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
             state="disabled")
-        self._start_ent.pack(side="left", padx=4)
+        self._start_ent.pack(side="left", padx=px(4))
 
         tk.Label(trim_row, text=t("youtube.to"), font=(UI_FONT, 9),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
@@ -898,10 +899,10 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["input_bg"], fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
             state="disabled")
-        self._end_ent.pack(side="left", padx=4)
+        self._end_ent.pack(side="left", padx=px(4))
 
         tk.Label(trim_row, text=t("youtube.hh_mm_ss"), font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=(4, 0))
+                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(4, 0))
 
         # Chapters listbox
         tk.Label(right_f, text=t("youtube.chapters_click_to_set_trim_range"),
@@ -915,7 +916,7 @@ class YouTubeDownloaderTab(BaseTab):
             selectbackground=CLR["accent"],
             selectforeground="white",
             relief="flat",
-            highlightthickness=1,
+            highlightthickness=px(1),
             highlightbackground=CLR["border"])
         ch_sb = ttk.Scrollbar(ch_box_f, orient="vertical",
                               command=self._chapters_lb.yview)
@@ -929,7 +930,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _build_output_row(self, root):
         out_f = tk.Frame(root, bg=CLR["bg"])
-        out_f.pack(fill="x", padx=20, pady=(0, 8))
+        out_f.pack(fill="x", padx=px(20), pady=px(0, 8))
         tk.Label(out_f, text=t("youtube.save_to"), font=(UI_FONT, 10, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
         self._out_var = tk.StringVar()
@@ -937,9 +938,9 @@ class YouTubeDownloaderTab(BaseTab):
                  relief="flat", font=(UI_FONT, 10),
                  bg=CLR["input_bg"], fg=CLR["input_fg"],
                  insertbackground=CLR["accent"],
-                 highlightthickness=1,
+                 highlightthickness=px(1),
                  highlightbackground=CLR["border"],
-                 highlightcolor=CLR["accent"]).pack(side="left", padx=8)
+                 highlightcolor=CLR["accent"]).pack(side="left", padx=px(8))
         tk.Button(out_f, text=t("btn.browse"), relief="flat",
                   font=(UI_FONT, 9), cursor="hand2",
                   bg=CLR["panel"], fg=CLR["fg"],
@@ -949,16 +950,16 @@ class YouTubeDownloaderTab(BaseTab):
                   font=(UI_FONT, 9), cursor="hand2",
                   bg=CLR["panel"], fg=CLR["fg"],
                   activebackground=CLR["accent"], activeforeground="white",
-                  command=self._open_output_folder).pack(side="left", padx=(6, 0))
+                  command=self._open_output_folder).pack(side="left", padx=px(6, 0))
 
     # ── Progress row ─────────────────────────────────────────────────────────
 
     def _build_progress_row(self, root):
         prog_f = tk.Frame(root, bg=CLR["bg"])
-        prog_f.pack(fill="x", padx=20, pady=(0, 6))
+        prog_f.pack(fill="x", padx=px(20), pady=px(0, 6))
         self._progress = ttk.Progressbar(
-            prog_f, orient="horizontal", mode="determinate", length=100)
-        self._progress.pack(side="left", fill="x", expand=True, padx=(0, 10))
+            prog_f, orient="horizontal", mode="determinate", length=px(100))
+        self._progress.pack(side="left", fill="x", expand=True, padx=px(0, 10))
         self._prog_status_var = tk.StringVar(value="")
         tk.Label(prog_f, textvariable=self._prog_status_var,
                  font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["orange"],
@@ -968,7 +969,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _build_action_buttons(self, root):
         btn_f = tk.Frame(root, bg=CLR["bg"])
-        btn_f.pack(pady=8)
+        btn_f.pack(pady=px(8))
 
         self._btn_dl = tk.Button(
             btn_f, text=t("youtube.download"),
@@ -977,7 +978,7 @@ class YouTubeDownloaderTab(BaseTab):
             height=2, width=20, cursor="hand2", relief="flat",
             activebackground=CLR["accent"], activeforeground="white",
             command=self._download)
-        self._btn_dl.pack(side="left", padx=6)
+        self._btn_dl.pack(side="left", padx=px(6))
 
         self._btn_cancel = tk.Button(
             btn_f, text=t("youtube.cancel"),
@@ -987,7 +988,7 @@ class YouTubeDownloaderTab(BaseTab):
             state="disabled",
             activebackground=CLR["pink"], activeforeground="white",
             command=self._cancel_download)
-        self._btn_cancel.pack(side="left", padx=6)
+        self._btn_cancel.pack(side="left", padx=px(6))
 
         self._btn_batch_toggle = tk.Button(
             btn_f, text=t("youtube.batch_mode"),
@@ -996,22 +997,22 @@ class YouTubeDownloaderTab(BaseTab):
             height=2, width=14, cursor="hand2", relief="flat",
             activebackground=CLR["accent"], activeforeground="white",
             command=self._toggle_batch)
-        self._btn_batch_toggle.pack(side="left", padx=6)
+        self._btn_batch_toggle.pack(side="left", padx=px(6))
 
     # ── Batch panel ──────────────────────────────────────────────────────────
 
     def _build_batch_panel(self, root):
         self._batch_frame = tk.LabelFrame(
             root, text=t("youtube.batch_queue"),
-            padx=10, pady=8,
+            padx=px(10), pady=px(8),
             font=(UI_FONT, 9, "bold"),
             bg=CLR["bg"], fg=CLR["fgdim"],
-            bd=1, relief="solid")
+            bd=px(1), relief="solid")
         # Do NOT pack yet - hidden by default
 
         # URL textarea
         url_area_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
-        url_area_f.pack(fill="x", pady=(0, 6))
+        url_area_f.pack(fill="x", pady=px(0, 6))
         tk.Label(url_area_f, text=t("youtube.paste_urls_one_per_line"),
                  font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w")
         self._batch_text = tk.Text(
@@ -1019,19 +1020,19 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["input_bg"], fg=CLR["input_fg"],
             font=(MONO_FONT, 9), relief="flat",
             insertbackground=CLR["accent"],
-            highlightthickness=1,
+            highlightthickness=px(1),
             highlightbackground=CLR["border"])
         self._batch_text.pack(fill="x")
 
         batch_ctrl_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
-        batch_ctrl_f.pack(fill="x", pady=(4, 6))
+        batch_ctrl_f.pack(fill="x", pady=px(4, 6))
         tk.Button(
             batch_ctrl_f, text=t("youtube.add_urls"), relief="flat",
             font=(UI_FONT, 9), cursor="hand2",
             bg=CLR["panel"], fg=CLR["fg"],
             activebackground=CLR["accent"], activeforeground="white",
             command=self._batch_add_urls
-        ).pack(side="left", padx=(0, 6))
+        ).pack(side="left", padx=px(0, 6))
         tk.Button(
             batch_ctrl_f, text="Clear", relief="flat",
             font=(UI_FONT, 9), cursor="hand2",
@@ -1047,9 +1048,9 @@ class YouTubeDownloaderTab(BaseTab):
         self._batch_tree = ttk.Treeview(tree_f, columns=cols, show="headings", height=5)
         for col in cols:
             self._batch_tree.heading(col, text=col)
-        self._batch_tree.column("Title",  width=220)
-        self._batch_tree.column("URL",    width=280)
-        self._batch_tree.column("Status", width=120)
+        self._batch_tree.column("Title",  width=px(220))
+        self._batch_tree.column("URL",    width=px(280))
+        self._batch_tree.column("Status", width=px(120))
         b_sb = ttk.Scrollbar(tree_f, orient="vertical",
                              command=self._batch_tree.yview)
         self._batch_tree.configure(yscrollcommand=b_sb.set)
@@ -1057,14 +1058,14 @@ class YouTubeDownloaderTab(BaseTab):
         b_sb.pack(side="right", fill="y")
 
         batch_act_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
-        batch_act_f.pack(fill="x", pady=(6, 0))
+        batch_act_f.pack(fill="x", pady=px(6, 0))
         self._btn_dl_all = tk.Button(
             batch_act_f, text=t("youtube.download_all"), relief="flat",
             font=(UI_FONT, 10, "bold"), cursor="hand2",
             bg=CLR["green"], fg="white",
             activebackground=CLR["accent"], activeforeground="white",
             command=self._batch_download_all)
-        self._btn_dl_all.pack(side="left", padx=(0, 8))
+        self._btn_dl_all.pack(side="left", padx=px(0, 8))
         self._btn_stop_batch = tk.Button(
             batch_act_f, text=t("youtube.stop_batch"), relief="flat",
             font=(UI_FONT, 10), cursor="hand2",
@@ -1078,34 +1079,34 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _build_history_panel(self, root):
         hist_hdr = tk.Frame(root, bg=CLR["panel"])
-        hist_hdr.pack(fill="x", padx=20, pady=(8, 0))
+        hist_hdr.pack(fill="x", padx=px(20), pady=px(8, 0))
         self._hist_toggle_btn = tk.Button(
             hist_hdr, text=t("youtube.download_history"),
             font=(UI_FONT, 9, "bold"), relief="flat", cursor="hand2",
             bg=CLR["panel"], fg=CLR["fg"],
             activebackground=CLR["panel"], activeforeground=CLR["accent"],
             command=self._toggle_history, anchor="w")
-        self._hist_toggle_btn.pack(side="left", fill="x", expand=True, padx=4, pady=4)
+        self._hist_toggle_btn.pack(side="left", fill="x", expand=True, padx=px(4), pady=px(4))
         tk.Button(
             hist_hdr, text=t("youtube.clear_history"), relief="flat",
             font=(UI_FONT, 8), cursor="hand2",
             bg=CLR["panel"], fg=CLR["fgdim"],
             activebackground=CLR["red"], activeforeground="white",
             command=self._clear_history
-        ).pack(side="right", padx=6)
+        ).pack(side="right", padx=px(6))
 
         self._hist_body = tk.Frame(root, bg=CLR["bg"])
-        self._hist_body.pack(fill="x", padx=20, pady=(0, 10))
+        self._hist_body.pack(fill="x", padx=px(20), pady=px(0, 10))
 
         hist_cols = ("Date", "Title", "Duration", "File")
         self._hist_tree = ttk.Treeview(
             self._hist_body, columns=hist_cols, show="headings", height=5)
         for col in hist_cols:
             self._hist_tree.heading(col, text=col)
-        self._hist_tree.column("Date",     width=130)
-        self._hist_tree.column("Title",    width=260)
-        self._hist_tree.column("Duration", width=80)
-        self._hist_tree.column("File",     width=220)
+        self._hist_tree.column("Date",     width=px(130))
+        self._hist_tree.column("Title",    width=px(260))
+        self._hist_tree.column("Duration", width=px(80))
+        self._hist_tree.column("File",     width=px(220))
         hist_sb = ttk.Scrollbar(self._hist_body, orient="vertical",
                                 command=self._hist_tree.yview)
         self._hist_tree.configure(yscrollcommand=hist_sb.set)
@@ -1214,14 +1215,14 @@ class YouTubeDownloaderTab(BaseTab):
     def _toggle_batch(self):
         self._batch_visible = not self._batch_visible
         if self._batch_visible:
-            self._batch_frame.pack(fill="x", padx=20, pady=(0, 8))
+            self._batch_frame.pack(fill="x", padx=px(20), pady=px(0, 8))
         else:
             self._batch_frame.pack_forget()
 
     def _toggle_history(self):
         self._history_visible = not self._history_visible
         if self._history_visible:
-            self._hist_body.pack(fill="x", padx=20, pady=(0, 10))
+            self._hist_body.pack(fill="x", padx=px(20), pady=px(0, 10))
             self._hist_toggle_btn.config(text=t("youtube.download_history"))
         else:
             self._hist_body.pack_forget()
@@ -1346,7 +1347,7 @@ class YouTubeDownloaderTab(BaseTab):
         # Live badge + record button
         if is_live:
             self._live_var.set("  ⏺ LIVE  ")
-            self._live_badge.pack(side="left", padx=4)
+            self._live_badge.pack(side="left", padx=px(4))
             self._btn_record.config(state="normal")
             self.log_tagged(self.console, "⏺ Live stream detected.", "warn")
         else:
@@ -1462,9 +1463,10 @@ class YouTubeDownloaderTab(BaseTab):
             with _net.urlopen(thumb_url, timeout=12, headers={"User-Agent": "Mozilla/5.0"}) as resp:
                 data = resp.read()
             self._thumb_bytes = data
+            tw, th = px(256), px(144)                     # the thumbnail box, in screen pixels
             res = subprocess.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-                                  "-frames:v", "1", "-vf", "scale=256:144:force_original_aspect_ratio=decrease,"
-                                  "pad=256:144:-1:-1:color=black", "-f", "image2pipe", "-c:v", "png", "pipe:1"],
+                                  "-frames:v", "1", "-vf", f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
+                                  f"pad={tw}:{th}:-1:-1:color=black", "-f", "image2pipe", "-c:v", "png", "pipe:1"],
                                  input=data, capture_output=True, timeout=20,
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             if res.returncode != 0 or not res.stdout:
@@ -1486,8 +1488,8 @@ class YouTubeDownloaderTab(BaseTab):
         try:
             self._thumb_canvas.delete("all")
             self._thumb_canvas.create_text(
-                128, 72, text=msg, fill=CLR["fgdim"],
-                font=(UI_FONT, 9), justify="center", width=240)
+                px(128), px(72), text=msg, fill=CLR["fgdim"],
+                font=(UI_FONT, 9), justify="center", width=px(240))
         except Exception:
             pass
 

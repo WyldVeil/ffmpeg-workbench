@@ -19,6 +19,7 @@ from core import ffmpeg as ff
 from core import ui
 from core.hardware import launch_preview
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.cutting import crossfader as xf
@@ -58,13 +59,13 @@ class TransitionStudioTab(BaseTab):
         self.a_row = FileRow(body, "First clip (A):", self.src_var, label_width=16,
                              on_change=lambda p: self.out_row.path or self.out_row.set(
                                  self.suggest_output(p, "transition")))
-        self.a_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.a_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_row = self.a_row
         self.b_row = FileRow(body, "Second clip (B):", label_width=16)
-        self.b_row.pack(fill="x", padx=20, pady=2)
+        self.b_row.pack(fill="x", padx=px(20), pady=px(2))
 
-        opt = tk.LabelFrame(body, text="  Transition  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=6)
+        opt = tk.LabelFrame(body, text="  Transition  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(6))
         top = tk.Frame(opt)
         top.pack(fill="x")
         self.family_var = tk.StringVar(value="Dissolves")
@@ -72,18 +73,18 @@ class TransitionStudioTab(BaseTab):
         fb.pack(side="left")
         fb.bind("<<ComboboxSelected>>", lambda _e: self._family_changed())
         self.trans_list = tk.Listbox(opt, height=6, exportselection=False)
-        self.trans_list.pack(fill="x", pady=4)
+        self.trans_list.pack(fill="x", pady=px(4))
         r = tk.Frame(opt)
-        r.pack(fill="x", pady=2)
+        r.pack(fill="x", pady=px(2))
         tk.Label(r, text="Length (s):").pack(side="left")
         self.dur_var = tk.StringVar(value="1.0")
         ttk.Combobox(r, textvariable=self.dur_var, values=["0.3", "0.5", "0.75", "1.0", "1.5", "2.0", "3.0"],
-                     width=6).pack(side="left", padx=4)
+                     width=6).pack(side="left", padx=px(4))
         self.freeze_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r, text="Hold the end of A / start of B (don't overlap the footage)",
-                       variable=self.freeze_var).pack(side="left", padx=10)
+                       variable=self.freeze_var).pack(side="left", padx=px(10))
         r2 = tk.Frame(opt)
-        r2.pack(fill="x", pady=2)
+        r2.pack(fill="x", pady=px(2))
         tk.Label(r2, text="Sound:").pack(side="left")
         self.audio_var = tk.StringVar(value="normal")
         for key, label in (("normal", "crossfade"), ("none", "no sound")):
@@ -91,22 +92,22 @@ class TransitionStudioTab(BaseTab):
         tk.Label(r2, text="  curve:").pack(side="left")
         self.curve_var = tk.StringVar(value=CURVES["tri"])
         ttk.Combobox(r2, textvariable=self.curve_var, values=list(CURVES.values()), state="readonly",
-                     width=22).pack(side="left", padx=4)
+                     width=22).pack(side="left", padx=px(4))
         self.btn_preview = tk.Button(opt, text="▶  Preview the cut", relief="flat", command=self._preview)
-        self.btn_preview.pack(anchor="w", pady=4)
+        self.btn_preview.pack(anchor="w", pady=px(4))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.a_row.path, "transition"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🎬  RENDER TRANSITION", font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=24, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

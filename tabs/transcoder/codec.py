@@ -17,6 +17,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -76,48 +77,48 @@ class CodecCruncherTab(BaseTab):
         self.make_header(self, t("tab.codec_cruncher"), t("codec.desc_subtitle"), icon="🔩")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_file"), on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
-        self.info_lbl.pack(fill="x", padx=20)
+        self.info_lbl.pack(fill="x", padx=px(20))
 
-        vc = tk.LabelFrame(body, text=t("section.video_codec"), padx=12, pady=8)
-        vc.pack(fill="x", padx=20, pady=5)
+        vc = tk.LabelFrame(body, text=t("section.video_codec"), padx=px(12), pady=px(8))
+        vc.pack(fill="x", padx=px(20), pady=px(5))
         self.copy_video = tk.BooleanVar(value=False)
         tk.Checkbutton(vc, text="Copy the video as it is (only change audio / container)", variable=self.copy_video,
                        command=self._update_ext).pack(anchor="w")
         self.encoder = EncoderPanel(vc, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr", "ffv1"),
                                     on_change=self._update_ext)
-        self.encoder.pack(anchor="w", pady=(4, 0))
+        self.encoder.pack(anchor="w", pady=px(4, 0))
         r = tk.Frame(vc)
-        r.pack(anchor="w", pady=(6, 0))
+        r.pack(anchor="w", pady=px(6, 0))
         tk.Label(r, text="Container:").pack(side="left")
         self.container_var = tk.StringVar(value="auto")
         cb = ttk.Combobox(r, textvariable=self.container_var, values=list(CONTAINERS), state="readonly", width=8)
-        cb.pack(side="left", padx=6)
+        cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._update_ext())
         tk.Label(r, text="(auto = the usual one for the codec)", fg=CLR["fgdim"]).pack(side="left")
 
-        ac = tk.LabelFrame(body, text=t("section.audio_codec"), padx=12, pady=8)
-        ac.pack(fill="x", padx=20, pady=5)
+        ac = tk.LabelFrame(body, text=t("section.audio_codec"), padx=px(12), pady=px(8))
+        ac.pack(fill="x", padx=px(20), pady=px(5))
         self.audio_var = tk.StringVar(value=AUDIO["aac256"][0])
         ttk.Combobox(ac, textvariable=self.audio_var, values=[v[0] for v in AUDIO.values()], state="readonly",
                      width=24).pack(side="left")
         self.keep_all = tk.BooleanVar(value=True)
         tk.Checkbutton(ac, text="Keep every audio track and the subtitles", variable=self.keep_all).pack(
-            side="left", padx=12)
+            side="left", padx=px(12))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "encoded", self._ext()))
         self.out_row.pack(fill="x")
         self.out_var = self.out_row.var
         self.btn_render = tk.Button(body, text=t("codec.btn_encode"), font=(UI_FONT, 12, "bold"), bg=CLR["accent"],
                                     fg="white", width=28, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=7)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

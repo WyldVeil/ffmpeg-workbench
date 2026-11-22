@@ -23,6 +23,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import hdr
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -56,15 +57,15 @@ class HdrToSdrTab(BaseTab):
                                             "normal screens.", icon="🌗")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.kind_lbl = tk.Label(body, text="Choose an HDR video - from a phone, camera, game or download.",
                                  fg=CLR["fgdim"], anchor="w", justify="left", font=(UI_FONT, 10))
-        self.kind_lbl.pack(fill="x", padx=24, pady=(0, 4))
+        self.kind_lbl.pack(fill="x", padx=px(24), pady=px(0, 4))
         self.compare = CompareView(body, 400, 225, before_label="As most players show it", after_label="Converted")
-        self.compare.pack(pady=4)
+        self.compare.pack(pady=px(4))
 
-        opt = tk.LabelFrame(body, text="  Conversion  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  Conversion  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.gpu_ok = fl.vulkan_ok()
         self.engine_var = tk.StringVar(value="gpu" if self.gpu_ok else "cpu")
         tk.Radiobutton(opt, text="GPU - best quality, understands Dolby Vision", variable=self.engine_var,
@@ -75,37 +76,37 @@ class HdrToSdrTab(BaseTab):
         if not self.gpu_ok:
             tk.Label(opt, text="(no Vulkan graphics driver found - GPU mode unavailable)", fg=CLR["fgdim"]).grid(
                 row=0, column=2, sticky="w")
-        tk.Label(opt, text="Tone curve:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Label(opt, text="Tone curve:").grid(row=2, column=0, sticky="w", pady=px(8, 0))
         self.curve_var = tk.StringVar(value=hdr.CURVES["bt2390"][0])
         cb = ttk.Combobox(opt, textvariable=self.curve_var, values=[v[0] for v in hdr.CURVES.values()],
                           state="readonly", width=38)
-        cb.grid(row=2, column=1, sticky="w", padx=6, pady=(8, 0))
+        cb.grid(row=2, column=1, sticky="w", padx=px(6), pady=px(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.adaptive_var = tk.BooleanVar(value=True)
         self.adaptive_cb = tk.Checkbutton(opt, text="Adapt to each scene's brightness (GPU)",
                                           variable=self.adaptive_var, command=self._changed)
-        self.adaptive_cb.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        tk.Label(opt, text="Input:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        self.adaptive_cb.grid(row=3, column=0, columnspan=2, sticky="w", pady=px(4, 0))
+        tk.Label(opt, text="Input:").grid(row=4, column=0, sticky="w", pady=px(6, 0))
         self.assume_var = tk.StringVar(value=ASSUME[""])
         ab = ttk.Combobox(opt, textvariable=self.assume_var, values=list(ASSUME.values()), state="readonly",
                           width=38)
-        ab.grid(row=4, column=1, sticky="w", padx=6, pady=(6, 0))
+        ab.grid(row=4, column=1, sticky="w", padx=px(6), pady=px(6, 0))
         ab.bind("<<ComboboxSelected>>", lambda _e: self._changed())
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         tk.Label(out_lf, text="Tip: HEVC or AV1 with 10-bit gives the smoothest skies and shadows.",
-                 fg=CLR["fgdim"]).pack(anchor="w", pady=(2, 0))
+                 fg=CLR["fgdim"]).pack(anchor="w", pady=px(2, 0))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "sdr", ".mp4"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="🌗  CONVERT TO SDR", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=24, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

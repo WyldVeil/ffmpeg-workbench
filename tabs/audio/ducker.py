@@ -12,6 +12,7 @@ import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 PRESETS = {
@@ -33,120 +34,120 @@ class AudioDuckerTab(BaseTab):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=20, pady=(14, 13))
+        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
         tk.Label(hdr_inner, text="🎚  " + t("tab.music_ducker"),
                  font=(UI_FONT, 15, "bold"),
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner,
                  text=t("ducker.desc_header"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=1).pack(fill="x")
+                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # ── Source video ──────────────────────────────────────────────────────
         sf = tk.Frame(self)
-        sf.pack(fill="x", padx=16, pady=8)
+        sf.pack(fill="x", padx=px(16), pady=px(8))
         tk.Label(sf, text=t("common.source_video"),
                  font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
         self._src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self._src_var, width=58, relief="flat").pack(side="left", padx=8)
+        tk.Entry(sf, textvariable=self._src_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(sf, text=t("btn.browse"), command=self._browse_src,
                   cursor="hand2", relief="flat").pack(side="left")
 
         # ── Music file ────────────────────────────────────────────────────────
         mf = tk.Frame(self)
-        mf.pack(fill="x", padx=16, pady=4)
+        mf.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mf, text=t("ducker.lbl_bg_music"),
                  font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
         self._music_var = tk.StringVar()
-        tk.Entry(mf, textvariable=self._music_var, width=58, relief="flat").pack(side="left", padx=8)
+        tk.Entry(mf, textvariable=self._music_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(mf, text=t("btn.browse"), command=self._browse_music,
                   cursor="hand2", relief="flat").pack(side="left")
 
         # ── Preset selector ───────────────────────────────────────────────────
         pf = tk.Frame(self)
-        pf.pack(fill="x", padx=16, pady=6)
+        pf.pack(fill="x", padx=px(16), pady=px(6))
         tk.Label(pf, text=t("common.preset"),
                  font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
         self._preset_var = tk.StringVar(value="Standard (YouTube)")
         preset_cb = ttk.Combobox(pf, textvariable=self._preset_var,
                                   values=list(PRESETS.keys()),
                                   state="readonly", width=26)
-        preset_cb.pack(side="left", padx=8)
+        preset_cb.pack(side="left", padx=px(8))
         preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
         tk.Button(pf, text=t("ducker.btn_apply_preset"), command=self._apply_preset,
-                  bg=CLR["panel"], fg=CLR["fg"], relief="flat").pack(side="left", padx=4)
+                  bg=CLR["panel"], fg=CLR["fg"], relief="flat").pack(side="left", padx=px(4))
 
         # ── Duck settings ─────────────────────────────────────────────────────
-        settings_f = tk.LabelFrame(self, text=t("ducker.sect_duck_settings"), padx=16, pady=10)
-        settings_f.pack(fill="x", padx=20, pady=8)
+        settings_f = tk.LabelFrame(self, text=t("ducker.sect_duck_settings"), padx=px(16), pady=px(10))
+        settings_f.pack(fill="x", padx=px(20), pady=px(8))
 
         # Music volume
         r1 = tk.Frame(settings_f)
-        r1.pack(fill="x", pady=3)
+        r1.pack(fill="x", pady=px(3))
         tk.Label(r1, text=t("ducker.lbl_music_volume"),
                  width=18, anchor="e").pack(side="left")
         self._music_vol = tk.DoubleVar(value=0.8)
         tk.Scale(r1, variable=self._music_vol, from_=0.0, to=1.5,
                  resolution=0.05, orient="horizontal",
-                 length=200).pack(side="left", padx=8)
+                 length=px(200)).pack(side="left", padx=px(8))
         self._music_vol_lbl = tk.Label(r1, text="80%", width=5, fg=CLR["accent"])
         self._music_vol_lbl.pack(side="left")
         self._music_vol.trace_add("write", lambda *_: self._music_vol_lbl.config(
             text=t("ducker.item").format(int(self._music_vol.get() * 100))))
         tk.Label(r1, text=t("ducker.desc_music_volume"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=12)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
 
         # Sensitivity / threshold
         r2 = tk.Frame(settings_f)
-        r2.pack(fill="x", pady=3)
+        r2.pack(fill="x", pady=px(3))
         tk.Label(r2, text=t("ducker.lbl_sensitivity"),
                  width=18, anchor="e").pack(side="left")
         self._threshold = tk.DoubleVar(value=0.015)
         tk.Scale(r2, variable=self._threshold, from_=0.001, to=0.10,
                  resolution=0.001, orient="horizontal",
-                 length=200).pack(side="left", padx=8)
+                 length=px(200)).pack(side="left", padx=px(8))
         self._thresh_lbl = tk.Label(r2, text="0.015", width=6, fg=CLR["accent"])
         self._thresh_lbl.pack(side="left")
         self._threshold.trace_add("write", lambda *_: self._thresh_lbl.config(
             text="{:.3f}".format(self._threshold.get())))
         tk.Label(r2, text=t("ducker.desc_sensitivity"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=12)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
 
         # Duck intensity / ratio
         r3 = tk.Frame(settings_f)
-        r3.pack(fill="x", pady=3)
+        r3.pack(fill="x", pady=px(3))
         tk.Label(r3, text=t("ducker.lbl_duck_intensity"),
                  width=18, anchor="e").pack(side="left")
         self._ratio = tk.DoubleVar(value=8.0)
         tk.Scale(r3, variable=self._ratio, from_=2.0, to=20.0,
                  resolution=1.0, orient="horizontal",
-                 length=200).pack(side="left", padx=8)
+                 length=px(200)).pack(side="left", padx=px(8))
         self._ratio_lbl = tk.Label(r3, text="8:1", width=5, fg=CLR["accent"])
         self._ratio_lbl.pack(side="left")
         self._ratio.trace_add("write", lambda *_: self._ratio_lbl.config(
             text=t("ducker.1").format(int(self._ratio.get()))))
         tk.Label(r3, text=t("ducker.desc_duck_intensity"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=12)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
 
         # Attack / release
         r4 = tk.Frame(settings_f)
-        r4.pack(fill="x", pady=3)
+        r4.pack(fill="x", pady=px(3))
         tk.Label(r4, text=t("ducker.lbl_attack_ms"),
                  width=18, anchor="e").pack(side="left")
         self._attack = tk.StringVar(value="10")
         tk.Entry(r4, textvariable=self._attack, width=6,
-                 relief="flat").pack(side="left", padx=8)
-        tk.Label(r4, text=t("ducker.lbl_release_ms")).pack(side="left", padx=(16, 0))
+                 relief="flat").pack(side="left", padx=px(8))
+        tk.Label(r4, text=t("ducker.lbl_release_ms")).pack(side="left", padx=px(16, 0))
         self._release = tk.StringVar(value="300")
         tk.Entry(r4, textvariable=self._release, width=6,
-                 relief="flat").pack(side="left", padx=8)
+                 relief="flat").pack(side="left", padx=px(8))
         tk.Label(r4, text=t("ducker.desc_attack_release"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=12)
+                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
 
         # ── Options ───────────────────────────────────────────────────────────
         opt_f = tk.Frame(self)
-        opt_f.pack(anchor="w", padx=16, pady=4)
+        opt_f.pack(anchor="w", padx=px(16), pady=px(4))
         self._loop_music = tk.BooleanVar(value=True)
         tk.Checkbutton(opt_f, text=t("ducker.opt_loop_music"),
                        variable=self._loop_music).pack(side="left")
@@ -157,11 +158,11 @@ class AudioDuckerTab(BaseTab):
 
         # ── Output ────────────────────────────────────────────────────────────
         of = tk.Frame(self)
-        of.pack(fill="x", padx=16, pady=6)
+        of.pack(fill="x", padx=px(16), pady=px(6))
         tk.Label(of, text=t("common.output_file"),
                  font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=58, relief="flat").pack(side="left", padx=8)
+        tk.Entry(of, textvariable=self._out_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out,
                   cursor="hand2", relief="flat").pack(side="left")
 
@@ -172,11 +173,11 @@ class AudioDuckerTab(BaseTab):
             bg=CLR["green"], fg="black",
             height=2, width=30,
             command=self._render)
-        self._btn_render.pack(pady=10)
+        self._btn_render.pack(pady=px(10))
 
         # ── Console ───────────────────────────────────────────────────────────
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=16, pady=4)
+        cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
         self.console, csb = self.make_console(cf, height=7)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

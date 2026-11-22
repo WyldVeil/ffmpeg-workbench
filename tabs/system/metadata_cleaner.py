@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 from core import dialogs
 from core import ffmpeg as ff
 from core import metaclean as mc
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 
@@ -32,25 +33,25 @@ class MetadataCleanerTab(BaseTab):
         self.make_header(self, "Metadata Cleaner", "Remove location, device, dates and names from files - "
                          "without re-encoding.", icon="🧹")
         top = tk.Frame(self)
-        top.pack(fill="x", padx=20, pady=(10, 4))
+        top.pack(fill="x", padx=px(20), pady=px(10, 4))
         for label, cmd in (("Add files…", self._add), ("Remove", self._remove), ("Clear", self._clear)):
-            tk.Button(top, text=label, command=cmd, relief="flat", cursor="hand2").pack(side="left", padx=(0, 6))
-        tk.Label(top, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=6)
+            tk.Button(top, text=label, command=cmd, relief="flat", cursor="hand2").pack(side="left", padx=px(0, 6))
+        tk.Label(top, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=px(6))
 
         mid = tk.Frame(self)
-        mid.pack(fill="both", expand=True, padx=20, pady=4)
+        mid.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.tree = ttk.Treeview(mid, columns=("what",), show="tree headings", height=12)
         self.tree.heading("#0", text="File / what it contains")
         self.tree.heading("what", text="Value")
-        self.tree.column("#0", width=420)
-        self.tree.column("what", width=420)
+        self.tree.column("#0", width=px(420))
+        self.tree.column("what", width=px(420))
         sb = ttk.Scrollbar(mid, command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        opt = tk.LabelFrame(self, text="  Keep  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(self, text="  Keep  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.keep_lang = tk.BooleanVar(value=True)
         self.keep_subs = tk.BooleanVar(value=True)
         self.keep_chapters = tk.BooleanVar(value=False)
@@ -59,24 +60,24 @@ class MetadataCleanerTab(BaseTab):
         for text, var in (("Track languages (which audio is English…)", self.keep_lang),
                           ("Subtitles", self.keep_subs), ("Chapters and their titles", self.keep_chapters),
                           ("Cover picture", self.keep_cover)):
-            tk.Checkbutton(opt, text=text, variable=var).pack(side="left", padx=(0, 12))
+            tk.Checkbutton(opt, text=text, variable=var).pack(side="left", padx=px(0, 12))
         tk.Checkbutton(self, text="Deep clean: also remove encoder notes inside the video stream (not for HDR "
-                                  "video, which needs them)", variable=self.deep).pack(anchor="w", padx=20)
+                                  "video, which needs them)", variable=self.deep).pack(anchor="w", padx=px(20))
         out = tk.Frame(self)
-        out.pack(fill="x", padx=20, pady=4)
+        out.pack(fill="x", padx=px(20), pady=px(4))
         self.where_var = tk.StringVar(value="next")
         tk.Radiobutton(out, text="Save next to each original as “name (clean)”", variable=self.where_var,
                        value="next").pack(side="left")
-        tk.Radiobutton(out, text="Into folder:", variable=self.where_var, value="folder").pack(side="left", padx=(12, 0))
+        tk.Radiobutton(out, text="Into folder:", variable=self.where_var, value="folder").pack(side="left", padx=px(12, 0))
         self.folder_var = tk.StringVar()
-        tk.Entry(out, textvariable=self.folder_var, width=34).pack(side="left", padx=4)
+        tk.Entry(out, textvariable=self.folder_var, width=34).pack(side="left", padx=px(4))
         tk.Button(out, text="…", relief="flat", command=lambda: self.folder_var.set(
             dialogs.ask_directory(parent=self) or self.folder_var.get())).pack(side="left")
         self.btn = tk.Button(self, text="🧹  CLEAN FILES", font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
                              width=24, cursor="hand2", command=self._clean)
-        self.btn.pack(pady=8)
+        self.btn.pack(pady=px(8))
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=False, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=False, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
@@ -50,9 +51,9 @@ class MuterTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         top = tk.Frame(body)
-        top.pack(fill="x", padx=20, pady=4)
+        top.pack(fill="x", padx=px(20), pady=px(4))
         pv = tk.Frame(top)
         pv.pack(side="left")
         self.preview = FramePreview(pv, 384, 216)
@@ -66,38 +67,38 @@ class MuterTab(BaseTab):
         self.a_var, self.b_var = tk.StringVar(), tk.StringVar()
         tk.Button(mark, text="Start here", relief="flat",
                   command=lambda: self.a_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
-        tk.Entry(mark, textvariable=self.a_var, width=11).pack(side="left", padx=2)
+        tk.Entry(mark, textvariable=self.a_var, width=11).pack(side="left", padx=px(2))
         tk.Button(mark, text="End here", relief="flat",
                   command=lambda: self.b_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
-        tk.Entry(mark, textvariable=self.b_var, width=11).pack(side="left", padx=2)
-        tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(side="left", padx=4)
+        tk.Entry(mark, textvariable=self.b_var, width=11).pack(side="left", padx=px(2))
+        tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(side="left", padx=px(4))
         right = tk.Frame(top)
-        right.pack(side="left", fill="both", expand=True, padx=(10, 0))
+        right.pack(side="left", fill="both", expand=True, padx=px(10, 0))
         self.listbox = tk.Listbox(right, height=10)
         self.listbox.pack(fill="both", expand=True)
         tk.Button(right, text="🗑 Remove selected", relief="flat", command=self._remove).pack(anchor="w")
 
-        opt = tk.LabelFrame(body, text="  What to do  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  What to do  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="silence")
         for key, label in MODES.items():
             tk.Radiobutton(opt, text=label, value=key, variable=self.mode_var).pack(anchor="w")
         fr = tk.Frame(opt)
-        fr.pack(anchor="w", pady=(4, 0))
+        fr.pack(anchor="w", pady=px(4, 0))
         tk.Label(fr, text="Fade (s):").pack(side="left")
         self.fade_var = tk.StringVar(value="0.05")
-        tk.Entry(fr, textvariable=self.fade_var, width=6).pack(side="left", padx=4)
+        tk.Entry(fr, textvariable=self.fade_var, width=6).pack(side="left", padx=px(4))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
                                suggest=lambda: self.suggest_output(self.src_row.path, "muted"))
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(body, text="🔇  APPLY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=20, command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

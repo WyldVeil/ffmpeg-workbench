@@ -19,6 +19,7 @@ from core import ffmpeg as ff
 from core.hardware import get_binary_path, CREATE_NO_WINDOW, open_in_explorer, reveal_file  # noqa: F401
 from core.skins import UI_FONT, MONO_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 def _load_clr():
@@ -71,7 +72,7 @@ def make_header(parent, title, subtitle="", icon=""):
     hdr.pack(fill="x")
 
     inner = tk.Frame(hdr, bg=CLR["panel"])
-    inner.pack(fill="x", padx=22, pady=(14, 12))
+    inner.pack(fill="x", padx=px(22), pady=px(14, 12))
 
     left = tk.Frame(inner, bg=CLR["panel"])
     left.pack(side="left", fill="both", expand=True)
@@ -86,10 +87,10 @@ def make_header(parent, title, subtitle="", icon=""):
         tk.Label(left, text=subtitle,
                  font=(UI_FONT, 9),
                  bg=CLR["panel"], fg=CLR["fgdim"],
-                 anchor="w").pack(side="top", fill="x", pady=(2, 0))
+                 anchor="w").pack(side="top", fill="x", pady=px(2, 0))
 
     # Bottom border
-    tk.Frame(parent, bg=CLR["border"], height=1).pack(fill="x")
+    tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x")
     return hdr
 
 
@@ -104,13 +105,13 @@ def make_section(parent, title="", padx=20, pady=(8, 4)):
         bg=CLR["bg"],
         fg=CLR["fgdim"],
         font=(UI_FONT, 8, "bold"),
-        bd=1,
+        bd=px(1),
         relief="solid",
-        padx=14, pady=8,
+        padx=px(14), pady=px(8),
         highlightthickness=0,
     )
     # LabelFrame borders are drawn in the widget's fg - set border via relief
-    lf.pack(fill="x", padx=padx, pady=pady)
+    lf.pack(fill="x", padx=px(padx), pady=px(pady))
     return lf
 
 
@@ -131,7 +132,7 @@ def make_console(parent, height=8):
         insertbackground=CLR["console_fg"],
         selectbackground=CLR["accent"],
         selectforeground="#FFFFFF",
-        padx=12, pady=8,
+        padx=px(12), pady=px(8),
         highlightthickness=0,
     )
     # Tag for green "Done" lines
@@ -160,17 +161,17 @@ def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
              relief="flat",
              bg=CLR["input_bg"], fg=CLR["input_fg"],
              insertbackground=CLR["accent"],
-             highlightthickness=1,
+             highlightthickness=px(1),
              highlightbackground=CLR["border"],
              highlightcolor=CLR["accent"],
-             font=(UI_FONT, 9)).pack(side="left", padx=8)
+             font=(UI_FONT, 9)).pack(side="left", padx=px(8))
     btn = tk.Button(f, text=t("btn.browse"),
                     font=(UI_FONT, 9),
                     bg=CLR["panel"], fg=CLR["fg"],
                     activebackground=CLR["accent"],
                     activeforeground="#FFFFFF",
                     relief="flat", cursor="hand2",
-                    padx=10, pady=3,
+                    padx=px(10), pady=px(3),
                     command=browse_cmd)
     btn.pack(side="left")
     return f
@@ -187,12 +188,12 @@ def make_labeled_entry(parent, label, var, width=8, tooltip=""):
              bg=CLR["input_bg"], fg=CLR["input_fg"],
              insertbackground=CLR["accent"],
              highlightthickness=0,
-             font=(UI_FONT, 9)).pack(side="left", padx=4)
+             font=(UI_FONT, 9)).pack(side="left", padx=px(4))
     if tooltip:
         tk.Label(f, text=tooltip,
                  fg=CLR["fgdim"],
                  bg=CLR["bg"],
-                 font=(UI_FONT, 8)).pack(side="left", padx=(2, 0))
+                 font=(UI_FONT, 8)).pack(side="left", padx=px(2, 0))
     return f
 
 
@@ -268,8 +269,8 @@ class ToolTip:
     def _show(self):
         if self._tip or not self._text:
             return
-        x = self._widget.winfo_rootx() + 20
-        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        x = self._widget.winfo_rootx() + px(20)
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + px(4)
         self._tip = tw = tk.Toplevel(self._widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
@@ -281,10 +282,10 @@ class ToolTip:
         lbl = tk.Label(tw, text=self._text,
                        bg="#2A2A2A", fg="#E0E0E0",
                        font=(UI_FONT, 8),
-                       relief="solid", bd=1,
-                       wraplength=self._WRAP,
+                       relief="solid", bd=px(1),
+                       wraplength=px(self._WRAP),
                        justify="left",
-                       padx=8, pady=5)
+                       padx=px(8), pady=px(5))
         lbl.pack()
 
     def _hide(self):
@@ -347,9 +348,9 @@ class VideoTimeline(tk.Frame):
         ch = height or self._HEIGHT
 
         # Canvas
-        self._canvas = tk.Canvas(self, bg="#0D0D0D", height=ch,
+        self._canvas = tk.Canvas(self, bg="#0D0D0D", height=px(ch),
                                   highlightthickness=0, bd=0)
-        self._canvas.pack(fill="x", padx=4, pady=4)
+        self._canvas.pack(fill="x", padx=px(4), pady=px(4))
         self._canvas.bind("<Configure>",      lambda _: self._draw())
         self._canvas.bind("<ButtonPress-1>",   self._on_press)
         self._canvas.bind("<B1-Motion>",       self._on_drag)
@@ -357,7 +358,7 @@ class VideoTimeline(tk.Frame):
 
         # Info strip below canvas
         info = tk.Frame(self, bg=CLR["bg"])
-        info.pack(fill="x", padx=8)
+        info.pack(fill="x", padx=px(8))
         self._pos_lbl = tk.Label(info, text="00:00.00",
                                   fg=CLR["accent"], bg=CLR["bg"],
                                   font=(MONO_FONT, 9, "bold"))
@@ -395,13 +396,13 @@ class VideoTimeline(tk.Frame):
     # ── Coordinate helpers ────────────────────────────────────────────────
 
     def _t2x(self, t, w):
-        p = self._PAD
+        p = px(self._PAD)
         if self._duration <= 0:
             return p
         return p + int((t / self._duration) * (w - 2 * p))
 
     def _x2t(self, x, w):
-        p = self._PAD
+        p = px(self._PAD)
         if self._duration <= 0:
             return 0.0
         return max(0.0, min(1.0, (x - p) / max(1, w - 2 * p))) * self._duration
@@ -412,10 +413,11 @@ class VideoTimeline(tk.Frame):
         c = self._canvas
         w = c.winfo_width()
         h = c.winfo_height()
-        if w < 20:
+        if w < px(20):
             return
         c.delete("all")
         c.create_rectangle(0, 0, w, h, fill="#0D0D0D", outline="")
+        pad, hr = px(self._PAD), px(self._HR)
 
         if self._duration <= 0:
             c.create_text(w // 2, h // 2,
@@ -426,52 +428,50 @@ class VideoTimeline(tk.Frame):
         cy = h // 2
 
         # Track background
-        c.create_rectangle(self._PAD, cy - 5, w - self._PAD, cy + 5,
+        c.create_rectangle(pad, cy - px(5), w - pad, cy + px(5),
                            fill="#222222", outline="")
 
         if self._show_handles:
             # Selection highlight
             xs = self._t2x(self._start, w)
             xe = self._t2x(self._end, w)
-            c.create_rectangle(xs, cy - 5, xe, cy + 5,
+            c.create_rectangle(xs, cy - px(5), xe, cy + px(5),
                                fill="#1A5A98", outline="")
 
         # Tick marks + time labels
-        num_ticks = min(20, max(5, w // 80))
+        num_ticks = min(20, max(5, w // px(80)))
         for i in range(num_ticks + 1):
             frac = i / num_ticks
             tx = self._t2x(self._duration * frac, w)
-            c.create_line(tx, cy + 7, tx, cy + 14, fill="#444444")
+            c.create_line(tx, cy + px(7), tx, cy + px(14), fill="#444444", width=px(1))
             tick_t = self._duration * frac
-            c.create_text(tx, cy + 23, text=_fmt_tl(tick_t),
+            c.create_text(tx, cy + px(23), text=_fmt_tl(tick_t),
                           fill="#555555", font=(UI_FONT, 7))
 
         # Playhead
         xp = self._t2x(self._playhead, w)
-        c.create_line(xp, cy - 20, xp, cy + 20, fill="#FFEB3B", width=2)
-        c.create_polygon(xp - 6, cy - 20, xp + 6, cy - 20, xp, cy - 11,
-                         fill="#FFEB3B", outline="#000000", width=1)
+        c.create_line(xp, cy - px(20), xp, cy + px(20), fill="#FFEB3B", width=px(2))
+        c.create_polygon(xp - px(6), cy - px(20), xp + px(6), cy - px(20), xp, cy - px(11),
+                         fill="#FFEB3B", outline="#000000", width=px(1))
 
         if self._show_handles:
             # Start handle (green)
-            c.create_oval(xs - self._HR, cy - self._HR,
-                          xs + self._HR, cy + self._HR,
-                          fill="#4CAF50", outline="white", width=2)
-            c.create_text(xs, cy - 20,
+            c.create_oval(xs - hr, cy - hr, xs + hr, cy + hr,
+                          fill="#4CAF50", outline="white", width=px(2))
+            c.create_text(xs, cy - px(20),
                           text=f"IN {_fmt_tl(self._start)}",
                           fill="#4CAF50", font=(MONO_FONT, 8, "bold"))
 
             # End handle (red)
-            c.create_oval(xe - self._HR, cy - self._HR,
-                          xe + self._HR, cy + self._HR,
-                          fill="#F44336", outline="white", width=2)
-            c.create_text(xe, cy + 34,
+            c.create_oval(xe - hr, cy - hr, xe + hr, cy + hr,
+                          fill="#F44336", outline="white", width=px(2))
+            c.create_text(xe, cy + px(34),
                           text=f"OUT {_fmt_tl(self._end)}",
                           fill="#F44336", font=(MONO_FONT, 8, "bold"))
 
             # Selection duration
             sel = max(0.0, self._end - self._start)
-            c.create_text((xs + xe) // 2, 12,
+            c.create_text((xs + xe) // 2, px(12),
                           text=f"Selection: {_fmt_tl(sel)}",
                           fill="white", font=(UI_FONT, 9, "bold"))
 
@@ -490,7 +490,7 @@ class VideoTimeline(tk.Frame):
         if self._duration <= 0:
             return
         def near(a, b):
-            return abs(a - b) < 14
+            return abs(a - b) < px(14)
 
         if self._show_handles:
             xs = self._t2x(self._start, w)

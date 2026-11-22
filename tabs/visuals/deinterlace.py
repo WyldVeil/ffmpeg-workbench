@@ -20,6 +20,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
@@ -62,16 +63,16 @@ class DeinterlaceTab(BaseTab):
         self.make_header(self, t("tab.deinterlace"), "Remove the comb lines from interlaced video.", icon="〰")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 2))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
-        self.info_lbl.pack(fill="x", padx=20)
+        self.info_lbl.pack(fill="x", padx=px(20))
         self.compare = CompareView(body, 400, 225, after_label="Deinterlaced")
-        self.compare.pack(pady=4)
-        opt = tk.LabelFrame(body, text="  Deinterlace  ", padx=12, pady=8)
-        opt.pack(fill="x", padx=20, pady=4)
+        self.compare.pack(pady=px(4))
+        opt = tk.LabelFrame(body, text="  Deinterlace  ", padx=px(12), pady=px(8))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def row(r, label, var, values, width):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=px(3))
             cb = ttk.Combobox(opt, textvariable=var, values=values, state="readonly", width=width)
             cb.grid(row=r, column=1, sticky="w")
             cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
@@ -82,18 +83,18 @@ class DeinterlaceTab(BaseTab):
         row(1, "Method:", self.engine_var, list(ENGINES.values()), 24)
         self.order_var = tk.StringVar(value=ORDERS["auto"])
         row(2, "Field order:", self.order_var, list(ORDERS.values()), 24)
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
                                suggest=lambda: self.suggest_output(self.src_row.path, "progressive"))
-        self.out_row.pack(fill="x", pady=(8, 0))
+        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(body, text="〰  DEINTERLACE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
                                     fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

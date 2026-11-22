@@ -155,6 +155,14 @@ files you created. Never delete the person's own files.
   use them, so a fix in one place fixes both.
 - `tabs/registry.py` lists the sidebar's tools. Visible text lives in
   `locale/*.json`.
+- **Sizes scale with the screen.** The UI is designed at 96 DPI. Fonts are in
+  points and grow on their own; every size in pixels goes through
+  `px()` from `core/scaling.py` (`padx=px(12)`, `pady=px(0, 8)`, canvas
+  offsets, fixed widths and heights, line widths, dash patterns). Never apply it to
+  sizes measured from the screen (`winfo_width()`, `event.width`), which are
+  already screen pixels. Drawings at fixed design coordinates can be grown
+  in one go with `scale_drawing(canvas)`. `tests/test_scaling.py` starts
+  the app at 200 %.
 - **To add an operation:** write a function in `core/cli.py` with `@operation`
   and `@options`, reusing the tool module's functions. Add a test to
   `tests/test_cli.py` and a row to the table above. A test fails if any

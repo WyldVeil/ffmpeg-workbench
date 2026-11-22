@@ -14,6 +14,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
@@ -45,9 +46,9 @@ class GIFMakerTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), self.src_var,
                                on_change=self._source_changed)
-        self.src_row.pack(fill="x", padx=20, pady=(10, 4))
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         pv = tk.Frame(body)
-        pv.pack(pady=4)
+        pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 400, 225)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
@@ -59,13 +60,13 @@ class GIFMakerTab(BaseTab):
         tk.Button(bar, text="Start here", relief="flat",
                   command=lambda: self.start_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
 
-        opt = tk.LabelFrame(body, text="  GIF  ", padx=12, pady=6)
-        opt.pack(fill="x", padx=20, pady=4)
+        opt = tk.LabelFrame(body, text="  GIF  ", padx=px(12), pady=px(6))
+        opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
+            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=px(2))
             for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=(0, 6), pady=2)
+                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
 
         self.start_var, self.dur_var = tk.StringVar(value="0"), tk.StringVar(value="4")
         row(0, "Start:", tk.Entry(opt, textvariable=self.start_var, width=11), tk.Label(opt, text="Length (s):"),
@@ -89,8 +90,8 @@ class GIFMakerTab(BaseTab):
         row(4, "Format:", ttk.Combobox(opt, textvariable=self.format_var, values=["GIF", "Animated WebP"],
                                        state="readonly", width=16))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=12, pady=8)
-        out_lf.pack(fill="x", padx=20, pady=6)
+        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="image", ext=".gif",
                                suggest=self._suggest)
         self.out_row.pack(fill="x")
@@ -98,9 +99,9 @@ class GIFMakerTab(BaseTab):
         self.size_lbl.pack(anchor="w")
         self.btn_render = tk.Button(body, text=t("gif_maker.create_button"), font=(UI_FONT, 12, "bold"),
                                     bg=CLR["green"], fg="white", width=22, cursor="hand2", command=self._render)
-        self.btn_render.pack(pady=8)
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

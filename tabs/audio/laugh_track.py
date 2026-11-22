@@ -17,6 +17,7 @@ from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.hardware import (    get_binary_path, CREATE_NO_WINDOW, detect_gpu
 )
 from core.i18n import t
+from core.scaling import px
 
 
 def _fmt(seconds):
@@ -53,26 +54,26 @@ class LaughTrackRemoverTab(BaseTab):
 
         # ── Source ────────────────────────────────────────────────────────
         sf = tk.Frame(self)
-        sf.pack(fill="x", padx=20, pady=(10, 4))
+        sf.pack(fill="x", padx=px(20), pady=px(10, 4))
         tk.Label(sf, text=t("common.source_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._src_var = tk.StringVar()
         tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat",
-                 font=(UI_FONT, 10)).pack(side="left", padx=8)
+                 font=(UI_FONT, 10)).pack(side="left", padx=px(8))
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2",
                   relief="flat", font=(UI_FONT, 9)).pack(side="left")
         self._info_lbl = tk.Label(sf, text="", fg=CLR.get("fgdim", "#888888"),
                                   font=(MONO_FONT, 9))
-        self._info_lbl.pack(side="left", padx=10)
+        self._info_lbl.pack(side="left", padx=px(10))
 
         # ── Engine Selector ───────────────────────────────────────────────
         eng_f = tk.Frame(self)
-        eng_f.pack(fill="x", padx=20, pady=(4, 8))
+        eng_f.pack(fill="x", padx=px(20), pady=px(4, 8))
         tk.Label(eng_f, text=t("laugh_track.engine_section"), font=(UI_FONT, 10, "bold")).pack(side="left")
 
         self._engine_var = tk.StringVar(value="ffmpeg")
         tk.Radiobutton(eng_f, text=t("laugh_track.ffmpeg_option"),
                        variable=self._engine_var, value="ffmpeg",
-                       font=(UI_FONT, 10), command=self._toggle_engine_ui).pack(side="left", padx=10)
+                       font=(UI_FONT, 10), command=self._toggle_engine_ui).pack(side="left", padx=px(10))
         tk.Radiobutton(eng_f, text=t("laugh_track.ai_stem_option"),
                        variable=self._engine_var, value="ai",
                        font=(UI_FONT, 10, "bold"), fg=CLR.get("accent", "#0078D7"),
@@ -88,10 +89,10 @@ class LaughTrackRemoverTab(BaseTab):
         # ==================================================================
         # 1. Added "Experimental" to the label frame
         self.ai_lf = tk.LabelFrame(self.engine_container, text=f"  {t('laugh_track.ai_experimental_option')}  ",
-                                   padx=15, pady=10, font=(UI_FONT, 9, "bold"), fg=CLR.get("accent", "#0078D7"))
+                                   padx=px(15), pady=px(10), font=(UI_FONT, 9, "bold"), fg=CLR.get("accent", "#0078D7"))
         
         self.ai_status_lbl = tk.Label(self.ai_lf, text=t("laugh_track.checking_for_ai_tools"), font=(UI_FONT, 10, "bold"))
-        self.ai_status_lbl.pack(anchor="w", pady=(0, 5))
+        self.ai_status_lbl.pack(anchor="w", pady=px(0, 5))
 
         self.ai_instructions_f = tk.Frame(self.ai_lf)
         
@@ -134,7 +135,7 @@ class LaughTrackRemoverTab(BaseTab):
         
         # Create a container frame specifically for the text box and its scrollbar
         txt_container = tk.Frame(self.ai_instructions_f, bg=CLR.get("panel", "#222222"))
-        txt_container.pack(anchor="w", pady=5)  # <-- Removed fill="x"
+        txt_container.pack(anchor="w", pady=px(5))  # <-- Removed fill="x"
 
         # Create the vertical scrollbar
         txt_scroll = ttk.Scrollbar(txt_container, orient="vertical")
@@ -152,13 +153,13 @@ class LaughTrackRemoverTab(BaseTab):
 
         tk.Button(self.ai_instructions_f, text=t("laugh_track.i_have_installed_the_tools_check_again"), 
                   bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"), font=(UI_FONT, 9), cursor="hand2", 
-                  command=self._check_ai_tools).pack(anchor="w", pady=5)
+                  command=self._check_ai_tools).pack(anchor="w", pady=px(5))
 
         self.ai_model_f = tk.Frame(self.ai_lf)
-        tk.Label(self.ai_model_f, text=t("common.model"), font=(UI_FONT, 10)).pack(side="left", pady=5)
+        tk.Label(self.ai_model_f, text=t("common.model"), font=(UI_FONT, 10)).pack(side="left", pady=px(5))
         self._ai_model = tk.StringVar(value="mel_band_roformer_crowd_aufr33_viperx_sdr_8.7144.ckpt")
-        tk.Entry(self.ai_model_f, textvariable=self._ai_model, width=50, font=(MONO_FONT, 10)).pack(side="left", padx=8, pady=5)
-        tk.Label(self.ai_model_f, text=t("laugh_track.requires_internet_on_first_run"), fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 9)).pack(side="left", pady=5)
+        tk.Entry(self.ai_model_f, textvariable=self._ai_model, width=50, font=(MONO_FONT, 10)).pack(side="left", padx=px(8), pady=px(5))
+        tk.Label(self.ai_model_f, text=t("laugh_track.requires_internet_on_first_run"), fg=CLR.get("fgdim", "#888888"), font=(UI_FONT, 9)).pack(side="left", pady=px(5))
 
 
         # ==================================================================
@@ -166,133 +167,133 @@ class LaughTrackRemoverTab(BaseTab):
         # ==================================================================
         self.ffmpeg_lf = tk.LabelFrame(
             self.engine_container, text=t("laugh_track.ffmpeg_tools_enable_one_or_more_they_stack"),
-            padx=15, pady=10, font=(UI_FONT, 9, "bold"), fg=CLR.get("fgdim", "#888888"))
+            padx=px(15), pady=px(10), font=(UI_FONT, 9, "bold"), fg=CLR.get("fgdim", "#888888"))
 
         # --- 1. Noise Profile ---
         self._use_profile = tk.BooleanVar(value=True)
         np_header = tk.Frame(self.ffmpeg_lf)
-        np_header.pack(fill="x", pady=(0, 2))
+        np_header.pack(fill="x", pady=px(0, 2))
         tk.Checkbutton(np_header, text=t("laugh_track.spectral_section"),
                        variable=self._use_profile, font=(UI_FONT, 10, "bold"),
                        command=self._toggle_sections).pack(side="left")
         
         self._profile_f = tk.Frame(self.ffmpeg_lf)
         pr1 = tk.Frame(self._profile_f)
-        pr1.pack(fill="x", pady=2)
+        pr1.pack(fill="x", pady=px(2))
         tk.Label(pr1, text=t("laugh_track.laugh_sample_start_label"), width=18, anchor="e").pack(side="left")
         self._sample_start = tk.StringVar(value="0.0")
-        tk.Entry(pr1, textvariable=self._sample_start, width=10).pack(side="left", padx=6)
-        tk.Label(pr1, text=t("laugh_track.laugh_sample_end_label")).pack(side="left", padx=(8, 0))
+        tk.Entry(pr1, textvariable=self._sample_start, width=10).pack(side="left", padx=px(6))
+        tk.Label(pr1, text=t("laugh_track.laugh_sample_end_label")).pack(side="left", padx=px(8, 0))
         self._sample_end = tk.StringVar(value="3.0")
-        tk.Entry(pr1, textvariable=self._sample_end, width=10).pack(side="left", padx=6)
+        tk.Entry(pr1, textvariable=self._sample_end, width=10).pack(side="left", padx=px(6))
 
         pr2 = tk.Frame(self._profile_f)
-        pr2.pack(fill="x", pady=4)
+        pr2.pack(fill="x", pady=px(4))
         tk.Label(pr2, text=t("laugh_track.reduction_strength_label"), width=18, anchor="e").pack(side="left")
         self._nr_strength = tk.DoubleVar(value=20.0)
-        tk.Scale(pr2, variable=self._nr_strength, from_=6, to=50, resolution=1, orient="horizontal").pack(side="left", padx=6)
+        tk.Scale(pr2, variable=self._nr_strength, from_=6, to=50, resolution=1, orient="horizontal").pack(side="left", padx=px(6))
 
         pr3 = tk.Frame(self._profile_f)
-        pr3.pack(fill="x", pady=2)
+        pr3.pack(fill="x", pady=px(2))
         tk.Label(pr3, text=t("laugh_track.noise_floor"), width=18, anchor="e").pack(side="left")
         self._noise_floor = tk.DoubleVar(value=-30.0)
-        tk.Scale(pr3, variable=self._noise_floor, from_=-60, to=-10, resolution=1, orient="horizontal").pack(side="left", padx=6)
+        tk.Scale(pr3, variable=self._noise_floor, from_=-60, to=-10, resolution=1, orient="horizontal").pack(side="left", padx=px(6))
 
         # --- 2. Center Channel ---
         self._use_center = tk.BooleanVar(value=False)
         cc_header = tk.Frame(self.ffmpeg_lf)
-        cc_header.pack(fill="x", pady=(0, 2))
+        cc_header.pack(fill="x", pady=px(0, 2))
         tk.Checkbutton(cc_header, text=t("laugh_track.center_channel_section"),
                        variable=self._use_center, font=(UI_FONT, 10, "bold"),
                        command=self._toggle_sections).pack(side="left")
 
         self._center_f = tk.Frame(self.ffmpeg_lf)
         cr1 = tk.Frame(self._center_f)
-        cr1.pack(fill="x", pady=2)
+        cr1.pack(fill="x", pady=px(2))
         tk.Label(cr1, text=t("laugh_track.center_strength_label"), width=18, anchor="e").pack(side="left")
         self._center_mix = tk.DoubleVar(value=0.8)
-        tk.Scale(cr1, variable=self._center_mix, from_=0.5, to=1.0, resolution=0.05, orient="horizontal").pack(side="left", padx=6)
+        tk.Scale(cr1, variable=self._center_mix, from_=0.5, to=1.0, resolution=0.05, orient="horizontal").pack(side="left", padx=px(6))
 
         self._stereo_cancel = tk.BooleanVar(value=False)
-        tk.Checkbutton(self._center_f, text=t("laugh_track.aggressive_checkbox"), variable=self._stereo_cancel).pack(anchor="w", padx=120)
+        tk.Checkbutton(self._center_f, text=t("laugh_track.aggressive_checkbox"), variable=self._stereo_cancel).pack(anchor="w", padx=px(120))
 
         # --- 3. Frequency Sculpt ---
         self._use_eq = tk.BooleanVar(value=False)
         eq_header = tk.Frame(self.ffmpeg_lf)
-        eq_header.pack(fill="x", pady=(0, 2))
+        eq_header.pack(fill="x", pady=px(0, 2))
         tk.Checkbutton(eq_header, text=t("laugh_track.frequency_section"),
                        variable=self._use_eq, font=(UI_FONT, 10, "bold"),
                        command=self._toggle_sections).pack(side="left")
 
         self._eq_f = tk.Frame(self.ffmpeg_lf)
         er1 = tk.Frame(self._eq_f)
-        er1.pack(fill="x", pady=2)
+        er1.pack(fill="x", pady=px(2))
         tk.Label(er1, text=t("laugh_track.low_cut_label"), width=18, anchor="e").pack(side="left")
         self._eq_low = tk.StringVar(value="300")
-        tk.Entry(er1, textvariable=self._eq_low, width=6).pack(side="left", padx=4)
-        tk.Label(er1, text=t("laugh_track.high_cut_label")).pack(side="left", padx=(12, 0))
+        tk.Entry(er1, textvariable=self._eq_low, width=6).pack(side="left", padx=px(4))
+        tk.Label(er1, text=t("laugh_track.high_cut_label")).pack(side="left", padx=px(12, 0))
         self._eq_high = tk.StringVar(value="5000")
-        tk.Entry(er1, textvariable=self._eq_high, width=6).pack(side="left", padx=4)
+        tk.Entry(er1, textvariable=self._eq_high, width=6).pack(side="left", padx=px(4))
 
         er2 = tk.Frame(self._eq_f)
-        er2.pack(fill="x", pady=2)
+        er2.pack(fill="x", pady=px(2))
         tk.Label(er2, text=t("laugh_track.cut_depth_label"), width=18, anchor="e").pack(side="left")
         self._eq_depth = tk.DoubleVar(value=8.0)
-        tk.Scale(er2, variable=self._eq_depth, from_=2, to=24, resolution=1, orient="horizontal").pack(side="left", padx=6)
+        tk.Scale(er2, variable=self._eq_depth, from_=2, to=24, resolution=1, orient="horizontal").pack(side="left", padx=px(6))
 
         # --- 4. Smart Gate ---
         self._use_gate = tk.BooleanVar(value=False)
         gt_header = tk.Frame(self.ffmpeg_lf)
-        gt_header.pack(fill="x", pady=(0, 2))
+        gt_header.pack(fill="x", pady=px(0, 2))
         tk.Checkbutton(gt_header, text=t("laugh_track.smart_gate_section"),
                        variable=self._use_gate, font=(UI_FONT, 10, "bold"),
                        command=self._toggle_sections).pack(side="left")
 
         self._gate_f = tk.Frame(self.ffmpeg_lf)
         gr1 = tk.Frame(self._gate_f)
-        gr1.pack(fill="x", pady=2)
+        gr1.pack(fill="x", pady=px(2))
         tk.Label(gr1, text=t("laugh_track.gate_threshold_label"), width=18, anchor="e").pack(side="left")
         self._gate_thresh = tk.DoubleVar(value=-18.0)
-        tk.Scale(gr1, variable=self._gate_thresh, from_=-40, to=-6, resolution=1, orient="horizontal").pack(side="left", padx=6)
+        tk.Scale(gr1, variable=self._gate_thresh, from_=-40, to=-6, resolution=1, orient="horizontal").pack(side="left", padx=px(6))
 
         gr2 = tk.Frame(self._gate_f)
-        gr2.pack(fill="x", pady=2)
+        gr2.pack(fill="x", pady=px(2))
         tk.Label(gr2, text=t("laugh_track.compression_ratio_label"), width=18, anchor="e").pack(side="left")
         self._gate_ratio = tk.DoubleVar(value=4.0)
-        tk.Scale(gr2, variable=self._gate_ratio, from_=2, to=20, resolution=0.5, orient="horizontal").pack(side="left", padx=6)
+        tk.Scale(gr2, variable=self._gate_ratio, from_=2, to=20, resolution=0.5, orient="horizontal").pack(side="left", padx=px(6))
 
         # ── Output ────────────────────────────────────────────────────────
-        out_lf = tk.LabelFrame(self, text=t("section.output"), padx=15, pady=8, font=(UI_FONT, 9, "bold"))
-        out_lf.pack(fill="x", padx=20, pady=4)
+        out_lf = tk.LabelFrame(self, text=t("section.output"), padx=px(15), pady=px(8), font=(UI_FONT, 9, "bold"))
+        out_lf.pack(fill="x", padx=px(20), pady=px(4))
 
         of1 = tk.Frame(out_lf)
-        of1.pack(fill="x", pady=2)
+        of1.pack(fill="x", pady=px(2))
         tk.Label(of1, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), width=12, anchor="e").pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of1, textvariable=self._out_var, width=52, font=(UI_FONT, 10)).pack(side="left", padx=8)
+        tk.Entry(of1, textvariable=self._out_var, width=52, font=(UI_FONT, 10)).pack(side="left", padx=px(8))
         tk.Button(of1, text=t("common.save_as"), command=self._browse_out, cursor="hand2").pack(side="left")
 
         of2 = tk.Frame(out_lf)
-        of2.pack(fill="x", pady=4)
+        of2.pack(fill="x", pady=px(4))
         self._export_mode = tk.StringVar(value="video")
-        tk.Radiobutton(of2, text=t("laugh_track.video_option"), variable=self._export_mode, value="video").pack(side="left", padx=(0, 20))
+        tk.Radiobutton(of2, text=t("laugh_track.video_option"), variable=self._export_mode, value="video").pack(side="left", padx=px(0, 20))
         tk.Radiobutton(of2, text=t("laugh_track.audio_option"), variable=self._export_mode, value="audio").pack(side="left")
 
         # ── Action buttons ────────────────────────────────────────────────
         bf = tk.Frame(self)
-        bf.pack(pady=10)
+        bf.pack(pady=px(10))
         self._btn_preview = tk.Button(bf, text=t("laugh_track.preview_button"), bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"), width=18, cursor="hand2", command=self._preview_result)
-        self._btn_preview.pack(side="left", padx=8)
+        self._btn_preview.pack(side="left", padx=px(8))
 
         self._btn_run = tk.Button(
             bf, text=t("laugh_track.remove_button"), font=(UI_FONT, 12, "bold"),
             bg=CLR.get("green", "#4CAF50"), fg="white", height=2, width=28,
             cursor="hand2", command=self._render)
-        self._btn_run.pack(side="left", padx=8)
+        self._btn_run.pack(side="left", padx=px(8))
 
         # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
         self.console, csb = self.make_console(cf, height=6)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -308,11 +309,11 @@ class LaughTrackRemoverTab(BaseTab):
         """Show/hide sections safely inside the container."""
         if self._engine_var.get() == "ai":
             self.ffmpeg_lf.pack_forget()
-            self.ai_lf.pack(fill="x", padx=20, pady=4)
+            self.ai_lf.pack(fill="x", padx=px(20), pady=px(4))
             self._btn_preview.config(state="disabled") 
         else:
             self.ai_lf.pack_forget()
-            self.ffmpeg_lf.pack(fill="x", padx=20, pady=4)
+            self.ffmpeg_lf.pack(fill="x", padx=px(20), pady=px(4))
             self._btn_preview.config(state="normal")
 
     def _toggle_sections(self):
@@ -327,7 +328,7 @@ class LaughTrackRemoverTab(BaseTab):
             (self._use_gate,    self._gate_f),
         ]:
             if var.get():
-                frame.pack(fill="x", padx=20, pady=2)
+                frame.pack(fill="x", padx=px(20), pady=px(2))
 
 # ── AI Tools Management ───────────────────────────────────────────
     def _find_ai_cli(self):
@@ -377,11 +378,11 @@ class LaughTrackRemoverTab(BaseTab):
         if self._find_ai_cli():
             self.ai_status_lbl.config(text=t("laugh_track.ai_tools_detected_ready"), fg=CLR.get("green", "#4CAF50"))
             self.ai_instructions_f.pack_forget()
-            self.ai_model_f.pack(fill="x", pady=5)
+            self.ai_model_f.pack(fill="x", pady=px(5))
         else:
             self.ai_status_lbl.config(text=t("laugh_track.ai_tools_missing"), fg="red")
             self.ai_model_f.pack_forget()
-            self.ai_instructions_f.pack(fill="x", pady=5)
+            self.ai_instructions_f.pack(fill="x", pady=px(5))
 
     # ── File browsing ─────────────────────────────────────────────────
     def _browse(self):

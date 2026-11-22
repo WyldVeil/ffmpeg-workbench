@@ -12,6 +12,7 @@ import os
 import json
 import random
 import sys
+from core.scaling import px
 
 SKIN_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -368,7 +369,7 @@ def _start_stars(app: tk.Tk, skin: dict, inner_frame=None):
             for i in range(n):
                 _star_data.append({
                     "x":     slot_w * i + random.uniform(0, slot_w),
-                    "y":     random.uniform(-120, H + 200),
+                    "y":     random.uniform(-px(120), H + px(200)),
                     "speed": random.uniform(0.5, 1.8),
                     "char":  random.choice(CHARS),
                     "col":   random.choice(COLOURS),
@@ -385,12 +386,12 @@ def _start_stars(app: tk.Tk, skin: dict, inner_frame=None):
                     pass
                 s["id"] = None
 
-            s["y"] += s["speed"] * _star_speed_mult
-            s["x"] += s["drift"] * _star_speed_mult
+            s["y"] += px(s["speed"] * _star_speed_mult)
+            s["x"] += px(s["drift"] * _star_speed_mult)
 
-            if s["y"] > H + 20:
+            if s["y"] > H + px(20):
                 # Re-enter from a random x across the full width
-                s["y"] = random.uniform(-30, -5)
+                s["y"] = random.uniform(-px(30), -px(5))
                 s["x"] = random.uniform(0, W)
                 s["speed"] = random.uniform(0.5, 1.8)
                 s["char"]  = random.choice(CHARS)
@@ -447,7 +448,7 @@ def apply_default_options(app: tk.Tk, skin: dict):
         app.option_add("*LabelFrame.Background",       c,     P)
         app.option_add("*LabelFrame.Foreground",       skin["fgdim"], P)
         app.option_add("*LabelFrame.Relief",           "solid", P)
-        app.option_add("*LabelFrame.BorderWidth",      "1",   P)
+        app.option_add("*LabelFrame.BorderWidth",      px(1),  P)
         app.option_add("*LabelFrame.Font",
                        f"{{{UI_FONT}}} 9 bold", P)
 
@@ -458,7 +459,7 @@ def apply_default_options(app: tk.Tk, skin: dict):
         app.option_add("*Entry.selectBackground",      acc,   P)
         app.option_add("*Entry.selectForeground",      "#FFFFFF", P)
         app.option_add("*Entry.Relief",                "flat", P)
-        app.option_add("*Entry.BorderWidth",           "1",   P)
+        app.option_add("*Entry.BorderWidth",           px(1),  P)
         app.option_add("*Entry.HighlightThickness",    "0",   P)
 
         # Spinbox
@@ -507,6 +508,13 @@ def apply_default_options(app: tk.Tk, skin: dict):
         app.option_add("*Scale.SliderRelief",          "flat", P)
         app.option_add("*Scale.HighlightThickness",    "0",   P)
         app.option_add("*Scale.BorderWidth",           "0",   P)
+        # Tk's own default sizes are in pixels: grow them on HiDPI screens
+        app.option_add("*Scale.Width",                 px(15), P)
+        app.option_add("*Scale.SliderLength",          px(30), P)
+        app.option_add("*Scale.Length",                px(100), P)
+        app.option_add("*Scrollbar.Width",             px(11), P)
+        for cls in ("Entry", "Spinbox", "Text"):
+            app.option_add(f"*{cls}.InsertWidth",       px(2), P)
 
         # Listbox
         app.option_add("*Listbox.Background",          i_bg,  P)
@@ -536,7 +544,7 @@ def apply_default_options(app: tk.Tk, skin: dict):
         app.option_add("*Menu.activeBackground",       acc,   P)
         app.option_add("*Menu.activeForeground",       "#FFFFFF", P)
         app.option_add("*Menu.Relief",                 "flat", P)
-        app.option_add("*Menu.BorderWidth",            "1",   P)
+        app.option_add("*Menu.BorderWidth",            px(1),  P)
         app.option_add("*Menu.TearOff",                "0",   P)
 
     except Exception:
@@ -661,6 +669,11 @@ def _apply_ttk_styles(skin: dict):
         i_bg = skin.get("input_bg", "#1E1E1E")
         i_fg = skin.get("input_fg", "#E2E2E2")
 
+        if tk.TkVersion < 9:
+            # Tk 8.6's clam theme sizes its arrows, sliders and check marks in
+            # fixed pixels (Tk 9 already gives them in points, so they scale).
+            style.configure(".", arrowsize=px(14), sliderlength=px(30), indicatorsize=px(10),
+                            indicatormargin=px(1, 1, 4, 1))
         style.configure("TFrame",        background=c)
         style.configure("TLabel",        background=c, foreground=fg,
                         font=(UI_FONT, 10))
@@ -671,7 +684,7 @@ def _apply_ttk_styles(skin: dict):
 
         # LabelFrame - clear bordered panel
         style.configure("TLabelframe",   background=c,
-                        bordercolor=bdr, relief="solid", borderwidth=1)
+                        bordercolor=bdr, relief="solid", borderwidth=px(1))
         style.configure("TLabelframe.Label",
                         background=c, foreground=fdm,
                         font=(UI_FONT, 9, "bold"))
@@ -685,8 +698,8 @@ def _apply_ttk_styles(skin: dict):
                   background=[("active", bdr), ("!active", pnl)])
 
         # Notebook
-        style.configure("TNotebook",     background=pnl, tabmargins=[0, 2, 0, 0])
-        style.configure("TNotebook.Tab", padding=[14, 8], font=(UI_FONT, 9))
+        style.configure("TNotebook",     background=pnl, tabmargins=px(0, 2, 0, 0))
+        style.configure("TNotebook.Tab", padding=px(14, 8), font=(UI_FONT, 9))
         style.map("TNotebook.Tab",
                   background=[("selected",  skin["sb_active"]),
                                ("!selected", skin["sb_bg"])],
@@ -696,14 +709,14 @@ def _apply_ttk_styles(skin: dict):
         # Entry
         style.configure("TEntry",
                         fieldbackground=i_bg, foreground=i_fg,
-                        insertcolor=i_fg, borderwidth=1, relief="flat",
-                        font=(UI_FONT, 10), padding=4)
+                        insertcolor=i_fg, borderwidth=px(1), relief="flat",
+                        font=(UI_FONT, 10), padding=px(4))
 
         # Combobox
         style.configure("TCombobox",
                         fieldbackground=i_bg, foreground=i_fg,
                         selectbackground=acc, selectforeground="#FFFFFF",
-                        arrowcolor=fdm, borderwidth=1, relief="flat",
+                        arrowcolor=fdm, borderwidth=px(1), relief="flat",
                         font=(UI_FONT, 10))
         style.map("TCombobox",
                   fieldbackground=[("readonly", i_bg)],
@@ -712,7 +725,7 @@ def _apply_ttk_styles(skin: dict):
 
         # Tree lists (queue, batch lists, metadata...)
         style.configure("Treeview", background=i_bg, fieldbackground=i_bg, foreground=i_fg,
-                        borderwidth=0, font=(UI_FONT, 10), rowheight=24)
+                        borderwidth=0, font=(UI_FONT, 10), rowheight=px(24))
         style.map("Treeview", background=[("selected", acc)], foreground=[("selected", "#FFFFFF")])
         style.configure("Treeview.Heading", background=pnl, foreground=fg, relief="flat",
                         font=(UI_FONT, 9, "bold"))
@@ -721,7 +734,7 @@ def _apply_ttk_styles(skin: dict):
         # Progressbar
         style.configure("TProgressbar",
                         background=acc, troughcolor=bdr,
-                        borderwidth=0, thickness=4)
+                        borderwidth=0, thickness=px(4))
 
         # Checkbutton + Radiobutton maps
         style.map("TCheckbutton",

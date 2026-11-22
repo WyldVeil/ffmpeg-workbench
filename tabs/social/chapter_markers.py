@@ -24,6 +24,7 @@ import json
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.i18n import t
+from core.scaling import px
 
 
 def _fmt_yt(secs: float) -> str:
@@ -106,101 +107,101 @@ class ChapterMarkersTab(BaseTab):
         hdr.pack(fill="x")
         tk.Label(hdr, text="📑  " + t("tab.chapter_markers"),
                  font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=20, pady=12)
+                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=px(20), pady=px(12))
         tk.Label(hdr,
                  text=t("chapter_markers.subtitle"),
                  bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
 
         # ── Source video ──────────────────────────────────────────────────
-        sf = tk.Frame(self); sf.pack(pady=10)
+        sf = tk.Frame(self); sf.pack(pady=px(10))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=8)
+        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=px(8))
         self.src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
         tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
         self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
-        self.dur_lbl.pack(side="left", padx=8)
+        self.dur_lbl.pack(side="left", padx=px(8))
 
         # ── Timeline scrubber ─────────────────────────────────────────────
-        scrub_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.timeline_section')}  ", padx=14, pady=10)
-        scrub_lf.pack(fill="x", padx=16, pady=6)
+        scrub_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10))
+        scrub_lf.pack(fill="x", padx=px(16), pady=px(6))
 
         self.timeline = tk.Scale(scrub_lf, from_=0, to=100,
-                                  orient="horizontal", length=700,
+                                  orient="horizontal", length=px(700),
                                   resolution=0.1,
                                   command=self._on_scrub)
         self.timeline.pack(fill="x")
 
-        ts_row = tk.Frame(scrub_lf); ts_row.pack(fill="x", pady=4)
+        ts_row = tk.Frame(scrub_lf); ts_row.pack(fill="x", pady=px(4))
         tk.Label(ts_row, text=t("chapter_markers.current_position_label")).pack(side="left")
         self.pos_lbl = tk.Label(ts_row, text="0:00", fg=CLR["accent"],
                                  font=(UI_FONT, 14, "bold"), width=10)
-        self.pos_lbl.pack(side="left", padx=8)
+        self.pos_lbl.pack(side="left", padx=px(8))
 
         tk.Label(ts_row, text=f"  {t('chapter_markers.jump_to_label')}").pack(side="left")
         self.jump_var = tk.StringVar()
         jump_e = tk.Entry(ts_row, textvariable=self.jump_var, width=7, relief="flat")
-        jump_e.pack(side="left", padx=4)
+        jump_e.pack(side="left", padx=px(4))
         jump_e.bind("<Return>", lambda e: self._jump())
-        tk.Button(ts_row, text="Go", command=self._jump, width=4, cursor="hand2", relief="flat").pack(side="left", padx=2)
+        tk.Button(ts_row, text="Go", command=self._jump, width=4, cursor="hand2", relief="flat").pack(side="left", padx=px(2))
 
         # Quick jump %
         for pct in [0, 10, 25, 50, 75, 90, 100]:
             tk.Button(ts_row, text=f"{pct}%", width=4, bg="#333",
                       fg=CLR["fg"], font=(UI_FONT, 8),
-                      command=lambda p=pct: self._jump_pct(p)).pack(side="left", padx=1)
+                      command=lambda p=pct: self._jump_pct(p)).pack(side="left", padx=px(1))
 
         # ── Mark + name ───────────────────────────────────────────────────
-        mark_row = tk.Frame(self); mark_row.pack(fill="x", padx=16, pady=4)
+        mark_row = tk.Frame(self); mark_row.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mark_row, text=t("chapter_markers.chapter_title_label")).pack(side="left")
         self.new_title_var = tk.StringVar(value="Chapter")
         title_entry = tk.Entry(mark_row, textvariable=self.new_title_var, width=30, relief="flat")
-        title_entry.pack(side="left", padx=8)
+        title_entry.pack(side="left", padx=px(8))
 
         self.btn_mark = tk.Button(mark_row, text=f"📌  {t('chapter_markers.mark_here_button')}",
                                    bg=CLR["green"], fg="white",
                                    font=(UI_FONT, 11, "bold"),
                                    width=14, command=self._mark_here)
-        self.btn_mark.pack(side="left", padx=8)
+        self.btn_mark.pack(side="left", padx=px(8))
         tk.Button(mark_row, text=f"➕ {t('chapter_markers.add_at_zero_button')}",
                   bg=CLR["panel"], fg=CLR["fg"],
-                  command=lambda: self._add_chapter(0.0, "Intro")).pack(side="left", padx=4)
+                  command=lambda: self._add_chapter(0.0, "Intro")).pack(side="left", padx=px(4))
 
         # Auto-number
-        auto_row = tk.Frame(self); auto_row.pack(anchor="w", padx=16, pady=2)
+        auto_row = tk.Frame(self); auto_row.pack(anchor="w", padx=px(16), pady=px(2))
         self.autonumber_var = tk.BooleanVar(value=True)
         tk.Checkbutton(auto_row,
                        text=t("chapter_markers.auto_number_checkbox"),
                        variable=self.autonumber_var).pack(side="left")
         self.prefix_var = tk.StringVar(value="Chapter")
-        tk.Entry(auto_row, textvariable=self.prefix_var, width=12, relief="flat").pack(side="left", padx=6)
+        tk.Entry(auto_row, textvariable=self.prefix_var, width=12, relief="flat").pack(side="left", padx=px(6))
 
         # ── Chapter list ──────────────────────────────────────────────────
-        list_hdr = tk.Frame(self); list_hdr.pack(fill="x", padx=16, pady=(8, 0))
+        list_hdr = tk.Frame(self); list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
         tk.Label(list_hdr, text=t("chapter_markers.chapter_list"), font=(UI_FONT, 9, "bold"),
                  fg=CLR["fgdim"]).pack(side="left")
         self.count_lbl = tk.Label(list_hdr, text=t("chapter_markers.0_chapters"),
                                    fg=CLR["fgdim"], font=(UI_FONT, 9))
-        self.count_lbl.pack(side="left", padx=10)
+        self.count_lbl.pack(side="left", padx=px(10))
 
         cols = ("timestamp", "title")
         self.tree = ttk.Treeview(self, columns=cols, show="headings",
                                   selectmode="browse", height=8)
         self.tree.heading("timestamp", text=t("chapter_markers.timestamp_col"))
         self.tree.heading("title",     text=t("chapter_markers.title_col"))
-        self.tree.column("timestamp", width=120, anchor="center")
-        self.tree.column("title",     width=500)
+        self.tree.column("timestamp", width=px(120), anchor="center")
+        self.tree.column("title",     width=px(500))
         tree_sb = ttk.Scrollbar(self, command=self.tree.yview)
         self.tree.config(yscrollcommand=tree_sb.set)
         self.tree.pack(side="left", fill="both", expand=False,
-                       padx=(16, 0), pady=4)
-        tree_sb.pack(side="left", fill="y", pady=4)
+                       padx=px(16, 0), pady=px(4))
+        tree_sb.pack(side="left", fill="y", pady=px(4))
         self.tree.bind("<Double-Button-1>", self._edit_selected)
         self.tree.bind("<Delete>", lambda e: self._remove_selected())
 
         # List action buttons
         list_btns = tk.Frame(self)
-        list_btns.pack(side="left", padx=8, anchor="n", pady=4)
+        list_btns.pack(side="left", padx=px(8), anchor="n", pady=px(4))
         for txt, cmd, bg in [
             ("✏  Edit Title",                            self._edit_selected,  "#3A3A3A"),
             (f"🗑  {t('chapter_markers.remove_button')}",  self._remove_selected,"#3A3A3A"),
@@ -210,7 +211,7 @@ class ChapterMarkersTab(BaseTab):
             ("📂  Import .srt",                           self._import_srt,     "#3A3A3A"),
         ]:
             tk.Button(list_btns, text=txt, bg=bg, fg=CLR["fg"],
-                      width=16, command=cmd).pack(pady=2)
+                      width=16, command=cmd).pack(pady=px(2))
 
         # ── Preview pane ──────────────────────────────────────────────────
         # (rest of the UI continues below the side-by-side)
@@ -219,11 +220,11 @@ class ChapterMarkersTab(BaseTab):
         # ── Validation ────────────────────────────────────────────────────
         self.valid_lbl = tk.Label(self, text="", font=(UI_FONT, 9),
                                    fg=CLR["fgdim"])
-        self.valid_lbl.pack(anchor="w", padx=16)
+        self.valid_lbl.pack(anchor="w", padx=px(16))
 
         # ── Export ────────────────────────────────────────────────────────
-        export_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.export_section')}  ", padx=14, pady=8)
-        export_lf.pack(fill="x", padx=16, pady=6)
+        export_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8))
+        export_lf.pack(fill="x", padx=px(16), pady=px(6))
 
         exp_row = tk.Frame(export_lf); exp_row.pack(fill="x")
         for fmt, cmd in [
@@ -236,12 +237,12 @@ class ChapterMarkersTab(BaseTab):
         ]:
             tk.Button(exp_row, text=fmt, bg=CLR["accent"], fg="black",
                       font=(UI_FONT, 9, "bold"), width=18,
-                      command=cmd).pack(side="left", padx=4)
+                      command=cmd).pack(side="left", padx=px(4))
 
         # Output preview
         preview_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.preview_section')}  ",
-                                    padx=10, pady=6)
-        preview_lf.pack(fill="x", padx=16, pady=4)
+                                    padx=px(10), pady=px(6))
+        preview_lf.pack(fill="x", padx=px(16), pady=px(4))
         self.preview_text = tk.Text(preview_lf, height=8,
                                      bg=CLR["bg"], fg="#EEEEEE",
                                      font=(MONO_FONT, 10))
@@ -332,12 +333,12 @@ class ChapterMarkersTab(BaseTab):
         c   = self.chapters[idx]
         dlg = tk.Toplevel(self)
         dlg.title("Edit Chapter")
-        dlg.geometry("400x150")
+        dlg.geometry(f"{px(400)}x{px(150)}")
         dlg.grab_set()
-        tk.Label(dlg, text=t("chapter_markers.timestamp_s")).pack(pady=(14, 2))
+        tk.Label(dlg, text=t("chapter_markers.timestamp_s")).pack(pady=px(14, 2))
         ts_var = tk.StringVar(value=str(c.time))
         tk.Entry(dlg, textvariable=ts_var, width=12, relief="flat").pack()
-        tk.Label(dlg, text=t("chapter_markers.title")).pack(pady=(8, 2))
+        tk.Label(dlg, text=t("chapter_markers.title")).pack(pady=px(8, 2))
         ti_var = tk.StringVar(value=c.title)
         tk.Entry(dlg, textvariable=ti_var, width=34).pack()
 
@@ -352,7 +353,7 @@ class ChapterMarkersTab(BaseTab):
                 dlg.destroy()
             except ValueError:
                 messagebox.showerror(t("common.error"), "Enter a valid number for timestamp.")
-        tk.Button(dlg, text="Save", command=_save, bg=CLR["green"], fg="white", cursor="hand2", relief="flat").pack(pady=10)
+        tk.Button(dlg, text="Save", command=_save, bg=CLR["green"], fg="white", cursor="hand2", relief="flat").pack(pady=px(10))
 
     def _remove_selected(self):
         sel = self.tree.selection()
