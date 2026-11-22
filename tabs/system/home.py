@@ -27,7 +27,7 @@ from core import settings as _settings
 from core import tools
 from core.scaling import px
 from core.tools import Category, ToolId
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit import labels
 
 logger = logging.getLogger("crossfader.system.home")
@@ -85,29 +85,14 @@ class HomeTab(BaseTab):
     # ── UI build ─────────────────────────────────────────────────────────────
     def _build_ui(self):
         # Header
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        inner = tk.Frame(hdr, bg=CLR["panel"])
-        inner.pack(fill="x", padx=px(22), pady=px(16, 14))
-        tk.Label(
-            inner,
-            text="🏠  Home",
-            font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-            anchor="w",
-        ).pack(side="top", anchor="w")
-        tk.Label(
-            inner,
-            text="Pick a tool to get started. Star the ones you "
-            "use most to pin them to your Favourites.",
-            font=(UI_FONT, 9),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="top", anchor="w", pady=px(2, 0))
+        column = make_header(
+            self,
+            "Home",
+            "Pick a tool to get started. Star the ones you use most to pin them to your Favourites.",
+            icon="🏠",
+        )
         back = tk.Label(
-            inner,
+            column,
             text="🧭  Not sure which tool? Start: What do you want to do?  ›",
             font=(UI_FONT, 10, "bold"),
             bg=CLR["panel"],
@@ -117,7 +102,6 @@ class HomeTab(BaseTab):
         )
         back.pack(side="top", anchor="w", pady=px(8, 0))
         back.bind("<Button-1>", lambda _e: self._go(ToolId.START))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Scrollable content
         outer = tk.Frame(self, bg=CLR["bg"])

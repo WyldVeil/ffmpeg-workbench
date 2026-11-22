@@ -14,7 +14,7 @@ from core import settings
 from core.i18n import t
 from core.scaling import px
 from core.settings import StartPage, load_settings, update
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
 
@@ -32,26 +32,7 @@ class SettingsTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="⚙  " + t("tab.settings"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("settings.subtitle"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.settings"), t("settings.subtitle"), icon="⚙")
 
         lf = tk.LabelFrame(
             self, text=f"  {t('settings.encoding_defaults_section')}  ", padx=px(20), pady=px(14)

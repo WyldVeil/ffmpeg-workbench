@@ -34,7 +34,7 @@ from core.skins import (
     save_custom_color,
     save_skin_name,
 )
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.stars import set_star_count, set_star_speed
 
@@ -93,15 +93,7 @@ class AdvancedSettingsTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(
-            hdr,
-            text="⚙  " + t("tab.advanced_settings"),
-            font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left", padx=px(20), pady=px(12))
+        make_header(self, t("tab.advanced_settings"), icon="⚙")
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=px(15), pady=px(10))

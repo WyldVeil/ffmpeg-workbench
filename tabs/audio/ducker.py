@@ -13,7 +13,7 @@ from tkinter import messagebox, ttk
 from core.i18n import t
 from core.ops import duck as dk
 from core.scaling import px
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 
 PRESETS = {
@@ -43,26 +43,7 @@ class AudioDuckerTab(BaseTab):
 
     def _build_header(self):
         # Header
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="🎚  " + t("tab.music_ducker"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("ducker.desc_header"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.music_ducker"), t("ducker.desc_header"), icon="🎚")
 
         # The bold labels on the left share one width: wide enough for the
         # longest of them (in any language), so none is cut off

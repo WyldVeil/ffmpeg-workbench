@@ -429,6 +429,50 @@ def test_pages_never_import_other_pages():
     assert not hits, f"move what's shared to core or tabs/kit: {hits}"
 
 
+#: pages with a layout of their own instead of the standard header: the welcome screen's hero title
+OWN_HEADER = {"tabs/system/start.py": "the welcome screen's hero title"}
+
+
+def _calls(tree: ast.AST, name: str) -> bool:
+    return any(
+        isinstance(n, ast.Call)
+        and (ast.unparse(n.func) == name or ast.unparse(n.func).endswith("." + name))
+        for n in ast.walk(tree)
+    )
+
+
+def _page_classes(tree: ast.AST) -> list[str]:
+    return [
+        n.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ClassDef) and any(ast.unparse(b) == "BaseTab" for b in n.bases)
+    ]
+
+
+def _title_labels(tree: ast.AST) -> list[int]:
+    """tk.Label(text=... t("tab.<tool>") ...): a tool's title drawn by hand."""
+    return [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and ast.unparse(n.func) in ("tk.Label", "ttk.Label")
+        and any(k.arg == "text" and "t('tab." in ast.unparse(k.value) for k in n.keywords)
+    ]
+
+
+def test_every_page_has_the_standard_header():
+    """Titles, icons and subtitles go through tabs.base_tab.make_header - one
+    look, one place to change it (there were 17 hand-built variants)."""
+    missing, by_hand = [], []
+    for rel, path in _py_files("tabs"):
+        tree = ast.parse(open(path, encoding="utf-8").read(), path)
+        if _page_classes(tree) and rel not in OWN_HEADER and not _calls(tree, "make_header"):
+            missing.append(rel)
+        by_hand += [f"{rel}:{line}" for line in _title_labels(tree)]
+    assert not missing, f"call make_header(self, title, subtitle, icon=...): {missing}"
+    assert not by_hand, f"a tool's title belongs in make_header: {by_hand}"
+
+
 def test_the_whole_engine_is_type_checked_strictly():
     """pyright's strict mode covers the engine, the window shell and the page kit;
     CI fails on any error, so this list may only grow."""

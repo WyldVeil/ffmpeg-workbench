@@ -21,7 +21,7 @@ from core.i18n import t
 from core.ops import trim
 from core.scaling import px
 from tabs import framestep
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
@@ -78,26 +78,7 @@ class TrimmerTab(BaseTab):
         self._build_render(bf, prev_btn)
 
     def _build_src(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="✂  " + t("tab.quick_trimmer"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("trimmer.subtitle"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.quick_trimmer"), t("trimmer.subtitle"), icon="✂")
 
         # Source row
         sf = tk.Frame(self)

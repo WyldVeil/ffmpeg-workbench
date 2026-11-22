@@ -25,7 +25,7 @@ from tkinter import messagebox, ttk
 from core.i18n import t
 from core.scaling import px
 from tabs import framestep
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.widgets import scroll_body
 
@@ -116,18 +116,7 @@ class ChapterMarkersTab(BaseTab):
         self._build_export(body)
 
     def _build_header(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(
-            hdr,
-            text="📑  " + t("tab.chapter_markers"),
-            font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left", padx=px(20), pady=px(12))
-        tk.Label(hdr, text=t("chapter_markers.subtitle"), bg=CLR["panel"], fg=CLR["fgdim"]).pack(
-            side="left"
-        )
+        make_header(self, t("tab.chapter_markers"), t("chapter_markers.subtitle"), icon="📑")
 
         body = scroll_body(self)
         return body

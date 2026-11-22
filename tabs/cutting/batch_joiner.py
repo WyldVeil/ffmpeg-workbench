@@ -13,7 +13,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 
 
@@ -34,26 +34,7 @@ class BatchJoinerTab(BaseTab):
         self._build_out()
 
     def _build_listbox(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="📎  " + t("tab.batch_joiner"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("batch_joiner.desc"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.batch_joiner"), t("batch_joiner.desc"), icon="📎")
 
         # File list
         lf = tk.LabelFrame(self, text=t("batch_joiner.sect_video_queue"), padx=px(10), pady=px(6))

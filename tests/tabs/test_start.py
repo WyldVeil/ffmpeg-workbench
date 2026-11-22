@@ -190,6 +190,19 @@ def test_dropped_file_gets_suggestions_and_opens_in_the_tool(ui, media, tmp_path
     ui.app.page(ToolId.METADATA_CLEANER)._clear()
 
 
+def _descendants(widget):
+    for child in widget.winfo_children():
+        yield child
+        yield from _descendants(child)
+
+
+def _text(widget):
+    try:
+        return widget.cget("text")
+    except Exception:  # frames and canvases have no text
+        return ""
+
+
 @pytest.mark.gui
 def test_recent_tools_and_home_link(ui):
     ui.open("Sharpen")
@@ -197,11 +210,7 @@ def test_recent_tools_and_home_link(ui):
     texts = [w.cget("text") for w in page._recent.winfo_children()]
     assert any("Sharpen" in tx for tx in texts)
     home = ui.open("Home")
-    links = [
-        w
-        for w in home.winfo_children()[0].winfo_children()[0].winfo_children()
-        if "Start" in str(w.cget("text"))
-    ]
+    links = [w for w in _descendants(home) if "Not sure which tool" in str(_text(w))]
     assert links
     links[0].event_generate("<Button-1>")
     ui.pump(0.2)

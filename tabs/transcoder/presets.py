@@ -18,7 +18,7 @@ from core import ffmpeg as ff
 from core.i18n import t
 from core.ops import presets as pr
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 
 #: the category filter's "show every category" entry (the others are the presets' own)
@@ -38,26 +38,7 @@ class PresetManagerTab(BaseTab):
             )
 
     def _build_ui(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="💾  " + t("tab.preset_manager"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("presets.subtitle"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.preset_manager"), t("presets.subtitle"), icon="💾")
 
         # ── Main paned layout ─────────────────────────────────────────────
         paned = tk.PanedWindow(self, orient="horizontal", sashwidth=px(6), bg="#AAAAAA")

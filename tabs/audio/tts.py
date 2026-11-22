@@ -24,7 +24,7 @@ from core import tts as tts_core
 from core.i18n import t
 from core.ops import voiceover as vo
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ChoiceBox
@@ -129,16 +129,7 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     def _build_ui(self):
         # ── Header ───────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(
-            hdr,
-            text="🗣  " + t("tab.tts_voice_over"),
-            font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left", padx=px(20), pady=px(12))
-        tk.Label(hdr, text=t("tts.subtitle"), bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
+        make_header(self, t("tab.tts_voice_over"), t("tts.subtitle"), icon="🗣")
 
         # ── Engine status banner ──────────────────────────────────────────
         self._build_engine_banner()

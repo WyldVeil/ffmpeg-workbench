@@ -15,7 +15,7 @@ from core.hardware import get_video_duration
 from core.i18n import t
 from core.scaling import px
 from tabs import framestep
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
 
@@ -51,18 +51,7 @@ class SplicerTab(BaseTab):
 
     def _build_seg_canvas(self):
         # Header
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x", padx=0, pady=0)
-        tk.Label(
-            hdr,
-            text="✂  " + t("tab.the_splicer"),
-            font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left", padx=px(20), pady=px(12))
-        tk.Label(hdr, text=t("splicer.subtitle"), bg=CLR["panel"], fg=CLR["fgdim"]).pack(
-            side="left", padx=px(5)
-        )
+        make_header(self, t("tab.the_splicer"), t("splicer.subtitle"), icon="✂")
 
         # Segments list area
         list_outer = tk.LabelFrame(

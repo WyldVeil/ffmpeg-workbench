@@ -23,7 +23,7 @@ from core.i18n import t
 from core.ops import karaoke as ko
 from core.queue_manager import Hooks
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -103,26 +103,7 @@ class KaraokeTab(BaseTab):
 
     def _build_header(self):
         # Header
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="🎤  " + t("tab.karaoke_generator"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("karaoke.subtitle"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.karaoke_generator"), t("karaoke.subtitle"), icon="🎤")
 
     def _build_whisper_status_banner(self):
         """Whisper status banner."""

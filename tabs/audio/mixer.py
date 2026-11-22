@@ -24,7 +24,7 @@ from core.i18n import t
 from core.ops import mixer as mx
 from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
 
@@ -93,26 +93,7 @@ class AudioMixerTab(BaseTab):
         self._build_master_output()
 
     def _build_vid(self):
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="🎚  " + t("tab.audio_mixer"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("mixer.subtitle"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.audio_mixer"), t("mixer.subtitle"), icon="🎚")
 
         # Video source
         vid_f = tk.Frame(self)

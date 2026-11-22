@@ -87,12 +87,12 @@ CLR = _load_clr()
 
 def make_header(parent, title, subtitle="", icon=""):
     """
-    Professional two-row tab header:
+    Every page's header (tests/test_architecture.py checks they all use it):
       ┌───────────────────────────────────────────┐
       │  ICON  Title                              │
       │        Subtitle description               │
       └───────────────────────────────────────────┘
-    Returns the outer header frame.
+    Returns the text column, for a page that adds a line under the subtitle.
     """
     hdr = tk.Frame(parent, bg=CLR["panel"])
     hdr.pack(fill="x")
@@ -120,7 +120,7 @@ def make_header(parent, title, subtitle="", icon=""):
 
     # Bottom border
     tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x")
-    return hdr
+    return left
 
 
 def make_section(parent, title="", padx=20, pady=(8, 4)):

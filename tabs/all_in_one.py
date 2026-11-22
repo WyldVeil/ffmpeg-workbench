@@ -35,7 +35,7 @@ from core import tasks
 from core.i18n import t
 from core.ops import all_in_one as aio
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
 
@@ -257,18 +257,7 @@ class AllInOneTab(BaseTab):
 
     def _build_ui(self):
         # ── Fixed header ──────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Label(
-            hdr,
-            text="🎛  " + t("tab.all_in_one"),
-            font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left", padx=px(20), pady=px(12))
-        tk.Label(hdr, text=t("all_in_one.subtitle"), bg=CLR["panel"], fg=CLR["fgdim"]).pack(
-            side="left"
-        )
+        make_header(self, t("tab.all_in_one"), t("all_in_one.subtitle"), icon="🎛")
 
         # ── Source / output (always visible, above scroll) ─────────────────
         io_frame = tk.Frame(self, bg=CLR["bg"], padx=px(12), pady=px(8))

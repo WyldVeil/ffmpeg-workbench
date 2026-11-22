@@ -19,7 +19,7 @@ from core.i18n import t
 from core.ops import encode_queue as eq
 from core.queue_manager import Hooks
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 
 RESOLUTIONS = ["Source", "3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "640x360"]
@@ -76,26 +76,7 @@ class EncodeQueueTab(BaseTab):
     # ═══════════════════════════════════════════════════════════════════════
     def _build_ui(self):
         # Header
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
-        hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(
-            hdr_inner,
-            text="📋  " + t("tab.encode_queue"),
-            font=(UI_FONT, 15, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Label(
-            hdr_inner,
-            text=t("encode_queue.subtitle"),
-            font=(UI_FONT, 10),
-            bg=CLR["panel"],
-            fg=CLR["fgdim"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
-        tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+        make_header(self, t("tab.encode_queue"), t("encode_queue.subtitle"), icon="📋")
 
         # Paned layout
         paned = tk.PanedWindow(self, orient="horizontal", sashwidth=px(6), bg="#AAAAAA")
