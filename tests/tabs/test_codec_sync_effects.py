@@ -7,7 +7,7 @@ import re
 import pytest
 
 from core import ffmpeg as ff
-from tabs.transcoder import codec as cc
+from core.ops import codec as co
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -31,7 +31,7 @@ def _cruncher(
     tab.encoder.set_codec(codec)
     tab.encoder._ten_bit.set(ten_bit)
     tab.container_var.set(container)
-    tab.audio_var.set(cc.AUDIO[audio][0])
+    tab.audio_var.set(co.AUDIO[audio][0])
     tab.out_row.set(out)
     tab._render()
     ui.wait_idle(300)
