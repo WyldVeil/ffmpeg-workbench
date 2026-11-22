@@ -233,9 +233,7 @@ class App(tk.Tk):
     def apply_theme(self, name: str) -> None:
         if name != load_skin_name():
             save_skin_name(name)
-        self.skin = apply_skin(
-            self, sidebar=self.sidebar, content=self.content, stars_behind=self.sidebar.inner
-        )
+        self.skin = apply_skin(self, sidebar=self.sidebar, content=self.content)
         self.sidebar.recolour(self.skin)
         self.statusbar.recolour(self.skin)
         self.versions.check_ffmpeg()  # describes FFmpeg in the theme's colours

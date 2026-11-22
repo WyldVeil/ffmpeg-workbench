@@ -31,6 +31,7 @@ from core.timecode import Timecode
 from core.tools import ToolId
 from tabs.kit import dialogs
 from tabs.kit.contracts import Shell, Transport
+from tabs.kit.job_button import JobButton
 
 logger = logging.getLogger("crossfader.base_tab")
 
@@ -670,6 +671,19 @@ class VideoTimeline(tk.Frame):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _report_status(shell: Shell, status: str, returncode: int, seconds: float) -> None:
+    """How a job ended, in the status bar."""
+    if status == "done":
+        took = f"{seconds:.1f}s" if seconds < 60 else f"{int(seconds // 60)}m {int(seconds % 60)}s"
+        shell.set_status(t("app.status.done", elapsed=took))
+    elif status == "cancelled":
+        shell.set_status(
+            t("common.cancelled") if t("common.cancelled") != "common.cancelled" else "Cancelled"
+        )
+    else:
+        shell.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
+
+
 class BaseTab(ttk.Frame):
     """
     Common base class for all tool tabs.
@@ -962,7 +976,6 @@ class BaseTab(ttk.Frame):
         command's last argument).  While the job runs, *btn* shows the
         progress and acts as a Cancel button, then gets its own text back.
         """
-        shell = self.shell()
         cmds = [[str(c) for c in cmd] for cmd in steps]
         if output is None and cmds and cmds[-1] and ff.is_ffmpeg(cmds[-1][0]):
             last = cmds[-1][-1]
@@ -970,81 +983,39 @@ class BaseTab(ttk.Frame):
                 last if last not in ("-", "pipe:", "pipe:1") and not last.startswith("-") else ""
             )
         self.log_debug("Queuing: " + " | ".join(ff.format_cmd(c) for c in cmds))
-        state: dict[str, Any] = {
-            "task": None,
-            "orig_cmd": None,
-            "label": "",
-            "t0": time.time(),
-            "clicked": time.monotonic(),
-        }
-
-        def _cancel_click():
-            # Ignore the second half of an accidental double-click on Render.
-            if time.monotonic() - state["clicked"] < 0.8:
-                return
-            if state["task"]:
-                self.cancel_render(state["task"])
-
-        if btn is not None:
-            try:
-                state["orig_cmd"] = btn.cget("command")
-                state["label"] = btn.cget("text")
-                btn.config(
-                    state="normal", text="⏳ " + t("app.status.queued_btn"), command=_cancel_click
-                )
-            except tk.TclError:
-                btn = None
+        shell = self.shell()
+        task: dict[str, str] = {}
+        started = [time.time()]
+        button = JobButton(btn, lambda: self.cancel_render(task["id"]) if task else None)
         if shell is not None:
             shell.set_status(t("app.status.queued"))
 
-        def _on_start(task_id):
-            state["t0"] = time.time()
-            if btn is not None:
-                with contextlib.suppress(tk.TclError):
-                    btn.config(text="✖ " + _cancel_label())
+        def _on_start(_task_id: str) -> None:
+            started[0] = time.time()
+            button.running()
             if shell is not None:
                 shell.set_status(t("app.status.processing"))
 
-        def _cancel_label(pct=None):
-            label = t("btn.cancel") if t("btn.cancel") != "btn.cancel" else "Cancel"
-            return f"{label}  {pct:.0f}%" if pct is not None else label
-
-        def _on_progress(task_id, line):
+        def _on_progress(task_id: str, line: str) -> None:
             if console is not None:
                 self.log(console, line)
-            tk_task = self.task(task_id)
-            if btn is not None and tk_task is not None and tk_task.fraction is not None:
-                with contextlib.suppress(tk.TclError):
-                    btn.config(text="✖ " + _cancel_label(tk_task.fraction * 100))
+            job = self.task(task_id)
+            if job is not None and job.fraction is not None:
+                button.running(job.fraction)
 
-        def _on_complete(task_id, returncode):
-            elapsed = time.time() - state["t0"]
-            elapsed_str = (
-                f"{elapsed:.1f}s" if elapsed < 60 else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
-            )
-            if btn is not None:
-                with contextlib.suppress(tk.TclError):
-                    btn.config(state="normal", text=state["label"], command=state["orig_cmd"] or "")
-            tk_task = self.task(task_id)
-            status = tk_task.status if tk_task else ("done" if returncode == 0 else "failed")
+        def _on_complete(task_id: str, returncode: int) -> None:
+            button.restore()
+            job = self.task(task_id)
+            status = job.status if job else ("done" if returncode == 0 else "failed")
             if shell is not None:
-                if status == "done":
-                    shell.set_status(t("app.status.done", elapsed=elapsed_str))
-                elif status == "cancelled":
-                    shell.set_status(
-                        t("common.cancelled")
-                        if t("common.cancelled") != "common.cancelled"
-                        else "Cancelled"
-                    )
-                else:
-                    shell.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
-            if console is not None and tk_task is not None and status == "failed" and tk_task.error:
-                self.log_tagged(console, tk_task.error, "error")
-            self.last_task = tk_task
+                _report_status(shell, status, returncode, time.time() - started[0])
+            if console is not None and job is not None and status == "failed" and job.error:
+                self.log_tagged(console, job.error, "error")
+            self.last_task = job
             if on_done:
-                on_done(0 if status == "done" else (returncode if returncode else 1))
+                on_done(0 if status == "done" else (returncode or 1))
 
-        state["task"] = self.enqueue_render(
+        task["id"] = self.enqueue_render(
             name or getattr(self, "TOOL_NAME", "") or "Render",
             output or "",
             work=cmds,
@@ -1052,7 +1023,7 @@ class BaseTab(ttk.Frame):
             expected_duration=duration,
             inputs=inputs,
         )
-        return state["task"]
+        return task["id"]
 
     # ── Result display ────────────────────────────────────────────────────────
 

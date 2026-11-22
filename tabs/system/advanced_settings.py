@@ -35,7 +35,7 @@ from core.skins import (
 )
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-from tabs.kit.theme import set_star_count, set_star_speed
+from tabs.kit.stars import set_star_count, set_star_speed
 
 logger = logging.getLogger("crossfader.system.advanced_settings")
 

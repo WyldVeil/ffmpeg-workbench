@@ -9,269 +9,16 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import random
-import sys
 import tkinter as tk
 from collections.abc import Callable
-from dataclasses import dataclass
 from tkinter import ttk
 from typing import cast
 
-from core import settings
 from core.scaling import px
 from core.skins import UI_FONT, Skin, get_skin, load_skin_name
+from tabs.kit.stars import start_stars, stop_stars
 
 logger = logging.getLogger("crossfader.kit.theme")
-
-# ── Module-level state for star animation ────────────────────────────────────
-_STAR_CHARS = ("✦", "✧", "⋆", "·", "˚", "∘", "*")
-_STAR_COLOURS = (
-    "#E1BEE7",
-    "#CE93D8",
-    "#BA68C8",
-    "#AB47BC",
-    "#F3E5F5",
-    "#D1C4E9",
-    "#B39DDB",
-    "#EDE7F6",
-)
-
-
-@dataclass(slots=True)
-class _Star:
-    """One falling star: where it is, how it moves, and its canvas item."""
-
-    x: float = 0.0
-    y: float = 0.0
-    speed: float = 1.0
-    drift: float = 0.0
-    char: str = "*"
-    colour: str = "#FFFFFF"
-    size: int = 12
-    item: int | None = None
-
-    def respawn(self, x: float, y: float) -> None:
-        self.x, self.y = x, y
-        self.speed = random.uniform(0.5, 1.8)
-        self.drift = random.uniform(-0.2, 0.2)
-        self.char = random.choice(_STAR_CHARS)
-        self.colour = random.choice(_STAR_COLOURS)
-        self.size = random.randint(8, 16)
-
-
-_star_canvas = None
-_star_toplevel = None  # click-through Toplevel overlay (Windows)
-_star_data: list[_Star] = []
-_star_after_id = None
-# Unique chroma-key colour - never used in any real skin palette
-_STAR_CHROMA = "#010203"
-# Speed multiplier: 1.0 = default, <1 slower, >1 faster
-_star_speed_mult: float = 1.0
-# Star count (density)
-_star_count: int = 55
-
-
-def get_star_speed() -> float:
-    """Return the current star speed multiplier."""
-    return _star_speed_mult
-
-
-def set_star_speed(mult: float) -> None:
-    """Set the star speed multiplier live (no restart needed)."""
-    global _star_speed_mult
-    _star_speed_mult = float(mult)
-
-
-def get_star_count() -> int:
-    """Return the current star density count."""
-    return _star_count
-
-
-def set_star_count(count: int) -> None:
-    """Set the number of stars. Takes effect on next skin apply."""
-    global _star_count
-    _star_count = max(10, int(count))
-
-
-def stop_stars():
-    """Kill any running star animation and destroy all overlay widgets."""
-    global _star_canvas, _star_toplevel, _star_data, _star_after_id
-    if _star_after_id is not None:
-        try:
-            if _star_canvas and _star_canvas.winfo_exists():
-                _star_canvas.after_cancel(_star_after_id)
-        except tk.TclError:
-            pass
-        _star_after_id = None
-    # Destroying the Toplevel also destroys the canvas inside it
-    if _star_toplevel is not None:
-        try:
-            if _star_toplevel.winfo_exists():
-                _star_toplevel.destroy()
-        except tk.TclError:
-            pass
-        _star_toplevel = None
-        _star_canvas = None
-    elif _star_canvas is not None:
-        try:
-            if _star_canvas.winfo_exists():
-                _star_canvas.destroy()
-        except tk.TclError:
-            pass
-        _star_canvas = None
-    _star_data.clear()
-
-
-def start_stars(app: tk.Tk, skin: Skin, inner_frame: tk.Misc | None = None) -> None:
-    """Spawn the Mystical falling-star particle overlay across the full window.
-
-    On Windows: creates a borderless click-through Toplevel that sits over the
-    entire app. The background is chroma-keyed transparent (-transparentcolor),
-    so only the star glyphs are visible. WS_EX_TRANSPARENT lets all mouse events
-    fall through to the main window beneath.
-
-    On other platforms: falls back to a canvas on the app root (limited effect).
-    The inner_frame parameter is accepted for API compatibility but not used.
-    """
-    global _star_canvas, _star_toplevel, _star_data, _star_after_id
-
-    stop_stars()
-
-    # Load persisted speed / density preferences
-    set_star_speed(settings.STAR_SPEED.get())
-    set_star_count(settings.STAR_COUNT.get())
-
-    if sys.platform == "win32":
-        import ctypes
-
-        _star_toplevel = tk.Toplevel(app)
-        _star_toplevel.overrideredirect(True)
-        _star_toplevel.configure(bg=_STAR_CHROMA)
-        _star_toplevel.attributes("-transparentcolor", _STAR_CHROMA)
-        # Not -topmost (that drew stars over every other program): owned by the
-        # app window and kept just above it.
-        _star_toplevel.transient(app)
-        _star_toplevel.lift(app)
-
-        # Apply WS_EX_TRANSPARENT | WS_EX_LAYERED so the overlay is
-        # completely click-through - all mouse events reach the app below.
-        def _make_clickthrough():
-            try:
-                _star_toplevel.update_idletasks()
-                raw = _star_toplevel.winfo_id()
-                hwnd = ctypes.windll.user32.GetParent(raw) or raw
-                GWL_EXSTYLE = -20
-                WS_EX_LAYERED = 0x00080000
-                WS_EX_TRANSPARENT = 0x00000020
-                ex = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-                ctypes.windll.user32.SetWindowLongW(
-                    hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED | WS_EX_TRANSPARENT
-                )
-            except Exception:
-                logger.debug("_make_clickthrough: best-effort step failed", exc_info=True)
-
-        app.after(80, _make_clickthrough)
-
-        _star_canvas = tk.Canvas(_star_toplevel, bg=_STAR_CHROMA, highlightthickness=0, bd=0)
-        _star_canvas.pack(fill="both", expand=True)
-
-        # Keep overlay geometry in sync with main window (move / resize)
-        def _sync():
-            if _star_toplevel is None or not _star_toplevel.winfo_exists():
-                return
-            try:
-                if app.state() == "iconic":
-                    _star_toplevel.withdraw()
-                else:
-                    _star_toplevel.deiconify()
-                    _star_toplevel.lift(app)
-                    x = app.winfo_rootx()
-                    y = app.winfo_rooty()
-                    w = app.winfo_width()
-                    h = app.winfo_height()
-                    _star_toplevel.geometry(f"{w}x{h}+{x}+{y}")
-            except Exception:
-                logger.debug("_sync: best-effort step failed", exc_info=True)
-            _star_toplevel.after(500, _sync)
-
-        # Bind to Configure for immediate response to resize/move
-        def _on_configure(event):
-            try:
-                if _star_toplevel and _star_toplevel.winfo_exists():
-                    x = app.winfo_rootx()
-                    y = app.winfo_rooty()
-                    w = app.winfo_width()
-                    h = app.winfo_height()
-                    _star_toplevel.geometry(f"{w}x{h}+{x}+{y}")
-            except Exception:
-                logger.debug("_on_configure: best-effort step failed", exc_info=True)
-
-        app.bind("<Configure>", _on_configure, add=True)
-        app.after(50, _sync)
-
-    else:
-        # Non-Windows fallback - canvas on root, lower behind content
-        _star_canvas = tk.Canvas(app, bg=skin["sb_bg"], highlightthickness=0, bd=0)
-        _star_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
-        # Canvas.lower() reorders the canvas's *items*; the window-stacking
-        # lower is Misc.lower - without it the canvas covered the whole UI.
-        with contextlib.suppress(tk.TclError):
-            tk.Misc.lower(_star_canvas)  # pyright: ignore[reportUnknownMemberType] - Misc.lower's stub is untyped
-
-    # _star_data is populated lazily on the first tick.
-    # We use the MAIN APP window dimensions (always reliable) rather than the
-    # canvas/Toplevel dimensions, which lag behind until the geometry manager
-    # has completed at least one layout pass after _sync fires.
-
-    def _get_wh():
-        """Return (W, H) using app dims - the overlay always matches the app."""
-        width, height = app.winfo_width(), app.winfo_height()
-        return (width if width >= 100 else 1440), (height if height >= 100 else 900)
-
-    def _tick():
-        global _star_after_id
-        if _star_canvas is None or not _star_canvas.winfo_exists():
-            return
-
-        width, height = _get_wh()
-
-        # Lazy init - runs once, using reliable app dimensions.
-        if not _star_data:
-            slot_w = width / _star_count
-            for i in range(_star_count):
-                star = _Star()
-                star.respawn(
-                    slot_w * i + random.uniform(0, slot_w),
-                    random.uniform(-px(120), height + px(200)),
-                )
-                _star_data.append(star)
-
-        canvas = _star_canvas
-        for star in _star_data:
-            if star.item is not None:
-                with contextlib.suppress(tk.TclError):
-                    canvas.delete(star.item)
-                star.item = None
-            star.y += px(star.speed * _star_speed_mult)
-            star.x += px(star.drift * _star_speed_mult)
-            if star.y > height + px(20):  # re-enter from a random x across the full width
-                star.respawn(random.uniform(0, width), random.uniform(-px(30), -px(5)))
-            if star.x < 0:
-                star.x = width
-            if star.x > width:
-                star.x = 0
-            star.item = canvas.create_text(
-                int(star.x),
-                int(star.y),
-                text=star.char,
-                fill=star.colour,
-                font=(UI_FONT, star.size),
-            )
-
-        _star_after_id = _star_canvas.after(50, _tick)
-
-    _star_canvas.after(50, _tick)
-
 
 # ── Global tk option cascading ────────────────────────────────────────────────
 
@@ -428,9 +175,7 @@ def _blend(a: str, b: str, amount: float) -> str:
     return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb, strict=False))
 
 
-def apply_skin(
-    app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame, stars_behind: tk.Misc | None = None
-) -> Skin:
+def apply_skin(app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame) -> Skin:
     """Apply the saved theme to the window (safe to repeat: live switching).
     Returns the palette; the shell's own widgets recolour themselves from it."""
     skin = get_skin(load_skin_name())
@@ -460,7 +205,7 @@ def apply_skin(
     _recolour_widget_tree(content, skin)
     apply_ttk_styles(skin)
     if skin.get("stars"):
-        start_stars(app, skin, stars_behind)
+        start_stars(app, skin)
     else:
         stop_stars()
     return skin

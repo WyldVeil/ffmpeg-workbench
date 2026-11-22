@@ -9,9 +9,7 @@ hold it, and queue one render with progress, cancel and overwrite protection.
 
 from __future__ import annotations
 
-import contextlib
 import os
-import time
 import tkinter as tk
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -25,6 +23,7 @@ from core.encoders import VideoEncode
 from core.i18n import t
 from core.ops.shared import keep_audio_args
 from core.queue_manager import Hooks, WorkerFn
+from tabs.kit.job_button import JobButton
 
 
 def container_of(path: str) -> str:
@@ -179,40 +178,37 @@ def queue_job(
     job when clicked; afterwards the result is shown, then *hooks.on_complete*
     runs (on the UI thread, like *hooks.on_start*)."""
     hooks = hooks or Hooks()
-    orig, label = btn.cget("command"), btn.cget("text")
-    queued_at = time.monotonic()
+    task: dict[str, str] = {}
+    button = JobButton(btn, lambda: tab.cancel_render(task["id"]) if task else None)
 
-    def cancel() -> None:
-        if time.monotonic() - queued_at > 0.8:  # ignore a double-click on Render
-            tab.cancel_render(state["tid"])
+    def on_start(tid: str) -> None:
+        button.running()
+        if hooks.on_start is not None:
+            hooks.on_start(tid)
 
     def on_progress(tid: str, line: str) -> None:
         tab.log(console, line)
-        task = tab.task(tid)
-        if task is not None and task.fraction is not None:
-            with contextlib.suppress(tk.TclError):
-                btn.config(text=f"\u2716 {t('btn.cancel')}  {task.fraction * 100:.0f}%")
+        running = tab.task(tid)
+        if running is not None and running.fraction is not None:
+            button.running(running.fraction)
 
     def on_complete(tid: str, rc: int) -> None:
-        with contextlib.suppress(tk.TclError):
-            btn.config(text=label, command=orig, state="normal")
+        button.restore()
         tab.last_task = tab.task(tid)
         tab.show_result(rc, job.out)
         if hooks.on_complete is not None:
             hooks.on_complete(tid, rc)
 
-    state = {"tid": None}
-    state["tid"] = tab.enqueue_render(
+    task["id"] = tab.enqueue_render(
         job.name,
         job.out,
         work=job.work,
         expected_duration=job.duration,
         inputs=job.inputs,
-        hooks=Hooks(on_start=hooks.on_start, on_progress=on_progress, on_complete=on_complete),
+        hooks=Hooks(on_start=on_start, on_progress=on_progress, on_complete=on_complete),
     )
-    btn.config(text=f"\u2716 {t('btn.cancel')}", command=cancel)
     tab.log(console, f"Queued: {os.path.basename(job.out)}")
-    return state["tid"]
+    return task["id"]
 
 
 def intermediate_args(venc) -> list:
