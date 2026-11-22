@@ -8,22 +8,23 @@ import pytest
 
 from core import ffmpeg as ff
 from core import filters as fl
+from core.ops import color_correct as cc_ops
 from core.ops import green_key as gk
 from core.ops import lut as lut_ops
 from core.ops import scopes as sc
 from core.ops import speed_ramp as sr_ops
-from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
+from tabs.visuals import green_key, lut, media_gen, scopes, speed_ramp
 
 # ── pure helpers ─────────────────────────────────────────────────────────────
 
 
 def test_colour_chain_neutral_and_curves():
-    assert color_correct.build_chain(color_correct.DEFAULTS) == ""
-    chain = color_correct.build_chain({"blacks": -0.1, "whites": 0.1, "shadows": 0.5})
+    assert cc_ops.build_chain(cc_ops.DEFAULTS) == ""
+    chain = cc_ops.build_chain({"blacks": -0.1, "whites": 0.1, "shadows": 0.5})
     assert "curves=all='0.100/0 0.25/0.310 0.75/0.750 0.900/1':interp=pchip" in chain
-    for look in color_correct.LOOKS.values():
-        values = dict(color_correct.DEFAULTS, **look)
-        color_correct.build_chain(values)
+    for look in cc_ops.LOOKS.values():
+        values = dict(cc_ops.DEFAULTS, **look)
+        cc_ops.build_chain(values)
 
 
 def test_speed_curve_maths():
