@@ -263,9 +263,14 @@ class ChapterMarkersTab(BaseTab):
             self.src_var.set(p)
             self._src_typed()
 
-    def _src_typed(self):
+    def on_source_loaded(self, path):
+        """Drag and drop / File > Open: the shared loader has already set the
+        path, so load it here (the typed-path check would think it was done)."""
+        self._src_typed(force=True)
+
+    def _src_typed(self, force=False):
         p = self.src_var.get().strip()
-        if p and os.path.isfile(p) and p != getattr(self, "file_path", ""):
+        if p and os.path.isfile(p) and (force or p != getattr(self, "file_path", "")):
             from core import ffmpeg as ff
             self.file_path = p
             self._duration = ff.duration_of(p)

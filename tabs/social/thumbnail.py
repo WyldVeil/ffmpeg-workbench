@@ -256,9 +256,14 @@ class ThumbnailMakerTab(BaseTab):
                     self._text_var, self._text_size, self._text_color, self._text_pos, self._text_stroke):
             var.trace_add("write", self._look_changed)
 
-    def _src_typed(self):
+    def on_source_loaded(self, path):
+        """Drag and drop / File > Open: the shared loader has already set the
+        path, so load it here (the typed-path check would think it was done)."""
+        self._src_typed(force=True)
+
+    def _src_typed(self, force=False):
         p = self._src_var.get().strip()
-        if p and os.path.isfile(p) and p != getattr(self, "file_path", ""):
+        if p and os.path.isfile(p) and (force or p != getattr(self, "file_path", "")):
             from core import ffmpeg as ff
             info = ff.try_probe(p)
             if info is None or not info.has_video:

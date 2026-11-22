@@ -79,7 +79,9 @@ worst moments, and both versions side by side.
 ### Upscaling with FSR, NIS and AI
 
 The Resolution Scaler can upscale with AMD FSR, NVIDIA Image Scaling, ArtCNN or
-Anime4K on the graphics card.
+Anime4K on the graphics card. No suitable graphics card? It works on the
+processor too: Lanczos (sharp), Bicubic (soft) and Nearest (for pixel art),
+with adjustable sharpening, and Automatic picks the best one either way.
 
 ![Resolution Scaler upscaling with FSR](screenshots/upscale.png)
 
@@ -234,7 +236,7 @@ Find every cut in a video, then split it or make chapters.
 </details>
 
 <details open>
-<summary><b>📱 Social & format</b> (16 tools)</summary>
+<summary><b>📱 Social & format</b> (17 tools)</summary>
 
 #### The Shortifier
 
@@ -296,41 +298,47 @@ Save stills from a video - one frame or many.
 
 ![Frame Extractor](screenshots/28_frame_extractor.png)
 
+#### Snapshot
+
+Save any frame as a full-size, high-quality picture.
+
+![Snapshot](screenshots/29_snapshot.png)
+
 #### Intro/Outro Maker
 
 Title cards with animated text, on their own or added to a video.
 
-![Intro/Outro Maker](screenshots/29_intro_outro_maker.png)
+![Intro/Outro Maker](screenshots/30_intro_outro_maker.png)
 
 #### Slideshow Maker
 
 Photos to video with motion, transitions, captions and music.
 
-![Slideshow Maker](screenshots/30_slideshow_maker.png)
+![Slideshow Maker](screenshots/31_slideshow_maker.png)
 
 #### Chapter Markers
 
 Chapter timestamps for YouTube, or chapters inside the file.
 
-![Chapter Markers](screenshots/31_chapter_markers.png)
+![Chapter Markers](screenshots/32_chapter_markers.png)
 
 #### Thumbnail Maker
 
 Pick the perfect frame and make a thumbnail with text.
 
-![Thumbnail Maker](screenshots/32_thumbnail_maker.png)
+![Thumbnail Maker](screenshots/33_thumbnail_maker.png)
 
 #### Video Collage
 
 Any number of clips on one screen, laid out automatically.
 
-![Video Collage](screenshots/33_video_collage.png)
+![Video Collage](screenshots/34_video_collage.png)
 
 #### Video Downloader
 
 Download videos or music from YouTube and 1000+ sites.
 
-![Video Downloader](screenshots/34_video_downloader.png)
+![Video Downloader](screenshots/35_video_downloader.png)
 
 </details>
 
@@ -341,103 +349,103 @@ Download videos or music from YouTube and 1000+ sites.
 
 Cut out the pauses - jump cuts for talks and podcasts.
 
-![Silence Remover](screenshots/35_silence_remover.png)
+![Silence Remover](screenshots/36_silence_remover.png)
 
 #### Audio Extractor
 
 Save a video's sound as its own file.
 
-![Audio Extractor](screenshots/36_audio_extractor.png)
+![Audio Extractor](screenshots/37_audio_extractor.png)
 
 #### Audio Replacer
 
 Replace a video's sound, or mix in new audio.
 
-![Audio Replacer](screenshots/37_audio_replacer.png)
+![Audio Replacer](screenshots/38_audio_replacer.png)
 
 #### Loudness Normalizer
 
 Make the volume even and right for YouTube, Spotify or TV.
 
-![Loudness Normalizer](screenshots/38_loudness_normalizer.png)
+![Loudness Normalizer](screenshots/39_loudness_normalizer.png)
 
 #### Audio Sync Shifter
 
 Fix sound that's ahead of or behind the picture.
 
-![Audio Sync Shifter](screenshots/39_audio_sync_shifter.png)
+![Audio Sync Shifter](screenshots/40_audio_sync_shifter.png)
 
 #### The Muter
 
 Silence or bleep moments, or remove the sound completely.
 
-![The Muter](screenshots/40_the_muter.png)
+![The Muter](screenshots/41_the_muter.png)
 
 #### Audio Dynamics
 
 Gate, compressor, EQ and limiter for a polished sound.
 
-![Audio Dynamics](screenshots/41_audio_dynamics.png)
+![Audio Dynamics](screenshots/42_audio_dynamics.png)
 
 #### Audio Mixer
 
 Mix up to 8 tracks - voice, music, effects - over a video.
 
-![Audio Mixer](screenshots/42_audio_mixer.png)
+![Audio Mixer](screenshots/43_audio_mixer.png)
 
 #### Voice Isolation
 
 Remove background noise from speech.
 
-![Voice Isolation](screenshots/43_voice_isolation.png)
+![Voice Isolation](screenshots/44_voice_isolation.png)
 
 #### Voice Changer
 
 Change a voice - deeper, higher, robot and more.
 
-![Voice Changer](screenshots/44_voice_changer.png)
+![Voice Changer](screenshots/45_voice_changer.png)
 
 #### TTS Voice-Over
 
 Turn text into natural speech, on its own or over a video.
 
-![TTS Voice-Over](screenshots/45_tts_voice_over.png)
+![TTS Voice-Over](screenshots/46_tts_voice_over.png)
 
 #### Waveform Editor
 
 See the sound, then mark parts to change, mute or export.
 
-![Waveform Editor](screenshots/46_waveform_editor.png)
+![Waveform Editor](screenshots/47_waveform_editor.png)
 
 #### Laugh Track Remover
 
 Reduce or remove laugh tracks.
 
-![Laugh Track Remover](screenshots/47_laugh_track_remover.png)
+![Laugh Track Remover](screenshots/48_laugh_track_remover.png)
 
 #### Music Ducker
 
 Lower the music automatically whenever someone talks.
 
-![Music Ducker](screenshots/48_music_ducker.png)
+![Music Ducker](screenshots/49_music_ducker.png)
 
 #### Karaoke Generator
 
 Sing-along videos with words that light up in time.
 
-![Karaoke Generator](screenshots/49_karaoke_generator.png)
+![Karaoke Generator](screenshots/50_karaoke_generator.png)
 
 #### Audio Converter
 
 Convert audio to MP3, AAC, FLAC, WAV, Opus and more.
 
-![Audio Converter](screenshots/50_audio_converter.png)
+![Audio Converter](screenshots/51_audio_converter.png)
 
 #### MIDIfier
 
 Turn a recording into MIDI notes and play them back with instruments.
 
-![MIDIfier](screenshots/51_midifier.png)
+![MIDIfier](screenshots/52_midifier.png)
 
 </details>
 
@@ -448,67 +456,67 @@ Turn a recording into MIDI notes and play them back with instruments.
 
 Shrink a video to fit a size limit - Discord, email, WhatsApp.
 
-![Universal Downsizer](screenshots/52_universal_downsizer.png)
+![Universal Downsizer](screenshots/53_universal_downsizer.png)
 
 #### Proxy Generator
 
 Light copies for smooth editing in other editors.
 
-![Proxy Generator](screenshots/53_proxy_generator.png)
+![Proxy Generator](screenshots/54_proxy_generator.png)
 
 #### Codec Cruncher
 
 Re-encode with full control - H.264, HEVC, AV1, ProRes, HDR.
 
-![Codec Cruncher](screenshots/54_codec_cruncher.png)
+![Codec Cruncher](screenshots/55_codec_cruncher.png)
 
 #### HDR to SDR
 
 Make HDR video from phones and cameras look right on normal screens.
 
-![HDR to SDR](screenshots/55_hdr_to_sdr.png)
+![HDR to SDR](screenshots/56_hdr_to_sdr.png)
 
 #### Tracks & Remux
 
 Keep, drop or label audio and subtitle tracks, add new ones, change MKV/MP4 - no re-encoding.
 
-![Tracks & Remux](screenshots/56_tracks_remux.png)
+![Tracks & Remux](screenshots/57_tracks_remux.png)
 
 #### Compare & Quality
 
 How much quality did an encode lose? VMAF, SSIM, PSNR and the two side by side.
 
-![Compare & Quality](screenshots/57_compare_quality.png)
+![Compare & Quality](screenshots/58_compare_quality.png)
 
 #### Format Converter
 
 Convert to MP4, MKV, MOV, WebM, MP3... copying what fits.
 
-![Format Converter](screenshots/58_format_converter.png)
+![Format Converter](screenshots/59_format_converter.png)
 
 #### Resolution Scaler
 
 Upscale or downscale to any resolution - FSR, NIS and AI upscalers.
 
-![Resolution Scaler](screenshots/59_resolution_scaler.png)
+![Resolution Scaler](screenshots/60_resolution_scaler.png)
 
 #### Framerate Interpolator
 
 Change the frame rate smoothly, or make true slow motion.
 
-![Framerate Interpolator](screenshots/60_framerate_interpolator.png)
+![Framerate Interpolator](screenshots/61_framerate_interpolator.png)
 
 #### Encode Queue
 
 See and manage every job that's running or waiting.
 
-![Encode Queue](screenshots/61_encode_queue.png)
+![Encode Queue](screenshots/62_encode_queue.png)
 
 #### Preset Manager
 
 Save your own FFmpeg recipes and run them on files.
 
-![Preset Manager](screenshots/62_preset_manager.png)
+![Preset Manager](screenshots/63_preset_manager.png)
 
 </details>
 
@@ -519,97 +527,97 @@ Save your own FFmpeg recipes and run them on files.
 
 Colour bars, test patterns, countdowns and tones.
 
-![Media Generator](screenshots/63_media_generator.png)
+![Media Generator](screenshots/64_media_generator.png)
 
 #### Special Effects
 
 Intros, outros, glitch, VHS, shake, zoom punch and more.
 
-![Special Effects](screenshots/64_special_effects.png)
+![Special Effects](screenshots/65_special_effects.png)
 
 #### LUT Applicator
 
 Apply a colour look (.cube LUT) at any strength.
 
-![LUT Applicator](screenshots/65_lut_applicator.png)
+![LUT Applicator](screenshots/66_lut_applicator.png)
 
 #### Basic Color Corrector
 
 Exposure, contrast, white balance and colour, with a live preview.
 
-![Basic Color Corrector](screenshots/66_basic_color_corrector.png)
+![Basic Color Corrector](screenshots/67_basic_color_corrector.png)
 
 #### Colour Match
 
 Make one clip's colours match another's.
 
-![Colour Match](screenshots/67_colour_match.png)
+![Colour Match](screenshots/68_colour_match.png)
 
 #### Video Scopes
 
 Waveform, parade, histogram and vectorscope.
 
-![Video Scopes](screenshots/68_video_scopes.png)
+![Video Scopes](screenshots/69_video_scopes.png)
 
 #### Speed Ramper
 
 Speed up or slow down, smoothly or in ramps.
 
-![Speed Ramper](screenshots/69_speed_ramper.png)
+![Speed Ramper](screenshots/70_speed_ramper.png)
 
 #### Deshaker
 
 Steady shaky footage.
 
-![Deshaker](screenshots/70_deshaker.png)
+![Deshaker](screenshots/71_deshaker.png)
 
 #### Green Screen Keyer
 
 Remove a green or blue background and replace it.
 
-![Green Screen Keyer](screenshots/71_green_screen_keyer.png)
+![Green Screen Keyer](screenshots/72_green_screen_keyer.png)
 
 #### Denoise
 
 Clean up noisy, grainy or blocky video.
 
-![Denoise](screenshots/72_denoise.png)
+![Denoise](screenshots/73_denoise.png)
 
 #### Deinterlace
 
 Remove the comb lines from TV, DVD and camcorder video.
 
-![Deinterlace](screenshots/73_deinterlace.png)
+![Deinterlace](screenshots/74_deinterlace.png)
 
 #### Sharpen
 
 Bring back detail in soft or upscaled video.
 
-![Sharpen](screenshots/74_sharpen.png)
+![Sharpen](screenshots/75_sharpen.png)
 
 #### Picture-in-Picture
 
 Put one video in a corner of another.
 
-![Picture-in-Picture](screenshots/75_picture_in_picture.png)
+![Picture-in-Picture](screenshots/76_picture_in_picture.png)
 
 #### Privacy Blur
 
 Blur or pixelate faces, number plates, names or screens.
 
-![Privacy Blur](screenshots/76_privacy_blur.png)
+![Privacy Blur](screenshots/77_privacy_blur.png)
 
 #### Animated Zoom
 
 Punch-ins, Ken Burns moves and smooth pans.
 
-![Animated Zoom](screenshots/77_animated_zoom.png)
+![Animated Zoom](screenshots/78_animated_zoom.png)
 
 #### Transition Studio
 
 One polished transition between two clips.
 
-![Transition Studio](screenshots/78_transition_studio.png)
+![Transition Studio](screenshots/79_transition_studio.png)
 
 </details>
 
@@ -620,33 +628,34 @@ One polished transition between two clips.
 
 Everything about a file: codecs, HDR, rotation, tracks.
 
-![Media Inspector](screenshots/79_media_inspector.png)
+![Media Inspector](screenshots/80_media_inspector.png)
 
 #### Metadata Cleaner
 
 Remove GPS location, phone model, dates and names before sharing.
 
-![Metadata Cleaner](screenshots/80_metadata_cleaner.png)
+![Metadata Cleaner](screenshots/81_metadata_cleaner.png)
 
 #### Screen Recorder
 
 Record your screen, with sound.
 
-![Screen Recorder](screenshots/81_screen_recorder.png)
+![Screen Recorder](screenshots/82_screen_recorder.png)
 
 #### Batch Processor
 
 Do the same thing to a whole folder of videos.
 
-![Batch Processor](screenshots/82_batch_processor.png)
+![Batch Processor](screenshots/83_batch_processor.png)
 
 #### Advanced Settings
 
 Network, proxy, skins, updates and system information.
 
-![Advanced Settings](screenshots/83_advanced_settings.png)
+![Advanced Settings](screenshots/84_advanced_settings.png)
 
 </details>
+
 
 ## Private by design
 

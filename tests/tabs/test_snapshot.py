@@ -254,3 +254,33 @@ def test_i_and_o_use_the_frame_shown(ui, media, tool):
         assert ff.parse_time(tab.vars["p_start"].get()) == pytest.approx(want)
     else:
         assert any(ff.format_time(want) in str(after[k]) for k in changed), (want, changed, after)
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+@pytest.mark.parametrize("tool,attr", [("Thumbnail Maker", "duration"), ("Chapter Markers", "_duration"),
+                                       ("Laugh Track Remover", "duration")])
+def test_dropped_file_is_fully_loaded(ui, media, tool, attr):
+    """Drag and drop / File > Open (the shared load_file) must load the file,
+    not just fill in its name."""
+    ui.reset()
+    tab = ui.open(tool)
+    assert tab.load_file(media["h264"])
+    ui.pump(0.8)
+    assert getattr(tab, attr, 0) == pytest.approx(6.0, abs=0.2), (tool, getattr(tab, attr, None))
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_splitter_renumbers_clips(ui, media):
+    ui.reset()
+    tab = ui.open("Manual Multi-Splitter")
+    tab.load_file(media["h264"])
+    ui.pump(0.3)
+    for a, b in ((0.0, 1.0), (2.0, 3.0)):
+        tab._timeline.set_range(a, b)
+        tab._add_row()
+    tab._remove_row(tab.split_rows[0]["frame"])
+    assert [r["label"].cget("text") for r in tab.split_rows] == ["Clip 1:", "Clip 2:"]
+    assert [r["suffix"].get() for r in tab.split_rows] == ["_clip1", "_clip2"]
+    assert tab.split_rows[0]["start"].get() == "00:00:00.000"

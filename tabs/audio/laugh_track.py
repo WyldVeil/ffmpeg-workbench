@@ -390,6 +390,10 @@ class LaughTrackRemoverTab(BaseTab):
         if p:
             self._load(p)
 
+    def on_source_loaded(self, path):
+        """Drag and drop / File > Open land here (the shared loader set the path)."""
+        self._load(path)
+
     def _load(self, p):
         from core import ffmpeg as ff
         info = ff.try_probe(p)

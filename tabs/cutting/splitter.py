@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox
 from core import dialogs
 import os
+import re
 
 from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT, add_tooltip
 from core.hardware import get_video_duration
@@ -137,15 +138,16 @@ class MultiSplitterTab(BaseTab):
         row = tk.Frame(self.rows_frame, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
 
-        tk.Label(row, text=f"Clip {idx}:", bg=CLR["bg"], fg=CLR["accent"], width=6).pack(side="left")
+        num = tk.Label(row, text=f"Clip {idx}:", bg=CLR["bg"], fg=CLR["accent"], width=6)
+        num.pack(side="left")
         
         tk.Label(row, text=t("splitter.start_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
         start_var = tk.StringVar(value=_ts(start) if self.duration > 0 else "00:00:00")
-        tk.Entry(row, textvariable=start_var, width=10, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
+        tk.Entry(row, textvariable=start_var, width=13, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
 
         tk.Label(row, text=t("splitter.end_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
         end_var = tk.StringVar(value=_ts(end) if self.duration > 0 else "00:00:10")
-        tk.Entry(row, textvariable=end_var, width=10, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
+        tk.Entry(row, textvariable=end_var, width=13, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
 
         tk.Label(row, text=t("splitter.suffix_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
         suffix_var = tk.StringVar(value=f"_clip{idx}")
@@ -159,7 +161,8 @@ class MultiSplitterTab(BaseTab):
         btn_rm = tk.Button(row, text="❌", bg=CLR["bg"], fg=CLR["red"], command=lambda r=row: self._remove_row(r))
         btn_rm.pack(side="left", padx=px(10))
 
-        self.split_rows.append({"frame": row, "start": start_var, "end": end_var, "suffix": suffix_var})
+        self.split_rows.append({"frame": row, "start": start_var, "end": end_var, "suffix": suffix_var,
+                                "label": num})
 
     def _from_timeline(self, start_var, end_var):
         if self.duration <= 0:
@@ -171,6 +174,11 @@ class MultiSplitterTab(BaseTab):
     def _remove_row(self, row_frame):
         row_frame.destroy()
         self.split_rows = [r for r in self.split_rows if r["frame"] != row_frame]
+        # Number the clips 1, 2, 3... again (and their suffixes, unless edited)
+        for i, r in enumerate(self.split_rows, 1):
+            r["label"].config(text=f"Clip {i}:")
+            if re.fullmatch(r"_clip\d+", r["suffix"].get()):
+                r["suffix"].set(f"_clip{i}")
 
     def _render_all(self):
         if not self.file_path:
