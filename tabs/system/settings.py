@@ -113,14 +113,9 @@ class SettingsTab(BaseTab):
         # Save button
         btn_f = tk.Frame(self)
         btn_f.pack(pady=px(16))
-        tk.Button(
-            btn_f,
-            text=t("settings.save_settings_button"),
-            bg=CLR["green"],
-            fg="white",
-            font=(UI_FONT, 11, "bold"),
-            command=self._save,
-        ).pack(side="left", padx=px(8))
+        self.make_render_btn(btn_f, t("settings.save_settings_button"), self._save).pack(
+            side="left", padx=px(8)
+        )
         self._status = tk.Label(btn_f, text="", fg=CLR["green"])
         self._status.pack(side="left", padx=px(8))
 

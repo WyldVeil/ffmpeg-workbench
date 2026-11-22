@@ -111,22 +111,9 @@ class RotateFlipTab(BaseTab):
             suggest=lambda: self._suggest(self.src_row.path),
         )
         self.out_row.pack(fill="x")
-        self.btn_render = tk.Button(
-            body,
-            text="🔄  APPLY",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🔄  APPLY", self._render, width=22)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _suggest(self, src):
         return self.suggest_output(src, "rotated") if src else ""

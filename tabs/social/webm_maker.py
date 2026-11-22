@@ -141,15 +141,8 @@ class WebMTab(BaseTab):
 
         render_row = tk.Frame(outer)
         render_row.pack(pady=px(8))
-        self.btn_render = tk.Button(
-            render_row,
-            text="▶ ENCODE (Simple)",
-            font=(UI_FONT, 12, "bold"),
-            bg="#5C6BC0",
-            fg="white",
-            height=2,
-            width=26,
-            command=self._start_render,
+        self.btn_render = self.make_render_btn(
+            render_row, "▶ ENCODE (Simple)", self._start_render, width=26
         )
         self.btn_render.pack(side="left", padx=px(8))
         self.btn_cancel = tk.Button(
@@ -170,11 +163,7 @@ class WebMTab(BaseTab):
         ).pack()
         self.progress = ttk.Progressbar(outer, mode="determinate", length=px(600), maximum=100)
         self.progress.pack(pady=px(2, 6))
-        con_f = tk.Frame(outer)
-        con_f.pack(fill="both", expand=True, padx=px(18), pady=px(0, 8))
-        self.console, csb = self.make_console(con_f, height=9)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(outer, height=9, padx=px(18), pady=px(0, 8))
         self._on_use_source_res_toggle()
         self._update_simple_estimate()
 

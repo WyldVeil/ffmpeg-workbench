@@ -75,3 +75,68 @@ class ChoiceBox(ttk.Combobox, Generic[E]):
         self._by_label[text] = member
         self.configure(values=list(self._labels.values()))
         self.value = chosen
+
+
+def _readable_on(colour: str) -> str:
+    """Black or white text, whichever reads on *colour* ('#RRGGBB')."""
+    r, g, b = (int(colour[i : i + 2], 16) for i in (1, 3, 5))
+    return "black" if r * 0.3 + g * 0.59 + b * 0.11 >= 128 else "white"
+
+
+def normal_colour(colour: str) -> str:
+    """'#RRGGBB' (upper case) from '#rrggbb', 'RRGGBB' or '#RGB'."""
+    c = colour.strip().lstrip("#").upper()
+    if len(c) == 3:
+        c = "".join(ch * 2 for ch in c)
+    if len(c) != 6 or any(ch not in "0123456789ABCDEF" for ch in c):
+        raise ValueError(f"not a colour: {colour!r}")
+    return "#" + c
+
+
+class ColourButton(tk.Button):
+    """A button filled with a colour; clicking it opens the colour picker.
+
+    :attr:`colour` is '#RRGGBB', :attr:`rgb` the same without '#' (the form
+    ASS and FFmpeg take); *on_change(colour)* runs after each pick."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        colour: str = "#FFFFFF",
+        *,
+        text: str = "",
+        width: int = 6,
+        on_change: Callable[[str], object] | None = None,
+    ) -> None:
+        super().__init__(
+            master, text=text, width=width, relief="flat", cursor="hand2", command=self._pick
+        )
+        self._on_change = on_change
+        self._colour = normal_colour(colour)
+        self._paint()
+
+    @property
+    def colour(self) -> str:
+        return self._colour
+
+    @property
+    def rgb(self) -> str:
+        return self._colour[1:]
+
+    def set(self, colour: str) -> None:
+        """Show *colour* (no on_change: the caller already knows)."""
+        self._colour = normal_colour(colour)
+        self._paint()
+
+    def _paint(self) -> None:
+        fg = _readable_on(self._colour)
+        self.configure(bg=self._colour, activebackground=self._colour, fg=fg, activeforeground=fg)
+
+    def _pick(self) -> None:
+        from tkinter import colorchooser
+
+        chosen = colorchooser.askcolor(self._colour, parent=self)[1]
+        if chosen:
+            self.set(chosen)
+            if self._on_change is not None:
+                self._on_change(self._colour)

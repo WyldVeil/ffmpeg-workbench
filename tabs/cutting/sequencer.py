@@ -18,7 +18,7 @@ from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.widgets import EncoderPanel, FramePreview, SaveRow, scroll_body
 
@@ -124,22 +124,9 @@ class SequencerTab(BaseTab):
         self.encoder.pack(anchor="w", pady=px(4))
         self.out_row = SaveRow(opt, t("common.output_file"), suggest=self._suggest)
         self.out_row.pack(fill="x")
-        self.btn_render = tk.Button(
-            body,
-            text="🎞  JOIN",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🎞  JOIN", self._render, width=22)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     # ── list ─────────────────────────────────────────────────────────────────
 

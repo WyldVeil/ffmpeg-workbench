@@ -302,7 +302,7 @@ class CrossfaderTab(BaseTab):
         btn_row.pack(pady=px(10), padx=px(16), fill="x")
         self._render_label = t("crossfader.render_crossfade")
         self.run_btn = self.make_render_btn(
-            btn_row, self._render_label, self._start_render, color=CLR["green"], width=26
+            btn_row, self._render_label, self._start_render, width=26
         )
         self.run_btn.config(state="disabled")
         self.run_btn.pack(side="left", padx=px(6))
@@ -323,11 +323,9 @@ class CrossfaderTab(BaseTab):
             btn_row, text="", fg=CLR["accent"], bg=CLR["bg"], font=(UI_FONT, 9), justify="left"
         )
         self._status_lbl.pack(side="left", padx=px(12))
-        cf = tk.Frame(parent, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
-        self.console, csb = self.make_console(cf, height=10)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            parent, height=10, bg=CLR["bg"], padx=px(16), pady=px(4)
+        )
 
     # ── clip rows ────────────────────────────────────────────────────────────
     def _row_index(self, row) -> int:

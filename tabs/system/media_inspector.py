@@ -21,7 +21,7 @@ from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import framestep
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.widgets import FramePreview
 
@@ -290,20 +290,7 @@ class MediaInspectorTab(BaseTab):
 
     def _text_page(self, title: str) -> tk.Text:
         frame = tk.Frame(self.nb, bg=CLR["bg"])
-        txt = tk.Text(
-            frame,
-            wrap="none",
-            bg=CLR["console_bg"],
-            fg=CLR["console_fg"],
-            font=(MONO_FONT, 9),
-            relief="flat",
-            padx=px(10),
-            pady=px(8),
-        )
-        sb = ttk.Scrollbar(frame, command=txt.yview)
-        txt.configure(yscrollcommand=sb.set)
-        txt.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        txt = self.make_console_block(frame, height=20, padx=0, pady=0)
         self.nb.add(frame, text=title)
         return txt
 

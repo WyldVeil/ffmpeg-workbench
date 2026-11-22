@@ -277,22 +277,11 @@ class ContactSheetTab(BaseTab):
         self.quality_var = tk.StringVar(value="92")
         tk.Label(row, text="Quality:").pack(side="left", padx=px(12, 4))
         tk.Spinbox(row, from_=40, to=100, textvariable=self.quality_var, width=5).pack(side="left")
-        self.btn_render = tk.Button(
-            body,
-            text="💾  Save contact sheet",
-            font=(UI_FONT, 11, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=24,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            body, "💾  Save contact sheet", self._render, width=24
         )
         self.btn_render.pack(pady=px(6))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=4)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=4)
 
     # ── Settings ──────────────────────────────────────────────────────────
 

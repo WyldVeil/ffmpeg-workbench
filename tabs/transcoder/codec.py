@@ -19,7 +19,7 @@ from core.i18n import t
 from core.ops import codec as co
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 CONTAINERS = ("auto", "mp4", "mkv", "mov", "webm")
@@ -90,21 +90,9 @@ class CodecCruncherTab(BaseTab):
         )
         self.out_row.pack(fill="x")
         self.out_var = self.out_row.var
-        self.btn_render = tk.Button(
-            body,
-            text=t("codec.btn_encode"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["accent"],
-            fg="white",
-            width=28,
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, t("codec.btn_encode"), self._render, width=28)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=7)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=7)
 
     def _codec(self) -> str:
         if self.copy_video.get() and self._info is not None and self._info.has_video:

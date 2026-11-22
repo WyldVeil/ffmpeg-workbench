@@ -193,15 +193,8 @@ class BatchTab(BaseTab):
         # ── Controls ─────────────────────────────────────────────────────
         ctrl_f = tk.Frame(self)
         ctrl_f.pack(pady=px(8))
-        self.btn_render = tk.Button(
-            ctrl_f,
-            text=t("batch.process_all_files"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=24,
-            command=self._run,
+        self.btn_render = self.make_render_btn(
+            ctrl_f, t("batch.process_all_files"), self._run, width=24
         )
         self.btn_render.pack(side="left", padx=px(8))
         tk.Button(
@@ -216,11 +209,7 @@ class BatchTab(BaseTab):
         self._prog_lbl.pack(side="left", padx=px(12))
 
         # Console
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
-        self.console, csb = self.make_console(cf, height=8)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=8, padx=px(20), pady=px(4))
 
         self._on_op_change()
 

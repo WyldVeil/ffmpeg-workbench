@@ -227,15 +227,7 @@ class SnapshotTab(BaseTab):
 
         out = tk.Frame(body)
         out.pack(fill="x", padx=px(20), pady=px(8, 4))
-        self.btn_render = tk.Button(
-            out,
-            text="📷  SAVE SCREENSHOT…",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            cursor="hand2",
-            command=self._save_as,
-        )
+        self.btn_render = self.make_render_btn(out, "📷  SAVE SCREENSHOT…", self._save_as)
         self.btn_render.pack(side="left")
         add_tooltip(self.btn_render, "Save this frame as a PNG (Ctrl+S)")
         self.btn_quick = tk.Button(out, text="Quick save", relief="flat", command=self._quick_save)

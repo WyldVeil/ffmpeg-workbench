@@ -265,14 +265,9 @@ class AdvancedSettingsTab(BaseTab):
             opts, text="Auto-open output folder after render", variable=self.auto_open_var
         ).grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4))
 
-        tk.Button(
-            f,
-            text=t("advanced_settings.save_settings"),
-            bg=CLR["green"],
-            fg="white",
-            font=(UI_FONT, 11, "bold"),
-            command=self._save_settings,
-        ).pack(pady=px(15))
+        self.make_render_btn(f, t("advanced_settings.save_settings"), self._save_settings).pack(
+            pady=px(15)
+        )
         self.save_lbl = tk.Label(f, text="", fg=CLR["green"])
         self.save_lbl.pack()
 

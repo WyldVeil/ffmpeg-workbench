@@ -220,16 +220,7 @@ class AutoSubsTab(BaseTab):
         self.out_row = SaveRow(out, "Save as:", kind="subtitle", ext=".srt", suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(6, 0))
 
-        self.btn_render = tk.Button(
-            body,
-            text="🗣  GENERATE SUBTITLES",
-            font=(UI_FONT, 12, "bold"),
-            bg="#00695C",
-            fg="white",
-            width=26,
-            cursor="hand2",
-            command=self._run,
-        )
+        self.btn_render = self.make_render_btn(body, "🗣  GENERATE SUBTITLES", self._run, width=26)
         self.btn_render.pack(pady=px(8))
         after = tk.Frame(body)
         after.pack(pady=px(0, 6))
@@ -250,11 +241,7 @@ class AutoSubsTab(BaseTab):
         )
         self.mux_btn.pack(side="left", padx=px(6))
 
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=8)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=8)
         self._fill_models()
         if not whisper.cli_path():
             self.log_tagged(

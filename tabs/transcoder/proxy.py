@@ -20,7 +20,7 @@ from core.ops import proxy as px_ops
 from core.outputs import free_name
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.transcoder.proxy")
@@ -132,22 +132,11 @@ class ProxyGenTab(BaseTab):
                 dialogs.ask_directory(parent=self) or self.out_dir_var.get()
             ),
         ).pack(side="left")
-        self.btn_render = tk.Button(
-            self,
-            text=t("proxy.render_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=28,
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            self, t("proxy.render_button"), self._render, width=28
         )
         self.btn_render.pack(pady=px(10))
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4))
 
     def load_file(self, path) -> bool:
         if os.path.isfile(path) and path not in self.file_paths:

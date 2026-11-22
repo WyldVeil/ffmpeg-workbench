@@ -202,23 +202,14 @@ class AudioDynamicsTab(BaseTab):
             font=(UI_FONT, 10),
             command=self._preview,
         ).pack(side="left", padx=px(8))
-        self.btn_render = tk.Button(
-            btn_row,
-            text=t("dynamics.btn_apply_dynamics"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=24,
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            btn_row, t("dynamics.btn_apply_dynamics"), self._render, width=24
         )
         self.btn_render.pack(side="left", padx=px(8))
 
-        cf = tk.Frame(inner)
-        cf.pack(fill="both", padx=px(16), pady=px(4))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            inner, height=5, padx=px(16), pady=px(4), expand=False
+        )
 
     # ── Stage builders ────────────────────────────────────────────────────
     def _stage_frame(self, parent, title, bypass_attr):

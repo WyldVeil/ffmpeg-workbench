@@ -21,7 +21,7 @@ from core import metaclean as mc
 from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.system.metadata_cleaner")
@@ -153,22 +153,9 @@ class MetadataCleanerTab(BaseTab):
                 dialogs.ask_directory(parent=self) or self.folder_var.get()
             ),
         ).pack(side="left")
-        self.btn = tk.Button(
-            self,
-            text="🧹  CLEAN FILES",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=24,
-            cursor="hand2",
-            command=self._clean,
-        )
+        self.btn = self.make_render_btn(self, "🧹  CLEAN FILES", self._clean, width=24)
         self.btn.pack(pady=px(8))
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=False, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=5, expand=False)
 
     # ── Files ─────────────────────────────────────────────────────────
     def load_file(self, path) -> bool:

@@ -155,22 +155,9 @@ class MediaGeneratorTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-        self.btn_render = tk.Button(
-            body,
-            text=t("mgen.btn_generate"),
-            font=(UI_FONT, 11, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=24,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, t("mgen.btn_generate"), self._render, width=24)
         self.btn_render.pack(pady=px(10))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=6)
         self._pattern_changed()
         self._audio_changed()
 

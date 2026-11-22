@@ -429,27 +429,15 @@ class LaughTrackRemoverTab(BaseTab):
         )
         self._btn_preview.pack(side="left", padx=px(8))
 
-        self.btn_render = tk.Button(
-            bf,
-            text=t("laugh_track.remove_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR.get("green", "#4CAF50"),
-            fg="white",
-            height=2,
-            width=28,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            bf, t("laugh_track.remove_button"), self._render, width=28
         )
         self.btn_render.pack(side="left", padx=px(8))
 
     def _build_console(self):
         """Console."""
         # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4, 10))
 
         # ==================================================================
         # Initialize UI layout states AFTER all widgets are fully created!

@@ -87,21 +87,9 @@ class SilenceTab(BaseTab):
             row, text="🔍  ANALYSE", font=(UI_FONT, 11, "bold"), width=14, command=self._analyse
         )
         self.btn_analyse.pack(side="left", padx=px(6))
-        self.btn_render = tk.Button(
-            row,
-            text="✂  REMOVE SILENCES",
-            font=(UI_FONT, 11, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=20,
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(row, "✂  REMOVE SILENCES", self._render, width=20)
         self.btn_render.pack(side="left", padx=px(6))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=6)
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)

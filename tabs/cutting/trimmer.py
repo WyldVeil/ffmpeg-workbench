@@ -261,25 +261,14 @@ class TrimmerTab(BaseTab):
     def _build_render(self, bf, prev_btn):
         prev_btn.pack(side="left", padx=px(8))
         add_tooltip(prev_btn, "Preview the selected region in ffplay (Space)")
-        self.btn_render = tk.Button(
-            bf,
-            text=t("trimmer.export_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="black",
-            height=2,
-            width=28,
-            command=self._run_trim,
+        self.btn_render = self.make_render_btn(
+            bf, t("trimmer.export_button"), self._run_trim, width=28
         )
         self.btn_render.pack(side="left", padx=px(8))
         add_tooltip(self.btn_render, "Export the trimmed clip (Ctrl+S)")
 
         # Console
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=5, padx=px(20), pady=px(4))
 
     # ─── File loading ─────────────────────────────────────────────────────
     def _browse(self):

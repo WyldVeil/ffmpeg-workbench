@@ -473,6 +473,49 @@ def test_every_page_has_the_standard_header():
     assert not by_hand, f"a tool's title belongs in make_header: {by_hand}"
 
 
+def _hand_built_scaffolding(tree: ast.AST) -> list[tuple[int, str]]:
+    found: list[tuple[int, str]] = []
+    for n in ast.walk(tree):
+        if (
+            isinstance(n, ast.Assign)
+            and ast.unparse(n.targets[0]) == "self.btn_render"
+            and not (
+                isinstance(n.value, ast.Call)
+                and ast.unparse(n.value.func).endswith("make_render_btn")
+            )
+        ):
+            found.append((n.lineno, "a render button not from make_render_btn"))
+        if (
+            isinstance(n, ast.Call)
+            and ast.unparse(n.func) == "tk.Text"
+            and any(k.arg == "bg" and "console_bg" in ast.unparse(k.value) for k in n.keywords)
+        ):
+            found.append((n.lineno, "a console Text (make_console_block)"))
+        if (
+            isinstance(n, ast.Assign)
+            and isinstance(n.value, ast.Call)
+            and ast.unparse(n.value.func).endswith("make_console")
+            and isinstance(n.targets[0], ast.Tuple)
+            and not ast.unparse(n.targets[0].elts[-1]).startswith("_")
+        ):
+            found.append((n.lineno, "a console and scrollbar packed by hand (make_console_block)"))
+    return found
+
+
+def test_pages_use_the_kit_for_buttons_and_consoles():
+    """The main action is make_render_btn (one look); consoles are
+    make_console_block (frame, text and scrollbar packed alike everywhere)."""
+    hits = [
+        f"{rel}:{line} {what}"
+        for rel, path in _py_files("tabs")
+        if rel != "tabs/base_tab.py"
+        for line, what in _hand_built_scaffolding(
+            ast.parse(open(path, encoding="utf-8").read(), path)
+        )
+    ]
+    assert not hits, hits
+
+
 def test_the_whole_engine_is_type_checked_strictly():
     """pyright's strict mode covers the engine, the window shell and the page kit;
     CI fails on any error, so this list may only grow."""

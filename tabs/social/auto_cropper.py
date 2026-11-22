@@ -68,22 +68,9 @@ class AutoCropperTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "nobars"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="✂  REMOVE BARS",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "✂  REMOVE BARS", self._render, width=22)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)

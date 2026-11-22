@@ -20,7 +20,7 @@ from core.ops.gif_maker import Animation, make_animation
 from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common, framestep
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
@@ -186,22 +186,11 @@ class GIFMakerTab(BaseTab):
         self.size_lbl.pack(anchor="w")
 
     def _build_render(self, body):
-        self.btn_render = tk.Button(
-            body,
-            text=t("gif_maker.create_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            body, t("gif_maker.create_button"), self._render, width=22
         )
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _suggest(self):
         src = self.src_row.path

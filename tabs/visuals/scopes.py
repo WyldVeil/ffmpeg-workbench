@@ -129,11 +129,7 @@ class VideoScopesTab(BaseTab):
         )
         self.btn_vid.pack(pady=px(6))
 
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
         self._scope_changed()
 
     # ── Behaviour ────────────────────────────────────────────────────────────

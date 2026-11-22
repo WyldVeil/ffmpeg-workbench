@@ -163,24 +163,13 @@ class BatchJoinerTab(BaseTab):
         ).pack(side="left")
 
         # Render
-        self.btn_render = tk.Button(
-            self,
-            text=t("batch_joiner.btn_join"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=30,
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            self, t("batch_joiner.btn_join"), self._render, width=30
         )
         self.btn_render.pack(pady=px(8))
 
         # Console
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4))
 
     def _toggle_encode_opts(self):
         if self.reencode_var.get():

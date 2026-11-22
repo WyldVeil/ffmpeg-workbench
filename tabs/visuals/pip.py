@@ -20,7 +20,7 @@ from core.ops import pip as pip_ops
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
@@ -194,24 +194,13 @@ class PIPTab(BaseTab):
             suggest=lambda: self.suggest_output(self.bg_row.path, "pip"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="🖼  MAKE PICTURE-IN-PICTURE",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=28,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            body, "🖼  MAKE PICTURE-IN-PICTURE", self._render, width=28
         )
 
     def _build_console(self, body):
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _pick_colour(self):
         res = colorchooser.askcolor(f"#{self.colour}", parent=self)

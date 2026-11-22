@@ -279,11 +279,9 @@ class ScreenRecorderTab(BaseTab):
         )
         self.btn_stop.pack()
 
-        cf = tk.Frame(self, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(5, 20))
-        self.console, csb = self.make_console(cf, height=8)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            self, height=8, bg=CLR["bg"], padx=px(20), pady=px(5, 20)
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Express Tab

@@ -28,7 +28,7 @@ from core.ops.downsizer import Goal, Plan, encode_to_size, plan
 from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
@@ -63,8 +63,8 @@ class UniversalDownsizerTab(BaseTab):
 
     def _build_ui(self):
         body, cb, opt, row, tb = self._build_header()
-        csb = self._build_output(body, cb, opt, row, tb)
-        self._build_console(csb)
+        self._build_output(body, cb, opt, row, tb)
+        self._changed()
 
     def _build_header(self):
         self.make_header(
@@ -178,26 +178,11 @@ class UniversalDownsizerTab(BaseTab):
         )
         self.out_row.pack(fill="x")
         self._out_var = self.out_row.var
-        self.btn_render = tk.Button(
-            body,
-            text=t("downsizer.render_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=30,
-            cursor="hand2",
-            command=self._start_render,
+        self.btn_render = self.make_render_btn(
+            body, t("downsizer.render_button"), self._start_render, width=30
         )
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=7)
-        return csb
-
-    def _build_console(self, csb):
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
-        self._changed()
+        self.console = self.make_console_block(body, height=7, padx=0, pady=0)
 
     # ── State ─────────────────────────────────────────────────────────
     def _key(self, table, var, default):

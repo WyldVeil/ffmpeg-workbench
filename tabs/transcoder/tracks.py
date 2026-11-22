@@ -19,7 +19,7 @@ from core import ffmpeg as ff
 from core import remux
 from core.i18n import t
 from core.scaling import px
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.kit import dialogs
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
@@ -162,22 +162,9 @@ class TracksRemuxTab(BaseTab):
             opt, t("common.output_file"), ext=".mkv", suggest=lambda: self._suggest()
         )
         self.out_row.pack(fill="x", pady=px(6, 0))
-        self.btn = tk.Button(
-            body,
-            text="🗂  REMUX  (no re-encoding)",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=28,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn = self.make_render_btn(body, "🗂  REMUX  (no re-encoding)", self._render, width=28)
         self.btn.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     # ── Files ─────────────────────────────────────────────────────────
     def load_file(self, path) -> bool:

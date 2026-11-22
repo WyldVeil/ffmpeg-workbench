@@ -677,18 +677,16 @@ class AudioExporterTab(BaseTab):
         btn_row = tk.Frame(self._inner, bg=CLR["bg"])
         btn_row.pack(fill="x", pady=px(12, 6))
         self.btn_render = self.make_render_btn(
-            btn_row, t("exporter.export_btn"), self._export, color=CLR["green"], width=30
+            btn_row, t("exporter.export_btn"), self._export, width=30
         )
         self.btn_render.pack(pady=px(4))
 
     # ── Console ──────────────────────────────────────────────────────────────
 
     def _build_console_section(self):
-        cf = tk.Frame(self._inner, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 14))
-        self.console, csb = self.make_console(cf, height=8)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            self._inner, height=8, bg=CLR["bg"], padx=px(20), pady=px(4, 14)
+        )
 
     # ── Callbacks ────────────────────────────────────────────────────────────
 

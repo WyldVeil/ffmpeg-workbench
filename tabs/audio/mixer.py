@@ -241,22 +241,10 @@ class AudioMixerTab(BaseTab):
             of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
         ).pack(side="left")
 
-        self.btn_render = tk.Button(
-            self,
-            text=t("mixer.mix_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#1565C0",
-            fg="white",
-            height=2,
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(self, t("mixer.mix_button"), self._render)
         self.btn_render.pack(pady=px(8), padx=px(16), fill="x")
 
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=5, padx=px(16), pady=px(4))
 
     # ─────────────────────────────────────────────────────────────────────
     def _add_track(self):

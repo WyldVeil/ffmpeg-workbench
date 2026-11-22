@@ -248,26 +248,15 @@ class AudioDuckerTab(BaseTab):
     def _build_render_button(self):
         """Render button."""
         # ── Render button ──────────────────────────────────────────────────────
-        self.btn_render = tk.Button(
-            self,
-            text=t("ducker.btn_duck_render"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="black",
-            height=2,
-            width=30,
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            self, t("ducker.btn_duck_render"), self._render, width=30
         )
         self.btn_render.pack(pady=px(10))
 
     def _build_console(self):
         """Console."""
         # ── Console ───────────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
-        self.console, csb = self.make_console(cf, height=7)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=7, padx=px(16), pady=px(4))
 
     # ─── Callbacks ────────────────────────────────────────────────────────────
     def _apply_preset(self, _event=None):

@@ -78,8 +78,8 @@ class VideoCollageTab(BaseTab):
     def _build_ui(self):
         slots_lf, stb = self._build_header()
         or2, out_lf = self._build_output_settings(slots_lf, stb)
-        cf = self._build_audio_mode(or2, out_lf)
-        self._build_console(cf)
+        self._build_audio_mode(or2, out_lf)
+        self._changed()
 
     def _build_header(self):
         self.make_header(
@@ -271,26 +271,11 @@ class VideoCollageTab(BaseTab):
         tk.Button(of, text=t("common.save_as"), command=self._browse_out, relief="flat").pack(
             side="left"
         )
-        self.btn_render = tk.Button(
-            self,
-            text=t("collage.build_collage"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=26,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            self, t("collage.build_collage"), self._render, width=26
         )
         self.btn_render.pack(pady=px(6))
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(2, 10))
-        return cf
-
-    def _build_console(self, cf):
-        self.console, csb = self.make_console(cf, height=4)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
-        self._changed()
+        self.console = self.make_console_block(self, height=4, pady=px(2, 10))
 
     # ── State helpers ─────────────────────────────────────────────────
     def _layout_key(self) -> str:

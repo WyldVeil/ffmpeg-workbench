@@ -20,7 +20,7 @@ from core.ops.shared import RenderJob
 from core.ops.sharpen import sharpen_chain
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 METHODS = {
@@ -109,22 +109,9 @@ class SharpenTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "sharp"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="🔪  SHARPEN",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🔪  SHARPEN", self._render, width=22)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
         self._changed()
 
     def _method(self):

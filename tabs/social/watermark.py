@@ -173,22 +173,9 @@ class TextBurnerTab(BaseTab):
 
     def _build_render(self, body):
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="©  BURN WATERMARK",
-            font=(UI_FONT, 12, "bold"),
-            bg="#E91E63",
-            fg="white",
-            width=24,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "©  BURN WATERMARK", self._render, width=24)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _pick(self):
         res = colorchooser.askcolor(self.colour, parent=self)

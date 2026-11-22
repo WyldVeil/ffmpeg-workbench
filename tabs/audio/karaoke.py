@@ -254,15 +254,8 @@ class KaraokeTab(BaseTab):
         # ── Action buttons ─────────────────────────────────────────────────
         btn_row = tk.Frame(self)
         btn_row.pack(pady=px(8))
-        self._btn_go = tk.Button(
-            btn_row,
-            text=t("karaoke.generate_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#7B1FA2",
-            fg="white",
-            height=2,
-            width=26,
-            command=self._generate,
+        self._btn_go = self.make_render_btn(
+            btn_row, t("karaoke.generate_button"), self._generate, width=26
         )
         self._btn_go.pack(side="left", padx=px(8))
         self._btn_stop = tk.Button(
@@ -285,11 +278,7 @@ class KaraokeTab(BaseTab):
         self._progress.pack(pady=px(2))
 
         # Console
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
-        self.console, csb = self.make_console(cf, height=8)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=8, padx=px(16), pady=px(4))
 
     # ─── Helpers ──────────────────────────────────────────────────────────────
     def _update_dark_lbl(self, *_):

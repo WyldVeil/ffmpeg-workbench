@@ -166,26 +166,15 @@ class SplicerTab(BaseTab):
         )
 
         # Render button
-        self.btn_render = tk.Button(
-            self,
-            text=t("splicer.splice_export_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=30,
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            self, t("splicer.splice_export_button"), self._render, width=30
         )
 
     def _build_console(self):
         self.btn_render.pack(pady=px(10))
 
         # Console
-        console_f = tk.Frame(self)
-        console_f.pack(fill="both", expand=True, padx=px(20), pady=px(5))
-        self.console, sb = self.make_console(console_f, height=7)
-        self.console.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=7, padx=px(20), pady=px(5))
 
     # ─── Segment management ───────────────────────────────────────────────────
     def _add_segment(self):

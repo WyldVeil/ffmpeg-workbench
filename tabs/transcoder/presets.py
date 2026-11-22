@@ -241,15 +241,7 @@ class PresetManagerTab(BaseTab):
             run_row2, text="…", command=self._browse_run_out, width=2, cursor="hand2", relief="flat"
         ).pack(side="left")
 
-        self.btn_render = tk.Button(
-            run_lf,
-            text=t("presets.run_now_button"),
-            bg=CLR["green"],
-            fg="white",
-            font=(UI_FONT, 11, "bold"),
-            height=2,
-            command=self._quick_run,
-        )
+        self.btn_render = self.make_render_btn(run_lf, t("presets.run_now_button"), self._quick_run)
         self.btn_render.pack(pady=px(4), fill="x")
 
         # Console

@@ -553,15 +553,8 @@ class TTSVoiceOverTab(BaseTab):
             command=self._preview_voice,
         ).pack(side="left", padx=px(6))
 
-        self.btn_render = tk.Button(
-            btn_row,
-            text=t("tts.generate_export_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=26,
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            btn_row, t("tts.generate_export_button"), self._render, width=26
         )
         self.btn_render.pack(side="left", padx=px(6))
 
@@ -618,11 +611,7 @@ class TTSVoiceOverTab(BaseTab):
 
     # ── Console ───────────────────────────────────────────────────────────
     def _build_console_section(self, parent):
-        cf = tk.Frame(parent)
-        cf.pack(fill="both", expand=True, padx=px(16), pady=px(6))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(parent, height=5, padx=px(16), pady=px(6))
 
     # ─────────────────────────────────────────────────────────────────────
     #  Helpers

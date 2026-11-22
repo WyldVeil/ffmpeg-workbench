@@ -30,7 +30,7 @@ from core.ops.scaler import GPU_METHODS, geometry, rate_fraction, scale_chain
 from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import CLR, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 SIZES = [
@@ -168,21 +168,9 @@ class ResolutionScalerTab(BaseTab):
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
-        self.btn_render = tk.Button(
-            body,
-            text="📐  SCALE VIDEO",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=26,
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "📐  SCALE VIDEO", self._render, width=26)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=6)
 
     def _box(self, info) -> tuple:
         label = self.size_var.get()
@@ -375,21 +363,9 @@ class FPSInterpolatorTab(BaseTab):
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
-        self.btn_render = tk.Button(
-            body,
-            text="🎞  CHANGE FRAME RATE",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=26,
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🎞  CHANGE FRAME RATE", self._render, width=26)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=6)
 
     def _source_changed(self, path):
         self._info = info = ff.try_probe(path)

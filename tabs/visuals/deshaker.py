@@ -148,24 +148,13 @@ class DeshakerTab(BaseTab):
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
 
-        self.btn_render = tk.Button(
-            body,
-            text=t("deshaker.stabilise_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=28,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            body, t("deshaker.stabilise_button"), self._render, width=28
         )
         self.btn_render.pack(pady=px(8))
         self.status_lbl = tk.Label(body, text="", fg=CLR["fgdim"])
         self.status_lbl.pack()
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=7)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=7)
 
     def _source_changed(self, path):
         if not self.out_row.path:

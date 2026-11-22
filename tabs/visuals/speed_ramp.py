@@ -212,22 +212,11 @@ class SpeedRamperTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "speed"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text=t("speed_ramp.apply_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=28,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            body, t("speed_ramp.apply_button"), self._render, width=28
         )
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=6)
 
         self._mode_widgets = (self.const_f, self.ramp_f)
         self._apply_preset("Speed up in the middle")

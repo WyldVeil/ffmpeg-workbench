@@ -110,22 +110,9 @@ class SmartReframeTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "reframed"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="🎯  REFRAME",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🎯  REFRAME", self._render, width=22)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=6)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=6)
 
     def _ratio_key(self):
         return next((k for k, v in RATIOS.items() if v[0] == self.ratio_var.get()), "9:16")

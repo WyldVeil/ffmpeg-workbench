@@ -909,17 +909,7 @@ class AllInOneTab(BaseTab):
         btn_row = tk.Frame(bottom, bg=CLR["panel"])
         btn_row.pack(fill="x", padx=px(12), pady=px(4, 10))
 
-        self.btn_render = tk.Button(
-            btn_row,
-            text="▶  RENDER",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="black",
-            height=2,
-            width=20,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(btn_row, "▶  RENDER", self._render, width=20)
         self.btn_render.pack(side="left", padx=px(8))
 
         self._btn_stop = tk.Button(
@@ -955,11 +945,9 @@ class AllInOneTab(BaseTab):
         ).pack(side="left", padx=px(4))
 
         # Console
-        con_frame = tk.Frame(bottom, bg=CLR["panel"])
-        con_frame.pack(fill="x", padx=px(12), pady=px(0, 8))
-        self.console, csb = self.make_console(con_frame, height=5)
-        self.console.pack(side="left", fill="x", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            bottom, height=5, bg=CLR["panel"], fill="x", expand=False, padx=px(12), pady=px(0, 8)
+        )
 
         # Initial command render
         self._rebuild_cmd()

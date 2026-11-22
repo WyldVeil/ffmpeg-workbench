@@ -282,20 +282,16 @@ class MIDIfierTab(BaseTab):
         # ── Run button ───────────────────────────────────────────────────
         btn_f = tk.Frame(self._inner, bg=CLR["bg"])
         btn_f.pack(fill="x", pady=px(12, 6))
-        self.btn_render = self.make_render_btn(
-            btn_f, t("midifier.run_btn"), self._run, color=CLR["green"], width=30
-        )
+        self.btn_render = self.make_render_btn(btn_f, t("midifier.run_btn"), self._run, width=30)
         self.btn_render.pack(pady=px(4))
         add_tooltip(self.btn_render, t("midifier.run_tooltip"))
 
     def _build_console(self):
         """Console."""
         # ── Console ──────────────────────────────────────────────────────
-        cf = tk.Frame(self._inner, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 14))
-        self.console, csb = self.make_console(cf, height=10)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            self._inner, height=10, bg=CLR["bg"], padx=px(20), pady=px(4, 14)
+        )
 
     # ── Browse ────────────────────────────────────────────────────────────
 

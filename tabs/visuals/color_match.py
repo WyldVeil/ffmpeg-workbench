@@ -24,7 +24,7 @@ from core.ops import color_match as cm
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 
@@ -101,14 +101,7 @@ class ColorMatchTab(BaseTab):
             body, text=f"  {t('color_match.statistics_section')}  ", padx=px(12), pady=px(6)
         )
         stats_lf.pack(fill="x", padx=px(20), pady=px(4))
-        self.stats_text = tk.Text(
-            stats_lf,
-            height=5,
-            bg=CLR["console_bg"],
-            fg="#00FF88",
-            font=(MONO_FONT, 9),
-            relief="flat",
-        )
+        self.stats_text, _bar = self.make_console(stats_lf, height=5)
         self.stats_text.pack(fill="x")
         self._show_stats("Choose both files, then press Analyse.")
         self.btn_analyse = tk.Button(
@@ -135,22 +128,11 @@ class ColorMatchTab(BaseTab):
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
 
-        self.btn_render = tk.Button(
-            body,
-            text=t("color_match.apply_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#AD1457",
-            fg="white",
-            width=26,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            body, t("color_match.apply_button"), self._render, width=26
         )
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     # ── Behaviour ────────────────────────────────────────────────────────────
 

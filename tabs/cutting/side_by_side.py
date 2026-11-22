@@ -21,7 +21,7 @@ from core.ops.shared import frame_rate
 from core.ops.side_by_side import Arrangement, Clip, build_graph, labels_script, sbs_cmd
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import BaseTab
 from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 LAYOUTS = {
@@ -193,22 +193,9 @@ class SideBySideTab(BaseTab):
 
     def _build_render(self, body):
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="◫  CREATE",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=22,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "◫  CREATE", self._render, width=22)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _key(self, table, var, default):
         return next((k for k, v in table.items() if v == var.get()), default)

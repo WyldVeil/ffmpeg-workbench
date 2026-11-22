@@ -161,20 +161,13 @@ class MultiSplitterTab(BaseTab):
         self._add_row()
 
         # Render Button & Console
-        self.btn_render = tk.Button(
-            self,
-            text=t("splitter.batch_extract_button"),
-            font=(UI_FONT, 11, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            command=self._render_all,
+        self.btn_render = self.make_render_btn(
+            self, t("splitter.batch_extract_button"), self._render_all
         )
         self.btn_render.pack(pady=px(10))
-        cf = tk.Frame(self, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
-        self.console, csb = self.make_console(cf)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            self, height=8, bg=CLR["bg"], padx=px(20), pady=px(4)
+        )
 
     def _browse_file(self):
         p = dialogs.askopenfilename(

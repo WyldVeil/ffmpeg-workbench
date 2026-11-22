@@ -37,8 +37,8 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
-from tabs.kit import dialogs
 from tabs.kit.time_fields import frame_button, seconds_text
+from tabs.widgets import FileRow, SaveRow
 
 logger = logging.getLogger("crossfader.visuals.effects")
 
@@ -89,62 +89,6 @@ def _make_scrollable(parent):
     sb.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)
     return canvas, inner
-
-
-def _src_row(parent, src_var, browse_cmd):
-    """Standard source-file browse row."""
-    f = tk.Frame(parent, bg=CLR["bg"])
-    f.pack(fill="x", padx=px(18), pady=px(12, 4))
-    tk.Label(
-        f, text=t("common.source_video"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]
-    ).pack(side="left")
-    tk.Entry(
-        f, textvariable=src_var, width=56, bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"]
-    ).pack(side="left", padx=px(8))
-    tk.Button(f, text=t("btn.browse"), command=browse_cmd, bg=CLR["panel"], fg=CLR["fg"]).pack(
-        side="left"
-    )
-
-
-def _out_row(parent, out_var, browse_cmd):
-    """Standard output-file save row."""
-    f = tk.Frame(parent, bg=CLR["bg"])
-    f.pack(fill="x", padx=px(18), pady=px(4))
-    tk.Label(
-        f, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]
-    ).pack(side="left")
-    tk.Entry(
-        f, textvariable=out_var, width=60, bg=CLR["panel"], fg=CLR["fg"], insertbackground=CLR["fg"]
-    ).pack(side="left", padx=px(8))
-    tk.Button(f, text=t("common.save_as"), command=browse_cmd, bg=CLR["panel"], fg=CLR["fg"]).pack(
-        side="left"
-    )
-
-
-def _run_btn(parent, text, command, color=None):
-    color = color or CLR["accent"]
-    btn = tk.Button(
-        parent,
-        text=text,
-        font=(UI_FONT, 12, "bold"),
-        bg=color,
-        fg="black",
-        height=2,
-        width=30,
-        cursor="hand2",
-        command=command,
-    )
-    btn.pack(pady=px(10))
-    return btn
-
-
-def _console_block(parent, height=7):
-    f = tk.Frame(parent, bg=CLR["bg"])
-    f.pack(fill="both", expand=True, padx=px(18), pady=px(4, 12))
-    c, sb = BaseTab.make_console(f, height=height)
-    c.pack(side="left", fill="both", expand=True)
-    sb.pack(side="right", fill="y")
-    return c
 
 
 def _lf(parent, title, **kw):
@@ -368,10 +312,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._fi_src = tk.StringVar()
         self._fi_out = tk.StringVar()
-        _src_row(
-            inner, self._fi_src, lambda: self._browse_src(self._fi_src, self._fi_out, "_fadein")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._fi_src,
+            on_change=partial(self._suggest_out, self._fi_out, "_fadein"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._fi_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._fi_out, lambda: self._browse_out(self._fi_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -412,8 +361,11 @@ class SpecialEffectsTab(BaseTab):
         r3 = _spin(opts, "CRF (quality):", self._fi_crf, 12, 30, 1)
         r3.pack(anchor="w", pady=px(3))
 
-        self._fi_btn = _run_btn(inner, "✨  APPLY FADE-IN", self._render_fadein, CLR["accent"])
-        self._fi_console = _console_block(inner)
+        self._fi_btn = self.make_render_btn(
+            inner, "✨  APPLY FADE-IN", self._render_fadein, width=30
+        )
+        self._fi_btn.pack(pady=px(10))
+        self._fi_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_fadein(self):
         begun = self._fx_begin(self._fi_src, self._fi_out, "fadein")
@@ -465,10 +417,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._zb_src = tk.StringVar()
         self._zb_out = tk.StringVar()
-        _src_row(
-            inner, self._zb_src, lambda: self._browse_src(self._zb_src, self._zb_out, "_zoomburst")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._zb_src,
+            on_change=partial(self._suggest_out, self._zb_out, "_zoomburst"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._zb_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._zb_out, lambda: self._browse_out(self._zb_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -483,8 +440,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF (quality):", self._zb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._zb_btn = _run_btn(inner, "🔍  APPLY ZOOM BURST", self._render_zoomburst, CLR["green"])
-        self._zb_console = _console_block(inner)
+        self._zb_btn = self.make_render_btn(
+            inner, "🔍  APPLY ZOOM BURST", self._render_zoomburst, width=30
+        )
+        self._zb_btn.pack(pady=px(10))
+        self._zb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_zoomburst(self):
         begun = self._fx_begin(self._zb_src, self._zb_out, "zoomburst")
@@ -529,10 +489,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._sl_src = tk.StringVar()
         self._sl_out = tk.StringVar()
-        _src_row(
-            inner, self._sl_src, lambda: self._browse_src(self._sl_src, self._sl_out, "_slidein")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._sl_src,
+            on_change=partial(self._suggest_out, self._sl_out, "_slidein"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._sl_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._sl_out, lambda: self._browse_out(self._sl_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -547,8 +512,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Slide duration (s):", self._sl_dur, 0.2, 5, 0.1).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._sl_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._sl_btn = _run_btn(inner, "↔  APPLY SLIDE-IN", self._render_slidein, CLR["orange"])
-        self._sl_console = _console_block(inner)
+        self._sl_btn = self.make_render_btn(
+            inner, "↔  APPLY SLIDE-IN", self._render_slidein, width=30
+        )
+        self._sl_btn.pack(pady=px(10))
+        self._sl_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_slidein(self):
         begun = self._fx_begin(self._sl_src, self._sl_out, "slidein")
@@ -602,10 +570,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._sp_src = tk.StringVar()
         self._sp_out = tk.StringVar()
-        _src_row(
-            inner, self._sp_src, lambda: self._browse_src(self._sp_src, self._sp_out, "_spinin")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._sp_src,
+            on_change=partial(self._suggest_out, self._sp_out, "_spinin"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._sp_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._sp_out, lambda: self._browse_out(self._sp_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -618,8 +591,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Number of rotations:", self._sp_turns, 1, 5, 1).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._sp_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._sp_btn = _run_btn(inner, "🌀  APPLY SPIN-IN", self._render_spinin, CLR["pink"])
-        self._sp_console = _console_block(inner)
+        self._sp_btn = self.make_render_btn(
+            inner, "🌀  APPLY SPIN-IN", self._render_spinin, width=30
+        )
+        self._sp_btn.pack(pady=px(10))
+        self._sp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_spinin(self):
         begun = self._fx_begin(self._sp_src, self._sp_out, "spinin")
@@ -664,12 +640,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._spo_src = tk.StringVar()
         self._spo_out = tk.StringVar()
-        _src_row(
+        FileRow(
             inner,
+            t("common.source_video"),
             self._spo_src,
-            lambda: self._browse_src(self._spo_src, self._spo_out, "_splitopen"),
+            on_change=partial(self._suggest_out, self._spo_out, "_splitopen"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._spo_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._spo_out, lambda: self._browse_out(self._spo_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -688,8 +667,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._spo_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._spo_btn = _run_btn(inner, "↕  APPLY SPLIT-OPEN", self._render_splitopen, "#9C27B0")
-        self._spo_console = _console_block(inner)
+        self._spo_btn = self.make_render_btn(
+            inner, "↕  APPLY SPLIT-OPEN", self._render_splitopen, width=30
+        )
+        self._spo_btn.pack(pady=px(10))
+        self._spo_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_splitopen(self):
         begun = self._fx_begin(self._spo_src, self._spo_out, "splitopen")
@@ -740,10 +722,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._fo_src = tk.StringVar()
         self._fo_out = tk.StringVar()
-        _src_row(
-            inner, self._fo_src, lambda: self._browse_src(self._fo_src, self._fo_out, "_fadeout")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._fo_src,
+            on_change=partial(self._suggest_out, self._fo_out, "_fadeout"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._fo_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._fo_out, lambda: self._browse_out(self._fo_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -752,8 +739,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Fade duration (s):", self._fo_dur, 0.3, 10, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._fo_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._fo_btn = _run_btn(inner, "⬛  APPLY FADE-OUT", self._render_fadeout, "#455A64")
-        self._fo_console = _console_block(inner)
+        self._fo_btn = self.make_render_btn(
+            inner, "⬛  APPLY FADE-OUT", self._render_fadeout, width=30
+        )
+        self._fo_btn.pack(pady=px(10))
+        self._fo_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_fadeout(self):
         src = self._fo_src.get().strip()
@@ -798,10 +788,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._fz_src = tk.StringVar()
         self._fz_out = tk.StringVar()
-        _src_row(
-            inner, self._fz_src, lambda: self._browse_src(self._fz_src, self._fz_out, "_freezezoom")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._fz_src,
+            on_change=partial(self._suggest_out, self._fz_out, "_freezezoom"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._fz_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._fz_out, lambda: self._browse_out(self._fz_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -812,10 +807,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Fade duration (s):", self._fz_fade, 0.3, 5, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._fz_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._fz_btn = _run_btn(
-            inner, "🎞  APPLY FREEZE & ZOOM OUT", self._render_freezezoom, "#37474F"
+        self._fz_btn = self.make_render_btn(
+            inner, "🎞  APPLY FREEZE & ZOOM OUT", self._render_freezezoom, width=30
         )
-        self._fz_console = _console_block(inner)
+        self._fz_btn.pack(pady=px(10))
+        self._fz_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_freezezoom(self):
         begun = self._fx_begin(self._fz_src, self._fz_out, "freezezoom")
@@ -866,10 +862,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._ir_src = tk.StringVar()
         self._ir_out = tk.StringVar()
-        _src_row(
-            inner, self._ir_src, lambda: self._browse_src(self._ir_src, self._ir_out, "_irisclose")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._ir_src,
+            on_change=partial(self._suggest_out, self._ir_out, "_irisclose"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._ir_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._ir_out, lambda: self._browse_out(self._ir_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -878,8 +879,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Iris duration (s):", self._ir_dur, 0.3, 6, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._ir_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._ir_btn = _run_btn(inner, "⭕  APPLY IRIS CLOSE", self._render_irisclose, "#263238")
-        self._ir_console = _console_block(inner)
+        self._ir_btn = self.make_render_btn(
+            inner, "⭕  APPLY IRIS CLOSE", self._render_irisclose, width=30
+        )
+        self._ir_btn.pack(pady=px(10))
+        self._ir_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_irisclose(self):
         begun = self._fx_begin(self._ir_src, self._ir_out, "irisclose")
@@ -936,10 +940,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._em_src = tk.StringVar()
         self._em_out = tk.StringVar()
-        _src_row(
-            inner, self._em_src, lambda: self._browse_src(self._em_src, self._em_out, "_emoji")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._em_src,
+            on_change=partial(self._suggest_out, self._em_out, "_emoji"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._em_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._em_out, lambda: self._browse_out(self._em_out))
 
         opts = _lf(inner, "Emoji / Text Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1015,10 +1024,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Hold for (s):", self._em_hold, 0.2, 30, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._em_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._em_btn = _run_btn(
-            inner, "😂  BURN EMOJI ONTO VIDEO", self._render_emoji, CLR["orange"]
+        self._em_btn = self.make_render_btn(
+            inner, "😂  BURN EMOJI ONTO VIDEO", self._render_emoji, width=30
         )
-        self._em_console = _console_block(inner)
+        self._em_btn.pack(pady=px(10))
+        self._em_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_emoji(self):
         src = self._em_src.get().strip()
@@ -1077,8 +1087,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._lt_src = tk.StringVar()
         self._lt_out = tk.StringVar()
-        _src_row(inner, self._lt_src, lambda: self._browse_src(self._lt_src, self._lt_out, "_lt"))
-        _out_row(inner, self._lt_out, lambda: self._browse_out(self._lt_out))
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._lt_src,
+            on_change=partial(self._suggest_out, self._lt_out, "_lt"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._lt_out).pack(
+            fill="x", padx=px(18), pady=px(4)
+        )
 
         opts = _lf(inner, "Banner Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1121,8 +1138,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Hold for (s):", self._lt_hold, 0.5, 60, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._lt_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._lt_btn = _run_btn(inner, "📛  BURN LOWER THIRD", self._render_lowerthird, "#1565C0")
-        self._lt_console = _console_block(inner)
+        self._lt_btn = self.make_render_btn(
+            inner, "📛  BURN LOWER THIRD", self._render_lowerthird, width=30
+        )
+        self._lt_btn.pack(pady=px(10))
+        self._lt_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_lowerthird(self):
         begun = self._fx_begin(self._lt_src, self._lt_out, "lowerthird")
@@ -1191,12 +1211,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._sub_src = tk.StringVar()
         self._sub_out = tk.StringVar()
-        _src_row(
+        FileRow(
             inner,
+            t("common.source_video"),
             self._sub_src,
-            lambda: self._browse_src(self._sub_src, self._sub_out, "_subscribe"),
+            on_change=partial(self._suggest_out, self._sub_out, "_subscribe"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._sub_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._sub_out, lambda: self._browse_out(self._sub_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1241,10 +1264,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Hold for (s):", self._sub_hold, 0.5, 60, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._sub_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._sub_btn = _run_btn(
-            inner, "🔔  BURN SUBSCRIBE REMINDER", self._render_subscribe, "#FF0000"
+        self._sub_btn = self.make_render_btn(
+            inner, "🔔  BURN SUBSCRIBE REMINDER", self._render_subscribe, width=30
         )
-        self._sub_console = _console_block(inner)
+        self._sub_btn.pack(pady=px(10))
+        self._sub_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_subscribe(self):
         src = self._sub_src.get().strip()
@@ -1303,10 +1327,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._cd_src = tk.StringVar()
         self._cd_out = tk.StringVar()
-        _src_row(
-            inner, self._cd_src, lambda: self._browse_src(self._cd_src, self._cd_out, "_countdown")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._cd_src,
+            on_change=partial(self._suggest_out, self._cd_out, "_countdown"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._cd_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._cd_out, lambda: self._browse_out(self._cd_out))
 
         opts = _lf(inner, "Countdown Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1329,8 +1358,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Font size:", self._cd_size, 24, 200, 8).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._cd_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._cd_btn = _run_btn(inner, "⏱  BURN COUNTDOWN", self._render_countdown, "#E53935")
-        self._cd_console = _console_block(inner)
+        self._cd_btn = self.make_render_btn(
+            inner, "⏱  BURN COUNTDOWN", self._render_countdown, width=30
+        )
+        self._cd_btn.pack(pady=px(10))
+        self._cd_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_countdown(self):
         src = self._cd_src.get().strip()
@@ -1382,10 +1414,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._pb_src = tk.StringVar()
         self._pb_out = tk.StringVar()
-        _src_row(
-            inner, self._pb_src, lambda: self._browse_src(self._pb_src, self._pb_out, "_progress")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._pb_src,
+            on_change=partial(self._suggest_out, self._pb_out, "_progress"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._pb_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._pb_out, lambda: self._browse_out(self._pb_out))
 
         opts = _lf(inner, "Bar Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1415,8 +1452,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF:", self._pb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._pb_btn = _run_btn(inner, "▶  BURN PROGRESS BAR", self._render_progressbar, "#E53935")
-        self._pb_console = _console_block(inner)
+        self._pb_btn = self.make_render_btn(
+            inner, "▶  BURN PROGRESS BAR", self._render_progressbar, width=30
+        )
+        self._pb_btn.pack(pady=px(10))
+        self._pb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_progressbar(self):
         begun = self._fx_begin(self._pb_src, self._pb_out, "progress")
@@ -1472,10 +1512,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._rgb_src = tk.StringVar()
         self._rgb_out = tk.StringVar()
-        _src_row(
-            inner, self._rgb_src, lambda: self._browse_src(self._rgb_src, self._rgb_out, "_rgb")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._rgb_src,
+            on_change=partial(self._suggest_out, self._rgb_out, "_rgb"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._rgb_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._rgb_out, lambda: self._browse_out(self._rgb_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1514,8 +1559,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(side="left", padx=px(4))
         _spin(opts, "CRF:", self._rgb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._rgb_btn = _run_btn(inner, "🌈  APPLY RGB GLITCH", self._render_rgb, "#9C27B0")
-        self._rgb_console = _console_block(inner)
+        self._rgb_btn = self.make_render_btn(
+            inner, "🌈  APPLY RGB GLITCH", self._render_rgb, width=30
+        )
+        self._rgb_btn.pack(pady=px(10))
+        self._rgb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_rgb(self):
         src = self._rgb_src.get().strip()
@@ -1572,10 +1620,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._vhs_src = tk.StringVar()
         self._vhs_out = tk.StringVar()
-        _src_row(
-            inner, self._vhs_src, lambda: self._browse_src(self._vhs_src, self._vhs_out, "_vhs")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._vhs_src,
+            on_change=partial(self._suggest_out, self._vhs_out, "_vhs"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._vhs_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._vhs_out, lambda: self._browse_out(self._vhs_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1587,8 +1640,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._vhs_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._vhs_btn = _run_btn(inner, "📼  APPLY VHS EFFECT", self._render_vhs, "#546E7A")
-        self._vhs_console = _console_block(inner)
+        self._vhs_btn = self.make_render_btn(
+            inner, "📼  APPLY VHS EFFECT", self._render_vhs, width=30
+        )
+        self._vhs_btn.pack(pady=px(10))
+        self._vhs_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_vhs(self):
         src = self._vhs_src.get().strip()
@@ -1641,10 +1697,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._gr_src = tk.StringVar()
         self._gr_out = tk.StringVar()
-        _src_row(
-            inner, self._gr_src, lambda: self._browse_src(self._gr_src, self._gr_out, "_grain")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._gr_src,
+            on_change=partial(self._suggest_out, self._gr_out, "_grain"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._gr_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._gr_out, lambda: self._browse_out(self._gr_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1655,8 +1716,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF:", self._gr_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._gr_btn = _run_btn(inner, "🎞  APPLY FILM GRAIN", self._render_grain, "#5D4037")
-        self._gr_console = _console_block(inner)
+        self._gr_btn = self.make_render_btn(
+            inner, "🎞  APPLY FILM GRAIN", self._render_grain, width=30
+        )
+        self._gr_btn.pack(pady=px(10))
+        self._gr_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_grain(self):
         src = self._gr_src.get().strip()
@@ -1702,10 +1766,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._vi_src = tk.StringVar()
         self._vi_out = tk.StringVar()
-        _src_row(
-            inner, self._vi_src, lambda: self._browse_src(self._vi_src, self._vi_out, "_vignette")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._vi_src,
+            on_change=partial(self._suggest_out, self._vi_out, "_vignette"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._vi_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._vi_out, lambda: self._browse_out(self._vi_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1716,8 +1785,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF:", self._vi_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._vi_btn = _run_btn(inner, "🔲  APPLY VIGNETTE", self._render_vignette, "#37474F")
-        self._vi_console = _console_block(inner)
+        self._vi_btn = self.make_render_btn(
+            inner, "🔲  APPLY VIGNETTE", self._render_vignette, width=30
+        )
+        self._vi_btn.pack(pady=px(10))
+        self._vi_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_vignette(self):
         src = self._vi_src.get().strip()
@@ -1760,10 +1832,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._ll_src = tk.StringVar()
         self._ll_out = tk.StringVar()
-        _src_row(
-            inner, self._ll_src, lambda: self._browse_src(self._ll_src, self._ll_out, "_lightleak")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._ll_src,
+            on_change=partial(self._suggest_out, self._ll_out, "_lightleak"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._ll_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._ll_out, lambda: self._browse_out(self._ll_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1791,8 +1868,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._ll_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._ll_btn = _run_btn(inner, "✨  APPLY LIGHT LEAK", self._render_lightleak, "#FF6F00")
-        self._ll_console = _console_block(inner)
+        self._ll_btn = self.make_render_btn(
+            inner, "✨  APPLY LIGHT LEAK", self._render_lightleak, width=30
+        )
+        self._ll_btn.pack(pady=px(10))
+        self._ll_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_lightleak(self):
         begun = self._fx_begin(self._ll_src, self._ll_out, "lightleak")
@@ -1853,10 +1933,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._sh_src = tk.StringVar()
         self._sh_out = tk.StringVar()
-        _src_row(
-            inner, self._sh_src, lambda: self._browse_src(self._sh_src, self._sh_out, "_shake")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._sh_src,
+            on_change=partial(self._suggest_out, self._sh_out, "_shake"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._sh_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._sh_out, lambda: self._browse_out(self._sh_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1897,8 +1982,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(side="left", padx=px(4))
         _spin(opts, "CRF:", self._sh_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._sh_btn = _run_btn(inner, "📳  APPLY CAMERA SHAKE", self._render_shake, "#B71C1C")
-        self._sh_console = _console_block(inner)
+        self._sh_btn = self.make_render_btn(
+            inner, "📳  APPLY CAMERA SHAKE", self._render_shake, width=30
+        )
+        self._sh_btn.pack(pady=px(10))
+        self._sh_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_shake(self):
         src = self._sh_src.get().strip()
@@ -1965,10 +2053,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._zp_src = tk.StringVar()
         self._zp_out = tk.StringVar()
-        _src_row(
-            inner, self._zp_src, lambda: self._browse_src(self._zp_src, self._zp_out, "_zoompunch")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._zp_src,
+            on_change=partial(self._suggest_out, self._zp_out, "_zoompunch"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._zp_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._zp_out, lambda: self._browse_out(self._zp_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -1996,8 +2089,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF:", self._zp_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._zp_btn = _run_btn(inner, "👊  APPLY ZOOM PUNCH", self._render_zoompunch, "#D32F2F")
-        self._zp_console = _console_block(inner)
+        self._zp_btn = self.make_render_btn(
+            inner, "👊  APPLY ZOOM PUNCH", self._render_zoompunch, width=30
+        )
+        self._zp_btn.pack(pady=px(10))
+        self._zp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_zoompunch(self):
         begun = self._fx_begin(self._zp_src, self._zp_out, "zoompunch")
@@ -2048,10 +2144,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._kb_src = tk.StringVar()
         self._kb_out = tk.StringVar()
-        _src_row(
-            inner, self._kb_src, lambda: self._browse_src(self._kb_src, self._kb_out, "_kenburns")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._kb_src,
+            on_change=partial(self._suggest_out, self._kb_out, "_kenburns"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._kb_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._kb_out, lambda: self._browse_out(self._kb_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -2073,8 +2174,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._kb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._kb_btn = _run_btn(inner, "🎥  APPLY KEN BURNS", self._render_kenburns, "#1B5E20")
-        self._kb_console = _console_block(inner)
+        self._kb_btn = self.make_render_btn(
+            inner, "🎥  APPLY KEN BURNS", self._render_kenburns, width=30
+        )
+        self._kb_btn.pack(pady=px(10))
+        self._kb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_kenburns(self):
         begun = self._fx_begin(self._kb_src, self._kb_out, "kenburns")
@@ -2129,10 +2233,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._wp_src = tk.StringVar()
         self._wp_out = tk.StringVar()
-        _src_row(
-            inner, self._wp_src, lambda: self._browse_src(self._wp_src, self._wp_out, "_whippan")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._wp_src,
+            on_change=partial(self._suggest_out, self._wp_out, "_whippan"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._wp_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._wp_out, lambda: self._browse_out(self._wp_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -2158,8 +2267,11 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "Blur strength:", self._wp_str, 5, 120, 5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._wp_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._wp_btn = _run_btn(inner, "💨  APPLY WHIP PAN BLUR", self._render_whippan, "#0D47A1")
-        self._wp_console = _console_block(inner)
+        self._wp_btn = self.make_render_btn(
+            inner, "💨  APPLY WHIP PAN BLUR", self._render_whippan, width=30
+        )
+        self._wp_btn.pack(pady=px(10))
+        self._wp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_whippan(self):
         begun = self._fx_begin(self._wp_src, self._wp_out, "whippan")
@@ -2215,8 +2327,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._mc_src = tk.StringVar()
         self._mc_out = tk.StringVar()
-        _src_row(inner, self._mc_src, lambda: self._browse_src(self._mc_src, self._mc_out, "_meme"))
-        _out_row(inner, self._mc_out, lambda: self._browse_out(self._mc_out))
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._mc_src,
+            on_change=partial(self._suggest_out, self._mc_out, "_meme"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._mc_out).pack(
+            fill="x", padx=px(18), pady=px(4)
+        )
 
         opts = _lf(inner, "Caption Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -2272,8 +2391,11 @@ class SpecialEffectsTab(BaseTab):
         ).pack(side="left", padx=px(4))
         _spin(opts, "CRF:", self._mc_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._mc_btn = _run_btn(inner, "🗯  BURN MEME CAPTIONS", self._render_meme, "#F57F17")
-        self._mc_console = _console_block(inner)
+        self._mc_btn = self.make_render_btn(
+            inner, "🗯  BURN MEME CAPTIONS", self._render_meme, width=30
+        )
+        self._mc_btn.pack(pady=px(10))
+        self._mc_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_meme(self):
         src = self._mc_src.get().strip()
@@ -2350,10 +2472,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._cb_src = tk.StringVar()
         self._cb_out = tk.StringVar()
-        _src_row(
-            inner, self._cb_src, lambda: self._browse_src(self._cb_src, self._cb_out, "_cinebars")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._cb_src,
+            on_change=partial(self._suggest_out, self._cb_out, "_cinebars"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._cb_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._cb_out, lambda: self._browse_out(self._cb_out))
 
         opts = _lf(inner, "Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -2385,8 +2512,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF:", self._cb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._cb_btn = _run_btn(inner, "🎬  APPLY CINEMATIC BARS", self._render_cinebars, "#1A237E")
-        self._cb_console = _console_block(inner)
+        self._cb_btn = self.make_render_btn(
+            inner, "🎬  APPLY CINEMATIC BARS", self._render_cinebars, width=30
+        )
+        self._cb_btn.pack(pady=px(10))
+        self._cb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_cinebars(self):
         begun = self._fx_begin(self._cb_src, self._cb_out, "cinebars")
@@ -2442,10 +2572,15 @@ class SpecialEffectsTab(BaseTab):
 
         self._wm_src = tk.StringVar()
         self._wm_out = tk.StringVar()
-        _src_row(
-            inner, self._wm_src, lambda: self._browse_src(self._wm_src, self._wm_out, "_watermark")
+        FileRow(
+            inner,
+            t("common.source_video"),
+            self._wm_src,
+            on_change=partial(self._suggest_out, self._wm_out, "_watermark"),
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), self._wm_out).pack(
+            fill="x", padx=px(18), pady=px(4)
         )
-        _out_row(inner, self._wm_out, lambda: self._browse_out(self._wm_out))
 
         opts = _lf(inner, "Watermark Options")
         opts.pack(fill="x", padx=px(18), pady=px(8))
@@ -2482,8 +2617,11 @@ class SpecialEffectsTab(BaseTab):
         )
         _spin(opts, "CRF:", self._wm_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
-        self._wm_btn = _run_btn(inner, "©  BURN WATERMARK", self._render_watermark, "#455A64")
-        self._wm_console = _console_block(inner)
+        self._wm_btn = self.make_render_btn(
+            inner, "©  BURN WATERMARK", self._render_watermark, width=30
+        )
+        self._wm_btn.pack(pady=px(10))
+        self._wm_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
     def _render_watermark(self):
         src = self._wm_src.get().strip()
@@ -2539,23 +2677,8 @@ class SpecialEffectsTab(BaseTab):
     #  Shared helpers used by all render methods
     # ═════════════════════════════════════════════════════════════════════
 
-    def _browse_src(self, src_var, out_var, suffix):
-        p = dialogs.askopenfilename(filetypes=VIDEO_TYPES)
-        if not p:
-            return
-        src_var.set(p)
-        base = os.path.splitext(p)[0]
-        if not out_var.get():
-            out_var.set(base + suffix + ".mp4")
-
     @staticmethod
-    def _browse_out(out_var):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[
-                (t("effects.mp4_video"), "*.mp4"),
-                (t("youtube.all_files"), t("ducker.item_2")),
-            ],
-        )
-        if p:
-            out_var.set(p)
+    def _suggest_out(out_var: tk.StringVar, suffix: str, src: str) -> None:
+        """Name the output after a new source, unless one is already chosen."""
+        if not out_var.get():
+            out_var.set(os.path.splitext(src)[0] + suffix + ".mp4")

@@ -25,7 +25,7 @@ from core.ops.shared import chapters_cmd
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
 
@@ -113,15 +113,7 @@ class SceneDetectTab(BaseTab):
         )
         btns = tk.Frame(act)
         btns.pack(pady=px(8, 0))
-        self.btn_split = tk.Button(
-            btns,
-            text="✂  SPLIT INTO SCENES",
-            font=(UI_FONT, 11, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            cursor="hand2",
-            command=self._split,
-        )
+        self.btn_split = self.make_render_btn(btns, "✂  SPLIT INTO SCENES", self._split)
         self.btn_split.pack(side="left", padx=px(4))
         self.btn_chapters = tk.Button(
             btns, text="📑 Add as chapters…", relief="flat", command=self._chapters
@@ -131,11 +123,7 @@ class SceneDetectTab(BaseTab):
             side="left", padx=px(4)
         )
 
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     # ── detection ────────────────────────────────────────────────────────────
 

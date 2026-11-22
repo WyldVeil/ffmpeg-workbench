@@ -229,11 +229,9 @@ class YouTubeDownloaderTab(BaseTab):
         self._build_batch_panel(root)
 
         # 10. Console
-        cf = tk.Frame(root, bg=CLR["bg"])
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 6))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(
+            root, height=5, bg=CLR["bg"], padx=px(20), pady=px(0, 6)
+        )
 
         # 11. History panel
         self._build_history_panel(root)
@@ -1293,20 +1291,7 @@ class YouTubeDownloaderTab(BaseTab):
         btn_f = tk.Frame(root, bg=CLR["bg"])
         btn_f.pack(pady=px(8))
 
-        self._btn_dl = tk.Button(
-            btn_f,
-            text=t("youtube.download"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=20,
-            cursor="hand2",
-            relief="flat",
-            activebackground=CLR["accent"],
-            activeforeground="white",
-            command=self._download,
-        )
+        self._btn_dl = self.make_render_btn(btn_f, t("youtube.download"), self._download, width=20)
         self._btn_dl.pack(side="left", padx=px(6))
 
         self._btn_cancel = tk.Button(
@@ -1487,7 +1472,7 @@ class YouTubeDownloaderTab(BaseTab):
         ).pack(side="right", padx=px(6))
 
         self._hist_body = tk.Frame(root, bg=CLR["bg"])
-        self._hist_body.pack(fill="x", padx=px(20), pady=px(0, 10))
+        self._hist_body.pack(fill="x")
 
         hist_cols = ("Date", "Title", "Duration", "File")
         self._hist_tree = ttk.Treeview(
@@ -1634,7 +1619,7 @@ class YouTubeDownloaderTab(BaseTab):
     def _toggle_history(self):
         self._history_visible = not self._history_visible
         if self._history_visible:
-            self._hist_body.pack(fill="x", padx=px(20), pady=px(0, 10))
+            self._hist_body.pack(fill="x")
             self._hist_toggle_btn.config(text=t("youtube.download_history"))
         else:
             self._hist_body.pack_forget()

@@ -4,7 +4,7 @@ base_tab.py  ─  Shared utilities for all Studio Pro tabs.
 Provides:
   • CLR - live skin color dict
   • BaseTab - base class for all tool tabs
-  • make_header, make_console, make_file_row, make_section,
+  • make_header, make_console, make_console_block, make_file_row, make_section,
     make_render_btn, make_labeled_entry - UI factory helpers
 """
 
@@ -178,6 +178,18 @@ def make_console(parent, height=8):
     return c, sb
 
 
+def make_console_block(parent, height=5, bg=None, **pack):
+    """Every page's console: a console with its scrollbar in a frame (background
+    *bg*), packed under the page's controls (*pack* overrides fill="both",
+    expand=True, padx=20, pady=(0, 10)); returns the console."""
+    frame = tk.Frame(parent, bg=bg) if bg else tk.Frame(parent)
+    frame.pack(**{"fill": "both", "expand": True, "padx": px(20), "pady": px(0, 10), **pack})
+    console, bar = make_console(frame, height=height)
+    console.pack(side="left", fill="both", expand=True)
+    bar.pack(side="right", fill="y")
+    return console
+
+
 def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
     """
     Standard source/output file row with consistent label alignment.
@@ -246,30 +258,19 @@ def make_labeled_entry(parent, label, var, width=8, tooltip=""):
     return f
 
 
-def make_render_btn(parent, text, command, color=None, width=24):
-    """
-    Large, prominent render/action button.
-    Uses accent color by default; pass color= to override (green/orange/red).
-    """
-    bg = color or CLR["accent"]
-    # Compute a darker active state
-    btn = tk.Button(
+def make_render_btn(parent, text, command, width=24):
+    """Every page's main action ("RENDER", "EXPORT", ...): one look everywhere
+    (tests/test_architecture.py checks no page builds its own)."""
+    return tk.Button(
         parent,
         text=text,
-        font=(UI_FONT, 11, "bold"),
-        bg=bg,
-        fg="#FFFFFF",
-        activebackground=CLR["fgdim"],
-        activeforeground="#FFFFFF",
-        relief="flat",
-        cursor="hand2",
-        height=2,
+        font=(UI_FONT, 12, "bold"),
+        bg=CLR["green"],
+        fg="white",
         width=width,
-        bd=0,
-        highlightthickness=0,
+        cursor="hand2",
         command=command,
     )
-    return btn
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -708,6 +709,7 @@ class BaseTab(ttk.Frame):
     make_header = staticmethod(make_header)
     make_section = staticmethod(make_section)
     make_console = staticmethod(make_console)
+    make_console_block = staticmethod(make_console_block)
     make_file_row = staticmethod(make_file_row)
     make_labeled_entry = staticmethod(make_labeled_entry)
     make_render_btn = staticmethod(make_render_btn)

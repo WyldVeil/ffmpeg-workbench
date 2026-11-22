@@ -19,7 +19,7 @@ from core.ops import audio_replace as ar
 from core.ops.shared import strip_audio_cmd
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.base_tab import BaseTab
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
 MODES = {
@@ -98,21 +98,9 @@ class AudioReplacerTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "new_audio"),
         )
         self.out_row.pack(fill="x")
-        self.btn_render = tk.Button(
-            body,
-            text="🎼  APPLY",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=20,
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🎼  APPLY", self._render, width=20)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     def _render(self):
         src = self.src_row.path

@@ -410,27 +410,15 @@ class ThumbnailMakerTab(BaseTab):
         # ── Run ───────────────────────────────────────────────────────────
         bf = tk.Frame(self)
         bf.pack(pady=px(8))
-        self.btn_render = tk.Button(
-            bf,
-            text="🖼  " + t("tab.thumbnail_maker"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            height=2,
-            width=26,
-            cursor="hand2",
-            command=self._render,
+        self.btn_render = self.make_render_btn(
+            bf, "🖼  " + t("tab.thumbnail_maker"), self._render, width=26
         )
         self.btn_render.pack()
 
     def _build_console(self):
         """Console."""
         # ── Console ───────────────────────────────────────────────────────
-        cf = tk.Frame(self)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
-        self.console, csb = self.make_console(cf, height=4)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(self, height=4, padx=px(20), pady=px(4, 10))
 
     # ── Callbacks ──────────────────────────────────────────────────────
     def _browse(self):

@@ -43,7 +43,7 @@ from core.paths import temp_dir
 from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
+from tabs.base_tab import CLR, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker, RangePicker
 from tabs.widgets import EncoderPanel, SaveRow, scroll_body
 
@@ -410,22 +410,9 @@ class SlideshowMakerTab(BaseTab):
         self.encoder.pack(anchor="w")
         self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(
-            body,
-            text="🎞  CREATE SLIDESHOW",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=24,
-            cursor="hand2",
-            command=self._render,
-        )
+        self.btn_render = self.make_render_btn(body, "🎞  CREATE SLIDESHOW", self._render, width=24)
         self.btn_render.pack(pady=px(8))
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
-        self.console, csb = self.make_console(cf, height=5)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=5)
 
     # ── The slide list ───────────────────────────────────────────────────────
 

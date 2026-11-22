@@ -100,8 +100,7 @@ class CompareQualityTab(BaseTab):
 
     def _build_ui(self):
         body, opt, r3 = self._build_header()
-        cf = self._build_results(body, opt, r3)
-        self._build_console(cf)
+        self._build_results(body, opt, r3)
 
     def _build_header(self):
         self.make_header(
@@ -182,16 +181,7 @@ class CompareQualityTab(BaseTab):
         tk.Entry(r4, textvariable=self.limit_var, width=6).pack(side="left", padx=px(4))
         tk.Label(r4, text="seconds").pack(side="left")
 
-        self.btn = tk.Button(
-            body,
-            text="📊  MEASURE QUALITY",
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"],
-            fg="white",
-            width=24,
-            cursor="hand2",
-            command=self._run,
-        )
+        self.btn = self.make_render_btn(body, "📊  MEASURE QUALITY", self._run, width=24)
         self.btn.pack(pady=px(8))
 
         self.res = tk.LabelFrame(body, text="  Results  ", padx=px(12), pady=px(8))
@@ -227,14 +217,7 @@ class CompareQualityTab(BaseTab):
         tk.Button(
             self.res, text="💾  Save the scores (CSV + JSON)…", relief="flat", command=self._export
         ).pack(anchor="w")
-        cf = tk.Frame(body)
-        cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
-        return cf
-
-    def _build_console(self, cf):
-        self.console, csb = self.make_console(cf, height=4)
-        self.console.pack(side="left", fill="both", expand=True)
-        csb.pack(side="right", fill="y")
+        self.console = self.make_console_block(body, height=4, pady=px(4, 10))
 
     # ── Files ─────────────────────────────────────────────────────────
     def load_file(self, path) -> bool:
