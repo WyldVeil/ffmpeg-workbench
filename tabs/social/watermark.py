@@ -298,3 +298,4 @@ class TextBurnerTab(BaseTab):
     def on_app_closing(self):
         if self._pdir:
             shutil.rmtree(self._pdir, ignore_errors=True)
+            self._pdir = None  # a new one is made if the page is used again

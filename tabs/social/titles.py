@@ -411,3 +411,4 @@ class TitlesGeneratorTab(BaseTab):
     def on_app_closing(self):
         if self._preview_dir:
             shutil.rmtree(self._preview_dir, ignore_errors=True)
+            self._preview_dir = None  # a new one is made if the page is used again

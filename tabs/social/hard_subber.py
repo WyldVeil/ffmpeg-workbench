@@ -428,3 +428,4 @@ class HardSubberTab(BaseTab):
     def on_app_closing(self):
         if self._work:
             shutil.rmtree(self._work, ignore_errors=True)
+            self._work = None  # a new one is made if the page is used again
