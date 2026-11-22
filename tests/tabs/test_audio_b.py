@@ -10,6 +10,7 @@ from core import ffmpeg as ff
 from core.ops import audio_export as ae
 from core.ops import karaoke as ko
 from core.ops import voiceover as vo
+from core.ops import waveform as wf
 from tabs.audio import mixer
 from tabs.kit.widgets import ChoiceBox
 
@@ -445,9 +446,8 @@ def test_midifier_end_to_end(ui, outdir, tmp_path):
 
 
 def test_waveform_region_filter():
-    from tabs.audio import waveform
 
-    f = waveform.region_filter([(1.0, 2.0, "mute", 0.0), (3.0, 4.0, "boost", 6.0)])
+    f = wf.region_filter([(1.0, 2.0, "mute", 0.0), (3.0, 4.0, "boost", 6.0)])
     assert f.startswith(
         "asetnsamples=n=256:p=0,volume='1+(0.000000-1)*clip(min(t-1.000,2.000-t)/0.02,0,1)'"
     )

@@ -24,67 +24,18 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
-from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
+from core.ops import waveform as wf
+from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, SaveRow
 
-RAMP = 0.02  # seconds of fade at each region edge
 COLOURS = {"mute": "red", "boost": "green", "duck": "orange"}
 
 
 def _fmt(seconds):
     return f"{Timecode.of(seconds):.2}"
-
-
-def peaks_cmd(src: str, slice_samples: int, out_txt: str, stream: int = 0) -> list:
-    """Peak level (dBFS) of every *slice_samples* block, printed to *out_txt*."""
-    af = (
-        f"aformat=sample_fmts=flt:channel_layouts=mono,asetnsamples=n={slice_samples}:p=0,"
-        "astats=metadata=1:reset=1:measure_perchannel=none:measure_overall=Peak_level,"
-        f"ametadata=mode=print:key=lavfi.astats.Overall.Peak_level:file={os.path.basename(out_txt)}"
-    )
-    return [
-        ff.ffmpeg_path(),
-        "-hide_banner",
-        "-nostdin",
-        "-y",
-        "-i",
-        src,
-        "-map",
-        f"0:a:{stream}",
-        "-af",
-        af,
-        "-f",
-        "null",
-        "-",
-    ]
-
-
-def read_peaks(path: str) -> list:
-    """dBFS lines -> linear peaks 0..1."""
-    vals = []
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            if line.startswith("lavfi.astats.Overall.Peak_level="):
-                try:
-                    db = float(line.split("=", 1)[1])
-                except ValueError:
-                    db = -120.0
-                vals.append(0.0 if math.isinf(db) or db < -120 else min(1.0, 10 ** (db / 20)))
-    return vals
-
-
-def region_filter(regions) -> str:
-    """Gain envelope for [(start, end, action, dB)] with RAMP-second edges."""
-    parts = ["asetnsamples=n=256:p=0"] if regions else []
-    for s, e, action, db in regions:
-        gain = 0.0 if action == "mute" else 10 ** ((db if action == "boost" else -db) / 20)
-        parts.append(
-            f"volume='1+({gain:.6f}-1)*clip(min(t-{s:.3f},{e:.3f}-t)/{RAMP},0,1)':eval=frame"
-        )
-    return ",".join(parts)
 
 
 class WaveformEditorTab(BaseTab):
@@ -321,12 +272,12 @@ class WaveformEditorTab(BaseTab):
         tmp = tempfile.mkdtemp(prefix="wme_wave_")
         try:
             out = os.path.join(tmp, "peaks.txt")
-            res = ff.run(peaks_cmd(path, slice_samples, out), cwd=tmp)
+            res = ff.run(wf.peaks_cmd(path, slice_samples, out), cwd=tmp)
             if res.returncode != 0 or not os.path.isfile(out):
                 raise RuntimeError(
                     "FFmpeg could not read the audio:\n" + "\n".join(res.log_tail[-4:])
                 )
-            peaks = read_peaks(out)
+            peaks = wf.read_peaks(out)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         return info, peaks, slice_samples / rate
@@ -557,28 +508,7 @@ class WaveformEditorTab(BaseTab):
         if not out:
             return
         self.out_row.set(out)
-        af = region_filter(self._regions)
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src]
-        if audio_only:
-            cmd += ["-map", "0:a:0", "-af", af, "-vn", *audio_encoder_args(out)]
-        else:
-            cmd += [
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a:0",
-                "-af",
-                af,
-                "-c:v",
-                "copy",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "256k",
-            ]
-            if out.lower().endswith((".mp4", ".mov", ".m4v")):
-                cmd += ["-movflags", "+faststart"]
-        cmd.append(out)
+        cmd = wf.apply_cmd(src, out, self._regions, audio_only=audio_only)
         self.log(self.console, f"Applying {len(self._regions)} region(s)…")
         self.run_ffmpeg(
             cmd,
