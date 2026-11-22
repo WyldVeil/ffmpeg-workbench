@@ -132,6 +132,62 @@ def _fetch_info(ytdlp: str, url: str, *, playlist: bool) -> dict:
     return json.loads(r.stdout)
 
 
+def _video_codec_args(vcodec: str, crf: int, preset: str, container: str) -> list[str]:
+    """Re-encoding after download: the codec, its quality, playable 8-bit pixels."""
+    by_codec = {
+        "copy": ["-c:v", "copy"],
+        "prores_ks": ["-c:v", "prores_ks", "-profile:v", "3"],
+        "libsvtav1": ["-c:v", "libsvtav1", "-preset", "4", "-crf", str(crf)],
+        "libvpx-vp9": [
+            "-c:v",
+            "libvpx-vp9",
+            "-crf",
+            str(crf),
+            "-b:v",
+            "0",
+            "-deadline",
+            "good",
+            "-cpu-used",
+            "2",
+        ],
+    }
+    args = by_codec.get(vcodec, ["-c:v", vcodec, "-crf", str(crf), "-preset", preset])
+    if vcodec in ("libx264", "libx265", "libsvtav1", "libvpx-vp9"):
+        args = [*args, "-pix_fmt", "yuv420p"]  # 10-bit sources -> playable 8-bit
+    if vcodec == "libx265" and container.lower() in ("mp4", "mov", "m4v"):
+        args = [*args, "-tag:v", "hvc1"]
+    return args
+
+
+def _scale_filter(res: str, custom: str) -> str | None:
+    """The scale filter for a resolution choice ("Original", "1280x720", "Custom…")."""
+    if res == "Original":
+        return None
+    if res == "Custom…":
+        parts = custom.strip().replace("×", "x").split("x")  # 1280x720 or 1280×720
+        return f"scale={parts[0].strip()}:{parts[1].strip()}" if len(parts) == 2 else None
+    parts = res.replace("×", "x").split("x")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        return f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1"
+    return None
+
+
+def _subtitles(sub_path: str) -> str | None:
+    if not sub_path or not os.path.isfile(sub_path):
+        return None
+    from core.filters import subtitles_filter
+
+    return subtitles_filter(sub_path)
+
+
+def _audio_args(acodec: str, bitrate: str, sample_rate: str) -> list[str]:
+    if acodec == "copy":
+        return ["-c:a", "copy"]
+    args = ["-c:a", acodec]
+    args += ["-b:a", bitrate] if acodec in ("aac", "libmp3lame", "libopus", "libvorbis") else []
+    return args + (["-ar", sample_rate] if acodec != "flac" else [])
+
+
 class YouTubeDownloaderTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -2419,93 +2475,26 @@ class YouTubeDownloaderTab(BaseTab):
     #  FFmpeg encode command builder
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_encode_cmd(self, inp: str, out: str, sub_path: str = "") -> list:
-        ffmpeg = _ffmpeg_exe()
-        cmd = [ffmpeg, "-i", inp]
-
-        vcodec = self._vcodec_var.get()
-        acodec = self._acodec_var.get()
-        container = self._container_var.get()
-        preset = self._preset_var.get()
-        res = self._res_var.get()
-        abitrate = self._abitrate_var.get()
-        asamplerate = self._asamplerate_var.get()
-        crf = int(self._crf_var.get())
-
-        # Video codec
-        if vcodec == "copy":
-            cmd += ["-c:v", "copy"]
-        elif vcodec == "prores_ks":
-            cmd += ["-c:v", "prores_ks", "-profile:v", "3"]
-        elif vcodec == "libsvtav1":
-            cmd += ["-c:v", "libsvtav1", "-preset", "4", "-crf", str(crf)]
-        elif vcodec == "libvpx-vp9":
-            cmd += [
-                "-c:v",
-                "libvpx-vp9",
-                "-crf",
-                str(crf),
-                "-b:v",
-                "0",
-                "-deadline",
-                "good",
-                "-cpu-used",
-                "2",
-            ]
-        else:
-            cmd += ["-c:v", vcodec, "-crf", str(crf), "-preset", preset]
-        if vcodec in ("libx264", "libx265", "libsvtav1", "libvpx-vp9"):
-            cmd += ["-pix_fmt", "yuv420p"]  # 10-bit sources -> playable 8-bit
-        if vcodec == "libx265" and container.lower() in ("mp4", "mov", "m4v"):
-            cmd += ["-tag:v", "hvc1"]
-
-        # Resolution scaling
-        if res != "Original":
-            if res == "Custom…":
-                custom = self._custom_res_var.get().strip()
-                # Accept both 1280x720 and 1280×720
-                custom = custom.replace("×", "x")
-                parts = custom.split("x")
-                if len(parts) == 2:
-                    w, h = parts[0].strip(), parts[1].strip()
-                    cmd += ["-vf", f"scale={w}:{h}"]
-            else:
-                res_clean = res.replace("×", "x")
-                parts = res_clean.split("x")
-                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                    cmd += [
-                        "-vf",
-                        f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease"
-                        f":force_divisible_by=2,setsar=1",
-                    ]
-
-        # Subtitle burn-in (overrides plain vf, append to filter chain)
-        if sub_path and os.path.isfile(sub_path):
-            from core.filters import subtitles_filter
-
-            sub_filter = subtitles_filter(sub_path)
-            if "-vf" in cmd:
-                vi = cmd.index("-vf")
-                cmd[vi + 1] = f"{cmd[vi + 1]},{sub_filter}"
-            else:
-                cmd += ["-vf", sub_filter]
-
-        # Audio codec
-        if acodec == "copy":
-            cmd += ["-c:a", "copy"]
-        else:
-            cmd += ["-c:a", acodec]
-            if acodec in ("aac", "libmp3lame", "libopus", "libvorbis"):
-                cmd += ["-b:a", abitrate]
-            if acodec != "flac":
-                cmd += ["-ar", asamplerate]
-
-        # Container extras
-        if container == "mp4":
-            cmd += ["-movflags", "+faststart"]
-
-        cmd += [out, "-y"]
-        return cmd
+    def _build_encode_cmd(self, inp: str, out: str, sub_path: str = "") -> list[str]:
+        vcodec, container = self._vcodec_var.get(), self._container_var.get()
+        cmd = [_ffmpeg_exe(), "-i", inp]
+        cmd += _video_codec_args(
+            vcodec, int(self._crf_var.get()), self._preset_var.get(), container
+        )
+        filters = [
+            f
+            for f in (
+                _scale_filter(self._res_var.get(), self._custom_res_var.get()),
+                _subtitles(sub_path),
+            )
+            if f
+        ]
+        cmd += ["-vf", ",".join(filters)] if filters else []
+        cmd += _audio_args(
+            self._acodec_var.get(), self._abitrate_var.get(), self._asamplerate_var.get()
+        )
+        cmd += ["-movflags", "+faststart"] if container == "mp4" else []
+        return [*cmd, out, "-y"]
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Main download entry point
