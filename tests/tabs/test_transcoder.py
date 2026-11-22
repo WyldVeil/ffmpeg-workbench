@@ -3,6 +3,7 @@
 import os
 import pathlib
 import shutil
+import subprocess
 
 import pytest
 
@@ -246,6 +247,45 @@ def test_fps_interpolator(ui, media, outdir, slowmo):
             if info.require_audio().duration
             else True
         )
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_fps_interpolator_in_pieces(ui, media, tmp_path):
+    """A long enough clip is interpolated in pieces side by side, then joined."""
+    src = str(tmp_path / "twelve.mp4")
+    subprocess.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-stream_loop",
+            "1",
+            "-i",
+            media["h264"],
+            "-t",
+            "12",
+            "-c",
+            "copy",
+            src,
+        ],
+        check=True,
+        capture_output=True,
+    )
+    ui.reset()
+    tab = ui.open("Framerate Interpolator")
+    tab.src_row.set(src)
+    ui.pump(0.3)
+    tab.fps_var.set("50")
+    tab.slowmo_var.set(False)
+    tab.parallel_var.set(True)
+    out = str(tmp_path / "pieces.mp4")
+    tab.out_row.set(out)
+    tab._render()
+    ui.wait_idle(900)
+    _ok(ui)
+    info = ff.probe(out, use_cache=False)
+    assert info.require_video().fps == pytest.approx(50, abs=0.1)
+    assert info.duration == pytest.approx(12, abs=0.3)
 
 
 # ── Proxy Generator / Encode Queue ──────────────────────────────────────────

@@ -126,6 +126,16 @@ def test_threads_start_only_in_core_tasks():
     assert not fixed, f"fixed - remove from THREAD_EXCEPTIONS: {sorted(fixed)}"
 
 
+def test_thread_pools_live_only_in_core_tasks():
+    """A ThreadPoolExecutor elsewhere would start threads past the task service."""
+    users = sorted(
+        rel
+        for rel, path in [*_py_files("core"), *_py_files("shell"), *_py_files("tabs")]
+        if rel != "core/tasks.py" and "ThreadPoolExecutor" in open(path, encoding="utf-8").read()
+    )
+    assert not users, f"use core.tasks.submit / run_all: {users}"
+
+
 def test_tool_pages_never_import_the_window():
     breaks = {
         rel: bad

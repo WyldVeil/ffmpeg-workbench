@@ -19,15 +19,19 @@ from __future__ import annotations
 import math
 import os
 import tkinter as tk
+from dataclasses import dataclass
 from fractions import Fraction
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core import upscale
+from core import tasks, upscale
+from core.encoders import VideoEncode
 from core.i18n import t
 from core.ops.scaler import GPU_METHODS, fps_filter, geometry, rate_fraction, scale_chain
 from core.ops.shared import frame_rate
+from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -62,6 +66,107 @@ METHODS = {
     "neighbor": "Nearest (pixel art)",
 }
 METHODS.update({key: "Upscale: " + spec[0] for key, spec in upscale.SHADERS.items()})
+
+
+def _slow_audio(factor: Fraction) -> str:
+    """atempo steps that stretch the sound *factor* times (keeping its pitch)."""
+    tempo, steps = 1 / float(factor), []
+    while tempo < 0.5:
+        steps.append("atempo=0.5")
+        tempo /= 0.5
+    return ",".join([*steps, f"atempo={tempo:.6f}"])
+
+
+@dataclass(frozen=True)
+class _FrameRateJob:
+    """A frame-rate change (or slow motion) in one go, or in pieces side by side."""
+
+    src: str
+    info: ff.MediaInfo
+    venc: VideoEncode
+    chain: str
+    pieces: list[tuple[float, float]]
+    factor: Fraction
+    audio_mode: str  # keep | slow | none
+    out_dur: float
+    container: str
+
+    def audio_args(self, input_index: int) -> list[str]:
+        if not self.info.has_audio or self.audio_mode == "none":
+            return ["-an"]
+        slow = ["-af", _slow_audio(self.factor)] if self.audio_mode == "slow" else []
+        return ["-map", f"{input_index}:a:0", *slow, "-c:a", "aac", "-b:a", "192k"]
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        final = ctx.output()
+        if len(self.pieces) == 1:
+            v = self.venc
+            cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *v.pre_input, "-i", self.src]
+            cmd += [
+                "-map",
+                "0:v:0",
+                *v.vf_args(self.chain),
+                *v.args,
+                *self.audio_args(0),
+                "-map_metadata",
+                "0",
+                final,
+            ]
+            ctx.run(cmd, duration=self.out_dur)
+            return 0
+        tmp = ctx.tempdir()
+        names = [os.path.join(tmp, f"piece{i:03d}.mkv") for i in range(len(self.pieces))]
+        done = [0.0] * len(self.pieces)
+        ctx.log(f"Interpolating {len(self.pieces)} pieces in parallel…")
+        tasks.run_all(
+            [partial(self._piece, ctx, i, names[i], done) for i in range(len(self.pieces))],
+            name="FpsPiece",
+        )
+        listing = fl.write_concat_list(names, os.path.join(tmp, "pieces.txt"))
+        ctx.log("Joining the pieces…")
+        cmd = [
+            ff.ffmpeg_path(),
+            "-hide_banner",
+            "-nostdin",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            listing,
+        ]
+        cmd += [
+            "-i",
+            self.src,
+            "-map",
+            "0:v:0",
+            "-c:v",
+            "copy",
+            *common.final_copy_args(self.venc, self.container),
+        ]
+        cmd += [*self.audio_args(1), "-t", f"{self.out_dur:.3f}", "-map_metadata", "1", final]
+        ctx.span(0.92, 1.0).run(cmd, duration=self.out_dur)
+        return 0
+
+    def _piece(self, ctx: TaskContext, i: int, name: str, done: list[float]) -> None:
+        start, length = self.pieces[i]
+        v = self.venc
+        cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *v.pre_input]
+        cmd += ["-ss", f"{start:.6f}", "-t", f"{length:.6f}", "-i", self.src, "-map", "0:v:0"]
+        cmd += [*v.vf_args(self.chain), *common.intermediate_args(v), "-an", name]
+        stretched = length * float(self.factor)
+
+        def prog(p: ff.Progress) -> None:
+            if p.out_time is not None:
+                done[i] = min(1.0, p.out_time / max(0.01, stretched))
+                ctx.progress(0.92 * sum(done) / len(done))
+
+        res = ff.run(cmd, duration=stretched, on_progress=prog, cancel=ctx.cancelled)
+        if res.cancelled:
+            raise ff.CancelledError("cancelled")
+        if res.returncode != 0:
+            raise RuntimeError(f"Piece {i + 1} failed:\n" + "\n".join(res.log_tail[-5:]))
 
 
 class ResolutionScalerTab(BaseTab):
@@ -475,132 +580,12 @@ class FPSInterpolatorTab(BaseTab):
             + (f", {len(pieces)} parallel pieces" if len(pieces) > 1 else ""),
         )
 
-        def audio_args(input_index):
-            if not info.has_audio or audio_mode == "none":
-                return ["-an"]
-            if audio_mode == "slow":
-                tempo, steps = 1 / float(factor), []
-                while tempo < 0.5:
-                    steps.append("atempo=0.5")
-                    tempo /= 0.5
-                steps.append(f"atempo={tempo:.6f}")
-                return [
-                    "-map",
-                    f"{input_index}:a:0",
-                    "-af",
-                    ",".join(steps),
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    "192k",
-                ]
-            return ["-map", f"{input_index}:a:0", "-c:a", "aac", "-b:a", "192k"]
-
-        def work(_p, _c, ctx):
-            final = ctx.output()
-            if len(pieces) == 1:
-                ctx.run(
-                    [
-                        ff.ffmpeg_path(),
-                        "-hide_banner",
-                        "-nostdin",
-                        "-y",
-                        *venc.pre_input,
-                        "-i",
-                        src,
-                        "-map",
-                        "0:v:0",
-                        *venc.vf_args(chain),
-                        *venc.args,
-                        *audio_args(0),
-                        "-map_metadata",
-                        "0",
-                        final,
-                    ],
-                    duration=out_dur,
-                )
-                return 0
-            import concurrent.futures as cf_
-
-            tmp = ctx.tempdir()
-            names = [os.path.join(tmp, f"piece{i:03d}.mkv") for i in range(len(pieces))]
-            done = [0.0] * len(pieces)
-
-            def one(i):
-                start, length = pieces[i]
-                cmd = [
-                    ff.ffmpeg_path(),
-                    "-hide_banner",
-                    "-nostdin",
-                    "-y",
-                    *venc.pre_input,
-                    "-ss",
-                    f"{start:.6f}",
-                    "-t",
-                    f"{length:.6f}",
-                    "-i",
-                    src,
-                    "-map",
-                    "0:v:0",
-                    *venc.vf_args(chain),
-                    *common.intermediate_args(venc),
-                    "-an",
-                    names[i],
-                ]
-
-                def prog(p, i=i):
-                    if p.out_time is not None:
-                        done[i] = min(1.0, p.out_time / max(0.01, length * float(factor)))
-                        ctx.progress(0.92 * sum(done) / len(done))
-
-                res = ff.run(
-                    cmd, duration=length * float(factor), on_progress=prog, cancel=ctx.cancelled
-                )
-                if res.cancelled:
-                    raise ff.CancelledError("cancelled")
-                if res.returncode != 0:
-                    raise RuntimeError(f"Piece {i + 1} failed:\n" + "\n".join(res.log_tail[-5:]))
-
-            ctx.log(f"Interpolating {len(pieces)} pieces in parallel…")
-            with cf_.ThreadPoolExecutor(max_workers=len(pieces)) as pool:
-                for fut in [pool.submit(one, i) for i in range(len(pieces))]:
-                    fut.result()
-            listing = fl.write_concat_list(names, os.path.join(tmp, "pieces.txt"))
-            ctx.log("Joining the pieces…")
-            ctx.span(0.92, 1.0).run(
-                [
-                    ff.ffmpeg_path(),
-                    "-hide_banner",
-                    "-nostdin",
-                    "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
-                    "-i",
-                    listing,
-                    "-i",
-                    src,
-                    "-map",
-                    "0:v:0",
-                    "-c:v",
-                    "copy",
-                    *common.final_copy_args(venc, container),
-                    *audio_args(1),
-                    "-t",
-                    f"{out_dur:.3f}",
-                    "-map_metadata",
-                    "1",
-                    final,
-                ],
-                duration=out_dur,
-            )
-            return 0
+        job = _FrameRateJob(src, info, venc, chain, pieces, factor, audio_mode, out_dur, container)
 
         common.queue_job(
             self,
             common.Job(
-                name="Framerate Interpolator", out=out, work=work, duration=out_dur, inputs=[src]
+                name="Framerate Interpolator", out=out, work=job.run, duration=out_dur, inputs=[src]
             ),
             btn=self.btn_render,
             console=self.console,

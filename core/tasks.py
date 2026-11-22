@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from typing import Literal, TypeVar
 
@@ -101,6 +101,15 @@ def submit(
     future = _pool(pool).submit(fn)
     future.add_done_callback(lambda f: _deliver(f, label, on_done, on_error))
     return future
+
+
+def run_all(jobs: Sequence[Callable[[], T]], *, name: str) -> list[T]:
+    """Run *jobs* side by side and wait for every one (from a worker thread, e.g.
+    a render made in pieces).  They get their own threads, so a busy pool can't
+    leave them waiting on each other; the first error is raised once all end."""
+    with ThreadPoolExecutor(max_workers=max(1, len(jobs)), thread_name_prefix=name) as pool:
+        futures = [pool.submit(job) for job in jobs]
+    return [f.result() for f in futures]
 
 
 def start_service(target: Callable[[], object], *, name: str) -> Service:
