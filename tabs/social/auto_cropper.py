@@ -27,8 +27,8 @@ class AutoCropperTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self.box = None
+        self._info: ff.MediaInfo | None = None
+        self.box: tuple[int, int, int, int] | None = None      # the picture inside the bars: x, y, w, h
         self._build_ui()
 
     def _build_ui(self):

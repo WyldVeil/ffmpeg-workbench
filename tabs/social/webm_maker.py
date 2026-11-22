@@ -982,7 +982,7 @@ class WebMTab(BaseTab):
             raise ValueError("The trimmed clip is empty.")
         audio_lib = AUDIO_OPTIONS.get(self.audio_codec_var.get())
         audio_kbps = int(self.audio_br_var.get().replace("k", "") or 128) if audio_lib else 0
-        cap_bytes, bitrate = None, 0
+        cap_bytes, bitrate, crf, size_mb = None, 0, 0, 0.0
         if size_limited:
             try:
                 size_mb = float(self.size_limit_var.get())

@@ -71,7 +71,7 @@ def test_auto_cropper(ui, media, outdir):
     tab._render()
     ui.wait_idle(120)
     _ok(ui)
-    assert ff.probe(out, use_cache=False).video.display_size == (960, 540)
+    assert ff.probe(out, use_cache=False).require_video().display_size == (960, 540)
 
 
 @pytest.mark.gui

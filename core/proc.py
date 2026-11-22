@@ -27,7 +27,7 @@ import signal
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import IO, Any, AnyStr, Generic, Literal, overload
 
@@ -37,7 +37,7 @@ from core.procenv import child_env
 __all__ = [
     "DEVNULL", "PIPE", "STDOUT", "Cancelled", "Popen", "ProcResult", "ProcessError", "ProcessTimeout",
     "ProgramNotFound", "StartError", "TimeoutExpired", "active_count", "forget", "kill_all", "kill_tree",
-    "list2cmdline", "run", "spawn",
+    "lines", "list2cmdline", "run", "spawn",
 ]
 
 logger = logging.getLogger("crossfader.proc")
@@ -156,6 +156,20 @@ def run(argv: Sequence[object], *, timeout: float | None, text: bool = True,
     if text:
         return ProcResult[str](tuple(args), proc.returncode, out or "", err or "", time.monotonic() - start)
     return ProcResult[bytes](tuple(args), proc.returncode, out or b"", err or b"", time.monotonic() - start)
+
+
+def lines(child: subprocess.Popen[str]) -> Iterator[str]:
+    """Each line *child* writes (started with ``stdout=PIPE, text=True``), until it
+    closes its output; then the pipe is closed and the program waited for."""
+    out = child.stdout
+    if out is None:
+        raise ValueError("lines() needs a program started with stdout=PIPE")
+    try:
+        yield from iter(out.readline, "")
+    finally:
+        out.close()
+        child.wait()
+        _forget(child)
 
 
 def _forget(proc: subprocess.Popen[Any] | None) -> None:

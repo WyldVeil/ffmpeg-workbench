@@ -146,20 +146,20 @@ def test_transition(capsys, media, outdir):
 @pytest.mark.ffmpeg
 def test_rotate(capsys, media, outdir):
     d = ok(capsys, "rotate", media["h264_b"], "--degrees", "90", "-o", str(outdir / "r.mp4"))
-    v = info(d["output"]).video
+    v = info(d["output"]).require_video()
     assert (v.width, v.height) == (720, 1280)
     d = ok(capsys, "rotate", media["h264_b"], "--degrees", "270", "--lossless", "-o", str(outdir / "l.mp4"))
-    v = info(d["output"]).video
+    v = info(d["output"]).require_video()
     assert (v.width, v.height, v.rotation) == (1280, 720, 270) and v.display_size == (720, 1280)
 
 
 @pytest.mark.ffmpeg
 def test_crop(capsys, media, outdir):
     d = ok(capsys, "crop", media["h264_b"], "--aspect", "1:1", "-o", str(outdir / "sq.mp4"))
-    v = info(d["output"]).video
+    v = info(d["output"]).require_video()
     assert (v.width, v.height) == (720, 720)
     d = ok(capsys, "crop", media["h264_b"], "--rect", "100:50:640:360", "-o", str(outdir / "r.mp4"))
-    assert (info(d["output"]).video.width, info(d["output"]).video.height) == (640, 360)
+    assert (info(d["output"]).require_video().width, info(d["output"]).require_video().height) == (640, 360)
 
 
 @pytest.mark.ffmpeg
@@ -232,7 +232,7 @@ def test_hdr_to_sdr(capsys, media, outdir):
     code, data = run(capsys, "hdr-to-sdr", media["hevc10"], "-o", str(outdir / "sdr.mp4"))
     assert code == 1 and "--assume" in data["error"]              # untagged: refuses instead of guessing
     d = ok(capsys, "hdr-to-sdr", media["hevc10"], "--assume", "pq", "-o", str(outdir / "sdr.mp4"))
-    v = info(d["output"]).video
+    v = info(d["output"]).require_video()
     assert v.pix_fmt == "yuv420p" and v.color_transfer in ("bt709", "")
 
 
@@ -253,7 +253,7 @@ def test_gif_and_images(capsys, media, outdir):
     d = ok(capsys, "gif", media["h264"], "--duration", "3", "--max-mb", "0.3", "-o", str(outdir / "small.gif"))
     assert d["size_bytes"] <= 0.3 * 1024 * 1024
     d = ok(capsys, "thumbnail", media["h264"], "--at", "2", "--format", "png", "-o", str(outdir / "f.png"))
-    assert info(d["output"]).video.width == 1280
+    assert info(d["output"]).require_video().width == 1280
     d = ok(capsys, "frames", media["h264"], "--count", "3", "-o", str(outdir / "frames"))
     assert d["files"] == 3
 

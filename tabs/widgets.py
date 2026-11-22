@@ -279,7 +279,7 @@ class FileRow(tk.Frame):
     def __init__(self, parent, label: str, var: tk.StringVar | None = None, *,
                  kind: str = "video", save: bool = False, ext: str = ".mp4",
                  width: int = 56, label_width: int = 16,
-                 on_change: Callable[[str], None] | None = None,
+                 on_change: Callable[[str], object] | None = None,
                  suggest: Callable[[], str] | None = None):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
@@ -424,7 +424,7 @@ class EncoderPanel(tk.Frame):
         if not self.winfo_exists():
             return
         for k in kinds:
-            self._hw_choices.append((k, encoders.HW_LABELS.get(k, k)))
+            self._hw_choices.append((k, encoders.HW_LABELS.get(k) or k))
         self._hw_box.config(values=[v for _, v in self._hw_choices])
         self._changed()
 

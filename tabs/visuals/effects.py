@@ -225,10 +225,11 @@ class SpecialEffectsTab(BaseTab):
     #: filters used to produce unplayable or failing renders).
     FX_GUARD = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p"
 
-    def run_ffmpeg(self, cmd, console=None, on_done=None, btn=None, btn_label="\u25b6  Run", **kw):
+    def run_ffmpeg(self, cmd, console=None, on_done=None, btn=None, btn_label="\u25b6  Run",
+                   *, duration=None, output=None, inputs=(), name=None, cmds=None):
         """Effects that build their own command still get overwrite protection,
         playable 4:2:0 output, progress and the source as an input guard."""
-        if "inputs" not in kw and "-i" in cmd:
+        if not inputs and "-i" in cmd:
             cmd = list(cmd)
             src = cmd[cmd.index("-i") + 1]
             final = self.confirm_output(cmd[-1], [src])
@@ -239,9 +240,11 @@ class SpecialEffectsTab(BaseTab):
             cmd[-1] = final
             if "libx264" in cmd and "-pix_fmt" not in cmd:
                 cmd[-1:-1] = ["-pix_fmt", "yuv420p"]
-            kw["inputs"] = [src]
-            kw.setdefault("duration", ff.duration_of(src) or None)
-        return super().run_ffmpeg(cmd, console, on_done, btn, btn_label, **kw)
+            inputs = [src]
+            if duration is None:
+                duration = ff.duration_of(src) or None
+        return super().run_ffmpeg(cmd, console, on_done, btn, btn_label, duration=duration, output=output,
+                                  inputs=inputs, name=name, cmds=cmds)
 
     def _fx_num(self, var, label, lo=None, hi=None):
         """Parse a numeric field ('1,5', '00:12.5' accepted); raises ValueError

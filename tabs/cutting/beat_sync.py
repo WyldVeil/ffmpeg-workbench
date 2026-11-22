@@ -311,7 +311,7 @@ class BeatSyncCutterTab(BaseTab):
 
     def _pick_beats(self):
         self._job = None
-        if self._onset is None:
+        if self._onset is None or self._period is None:
             return
         if self.mode_var.get() == "grid":
             self.beats = beat_grid(self._onset, self._period)

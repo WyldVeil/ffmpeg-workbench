@@ -31,7 +31,7 @@ def q():
                 return True
         return False
 
-    mgr.pump_until = pump_until
+    mgr.pump_until = pump_until  # type: ignore[attr-defined]  # the fixture's helper rides on the manager
     yield mgr
     mgr.cancel_all()
     pump_until(lambda: not mgr.active_tasks(), 20)

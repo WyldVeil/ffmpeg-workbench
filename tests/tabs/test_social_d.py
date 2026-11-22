@@ -232,5 +232,5 @@ def test_collage_odd_custom_canvas(ui, media, outdir):
     tab._render()
     ui.wait_idle(240)
     _ok(ui)
-    v = ff.probe(out, use_cache=False).video
+    v = ff.probe(out, use_cache=False).require_video()
     assert (v.width, v.height) == (1000, 776)

@@ -1,5 +1,6 @@
 """System proxy discovery and network policy."""
 
+import email.message
 import http.server
 import socket
 import socketserver
@@ -280,14 +281,15 @@ class _Hello(http.server.BaseHTTPRequestHandler):
     """Answers any GET - used as a web server and as an HTTP proxy."""
 
     def do_GET(self):
-        body = f"hello via {self.server.server_address[1]} for {self.path}".encode()
+        port = self.server.server_address[1]  # type: ignore[index]  # a TCP server: (host, port)
+        body = f"hello via {port} for {self.path}".encode()
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, *a):
-        pass
+    def log_message(self, format: str, *args: object) -> None:
+        """Quiet: the tests read assertions, not access logs."""
 
 
 def _serve():
@@ -351,7 +353,7 @@ def test_explain_error_messages():
     import urllib.error
     assert "certificate" in net.explain_error(urllib.error.URLError(_ssl.SSLCertVerificationError("x"))).lower()
     assert "username and password" in net.explain_error(
-        urllib.error.HTTPError("http://x", 407, "Proxy Authentication Required", {}, None))
+        urllib.error.HTTPError("http://x", 407, "Proxy Authentication Required", email.message.Message(), None))
     assert "looked up" in net.explain_error(urllib.error.URLError(socket.gaierror(-2, "x")))
 
 

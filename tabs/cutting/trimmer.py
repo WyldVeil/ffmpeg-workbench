@@ -243,7 +243,8 @@ class TrimmerTab(BaseTab):
         ext = os.path.splitext(src)[1] if self._copy_mode.get() else ".mp4"
         return self.suggest_output(src, "trimmed", ext or ".mp4")
 
-    def load_file(self, p):
+    def load_file(self, path):
+        p = path
         info = ff.try_probe(p)
         if info is None or not info.duration:
             messagebox.showerror(t("common.error"), t("common.no_input") + f"\n{p}", parent=self)

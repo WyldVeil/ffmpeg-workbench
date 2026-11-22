@@ -68,7 +68,7 @@ def test_loudness_two_pass(ui, media, outdir):
     _ok(ui)
     m = ln.measure(out, -16, -1.5, 11)
     assert m.input_i == pytest.approx(-16, abs=1.0)
-    assert ff.probe(out, use_cache=False).audio.sample_rate == ff.probe(media["wav_silence"]).audio.sample_rate
+    assert ff.probe(out, use_cache=False).require_audio().sample_rate == ff.probe(media["wav_silence"]).require_audio().sample_rate
 
 
 @pytest.mark.gui

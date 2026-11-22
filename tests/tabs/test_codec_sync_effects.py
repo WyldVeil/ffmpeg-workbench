@@ -75,7 +75,7 @@ def test_sync_shifter(ui, media, outdir, offset, lossless):
     if lossless:
         # the sound's timestamps start later; nothing re-encoded
         assert info.require_audio().start_time - info.require_video().start_time == pytest.approx(offset, abs=0.05)
-        assert info.require_audio().codec == ff.probe(media["h264"]).audio.codec
+        assert info.require_audio().codec == ff.probe(media["h264"]).require_audio().codec
     elif offset > 0:
         assert _mean_db(out, 0.0, offset - 0.05) < -60          # silence in front...
         assert _mean_db(out, 1.0, 1.0) > -30                    # ...then the sound
@@ -99,6 +99,7 @@ def _effects():
     for m in re.finditer(r"    def (_render_\w+)\(self\):(.*?)(?=\n    def |\Z)", code, re.S):
         src = re.search(r"self\.(_\w+?)_src\b", m.group(2))
         dst = re.search(r"self\.(_\w+?)_out\b", m.group(2))
+        assert src is not None and dst is not None, m.group(1)
         out.append((m.group(1), src.group(1), dst.group(1)))
     return out
 

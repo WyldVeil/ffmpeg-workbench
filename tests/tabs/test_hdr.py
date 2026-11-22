@@ -82,7 +82,7 @@ def test_converts_and_leaves_no_hdr_metadata(ui, hdr10, outdir, engine, containe
     ui.wait_idle(240)
     assert not ui.dialogs.errors(), ui.dialogs.errors()
     info = ff.probe(out, use_cache=False)
-    v = info.video
+    v = info.require_video()
     assert (v.color_transfer, v.color_primaries) == ("bt709", "bt709") and not v.is_hdr
     assert info.has_audio and info.duration == pytest.approx(1.5, abs=0.1)
     assert _hdr_leftovers(out) == []
@@ -106,7 +106,7 @@ def test_hlg_and_untagged(ui, hlg, media, outdir):
     tab.out_row.set(out)
     tab._render()
     ui.wait_idle(240)
-    assert ff.probe(out, use_cache=False).video.color_transfer == "bt709"
+    assert ff.probe(out, use_cache=False).require_video().color_transfer == "bt709"
     # an SDR file: nothing to convert, explained
     ui.reset()
     tab.load_file(media["h264_b"])

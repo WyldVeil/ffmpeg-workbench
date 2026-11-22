@@ -251,7 +251,7 @@ def test_converter_keeps_cover_and_rate_when_normalising(ui, media, outdir, tmp_
     subprocess.run([ff.ffmpeg_path(), "-y", "-loglevel", "error", "-i", media["mp3"], "-i", media["png"],
                     "-map", "0:a", "-map", "1:v", "-c:a", "copy", "-c:v", "mjpeg", "-disposition:v",
                     "attached_pic", "-metadata", "title=Song", src], check=True)
-    rate = ff.probe(src).audio.sample_rate
+    rate = ff.probe(src).require_audio().sample_rate
     out = str(outdir / "norm.flac")
     info = _converter(ui, src, "FLAC", out, norm_var="EBU R128 (loudnorm)")
     assert info.require_audio().sample_rate == rate                     # no silent 192 kHz upsample

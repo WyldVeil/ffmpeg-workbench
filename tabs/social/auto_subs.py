@@ -37,6 +37,7 @@ class AutoSubsTab(BaseTab):
         self.src_var = tk.StringVar()
         self._info = None
         self._last_subs = None
+        self._last_lang = ""
         self._downloading = False
         self._build_ui()
 

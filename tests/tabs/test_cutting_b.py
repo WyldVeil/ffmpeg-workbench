@@ -82,7 +82,7 @@ def test_crop_detect_and_render(ui, media, outdir):
     tab._render()
     ui.wait_idle(120)
     _ok(ui)
-    assert ff.probe(out, use_cache=False).video.display_size == (1280, 536)
+    assert ff.probe(out, use_cache=False).require_video().display_size == (1280, 536)
 
 
 @pytest.mark.gui

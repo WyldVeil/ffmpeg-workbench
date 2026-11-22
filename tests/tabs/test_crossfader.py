@@ -28,7 +28,7 @@ def test_overlap_mixed_inputs_with_silent_clip(media, outdir):
     expected = sum(c.duration for c in clips) - 3 * T
     assert seconds == pytest.approx(expected, abs=0.01)
     assert info.duration == pytest.approx(expected, abs=0.15)
-    v, a = info.video, info.audio
+    v, a = info.require_video(), info.require_audio()
     assert (v.width, v.height) == (1280, 720) and v.pix_fmt == "yuv420p"
     assert a is not None and a.channels == 2 and a.sample_rate == 48000
     assert abs(v.duration - a.duration) < 0.1          # no A/V drift

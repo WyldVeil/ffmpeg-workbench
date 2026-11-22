@@ -34,7 +34,7 @@ def measure(ref, dist, **kw):
     argv, files = q.build(ref, dist, ff.probe(ref), ff.probe(dist), **kw)
     tmp = tempfile.mkdtemp()
     subprocess.run(argv, cwd=tmp, check=True, capture_output=True)
-    return q.read(tmp, files, ff.probe(ref).video.fps, kw.get("skip_ref", 0.0))
+    return q.read(tmp, files, ff.probe(ref).require_video().fps, kw.get("skip_ref", 0.0))
 
 
 @pytest.mark.ffmpeg

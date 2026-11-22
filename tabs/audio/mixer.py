@@ -49,6 +49,8 @@ class Track:
         self.fadeout_var= tk.StringVar(value="0")
         self.mute_var  = tk.BooleanVar(value=False)
         self.solo_var  = tk.BooleanVar(value=False)
+        self.row: tk.Frame | None = None           # its row in the track list, once drawn
+        self.full_path = ""
         self.loop_var  = tk.BooleanVar(value=False)
         self.enabled   = tk.BooleanVar(value=True)
 

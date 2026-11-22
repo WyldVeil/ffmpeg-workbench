@@ -817,7 +817,7 @@ class BaseTab(ttk.Frame):
     # ── FFmpeg runner ─────────────────────────────────────────────────────────
 
     def run_ffmpeg(self, cmd, console=None, on_done=None, btn=None, btn_label="▶  Run",
-                   *, duration=None, output=None, inputs=(), name=None, cmds=None):
+                   *, duration=None, output=None, inputs=(), name=None, cmds=None) -> str | None:
         """Queue FFmpeg *cmd* (or a list *cmds* run in order).
 
         *duration* is the expected output length in seconds (enables an

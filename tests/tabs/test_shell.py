@@ -1,6 +1,7 @@
 """Application shell: file routing, drag-and-drop, search, closing with jobs."""
 import sys
 import time
+import tkinter as tk
 import types
 
 import pytest
@@ -55,20 +56,26 @@ def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
     from core import ffmpeg as ff
     from core.queue_manager import RenderQueueManager
     q = RenderQueueManager.get_instance()
+
+    def status(task_id: str) -> str:
+        task = q.get_task(task_id)
+        assert task is not None
+        return task.status
+
     out = str(outdir / "long.mp4")
     tid = q.enqueue("long", out, cmd=[ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i",
                                        "testsrc2=size=1280x720:rate=30:d=600", "-c:v", "libx264",
                                        "-preset", "veryslow", out], expected_duration=600)
-    ui.wait_for(lambda: q.get_task(tid).status == "active", 30)
+    ui.wait_for(lambda: status(tid) == "active", 30)
     destroyed = []
     monkeypatch.setattr(ui.app, "destroy", lambda: destroyed.append(True))
     ui.dialogs.default_yes = False
     ui.app.quit_app()                     # user says "no" -> nothing happens
-    assert not destroyed and q.get_task(tid).status == "active"
+    assert not destroyed and status(tid) == "active"
     ui.dialogs.default_yes = True
     ui.app.quit_app()
     assert destroyed
-    ui.wait_for(lambda: q.get_task(tid).status == "cancelled", 15)
+    ui.wait_for(lambda: status(tid) == "cancelled", 15)
     time.sleep(0.2)
     assert ff.active_count() == 0
 
@@ -199,9 +206,8 @@ def _wheel(ui, widget, button=None, delta=None):
     ui.pump(0.05)
 
 
-def _page_canvas(ui, name):
+def _page_canvas(ui, name) -> tk.Canvas:
     """Open a tool and return its scrolling canvas, made to need scrolling."""
-    import tkinter as tk
     ui.app.geometry("1280x560")
     tab = ui.open(name)
     ui.pump(0.5)
@@ -215,6 +221,7 @@ def _page_canvas(ui, name):
                 return w
         stack.extend(w.winfo_children())
     pytest.skip(f"{name} fits the window without scrolling")
+    raise AssertionError  # unreachable: skip() raises
 
 
 @pytest.mark.gui
@@ -261,7 +268,8 @@ def test_wheel_over_a_drop_down_scrolls_the_page_unless_it_has_focus(ui):
     """Passing over a drop-down while scrolling a page must not change the setting."""
     from tkinter import ttk
     page = _page_canvas(ui, "Universal Downsizer")
-    stack, boxes = [page], []
+    stack: list[tk.Misc] = [page]
+    boxes = []
     while stack:
         w = stack.pop(0)
         if isinstance(w, ttk.Combobox) and w.winfo_viewable() and len(w.cget("values")) > 1:
@@ -287,7 +295,8 @@ def test_wheel_over_a_drop_down_scrolls_the_page_unless_it_has_focus(ui):
 def test_wheel_lets_a_long_text_box_scroll_itself(ui):
     import tkinter as tk
     page = _page_canvas(ui, "Universal Downsizer")
-    stack, texts = [page], []
+    stack: list[tk.Misc] = [page]
+    texts = []
     while stack:
         w = stack.pop(0)
         if isinstance(w, tk.Text) and w.winfo_viewable():
@@ -324,6 +333,7 @@ def test_wheel_in_a_window_over_the_sidebar_scrolls_that_window(ui):
             tk.Label(inner, text=f"row {i}").pack()
         ui.pump(0.5)
         canvas = inner.master
+        assert isinstance(canvas, tk.Canvas)
         _wheel_down(ui, inner.winfo_children()[3])
         assert canvas.yview()[0] > 0 and sidebar.yview()[0] == 0
     finally:

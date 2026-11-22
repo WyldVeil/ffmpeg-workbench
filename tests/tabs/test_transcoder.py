@@ -179,7 +179,7 @@ def test_resolution_scaler(ui, media, outdir, size, shape, want):
     tab._render()
     ui.wait_idle(240)
     _ok(ui)
-    v = ff.probe(out, use_cache=False).video
+    v = ff.probe(out, use_cache=False).require_video()
     assert (v.width, v.height) == want
 
 
@@ -243,7 +243,7 @@ def test_encode_queue_commands_run(media, tmp_path, vcodec, acodec, ext):
     cmd = j.build_cmd(ff.ffmpeg_path())
     r = subprocess.run(cmd, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-800:]
-    v = ff.probe(j.out, use_cache=False).video
+    v = ff.probe(j.out, use_cache=False).require_video()
     assert (v.width, v.height) == (640, 360) and v.fps == pytest.approx(29.97, abs=0.01)
 
 

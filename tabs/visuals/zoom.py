@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import messagebox, ttk
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -211,8 +211,9 @@ class AnimatedZoomTab(BaseTab):
                 frame.pack_forget()
         self._changed()
 
-    def params(self, duration: float) -> dict:
+    def params(self, duration: float) -> dict[str, Any]:
         v = {k: var.get().strip() for k, var in self.vars.items()}
+        p: dict[str, Any]
         num = common.number
         ease = next((k for k, x in EASES.items() if x == self.ease_var.get()), "smooth")
         mode = self._mode()

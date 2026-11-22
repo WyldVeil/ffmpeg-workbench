@@ -152,6 +152,7 @@ class SilenceTab(BaseTab):
             if audio_only:
                 cmd += ["-map", "[a]", *audio_encoder_args(out)]
             else:
+                assert venc is not None                  # a video output always has an encoder
                 if venc.filter_suffix:
                     raise RuntimeError("Choose a software or NVENC/QSV encoder for this tool.")
                 cmd += ["-map", "[v]", "-map", "[a]", *venc.args,

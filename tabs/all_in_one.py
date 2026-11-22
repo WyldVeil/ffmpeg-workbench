@@ -265,6 +265,7 @@ class AllInOneTab(BaseTab):
 
     def __init__(self, parent):
         super().__init__(parent)
+        self._probed_path: str | None = None
         self._duration   = 0.0    # loaded video duration - needed for fade-out math
         self._last_cmd   = []     # most recently built command list
         self._build_ui()
@@ -361,7 +362,7 @@ class AllInOneTab(BaseTab):
         def go():
             self._src_job = None
             p = self._src_var.get().strip()
-            if p and os.path.isfile(p) and p != getattr(self, "_probed_path", None):
+            if p and os.path.isfile(p) and p != self._probed_path:
                 self._probed_path = p
                 if not self._out_var.get():
                     self._out_var.set(self.suggest_output(p, "pipeline"))

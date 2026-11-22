@@ -303,10 +303,11 @@ class CompareQualityTab(BaseTab):
         if series is None:
             c.create_text(w / 2, h / 2, text="The score over time appears here", fill="#777777", font=(UI_FONT, 10))
             return
+        assert res is not None                            # series came from it
         is_vmaf = series is res.vmaf
         lo, hi = (min(60.0, series.minimum() - 2), 100.0) if is_vmaf else (min(0.9, series.minimum()), 1.0)
         t0, t1 = series.times[0], series.times[-1] or 1.0
-        pad_l, pad_r, pad_y = px(34, 8, 8)
+        pad_l, pad_r, pad_y = px(34), px(8), px(8)
 
         def xy(t, v):
             x = pad_l + (t - t0) / max(1e-6, t1 - t0) * (w - pad_l - pad_r)

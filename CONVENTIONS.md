@@ -10,7 +10,7 @@ structure they protect. **(enforced)** means a test or CI checks it.
 * **Type every public function.** Prefer precise types: `ToolId` not `str`,
   `Timecode` not `float`, `Mapping` for read-only arguments, `Literal` /
   `StrEnum` for closed sets, frozen `@dataclass(slots=True)` for values.
-  pyright must not get worse **(enforced)**; strict files stay at zero.
+  pyright stays at zero errors **(enforced)**; strict files stay strict.
 * **Values are immutable** unless they must change. `MediaInfo`, `Stream`,
   `ProcResult`, `ToolSpec`, `Timecode` and `Setting` are frozen.
 * **Parse at the boundary.** Data from outside (settings.json, ffprobe JSON,

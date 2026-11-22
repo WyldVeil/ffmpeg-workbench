@@ -71,7 +71,7 @@ def test_deinterlace_double_rate(ui, outdir, tmp_path):
     tab._render()
     ui.wait_idle(120)
     _ok(ui)
-    v = ff.probe(out, use_cache=False).video
+    v = ff.probe(out, use_cache=False).require_video()
     assert v.fps == pytest.approx(50, abs=0.1) and v.field_order in ("progressive", "")
 
 

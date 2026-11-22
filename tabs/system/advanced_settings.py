@@ -40,6 +40,9 @@ logger = logging.getLogger("crossfader.system.advanced_settings")
 
 
 class AdvancedSettingsTab(BaseTab):
+    # made by the network section's builders (the app and Tor drop-downs)
+    _net_app_var: tk.StringVar
+    _net_tor_var: tk.StringVar
     def __init__(self, parent):
         super().__init__(parent)
         self.settings    = load_settings()
@@ -234,6 +237,11 @@ class AdvancedSettingsTab(BaseTab):
         cfg = _net.get()
         self._net_vars = {}
 
+        def text_var(key: str) -> tk.StringVar:
+            v = var(key)
+            assert isinstance(v, tk.StringVar), key
+            return v
+
         def var(key):
             default = _net.DEFAULTS[key]
             v = (tk.BooleanVar(value=bool(cfg.get(key, default))) if isinstance(default, bool)
@@ -363,7 +371,7 @@ class AdvancedSettingsTab(BaseTab):
         r = tk.Frame(cert)
         r.pack(anchor="w", fill="x", pady=px(2))
         tk.Label(r, text="Extra certificate file (PEM):").pack(side="left")
-        ca = var("network.extra_ca")
+        ca = text_var("network.extra_ca")
         tk.Entry(r, textvariable=ca, width=44).pack(side="left", padx=px(4))
         tk.Button(r, text="Choose…", command=lambda: ca.set(dialogs.askopenfilename(
             filetypes=[("Certificates", "*.pem *.crt *.cer"), ("All files", "*")]) or ca.get())).pack(side="left")
@@ -1458,12 +1466,10 @@ class AdvancedSettingsTab(BaseTab):
                 logger.debug("_work: best-effort step failed", exc_info=True)
                 parts = cmd_str.split()
             proc = _proc.spawn(parts, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True)
-            for line in iter(proc.stdout.readline, ""):
+            for line in _proc.lines(proc):
                 self.after(0, lambda text=line: [
                     self.dev_console.insert(tk.END, text),
                     self.dev_console.see(tk.END)])
-            proc.stdout.close()
-            proc.wait()
             self.after(0, lambda: self.dev_console.insert(
                 tk.END, f"\n[Exited {proc.returncode}]\n"))
 
@@ -1493,6 +1499,6 @@ def _local_addresses() -> list:
         pass
     if not out:
         with contextlib.suppress(OSError):
-            out = sorted({a[4][0] for a in _socket.getaddrinfo(_socket.gethostname(), None)
-                          if not a[4][0].startswith(("127.", "::1"))})
+            found = {str(a[4][0]) for a in _socket.getaddrinfo(_socket.gethostname(), None)}
+            out = sorted(a for a in found if not a.startswith(("127.", "::1")))
     return out

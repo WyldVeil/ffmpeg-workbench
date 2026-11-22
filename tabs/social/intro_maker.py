@@ -18,6 +18,7 @@ import base64
 import os
 import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
+from typing import Literal
 
 from core import ass, concat, tasks
 from core import encoders as enc
@@ -249,9 +250,11 @@ class IntroMakerTab(BaseTab):
 
     def _bg_changed(self):
         kind = self.bg_kind()
-        state = {"gradient": ("normal", "normal", "normal"), "solid": ("disabled", "normal", "disabled"),
+        states: dict[str, tuple[Literal["normal", "disabled"], ...]] = {
+                 "gradient": ("normal", "normal", "normal"), "solid": ("disabled", "normal", "disabled"),
                  "black": ("disabled", "disabled", "disabled"),
-                 "file": ("disabled", "disabled", "disabled")}[kind]
+                 "file": ("disabled", "disabled", "disabled")}
+        state = states[kind]
         self.grad_box.config(state="readonly" if state[0] == "normal" else "disabled")
         self.c1_btn.config(state=state[1])
         self.c2_btn.config(state=state[2])

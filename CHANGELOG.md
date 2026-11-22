@@ -45,6 +45,8 @@
   one gateway for programs and one for background work, a typed error tree,
   and tests that keep the structure from eroding. See
   [ARCHITECTURE.md](ARCHITECTURE.md).
+- The type checker (pyright) reports no errors anywhere in the code, and CI
+  keeps it that way.
 - Python 3.11 or newer is needed to run from source.
 
 ## 1.2.4

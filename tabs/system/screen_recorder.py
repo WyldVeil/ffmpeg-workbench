@@ -36,8 +36,8 @@ class AreaSelector(tk.Toplevel):
         self.overrideredirect(True)
 
         self.callback = callback
-        self.start_x = self.start_y = None
-        self.rect = None
+        self.start_x = self.start_y = 0
+        self.rect = 0                       # the rectangle's canvas id, while dragging
 
         self.canvas = tk.Canvas(self, cursor="cross", bg="grey", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)

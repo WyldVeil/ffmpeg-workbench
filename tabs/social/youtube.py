@@ -1578,7 +1578,7 @@ class YouTubeDownloaderTab(BaseTab):
                 self._record_proc = _proc.spawn(
                     cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1,
                     env=_net.subprocess_env())
-                for line in iter(self._record_proc.stdout.readline, ""):
+                for line in _proc.lines(self._record_proc):
                     stripped = line.rstrip()
                     if stripped:
                         elapsed = int(time.time() - self._record_start)
@@ -1587,8 +1587,6 @@ class YouTubeDownloaderTab(BaseTab):
                         et = f"[{h:02d}:{m:02d}:{s:02d}]"
                         self.after(0, lambda msg=f"{et} {stripped}":
                                    self.log(self.console, msg))
-                self._record_proc.stdout.close()
-                self._record_proc.wait()
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(0, lambda e=exc: self.log_tagged(
@@ -1629,7 +1627,7 @@ class YouTubeDownloaderTab(BaseTab):
                         "Network.")
                 self.after(0, lambda h=hint, n=retries: self.log_tagged(
                     self.console, f"The site still blocked Tor after {n} fresh circuits. {h}", "warn"))
-            if rc == 0 or attempt >= retries or getattr(self, "_cancel_requested", False) \
+            if rc == 0 or tor is None or attempt >= retries or getattr(self, "_cancel_requested", False) \
                     or not _net.looks_blocked(tail):
                 return rc
             attempt += 1
@@ -1652,7 +1650,7 @@ class YouTubeDownloaderTab(BaseTab):
             proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1,
                                env=_net.subprocess_env(url=url))
             self._active_proc = proc
-            for line in iter(proc.stdout.readline, ""):
+            for line in _proc.lines(proc):
                 stripped = line.rstrip()
                 if not stripped:
                     continue
@@ -1662,16 +1660,14 @@ class YouTubeDownloaderTab(BaseTab):
                     size, spd, eta = m.group(2).strip(), m.group(3).strip(), m.group(4).strip()
                     if batch:
                         self.after(0, lambda p_=pct, s_=spd: self._on_progress_update(p_, "-", s_, "-"))
-                    else:
+                    elif on_progress is not None:
                         self.after(0, lambda p_=pct, sz=size, sp=spd, et=eta: on_progress(p_, sz, sp, et))
                 else:
                     tail.append(stripped)
-                    if on_line:
-                        self.after(0, lambda s_=stripped: on_line(s_))
+                    if on_line is not None:
+                        self.after(0, lambda s_=stripped, show=on_line: show(s_))
                     else:
                         self.after(0, lambda s_=stripped: self.log(self.console, s_))
-            proc.stdout.close()
-            proc.wait()
             rc = proc.returncode
         except Exception as exc:
             logger.debug("_run_ytdlp_once: best-effort step failed", exc_info=True)
@@ -2065,7 +2061,7 @@ class YouTubeDownloaderTab(BaseTab):
             try:
                 proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1)
                 self._active_proc = proc
-                for line in iter(proc.stdout.readline, ""):
+                for line in _proc.lines(proc):
                     if cancel_fn():
                         proc.terminate()
                         self._active_proc = None
@@ -2083,8 +2079,6 @@ class YouTubeDownloaderTab(BaseTab):
                                    self._on_encode_progress(p, t, total_dur))
                     else:
                         progress_cb(stripped)
-                proc.stdout.close()
-                proc.wait()
                 rc = proc.returncode
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)

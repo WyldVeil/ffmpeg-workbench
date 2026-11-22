@@ -52,7 +52,7 @@ def test_mystical_star_canvas_stays_behind_the_ui():
     try:
         canvas = theme._star_canvas
         if canvas is not None and canvas.master is app:
-            stack = app.tk.splitlist(app.tk.call("winfo", "children", app._w))
+            stack = app.tk.splitlist(app.tk.call("winfo", "children", str(app)))
             assert stack[0] == str(canvas)            # lowest in stacking order, under every panel
     finally:
         theme.stop_stars()

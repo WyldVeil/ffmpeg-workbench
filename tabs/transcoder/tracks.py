@@ -140,7 +140,7 @@ class TracksRemuxTab(BaseTab):
             self.log(self.console, f"Can't read {os.path.basename(path)}: {exc}")
             return
         ext = os.path.splitext(path)[1].lower().lstrip(".")
-        self.container_var.set(CONTAINERS.get({"m4v": "mp4"}.get(ext, ext), CONTAINERS["mkv"]))
+        self.container_var.set(CONTAINERS.get("mp4" if ext == "m4v" else ext, CONTAINERS["mkv"]))
         self.out_row.set(self._suggest())
         self._refresh(select=0)
 
@@ -270,13 +270,13 @@ class TracksRemuxTab(BaseTab):
 
     def extract(self, i: int, out: str) -> None:
         tr = self.plan.tracks[i]
-        out = self.confirm_output(out, [self.plan.inputs[tr.source]])
-        if not out:
+        final = self.confirm_output(out, [self.plan.inputs[tr.source]])
+        if not final:
             return
-        cmd = remux.extract_command(self.plan.inputs[tr.source], tr, out)
-        self.log(self.console, f"Saving {tr.describe()} → {os.path.basename(out)}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn,
-                        btn_label="🗂  REMUX  (no re-encoding)", output=out, inputs=list(self.plan.inputs),
+        cmd = remux.extract_command(self.plan.inputs[tr.source], tr, final)
+        self.log(self.console, f"Saving {tr.describe()} → {os.path.basename(final)}")
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, final), btn=self.btn,
+                        btn_label="🗂  REMUX  (no re-encoding)", output=final, inputs=list(self.plan.inputs),
                         name="Save track")
 
     # ── Remux ─────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ they may only shrink.
 | R4 | Narrow `Optional` once, at a blessed boundary | Adopted | `MediaInfo.require_video()/require_audio()`, `capabilities.peek()` |
 | R5 | Pure ops below the UI | Adopted | `core/ops/`; `core/cli.py` imports no page (enforced) |
 | R6 | Parameter objects instead of long keyword lists | Partly | read-once specs in Special Effects; 31 long signatures remain (ruff PLR0913 debt) |
-| R7 | Type-checker adoption plan gated in CI | Adopted | `scripts/check_types.py` ratchet; strict list in `pyrightconfig.json` |
+| R7 | Type-checker adoption plan gated in CI | Adopted | 559 errors -> 0; `scripts/check_types.py` gate; strict list in `pyrightconfig.json` |
 | R8 | Typed settings parsed once | Adopted | `core/settings.py` `Setting[T]`; `tests/test_settings_keys.py` |
 | R9 | Immutable, typed probe results | Adopted | frozen `MediaInfo`, `Stream` |
 | R10 | One tool registry | Adopted | `core/tools.py` + `tabs/registry.py`; `tests/test_tools.py` |

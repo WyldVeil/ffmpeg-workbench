@@ -194,7 +194,7 @@ def resolve_ffmpeg() -> dict:
         for plat, variant in FFMPEG_VARIANT.items():
             if m.group(2) == variant:
                 found[plat] = {"name": name, "url": a["browser_download_url"]}
-    if len(found) != len(FFMPEG_VARIANT):
+    if len(found) != len(FFMPEG_VARIANT) or version is None:
         raise SystemExit(f"{rel['tag_name']} lacks FFmpeg {FFMPEG_LINE} builds for every platform")
     sums = _parse_sums(get_text(assets["checksums.sha256"]["browser_download_url"]))
     for plat in found:

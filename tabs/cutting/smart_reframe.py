@@ -277,6 +277,8 @@ class SmartReframeTab(BaseTab):
                f"tblend=all_mode=difference,scale={GRID_W}:{GRID_H}:flags=area",
                "-f", "rawvideo", "-pix_fmt", "gray", "-"]
         proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.DEVNULL)
+        out = proc.stdout
+        assert out is not None                            # started with stdout=PIPE
         size = GRID_W * GRID_H
         frames, buf = [], b""
         expected = max(1, int(duration * RATE))
@@ -285,7 +287,7 @@ class SmartReframeTab(BaseTab):
                 if cancelled():
                     ff.kill_tree(proc)
                     raise ff.CancelledError("cancelled")
-                chunk = proc.stdout.read(size * 16)
+                chunk = out.read(size * 16)
                 if not chunk:
                     break
                 buf += chunk
