@@ -17,6 +17,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUI_MODULES = ("tkinter", "tkinterdnd2", "tabs", "main", "shell")
@@ -185,6 +186,247 @@ def test_no_hidden_imports():
         and node.func.id == "__import__"
     ]
     assert not hits, f"import modules normally (or with importlib, for lazy tool pages): {hits}"
+
+
+#: What the pages hand to core instead of spelling out (Robust Python ch. 2:
+#: the engine owns the vocabulary).  FFmpeg options, and the prefixes of the
+#: per-stream ones (-c:a:0, -metadata:s:s:1, ...); yt-dlp's long options.
+FFMPEG_OPTIONS = frozenset(
+    [
+        "-/filter_complex",
+        "-ac",
+        "-acodec",
+        "-af",
+        "-an",
+        "-analyzeduration",
+        "-ar",
+        "-autoexit",
+        "-avoid_negative_ts",
+        "-bf",
+        "-bsf:v",
+        "-bufsize",
+        "-c",
+        "-codecs",
+        "-compression_level",
+        "-copyts",
+        "-cq",
+        "-crf",
+        "-deadline",
+        "-dn",
+        "-draw_mouse",
+        "-f",
+        "-fflags",
+        "-filter_complex",
+        "-filters",
+        "-fps_mode",
+        "-framerate",
+        "-g",
+        "-hide_banner",
+        "-hwaccel",
+        "-hwaccel_output_format",
+        "-i",
+        "-ignore_loop",
+        "-init_hw_device",
+        "-itsoffset",
+        "-level",
+        "-loglevel",
+        "-loop",
+        "-map",
+        "-map_chapters",
+        "-map_metadata",
+        "-maxrate",
+        "-movflags",
+        "-nodisp",
+        "-nostats",
+        "-nostdin",
+        "-pass",
+        "-passlogfile",
+        "-pix_fmt",
+        "-preset",
+        "-print_format",
+        "-probesize",
+        "-progress",
+        "-qp",
+        "-r",
+        "-read_intervals",
+        "-reset_timestamps",
+        "-s",
+        "-sample_fmt",
+        "-segment_format_options",
+        "-segment_times",
+        "-select_streams",
+        "-shortest",
+        "-show_entries",
+        "-show_format",
+        "-show_streams",
+        "-skip_frame",
+        "-sn",
+        "-ss",
+        "-sseof",
+        "-start_number",
+        "-stream_loop",
+        "-t",
+        "-thread_queue_size",
+        "-timecode",
+        "-to",
+        "-tune",
+        "-update",
+        "-v",
+        "-vaapi_device",
+        "-vcodec",
+        "-vf",
+        "-vframes",
+        "-video_size",
+        "-vn",
+        "-window_title",
+        "-y",
+    ]
+)
+FFMPEG_OPTION_PREFIXES = (
+    "-c:",
+    "-b:",
+    "-q:",
+    "-filter:",
+    "-frames:",
+    "-profile:",
+    "-tag:",
+    "-metadata",
+    "-disposition",
+)
+YTDLP_OPTIONS = frozenset(
+    [
+        "-o",
+        "-x",
+        "-g",
+        "--add-metadata",
+        "--audio-format",
+        "--audio-quality",
+        "--cookies",
+        "--download-sections",
+        "--downloader",
+        "--downloader-args",
+        "--embed-chapters",
+        "--embed-metadata",
+        "--embed-subs",
+        "--embed-thumbnail",
+        "--force-keyframes-at-cuts",
+        "--get-title",
+        "--live-from-start",
+        "--merge-output-format",
+        "--no-overwrites",
+        "--no-playlist",
+        "--password",
+        "--proxy",
+        "--rate-limit",
+        "--skip-download",
+        "--sponsorblock-mark",
+        "--sponsorblock-remove",
+        "--sub-format",
+        "--sub-lang",
+        "--username",
+        "--write-auto-sub",
+        "--write-sub",
+        "--yes-playlist",
+    ]
+)
+BINARY_NAMES = frozenset({"ffmpeg_path", "ffprobe_path", "ffplay_path", "get_binary_path"})
+
+
+def _filter_syntax() -> re.Pattern[str]:
+    with open(os.path.join(ROOT, "tests", "ffmpeg_filters.txt"), encoding="utf-8") as fh:
+        names = [ln.strip() for ln in fh if ln.strip() and not ln.startswith("#")]
+    return re.compile(r"(?<![\w.])(" + "|".join(sorted(names, key=len, reverse=True)) + r")=")
+
+
+def _docstrings(tree: ast.AST) -> set[int]:
+    return {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+
+
+def _command_text(text: str, filters: re.Pattern[str]) -> bool:
+    return (
+        text in FFMPEG_OPTIONS
+        or text.startswith(FFMPEG_OPTION_PREFIXES)
+        or text in YTDLP_OPTIONS
+        or bool(filters.search(text))
+    )
+
+
+def _command_parts(tree: ast.AST, filters: re.Pattern[str]) -> list[tuple[int, str]]:
+    docs = _docstrings(tree)
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
+            if _command_text(node.value, filters):
+                found.append((node.lineno, node.value[:40]))
+        elif isinstance(node, ast.Attribute) and node.attr in BINARY_NAMES:
+            found.append((node.lineno, node.attr))
+        elif isinstance(node, ast.Name) and node.id in BINARY_NAMES:
+            found.append((node.lineno, node.id))
+        elif isinstance(node, ast.ImportFrom) and any(a.name in BINARY_NAMES for a in node.names):
+            found.append((node.lineno, "import of a binary's path"))
+    return found
+
+
+def test_pages_never_build_commands():
+    """FFmpeg and yt-dlp commands are built in core (core/ops, core/ffmpeg...):
+    no options, no filter syntax and no binary paths in tabs/ or shell/.  The
+    pages read their fields and call the engine."""
+    filters = _filter_syntax()
+    hits = [
+        f"{rel}:{line} {what!r}"
+        for rel, path in _py_files("tabs", "shell")
+        for line, what in _command_parts(
+            ast.parse(open(path, encoding="utf-8").read(), path), filters
+        )
+    ]
+    assert not hits, "build commands in core/ops and call them from the page:\n" + "\n".join(hits)
+
+
+#: the folders whose modules are tool pages (plus tabs/all_in_one.py)
+PAGE_FOLDERS = ("audio", "cutting", "social", "system", "transcoder", "visuals")
+
+
+def _page_module(module: str) -> bool:
+    parts = module.split(".")
+    return module == "tabs.all_in_one" or (
+        len(parts) >= 3 and parts[0] == "tabs" and parts[1] in PAGE_FOLDERS
+    )
+
+
+def _imported_modules(tree: ast.AST) -> list[tuple[int, str]]:
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [(node.lineno, a.name) for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found += [(node.lineno, node.module)] + [
+                (node.lineno, f"{node.module}.{a.name}") for a in node.names
+            ]
+    return found
+
+
+def test_pages_never_import_other_pages():
+    """What two pages share lives in core or tabs/kit; a page handing work to
+    another goes through tabs.kit.contracts (as Auto Subtitles -> Hard Subber)."""
+    hits = []
+    for rel, path in _py_files("tabs"):
+        me = rel[:-3].replace("/", ".")
+        if not _page_module(me):
+            continue
+        tree = ast.parse(open(path, encoding="utf-8").read(), path)
+        hits += [
+            f"{rel}:{line} -> {mod}"
+            for line, mod in _imported_modules(tree)
+            if _page_module(mod) and mod != me
+        ]
+    assert not hits, f"move what's shared to core or tabs/kit: {hits}"
 
 
 def test_the_whole_engine_is_type_checked_strictly():
