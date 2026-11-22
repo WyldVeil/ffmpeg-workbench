@@ -19,6 +19,7 @@ each one is
 
 :func:`warm` (called at start-up) learns everything in the background.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,18 +38,20 @@ logger = logging.getLogger("crossfader.capabilities")
 
 Name = Literal["filters", "vulkan", "anlmdn"]
 NAMES: Final[tuple[Name, ...]] = ("filters", "vulkan", "anlmdn")
-_MAX_AGE: Final = 7 * 24 * 3600            # GPU drivers change without FFmpeg changing: re-check weekly
+_MAX_AGE: Final = 7 * 24 * 3600  # GPU drivers change without FFmpeg changing: re-check weekly
 _MISSING: Final = object()
 
-_values: dict[str, Any] = {}               # threads: written under the name's lock, read freely
+_values: dict[str, Any] = {}  # threads: written under the name's lock, read freely
 _locks: dict[str, threading.Lock] = {n: threading.Lock() for n in NAMES}
 _disk_lock = threading.Lock()
 
 
 # ── What each fact is, and how to learn it ─────────────────────────────────────
 
+
 def _ffmpeg() -> str:
     from core import ffmpeg as ff
+
     return ff.ffmpeg_path()
 
 
@@ -65,16 +68,51 @@ def _learn_filters() -> list[str]:
 def _learn_vulkan() -> bool:
     if "libplacebo" not in get("filters"):
         return False
-    r = proc.run([_ffmpeg(), "-hide_banner", "-nostdin", "-loglevel", "error", "-init_hw_device", "vulkan",
-                  "-f", "lavfi", "-i", "color=s=64x64:d=0.1", "-vf", "libplacebo=w=128:h=128:format=yuv420p",
-                  "-f", "null", "-"], timeout=30)
+    r = proc.run(
+        [
+            _ffmpeg(),
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-init_hw_device",
+            "vulkan",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=s=64x64:d=0.1",
+            "-vf",
+            "libplacebo=w=128:h=128:format=yuv420p",
+            "-f",
+            "null",
+            "-",
+        ],
+        timeout=30,
+    )
     return r.ok
 
 
 def _learn_anlmdn() -> bool:
     """anlmdn corrupts the heap in some FFmpeg builds: run it once on noise."""
-    r = proc.run([_ffmpeg(), "-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi",
-                  "-i", "anoisesrc=d=1:c=pink", "-af", "anlmdn", "-f", "null", "-"], timeout=30)
+    r = proc.run(
+        [
+            _ffmpeg(),
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "anoisesrc=d=1:c=pink",
+            "-af",
+            "anlmdn",
+            "-f",
+            "null",
+            "-",
+        ],
+        timeout=30,
+    )
     return r.ok
 
 
@@ -92,6 +130,7 @@ def _shape(name: Name, value: Any) -> Any:
 
 
 # ── The disk cache ─────────────────────────────────────────────────────────────
+
 
 def _cache_file() -> str:
     return os.path.join(paths.cache_dir(), "capabilities.json")
@@ -114,17 +153,26 @@ def _read_disk() -> dict[str, Any]:
     return cast("dict[str, Any]", data) if isinstance(data, dict) else {}
 
 
+def _entry(raw: object) -> dict[str, Any] | None:
+    """A cached fact that is still fresh, or None."""
+    if not isinstance(raw, dict):
+        return None
+    entry = cast("dict[str, Any]", raw)
+    try:
+        fresh = time.time() - float(entry.get("at", 0)) < _MAX_AGE
+    except (TypeError, ValueError):
+        return None
+    return entry if fresh else None
+
+
 def _from_disk(name: Name, ident: str) -> Any:
-    entry: Any = _read_disk().get(f"{name}|{ident}")
-    if isinstance(entry, dict) and time.time() - float(entry.get("at", 0)) < _MAX_AGE:  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-        return entry.get("value", _MISSING)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-    return _MISSING
+    entry = _entry(_read_disk().get(f"{name}|{ident}"))
+    return entry.get("value", _MISSING) if entry is not None else _MISSING
 
 
 def _to_disk(name: Name, ident: str, value: Any) -> None:
     with _disk_lock:
-        data: dict[str, Any] = {k: v for k, v in _read_disk().items()
-                                if isinstance(v, dict) and time.time() - float(v.get("at", 0)) < _MAX_AGE}  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        data: dict[str, Any] = {k: v for k, v in _read_disk().items() if _entry(v) is not None}
         if isinstance(value, (set, frozenset)):
             value = sorted(cast("set[str]", value))
         data[f"{name}|{ident}"] = {"value": value, "at": time.time()}
@@ -138,6 +186,7 @@ def _to_disk(name: Name, ident: str, value: Any) -> None:
 
 
 # ── Reading ───────────────────────────────────────────────────────────────────
+
 
 def get(name: Name) -> Any:
     """The fact, learning it first if needed.  On the UI thread the learning
@@ -159,8 +208,13 @@ def get(name: Name) -> Any:
             try:
                 value = learn()
             except proc.ProcessError:
-                logger.info("capability %s: FFmpeg could not be run; assuming %r", name, fallback, exc_info=True)
-                value, ident = fallback, None           # don't remember a guess
+                logger.info(
+                    "capability %s: FFmpeg could not be run; assuming %r",
+                    name,
+                    fallback,
+                    exc_info=True,
+                )
+                value, ident = fallback, None  # don't remember a guess
             if ident:
                 _to_disk(name, ident, value)
         value = _shape(name, value)

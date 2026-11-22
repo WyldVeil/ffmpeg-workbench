@@ -13,6 +13,7 @@ Rules every tab follows:
 The overwrite policy comes from the ``overwrite_policy`` setting:
 ``"ask"`` (default), ``"rename"`` (auto-number), or ``"overwrite"``.
 """
+
 from __future__ import annotations
 
 import os
@@ -52,8 +53,14 @@ def unique_path(path: str) -> str:
         n += 1
 
 
-def suggest_output(src: str | None, suffix: str = "edited", ext: str | None = None,
-                   *, folder: str | None = None, unique: bool = True) -> str:
+def suggest_output(
+    src: str | None,
+    suffix: str = "edited",
+    ext: str | None = None,
+    *,
+    folder: str | None = None,
+    unique: bool = True,
+) -> str:
     """Suggest an output path derived from *src*.
 
     *ext* may be given with or without a dot; by default the source's
@@ -91,8 +98,15 @@ class OutputRejected(OutputError):
     """Raised by :func:`resolve_output` when the user cancels or the path is unusable."""
 
 
-def resolve_output(out: str, inputs: Iterable[str] = (), *, default_ext: str = ".mp4",
-                   policy: str | None = None, parent=None, ask=True) -> str:
+def resolve_output(
+    out: str,
+    inputs: Iterable[str] = (),
+    *,
+    default_ext: str = ".mp4",
+    policy: str | None = None,
+    parent=None,
+    ask=True,
+) -> str:
     """Validate and finalise an output path before rendering.
 
     Returns the path to use (possibly renamed), or raises
@@ -107,7 +121,8 @@ def resolve_output(out: str, inputs: Iterable[str] = (), *, default_ext: str = "
             alt = unique_path(out)
             raise OutputRejected(
                 "The output file is the same as an input file, which would destroy "
-                f"the source while reading it.\n\nPick another name, e.g.\n{alt}")
+                f"the source while reading it.\n\nPick another name, e.g.\n{alt}"
+            )
     folder = os.path.dirname(out)
     try:
         os.makedirs(folder, exist_ok=True)
@@ -125,13 +140,15 @@ def resolve_output(out: str, inputs: Iterable[str] = (), *, default_ext: str = "
     if policy == "rename" or not ask:
         return unique_path(out)
     from tkinter import messagebox
+
     alt = unique_path(out)
     answer = messagebox.askyesnocancel(
         "File already exists",
         f"{os.path.basename(out)} already exists.\n\n"
         f"Yes — overwrite it\nNo — save as {os.path.basename(alt)}\n"
         "Cancel — don't render",
-        parent=parent)  # pyright: ignore[reportArgumentType] - None means "the main window", as Tk allows
+        parent=parent,  # pyright: ignore[reportArgumentType] - None means "the main window", as Tk allows
+    )
     if answer is None:
         raise OutputRejected("")
     return out if answer else alt
