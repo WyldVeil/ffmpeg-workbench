@@ -1032,6 +1032,49 @@ def version_of(binary: str | None = None) -> str:
     return ver
 
 
+_TAKES_VALUE = frozenset(
+    {
+        "-ss",
+        "-t",
+        "-to",
+        "-i",
+        "-vf",
+        "-af",
+        "-c:v",
+        "-c:a",
+        "-crf",
+        "-preset",
+        "-b:v",
+        "-b:a",
+        "-movflags",
+        "-r",
+        "-s",
+        "-map",
+        "-f",
+    }
+)
+
+
+def format_cmd_lines(cmd: Sequence[str]) -> str:
+    """argv as a readable shell command, one option (with its value) per
+    backslash-continued line."""
+    if not cmd:
+        return ""
+    import shlex
+
+    lines = [shlex.quote(cmd[0])]
+    i = 1
+    while i < len(cmd):
+        p = cmd[i]
+        if p.startswith("-") and i + 1 < len(cmd) and cmd[i + 1] not in _TAKES_VALUE:
+            lines.append(f"  {shlex.quote(p)} {shlex.quote(cmd[i + 1])}")
+            i += 2
+        else:
+            lines.append(f"  {shlex.quote(p)}")
+            i += 1
+    return " \\\n".join(lines)
+
+
 def format_cmd(cmd: Sequence[str]) -> str:
     """Render argv as a copy-pasteable shell command for the current OS."""
     if _IS_WIN:

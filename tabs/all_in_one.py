@@ -30,6 +30,7 @@ import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
+from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops import all_in_one as aio
@@ -1001,7 +1002,7 @@ class AllInOneTab(BaseTab):
         notes += built.notes
         self._last_cmd = built.argv
         self._expected_len = built.length or None
-        self._set_cmd_text(self._format_cmd(built.argv))
+        self._set_cmd_text(ff.format_cmd_lines(built.argv))
         self._edit_lbl.config(text=("⚠ " + "; ".join(notes)) if notes else "")
 
     # ── reading the sections (each None while switched off) ─────────────────
@@ -1140,50 +1141,6 @@ class AllInOneTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  Command display helpers
     # ─────────────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _format_cmd(parts):
-        """
-        Format the command list as a readable multi-line string using
-        backslash line continuations.  Groups args into logical pairs.
-        """
-        if not parts:
-            return ""
-
-        lines = [shlex.quote(parts[0])]
-        i = 1
-        # Flags that take a following value
-        takes_val = {
-            "-ss",
-            "-t",
-            "-to",
-            "-i",
-            "-vf",
-            "-af",
-            "-c:v",
-            "-c:a",
-            "-crf",
-            "-preset",
-            "-b:v",
-            "-b:a",
-            "-movflags",
-            "-r",
-            "-s",
-            "-map",
-            "-f",
-        }
-
-        while i < len(parts):
-            p = parts[i]
-            if p.startswith("-") and i + 1 < len(parts) and parts[i + 1] not in takes_val:
-                # flag + value on same continuation line
-                lines.append(f"  {shlex.quote(p)} {shlex.quote(parts[i + 1])}")
-                i += 2
-            else:
-                lines.append(f"  {shlex.quote(p)}")
-                i += 1
-
-        return " \\\n".join(lines)
 
     def _set_cmd_text(self, text):
         self._setting_text = True
