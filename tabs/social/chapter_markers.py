@@ -107,6 +107,15 @@ class ChapterMarkersTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body = self._build_header()
+        self._build_source_video(body)
+        self._build_timeline_scrubber(body)
+        self._build_mark_name(body)
+        self._build_chapter_list(body)
+        self._build_preview_pane(body)
+        self._build_export(body)
+
+    def _build_header(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         tk.Label(
@@ -121,7 +130,10 @@ class ChapterMarkersTab(BaseTab):
         )
 
         body = scroll_body(self)
+        return body
 
+    def _build_source_video(self, body):
+        """Source video."""
         # ── Source video ──────────────────────────────────────────────────
         sf = tk.Frame(body)
         sf.pack(pady=px(10))
@@ -137,6 +149,8 @@ class ChapterMarkersTab(BaseTab):
         self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
         self.dur_lbl.pack(side="left", padx=px(8))
 
+    def _build_timeline_scrubber(self, body):
+        """Timeline scrubber."""
         # ── Timeline scrubber ─────────────────────────────────────────────
         scrub_lf = tk.LabelFrame(
             body, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10)
@@ -184,6 +198,8 @@ class ChapterMarkersTab(BaseTab):
                 command=lambda p=pct: self._jump_pct(p),
             ).pack(side="left", padx=px(1))
 
+    def _build_mark_name(self, body):
+        """Mark + name."""
         # ── Mark + name ───────────────────────────────────────────────────
         mark_row = tk.Frame(body)
         mark_row.pack(fill="x", padx=px(16), pady=px(4))
@@ -222,6 +238,8 @@ class ChapterMarkersTab(BaseTab):
             side="left", padx=px(6)
         )
 
+    def _build_chapter_list(self, body):
+        """Chapter list."""
         # ── Chapter list ──────────────────────────────────────────────────
         list_hdr = tk.Frame(body)
         list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
@@ -270,15 +288,16 @@ class ChapterMarkersTab(BaseTab):
                 pady=px(2)
             )
 
-        # ── Preview pane ──────────────────────────────────────────────────
-        # (rest of the UI continues below the side-by-side)
-
+    def _build_preview_pane(self, body):
+        """Preview pane."""
         # ── Validation ────────────────────────────────────────────────────
         self.valid_lbl = tk.Label(
             body, text="", font=(UI_FONT, 9), fg=CLR["fgdim"], justify="left", anchor="w"
         )
         self.valid_lbl.pack(anchor="w", padx=px(16))
 
+    def _build_export(self, body):
+        """Export."""
         # ── Export ────────────────────────────────────────────────────────
         export_lf = tk.LabelFrame(
             body, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8)

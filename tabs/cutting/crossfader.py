@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import encoders as enc
@@ -677,6 +678,12 @@ class CrossfaderTab(BaseTab):
             name="Crossfader",
         )
 
+    def _preview_done(self, out, rc):
+        if rc == 0:
+            launch_preview(out)
+        else:
+            self.show_result(rc, out)
+
     def _start_preview(self):
         from core.paths import temp_dir
 
@@ -688,7 +695,7 @@ class CrossfaderTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self.console,
-            on_done=lambda rc: launch_preview(out) if rc == 0 else self.show_result(rc, out),
+            on_done=partial(self._preview_done, out),
             btn=self.preview_btn,
             duration=seconds,
             output=out,

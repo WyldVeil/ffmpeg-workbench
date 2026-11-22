@@ -365,6 +365,10 @@ class AdvancedSettingsTab(BaseTab):
         if special:
             self._build_tor_system_section(body, special)
 
+    def _net_pick(self, situation):
+        self._net_situation_var.set(situation)
+        self._net_choose(situation)
+
     def _net_situations(self, form: _NetForm) -> None:
         from core import network as _net
 
@@ -431,7 +435,7 @@ class AdvancedSettingsTab(BaseTab):
             cb.pack(side="left", padx=px(6))
             cb.bind(
                 "<<ComboboxSelected>>",
-                lambda _e: (self._net_situation_var.set("app"), self._net_choose("app")),
+                lambda _e: self._net_pick("app"),
             )
             tk.Button(parent, text="Find…", command=self._net_find_local).pack(side="left")
 
@@ -451,7 +455,7 @@ class AdvancedSettingsTab(BaseTab):
             cb.pack(side="left", padx=px(6))
             cb.bind(
                 "<<ComboboxSelected>>",
-                lambda _e: (self._net_situation_var.set("tor"), self._net_choose("tor")),
+                lambda _e: self._net_pick("tor"),
             )
 
         desc = {sid: d for sid, _t, d, _v in _net.SITUATIONS}
@@ -537,6 +541,12 @@ class AdvancedSettingsTab(BaseTab):
                 "write", lambda *_a: self._net_situation_var.set("custom")
             )
 
+    def _choose_certificate(self, ca):
+        path = dialogs.askopenfilename(
+            filetypes=[("Certificates", "*.pem *.crt *.cer"), ("All files", "*")]
+        )
+        ca.set(path or ca.get())
+
     def _net_certificates(self, form: _NetForm) -> None:
         section = form.section
         hint = form.hint
@@ -558,12 +568,7 @@ class AdvancedSettingsTab(BaseTab):
         tk.Button(
             r,
             text="Choose…",
-            command=lambda: ca.set(
-                dialogs.askopenfilename(
-                    filetypes=[("Certificates", "*.pem *.crt *.cer"), ("All files", "*")]
-                )
-                or ca.get()
-            ),
+            command=partial(self._choose_certificate, ca),
         ).pack(side="left")
         tk.Checkbutton(
             cert,
@@ -845,9 +850,12 @@ class AdvancedSettingsTab(BaseTab):
         bf = tk.Frame(dlg)
         bf.pack(pady=px(10))
         tk.Button(bf, text="Turn on", command=ok).pack(side="left", padx=px(4))
-        tk.Button(bf, text="Cancel", command=lambda: (pw.set(""), dlg.destroy())).pack(
-            side="left", padx=px(4)
-        )
+
+        def cancel():
+            pw.set("")
+            dlg.destroy()
+
+        tk.Button(bf, text="Cancel", command=cancel).pack(side="left", padx=px(4))
         entry.bind("<Return>", ok)
         entry.focus_set()
         dlg.grab_set()
@@ -898,13 +906,8 @@ class AdvancedSettingsTab(BaseTab):
         def _work():
             ok, msg = _net.test(cfg=cfg)
             colour = CLR["green"] if ok else CLR["red"]
-            self.after(
-                0,
-                lambda: self._net_status_lbl.config(
-                    text=("Connection OK: " + msg) if ok else ("Connection failed: " + msg),
-                    fg=colour,
-                ),
-            )
+            text = ("Connection OK: " + msg) if ok else ("Connection failed: " + msg)
+            self.after(0, partial(self._net_status_lbl.config, text=text, fg=colour))
 
         tasks.submit(_work)
 
@@ -983,6 +986,12 @@ class AdvancedSettingsTab(BaseTab):
 
     # ── Themes sub-tab ────────────────────────────────────────────────────────
     def _build_themes_subtab(self, inner_nb):
+        current_skin, f = self._build_themes_subtab_skin(inner_nb)
+        self._build_themes_subtab_skin_status(f)
+        self._build_themes_subtab_star_speed_control_only_visi(f)
+        self._build_themes_subtab_star_density_count(current_skin)
+
+    def _build_themes_subtab_skin(self, inner_nb):
         f = ttk.Frame(inner_nb)
         inner_nb.add(f, text="  Themes  ")
 
@@ -1078,7 +1087,9 @@ class AdvancedSettingsTab(BaseTab):
                 command=lambda n=name: self._on_skin_select(n),
             )
             rb.pack(pady=px(0, 8))
+        return current_skin, f
 
+    def _build_themes_subtab_skin_status(self, f):
         apply_f = tk.Frame(f)
         apply_f.pack(pady=px(10))
         tk.Button(
@@ -1102,6 +1113,8 @@ class AdvancedSettingsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(pady=px(2, 6))
 
+    def _build_themes_subtab_star_speed_control_only_visi(self, f):
+        """Star speed control (only visible when Mystical is active)."""
         # ── Star speed control (only visible when Mystical is active) ─────────
         self._star_speed_frame = tk.LabelFrame(
             f, text=t("advanced_settings.star_speed"), padx=px(16), pady=px(10)
@@ -1143,6 +1156,8 @@ class AdvancedSettingsTab(BaseTab):
         )
         self._star_speed_lbl.pack()
 
+    def _build_themes_subtab_star_density_count(self, current_skin):
+        """Star density (count)."""
         # ── Star density (count) ───────────────────────────────────────────
         tk.Frame(self._star_speed_frame, height=px(6)).pack()  # spacer
 
@@ -1184,6 +1199,11 @@ class AdvancedSettingsTab(BaseTab):
     # ── Custom skin sub-tab ───────────────────────────────────────────────────
     def _build_custom_subtab(self, inner_nb):
         """Scrollable color-property editor for the 'Custom' skin."""
+        current_custom, inner, sections = self._build_custom_subtab_custom_status(inner_nb)
+        self._build_custom_colour_rows(current_custom, inner, sections)
+        self._build_custom_reset(inner)
+
+    def _build_custom_subtab_custom_status(self, inner_nb):
         f = ttk.Frame(inner_nb)
         inner_nb.add(f, text="  Custom  ")
 
@@ -1280,7 +1300,9 @@ class AdvancedSettingsTab(BaseTab):
                 ],
             ),
         ]
+        return current_custom, inner, sections
 
+    def _build_custom_colour_rows(self, current_custom, inner, sections):
         for section_title, props in sections:
             sec_frame = tk.LabelFrame(inner, text=f"  {section_title}  ", padx=px(12), pady=px(10))
             sec_frame.pack(fill="x", padx=px(8), pady=px(8, 4))
@@ -1348,6 +1370,7 @@ class AdvancedSettingsTab(BaseTab):
                 entry.bind("<FocusOut>", _sync_swatch)
                 entry.bind("<Return>", _sync_swatch)
 
+    def _build_custom_reset(self, inner):
         # Reset to defaults button
         reset_row = tk.Frame(inner)
         reset_row.pack(fill="x", padx=px(8), pady=px(12, 8))
@@ -1622,6 +1645,10 @@ class AdvancedSettingsTab(BaseTab):
         )
         self.dev_console.pack(fill="both", expand=True, padx=px(20), pady=px(4))
 
+    def _dev_print(self, text):
+        self.dev_console.insert(tk.END, text)
+        self.dev_console.see(tk.END)
+
     def _run_dev_cmd(self):
         cmd_str = self.dev_cmd_var.get().strip()
         if not cmd_str:
@@ -1639,13 +1666,7 @@ class AdvancedSettingsTab(BaseTab):
                 parts = cmd_str.split()
             proc = _proc.spawn(parts, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True)
             for line in _proc.lines(proc):
-                self.after(
-                    0,
-                    lambda text=line: [
-                        self.dev_console.insert(tk.END, text),
-                        self.dev_console.see(tk.END),
-                    ],
-                )
+                self.after(0, self._dev_print, line)
             self.after(
                 0, lambda: self.dev_console.insert(tk.END, f"\n[Exited {proc.returncode}]\n")
             )

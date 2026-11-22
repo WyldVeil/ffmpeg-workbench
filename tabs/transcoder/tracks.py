@@ -56,6 +56,11 @@ class TracksRemuxTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, lf = self._build_header()
+        cb, opt, r1 = self._build_output(body, lf)
+        self._build_chapters(body, cb, opt, r1)
+
+    def _build_header(self):
         self.make_header(
             self,
             "Tracks & Remux",
@@ -97,7 +102,9 @@ class TracksRemuxTab(BaseTab):
             tk.Button(bar, text=text, relief="flat", cursor="hand2", command=cmd).pack(
                 side="left", padx=px(0, 6)
             )
+        return body, lf
 
+    def _build_output(self, body, lf):
         ed = tk.Frame(lf)
         ed.pack(fill="x", pady=px(8, 0))
         tk.Label(ed, text="Language:").pack(side="left")
@@ -135,6 +142,9 @@ class TracksRemuxTab(BaseTab):
             state="readonly",
             width=26,
         )
+        return cb, opt, r1
+
+    def _build_chapters(self, body, cb, opt, r1):
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._container_changed())
         self.chapters_var = tk.BooleanVar(value=True)

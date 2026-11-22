@@ -29,6 +29,11 @@ class BatchJoinerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        opt_lf = self._build_listbox()
+        self._build_reencode(opt_lf)
+        self._build_out()
+
+    def _build_listbox(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
@@ -90,7 +95,9 @@ class BatchJoinerTab(BaseTab):
         # Options
         opt_lf = tk.LabelFrame(self, text=t("section.output_options"), padx=px(15), pady=px(8))
         opt_lf.pack(fill="x", padx=px(20), pady=px(5))
+        return opt_lf
 
+    def _build_reencode(self, opt_lf):
         # Row 1
         r1 = tk.Frame(opt_lf)
         r1.pack(fill="x", pady=px(3))
@@ -155,6 +162,7 @@ class BatchJoinerTab(BaseTab):
             state="readonly",
         ).pack(side="left", padx=px(4))
 
+    def _build_out(self):
         # Output
         out_row = tk.Frame(self)
         out_row.pack(pady=px(5))

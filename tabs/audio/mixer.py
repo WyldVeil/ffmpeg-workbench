@@ -67,6 +67,11 @@ class AudioMixerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        self._build_vid()
+        self._build_track_grid()
+        self._build_master_output()
+
+    def _build_vid(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
@@ -121,6 +126,8 @@ class AudioMixerTab(BaseTab):
             length=px(120),
         ).pack(side="left")
 
+    def _build_track_grid(self):
+        """Track grid."""
         # ── Track grid ────────────────────────────────────────────────────
         tk.Frame(self, bg="#333", height=px(1)).pack(fill="x", padx=px(16), pady=px(4))
 
@@ -182,6 +189,8 @@ class AudioMixerTab(BaseTab):
         for _ in range(3):
             self._add_track()
 
+    def _build_master_output(self):
+        """Master output."""
         # ── Master output ─────────────────────────────────────────────────
         tk.Frame(self, bg="#333", height=px(1)).pack(fill="x", padx=px(16), pady=px(4))
         master_f = tk.Frame(self)

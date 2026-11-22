@@ -315,6 +315,15 @@ class ScreenRecorderTab(BaseTab):
     #  Pro Studio Tab
     # ─────────────────────────────────────────────────────────────────────────
     def _build_studio_tab(self):
+        self._build_studio_tab_capture_source()
+        self._build_studio_tab_video_settings()
+        self._build_studio_tab_audio_devices_dynamic()
+        self._build_studio_tab_obs_feature_1_global_hotkey()
+        self._build_studio_tab_obs_feature_2_output_path()
+        self._build_studio_tab_obs_feature_3_auto_stop_time()
+        self._build_studio_tab_start_button()
+
+    def _build_studio_tab_capture_source(self):
         # ── Capture source ────────────────────────────────────────────────────
         src_f = tk.LabelFrame(
             self.tab_studio,
@@ -417,6 +426,8 @@ class ScreenRecorderTab(BaseTab):
 
         self._on_mode_change()  # set initial visibility
 
+    def _build_studio_tab_video_settings(self):
+        """Video Settings."""
         # ── Video Settings ────────────────────────────────────────────────────
         tk.Frame(self.tab_studio, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
         vid_f = tk.LabelFrame(
@@ -516,6 +527,8 @@ class ScreenRecorderTab(BaseTab):
             values=["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"],
         ).grid(row=2, column=3, padx=px(5))
 
+    def _build_studio_tab_audio_devices_dynamic(self):
+        """Audio Devices (Dynamic)."""
         # ── Audio Devices (Dynamic) ────────────────────────────────────────────
         aud_f = tk.LabelFrame(
             self.tab_studio,
@@ -579,6 +592,8 @@ class ScreenRecorderTab(BaseTab):
         self.cb_audio1.set("Loading devices...")
         tasks.submit(self._load_audio_devices)
 
+    def _build_studio_tab_obs_feature_1_global_hotkey(self):
+        """OBS Feature 1 – Global Hotkey."""
         # ── OBS Feature 1 – Global Hotkey ─────────────────────────────────────
         hotkey_f = tk.LabelFrame(
             self.tab_studio,
@@ -619,6 +634,8 @@ class ScreenRecorderTab(BaseTab):
         )
         self.lbl_hotkey_status.pack(side="left", padx=px(8))
 
+    def _build_studio_tab_obs_feature_2_output_path(self):
+        """OBS Feature 2 – Output Path."""
         # ── OBS Feature 2 – Output Path ───────────────────────────────────────
         path_f = tk.LabelFrame(
             self.tab_studio,
@@ -675,6 +692,8 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(4))
 
+    def _build_studio_tab_obs_feature_3_auto_stop_time(self):
+        """OBS Feature 3 – Auto-Stop Timer."""
         # ── OBS Feature 3 – Auto-Stop Timer ───────────────────────────────────
         timer_f = tk.LabelFrame(
             self.tab_studio,
@@ -723,6 +742,8 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(6))
 
+    def _build_studio_tab_start_button(self):
+        """Start button."""
         # ── Start button ──────────────────────────────────────────────────────
         self.btn_start_pro = tk.Button(
             self.tab_studio,

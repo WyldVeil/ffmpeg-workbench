@@ -17,6 +17,7 @@ import itertools
 import math
 import os
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import encoders as enc
@@ -187,6 +188,15 @@ class SpeedRamperTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body = self._build_header()
+        out_lf = self._build_ramp_points(body)
+        self._build_out(body, out_lf)
+
+    def _preset(self, value):
+        self.speed_var.set(value)
+        self._schedule()
+
+    def _build_header(self):
         self.make_header(self, t("tab.speed_ramper"), t("speed_ramp.subtitle"), icon="⚡")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -246,9 +256,11 @@ class SpeedRamperTab(BaseTab):
                 text=lbl,
                 width=4,
                 relief="flat",
-                command=lambda v=val: (self.speed_var.set(v), self._schedule()),
+                command=partial(self._preset, val),
             ).pack(side="left", padx=px(1))
+        return body
 
+    def _build_ramp_points(self, body):
         # ramp
         self.ramp_f = tk.LabelFrame(
             body, text=f"  {t('speed_ramp.ramp_points_section')}  ", padx=px(10), pady=px(8)
@@ -312,6 +324,9 @@ class SpeedRamperTab(BaseTab):
         self.encoder = EncoderPanel(
             out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
         )
+        return out_lf
+
+    def _build_out(self, body, out_lf):
         self.encoder.pack(anchor="w")
         self.out_row = SaveRow(
             out_lf,

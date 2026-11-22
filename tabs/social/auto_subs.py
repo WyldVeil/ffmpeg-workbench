@@ -126,6 +126,10 @@ class AutoSubsTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, eng, row = self._build_header()
+        self._build_output(body, eng, row)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.auto_subtitles"),
@@ -195,6 +199,9 @@ class AutoSubsTab(BaseTab):
                 font=(UI_FONT, 8),
             ),
         )
+        return body, eng, row
+
+    def _build_output(self, body, eng, row):
         self.prompt_var = tk.StringVar()
         row(
             5,

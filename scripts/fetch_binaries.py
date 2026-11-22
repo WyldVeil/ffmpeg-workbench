@@ -584,6 +584,130 @@ def fetch_licence_texts(tool: str, urls: list, out: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _entry(tool: dict, a: dict, **more: str) -> dict:
+    """VERSIONS.json's record of one downloaded file."""
+    return {
+        "version": tool["version"],
+        "url": a["url"],
+        "sha256": a["sha256"],
+        "license": tool["license"],
+        **more,
+    }
+
+
+def _main_tools(tools: dict, plat: str, cache: str, out: str) -> dict:
+    """FFmpeg, yt-dlp and Deno: every platform has them."""
+    exe = ".exe" if plat.startswith("windows") else ""
+    ff = tools["ffmpeg"]
+    a = ff["assets"][plat]
+    install_ffmpeg(ff, plat, download(a["url"], os.path.join(cache, a["name"]), a["sha256"]), out)
+    versions = {"ffmpeg": _entry(ff, a, source=ff["source"])}
+
+    yt = tools["yt-dlp"]
+    a = yt["assets"][plat]
+    path = download(a["url"], os.path.join(cache, f"{yt['version']}-{a['name']}"), a["sha256"])
+    install_single(path, out, "yt-dlp" + exe)
+    fetch_licence_texts("yt-dlp", yt["license_urls"], out)
+    versions["yt-dlp"] = _entry(yt, a)
+
+    dn = tools["deno"]
+    a = dn["assets"][plat]
+    path = download(a["url"], os.path.join(cache, f"{dn['version']}-{a['name']}"), a["sha256"])
+    install_single(path, out, "deno" + exe, member_suffix="deno" + exe)
+    fetch_licence_texts("deno", dn["license_urls"], out)
+    versions["deno"] = _entry(dn, a)
+    return versions
+
+
+def _extra_tools(tools: dict, plat: str, cache: str, out: str) -> dict:
+    """FluidSynth and whisper.cpp where the platform has a build."""
+    versions = {}
+    fs = tools.get("fluidsynth", {})
+    if plat in fs.get("assets", {}):
+        a = fs["assets"][plat]
+        install_fluidsynth(download(a["url"], os.path.join(cache, a["name"]), a["sha256"]), out)
+        fetch_licence_texts("fluidsynth", fs["license_urls"], out)
+        versions["fluidsynth"] = _entry(fs, a)
+
+    wh = tools.get("whisper", {})
+    if plat in wh.get("assets", {}):
+        a = wh["assets"][plat]
+        path = download(a["url"], os.path.join(cache, f"{wh['version']}-{a['name']}"), a["sha256"])
+        install_whisper(path, out)
+        fetch_licence_texts("whisper", wh["license_urls"], out)
+        versions["whisper.cpp"] = _entry(wh, a)
+    return versions
+
+
+def _data_files(tools: dict, cache: str, out: str) -> dict:
+    """The soundfont and the shaders (the same on every platform)."""
+    versions = {}
+    sf = tools.get("soundfont", {})
+    a = sf.get("assets", {}).get("any")
+    if a:
+        path = download(a["url"], os.path.join(cache, f"{sf['version']}-{a['name']}"), a["sha256"])
+        os.makedirs(os.path.join(out, "soundfonts"), exist_ok=True)
+        shutil.copyfile(path, os.path.join(out, "soundfonts", a["name"]))
+        fetch_licence_texts("generaluser-gs", sf["license_urls"], out)
+        versions["GeneralUser GS"] = _entry(sf, a)
+
+    sh = tools.get("shaders", {})
+    for name, a in sh.get("assets", {}).get("any", {}).items():
+        path = download(
+            a["url"], os.path.join(cache, "shaders", f"{a['sha256'][:12]}-{name}"), a["sha256"]
+        )
+        os.makedirs(os.path.join(out, "shaders"), exist_ok=True)
+        shutil.copyfile(path, os.path.join(out, "shaders", name))
+        versions[f"shader {name}"] = {**_entry(sh, a), "license": a["license"]}
+    if sh:
+        fetch_licence_texts("shaders", sh.get("license_urls", []), out)
+    return versions
+
+
+def _smoke_test(plat: str, out: str) -> None:
+    """Run what we can on this machine (only when it is *plat*)."""
+    host = (
+        "windows-x64"
+        if os.name == "nt"
+        else "linux-x64"
+        if sys.platform.startswith("linux")
+        else ""
+    )
+    if host != plat:
+        return
+    exe = ".exe" if plat.startswith("windows") else ""
+    for tool, args in (
+        ("ffmpeg", ["-version"]),
+        ("ffprobe", ["-version"]),
+        ("yt-dlp", ["--version"]),
+        ("deno", ["--version"]),
+        ("whisper-cli", ["--help"]),
+    ):
+        if tool == "whisper-cli" and not os.path.isdir(os.path.join(out, "whisper")):
+            continue
+        folder = (
+            os.path.join(out, "ffmpeg", "bin")
+            if tool.startswith("ff")
+            else os.path.join(out, "whisper")
+            if tool == "whisper-cli"
+            else out
+        )
+        r = subprocess.run(
+            [os.path.join(folder, tool + exe), *args],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        first = (r.stdout or r.stderr).splitlines()[:1]
+        print(
+            f"  ok      {tool:<8} {first[0] if first else '?'}"
+            if r.returncode == 0
+            else f"  FAILED  {tool}: {r.stderr[:200]}"
+        )
+        if r.returncode != 0:
+            raise SystemExit(1)
+
+
 def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
     out = os.path.join(dest_root, plat)
     print(f"\n== {plat} -> {out}")
@@ -596,146 +720,17 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
                 os.remove(p)
     os.makedirs(out, exist_ok=True)
     tools = lock["tools"]
-    exe = ".exe" if plat.startswith("windows") else ""
-    versions = {}
-
-    ff = tools["ffmpeg"]
-    a = ff["assets"][plat]
-    path = download(a["url"], os.path.join(cache, a["name"]), a["sha256"])
-    install_ffmpeg(ff, plat, path, out)
-    versions["ffmpeg"] = {
-        "version": ff["version"],
-        "url": a["url"],
-        "sha256": a["sha256"],
-        "license": ff["license"],
-        "source": ff["source"],
+    versions = {
+        **_main_tools(tools, plat, cache, out),
+        **_extra_tools(tools, plat, cache, out),
+        **_data_files(tools, cache, out),
     }
-
-    yt = tools["yt-dlp"]
-    a = yt["assets"][plat]
-    path = download(a["url"], os.path.join(cache, f"{yt['version']}-{a['name']}"), a["sha256"])
-    install_single(path, out, "yt-dlp" + exe)
-    fetch_licence_texts("yt-dlp", yt["license_urls"], out)
-    versions["yt-dlp"] = {
-        "version": yt["version"],
-        "url": a["url"],
-        "sha256": a["sha256"],
-        "license": yt["license"],
-    }
-
-    dn = tools["deno"]
-    a = dn["assets"][plat]
-    path = download(a["url"], os.path.join(cache, f"{dn['version']}-{a['name']}"), a["sha256"])
-    install_single(path, out, "deno" + exe, member_suffix="deno" + exe)
-    fetch_licence_texts("deno", dn["license_urls"], out)
-    versions["deno"] = {
-        "version": dn["version"],
-        "url": a["url"],
-        "sha256": a["sha256"],
-        "license": dn["license"],
-    }
-
-    fs = tools.get("fluidsynth", {})
-    if plat in fs.get("assets", {}):
-        a = fs["assets"][plat]
-        path = download(a["url"], os.path.join(cache, a["name"]), a["sha256"])
-        install_fluidsynth(path, out)
-        fetch_licence_texts("fluidsynth", fs["license_urls"], out)
-        versions["fluidsynth"] = {
-            "version": fs["version"],
-            "url": a["url"],
-            "sha256": a["sha256"],
-            "license": fs["license"],
-        }
-
-    wh = tools.get("whisper", {})
-    if plat in wh.get("assets", {}):
-        a = wh["assets"][plat]
-        path = download(a["url"], os.path.join(cache, f"{wh['version']}-{a['name']}"), a["sha256"])
-        install_whisper(path, out)
-        fetch_licence_texts("whisper", wh["license_urls"], out)
-        versions["whisper.cpp"] = {
-            "version": wh["version"],
-            "url": a["url"],
-            "sha256": a["sha256"],
-            "license": wh["license"],
-        }
-
-    sf = tools.get("soundfont", {})
-    a = sf.get("assets", {}).get("any")
-    if a:
-        path = download(a["url"], os.path.join(cache, f"{sf['version']}-{a['name']}"), a["sha256"])
-        os.makedirs(os.path.join(out, "soundfonts"), exist_ok=True)
-        shutil.copyfile(path, os.path.join(out, "soundfonts", a["name"]))
-        fetch_licence_texts("generaluser-gs", sf["license_urls"], out)
-        versions["GeneralUser GS"] = {
-            "version": sf["version"],
-            "url": a["url"],
-            "sha256": a["sha256"],
-            "license": sf["license"],
-        }
-
-    sh = tools.get("shaders", {})
-    for name, a in sh.get("assets", {}).get("any", {}).items():
-        path = download(
-            a["url"], os.path.join(cache, "shaders", f"{a['sha256'][:12]}-{name}"), a["sha256"]
-        )
-        os.makedirs(os.path.join(out, "shaders"), exist_ok=True)
-        shutil.copyfile(path, os.path.join(out, "shaders", name))
-        versions[f"shader {name}"] = {
-            "version": sh["version"],
-            "url": a["url"],
-            "sha256": a["sha256"],
-            "license": a["license"],
-        }
-    if sh:
-        fetch_licence_texts("shaders", sh.get("license_urls", []), out)
-
     with open(os.path.join(out, "VERSIONS.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump(
             {"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2
         )
         fh.write("\n")
-
-    # Smoke-test what we can run on this machine.
-    host = (
-        "windows-x64"
-        if os.name == "nt"
-        else "linux-x64"
-        if sys.platform.startswith("linux")
-        else ""
-    )
-    if host == plat:
-        for tool, args in (
-            ("ffmpeg", ["-version"]),
-            ("ffprobe", ["-version"]),
-            ("yt-dlp", ["--version"]),
-            ("deno", ["--version"]),
-            ("whisper-cli", ["--help"]),
-        ):
-            if tool == "whisper-cli" and not os.path.isdir(os.path.join(out, "whisper")):
-                continue
-            folder = (
-                os.path.join(out, "ffmpeg", "bin")
-                if tool.startswith("ff")
-                else os.path.join(out, "whisper")
-                if tool == "whisper-cli"
-                else out
-            )
-            r = subprocess.run(
-                [os.path.join(folder, tool + exe), *args],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            first = (r.stdout or r.stderr).splitlines()[:1]
-            print(
-                f"  ok      {tool:<8} {first[0] if first else '?'}"
-                if r.returncode == 0
-                else f"  FAILED  {tool}: {r.stderr[:200]}"
-            )
-            if r.returncode != 0:
-                raise SystemExit(1)
+    _smoke_test(plat, out)
 
 
 def fetch_sources(lock: dict, dest: str) -> None:

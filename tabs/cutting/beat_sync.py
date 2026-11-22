@@ -204,6 +204,10 @@ class BeatSyncCutterTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, cl = self._build_header()
+        self._build_output(body, cl)
+
+    def _build_header(self):
         self.make_header(
             self, t("tab.beat_sync_cutter"), "Music montages that cut on the beat.", icon="🥁"
         )
@@ -265,6 +269,9 @@ class BeatSyncCutterTab(BaseTab):
 
         cl = tk.LabelFrame(body, text="  Clips  ", padx=px(12), pady=px(6))
         cl.pack(fill="x", padx=px(20), pady=px(4))
+        return body, cl
+
+    def _build_output(self, body, cl):
         top = tk.Frame(cl)
         top.pack(fill="x")
         self.listbox = tk.Listbox(top, height=6)

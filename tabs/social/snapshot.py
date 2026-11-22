@@ -57,6 +57,11 @@ class SnapshotTab(BaseTab):
 
     # ── UI ────────────────────────────────────────────────────────────
     def _build_ui(self):
+        body, row = self._build_header()
+        adj, pic = self._build_picture(body, row)
+        self._build_sharpen(adj, body, pic)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.snapshot"),
@@ -118,6 +123,9 @@ class SnapshotTab(BaseTab):
         self.pos_lbl.pack(side="left", padx=px(12, 0))
         tk.Label(row, text="Go to:").pack(side="left", padx=px(16, 4))
         self.goto_var = tk.StringVar()
+        return body, row
+
+    def _build_picture(self, body, row):
         goto = tk.Entry(row, textvariable=self.goto_var, width=13, relief="flat")
         goto.pack(side="left")
         goto.bind("<Return>", lambda _e: self._goto())
@@ -179,6 +187,9 @@ class SnapshotTab(BaseTab):
         adj = tk.Frame(pic)
         adj.pack(fill="x", pady=px(8, 0))
         self.size_var = tk.StringVar(value=SIZES["own"])
+        return adj, pic
+
+    def _build_sharpen(self, adj, body, pic):
         self.sharpen_var = tk.StringVar(value=SHARPEN[0.0])
         self.denoise_var = tk.StringVar(value=DENOISE[0])
         for label, var, values, width in (

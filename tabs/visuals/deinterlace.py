@@ -136,12 +136,14 @@ class DeinterlaceTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "progressive"))
 
+    def _show_filter(self):
+        self._job = None
+        self.compare.set_filter(self._chain())
+
     def _changed(self):
         if self._job is not None:
             self.after_cancel(self._job)
-        self._job = self.after(
-            250, lambda: (setattr(self, "_job", None), self.compare.set_filter(self._chain()))
-        )
+        self._job = self.after(250, self._show_filter)
 
     def _render(self):
         src = self.src_row.path

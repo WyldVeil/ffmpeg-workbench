@@ -8,6 +8,7 @@ import contextlib
 import logging
 import os
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox
 
 from core import ffmpeg as ff
@@ -114,6 +115,12 @@ class TrimmerTab(BaseTab):
         self._apply_typed_times()
 
     def _build_ui(self):
+        mk = self._build_src()
+        r3 = self._build_start_ent(mk)
+        bf, prev_btn = self._build_scrub(r3)
+        self._build_render(bf, prev_btn)
+
+    def _build_src(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
@@ -175,7 +182,14 @@ class TrimmerTab(BaseTab):
         self.preview.pack(side="right", anchor="n", padx=px(12, 0))
         self._preview_soon = _ui.debounce(self, 90, lambda: self.preview.show(self._preview_t))
         self._preview_t = 0.0
+        return mk
 
+    def _mark_here(self, var):
+        """Set a mark (start or end) to the scrubber's position."""
+        var.set(fmt_time(self._scrub.get()))
+        self._apply_typed_times()
+
+    def _build_start_ent(self, mk):
         r1 = tk.Frame(mk)
         r1.pack(fill="x", pady=px(2))
         tk.Label(
@@ -193,9 +207,7 @@ class TrimmerTab(BaseTab):
             text=t("trimmer.set_to_preview_start"),
             bg=CLR["panel"],
             fg="white",
-            command=lambda: (
-                self._start_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()
-            ),
+            command=partial(self._mark_here, self._start_var),
         ).pack(side="left", padx=px(4))
         tk.Label(r1, text=t("trimmer.start_handle_hint"), fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(
             side="left"
@@ -218,9 +230,7 @@ class TrimmerTab(BaseTab):
             text=t("trimmer.set_to_preview_end"),
             bg=CLR["panel"],
             fg="white",
-            command=lambda: (
-                self._end_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()
-            ),
+            command=partial(self._mark_here, self._end_var),
         ).pack(side="left", padx=px(4))
         tk.Label(r2, text=t("trimmer.end_handle_hint"), fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(
             side="left"
@@ -243,6 +253,9 @@ class TrimmerTab(BaseTab):
             fg="white",
             command=self._preview_at_scrub,
         ).pack(side="right", padx=px(8))
+        return r3
+
+    def _build_scrub(self, r3):
         self._scrub_lbl = tk.Label(
             r3, text="00:00.00", fg=CLR["accent"], font=(MONO_FONT, 10), width=9
         )
@@ -305,6 +318,9 @@ class TrimmerTab(BaseTab):
             width=28,
             command=self._preview_selection,
         )
+        return bf, prev_btn
+
+    def _build_render(self, bf, prev_btn):
         prev_btn.pack(side="left", padx=px(8))
         add_tooltip(prev_btn, "Preview the selected region in ffplay (Space)")
         self.btn_render = tk.Button(
@@ -653,6 +669,112 @@ class TrimmerTab(BaseTab):
         self.preview_proc = _proc.spawn(cmd)
 
     # ─── Trim / Export ────────────────────────────────────────────────────
+    def _marks(self) -> tuple[float, float] | None:
+        """(start, end) of the part to keep; None after saying the marks are wrong."""
+        try:
+            ss, end = parse_time(self._start_var.get()), parse_time(self._end_var.get())
+        except ValueError:
+            ss, end = 0.0, 0.0
+        if end - ss <= 0:
+            messagebox.showerror(
+                t("trimmer.invalid_range_error"), t("trimmer.invalid_range_message"), parent=self
+            )
+            return None
+        return ss, end
+
+    def _copy_cmd(self, ss: float, end: float, out: str, container: str) -> tuple[list[str], float]:
+        """Lossless (stream copy) from the keyframe at or before *ss*."""
+        ffmpeg = ff.ffmpeg_path()
+        # Lossless: input-seek to the keyframe at/before the mark so video
+        # and audio both start at 0 (output-side -ss with -c copy left a
+        # second of missing video at the start).
+        k = keyframe_at_or_before(self.file_path, ss)
+        k = ss if k is None else k
+        if ss - k > 0.01:
+            self.log_tagged(
+                self.console,
+                t("trimmer.snapped_note")
+                if t("trimmer.snapped_note") != "trimmer.snapped_note"
+                else f"\u2139 Lossless cuts must start on a keyframe: starting at {fmt_time(k)} "
+                f"({ss - k:.2f} s before your mark). Untick 'stream copy' for a frame-exact cut.",
+                "info",
+            )
+        dur = end - k
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-ss",
+            ff.ts(k),
+            "-i",
+            self.file_path,
+            "-t",
+            ff.ts(dur),
+            "-map",
+            "0:v:0?",
+            "-map",
+            "0:a?",
+            "-c",
+            "copy",
+            "-sn",
+            "-dn",
+            "-map_metadata",
+            "0",
+            "-map_chapters",
+            "-1",
+        ]
+        if container in ("mp4", "m4v", "mov"):
+            cmd += ["-movflags", "+faststart"]
+        cmd.append(out)
+        self.log(
+            self.console,
+            f"Lossless trim: {fmt_time(k)} \u2013 {fmt_time(end)}  ({fmt_time(dur)})",
+        )
+        return cmd, dur
+
+    def _encode_cmd(
+        self, ss: float, end: float, out: str, container: str
+    ) -> tuple[list[str], float]:
+        """Frame-exact: re-encoded with H.264 at the chosen CRF."""
+        ffmpeg = ff.ffmpeg_path()
+        from core import encoders as enc
+
+        venc = enc.video("h264", "high", speed="balanced", hw="off", container=container or "mp4")
+        crf = (self._crf_var.get() or "18").strip()
+        vargs = list(venc.args)
+        if "-crf" in vargs and crf.replace(".", "", 1).isdigit():
+            vargs[vargs.index("-crf") + 1] = crf
+        dur = end - ss
+        info = ff.try_probe(self.file_path)
+        has_audio = bool(info and info.has_audio)
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-ss",
+            ff.ts(ss),
+            "-i",
+            self.file_path,
+            "-t",
+            ff.ts(dur),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-sn",
+            "-dn",
+            *vargs,
+            *(enc.audio("aac", "192k", container=container or "mp4") if has_audio else []),
+            "-map_metadata",
+            "0",
+            "-map_chapters",
+            "-1",
+            out,
+        ]
+        self.log(
+            self.console,
+            f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}",
+        )
+        return cmd, dur
+
     def _run_trim(self):
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
@@ -662,19 +784,10 @@ class TrimmerTab(BaseTab):
             self._apply_typed_times()
         except Exception:
             logger.debug("_run_trim: best-effort step failed", exc_info=True)
-        try:
-            ss = parse_time(self._start_var.get())
-            end = parse_time(self._end_var.get())
-        except ValueError:
-            messagebox.showerror(
-                t("trimmer.invalid_range_error"), t("trimmer.invalid_range_message"), parent=self
-            )
+        marks = self._marks()
+        if marks is None:
             return
-        if end - ss <= 0:
-            messagebox.showerror(
-                t("trimmer.invalid_range_error"), t("trimmer.invalid_range_message"), parent=self
-            )
-            return
+        ss, end = marks
         out = self._out_var.get().strip() or self._default_out(self.file_path)
         default_ext = os.path.splitext(self.file_path)[1] if self._copy_mode.get() else ".mp4"
         out = self.confirm_output(out, [self.file_path], default_ext=default_ext or ".mp4")
@@ -684,93 +797,9 @@ class TrimmerTab(BaseTab):
         with contextlib.suppress(tk.TclError):
             self.console.delete("1.0", tk.END)
 
-        ffmpeg = ff.ffmpeg_path()
         container = os.path.splitext(out)[1].lstrip(".").lower()
-        if self._copy_mode.get():
-            # Lossless: input-seek to the keyframe at/before the mark so video
-            # and audio both start at 0 (output-side -ss with -c copy left a
-            # second of missing video at the start).
-            k = keyframe_at_or_before(self.file_path, ss)
-            k = ss if k is None else k
-            if ss - k > 0.01:
-                self.log_tagged(
-                    self.console,
-                    t("trimmer.snapped_note")
-                    if t("trimmer.snapped_note") != "trimmer.snapped_note"
-                    else f"\u2139 Lossless cuts must start on a keyframe: starting at {fmt_time(k)} "
-                    f"({ss - k:.2f} s before your mark). Untick 'stream copy' for a frame-exact cut.",
-                    "info",
-                )
-            dur = end - k
-            cmd = [
-                ffmpeg,
-                "-y",
-                "-ss",
-                ff.ts(k),
-                "-i",
-                self.file_path,
-                "-t",
-                ff.ts(dur),
-                "-map",
-                "0:v:0?",
-                "-map",
-                "0:a?",
-                "-c",
-                "copy",
-                "-sn",
-                "-dn",
-                "-map_metadata",
-                "0",
-                "-map_chapters",
-                "-1",
-            ]
-            if container in ("mp4", "m4v", "mov"):
-                cmd += ["-movflags", "+faststart"]
-            cmd.append(out)
-            self.log(
-                self.console,
-                f"Lossless trim: {fmt_time(k)} \u2013 {fmt_time(end)}  ({fmt_time(dur)})",
-            )
-        else:
-            from core import encoders as enc
-
-            venc = enc.video(
-                "h264", "high", speed="balanced", hw="off", container=container or "mp4"
-            )
-            crf = (self._crf_var.get() or "18").strip()
-            vargs = list(venc.args)
-            if "-crf" in vargs and crf.replace(".", "", 1).isdigit():
-                vargs[vargs.index("-crf") + 1] = crf
-            dur = end - ss
-            info = ff.try_probe(self.file_path)
-            has_audio = bool(info and info.has_audio)
-            cmd = [
-                ffmpeg,
-                "-y",
-                "-ss",
-                ff.ts(ss),
-                "-i",
-                self.file_path,
-                "-t",
-                ff.ts(dur),
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
-                "-sn",
-                "-dn",
-                *vargs,
-                *(enc.audio("aac", "192k", container=container or "mp4") if has_audio else []),
-                "-map_metadata",
-                "0",
-                "-map_chapters",
-                "-1",
-                out,
-            ]
-            self.log(
-                self.console,
-                f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}",
-            )
+        build = self._copy_cmd if self._copy_mode.get() else self._encode_cmd
+        cmd, dur = build(ss, end, out, container)
         self.run_ffmpeg(
             cmd,
             self.console,

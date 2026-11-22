@@ -155,13 +155,13 @@ overwritten.
 
 | Gate | Where | Rule |
 |---|---|---|
-| ruff | CI | the book-recommended rule set; remaining debt is a named list in `pyproject.toml` that may only shrink |
+| ruff | CI | the book-recommended rule set with **no exceptions**: every function under complexity 15, 8 parameters and 50 statements; `ruff format` is the one style |
 | pyright | CI (`scripts/check_types.py`) | **zero errors**: standard mode everywhere, **strict** for the foundation modules listed in `pyrightconfig.json`; the baseline (`tests/typing_baseline.json`) is empty, so any new error fails CI |
-| architecture | `tests/test_architecture.py` | layers, process gateway, task service, no hidden imports |
+| architecture | `tests/test_architecture.py` | layers (no engine exceptions), process gateway, task service and its pools, pages read times through `tabs/kit/time_fields.py`, no function over 120 lines, lambdas do one thing, no hidden imports |
 | settings | `tests/test_settings_keys.py` | every key the code reads is declared |
 | performance | `tests/test_perf.py` | no program on the UI thread; start-up budget; no heavy imports |
 | properties | `tests/test_properties.py` | Hypothesis: Timecode round-trips and rounding, tool-id parsing, a stateful model of the settings store |
-| behaviour | the rest of `tests/` | ~750 tests, most driving the real window headlessly (`tests/gui_harness.py`, Xvfb) with real FFmpeg on generated media |
+| behaviour | the rest of `tests/` | ~770 tests, most driving the real window headlessly (`tests/gui_harness.py`, Xvfb) with real FFmpeg on generated media |
 
 ## 7. Decisions, and what was deliberately not done
 

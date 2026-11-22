@@ -22,6 +22,13 @@ structure they protect. **(enforced)** means a test or CI checks it.
   **(enforced: SLF001)**; no `__dunder` mangling.
 * **No compatibility shims** inside the codebase: when a name changes,
   change every caller (we own them all).
+* **Small functions.** Complexity 15, 8 parameters, 50 statements and 120
+  lines at most **(enforced, no exceptions)**. Past that, split into named
+  steps, group the options into a spec dataclass, or move the logic to
+  `core/ops` - never add an ignore.
+* **A lambda is one step** (`lambda _e: self._changed()`). Anything more -
+  several actions, an if/else of actions, several lines - gets a name: a
+  method, `functools.partial`, or `widget.after(0, fn, *args)` **(enforced)**.
 
 ## Errors and logging
 
@@ -66,6 +73,9 @@ structure they protect. **(enforced)** means a test or CI checks it.
 * Offer abilities through the protocols in `tabs/kit/contracts.py`
   (`transport()`, `mark_in()`, `render()`, `load_file()`...). The window
   never looks at anything else.
+* Times typed by a person go through `MomentPicker` / `RangePicker`
+  (`tabs/kit/time_fields.py`): one parser, one error sentence, the 🎞 frame
+  picker and the ◉ "use the preview's frame" button for free **(enforced)**.
 * Sizes: every pixel value goes through `px()`; fonts are in points. Text:
   through `t()` (locale/), display only - never into an FFmpeg argument.
 * Pages never import `shell/` or `main` **(enforced)**; use `self.shell()`.

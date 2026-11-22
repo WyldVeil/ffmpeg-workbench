@@ -109,6 +109,17 @@ class MIDIfierTab(BaseTab):
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        self._build_header()
+        self._build_dependencies_status()
+        self._build_source()
+        self._build_pipeline_overview()
+        opt_sec, r2 = self._build_options()
+        self._build_save_midi(opt_sec, r2)
+        self._build_output()
+        self._build_run_button()
+        self._build_console()
+
+    def _build_header(self):
         self.make_header(
             self, t("tab.midifier"), subtitle=t("midifier.subtitle"), icon="\U0001f3b9"
         )
@@ -125,6 +136,8 @@ class MIDIfierTab(BaseTab):
         canvas.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
+    def _build_dependencies_status(self):
+        """Dependencies status."""
         # ── Dependencies status ──────────────────────────────────────────
         dep_sec = self.make_section(self._inner, title=t("midifier.section.deps"))
         self._dep_lbl = tk.Label(
@@ -149,12 +162,16 @@ class MIDIfierTab(BaseTab):
         )
         add_tooltip(self._dep_btn, "Use any General MIDI SoundFont (.sf2 / .sf3) you have.")
 
+    def _build_source(self):
+        """Source."""
         # ── Source ───────────────────────────────────────────────────────
         src_sec = self.make_section(self._inner, title=t("midifier.section.source"))
         self.src_var = tk.StringVar()
         row = self.make_file_row(src_sec, t("midifier.input_file"), self.src_var, self._browse_src)
         row.pack(fill="x", pady=px(4))
 
+    def _build_pipeline_overview(self):
+        """Pipeline overview."""
         # ── Pipeline overview ────────────────────────────────────────────
         pipe_sec = self.make_section(self._inner, title=t("midifier.section.pipeline"))
         steps = [
@@ -188,6 +205,8 @@ class MIDIfierTab(BaseTab):
                 wraplength=px(500),
             ).pack(fill="x")
 
+    def _build_options(self):
+        """Options."""
         # ── Options ──────────────────────────────────────────────────────
         opt_sec = self.make_section(self._inner, title=t("midifier.section.options"))
 
@@ -256,6 +275,9 @@ class MIDIfierTab(BaseTab):
             state="readonly",
             width=8,
         ).pack(side="left", padx=px(8))
+        return opt_sec, r2
+
+    def _build_save_midi(self, opt_sec, r2):
         tk.Label(r2, text="Hz", font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
 
         r3 = tk.Frame(opt_sec, bg=CLR["bg"])
@@ -319,12 +341,16 @@ class MIDIfierTab(BaseTab):
             r5, text=t("midifier.min_note_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left", padx=px(4))
 
+    def _build_output(self):
+        """Output."""
         # ── Output ───────────────────────────────────────────────────────
         out_sec = self.make_section(self._inner, title=t("midifier.section.output"))
         self.out_var = tk.StringVar()
         out_row = self.make_file_row(out_sec, t("midifier.save_as"), self.out_var, self._browse_out)
         out_row.pack(fill="x", pady=px(4))
 
+    def _build_run_button(self):
+        """Run button."""
         # ── Run button ───────────────────────────────────────────────────
         btn_f = tk.Frame(self._inner, bg=CLR["bg"])
         btn_f.pack(fill="x", pady=px(12, 6))
@@ -334,6 +360,8 @@ class MIDIfierTab(BaseTab):
         self.btn_render.pack(pady=px(4))
         add_tooltip(self.btn_render, t("midifier.run_tooltip"))
 
+    def _build_console(self):
+        """Console."""
         # ── Console ──────────────────────────────────────────────────────
         cf = tk.Frame(self._inner, bg=CLR["bg"])
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 14))

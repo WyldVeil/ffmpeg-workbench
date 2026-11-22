@@ -44,6 +44,11 @@ class FreezeFrameTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, opt = self._build_header()
+        self._build_output(body, opt)
+        self._build_render(body)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.freeze_frame"),
@@ -81,6 +86,9 @@ class FreezeFrameTab(BaseTab):
                 row, text=label, value=key, variable=self.mode_var, width=18, anchor="w"
             ).pack(side="left")
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        return body, opt
+
+    def _build_output(self, body, opt):
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="At:").pack(side="left")
@@ -118,6 +126,8 @@ class FreezeFrameTab(BaseTab):
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.src_row.path, "freeze"),
         )
+
+    def _build_render(self, body):
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(
             body,

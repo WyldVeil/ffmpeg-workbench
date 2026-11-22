@@ -243,6 +243,14 @@ class KaraokeTab(BaseTab):
 
     # ─── UI ───────────────────────────────────────────────────────────────────
     def _build_ui(self):
+        self._build_header()
+        self._build_whisper_status_banner()
+        self._build_source()
+        self._build_settings()
+        self._build_output()
+        self._build_action_buttons()
+
+    def _build_header(self):
         # Header
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
@@ -265,6 +273,8 @@ class KaraokeTab(BaseTab):
         ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
+    def _build_whisper_status_banner(self):
+        """Whisper status banner."""
         # ── Whisper status banner ──────────────────────────────────────────
         self._banner = tk.Frame(self, bg="#1A2A1A", relief="groove", bd=px(1))
         self._banner.pack(fill="x", padx=px(16), pady=px(8, 4))
@@ -285,6 +295,8 @@ class KaraokeTab(BaseTab):
         ).pack(side="right", padx=px(8), pady=px(4))
         self.after(120, self._check_whisper)
 
+    def _build_source(self):
+        """Source."""
         # ── Source ────────────────────────────────────────────────────────
         r1 = tk.Frame(self)
         r1.pack(fill="x", padx=px(16), pady=px(8))
@@ -303,6 +315,8 @@ class KaraokeTab(BaseTab):
             r1, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat"
         ).pack(side="left")
 
+    def _build_settings(self):
+        """Settings."""
         # ── Settings ──────────────────────────────────────────────────────
         sf = tk.LabelFrame(
             self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10)
@@ -387,6 +401,8 @@ class KaraokeTab(BaseTab):
             variable=self._rm_vocals,
         ).pack(side="left")
 
+    def _build_output(self):
+        """Output."""
         # ── Output ────────────────────────────────────────────────────────
         ro = tk.Frame(self)
         ro.pack(fill="x", padx=px(16), pady=px(6))
@@ -401,6 +417,8 @@ class KaraokeTab(BaseTab):
             ro, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
         ).pack(side="left")
 
+    def _build_action_buttons(self):
+        """Action buttons."""
         # ── Action buttons ─────────────────────────────────────────────────
         btn_row = tk.Frame(self)
         btn_row.pack(pady=px(8))
@@ -464,6 +482,10 @@ class KaraokeTab(BaseTab):
                 fg=CLR["fgdim"],
             )
 
+    def _model_ready(self, _path):
+        self._log("✅  Model ready.")
+        self._check_whisper()
+
     def _install_whisper(self):
         from core import whisper
 
@@ -471,7 +493,7 @@ class KaraokeTab(BaseTab):
         self._log(f"Downloading {whisper.MODELS[key].label}…")
         tasks.submit(
             partial(whisper.download_model, key),
-            on_done=lambda _p: (self._log("✅  Model ready."), self._check_whisper()),
+            on_done=self._model_ready,
             on_error=lambda e: self._log(f"❌  Download failed: {e}"),
             name="KaraokeModel",
         )
@@ -493,14 +515,12 @@ class KaraokeTab(BaseTab):
         if p:
             self._out_var.set(p)
 
+    def _append_log(self, msg):
+        self.console.insert(tk.END, msg + "\n")
+        self.console.see(tk.END)
+
     def _log(self, msg):
-        self.after(
-            0,
-            lambda m=msg: [
-                self.console.insert(tk.END, m + "\n"),
-                self.console.see(tk.END),
-            ],
-        )
+        self.after(0, self._append_log, msg)
 
     def _status(self, msg):
         self.after(0, lambda m=msg: self._prog_lbl.config(text=m))
@@ -586,13 +606,15 @@ class KaraokeTab(BaseTab):
             max_len=40,
             formats=("json",),
         )
+
+        def progress(line):
+            f = whisper.parse_progress(line)
+            if f is not None:
+                ctx.progress(0.25 + 0.45 * f)
+
         res = ff.run(
             cmd,
-            on_line=lambda line: (
-                ctx.progress(0.25 + 0.45 * f)
-                if (f := whisper.parse_progress(line)) is not None
-                else None
-            ),
+            on_line=progress,
             cancel=ctx.cancelled,
         )
         if res.cancelled:

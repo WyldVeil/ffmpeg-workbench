@@ -12,6 +12,7 @@ Bring back detail with a before/after view:
 from __future__ import annotations
 
 import tkinter as tk
+from functools import partial
 from tkinter import ttk
 
 from core.i18n import t
@@ -35,6 +36,10 @@ class SharpenTab(BaseTab):
         self.src_var = tk.StringVar()
         self._job = None
         self._build_ui()
+
+    def _preset(self, value):
+        self.amount_var.set(value)
+        self._changed()
 
     def _build_ui(self):
         self.make_header(
@@ -91,7 +96,7 @@ class SharpenTab(BaseTab):
                 pf,
                 text=name,
                 relief="flat",
-                command=lambda v=val: (self.amount_var.set(v), self._changed()),
+                command=partial(self._preset, val),
             ).pack(side="left", padx=px(2))
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
@@ -135,13 +140,15 @@ class SharpenTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "sharp"))
 
+    def _show_filter(self):
+        self._job = None
+        self.compare.set_filter(self._chain())
+
     def _changed(self):
         self.radius_scale.config(state="normal" if self._method() == "unsharp" else "disabled")
         if self._job is not None:
             self.after_cancel(self._job)
-        self._job = self.after(
-            250, lambda: (setattr(self, "_job", None), self.compare.set_filter(self._chain()))
-        )
+        self._job = self.after(250, self._show_filter)
 
     def _render(self):
         src = self.src_row.path

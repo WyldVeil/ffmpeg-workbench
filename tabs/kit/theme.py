@@ -12,7 +12,7 @@ import logging
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
-from typing import cast
+from typing import NamedTuple, cast
 
 from core.scaling import px
 from core.skins import UI_FONT, Skin, get_skin, load_skin_name
@@ -23,141 +23,170 @@ logger = logging.getLogger("crossfader.kit.theme")
 # ── Global tk option cascading ────────────────────────────────────────────────
 
 
+class _Colours(NamedTuple):
+    c: str  # content background
+    fg: str  # text
+    i_bg: str  # input background
+    i_fg: str  # input text
+    bdr: str  # borders
+    pnl: str  # panels
+    acc: str  # accent
+
+
+def _window_options(skin: Skin, k: _Colours) -> dict[str, object]:
+    return {
+        # Frame
+        "*Background": k.c,
+        "*Foreground": k.fg,
+        "*Font": f"{{{UI_FONT}}} 10",
+        "*activeBackground": k.pnl,
+        "*activeForeground": k.fg,
+        "*disabledForeground": k.bdr,
+        # Label
+        "*Label.Background": k.c,
+        "*Label.Foreground": k.fg,
+        "*Label.BorderWidth": "0",
+        # LabelFrame
+        "*LabelFrame.Background": k.c,
+        "*LabelFrame.Foreground": skin["fgdim"],
+        "*LabelFrame.Relief": "solid",
+        "*LabelFrame.BorderWidth": px(1),
+        "*LabelFrame.Font": f"{{{UI_FONT}}} 9 bold",
+        # Canvas
+        "*Canvas.Background": k.c,
+        "*Canvas.HighlightThickness": "0",
+        # Menu
+        "*Menu.Background": k.pnl,
+        "*Menu.Foreground": k.fg,
+        "*Menu.activeBackground": k.acc,
+        "*Menu.activeForeground": "#FFFFFF",
+        "*Menu.Relief": "flat",
+        "*Menu.BorderWidth": px(1),
+        "*Menu.TearOff": "0",
+    }
+
+
+def _inputs_options(skin: Skin, k: _Colours) -> dict[str, object]:
+    return {
+        # Entry
+        "*Entry.Background": k.i_bg,
+        "*Entry.Foreground": k.i_fg,
+        "*Entry.insertBackground": k.i_fg,
+        "*Entry.selectBackground": k.acc,
+        "*Entry.selectForeground": "#FFFFFF",
+        "*Entry.Relief": "flat",
+        "*Entry.BorderWidth": px(1),
+        "*Entry.HighlightThickness": "0",
+        # Spinbox
+        "*Spinbox.Background": k.i_bg,
+        "*Spinbox.Foreground": k.i_fg,
+        "*Spinbox.insertBackground": k.i_fg,
+        "*Spinbox.selectBackground": k.acc,
+        "*Spinbox.Relief": "flat",
+        "*Spinbox.buttonBackground": k.pnl,
+        "*Spinbox.HighlightThickness": "0",
+        # Listbox
+        "*Listbox.Background": k.i_bg,
+        "*Listbox.Foreground": k.i_fg,
+        "*Listbox.selectBackground": k.acc,
+        "*Listbox.selectForeground": "#FFFFFF",
+        "*Listbox.Relief": "flat",
+        "*Listbox.BorderWidth": "0",
+        "*Listbox.HighlightThickness": "0",
+        # Text
+        "*Text.Background": skin["console_bg"],
+        "*Text.Foreground": skin["console_fg"],
+        "*Text.insertBackground": skin["console_fg"],
+        "*Text.selectBackground": k.acc,
+        "*Text.Relief": "flat",
+        "*Text.BorderWidth": "0",
+        "*Text.HighlightThickness": "0",
+    }
+
+
+def _buttons_options(skin: Skin, k: _Colours) -> dict[str, object]:
+    return {
+        # Button
+        "*Button.Background": k.pnl,
+        "*Button.Foreground": k.fg,
+        "*Button.activeBackground": skin["sb_hover"],
+        "*Button.activeForeground": "#FFFFFF",
+        "*Button.Relief": "flat",
+        "*Button.BorderWidth": "0",
+        "*Button.Cursor": "hand2",
+        "*Button.HighlightThickness": "0",
+        # Checkbutton
+        "*Checkbutton.Background": k.c,
+        "*Checkbutton.Foreground": k.fg,
+        "*Checkbutton.selectColor": k.pnl,
+        "*Checkbutton.activeBackground": k.c,
+        "*Checkbutton.activeForeground": k.acc,
+        "*Checkbutton.HighlightThickness": "0",
+        # Radiobutton
+        "*Radiobutton.Background": k.c,
+        "*Radiobutton.Foreground": k.fg,
+        "*Radiobutton.selectColor": k.acc,
+        "*Radiobutton.activeBackground": k.c,
+        "*Radiobutton.activeForeground": k.acc,
+        "*Radiobutton.HighlightThickness": "0",
+    }
+
+
+def _sliders_options(skin: Skin, k: _Colours) -> dict[str, object]:
+    return {
+        # Scale
+        # trough must be clearly lighter for the slider to show at all.
+        "*Scale.Background": k.c,
+        "*Scale.Foreground": k.fg,
+        # option *names* are case-sensitive ("troughColor"); its class is
+        # "Background", so without this the trough took the background colour
+        "*Scale.troughColor": _blend(k.bdr, k.fg, 0.35),
+        "*Scale.activeBackground": k.acc,
+        "*Scale.SliderRelief": "flat",
+        "*Scale.HighlightThickness": "0",
+        "*Scale.BorderWidth": "0",
+        # Tk's own default sizes are in pixels: grow them on HiDPI screens
+        "*Scale.Width": px(15),
+        "*Scale.SliderLength": px(30),
+        "*Scale.Length": px(100),
+        "*Scrollbar.Width": px(11),
+        **{f"*{cls}.InsertWidth": px(2) for cls in ("Entry", "Spinbox", "Text")},
+    }
+
+
+def option_defaults(skin: Skin) -> dict[str, object]:
+    """Tk option-database defaults that give every classic Tk widget the skin's
+    colours (explicit widget settings still win)."""
+    colours = _Colours(
+        skin["content"],
+        skin["fg"],
+        skin.get("input_bg", "#222222"),
+        skin.get("input_fg", "#E2E2E2"),
+        skin.get("border", "#2C2C2C"),
+        skin["panel"],
+        skin["accent"],
+    )
+    return {
+        **_window_options(skin, colours),
+        **_inputs_options(skin, colours),
+        **_buttons_options(skin, colours),
+        **_sliders_options(skin, colours),
+    }
+
+
 def apply_default_options(app: tk.Tk, skin: Skin) -> None:
     """
-    Set tk option_add defaults so EVERY tk widget (in all 67 tabs) inherits
-    dark-theme colors without touching individual tab files.
+    Set tk option_add defaults so EVERY tk widget (in all the tools) inherits
+    the skin's colours without touching individual tab files.
     Called at startup BEFORE tabs are created, and again on skin switch.
     """
     try:
         app.option_clear()
-        P = "widgetDefault"  # lowest priority - explicit widget settings override
         # option_add's stub leaves the value untyped: give it a typed name once
         option_add = app.option_add  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         add = cast("Callable[[str, object, str], None]", option_add)
-        c = skin["content"]
-        fg = skin["fg"]
-        i_bg = skin.get("input_bg", "#222222")
-        i_fg = skin.get("input_fg", "#E2E2E2")
-        bdr = skin.get("border", "#2C2C2C")
-        pnl = skin["panel"]
-        acc = skin["accent"]
-
-        # Frame / generic background
-        add("*Background", c, P)
-        add("*Foreground", fg, P)
-        add("*Font", f"{{{UI_FONT}}} 10", P)
-        add("*activeBackground", pnl, P)
-        add("*activeForeground", fg, P)
-        add("*disabledForeground", bdr, P)
-
-        # Label
-        add("*Label.Background", c, P)
-        add("*Label.Foreground", fg, P)
-        add("*Label.BorderWidth", "0", P)
-
-        # LabelFrame
-        add("*LabelFrame.Background", c, P)
-        add("*LabelFrame.Foreground", skin["fgdim"], P)
-        add("*LabelFrame.Relief", "solid", P)
-        add("*LabelFrame.BorderWidth", px(1), P)
-        add("*LabelFrame.Font", f"{{{UI_FONT}}} 9 bold", P)
-
-        # Entry
-        add("*Entry.Background", i_bg, P)
-        add("*Entry.Foreground", i_fg, P)
-        add("*Entry.insertBackground", i_fg, P)
-        add("*Entry.selectBackground", acc, P)
-        add("*Entry.selectForeground", "#FFFFFF", P)
-        add("*Entry.Relief", "flat", P)
-        add("*Entry.BorderWidth", px(1), P)
-        add("*Entry.HighlightThickness", "0", P)
-
-        # Spinbox
-        add("*Spinbox.Background", i_bg, P)
-        add("*Spinbox.Foreground", i_fg, P)
-        add("*Spinbox.insertBackground", i_fg, P)
-        add("*Spinbox.selectBackground", acc, P)
-        add("*Spinbox.Relief", "flat", P)
-        add("*Spinbox.buttonBackground", pnl, P)
-        add("*Spinbox.HighlightThickness", "0", P)
-
-        # Button
-        add("*Button.Background", pnl, P)
-        add("*Button.Foreground", fg, P)
-        add("*Button.activeBackground", skin["sb_hover"], P)
-        add("*Button.activeForeground", "#FFFFFF", P)
-        add("*Button.Relief", "flat", P)
-        add("*Button.BorderWidth", "0", P)
-        add("*Button.Cursor", "hand2", P)
-        add("*Button.HighlightThickness", "0", P)
-
-        # Checkbutton
-        add("*Checkbutton.Background", c, P)
-        add("*Checkbutton.Foreground", fg, P)
-        add("*Checkbutton.selectColor", pnl, P)
-        add("*Checkbutton.activeBackground", c, P)
-        add("*Checkbutton.activeForeground", acc, P)
-        add("*Checkbutton.HighlightThickness", "0", P)
-
-        # Radiobutton
-        add("*Radiobutton.Background", c, P)
-        add("*Radiobutton.Foreground", fg, P)
-        add("*Radiobutton.selectColor", acc, P)
-        add("*Radiobutton.activeBackground", c, P)
-        add("*Radiobutton.activeForeground", acc, P)
-        add("*Radiobutton.HighlightThickness", "0", P)
-
-        # Scale (slider).  Tk draws the slider in the background colour, so the
-        # trough must be clearly lighter for the slider to show at all.
-        add("*Scale.Background", c, P)
-        add("*Scale.Foreground", fg, P)
-        # option *names* are case-sensitive ("troughColor"); its class is
-        # "Background", so without this the trough took the background colour
-        add("*Scale.troughColor", _blend(bdr, fg, 0.35), P)
-        add("*Scale.activeBackground", acc, P)
-        add("*Scale.SliderRelief", "flat", P)
-        add("*Scale.HighlightThickness", "0", P)
-        add("*Scale.BorderWidth", "0", P)
-        # Tk's own default sizes are in pixels: grow them on HiDPI screens
-        add("*Scale.Width", px(15), P)
-        add("*Scale.SliderLength", px(30), P)
-        add("*Scale.Length", px(100), P)
-        add("*Scrollbar.Width", px(11), P)
-        for cls in ("Entry", "Spinbox", "Text"):
-            add(f"*{cls}.InsertWidth", px(2), P)
-
-        # Listbox
-        add("*Listbox.Background", i_bg, P)
-        add("*Listbox.Foreground", i_fg, P)
-        add("*Listbox.selectBackground", acc, P)
-        add("*Listbox.selectForeground", "#FFFFFF", P)
-        add("*Listbox.Relief", "flat", P)
-        add("*Listbox.BorderWidth", "0", P)
-        add("*Listbox.HighlightThickness", "0", P)
-
-        # Text (used for console log areas)
-        add("*Text.Background", skin["console_bg"], P)
-        add("*Text.Foreground", skin["console_fg"], P)
-        add("*Text.insertBackground", skin["console_fg"], P)
-        add("*Text.selectBackground", acc, P)
-        add("*Text.Relief", "flat", P)
-        add("*Text.BorderWidth", "0", P)
-        add("*Text.HighlightThickness", "0", P)
-
-        # Canvas
-        add("*Canvas.Background", c, P)
-        add("*Canvas.HighlightThickness", "0", P)
-
-        # Menu
-        add("*Menu.Background", pnl, P)
-        add("*Menu.Foreground", fg, P)
-        add("*Menu.activeBackground", acc, P)
-        add("*Menu.activeForeground", "#FFFFFF", P)
-        add("*Menu.Relief", "flat", P)
-        add("*Menu.BorderWidth", px(1), P)
-        add("*Menu.TearOff", "0", P)
-
+        for pattern, value in option_defaults(skin).items():
+            add(pattern, value, "widgetDefault")  # lowest priority
     except Exception:
         logger.debug("apply_default_options: best-effort step failed", exc_info=True)
 

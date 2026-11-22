@@ -74,6 +74,11 @@ class FrameExtractorTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, opts, p = self._build_header()
+        self._build_every(opts, p)
+        self._build_dir(body, opts)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.frame_extractor"),
@@ -135,6 +140,9 @@ class FrameExtractorTab(BaseTab):
         p = self.panels["single"] = tk.Frame(opts)
         tk.Label(p, text="Time:").pack(side="left")
         self.moment = MomentPicker(p, value="0", width=14, on_change=self._time_typed)
+        return body, opts, p
+
+    def _build_every(self, opts, p):
         self.moment.pack(side="left", padx=px(6))
         tk.Label(
             p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"], font=(UI_FONT, 8)
@@ -197,6 +205,7 @@ class FrameExtractorTab(BaseTab):
             frow, variable=self.quality_var, from_=1, to=100, orient="horizontal", length=px(160)
         ).pack(side="left")
 
+    def _build_dir(self, body, opts):
         drow = tk.Frame(opts)
         drow.pack(fill="x", pady=px(6, 0))
         tk.Label(drow, text="Save to folder:", width=14, anchor="w").pack(side="left")

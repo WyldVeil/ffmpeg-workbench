@@ -11,7 +11,6 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import ffmpeg as ff
 from core.i18n import t
 from core.ops import batch as batch_ops
 from core.scaling import px
@@ -59,6 +58,13 @@ class BatchTab(BaseTab):
 
     # ─────────────────────────────────────────────────────────────────────
     def _build_ui(self):
+        self._build_header()
+        self._build_input_files()
+        self._build_operation()
+        self._build_output_folder()
+        self._build_controls()
+
+    def _build_header(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
@@ -80,6 +86,8 @@ class BatchTab(BaseTab):
         ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
+    def _build_input_files(self):
+        """Input files."""
         # ── Input files ───────────────────────────────────────────────────
         inp_lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(12), pady=px(8))
         inp_lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
@@ -117,6 +125,8 @@ class BatchTab(BaseTab):
         )
         self._count_lbl.pack()
 
+    def _build_operation(self):
+        """Operation."""
         # ── Operation ─────────────────────────────────────────────────────
         op_lf = tk.LabelFrame(
             self, text=f"  {t('batch.operation_section')}  ", padx=px(14), pady=px(10)
@@ -177,6 +187,8 @@ class BatchTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(side="left")
 
+    def _build_output_folder(self):
+        """Output folder."""
         # ── Output folder ─────────────────────────────────────────────────
         out_lf = tk.LabelFrame(self, text=t("section.output"), padx=px(14), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(4))
@@ -198,6 +210,8 @@ class BatchTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
+    def _build_controls(self):
+        """Controls."""
         # ── Controls ─────────────────────────────────────────────────────
         ctrl_f = tk.Frame(self)
         ctrl_f.pack(pady=px(8))
@@ -327,53 +341,12 @@ class BatchTab(BaseTab):
         files = self.input_files[:]
         taken = {os.path.normcase(os.path.abspath(f)) for f in files}
 
-        def work(_p, _c, ctx):
-            done, skipped, failed = 0, [], []
-            for i, src in enumerate(files):
-                ctx.span(i / len(files), (i + 1) / len(files))
-                ctx.log(f"[{i + 1}/{len(files)}] {os.path.basename(src)}")
-                try:
-                    info = ff.probe(src)
-                    plan = batch_ops.plan(op, info, src, out_dir, opts, taken)
-                    if isinstance(plan, str):
-                        skipped.append((src, plan))
-                        ctx.log(f"  skipped: {plan}")
-                        continue
-                    out, steps = plan
-                    taken.add(os.path.normcase(out))
-                    part = f"{os.path.splitext(out)[0]}.part{os.path.splitext(out)[1]}"
-                    try:
-                        for step in steps:
-                            argv = step(ctx) if callable(step) else step
-                            ctx.run(
-                                [a if a != "{OUT}" else part for a in argv],
-                                duration=info.duration or None,
-                                tail=200000,
-                            )
-                        os.replace(part, out)
-                    finally:
-                        if os.path.exists(part):
-                            os.remove(part)
-                    done += 1
-                    ctx.log(f"  ✓ {os.path.basename(out)}")
-                except ff.CancelledError:
-                    raise
-                except Exception as exc:
-                    logger.debug("work: best-effort step failed", exc_info=True)
-                    reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
-                    failed.append((src, reason))
-                    ctx.log(f"  ✖ {reason}")
-            ctx.log(f"Done: {done} · skipped {len(skipped)} · failed {len(failed)}")
-            if failed:
-                raise RuntimeError(
-                    f"{len(failed)} of {len(files)} file(s) failed:\n"
-                    + "\n".join(f"• {os.path.basename(s_)}: {r}" for s_, r in failed[:12])
-                )
-            return 0
-
+        job = batch_ops.Batch(op, files, out_dir, opts, taken)
         self._batch_tid = common.queue_job(
             self,
-            common.Job(name=f"Batch: {len(files)} file(s)", out=out_dir, work=work, inputs=files),
+            common.Job(
+                name=f"Batch: {len(files)} file(s)", out=out_dir, work=job.run, inputs=files
+            ),
             btn=self.btn_render,
             console=self.console,
         )

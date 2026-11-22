@@ -141,6 +141,11 @@ class AnimatedZoomTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, entry, labelled, opt, time_entry = self._build_header()
+        self._build_kb(entry, labelled, opt, time_entry)
+        self._build_output(body, opt)
+
+    def _build_header(self):
         self.make_header(
             self, t("tab.animated_zoom"), "Punch-ins, Ken Burns moves and smooth pans.", icon="🔍"
         )
@@ -206,6 +211,9 @@ class AnimatedZoomTab(BaseTab):
                     side="left", padx=px(2)
                 )
 
+        return body, entry, labelled, opt, time_entry
+
+    def _build_kb(self, entry, labelled, opt, time_entry):
         f = self.frames["punch"] = tk.Frame(opt)
         labelled(
             f,
@@ -271,6 +279,8 @@ class AnimatedZoomTab(BaseTab):
             "Y %",
             lambda r: entry(r, "u_y", "50", 5),
         )
+
+    def _build_output(self, body, opt):
         er = self._ease_row = tk.Frame(opt)
         er.pack(anchor="w", pady=px(4))
         tk.Label(er, text="Motion:").pack(side="left")

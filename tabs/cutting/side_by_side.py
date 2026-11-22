@@ -58,6 +58,11 @@ class SideBySideTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, lay, row = self._build_header()
+        self._build_output(body, lay, row)
+        self._build_render(body)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.side_by_side"),
@@ -120,6 +125,9 @@ class SideBySideTab(BaseTab):
                 lay, textvariable=self.size_var, values=list(SIZES), state="readonly", width=18
             ),
         )
+        return body, lay, row
+
+    def _build_output(self, body, lay, row):
         self.fill_var = tk.BooleanVar(value=False)
         self.divider_var = tk.BooleanVar(value=True)
         self.labels_on = tk.BooleanVar(value=True)
@@ -183,6 +191,8 @@ class SideBySideTab(BaseTab):
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.rows[0].path, "side_by_side"),
         )
+
+    def _build_render(self, body):
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(
             body,

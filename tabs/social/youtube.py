@@ -90,6 +90,19 @@ def _fmt_dur(seconds) -> str:
     return f"{Timecode.of(seconds):H.0}"
 
 
+_VIDEO_CODECS = ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "prores_ks", "copy"]
+_X264_PRESETS = [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+]
+
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".qve_yt_history.json")
 
 _DL_PROGRESS_RE = re.compile(
@@ -688,6 +701,11 @@ class YouTubeDownloaderTab(BaseTab):
             ).pack(anchor="w", pady=px(1))
 
     def _build_encode_tab(self, parent):
+        _combo, _row, col_left, col_right = self._build_encode_tab_vcodec(parent)
+        crf_row = self._build_encode_tab_res(col_left, col_right)
+        self._build_encode_tab_crf(_combo, _row, col_right, crf_row)
+
+    def _build_encode_tab_vcodec(self, parent):
         def _row(p, lbl, widget_factory, pady=3):
             r = tk.Frame(p, bg=CLR["bg"])
             r.pack(fill="x", pady=px(pady))
@@ -719,11 +737,7 @@ class YouTubeDownloaderTab(BaseTab):
         _row(
             col_left,
             "Video codec:",
-            lambda p: _combo(
-                p,
-                self._vcodec_var,
-                ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "prores_ks", "copy"],
-            ),
+            lambda p: _combo(p, self._vcodec_var, _VIDEO_CODECS),
         )
 
         self._acodec_var = tk.StringVar(value="aac")
@@ -746,24 +760,17 @@ class YouTubeDownloaderTab(BaseTab):
         _row(
             col_left,
             "Preset:",
-            lambda p: _combo(
-                p,
-                self._preset_var,
-                [
-                    "ultrafast",
-                    "superfast",
-                    "veryfast",
-                    "faster",
-                    "fast",
-                    "medium",
-                    "slow",
-                    "slower",
-                    "veryslow",
-                ],
-                width=14,
-            ),
+            lambda p: _combo(p, self._preset_var, _X264_PRESETS, width=14),
         )
+        return _combo, _row, col_left, col_right
 
+    def _show_custom_res(self, _e=None):
+        if self._res_var.get() == "Custom…":
+            self._custom_res_entry.pack(side="left", padx=px(4))
+        else:
+            self._custom_res_entry.pack_forget()
+
+    def _build_encode_tab_res(self, col_left, col_right):
         self._res_var = tk.StringVar(value="Original")
         res_row = tk.Frame(col_left, bg=CLR["bg"])
         res_row.pack(fill="x", pady=px(3))
@@ -807,11 +814,7 @@ class YouTubeDownloaderTab(BaseTab):
         )
         res_cb.bind(
             "<<ComboboxSelected>>",
-            lambda e: (
-                self._custom_res_entry.pack(side="left", padx=px(4))
-                if self._res_var.get() == "Custom…"
-                else self._custom_res_entry.pack_forget()
-            ),
+            self._show_custom_res,
         )
 
         # Right column
@@ -826,6 +829,9 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["bg"],
             fg=CLR["fgdim"],
         ).pack(side="left")
+        return crf_row
+
+    def _build_encode_tab_crf(self, _combo, _row, col_right, crf_row):
         self._crf_var = tk.IntVar(value=18)
         crf_scale = tk.Scale(
             crf_row,
@@ -2070,12 +2076,11 @@ class YouTubeDownloaderTab(BaseTab):
                 if route and route.startswith("socks"):
                     self.after(
                         0,
-                        lambda: self.log_tagged(
-                            self.console,
-                            "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
-                            "one and would connect around it). Download the video instead.",
-                            "warn",
-                        ),
+                        self.log_tagged,
+                        self.console,
+                        "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
+                        "one and would connect around it). Download the video instead.",
+                        "warn",
                     )
                     return
                 r = _proc.run(
@@ -2230,11 +2235,10 @@ class YouTubeDownloaderTab(BaseTab):
                 )
                 self.after(
                     0,
-                    lambda h=hint, n=retries: self.log_tagged(
-                        self.console,
-                        f"The site still blocked Tor after {n} fresh circuits. {h}",
-                        "warn",
-                    ),
+                    self.log_tagged,
+                    self.console,
+                    f"The site still blocked Tor after {retries} fresh circuits. {hint}",
+                    "warn",
                 )
             if (
                 rc == 0
@@ -2247,11 +2251,10 @@ class YouTubeDownloaderTab(BaseTab):
             attempt += 1
             self.after(
                 0,
-                lambda n=attempt, m=retries: self.log_tagged(
-                    self.console,
-                    f"↻ The site blocked this Tor exit - trying a fresh Tor circuit ({n}/{m})…",
-                    "warn",
-                ),
+                self.log_tagged,
+                self.console,
+                f"↻ The site blocked this Tor exit - trying a fresh Tor circuit ({attempt}/{retries})…",
+                "warn",
             )
             cmd = list(cmd)
             idx = max(i for i, a in enumerate(cmd[:-1]) if a == "--proxy")
@@ -2796,6 +2799,11 @@ class YouTubeDownloaderTab(BaseTab):
         self._btn_stop_batch.config(state="normal")
         tasks.submit(partial(self._batch_worker, items, ytdlp))
 
+    def _batch_status(self, item, status):
+        """Set the status column of a batch row (its URL and title stay)."""
+        url, title = self._batch_tree.item(item, "values")[:2]
+        self._batch_tree.item(item, values=(url, title, status))
+
     def _batch_worker(self, items, ytdlp: str):
         for item in items:
             if not self._batch_running:
@@ -2805,17 +2813,7 @@ class YouTubeDownloaderTab(BaseTab):
             if not url:
                 continue
 
-            self.after(
-                0,
-                lambda i=item: self._batch_tree.item(
-                    i,
-                    values=(
-                        self._batch_tree.item(i, "values")[0],
-                        self._batch_tree.item(i, "values")[1],
-                        "Fetching…",
-                    ),
-                ),
-            )
+            self.after(0, self._batch_status, item, "Fetching…")
 
             # Quick title fetch
             title = "-"

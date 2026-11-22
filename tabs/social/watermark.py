@@ -37,6 +37,11 @@ class TextBurnerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body = self._build_header()
+        self._build_position_motion(body)
+        self._build_render(body)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.watermarker"),
@@ -99,6 +104,9 @@ class TextBurnerTab(BaseTab):
         self.col_btn = tk.Button(
             flags, text="Colour…", relief="flat", bg=self.colour, command=self._pick
         )
+        return body
+
+    def _build_position_motion(self, body):
         self.col_btn.pack(side="left", padx=px(8))
 
         pos = tk.LabelFrame(body, text="  Position & motion  ", padx=px(12), pady=px(6))
@@ -161,6 +169,8 @@ class TextBurnerTab(BaseTab):
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"),
         )
+
+    def _build_render(self, body):
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(
             body,

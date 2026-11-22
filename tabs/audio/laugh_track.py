@@ -45,8 +45,24 @@ class LaughTrackRemoverTab(BaseTab):
         self._check_ai_tools()
 
     def _build_ui(self):
+        self._build_header()
+        self._build_source()
+        self._build_engine_selector()
+        instr_text, txt_container = self._build_engine_container_frame()
+        self._build_ai_model_f(instr_text, txt_container)
+        self._build_1_noise_profile()
+        self._build_2_center_channel()
+        self._build_3_frequency_sculpt()
+        self._build_4_smart_gate()
+        self._build_output()
+        self._build_action_buttons()
+        self._build_console()
+
+    def _build_header(self):
         self.make_header(self, t("tab.laugh_track_remover"), t("laugh_track.subtitle"))
 
+    def _build_source(self):
+        """Source."""
         # ── Source ────────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(20), pady=px(10, 4))
@@ -66,6 +82,8 @@ class LaughTrackRemoverTab(BaseTab):
         self._info_lbl = tk.Label(sf, text="", fg=CLR.get("fgdim", "#888888"), font=(MONO_FONT, 9))
         self._info_lbl.pack(side="left", padx=px(10))
 
+    def _build_engine_selector(self):
+        """Engine Selector."""
         # ── Engine Selector ───────────────────────────────────────────────
         eng_f = tk.Frame(self)
         eng_f.pack(fill="x", padx=px(20), pady=px(4, 8))
@@ -92,6 +110,8 @@ class LaughTrackRemoverTab(BaseTab):
             command=self._toggle_engine_ui,
         ).pack(side="left")
 
+    def _build_engine_container_frame(self):
+        """Engine Container Frame."""
         # ── Engine Container Frame ────────────────────────────────────────
         # This prevents Tkinter layout crashes when swapping sections
         self.engine_container = tk.Frame(self)
@@ -156,6 +176,9 @@ class LaughTrackRemoverTab(BaseTab):
 
         # Create a container frame specifically for the text box and its scrollbar
         txt_container = tk.Frame(self.ai_instructions_f, bg=CLR.get("panel", "#222222"))
+        return instr_text, txt_container
+
+    def _build_ai_model_f(self, instr_text, txt_container):
         txt_container.pack(anchor="w", pady=px(5))  # <-- Removed fill="x"
 
         # Create the vertical scrollbar
@@ -217,6 +240,8 @@ class LaughTrackRemoverTab(BaseTab):
             fg=CLR.get("fgdim", "#888888"),
         )
 
+    def _build_1_noise_profile(self):
+        """1. Noise Profile."""
         # --- 1. Noise Profile ---
         self._use_profile = tk.BooleanVar(value=True)
         np_header = tk.Frame(self.ffmpeg_lf)
@@ -259,6 +284,8 @@ class LaughTrackRemoverTab(BaseTab):
             pr3, variable=self._noise_floor, from_=-60, to=-10, resolution=1, orient="horizontal"
         ).pack(side="left", padx=px(6))
 
+    def _build_2_center_channel(self):
+        """2. Center Channel."""
         # --- 2. Center Channel ---
         self._use_center = tk.BooleanVar(value=False)
         cc_header = tk.Frame(self.ffmpeg_lf)
@@ -287,6 +314,8 @@ class LaughTrackRemoverTab(BaseTab):
             self._center_f, text=t("laugh_track.aggressive_checkbox"), variable=self._stereo_cancel
         ).pack(anchor="w", padx=px(120))
 
+    def _build_3_frequency_sculpt(self):
+        """3. Frequency Sculpt."""
         # --- 3. Frequency Sculpt ---
         self._use_eq = tk.BooleanVar(value=False)
         eq_header = tk.Frame(self.ffmpeg_lf)
@@ -317,6 +346,8 @@ class LaughTrackRemoverTab(BaseTab):
             er2, variable=self._eq_depth, from_=2, to=24, resolution=1, orient="horizontal"
         ).pack(side="left", padx=px(6))
 
+    def _build_4_smart_gate(self):
+        """4. Smart Gate."""
         # --- 4. Smart Gate ---
         self._use_gate = tk.BooleanVar(value=False)
         gt_header = tk.Frame(self.ffmpeg_lf)
@@ -350,6 +381,8 @@ class LaughTrackRemoverTab(BaseTab):
             gr2, variable=self._gate_ratio, from_=2, to=20, resolution=0.5, orient="horizontal"
         ).pack(side="left", padx=px(6))
 
+    def _build_output(self):
+        """Output."""
         # ── Output ────────────────────────────────────────────────────────
         out_lf = tk.LabelFrame(
             self, text=t("section.output"), padx=px(15), pady=px(8), font=(UI_FONT, 9, "bold")
@@ -379,6 +412,8 @@ class LaughTrackRemoverTab(BaseTab):
             of2, text=t("laugh_track.audio_option"), variable=self._export_mode, value="audio"
         ).pack(side="left")
 
+    def _build_action_buttons(self):
+        """Action buttons."""
         # ── Action buttons ────────────────────────────────────────────────
         bf = tk.Frame(self)
         bf.pack(pady=px(10))
@@ -406,6 +441,8 @@ class LaughTrackRemoverTab(BaseTab):
         )
         self.btn_render.pack(side="left", padx=px(8))
 
+    def _build_console(self):
+        """Console."""
         # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))

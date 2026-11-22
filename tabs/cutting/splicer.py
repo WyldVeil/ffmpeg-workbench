@@ -45,6 +45,11 @@ class SplicerTab(BaseTab):
         self._timeline.mark_out()
 
     def _build_ui(self):
+        btn_row = self._build_seg_canvas()
+        self._build_out(btn_row)
+        self._build_console()
+
+    def _build_seg_canvas(self):
         # Header
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x", padx=0, pady=0)
@@ -109,6 +114,9 @@ class SplicerTab(BaseTab):
 
         # Buttons
         btn_row = tk.Frame(self)
+        return btn_row
+
+    def _build_out(self, btn_row):
         btn_row.pack(pady=px(8))
         tk.Button(
             btn_row,
@@ -179,6 +187,8 @@ class SplicerTab(BaseTab):
             width=30,
             command=self._render,
         )
+
+    def _build_console(self):
         self.btn_render.pack(pady=px(10))
 
         # Console

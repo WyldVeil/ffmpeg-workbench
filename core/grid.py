@@ -257,6 +257,96 @@ class Timing:
     audio: str = "first"
 
 
+def _reflow_video(
+    clips: Sequence[Clip], canvas: Canvas, total: float, layouts: Mapping[LayoutKey, Layout]
+) -> list[str]:
+    """Clips that end leave the frame and the others re-arrange: one segment per
+    set of clips still playing, joined -> [v]."""
+    W, H, fps = canvas.width, canvas.height, canvas.fps
+    cuts = sorted({0.0, total, *[c.duration for c in clips if 0 < c.duration < total]})
+    segments = [(a, b) for a, b in itertools.pairwise(cuts) if b - a > 0.02]
+    active = [[c for c in clips if c.duration > a + 1e-3] for a, _b in segments]
+    parts: list[str] = []
+    branch: dict[int, list[str]] = {}
+    for c in clips:  # each clip split into as many branches as segments it plays in
+        n = sum(1 for group in active if c in group)
+        if n:
+            labels = [f"[s{c.index}_{k}]" for k in range(n)]
+            parts.append(
+                f"[{c.index}:v]setpts=PTS-STARTPTS"
+                + (f",split={n}{''.join(labels)}" if n > 1 else labels[0])
+            )
+            branch[c.index] = labels
+    for k, ((a, b), group) in enumerate(zip(segments, active, strict=False)):
+        parts.append(
+            f"color=c={canvas.background}:s={W}x{H}:r={fps}:d={b - a:.3f},format=yuv420p[bg{k}]"
+        )
+        cur = f"[bg{k}]"
+        if group:
+            lay = layouts.get(tuple(c.index for c in group)) or best_layout(
+                [c.aspect for c in group], W, H, gap=canvas.gap, mode=canvas.mode
+            )
+            for j, c in enumerate(group):
+                src, rect = branch[c.index].pop(0), lay.rects[j]
+                crop = lay.crop[j] if lay.crop else None
+                trim = f"{src}trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,"
+                parts.append(_place(trim, rect, crop, fps) + f"[p{k}_{j}]")
+                parts.append(
+                    f"{cur}[p{k}_{j}]overlay={rect[0]}:{rect[1]}:eof_action=pass[o{k}_{j}]"
+                )
+                cur = f"[o{k}_{j}]"
+        parts.append(f"{cur}null[seg{k}]")
+    joined = "".join(f"[seg{k}]" for k in range(len(segments)))
+    return [*parts, joined + f"concat=n={len(segments)}:v=1:a=0,format=yuv420p[v]"]
+
+
+def _fixed_video(
+    clips: Sequence[Clip], canvas: Canvas, timing: Timing, layouts: Mapping[LayoutKey, Layout]
+) -> list[str]:
+    """One layout for the whole collage -> [v]; a clip that ends holds its last
+    frame, or (end="background" without looping) leaves its cell empty."""
+    W, H, fps = canvas.width, canvas.height, canvas.fps
+    lay = layouts.get("all") or best_layout(
+        [c.aspect for c in clips], W, H, gap=canvas.gap, mode=canvas.mode
+    )
+    parts = [
+        f"color=c={canvas.background}:s={W}x{H}:r={fps}:d={timing.total:.3f},format=yuv420p[bg]"
+    ]
+    cur = "[bg]"
+    eof = "pass" if (not timing.loop and timing.end == "background") else "repeat"
+    for j, c in enumerate(clips):
+        crop = lay.crop[j] if lay.crop else None
+        parts.append(
+            _place(f"[{c.index}:v]setpts=PTS-STARTPTS,", lay.rects[j], crop, fps) + f"[p{j}]"
+        )
+        x, y = lay.rects[j][0], lay.rects[j][1]
+        parts.append(f"{cur}[p{j}]overlay={x}:{y}:eof_action={eof}[o{j}]")
+        cur = f"[o{j}]"
+    return [*parts, f"{cur}format=yuv420p[v]"]
+
+
+def _collage_audio(clips: Sequence[Clip], audio: str, total: float) -> list[str]:
+    """[a]: the first clip's sound, or every clip's mixed ("mix"); [] for none."""
+    with_audio = [c for c in clips if c.has_audio]
+    if audio == "none" or not with_audio:
+        return []
+    st = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
+    if audio == "first":
+        c = with_audio[0]
+        return [f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a]"]
+    parts = [
+        f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a{c.index}]"
+        for c in with_audio
+    ]
+    labels = "".join(f"[a{c.index}]" for c in with_audio)
+    if len(with_audio) > 1:
+        return [
+            *parts,
+            f"{labels}amix=inputs={len(with_audio)}:duration=longest:normalize=0,alimiter=limit=0.95[a]",
+        ]
+    return [*parts, f"{labels}anull[a]"]
+
+
 def collage_filter(
     clips: Sequence[Clip],
     canvas: Canvas,
@@ -264,90 +354,13 @@ def collage_filter(
     layouts: Mapping[LayoutKey, Layout] | None = None,
 ) -> tuple[str, bool]:
     """filter_complex for the collage -> (graph, has_audio)."""
-    W, H, fps, gap = canvas.width, canvas.height, canvas.fps, canvas.gap
-    mode, bg = canvas.mode, canvas.background
-    total, loop, end, audio = timing.total, timing.loop, timing.end, timing.audio
-    parts: list[str] = []
-    if not loop and end == "reflow":
-        cuts = sorted({0.0, total, *[c.duration for c in clips if 0 < c.duration < total]})
-        segments = [(a, b) for a, b in itertools.pairwise(cuts) if b - a > 0.02]
-        active = [[c for c in clips if c.duration > a + 1e-3] for a, _b in segments]
-        uses = {c.index: sum(1 for group in active if c in group) for c in clips}
-        branch: dict[int, list[str]] = {}
-        for c in clips:
-            n = uses[c.index]
-            if n == 0:
-                continue
-            labels = [f"[s{c.index}_{k}]" for k in range(n)]
-            parts.append(
-                f"[{c.index}:v]setpts=PTS-STARTPTS"
-                + (f",split={n}{''.join(labels)}" if n > 1 else labels[0])
-            )
-            branch[c.index] = labels
-        seg_labels: list[str] = []
-        for k, ((a, b), group) in enumerate(zip(segments, active, strict=False)):
-            parts.append(f"color=c={bg}:s={W}x{H}:r={fps}:d={b - a:.3f},format=yuv420p[bg{k}]")
-            cur = f"[bg{k}]"
-            if group:
-                lay = (layouts or {}).get(tuple(c.index for c in group)) or best_layout(
-                    [c.aspect for c in group], W, H, gap=gap, mode=mode
-                )
-                for j, c in enumerate(group):
-                    src = branch[c.index].pop(0)
-                    rect = lay.rects[j]
-                    crop = lay.crop[j] if lay.crop else None
-                    parts.append(
-                        _place(
-                            f"{src}trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,",
-                            rect,
-                            crop,
-                            fps,
-                        )
-                        + f"[p{k}_{j}]"
-                    )
-                    parts.append(
-                        f"{cur}[p{k}_{j}]overlay={rect[0]}:{rect[1]}:eof_action=pass[o{k}_{j}]"
-                    )
-                    cur = f"[o{k}_{j}]"
-            parts.append(f"{cur}null[seg{k}]")
-            seg_labels.append(f"[seg{k}]")
-        parts.append("".join(seg_labels) + f"concat=n={len(seg_labels)}:v=1:a=0,format=yuv420p[v]")
+    fixed = layouts or {}
+    if not timing.loop and timing.end == "reflow":
+        parts = _reflow_video(clips, canvas, timing.total, fixed)
     else:
-        lay = (layouts or {}).get("all") or best_layout(
-            [c.aspect for c in clips], W, H, gap=gap, mode=mode
-        )
-        parts.append(f"color=c={bg}:s={W}x{H}:r={fps}:d={total:.3f},format=yuv420p[bg]")
-        cur = "[bg]"
-        eof = "pass" if (not loop and end == "background") else "repeat"
-        for j, c in enumerate(clips):
-            crop = lay.crop[j] if lay.crop else None
-            parts.append(
-                _place(f"[{c.index}:v]setpts=PTS-STARTPTS,", lay.rects[j], crop, fps) + f"[p{j}]"
-            )
-            x, y = lay.rects[j][0], lay.rects[j][1]
-            parts.append(f"{cur}[p{j}]overlay={x}:{y}:eof_action={eof}[o{j}]")
-            cur = f"[o{j}]"
-        parts.append(f"{cur}format=yuv420p[v]")
-    with_audio = [c for c in clips if c.has_audio]
-    if audio == "none" or not with_audio:
-        return ";".join(parts), False
-    st = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
-    if audio == "first":
-        c = with_audio[0]
-        parts.append(f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a]")
-    else:
-        for c in with_audio:
-            parts.append(
-                f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a{c.index}]"
-            )
-        labels = "".join(f"[a{c.index}]" for c in with_audio)
-        parts.append(
-            f"{labels}amix=inputs={len(with_audio)}:duration=longest:normalize=0,"
-            f"alimiter=limit=0.95[a]"
-            if len(with_audio) > 1
-            else f"{labels}anull[a]"
-        )
-    return ";".join(parts), True
+        parts = _fixed_video(clips, canvas, timing, fixed)
+    audio = _collage_audio(clips, timing.audio, timing.total)
+    return ";".join(parts + audio), bool(audio)
 
 
 def pip_filter(

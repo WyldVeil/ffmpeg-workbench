@@ -577,6 +577,10 @@ class AllInOneTab(BaseTab):
 
     # ── 🎨 Color & Image ──────────────────────────────────────────────────
 
+    def _slider_moved(self, var, value):
+        var.set(f"{float(value):.2f}")
+        self._rebuild_cmd()
+
     def _build_color(self, parent):
         self._sec_color = _Section(parent, "🎨  Color & Image", self._rebuild_cmd)
         self._sec_color.pack(fill="x", pady=px(1))
@@ -614,7 +618,7 @@ class AllInOneTab(BaseTab):
                 bg=CLR["bg"],
                 fg=CLR["fg"],
                 highlightthickness=0,
-                command=lambda v, var=var: (var.set(f"{float(v):.2f}"), self._rebuild_cmd()),
+                command=partial(self._slider_moved, var),
             )
             sc.pack(side="left", padx=px(6))
             _lbl(r, "", dim=True).pack(side="left")  # spacer

@@ -119,6 +119,11 @@ class HardSubberTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, r0, st = self._build_header()
+        out_lf = self._build_output(body, r0, st)
+        self._build_out(body, out_lf)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.hard_subber"),
@@ -186,6 +191,9 @@ class HardSubberTab(BaseTab):
             length=px(140),
             command=lambda _v: self._schedule(),
         ).pack(side="left", padx=px(4))
+        return body, r0, st
+
+    def _build_output(self, body, r0, st):
         self.col_btn = tk.Button(
             r0, text="Text", relief="flat", command=lambda: self._pick("colour")
         )
@@ -247,6 +255,9 @@ class HardSubberTab(BaseTab):
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
+        return out_lf
+
+    def _build_out(self, body, out_lf):
         self.encoder.pack(anchor="w")
         self.out_row = SaveRow(
             out_lf,

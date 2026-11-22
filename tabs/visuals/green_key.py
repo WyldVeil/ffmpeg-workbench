@@ -168,6 +168,11 @@ class GreenKeyerTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        body, opts = self._build_header()
+        out_lf = self._build_output(body, opts)
+        self._build_encoder(body, out_lf)
+
+    def _build_header(self):
         self.make_header(self, t("tab.green_screen_keyer"), t("green_key.subtitle"), icon="🟩")
         body = scroll_body(self)
 
@@ -229,6 +234,9 @@ class GreenKeyerTab(BaseTab):
             body, text=f"  {t('green_key.key_options_section')}  ", padx=px(12), pady=px(8)
         )
         opts.pack(fill="x", padx=px(20), pady=px(4))
+        return body, opts
+
+    def _build_output(self, body, opts):
         r0 = tk.Frame(opts)
         r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Method:", font=(UI_FONT, 10, "bold")).pack(side="left")
@@ -291,6 +299,9 @@ class GreenKeyerTab(BaseTab):
         ).pack(anchor="w")
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
+        return out_lf
+
+    def _build_encoder(self, body, out_lf):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(
             out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")

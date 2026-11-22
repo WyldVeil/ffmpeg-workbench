@@ -12,13 +12,16 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
+from core.encoders import VideoEncode
 from core.i18n import t
 from core.ops.shared import frame_rate
+from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -57,6 +60,94 @@ def _tempo(speed: float) -> str:
     return ",".join(parts)
 
 
+@dataclass(frozen=True, kw_only=True)
+class _LoopJob:
+    """Each distinct piece (a part of the source at a speed and brightness) is
+    made once, then all are joined in order."""
+
+    src: str
+    pieces: list[tuple[str, float, float, float, float]]  # kind, from, to, speed, level
+    base_vf: str
+    venc: VideoEncode
+    container: str
+    audio: bool
+    total: float
+
+    def _piece_cmd(self, a: float, b: float, sp: float, lv: float, seg: str) -> list[str]:
+        vf = (
+            self.base_vf
+            + (f",setpts=PTS/{sp:.5f}" if sp != 1 else "")
+            + (f",lutyuv=y=val*{lv:.3f}" if lv < 1 else "")
+        )
+        af = (
+            "anull"
+            + (f",{_tempo(sp)}" if sp != 1 else "")
+            + (f",volume={lv:.3f}" if lv < 1 else "")
+        )
+        # -t before -i limits the SOURCE section (speed changes come after)
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            *self.venc.pre_input,
+            "-ss",
+            ff.ts(a),
+            "-t",
+            ff.ts(b - a),
+            "-i",
+            self.src,
+        ]
+        cmd += ["-map", "0:v:0", *self.venc.vf_args(vf)]
+        audio = ["-map", "0:a:0", "-af", af, "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
+        return [
+            *cmd,
+            *(audio if self.audio else ["-an"]),
+            *common.intermediate_args(self.venc),
+            seg,
+        ]
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        tmp = ctx.tempdir()
+        made: dict[tuple[float, float, float, float], str] = {}
+        files: list[str] = []
+        done = 0.0
+        for _kind, a, b, sp, lv in self.pieces:
+            key, length = (a, b, sp, lv), (b - a) / sp
+            if key not in made:
+                seg = os.path.join(tmp, f"u{len(made):04d}.mkv")
+                ctx.span(0.9 * done / self.total, 0.9 * (done + length) / self.total).run(
+                    self._piece_cmd(a, b, sp, lv, seg), duration=length
+                )
+                made[key] = seg
+            done += length
+            files.append(made[key])
+        lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
+        final = [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            lst,
+            "-map",
+            "0:v:0",
+            "-c:v",
+            "copy",
+        ]
+        audio = [
+            "-map",
+            "0:a:0",
+            *enc.audio(enc.default_audio_for(self.container), container=self.container),
+        ]
+        final += audio if self.audio else ["-an"]
+        ctx.span(0.9, 1.0).run(
+            [*final, *common.final_copy_args(self.venc, self.container), ctx.output()],
+            duration=self.total,
+        )
+        return 0
+
+
 class ClipLooperTab(BaseTab):
     # i / o (and the buttons): the section starts / ends at the frame shown
     def mark_in(self):
@@ -72,6 +163,11 @@ class ClipLooperTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, opt = self._build_header()
+        self._build_output(body, opt)
+        self._build_console(body)
+
+    def _build_header(self):
         self.make_header(self, t("tab.clip_looper"), "Repeat, stutter or echo a moment.", icon="🔁")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -114,6 +210,9 @@ class ClipLooperTab(BaseTab):
                 command=self._mode_changed,
             ).pack(side="left")
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
+        return body, opt
+
+    def _build_output(self, body, opt):
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="Section from").pack(side="left")
@@ -157,6 +256,8 @@ class ClipLooperTab(BaseTab):
             cursor="hand2",
             command=self._render,
         )
+
+    def _build_console(self, body):
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -178,12 +279,8 @@ class ClipLooperTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "looped"))
 
-    def _render(self):
-        src = self.src_row.path
-        info = common.check_source(self, src)
-        if info is None:
-            return
-        dur = info.duration
+    def _section(self, info: ff.MediaInfo) -> tuple[float, float, int, float] | None:
+        """(start, end, repeats, speed-up) from the fields; None after saying what's wrong."""
         mode = self.mode_var.get()
         fps = info.require_video().fps or 30.0
         try:
@@ -196,14 +293,23 @@ class ClipLooperTab(BaseTab):
                     raise ValueError("Say where the section ends.")
             count = int(common.number(self.count_var.get(), "Repeats", 2, 200))
             factor = common.number(self.factor_var.get() or "1.3", "Speed-up", 1.01, 4)
-            if not 0 <= start < end <= dur + 0.05:
+            if not 0 <= start < end <= info.duration + 0.05:
                 raise ValueError("The section must lie inside the clip, with 'from' before 'to'.")
             if end - start < 1.0 / fps:
                 raise ValueError("The section is shorter than one frame.")
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return None
+        return start, min(end, info.duration), count, factor
+
+    def _render(self):
+        src = self.src_row.path
+        info = common.check_source(self, src)
+        section = self._section(info) if info is not None else None
+        if info is None or section is None:
             return
-        end = min(end, dur)
+        start, end, count, factor = section
+        dur, mode, fps = info.duration, self.mode_var.get(), info.require_video().fps or 30.0
         out = common.output_for(self, self.out_row, src, "looped")
         if not out:
             return
@@ -211,99 +317,24 @@ class ClipLooperTab(BaseTab):
         if mode == "accel":  # stop once a repeat is shorter than a frame
             units = [u for u in units if (end - start) / u[0] >= 1.0 / fps] or units[:1]
         keep = self.context_var.get()
-        audio = info.has_audio
         w, h = common.even_size(info)
         container = common.container_of(out)
-        venc = self.encoder.video_encode(container)
-        fps_str = frame_rate(info)
-        base = f"scale={w}:{h},setsar=1,fps={fps_str},format=yuv420p"
-        pieces = [("plain", 0.0, start, 1.0, 1.0)] if keep and start > 0.01 else []
+        pieces: list[tuple[str, float, float, float, float]] = (
+            [("plain", 0.0, start, 1.0, 1.0)] if keep and start > 0.01 else []
+        )
         pieces += [("loop", start, end, sp, lv) for sp, lv in units]
         if keep and end < dur - 0.01:
             pieces.append(("plain", end, dur, 1.0, 1.0))
         total = sum((b - a) / sp for _k, a, b, sp, _lv in pieces)
-
-        def work(_p, _c, ctx):
-            tmp = ctx.tempdir()
-            made, files, done = {}, [], 0.0
-            for _i, (_kind, a, b, sp, lv) in enumerate(pieces):
-                key = (a, b, sp, lv)
-                length = (b - a) / sp
-                if key not in made:
-                    seg = os.path.join(tmp, f"u{len(made):04d}.mkv")
-                    vf = (
-                        base
-                        + (f",setpts=PTS/{sp:.5f}" if sp != 1 else "")
-                        + (f",lutyuv=y=val*{lv:.3f}" if lv < 1 else "")
-                    )
-                    af = (
-                        "anull"
-                        + (f",{_tempo(sp)}" if sp != 1 else "")
-                        + (f",volume={lv:.3f}" if lv < 1 else "")
-                    )
-                    # -t before -i limits the SOURCE section (speed changes come after)
-                    cmd = [
-                        ff.ffmpeg_path(),
-                        "-y",
-                        *venc.pre_input,
-                        "-ss",
-                        ff.ts(a),
-                        "-t",
-                        ff.ts(b - a),
-                        "-i",
-                        src,
-                        "-map",
-                        "0:v:0",
-                        *venc.vf_args(vf),
-                    ]
-                    cmd += (
-                        [
-                            "-map",
-                            "0:a:0",
-                            "-af",
-                            af,
-                            "-c:a",
-                            "pcm_s16le",
-                            "-ar",
-                            "48000",
-                            "-ac",
-                            "2",
-                        ]
-                        if audio
-                        else ["-an"]
-                    )
-                    cmd += [*common.intermediate_args(venc), seg]
-                    ctx.span(0.9 * done / total, 0.9 * (done + length) / total).run(
-                        cmd, duration=length
-                    )
-                    made[key] = seg
-                done += length
-                files.append(made[key])
-            lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
-            final = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                lst,
-                "-map",
-                "0:v:0",
-                "-c:v",
-                "copy",
-            ]
-            final += (
-                ["-map", "0:a:0", *enc.audio(enc.default_audio_for(container), container=container)]
-                if audio
-                else ["-an"]
-            )
-            ctx.span(0.9, 1.0).run(
-                final + common.final_copy_args(venc, container) + [ctx.output()], duration=total
-            )
-            return 0
-
+        job = _LoopJob(
+            src=src,
+            pieces=pieces,
+            base_vf=f"scale={w}:{h},setsar=1,fps={frame_rate(info)},format=yuv420p",
+            venc=self.encoder.video_encode(container),
+            container=container,
+            audio=info.has_audio,
+            total=total,
+        )
         self.log(
             self.console,
             f"{len(units)} repeats of {ff.format_time(end - start)} → "
@@ -311,7 +342,7 @@ class ClipLooperTab(BaseTab):
         )
         common.queue_job(
             self,
-            common.Job(name="Clip Looper", out=out, work=work, duration=total, inputs=[src]),
+            common.Job(name="Clip Looper", out=out, work=job.run, duration=total, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
         )

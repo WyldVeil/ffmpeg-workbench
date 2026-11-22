@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.6
+
+### Easier
+
+- Every time box in the app works the same way: type 12.5, 1:02.5 or
+  1:02:03, press 🎞 to find the moment by looking at the frames, or ◉ to take
+  the frame the preview shows. A time that can't be read says which box and
+  what to type, instead of a general error.
+
+### Under the hood
+
+- No function in the app is longer than 120 lines or 50 statements, more
+  complex than 15 or takes more than 8 settings, and CI keeps it that way
+  with no exceptions. The biggest pages were split into named steps, and
+  what they build moved to the engine (`core/ops`): Animated Titles, the
+  Media Generator, the Batch Processor's job, the collage and side-by-side
+  graphs. Each move was checked by comparing the old and new FFmpeg
+  commands over thousands of combinations.
+- Lambdas are one step; anything more has a name (checked by a test).
+- The engine (`core/`) has no exceptions to its layering rules, and
+  `core`, `shell` and `tabs/kit` are type-checked in strict mode.
+
 ## 1.2.5
 
 ### Smoother

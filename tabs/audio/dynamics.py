@@ -86,6 +86,17 @@ class AudioDynamicsTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        self._build_src()
+        inner = self._build_scrollable_chain()
+        self._build_1_noise_gate(inner)
+        self._build_2_eq(inner)
+        self._build_3_compressor(inner)
+        self._build_4_de_esser(inner)
+        self._build_5_limiter(inner)
+        self._build_filter_preview(inner)
+        self._build_output_render(inner)
+
+    def _build_src(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
@@ -136,6 +147,8 @@ class AudioDynamicsTab(BaseTab):
         preset_cb.pack(side="left", padx=px(8))
         preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
 
+    def _build_scrollable_chain(self):
+        """Scrollable chain."""
         # ── Scrollable chain ─────────────────────────────────────────────
         canvas = tk.Canvas(self, highlightthickness=0)
         sb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
@@ -147,28 +160,43 @@ class AudioDynamicsTab(BaseTab):
         # No mousewheel binding here - main.py's _global_mousewheel handles it.
         canvas.pack(side="left", fill="both", expand=True, padx=px(16, 0))
         sb.pack(side="right", fill="y")
+        return inner
 
+    def _build_1_noise_gate(self, inner):
+        """1. Noise Gate."""
         # ── 1. Noise Gate ─────────────────────────────────────────────────
         self._build_gate(inner)
 
+    def _build_2_eq(self, inner):
+        """2. EQ."""
         # ── 2. EQ ─────────────────────────────────────────────────────────
         self._build_eq(inner)
 
+    def _build_3_compressor(self, inner):
+        """3. Compressor."""
         # ── 3. Compressor ─────────────────────────────────────────────────
         self._build_compressor(inner)
 
+    def _build_4_de_esser(self, inner):
+        """4. De-esser."""
         # ── 4. De-esser ───────────────────────────────────────────────────
         self._build_deesser(inner)
 
+    def _build_5_limiter(self, inner):
+        """5. Limiter."""
         # ── 5. Limiter ────────────────────────────────────────────────────
         self._build_limiter(inner)
 
+    def _build_filter_preview(self, inner):
+        """Filter preview."""
         # ── Filter preview ────────────────────────────────────────────────
         self.filter_preview = tk.Label(
             inner, text="", fg=CLR["fgdim"], font=(MONO_FONT, 8), wraplength=px(860), justify="left"
         )
         self.filter_preview.pack(anchor="w", padx=px(16), pady=px(4))
 
+    def _build_output_render(self, inner):
+        """Output & render."""
         # ── Output & render ───────────────────────────────────────────────
         of = tk.Frame(inner)
         of.pack(pady=px(6), padx=px(16), fill="x")

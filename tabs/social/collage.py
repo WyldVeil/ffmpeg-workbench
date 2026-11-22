@@ -18,6 +18,7 @@ Any number of clips on one canvas, playing together.
 
 import os
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
@@ -75,6 +76,12 @@ class VideoCollageTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        slots_lf, stb = self._build_header()
+        or2, out_lf = self._build_output_settings(slots_lf, stb)
+        cf = self._build_audio_mode(or2, out_lf)
+        self._build_console(cf)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.video_collage"),
@@ -145,6 +152,13 @@ class VideoCollageTab(BaseTab):
             tk.Button(stb, text=text, relief="flat", cursor="hand2", command=cmd).pack(
                 side="left", padx=px(2)
             )
+        return slots_lf, stb
+
+    def _set_out_size(self, w, h):
+        self._out_w.set(str(w))
+        self._out_h.set(str(h))
+
+    def _build_output_settings(self, slots_lf, stb):
         self._slot_count_lbl = tk.Label(stb, text=t("collage.0_videos_loaded"), fg=CLR["fgdim"])
         self._slot_count_lbl.pack(side="right", padx=px(8))
         list_f = tk.Frame(slots_lf)
@@ -191,7 +205,7 @@ class VideoCollageTab(BaseTab):
                 text=lbl,
                 relief="flat",
                 width=5,
-                command=lambda _w=w, _h=h: (self._out_w.set(str(_w)), self._out_h.set(str(_h))),
+                command=partial(self._set_out_size, w, h),
             ).pack(side="left", padx=px(2))
         for v in (self._out_w, self._out_h):
             v.trace_add("write", lambda *_a: self._changed())
@@ -206,6 +220,9 @@ class VideoCollageTab(BaseTab):
         ttk.Combobox(
             or2, textvariable=self._bg_color, width=9, values=list(BACKGROUNDS), state="readonly"
         ).pack(side="left", padx=px(4))
+        return or2, out_lf
+
+    def _build_audio_mode(self, or2, out_lf):
         tk.Label(or2, text="  Sound:").pack(side="left")
         self._audio_mode = tk.StringVar(value=AUDIO_MODES["first"])
         ttk.Combobox(
@@ -267,6 +284,9 @@ class VideoCollageTab(BaseTab):
         self.btn_render.pack(pady=px(6))
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(2, 10))
+        return cf
+
+    def _build_console(self, cf):
         self.console, csb = self.make_console(cf, height=4)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

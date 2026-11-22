@@ -62,6 +62,11 @@ class UniversalDownsizerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, cb, opt, row, tb = self._build_header()
+        csb = self._build_output(body, cb, opt, row, tb)
+        self._build_console(csb)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.universal_downsizer"),
@@ -123,6 +128,9 @@ class UniversalDownsizerTab(BaseTab):
         ).pack(side="left", padx=px(10))
         row(2, "Encoding:", sp)
         self.audio_var = tk.StringVar(value=AUDIO_MODES["auto"])
+        return body, cb, opt, row, tb
+
+    def _build_output(self, body, cb, opt, row, tb):
         ab = ttk.Combobox(
             opt,
             textvariable=self.audio_var,
@@ -184,6 +192,9 @@ class UniversalDownsizerTab(BaseTab):
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=7)
+        return csb
+
+    def _build_console(self, csb):
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
         self._changed()

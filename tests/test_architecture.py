@@ -193,3 +193,56 @@ def test_the_whole_engine_is_type_checked_strictly():
     with open(os.path.join(ROOT, "pyrightconfig.json"), encoding="utf-8") as fh:
         config = json.load(fh)
     assert {"core", "shell", "tabs/kit"} <= set(config["strict"])
+
+
+MAX_FUNCTION_LINES = 120
+
+
+def test_no_function_is_longer_than_a_screen_or_two():
+    """A function over 120 lines does too many things: split it into steps with
+    names (ruff's PLR0915 also caps it at 50 statements)."""
+    long: list[str] = []
+    for rel, path in _py_files("main.py", "core", "shell", "tabs", "scripts", "devtools"):
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                lines = (node.end_lineno or node.lineno) - node.lineno + 1
+                if lines > MAX_FUNCTION_LINES:
+                    long.append(f"{rel}:{node.lineno} {node.name} ({lines} lines)")
+    assert not long, "Split these into named steps:\n" + "\n".join(long)
+
+
+def _busy_lambda(node: ast.Lambda) -> str | None:
+    """Why *node* should be a named function, or None when it's a one-step callback."""
+    body = node.body
+    if (
+        isinstance(body, (ast.Tuple, ast.List))
+        and sum(isinstance(e, ast.Call) for e in body.elts) >= 2
+    ):
+        return "does several things"
+    if isinstance(body, ast.BoolOp) and sum(isinstance(v, ast.Call) for v in body.values) >= 2:
+        return "chains actions with and/or"
+    if (
+        isinstance(body, ast.IfExp)
+        and isinstance(body.body, ast.Call)
+        and isinstance(body.orelse, ast.Call)
+    ):
+        return "picks between actions"
+    if (node.end_lineno or node.lineno) - node.lineno >= 3:
+        return "is long"
+    return None
+
+
+def test_lambdas_do_one_thing():
+    """A lambda is for one short step (``lambda _e: self._changed()``).  One that
+    does several things, or runs over several lines, wants a name: a method,
+    functools.partial, or ``after(0, fn, *args)``."""
+    busy: list[str] = []
+    for rel, path in _py_files("main.py", "core", "shell", "tabs"):
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Lambda) and (why := _busy_lambda(node)):
+                busy.append(f"{rel}:{node.lineno} {why}")
+    assert not busy, "Give these lambdas a name:\n" + "\n".join(busy)

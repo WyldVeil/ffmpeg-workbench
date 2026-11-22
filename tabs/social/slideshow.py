@@ -164,6 +164,11 @@ class SlideshowMakerTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        body, opt, row = self._build_header()
+        self._build_trans_dur(opt, row)
+        self._build_output(body, opt, row)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.slideshow_maker"),
@@ -226,6 +231,9 @@ class SlideshowMakerTab(BaseTab):
                 w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(2))
 
         self.dur_var = tk.StringVar(value="4")
+        return body, opt, row
+
+    def _build_trans_dur(self, opt, row):
         self.trans_dur_var = tk.StringVar(value="1.0")
         row(
             0,
@@ -295,6 +303,8 @@ class SlideshowMakerTab(BaseTab):
                 width=5,
             ),
         )
+
+    def _build_output(self, body, opt, row):
         self.cap_on = tk.BooleanVar(value=True)
         self.cap_font = tk.StringVar(value="Montserrat")
         self.cap_pos = tk.StringVar(value=CAPTION_POS["bottom"])

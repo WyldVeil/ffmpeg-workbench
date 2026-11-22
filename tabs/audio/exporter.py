@@ -280,6 +280,11 @@ class AudioExporterTab(BaseTab):
     # ── Quality / Bitrate ────────────────────────────────────────────────────
 
     def _build_quality_section(self):
+        self._build_quality_section_qual_sec()
+        self._build_quality_section_vbr()
+        self._build_quality_compression()
+
+    def _build_quality_section_qual_sec(self):
         self._qual_sec = self.make_section(self._inner, title=t("exporter.section.quality"))
 
         # Bitrate mode row
@@ -343,6 +348,8 @@ class AudioExporterTab(BaseTab):
             bg=CLR["bg"],
             fg=CLR["fg"],
         ).pack(side="left")
+
+    def _build_quality_section_vbr(self):
         self.vbr_var = tk.IntVar(value=2)
         self._vbr_scale = tk.Scale(
             self._vbr_row,
@@ -405,6 +412,8 @@ class AudioExporterTab(BaseTab):
             fg=CLR["fg"],
             highlightthickness=0,
         )
+
+    def _build_quality_compression(self):
         self._comp_scale.pack(side="left", padx=px(8))
         tk.Label(
             self._comp_row,
@@ -504,6 +513,11 @@ class AudioExporterTab(BaseTab):
     # ── Effects (fade, normalize) ────────────────────────────────────────────
 
     def _build_effects_section(self):
+        r1, sec = self._build_effects_section_fade_in()
+        r3 = self._build_effects_section_norm(r1, sec)
+        self._build_effects_section_replay_gain(r3)
+
+    def _build_effects_section_fade_in(self):
         sec = self.make_section(self._inner, title=t("exporter.section.effects"))
 
         # Fades
@@ -566,6 +580,9 @@ class AudioExporterTab(BaseTab):
             insertbackground=CLR["accent"],
             font=(UI_FONT, 9),
         ).pack(side="left", padx=px(4))
+        return r1, sec
+
+    def _build_effects_section_norm(self, r1, sec):
         tk.Label(
             r1, text=t("exporter.volume_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left")
@@ -627,6 +644,9 @@ class AudioExporterTab(BaseTab):
         r3 = tk.Frame(sec, bg=CLR["bg"])
         r3.pack(fill="x", pady=px(4))
         self.strip_silence_var = tk.BooleanVar(value=False)
+        return r3
+
+    def _build_effects_section_replay_gain(self, r3):
         tk.Checkbutton(
             r3,
             text=t("exporter.strip_silence"),

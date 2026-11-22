@@ -53,6 +53,11 @@ class GIFMakerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, opt, row = self._build_header()
+        self._build_output(body, opt, row)
+        self._build_render(body)
+
+    def _build_header(self):
         self.make_header(self, t("tab.pro_gif_maker"), t("gif_maker.subtitle"), icon="🎞")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -115,6 +120,9 @@ class GIFMakerTab(BaseTab):
                 width=6,
             ),
         )
+        return body, opt, row
+
+    def _build_output(self, body, opt, row):
         self.colours_var = tk.StringVar(value="256")
         self.dither_var = tk.StringVar(value=DITHERS["sierra2_4a"])
         row(
@@ -176,6 +184,8 @@ class GIFMakerTab(BaseTab):
         self.out_row.pack(fill="x")
         self.size_lbl = tk.Label(out_lf, text="", fg=CLR["accent"])
         self.size_lbl.pack(anchor="w")
+
+    def _build_render(self, body):
         self.btn_render = tk.Button(
             body,
             text=t("gif_maker.create_button"),

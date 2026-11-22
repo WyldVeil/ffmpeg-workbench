@@ -13,6 +13,7 @@ Remove sensor noise, grain and compression mush with a before/after view:
 from __future__ import annotations
 
 import tkinter as tk
+from functools import partial
 from tkinter import ttk
 
 from core import ffmpeg as ff
@@ -40,6 +41,10 @@ class DenoiseTab(BaseTab):
         self._info = None
         self._job = None
         self._build_ui()
+
+    def _preset(self, value):
+        self.strength_var.set(value)
+        self._changed()
 
     def _build_ui(self):
         self.make_header(
@@ -85,7 +90,7 @@ class DenoiseTab(BaseTab):
                 pf,
                 text=name,
                 relief="flat",
-                command=lambda v=val: (self.strength_var.set(v), self._changed()),
+                command=partial(self._preset, val),
             ).pack(side="left", padx=px(2))
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))

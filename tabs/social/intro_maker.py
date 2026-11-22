@@ -82,6 +82,12 @@ class IntroMakerTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        body, design, row = self._build_header()
+        self._build_text(design, row)
+        self._build_attach_to_a_video_optional(body, design, row)
+        self._build_render(body)
+
+    def _build_header(self):
         self.make_header(
             self,
             t("tab.intro_outro_maker"),
@@ -154,6 +160,9 @@ class IntroMakerTab(BaseTab):
                 width=12,
             ),
         )
+        return body, design, row
+
+    def _build_text(self, design, row):
         self.text_btn = tk.Button(
             design,
             text="Text colour",
@@ -221,6 +230,8 @@ class IntroMakerTab(BaseTab):
                 width=5,
             ),
         )
+
+    def _build_attach_to_a_video_optional(self, body, design, row):
         self.res_var = tk.StringVar(value=next(iter(RESOLUTIONS)))
         row(
             9,
@@ -282,6 +293,8 @@ class IntroMakerTab(BaseTab):
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
         self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest)
+
+    def _build_render(self, body):
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(
             body,

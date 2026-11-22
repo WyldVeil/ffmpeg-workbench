@@ -60,6 +60,10 @@ class DeshakerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, opts = self._build_header()
+        self._build_output(body, opts)
+
+    def _build_header(self):
         self.make_header(self, t("tab.deshaker"), t("deshaker.subtitle"), icon="🎥")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -122,6 +126,9 @@ class DeshakerTab(BaseTab):
         ttk.Combobox(
             opts, textvariable=self.zoom_mode, values=list(ZOOM_MODES), state="readonly", width=40
         ).grid(row=3, column=1, columnspan=2, sticky="w")
+        return body, opts
+
+    def _build_output(self, body, opts):
         tk.Label(opts, text="Extra zoom (%):", anchor="w", width=26).grid(
             row=4, column=0, sticky="w"
         )

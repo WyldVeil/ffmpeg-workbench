@@ -125,6 +125,10 @@ class SilenceTab(BaseTab):
         zones = keep_zones(parse_silences(text, info.duration), info.duration, pad, fps)
         return zones
 
+    def _analyse_failed(self, exc):
+        self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
+        messagebox.showerror(t("common.error"), str(exc), parent=self)
+
     def _analyse(self):
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
@@ -152,10 +156,7 @@ class SilenceTab(BaseTab):
         tasks.submit(
             work,
             on_done=done,
-            on_error=lambda e: (
-                self.btn_analyse.config(state="normal", text="🔍  ANALYSE"),
-                messagebox.showerror(t("common.error"), str(e), parent=self),
-            ),
+            on_error=self._analyse_failed,
             name="SilenceDetect",
         )
 

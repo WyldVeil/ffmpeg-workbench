@@ -57,6 +57,12 @@ class HdrToSdrTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, known, opt = self._build_header()
+        self._build_gpu_note(known, opt)
+        self._build_output(body, opt)
+        self._build_console(body)
+
+    def _build_header(self):
         self.make_header(
             self,
             "HDR to SDR",
@@ -93,6 +99,9 @@ class HdrToSdrTab(BaseTab):
             command=self._changed,
             state="normal" if self.gpu_ok else "disabled",
         )
+        return body, known, opt
+
+    def _build_gpu_note(self, known, opt):
         self.gpu_radio.grid(row=0, column=0, columnspan=2, sticky="w")
         tk.Radiobutton(
             opt,
@@ -129,6 +138,8 @@ class HdrToSdrTab(BaseTab):
         self.adaptive_cb.grid(row=3, column=0, columnspan=2, sticky="w", pady=px(4, 0))
         tk.Label(opt, text="Input:").grid(row=4, column=0, sticky="w", pady=px(6, 0))
         self.assume_var = tk.StringVar(value=ASSUME[""])
+
+    def _build_output(self, body, opt):
         ab = ttk.Combobox(
             opt,
             textvariable=self.assume_var,
@@ -165,6 +176,8 @@ class HdrToSdrTab(BaseTab):
             command=self._render,
         )
         self.btn_render.pack(pady=px(8))
+
+    def _build_console(self, body):
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=5)

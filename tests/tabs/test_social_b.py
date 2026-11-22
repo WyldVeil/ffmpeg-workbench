@@ -7,6 +7,7 @@ import pytest
 
 from core import ass
 from core import ffmpeg as ff
+from core.ops import titles as titles_ops
 from tabs.social import frame_extractor, intro_maker, slideshow, titles
 
 NASTY_TEXT = "Don't stop: 50% off, {now} [ok]; \\o/ \\N é"
@@ -23,11 +24,11 @@ def test_ass_escape_keeps_text_literal():
 
 def test_title_script_all_styles_scale():
     cards = [
-        titles.Card(style, NASTY_TEXT, "second line", i * 3.0, 2.5)
+        titles_ops.Card(style, NASTY_TEXT, "second line", i * 3.0, 2.5)
         for i, style in enumerate(titles.STYLES)
     ]
     for w, h in ((1280, 720), (1080, 1920), (3840, 2160)):
-        text = titles.build_script(cards, w, h).render()
+        text = titles_ops.build_script(cards, w, h).render()
         assert f"PlayResX: {w}" in text and text.count("Dialogue:") >= len(cards) * 2
 
 
@@ -66,7 +67,7 @@ def test_titles_render(ui, media, outdir, source):
     for r in list(tab.rows):
         tab._remove(r)
     for i, style in enumerate(titles.STYLES):
-        row = tab.add_card(titles.Card(style, NASTY_TEXT, "line two", i * 0.6, 1.0))
+        row = tab.add_card(titles_ops.Card(style, NASTY_TEXT, "line two", i * 0.6, 1.0))
         assert row in tab.rows
     out = str(outdir / f"titles_{source}.mp4")
     tab.out_row.set(out)

@@ -60,6 +60,11 @@ class ManualCropTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        ar, body, ctrl = self._build_header()
+        sc = self._build_crop_region(ar, ctrl)
+        self._build_output(body, sc)
+
+    def _build_header(self):
         self.make_header(self, t("tab.manual_crop"), t("crop.subtitle"), icon="🔲")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -98,6 +103,9 @@ class ManualCropTab(BaseTab):
         ar = tk.LabelFrame(
             ctrl, text=f"  {t('crop.aspect_ratio_section')}  ", padx=px(8), pady=px(4)
         )
+        return ar, body, ctrl
+
+    def _build_crop_region(self, ar, ctrl):
         ar.pack(fill="x")
         self.aspect_var = tk.StringVar(value="free")
         for key, label, _ratio in ASPECTS:
@@ -136,6 +144,9 @@ class ManualCropTab(BaseTab):
         tk.Radiobutton(
             sc, text="Keep the cropped size", value="keep", variable=self.scale_var
         ).pack(anchor="w")
+        return sc
+
+    def _build_output(self, body, sc):
         sr = tk.Frame(sc)
         sr.pack(fill="x")
         tk.Radiobutton(sr, text="Scale to", value="scale", variable=self.scale_var).pack(

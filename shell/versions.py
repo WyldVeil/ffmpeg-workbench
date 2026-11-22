@@ -122,6 +122,10 @@ class ToolVersions:
                 text=f"yt-dlp {local} (up to date)", fg=skin["green"], cursor="arrow"
             )
 
+    def _ytdlp_found(self, path: str, version: str) -> None:
+        self.set_ytdlp(version, path, force=True)
+        self._bar.show_ytdlp(True)
+
     def check_all(self) -> None:
         """Help › Check for tool updates."""
         self.check_ffmpeg()
@@ -130,7 +134,7 @@ class ToolVersions:
             tasks.submit(
                 partial(ytdlp_version, path),
                 name="yt-dlp version",
-                on_done=lambda v: (self.set_ytdlp(v, path, force=True), self._bar.show_ytdlp(True)),
+                on_done=partial(self._ytdlp_found, path),
             )
 
     def update_ytdlp(self) -> None:

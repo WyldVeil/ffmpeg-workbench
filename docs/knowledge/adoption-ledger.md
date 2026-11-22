@@ -6,20 +6,20 @@ of it. **Adopted** = done and, where possible, guarded by a test.
 over as it is touched. **Deferred** = worth doing, not yet done (with the
 reason). **Declined** = considered and rejected (with the reason).
 
-The lint "debt" list in `pyproject.toml` and the allow-lists in
-`tests/test_architecture.py` are the machine-readable side of this page:
-they may only shrink.
+The ruff rule set in `pyproject.toml` (no ignores left) and the rules in
+`tests/test_architecture.py` (no allow-lists left) are the machine-readable
+side of this page.
 
 ## Robust Python
 
 | # | Recommendation | Status | Where |
 |---|---|---|---|
 | R1 | Page Protocols instead of probing private attributes | Adopted | `tabs/kit/contracts.py`, `shell/shortcuts.py`; ruff SLF001 on |
-| R2 | One composable range/moment picker widget | Deferred | the pages share `tabs/framestep.py` and the pickers in `tabs/widgets.py`; merging ~20 layouts is the next UI refactor |
+| R2 | One composable range/moment picker widget | Adopted | `MomentPicker` / `RangePicker` (`tabs/kit/time_fields.py`) on 20 pages; `test_pages_read_times_through_the_kit` (1.2.6) |
 | R3 | Enums + `ChoiceBox[E]` instead of labels in StringVars | Partly | `ChoiceBox` (`tabs/kit/widgets.py`), `StartPage`, `TaskStatus`, `ToolId`, `Category`; older drop-downs move over when touched |
 | R4 | Narrow `Optional` once, at a blessed boundary | Adopted | `MediaInfo.require_video()/require_audio()`, `capabilities.peek()` |
 | R5 | Pure ops below the UI | Adopted | `core/ops/`; `core/cli.py` imports no page (enforced) |
-| R6 | Parameter objects instead of long keyword lists | Partly | read-once specs in Special Effects; 31 long signatures remain (ruff PLR0913 debt) |
+| R6 | Parameter objects instead of long keyword lists | Adopted | spec dataclasses (`Canvas`, `Timing`, `Arrangement`, `Recipe`, `TextMark`...); PLR0913 at 8 with no exceptions (1.2.6) |
 | R7 | Type-checker adoption plan gated in CI | Adopted | 559 errors -> 0; `scripts/check_types.py` gate; strict list in `pyrightconfig.json` |
 | R8 | Typed settings parsed once | Adopted | `core/settings.py` `Setting[T]`; `tests/test_settings_keys.py` |
 | R9 | Immutable, typed probe results | Adopted | frozen `MediaInfo`, `Stream` |
@@ -54,7 +54,7 @@ they may only shrink.
 | R9 | Render job as a dataclass with an Enum status | Partly | see Robust Python R14 |
 | R10 | Simpler queue worker loop | Partly | workers are `tasks.start_service` loops |
 | R11 | Keyword-only options | Partly | all new APIs; older ones as touched |
-| R12 | Fewer stateful closures and lambda chains | Partly | `functools.partial` in hand-offs; some pages still chain lambdas |
+| R12 | Fewer stateful closures and lambda chains | Adopted | named methods / `partial` / `after(0, fn, *args)`; queued jobs are small dataclasses (`_LoopJob`, `_ReverseJob`, `_WebmEncode`, `Batch`) instead of closures; `test_lambdas_do_one_thing` (1.2.6) |
 | R13 | Shared scaffolding for the tools | Partly | `BaseTab` defaults, `tabs/kit` |
 | R14 | Dependency seams for tests | Adopted | `ui.hosted_by`, injectable settings file, capability cache folder |
 | R15 | One logging stream | Adopted | module `logger`s under `crossfader.*` |

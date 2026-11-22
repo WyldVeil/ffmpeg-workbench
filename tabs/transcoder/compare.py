@@ -99,6 +99,11 @@ class CompareQualityTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, opt, r3 = self._build_header()
+        cf = self._build_results(body, opt, r3)
+        self._build_console(cf)
+
+    def _build_header(self):
         self.make_header(
             self,
             "Compare & Quality",
@@ -160,6 +165,9 @@ class CompareQualityTab(BaseTab):
         tk.Label(r3, text="Skip at the start - original:").pack(side="left")
         self.skip_ref_var = tk.StringVar(value="0")
         tk.Entry(r3, textvariable=self.skip_ref_var, width=6).pack(side="left", padx=px(4))
+        return body, opt, r3
+
+    def _build_results(self, body, opt, r3):
         tk.Label(r3, text="s   encoded:").pack(side="left")
         self.skip_dist_var = tk.StringVar(value="0")
         tk.Entry(r3, textvariable=self.skip_dist_var, width=6).pack(side="left", padx=px(4))
@@ -221,6 +229,9 @@ class CompareQualityTab(BaseTab):
         ).pack(anchor="w")
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
+        return cf
+
+    def _build_console(self, cf):
         self.console, csb = self.make_console(cf, height=4)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")

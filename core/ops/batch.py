@@ -8,6 +8,7 @@ file is skipped.  '{OUT}' in a step stands for the temporary output file.
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -21,6 +22,8 @@ from core.outputs import free_name
 
 if TYPE_CHECKING:
     from core.queue_manager import TaskContext
+
+logger = logging.getLogger(__name__)
 
 Step = list[str] | Callable[["TaskContext"], list[str]]
 Plan = tuple[str, list[Step]] | str
@@ -180,3 +183,69 @@ def plan(
     if not info.has_video:
         return "no video"
     return _VIDEO.get(op, _reencode)(f)
+
+
+@dataclass(frozen=True)
+class Batch:
+    """The queued job: every file planned and made in turn.  A file that can't
+    be done is skipped or noted; the others carry on."""
+
+    op: str
+    files: list[str]
+    out_dir: str
+    opts: Mapping[str, Any]
+    taken: set[str]  # outputs already used (normcased), so names never clash
+
+    def _make(self, ctx: TaskContext, src: str) -> str | None:
+        """Make *src*'s output -> None, or why it was skipped.  Written to a
+        .part file first, so a failed step never leaves a half file."""
+        info = ff.probe(src)
+        planned = plan(self.op, info, src, self.out_dir, self.opts, self.taken)
+        if isinstance(planned, str):
+            return planned
+        out, steps = planned
+        self.taken.add(os.path.normcase(out))
+        part = f"{os.path.splitext(out)[0]}.part{os.path.splitext(out)[1]}"
+        try:
+            for step in steps:
+                argv = step(ctx) if callable(step) else step
+                ctx.run(
+                    [a if a != "{OUT}" else part for a in argv],
+                    duration=info.duration or None,
+                    tail=200000,
+                )
+            os.replace(part, out)
+        finally:
+            if os.path.exists(part):
+                os.remove(part)
+        ctx.log(f"  ✓ {os.path.basename(out)}")
+        return None
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        files = self.files
+        done, skipped, failed = 0, 0, list[tuple[str, str]]()
+        for i, src in enumerate(files):
+            ctx.span(i / len(files), (i + 1) / len(files))
+            ctx.log(f"[{i + 1}/{len(files)}] {os.path.basename(src)}")
+            try:
+                reason = self._make(ctx, src)
+            except ff.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("work: best-effort step failed", exc_info=True)
+                reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
+                failed.append((src, reason))
+                ctx.log(f"  ✖ {reason}")
+                continue
+            if reason is None:
+                done += 1
+            else:
+                skipped += 1
+                ctx.log(f"  skipped: {reason}")
+        ctx.log(f"Done: {done} · skipped {skipped} · failed {len(failed)}")
+        if failed:
+            raise RuntimeError(
+                f"{len(failed)} of {len(files)} file(s) failed:\n"
+                + "\n".join(f"• {os.path.basename(s_)}: {r}" for s_, r in failed[:12])
+            )
+        return 0

@@ -23,6 +23,7 @@ import os
 import tkinter as tk
 from collections.abc import Callable, Sequence
 from dataclasses import replace
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
@@ -71,6 +72,10 @@ def _probe_wh(path):
         return 1920, 1080
     w, h = info.require_video().display_size
     return max(2, w // 2 * 2), max(2, h // 2 * 2)
+
+
+def _probe_length_and_size(src):
+    return _probe_duration(src), _probe_wh(src)
 
 
 def _first_visible_time(path, scan=10.0):
@@ -2347,9 +2352,7 @@ class SpecialEffectsTab(BaseTab):
                 btn=self._sh_btn,
             )
 
-        tasks.submit(
-            lambda: (_probe_duration(src), _probe_wh(src)), on_done=_start, name="render_shake"
-        )
+        tasks.submit(partial(_probe_length_and_size, src), on_done=_start, name="render_shake")
 
     def _build_mo_zoompunch(self, nb):
         f = ttk.Frame(nb)

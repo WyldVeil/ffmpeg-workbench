@@ -149,6 +149,11 @@ class PIPTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, ch, opt, pb, pr = self._build_header()
+        self._build_output(body, ch, opt, pb, pr)
+        self._build_console(body)
+
+    def _build_header(self):
         self.make_header(
             self, t("tab.picture_in_picture"), "Put one video inside another.", icon="🖼"
         )
@@ -214,6 +219,9 @@ class PIPTab(BaseTab):
             state="readonly",
             width=16,
         )
+        return body, ch, opt, pb, pr
+
+    def _build_output(self, body, ch, opt, pb, pr):
         pb.pack(side="left", padx=px(4))
         pb.bind("<<ComboboxSelected>>", ch)
         self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
@@ -281,6 +289,8 @@ class PIPTab(BaseTab):
             cursor="hand2",
             command=self._render,
         )
+
+    def _build_console(self, body):
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))

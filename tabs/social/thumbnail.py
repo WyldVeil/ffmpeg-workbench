@@ -58,8 +58,22 @@ class ThumbnailMakerTab(BaseTab):
         return ScrubTransport(self._scrub, lambda: self.duration)
 
     def _build_ui(self):
+        self._build_header()
+        self._build_source()
+        self._build_frame_selection()
+        self._build_size_preset()
+        self._build_image_adjustments()
+        self._build_text_overlay()
+        self._build_batch_mode()
+        self._build_output()
+        self._build_run()
+        self._build_console()
+
+    def _build_header(self):
         self.make_header(self, t("tab.thumbnail_maker"), t("thumbnail.subtitle"), icon="🖼")
 
+    def _build_source(self):
+        """Source."""
         # ── Source ────────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(20), pady=px(14, 4))
@@ -80,6 +94,8 @@ class ThumbnailMakerTab(BaseTab):
         self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self._dur_lbl.pack(side="left", padx=px(10))
 
+    def _build_frame_selection(self):
+        """Frame selection."""
         # ── Frame selection ───────────────────────────────────────────────
         frame_lf = tk.LabelFrame(
             self,
@@ -176,6 +192,8 @@ class ThumbnailMakerTab(BaseTab):
             command=lambda: self._nudge(1.0),
         ).pack(side="left", padx=px(2))
 
+    def _build_size_preset(self):
+        """Size preset."""
         # ── Size preset ───────────────────────────────────────────────────
         size_lf = tk.LabelFrame(
             self,
@@ -194,6 +212,8 @@ class ThumbnailMakerTab(BaseTab):
                 sz_row, text=label, variable=self._size_var, value=key, font=(UI_FONT, 9)
             ).pack(anchor="w")
 
+    def _build_image_adjustments(self):
+        """Image adjustments."""
         # ── Image adjustments ─────────────────────────────────────────────
         adj_lf = tk.LabelFrame(
             self,
@@ -258,6 +278,8 @@ class ThumbnailMakerTab(BaseTab):
             highlightthickness=0,
         ).pack(side="left", padx=px(4))
 
+    def _build_text_overlay(self):
+        """Text overlay."""
         # ── Text overlay ──────────────────────────────────────────────────
         txt_lf = tk.LabelFrame(
             self,
@@ -323,6 +345,8 @@ class ThumbnailMakerTab(BaseTab):
             tr2, text=t("thumbnail.stroke_checkbox"), variable=self._text_stroke, font=(UI_FONT, 10)
         ).pack(side="left", padx=px(12))
 
+    def _build_batch_mode(self):
+        """Batch mode."""
         # ── Batch mode ────────────────────────────────────────────────────
         batch_lf = tk.LabelFrame(
             self,
@@ -350,6 +374,8 @@ class ThumbnailMakerTab(BaseTab):
             br, text=t("thumbnail.seconds_to_folder_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left")
 
+    def _build_output(self):
+        """Output."""
         # ── Output ────────────────────────────────────────────────────────
         of = tk.Frame(self)
         of.pack(fill="x", padx=px(20), pady=px(6))
@@ -378,6 +404,8 @@ class ThumbnailMakerTab(BaseTab):
                 side="left", padx=px(8)
             )
 
+    def _build_run(self):
+        """Run."""
         # ── Run ───────────────────────────────────────────────────────────
         bf = tk.Frame(self)
         bf.pack(pady=px(8))
@@ -394,6 +422,8 @@ class ThumbnailMakerTab(BaseTab):
         )
         self.btn_render.pack()
 
+    def _build_console(self):
+        """Console."""
         # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))

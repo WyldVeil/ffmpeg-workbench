@@ -105,6 +105,11 @@ class WaveformEditorTab(BaseTab):
 
     # ── UI ────────────────────────────────────────────────────────────
     def _build_ui(self):
+        mk = self._build_header()
+        self._build_region_actions(mk)
+        self._build_export_mode()
+
+    def _build_header(self):
         self.make_header(self, t("tab.waveform_editor"), t("waveform.subtitle"), icon="🎵")
         self.src_row = FileRow(self, t("common.source_file"), kind="media", on_change=self._load)
         self.src_row.pack(fill="x", padx=px(20), pady=px(12, 2))
@@ -168,6 +173,9 @@ class WaveformEditorTab(BaseTab):
         tk.Button(mk, text="Zoom to selection", relief="flat", command=self._zoom_sel).pack(
             side="left", padx=px(4)
         )
+        return mk
+
+    def _build_region_actions(self, mk):
         tk.Button(mk, text="Show all", relief="flat", command=self._zoom_all).pack(side="left")
 
         act = tk.LabelFrame(
@@ -231,6 +239,7 @@ class WaveformEditorTab(BaseTab):
             pady=px(2), fill="x"
         )
 
+    def _build_export_mode(self):
         of = tk.Frame(self)
         of.pack(fill="x", padx=px(20), pady=px(6))
         self._export_mode = tk.StringVar(value="video")

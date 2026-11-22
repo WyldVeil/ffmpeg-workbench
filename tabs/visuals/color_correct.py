@@ -9,6 +9,7 @@ before/after preview of the exact filter chain that will be rendered.
 from __future__ import annotations
 
 import tkinter as tk
+from functools import partial
 from tkinter import ttk
 
 from core.i18n import t
@@ -198,6 +199,10 @@ class ColorCorrectorTab(BaseTab):
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
 
+    def _reset_slider(self, var, default):
+        var.set(default)
+        self._schedule_preview()
+
     def _group(self, parent, title, keys):
         lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=px(10), pady=px(4))
         for row, key in enumerate(keys):
@@ -222,7 +227,7 @@ class ColorCorrectorTab(BaseTab):
                 width=2,
                 relief="flat",
                 cursor="hand2",
-                command=lambda v=var, d=default: (v.set(d), self._schedule_preview()),
+                command=partial(self._reset_slider, var, default),
             ).grid(row=row, column=2, padx=px(2))
         return lf
 

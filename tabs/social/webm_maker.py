@@ -15,11 +15,12 @@ import tkinter as tk
 from dataclasses import dataclass
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
-from core.queue_manager import Hooks
+from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit.time_fields import RangePicker
@@ -123,6 +124,57 @@ def _effective_vp9_deadline(deadline: str, two_pass: bool) -> str:
 
 
 # ─── Simple mode: auto-compute engine (spec 2026-05-10) ──────────────────────
+@dataclass(frozen=True)
+class _WebmEncode:
+    """One or two passes; with a size limit, re-encoded at a lower bitrate
+    (up to three times) until the file fits."""
+
+    src: str
+    job: dict[str, Any]
+
+    def _cmd(self, bitrate: int, *tail: str) -> list[str]:
+        job = self.job
+        inp = [ff.ffmpeg_path(), "-y"]
+        if job["start"] > 0:
+            inp += ["-ss", ff.ts(job["start"])]
+        inp += ["-t", ff.ts(job["dur"]), "-i", self.src, "-map", "0:v:0"]
+        return [*inp, *(a.replace("{BITRATE}", str(bitrate)) for a in job["video"]), *tail]
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        job = self.job
+        two_pass, cap = job["two_pass"], job["cap_bytes"]
+        amap = ["-map", "0:a:0"] if job["audio"] != ["-an"] else []
+        bitrate, final = job["bitrate"], ctx.output()
+        log = os.path.join(ctx.tempdir(), "pass")
+        if two_pass:
+            ctx.log("Pass 1 of 2: analysing…")
+            first = self._cmd(bitrate, "-pass", "1", "-passlogfile", log, "-an", "-f", "null", "-")
+            ctx.span(0.0, 0.4).run(first, duration=job["dur"])
+        passes = ["-pass", "2", "-passlogfile", log] if two_pass else []
+        lo = 0.4 if two_pass else 0.0
+        for attempt in range(4):
+            ctx.log(
+                "Encoding…"
+                if attempt == 0
+                else f"Over the size limit - re-encoding at {bitrate} kbps…"
+            )
+            ctx.span(
+                lo + (1 - lo) * attempt / 4, lo + (1 - lo) * (attempt + 1) / 4 if attempt else 1.0
+            )
+            tail = [*passes, *amap, *job["audio"], *job["extra"], "-f", job["format"], final]
+            ctx.run(self._cmd(bitrate, *tail), duration=job["dur"])
+            if not cap or os.path.getsize(final) <= cap:
+                break
+            bitrate = _size_retry_bitrate(bitrate, cap, os.path.getsize(final))
+        else:
+            raise RuntimeError(
+                "Could not get the file under the size limit - try a shorter "
+                "trim or a lower resolution."
+            )
+        ctx.log(f"Final size: {os.path.getsize(final) / 1024 / 1024:.2f} MB")
+        return 0
+
+
 @dataclass(frozen=True)
 class SimpleEncodeSettings:
     audio_bitrate_kbps: int  # 0 == silent profile (drives -an)
@@ -371,6 +423,19 @@ class WebMTab(BaseTab):
         self.simple_est_lbl.pack(anchor="w", padx=px(14), pady=px(4, 8))
 
     def _build_advanced_tab(self, parent):
+        left, right = self._build_advanced_columns(parent)
+        crf_row = self._build_advanced_tab_size_limit(left)
+        self._build_advanced_quality_slider(crf_row)
+        self._build_advanced_tab_quality_preset(left)
+        self._build_advanced_tab_codec(left)
+        self._build_advanced_tab_audio(left)
+        h_row, res_lf = self._build_advanced_tab_resolution(right)
+        self._build_advanced_tab_res_h(h_row, res_lf)
+        self._build_advanced_tab_trim(right)
+        ex3, tile_cb, tile_lbl = self._build_advanced_tab_extra_options(right)
+        self._build_advanced_tab_rowmt(ex3, tile_cb, tile_lbl)
+
+    def _build_advanced_columns(self, parent):
         # ── Two-column layout for the main controls ───────────────────────
         cols = tk.Frame(parent)
         cols.pack(fill="x", padx=px(8), pady=px(4))
@@ -378,9 +443,10 @@ class WebMTab(BaseTab):
         left.pack(side="left", fill="both", expand=True, padx=px(0, 6))
         right = tk.Frame(cols)
         right.pack(side="left", fill="both", expand=True, padx=px(6, 0))
+        return left, right
 
-        # ════ LEFT COLUMN ═════════════════════════════════════════════════
-
+    def _build_advanced_tab_size_limit(self, left):
+        """Size limit."""
         # ── Size limit ────────────────────────────────────────────────────
         size_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.target_size_section')}  ", padx=px(14), pady=px(10)
@@ -443,6 +509,9 @@ class WebMTab(BaseTab):
         crf_row = tk.Frame(self.crf_controls)
         crf_row.pack(fill="x", pady=px(4, 0))
         self.crf_var = tk.IntVar(value=31)  # preset will reseed in _on_quality_change
+        return crf_row
+
+    def _build_advanced_quality_slider(self, crf_row):
         tk.Scale(
             crf_row,
             variable=self.crf_var,
@@ -458,6 +527,8 @@ class WebMTab(BaseTab):
             self.crf_controls, text=t("webm_maker.crf_hint"), fg=CLR["fgdim"], font=(UI_FONT, 8)
         ).pack(anchor="w", pady=px(2, 0))
 
+    def _build_advanced_tab_quality_preset(self, left):
+        """Quality preset."""
         # ── Quality preset ────────────────────────────────────────────────
         qual_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.speed_section')}  ", padx=px(14), pady=px(10)
@@ -481,6 +552,8 @@ class WebMTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w", pady=px(4, 0))
 
+    def _build_advanced_tab_codec(self, left):
+        """Codec."""
         # ── Codec ─────────────────────────────────────────────────────────
         codec_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.video_codec_section')}  ", padx=px(14), pady=px(10)
@@ -505,6 +578,8 @@ class WebMTab(BaseTab):
             codec_lf, text=t("webm_maker.two_pass_checkbox"), variable=self.twopass_var
         ).pack(anchor="w", pady=px(6, 0))
 
+    def _build_advanced_tab_audio(self, left):
+        """Audio."""
         # ── Audio ─────────────────────────────────────────────────────────
         audio_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.audio_section')}  ", padx=px(14), pady=px(10)
@@ -533,8 +608,8 @@ class WebMTab(BaseTab):
         )
         self.audio_br_cb.pack(side="left", padx=px(4))
 
-        # ════ RIGHT COLUMN ════════════════════════════════════════════════
-
+    def _build_advanced_tab_resolution(self, right):
+        """Resolution."""
         # ── Resolution ────────────────────────────────────────────────────
         res_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.output_resolution_section')}  ", padx=px(14), pady=px(10)
@@ -597,6 +672,9 @@ class WebMTab(BaseTab):
         # Height slider + entry — symmetric to width
         h_row = tk.Frame(res_lf)
         h_row.pack(fill="x", pady=px(2, 4))
+        return h_row, res_lf
+
+    def _build_advanced_tab_res_h(self, h_row, res_lf):
         tk.Label(h_row, text=t("crop.height_label"), width=7, anchor="e").pack(side="left")
         self.res_h_var = tk.IntVar(value=1080)
         self.res_h_entry_var = tk.StringVar(value="1080")
@@ -654,6 +732,8 @@ class WebMTab(BaseTab):
             btn.pack(side="left", padx=px(1))
             self._res_preset_btns.append(btn)
 
+    def _build_advanced_tab_trim(self, right):
+        """Trim."""
         # ── Trim ──────────────────────────────────────────────────────────
         trim_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.trim_section')}  ", padx=px(14), pady=px(8)
@@ -668,6 +748,8 @@ class WebMTab(BaseTab):
         )
         self.trim.pack(side="left", padx=px(4))
 
+    def _build_advanced_tab_extra_options(self, right):
+        """Extra options."""
         # ── Extra options ─────────────────────────────────────────────────
         extra_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.extra_options_section')}  ", padx=px(14), pady=px(8)
@@ -731,6 +813,9 @@ class WebMTab(BaseTab):
             state="readonly",
             width=4,
         )
+        return ex3, tile_cb, tile_lbl
+
+    def _build_advanced_tab_rowmt(self, ex3, tile_cb, tile_lbl):
         tile_cb.pack(side="left", padx=px(4))
         self.add_tooltip(tile_lbl, t("webm_maker.tile_columns_tooltip"))
         self.add_tooltip(tile_cb, t("webm_maker.tile_columns_tooltip"))
@@ -1198,12 +1283,8 @@ class WebMTab(BaseTab):
             "format": "webm",
         }
 
-    def _advanced_job(self, src):
-        codec = self.codec_var.get()
-        two_pass = self.twopass_var.get()
-        size_limited = self.size_limit_enabled_var.get()
-        preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
-        _, vp9_cpu, vp9_deadline, vp8_cpu, _crf_hint = preset
+    def _trim_length(self) -> tuple[float, float]:
+        """(start, seconds) of the trimmed part."""
         t_start, t_until = self.trim.span()
         t_end = t_until or 0.0  # 0: to the end
         if t_start >= self._src_dur:
@@ -1211,24 +1292,28 @@ class WebMTab(BaseTab):
         eff = (t_end if t_end > t_start else self._src_dur) - t_start
         if eff <= 0.05:
             raise ValueError("The trimmed clip is empty.")
-        audio_lib = AUDIO_OPTIONS.get(self.audio_codec_var.get())
-        audio_kbps = int(self.audio_br_var.get().replace("k", "") or 128) if audio_lib else 0
-        cap_bytes, bitrate, crf, size_mb = None, 0, 0, 0.0
-        if size_limited:
-            try:
-                size_mb = float(self.size_limit_var.get())
-                assert size_mb > 0
-            except (ValueError, AssertionError):
-                raise ValueError("Enter a valid positive file-size target.") from None
-            cap_bytes = int(size_mb * 1024 * 1024)
-            budget = cap_bytes * 8 * 0.985 - audio_kbps * 1000 * eff  # ~1.5% container overhead
-            bitrate = max(50, min(int(budget / eff / 1000), 100_000))
-        else:
-            try:
-                crf = int(self.crf_var.get())
-            except (ValueError, tk.TclError):
-                raise ValueError("CRF must be a whole number between 0 and 63.") from None
-        vf = []
+        return t_start, eff
+
+    def _size_target(self, eff: float, audio_kbps: int) -> tuple[int, int, float]:
+        """(byte cap, video kbps, MB) that fit the clip in the size limit."""
+        try:
+            size_mb = float(self.size_limit_var.get())
+            assert size_mb > 0
+        except (ValueError, AssertionError):
+            raise ValueError("Enter a valid positive file-size target.") from None
+        cap_bytes = int(size_mb * 1024 * 1024)
+        budget = cap_bytes * 8 * 0.985 - audio_kbps * 1000 * eff  # ~1.5% container overhead
+        return cap_bytes, max(50, min(int(budget / eff / 1000), 100_000)), size_mb
+
+    def _crf(self) -> int:
+        try:
+            return int(self.crf_var.get())
+        except (ValueError, tk.TclError):
+            raise ValueError("CRF must be a whole number between 0 and 63.") from None
+
+    def _video_filters(self) -> list[str]:
+        """Resize (when not the source size) and frame rate (when set)."""
+        vf: list[str] = []
         if not self.use_source_res_var.get():
             ow, oh = self.res_w_var.get(), self.res_h_var.get()
             if (ow, oh) != (self._src_w, self._src_h):
@@ -1240,33 +1325,45 @@ class WebMTab(BaseTab):
             except ValueError:
                 raise ValueError("FPS must be a number (0 = keep).") from None
             vf.append(f"fps={fps}")
+        return vf
+
+    def _advanced_video(self, rate: list[str], size_limited: bool) -> list[str]:
+        """VP9 or VP8 arguments at *rate*, with the chosen speed and pixel format."""
+        codec = self.codec_var.get()
+        preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
+        _, vp9_cpu, vp9_deadline, vp8_cpu, _crf_hint = preset
+        vf = self._video_filters()
         pixfmt, warn = _resolve_pixfmt(self.pixfmt_var.get().split(" ")[0], self._src_pixfmt, codec)
         if warn:
             self._log(warn)
-        rate = ["-b:v", "{BITRATE}k"] if size_limited else ["-b:v", "0", "-crf", str(crf)]
         if codec == "VP9":
-            deadline = _effective_vp9_deadline(vp9_deadline, two_pass)
-            video = [
-                "-c:v",
-                "libvpx-vp9",
-                *rate,
-                "-cpu-used",
-                str(vp9_cpu),
-                "-deadline",
-                deadline,
+            deadline = _effective_vp9_deadline(vp9_deadline, self.twopass_var.get())
+            video = ["-c:v", "libvpx-vp9", *rate, "-cpu-used", str(vp9_cpu), "-deadline", deadline]
+            video += [
                 "-tile-columns",
                 self.tile_col_var.get(),
                 "-row-mt",
                 "1" if self.rowmt_var.get() else "0",
-                "-pix_fmt",
-                pixfmt,
             ]
+            video += ["-pix_fmt", pixfmt]
             if size_limited:
                 video += ["-undershoot-pct", "0", "-overshoot-pct", "0"]
         else:
             video = ["-c:v", "libvpx", *rate, "-cpu-used", str(vp8_cpu), "-pix_fmt", pixfmt]
-        if vf:
-            video += ["-vf", ",".join(vf)]
+        return [*video, "-vf", ",".join(vf)] if vf else video
+
+    def _advanced_job(self, src):
+        size_limited = self.size_limit_enabled_var.get()
+        t_start, eff = self._trim_length()
+        audio_lib = AUDIO_OPTIONS.get(self.audio_codec_var.get())
+        audio_kbps = int(self.audio_br_var.get().replace("k", "") or 128) if audio_lib else 0
+        cap_bytes, bitrate, crf, size_mb = None, 0, 0, 0.0
+        if size_limited:
+            cap_bytes, bitrate, size_mb = self._size_target(eff, audio_kbps)
+        else:
+            crf = self._crf()
+        rate = ["-b:v", "{BITRATE}k"] if size_limited else ["-b:v", "0", "-crf", str(crf)]
+        video = self._advanced_video(rate, size_limited)
         audio = (
             ["-c:a", audio_lib, "-b:a", self.audio_br_var.get()]
             if audio_lib and self._src_has_audio
@@ -1276,7 +1373,7 @@ class WebMTab(BaseTab):
         if self.loop_var.get():
             extra += ["-loop", "0"]
         self._log(
-            f"Advanced · {codec} · "
+            f"Advanced · {self.codec_var.get()} · "
             + (f"{bitrate} kbps for {size_mb:g} MB" if size_limited else f"CRF {crf}")
             + f" · {eff:.1f}s"
         )
@@ -1286,7 +1383,7 @@ class WebMTab(BaseTab):
             "video": video,
             "audio": audio,
             "extra": extra,
-            "two_pass": two_pass,
+            "two_pass": self.twopass_var.get(),
             "bitrate": bitrate,
             "cap_bytes": cap_bytes,
             "format": "webm",
@@ -1295,97 +1392,40 @@ class WebMTab(BaseTab):
     # ── the queued job ───────────────────────────────────────────────────────
 
     def _run_job(self, src, out, job):
-        def fill(args, bitrate):
-            return [a.replace("{BITRATE}", str(bitrate)) for a in args]
-
-        def work(_p, _c, ctx):
-            tmp = ctx.tempdir()
-            inp = [ff.ffmpeg_path(), "-y"]
-            if job["start"] > 0:
-                inp += ["-ss", ff.ts(job["start"])]
-            inp += ["-t", ff.ts(job["dur"]), "-i", src, "-map", "0:v:0"]
-            amap = ["-map", "0:a:0"] if job["audio"] != ["-an"] else []
-            bitrate = job["bitrate"]
-            final = ctx.output()
-            log = os.path.join(tmp, "pass")
-            if job["two_pass"]:
-                ctx.log("Pass 1 of 2: analysing…")
-                ctx.span(0.0, 0.4).run(
-                    inp
-                    + fill(job["video"], bitrate)
-                    + ["-pass", "1", "-passlogfile", log, "-an", "-f", "null", "-"],
-                    duration=job["dur"],
-                )
-            for attempt in range(4):
-                ctx.log(
-                    "Encoding…"
-                    if attempt == 0
-                    else f"Over the size limit - re-encoding at {bitrate} kbps…"
-                )
-                passes = ["-pass", "2", "-passlogfile", log] if job["two_pass"] else []
-                lo = 0.4 if job["two_pass"] else 0.0
-                ctx.span(
-                    lo + (1 - lo) * attempt / 4,
-                    lo + (1 - lo) * (attempt + 1) / 4 if attempt else 1.0,
-                )
-                ctx.run(
-                    inp
-                    + fill(job["video"], bitrate)
-                    + passes
-                    + amap
-                    + job["audio"]
-                    + job["extra"]
-                    + ["-f", job["format"], final],
-                    duration=job["dur"],
-                )
-                cap = job["cap_bytes"]
-                if not cap or os.path.getsize(final) <= cap:
-                    break
-                bitrate = _size_retry_bitrate(bitrate, cap, os.path.getsize(final))
-            else:
-                raise RuntimeError(
-                    "Could not get the file under the size limit - try a shorter "
-                    "trim or a lower resolution."
-                )
-            ctx.log(f"Final size: {os.path.getsize(final) / 1024 / 1024:.2f} MB")
-            return 0
-
         self.btn_cancel.config(state="normal")
         self.btn_render.config(state="disabled")
         self.progress.config(value=0)
         self.status_var.set("Queued…")
-
-        def on_progress(tid, line):
-            self._log(line)
-            task = self.task(tid)
-            if task is not None and task.fraction is not None:
-                self.progress.config(value=task.fraction * 100)
-                self.status_var.set(f"Encoding… {task.fraction * 100:.0f}%")
-
-        def on_complete(tid, rc):
-            self._task_id = None
-            self.btn_render.config(state="normal")
-            self.btn_cancel.config(state="disabled")
-            self.progress.config(value=100 if rc == 0 else 0)
-            task = self.task(tid)
-            self.last_task = task
-            if rc == 0 and os.path.exists(out):
-                mb = os.path.getsize(out) / 1024 / 1024
-                self.status_var.set(f"✅  Done  →  {mb:.2f} MB  ({out})")
-            elif rc == -1:
-                self.status_var.set("Cancelled.")
-            else:
-                self.status_var.set("❌  Encode failed.")
-            self.show_result(rc, out)
-
         self._task_id = self.enqueue_render(
             "WebM Encode",
             out,
-            work=work,
+            work=_WebmEncode(src, job).run,
             expected_duration=job["dur"],
             inputs=[src],
-            hooks=Hooks(on_progress=on_progress, on_complete=on_complete),
+            hooks=Hooks(on_progress=self._job_progress, on_complete=partial(self._job_done, out)),
         )
+
+    def _job_progress(self, tid, line):
+        self._log(line)
+        task = self.task(tid)
+        if task is not None and task.fraction is not None:
+            self.progress.config(value=task.fraction * 100)
+            self.status_var.set(f"Encoding… {task.fraction * 100:.0f}%")
+
+    def _job_done(self, out, tid, rc):
+        self._task_id = None
+        self.btn_render.config(state="normal")
+        self.btn_cancel.config(state="disabled")
+        self.progress.config(value=100 if rc == 0 else 0)
+        self.last_task = self.task(tid)
+        if rc == 0 and os.path.exists(out):
+            mb = os.path.getsize(out) / 1024 / 1024
+            self.status_var.set(f"✅  Done  →  {mb:.2f} MB  ({out})")
+        elif rc == -1:
+            self.status_var.set("Cancelled.")
+        else:
+            self.status_var.set("❌  Encode failed.")
+        self.show_result(rc, out)
 
     def _log(self, msg: str):
         self.log(self.console, msg)

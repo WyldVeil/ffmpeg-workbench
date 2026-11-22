@@ -43,6 +43,12 @@ class RegionBlurTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
+        body, left, top = self._build_header()
+        ed = self._build_selected_region(left, top)
+        self._build_output(body, ed)
+        self._build_console(body)
+
+    def _build_header(self):
         self.make_header(
             self, t("tab.privacy_blur"), "Hide faces, plates, names or screens.", icon="🕶"
         )
@@ -81,6 +87,9 @@ class RegionBlurTab(BaseTab):
             variable=self.result_var,
             command=self._refresh_preview,
         ).pack(anchor="w")
+        return body, left, top
+
+    def _build_selected_region(self, left, top):
         tk.Label(
             left, text="Drag on the picture to add a region.", fg=CLR["fgdim"], font=(UI_FONT, 8)
         ).pack(anchor="w")
@@ -119,6 +128,9 @@ class RegionBlurTab(BaseTab):
             length=px(140),
             label="Strength",
         ).grid(row=0, column=1, sticky="w", padx=px(6))
+        return ed
+
+    def _build_output(self, body, ed):
         tf = tk.Frame(ed)
         tf.grid(row=1, column=0, columnspan=2, sticky="w")
         tk.Label(tf, text="From").pack(side="left")
@@ -156,6 +168,8 @@ class RegionBlurTab(BaseTab):
             cursor="hand2",
             command=self._render,
         )
+
+    def _build_console(self, body):
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))

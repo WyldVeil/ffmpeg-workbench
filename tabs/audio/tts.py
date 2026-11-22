@@ -871,6 +871,10 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  Preview (generate + load into player, no export)
     # ─────────────────────────────────────────────────────────────────────
+    def _play_sample(self, path, _srt):
+        self._player_load(path)
+        self._player_play()
+
     def _preview_voice(self):
         """Speak a short sample sentence in the chosen voice."""
         name = self.voice_var.get().split("(")[0].strip()
@@ -883,7 +887,7 @@ class TTSVoiceOverTab(BaseTab):
             sample,
             self._scratch("voice_sample"),
             False,
-            lambda path, _srt: (self._player_load(path), self._player_play()),
+            self._play_sample,
         )
 
     def _generate_preview(self):

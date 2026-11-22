@@ -30,6 +30,17 @@ class AudioDuckerTab(BaseTab):
 
     # ─── UI ───────────────────────────────────────────────────────────────────
     def _build_ui(self):
+        lw = self._build_header()
+        self._build_source_video(lw)
+        self._build_music_file(lw)
+        self._build_preset_selector(lw)
+        self._build_duck_settings()
+        self._build_options()
+        self._build_output(lw)
+        self._build_render_button()
+        self._build_console()
+
+    def _build_header(self):
         # Header
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
@@ -63,7 +74,10 @@ class AudioDuckerTab(BaseTab):
                 "common.output_file",
             )
         )
+        return lw
 
+    def _build_source_video(self, lw):
+        """Source video."""
         # ── Source video ──────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(16), pady=px(8))
@@ -78,6 +92,8 @@ class AudioDuckerTab(BaseTab):
             sf, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat"
         ).pack(side="left")
 
+    def _build_music_file(self, lw):
+        """Music file."""
         # ── Music file ────────────────────────────────────────────────────────
         mf = tk.Frame(self)
         mf.pack(fill="x", padx=px(16), pady=px(4))
@@ -92,6 +108,8 @@ class AudioDuckerTab(BaseTab):
             mf, text=t("btn.browse"), command=self._browse_music, cursor="hand2", relief="flat"
         ).pack(side="left")
 
+    def _build_preset_selector(self, lw):
+        """Preset selector."""
         # ── Preset selector ───────────────────────────────────────────────────
         pf = tk.Frame(self)
         pf.pack(fill="x", padx=px(16), pady=px(6))
@@ -117,6 +135,8 @@ class AudioDuckerTab(BaseTab):
             relief="flat",
         ).pack(side="left", padx=px(4))
 
+    def _build_duck_settings(self):
+        """Duck settings."""
         # ── Duck settings ─────────────────────────────────────────────────────
         settings_f = tk.LabelFrame(
             self, text=t("ducker.sect_duck_settings"), padx=px(16), pady=px(10)
@@ -213,6 +233,8 @@ class AudioDuckerTab(BaseTab):
             side="left", padx=px(12)
         )
 
+    def _build_options(self):
+        """Options."""
         # ── Options ───────────────────────────────────────────────────────────
         opt_f = tk.Frame(self)
         opt_f.pack(anchor="w", padx=px(16), pady=px(4))
@@ -225,6 +247,8 @@ class AudioDuckerTab(BaseTab):
             side="left"
         )
 
+    def _build_output(self, lw):
+        """Output."""
         # ── Output ────────────────────────────────────────────────────────────
         of = tk.Frame(self)
         of.pack(fill="x", padx=px(16), pady=px(6))
@@ -239,6 +263,8 @@ class AudioDuckerTab(BaseTab):
             of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
         ).pack(side="left")
 
+    def _build_render_button(self):
+        """Render button."""
         # ── Render button ──────────────────────────────────────────────────────
         self.btn_render = tk.Button(
             self,
@@ -252,6 +278,8 @@ class AudioDuckerTab(BaseTab):
         )
         self.btn_render.pack(pady=px(10))
 
+    def _build_console(self):
+        """Console."""
         # ── Console ───────────────────────────────────────────────────────────
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))

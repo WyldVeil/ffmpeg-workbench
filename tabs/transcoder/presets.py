@@ -299,6 +299,10 @@ class PresetManagerTab(BaseTab):
 
     # ── Editor panel ──────────────────────────────────────────────────────
     def _build_editor(self, parent):
+        ef = self._build_editor_quick_insert(parent)
+        self._build_editor_quick_run_section(ef)
+
+    def _build_editor_quick_insert(self, parent):
         tk.Label(
             parent, text=t("presets.editor_section"), font=(UI_FONT, 9, "bold"), fg=CLR["fgdim"]
         ).pack(anchor="w", padx=px(8), pady=px(6, 2))
@@ -397,7 +401,10 @@ class PresetManagerTab(BaseTab):
             fg=CLR["fg"],
             command=self._clear_editor,
         ).pack(side="left", padx=px(4))
+        return ef
 
+    def _build_editor_quick_run_section(self, ef):
+        """Quick Run section."""
         # ── Quick Run section ─────────────────────────────────────────────
         run_lf = tk.LabelFrame(
             ef, text=f"  {t('presets.quick_run_section')}  ", padx=px(10), pady=px(8)
