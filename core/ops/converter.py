@@ -6,8 +6,13 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.ops.batch_files import run_batch
+from core.queue_manager import TaskContext
 
 FORMATS = {  # key: (label, kind)
     "mp4": ("MP4 - plays everywhere", "video"),
@@ -180,3 +185,28 @@ def stream_args(
     if fmt in ("mp4", "mov", "m4v"):
         args += ["-movflags", "+faststart"]
     return pre, args, notes, ", ".join(actions)
+
+
+def convert_cmd(src: str, out: str, pre: Sequence[str], args: Sequence[str]) -> list[str]:
+    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *pre, "-i", src, *args, out]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConvertBatch:
+    jobs: Sequence[tuple[str, str]]
+    fmt: str
+    smart: bool  # copy streams that already fit
+
+    def _one(self, ctx: TaskContext, src: str, part: str) -> None:
+        info = ff.probe(src)
+        pre, args, notes, summary = stream_args(info, self.fmt, self.smart)
+        for note in notes:
+            ctx.log("  " + note)
+        ctx.log(f"  {summary}")
+        ctx.run(convert_cmd(src, part, pre, args), duration=info.duration or None)
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        explain = {"no audio": "it has no audio"}
+        return run_batch(
+            ctx, self.jobs, self._one, noun="file(s) converted", explain=lambda r: explain.get(r, r)
+        )

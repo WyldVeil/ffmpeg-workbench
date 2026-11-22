@@ -15,15 +15,13 @@ file's result is checked - failures are reported, not counted as done.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.converter import FORMATS, stream_args
+from core.ops.converter import FORMATS, ConvertBatch
 from core.outputs import free_name
 from core.scaling import px
 from tabs import common
@@ -166,71 +164,16 @@ class FormatConverterTab(BaseTab):
             taken.add(os.path.normcase(out))
             jobs.append((src, out))
 
-        def work(_p, _c, ctx):
-            done, failed = [], []
-            for i, (src, out) in enumerate(jobs):
-                ctx.span(i / len(jobs), (i + 1) / len(jobs))
-                ctx.log(f"[{i + 1}/{len(jobs)}] {os.path.basename(src)} → {os.path.basename(out)}")
-                part = f"{os.path.splitext(out)[0]}.part{os.path.splitext(out)[1]}"
-                try:
-                    info = ff.probe(src)
-                    pre, args, notes, summary = stream_args(info, fmt, smart)
-                    for note in notes:
-                        ctx.log("  " + note)
-                    ctx.log(f"  {summary}")
-                    ctx.run(
-                        [
-                            ff.ffmpeg_path(),
-                            "-hide_banner",
-                            "-nostdin",
-                            "-y",
-                            *pre,
-                            "-i",
-                            src,
-                            *args,
-                            part,
-                        ],
-                        duration=info.duration or None,
-                    )
-                    os.replace(part, out)
-                    done.append(out)
-                except ff.CancelledError:
-                    _remove(part)
-                    raise
-                except Exception as exc:  # one bad file must not stop the batch
-                    logger.debug("work: best-effort step failed", exc_info=True)
-                    _remove(part)
-                    reason = (
-                        str(exc).strip().splitlines()[-1]
-                        if str(exc).strip()
-                        else type(exc).__name__
-                    )
-                    if reason == "no audio":
-                        reason = "it has no audio"
-                    failed.append((src, reason))
-                    ctx.log(f"  ✖ failed: {reason}")
-            ctx.log(f"Converted {len(done)} of {len(jobs)} file(s).")
-            if failed:
-                raise RuntimeError(
-                    f"{len(failed)} of {len(jobs)} file(s) failed:\n"
-                    + "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed)
-                )
-            return 0
-
+        batch = ConvertBatch(jobs=jobs, fmt=fmt, smart=smart)
         out_label = jobs[0][1] if len(jobs) == 1 else os.path.dirname(jobs[0][1])
         common.queue_job(
             self,
             common.Job(
                 name=f"Convert {len(jobs)} file(s) to {fmt.upper()}",
                 out=out_label,
-                work=work,
+                work=batch.run,
                 inputs=paths,
             ),
             btn=self.btn_render,
             console=self.console,
         )
-
-
-def _remove(path):
-    with contextlib.suppress(OSError):
-        os.remove(path)

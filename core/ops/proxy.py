@@ -6,16 +6,13 @@ each file written to a .part name and renamed only when it's complete.
 
 from __future__ import annotations
 
-import contextlib
-import logging
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import ffmpeg as ff
+from core.ops.batch_files import run_batch
 from core.queue_manager import TaskContext
-
-logger = logging.getLogger("crossfader.ops.proxy")
 
 PRESETS: dict[str, tuple[str, str, list[str], str]] = {  # key: (label, ext, video args, audio mode)
     "prores": (
@@ -107,11 +104,6 @@ def proxy_cmd(
     return [*head, *proxy_args(info, preset, size_key, audio), out]
 
 
-def _remove(path: str) -> None:
-    with contextlib.suppress(OSError):
-        os.remove(path)
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ProxyBatch:
     """(source, proxy) pairs made in turn; a file that fails is reported, and the
@@ -122,39 +114,15 @@ class ProxyBatch:
     size: str
     audio: bool
 
-    def _one(self, ctx: TaskContext, src: str, out: str) -> None:
-        part = f"{os.path.splitext(out)[0]}.part{PRESETS[self.preset][1]}"
-        try:
-            info = ff.probe(src)
-            if not info.has_video:
-                raise ValueError("no video in this file")
-            os.makedirs(os.path.dirname(out), exist_ok=True)
-            ctx.run(
-                proxy_cmd(src, part, info, self.preset, self.size, audio=self.audio),
-                duration=info.duration or None,
-            )
-            os.replace(part, out)
-        except BaseException:
-            _remove(part)
-            raise
+    def _one(self, ctx: TaskContext, src: str, part: str) -> None:
+        info = ff.probe(src)
+        if not info.has_video:
+            raise ValueError("no video in this file")
+        os.makedirs(os.path.dirname(part), exist_ok=True)
+        ctx.run(
+            proxy_cmd(src, part, info, self.preset, self.size, audio=self.audio),
+            duration=info.duration or None,
+        )
 
     def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
-        n = len(self.jobs)
-        failed: list[tuple[str, str]] = []
-        for i, (src, out) in enumerate(self.jobs):
-            ctx.span(i / n, (i + 1) / n)
-            ctx.log(f"[{i + 1}/{n}] {os.path.basename(src)} → {out}")
-            try:
-                self._one(ctx, src, out)
-            except ff.CancelledError:
-                raise
-            except Exception as exc:
-                logger.debug("proxy failed", exc_info=True)
-                reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
-                failed.append((src, reason))
-                ctx.log(f"  ✖ failed: {reason}")
-        ctx.log(f"{n - len(failed)} of {n} proxies made.")
-        if failed:
-            lines = "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed)
-            raise RuntimeError(f"{len(failed)} of {n} file(s) failed:\n{lines}")
-        return 0
+        return run_batch(ctx, self.jobs, self._one, noun="proxies made")
