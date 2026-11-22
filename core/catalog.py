@@ -17,9 +17,12 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from core.tools import SPECS, Category, ToolId, ToolSpec, spec
+
+if TYPE_CHECKING:
+    from core.ffmpeg import MediaInfo
 
 AIO: Final = spec(ToolId.ALL_IN_ONE_BUILDER).name
 
@@ -37,7 +40,7 @@ class Goal:
     icon: str
     title: str
     blurb: str
-    tools: tuple
+    tools: tuple[str, ...]
 
 
 GOALS = (
@@ -345,8 +348,8 @@ STOPWORDS = {
 _WORD = re.compile(r"[a-z0-9]+")
 
 
-def _tokens(text: str, *, query: bool = False) -> list:
-    out = []
+def _tokens(text: str, *, query: bool = False) -> list[str]:
+    out: list[str] = []
     for w in _WORD.findall(text.lower()):
         if query and w in STOPWORDS:
             continue
@@ -358,17 +361,17 @@ def _tokens(text: str, *, query: bool = False) -> list:
     return out
 
 
-def search(text: str, limit: int = 12) -> list:
+def search(text: str, limit: int = 12) -> list[str]:
     """Tool names that match *text*, best first."""
     query = _tokens(text, query=True)
     if not query:
         return []
-    goal_words = {}
+    goal_words: dict[str, list[str]] = {}
     leaders = {g.tools[0] for g in GOALS}  # ties go to the tool a goal lists first
     for g in GOALS:
         for name in g.tools:
             goal_words.setdefault(name, []).extend(_tokens(g.title + " " + g.blurb))
-    scored = []
+    scored: list[tuple[float, str]] = []
     for name, info in TOOLS.items():
         name_w = _tokens(name)
         words = set(_tokens(info.words))
@@ -410,10 +413,10 @@ def _size(n: float) -> str:
     return ""
 
 
-def describe(info) -> str:
+def describe(info: MediaInfo) -> str:
     """One line about a file: 'Video · 3840×2160 HDR · 60 fps · 2:31 · 1.3 GB'."""
-    parts = []
-    v = info.video if info.has_video and not info.video.attached_pic else None
+    parts: list[str] = []
+    v = info.video if info.video is not None and not info.video.attached_pic else None
     if v is not None and info.duration <= 0.05:
         parts.append("Image")
     elif v is not None:
@@ -434,17 +437,17 @@ def describe(info) -> str:
     return " · ".join(parts)
 
 
-def suggest(info, limit: int = 8) -> list:
+def suggest(info: MediaInfo, limit: int = 8) -> list[tuple[str, str]]:
     """[(tool name, reason)] worth trying on the file *info*, most specific first."""
     from core import metaclean as mc
 
-    out: list = []
+    out: list[tuple[str, str]] = []
 
-    def add(name: str, reason: str):
+    def add(name: str, reason: str) -> None:
         if name in TOOLS and all(n != name for n, _r in out):
             out.append((name, reason))
 
-    v = info.video if info.has_video and not info.video.attached_pic else None
+    v = info.video if info.video is not None and not info.video.attached_pic else None
     still = v is not None and info.duration <= 0.05
     found = mc.inspect(info)
     cats = {f.category for f in found}

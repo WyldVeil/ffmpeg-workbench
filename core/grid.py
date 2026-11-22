@@ -20,20 +20,25 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+
+Rect = tuple[int, int, int, int]  # x, y, w, h
+Size = tuple[int, int]
+LayoutKey = tuple[int, ...] | str  # the clip indices a layout is for, or "all"
 
 
 @dataclass
 class Layout:
-    rects: list  # [(x, y, w, h)] per clip, in clip order
+    rects: list[Rect]  # per clip, in clip order
     kind: str  # "grid CxR", "rows a-b-c", "columns a-b"
     coverage: float  # share of the canvas showing picture (0..1)
-    crop: list | None = None  # per clip: (cw, ch) to crop to after scaling (fill mode), else None
+    crop: list[Size | None] | None = None  # per clip: (cw, ch) to crop to after scaling (fill mode)
     balance: float = 0.0  # log of the geometric mean of the visible clip areas
     rows: int = 1
     cols: int = 1
 
-    def score(self) -> tuple:
+    def score(self) -> tuple[float, float, int]:
         """Bigger is better: every clip as large as possible *and* similar in
         size (geometric mean), then frame coverage, then the first clip's size."""
         first = self.rects[0][2] * self.rects[0][3] if self.rects else 0
@@ -47,18 +52,22 @@ def _even(v: float) -> int:
     return max(2, round(v / 2) * 2)
 
 
-def _fit_in(cell_w: float, cell_h: float, aspect: float) -> tuple:
+def _fit_in(cell_w: float, cell_h: float, aspect: float) -> tuple[float, float]:
     if cell_w / cell_h > aspect:
         return cell_h * aspect, cell_h
     return cell_w, cell_w / aspect
 
 
-def uniform(aspects: list, W: int, H: int, cols: int, gap: int = 0, fill: bool = False) -> Layout:
+def uniform(
+    aspects: Sequence[float], W: int, H: int, cols: int, gap: int = 0, fill: bool = False
+) -> Layout:
     n = len(aspects)
     rows = math.ceil(n / cols)
     cw = (W - gap * (cols + 1)) / cols
     ch = (H - gap * (rows + 1)) / rows
-    rects, crops, area, logs = [], [], 0.0, 0.0
+    rects: list[Rect] = []
+    crops: list[Size | None] = []
+    area = logs = 0.0
     for i, a in enumerate(aspects):
         r, c = divmod(i, cols)
         in_row = min(cols, n - r * cols)
@@ -83,7 +92,9 @@ def uniform(aspects: list, W: int, H: int, cols: int, gap: int = 0, fill: bool =
     )
 
 
-def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: bool) -> Layout:
+def _justified(
+    aspects: Sequence[float], W: int, H: int, groups: Sequence[int], gap: int, columns: bool
+) -> Layout:
     """Rows (or columns) of clips that exactly fill the width (height)."""
     if columns:  # transpose: work on the rotated problem
         lay = _justified([1 / a for a in aspects], H, W, groups, gap, False)
@@ -97,7 +108,8 @@ def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: b
             lay.cols,
             lay.rows,
         )
-    heights, idx = [], 0
+    heights: list[float] = []
+    idx = 0
     for size in groups:
         sum_a = sum(aspects[idx : idx + size])
         heights.append((W - gap * (size + 1)) / sum_a)
@@ -107,7 +119,8 @@ def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: b
     scale = min(1.0, avail_h / total) if total > 0 else 1.0
     used_h = total * scale + gap * (len(groups) + 1)
     y = (H - used_h) / 2 + gap
-    rects, area, idx, logs = [], 0.0, 0, 0.0
+    rects: list[Rect] = []
+    area, idx, logs = 0.0, 0, 0.0
     for size, h0 in zip(groups, heights, strict=False):
         h = h0 * scale
         widths = [aspects[idx + k] * h for k in range(size)]
@@ -131,11 +144,12 @@ def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: b
     )
 
 
-def _partitions(n: int, limit_exhaustive: int = 14):
+def _partitions(n: int, limit_exhaustive: int = 14) -> Iterator[list[int]]:
     """Ways to split n clips (in order) into rows."""
     if n <= limit_exhaustive:
         for cuts in itertools.product((0, 1), repeat=n - 1):
-            groups, size = [], 1
+            groups: list[int] = []
+            size = 1
             for c in cuts:
                 if c:
                     groups.append(size)
@@ -159,7 +173,9 @@ def _partitions(n: int, limit_exhaustive: int = 14):
             yield sizes
 
 
-def best_layout(aspects: list, W: int, H: int, *, gap: int = 0, mode: str = "fit") -> Layout:
+def best_layout(
+    aspects: Sequence[float], W: int, H: int, *, gap: int = 0, mode: str = "fit"
+) -> Layout:
     """Best arrangement of clips with display aspect ratios *aspects* on W×H."""
     if not aspects:
         raise ValueError("No clips to arrange.")
@@ -168,7 +184,7 @@ def best_layout(aspects: list, W: int, H: int, *, gap: int = 0, mode: str = "fit
     fill = mode == "fill"
     landscape = W >= H
 
-    def key(lay: Layout) -> tuple:
+    def key(lay: Layout) -> tuple[float, float, int, int]:
         # ties: follow the canvas - side by side on wide canvases, stacked on tall ones
         b, c, first = lay.score()
         return (b, c, -(lay.rows if landscape else lay.cols), first)
@@ -179,7 +195,7 @@ def best_layout(aspects: list, W: int, H: int, *, gap: int = 0, mode: str = "fit
         if best is None or key(lay) > key(best):
             best = lay
     if not fill:
-        seen = set()
+        seen: set[tuple[int, ...]] = set()
         for groups in _partitions(n):
             if tuple(groups) in seen:
                 continue
@@ -203,7 +219,7 @@ class Clip:
     has_audio: bool = False
 
 
-def _place(label: str, rect: tuple, crop: tuple | None, fps: str) -> str:
+def _place(label: str, rect: Rect, crop: Size | None, fps: str) -> str:
     """Scale (and crop for 'fill') one clip branch to its rectangle."""
     _x, _y, w, h = rect
     if crop:
@@ -216,7 +232,7 @@ def _place(label: str, rect: tuple, crop: tuple | None, fps: str) -> str:
 
 
 def collage_filter(
-    clips: list,
+    clips: Sequence[Clip],
     W: int,
     H: int,
     *,
@@ -228,19 +244,19 @@ def collage_filter(
     loop: bool = True,
     end: str = "hold",
     audio: str = "first",
-    layouts: dict | None = None,
-) -> tuple:
+    layouts: Mapping[LayoutKey, Layout] | None = None,
+) -> tuple[str, bool]:
     """filter_complex for the collage -> (graph, has_audio).
 
     *end* (when not looping): 'hold' (last frame stays), 'background', or
     'reflow' (the remaining clips are re-arranged to fill the frame)."""
-    parts = []
+    parts: list[str] = []
     if not loop and end == "reflow":
         cuts = sorted({0.0, total, *[c.duration for c in clips if 0 < c.duration < total]})
         segments = [(a, b) for a, b in itertools.pairwise(cuts) if b - a > 0.02]
         active = [[c for c in clips if c.duration > a + 1e-3] for a, _b in segments]
         uses = {c.index: sum(1 for group in active if c in group) for c in clips}
-        branch = {}
+        branch: dict[int, list[str]] = {}
         for c in clips:
             n = uses[c.index]
             if n == 0:
@@ -251,7 +267,7 @@ def collage_filter(
                 + (f",split={n}{''.join(labels)}" if n > 1 else labels[0])
             )
             branch[c.index] = labels
-        seg_labels = []
+        seg_labels: list[str] = []
         for k, ((a, b), group) in enumerate(zip(segments, active, strict=False)):
             parts.append(f"color=c={bg}:s={W}x{H}:r={fps}:d={b - a:.3f},format=yuv420p[bg{k}]")
             cur = f"[bg{k}]"

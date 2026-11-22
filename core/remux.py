@@ -19,6 +19,7 @@ that track already has (.srt, .ass, .sup, .m4a, .flac, .ac3...).
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from core import ffmpeg as ff
@@ -27,13 +28,13 @@ TEXT_SUBS = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text"}
 BITMAP_SUBS = {"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub"}
 
 #: what each container can carry as-is (None = anything)
-VIDEO_OK = {
+VIDEO_OK: dict[str, set[str] | None] = {
     "mp4": {"h264", "hevc", "av1", "vp9", "mpeg4", "mpeg2video", "mjpeg"},
     "mov": {"h264", "hevc", "prores", "dnxhd", "mjpeg", "mpeg4", "mpeg2video", "av1"},
     "webm": {"vp8", "vp9", "av1"},
     "mkv": None,
 }
-AUDIO_OK = {
+AUDIO_OK: dict[str, set[str] | None] = {
     "mp4": {"aac", "mp3", "ac3", "eac3", "alac", "opus", "flac", "mp2"},
     "mov": {
         "aac",
@@ -149,14 +150,14 @@ class Track:
         return " · ".join(bits)
 
 
-def _kind(s) -> str:
+def _kind(s: ff.Stream) -> str:
     if s.attached_pic:
         return "cover"
     return s.type if s.type in ("video", "audio", "subtitle", "attachment") else "data"
 
 
-def tracks_of(info: ff.MediaInfo, source: int = 0, path: str = "") -> list:
-    out = []
+def tracks_of(info: ff.MediaInfo, source: int = 0, path: str = "") -> list[Track]:
+    out: list[Track] = []
     for s in info.streams:
         kind = _kind(s)
         tags = s.tags or {}
@@ -177,7 +178,7 @@ def tracks_of(info: ff.MediaInfo, source: int = 0, path: str = "") -> list:
             details = f"{s.width}×{s.height}"
         else:
             details = ""
-        disp = s.raw.get("disposition") or {}
+        disp = ff.json_object(s.raw.get("disposition"))
         codec = s.codec if s.codec and s.codec != "unknown" else ""
         if kind == "attachment" and not codec:
             codec = os.path.splitext(tags.get("filename", ""))[1].lstrip(".").lower() or "file"
@@ -200,18 +201,21 @@ def tracks_of(info: ff.MediaInfo, source: int = 0, path: str = "") -> list:
     return out
 
 
-def problems(tracks: list, container: str) -> list:
+def problems(tracks: Sequence[Track], container: str) -> list[tuple[Track, str]]:
     """[(track, sentence)] for tracks the container can't hold (they'll be left
     out) or will change (text subtitles converted)."""
-    out = []
+    out: list[tuple[Track, str]] = []
     if container not in VIDEO_OK:
         return out
+    video_ok, audio_ok = VIDEO_OK[container], AUDIO_OK[container]
+    if video_ok is None or audio_ok is None:  # MKV holds anything
+        return out
     for t in tracks:
-        if not t.keep or container == "mkv":
+        if not t.keep:
             continue
-        if t.kind == "video" and t.codec not in VIDEO_OK[container]:
+        if t.kind == "video" and t.codec not in video_ok:
             out.append((t, f"{t.codec} video can't go into {container.upper()} - use MKV"))
-        elif t.kind == "audio" and t.codec not in AUDIO_OK[container]:
+        elif t.kind == "audio" and t.codec not in audio_ok:
             out.append((t, f"{t.codec} audio can't go into {container.upper()} - use MKV"))
         elif t.kind == "subtitle":
             if t.codec in BITMAP_SUBS:
@@ -252,14 +256,14 @@ def _droppable(t: Track, container: str) -> bool:
 
 
 def remux_command(
-    inputs: list,
-    tracks: list,
+    inputs: Sequence[str],
+    tracks: Sequence[Track],
     out: str,
     *,
     keep_chapters: bool = True,
     title: str | None = None,
     keep_tags: bool = True,
-) -> tuple:
+) -> tuple[list[str], list[str]]:
     """(argv, [notes]) copying *tracks* (in order) from *inputs* into *out*."""
     container = os.path.splitext(out)[1].lstrip(".").lower()
     container = {"m4v": "mp4", "mka": "mkv", "mks": "mkv"}.get(container, container)
@@ -269,8 +273,8 @@ def remux_command(
         if n > 0 and abs(delays.get(n, 0.0)) > 1e-6:
             argv += ["-itsoffset", f"{delays[n]:.3f}"]
         argv += ["-i", path]
-    notes = []
-    kept = []
+    notes: list[str] = []
+    kept: list[Track] = []
     for t in tracks:
         if not t.keep:
             continue
@@ -317,7 +321,7 @@ def remux_command(
     return [*argv, out], notes
 
 
-def extract_command(path: str, track: Track, out: str) -> list:
+def extract_command(path: str, track: Track, out: str) -> list[str]:
     """Save one track on its own (copied; MP4 text subtitles become SRT)."""
     argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
     if track.kind == "attachment":
@@ -345,15 +349,15 @@ def extract_ext(track: Track) -> str:
 class Plan:
     """What the Tracks tool holds: the files and the track list in output order."""
 
-    inputs: list = field(default_factory=list)
-    tracks: list = field(default_factory=list)
+    inputs: list[str] = field(default_factory=list[str])
+    tracks: list[Track] = field(default_factory=list[Track])
 
     def load(self, path: str) -> None:
         info = ff.probe(path)
         self.inputs = [path]
         self.tracks = tracks_of(info, 0, path)
 
-    def add_file(self, path: str, delay: float = 0.0, language: str = "") -> list:
+    def add_file(self, path: str, delay: float = 0.0, language: str = "") -> list[Track]:
         info = ff.probe(path)
         n = len(self.inputs)
         self.inputs.append(path)

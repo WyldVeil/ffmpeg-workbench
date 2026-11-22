@@ -26,12 +26,15 @@ import signal
 import sys
 import time
 from collections import deque
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 from functools import partial
 
 from core import ffmpeg as ff
 from core import proc as _proc
 from core import tasks
+
+Region = tuple[int, int, int, int]  # x, y, width, height
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
@@ -98,9 +101,9 @@ def default_folder() -> str:
 # ── Audio sources ─────────────────────────────────────────────────────────────
 
 
-def audio_sources() -> list:
+def audio_sources() -> list[tuple[str, str]]:
     """[(id, label)] - id is what the capture input needs."""
-    out = []
+    out: list[tuple[str, str]] = []
     try:
         if IS_WIN:
             r = ff.capture(
@@ -161,7 +164,7 @@ def audio_sources() -> list:
     return out
 
 
-def system_sound_source(sources: list) -> str | None:
+def system_sound_source(sources: Iterable[tuple[str, str]]) -> str | None:
     """Best guess at 'the computer's own sound' among *sources*."""
     for sid, label in sources:
         low = (sid + " " + label).lower()
@@ -181,7 +184,7 @@ def system_sound_source(sources: list) -> str | None:
     return None
 
 
-def audio_input(source: str) -> list:
+def audio_input(source: str) -> list[str]:
     if IS_WIN:
         return ["-thread_queue_size", "1024", "-f", "dshow", "-i", f"audio={source}"]
     if IS_MAC:
@@ -193,8 +196,8 @@ def audio_input(source: str) -> list:
 
 
 def screen_input(
-    fps: str = "30", *, region: tuple | None = None, cursor: bool = True, window_title: str = ""
-) -> list:
+    fps: str = "30", *, region: Region | None = None, cursor: bool = True, window_title: str = ""
+) -> list[str]:
     """FFmpeg input arguments for the screen (Windows / macOS / X11)."""
     if IS_WIN:
         args = ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", str(fps)]
@@ -247,17 +250,17 @@ def screen_input(
 
 
 def ffmpeg_command(
-    video_in: list,
-    audio_sources_: list,
+    video_in: Sequence[str],
+    audio_sources_: Sequence[str],
     out: str,
-    video_args: list,
+    video_args: Sequence[str],
     *,
     audio_codec: str = "aac",
-    region_crop: tuple | None = None,
+    region_crop: Region | None = None,
     seconds: int | None = None,
-    pre_input: list | None = None,
+    pre_input: Sequence[str] | None = None,
     vf_suffix: str = "",
-) -> list:
+) -> list[str]:
     cmd = [ff.ffmpeg_path(), "-hide_banner", "-y", *(pre_input or []), *video_in]
     for src in audio_sources_:
         cmd += audio_input(src)
@@ -302,8 +305,13 @@ def ffmpeg_command(
 
 
 def wayland_command(
-    tool: str, out: str, *, fps: str = "60", audio: tuple = ("output",), seconds: int | None = None
-) -> list:
+    tool: str,
+    out: str,
+    *,
+    fps: str = "60",
+    audio: tuple[str, ...] = ("output",),
+    seconds: int | None = None,
+) -> list[str]:
     """Command for gpu-screen-recorder / wf-recorder (audio: 'output' and/or 'input')."""
     name = os.path.basename(tool)
     if name.startswith("gpu-screen-recorder"):
@@ -323,9 +331,16 @@ def wayland_command(
 class Recording:
     """One running recorder process."""
 
-    def __init__(self, cmd: list, out: str, *, on_exit=None, seconds: int | None = None):
+    def __init__(
+        self,
+        cmd: list[str],
+        out: str,
+        *,
+        on_exit: Callable[[Recording, int], object] | None = None,
+        seconds: int | None = None,
+    ):
         self.cmd, self.out, self.on_exit = cmd, out, on_exit
-        self.tail = deque(maxlen=60)
+        self.tail: deque[str] = deque(maxlen=60)
         self.started = time.monotonic()
         self.stopping = False
         self.seconds = seconds
@@ -337,7 +352,7 @@ class Recording:
         if seconds and not self.is_ffmpeg:
             tasks.start_service(partial(self._stop_after, seconds), name="RecorderTimer")
 
-    def _pump(self):
+    def _pump(self) -> None:
         out = self.proc.stdout
         assert out is not None, "spawned with stdout=PIPE"
         for line in iter(out.readline, ""):

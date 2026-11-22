@@ -116,7 +116,7 @@ def _i(value: Any, default: int = 0) -> int:
         return default
 
 
-def _obj(value: object) -> dict[str, Any]:
+def json_object(value: object) -> dict[str, Any]:
     """A JSON object from ffprobe, or {} when the field is missing or the wrong shape."""
     return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
 
@@ -128,7 +128,7 @@ def _objs(value: object) -> list[dict[str, Any]]:
 
 
 def _tags(value: object) -> dict[str, Any]:
-    return {k.lower(): v for k, v in _obj(value).items()}
+    return {k.lower(): v for k, v in json_object(value).items()}
 
 
 def _rate(value: Any) -> float:
@@ -313,7 +313,7 @@ class MediaInfo:
 
 def _parse_stream(d: dict[str, Any]) -> Stream:
     tags = _tags(d.get("tags"))
-    disp = _obj(d.get("disposition"))
+    disp = json_object(d.get("disposition"))
     rotation = 0
     for sd in _objs(d.get("side_data_list")):
         if "rotation" in sd:
@@ -362,7 +362,7 @@ def _parse_stream(d: dict[str, Any]) -> Stream:
 
 
 def parse_probe_json(path: str, data: dict[str, Any]) -> MediaInfo:
-    fmt = _obj(data.get("format"))
+    fmt = json_object(data.get("format"))
     streams = tuple(_parse_stream(s) for s in _objs(data.get("streams")))
     duration = _f(fmt.get("duration"))
     if not duration:

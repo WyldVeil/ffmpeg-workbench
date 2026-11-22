@@ -585,7 +585,7 @@ class VideoCollageTab(BaseTab):
                 grid.Clip(i, s["aspect"], s["duration"], s["has_audio"])
                 for i, s in enumerate(clips)
             ]
-            layouts = (
+            layouts: dict[grid.LayoutKey, grid.Layout] | None = (
                 None if spec.get("auto") else {"all": self._layout([c.aspect for c in gclips])}
             )
             if not spec.get("auto") and not loop and end == "reflow":

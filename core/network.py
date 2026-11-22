@@ -579,7 +579,9 @@ def tool_proxy(url: str = "https://www.youtube.com/", cfg: NetConfig | None = No
     return "" if first == DIRECT else first
 
 
-def build_yt_dlp_args(cfg: NetConfig | None = None, url: str = "https://www.youtube.com/") -> list[str]:
+def build_yt_dlp_args(
+    cfg: NetConfig | None = None, url: str = "https://www.youtube.com/"
+) -> list[str]:
     """yt-dlp flags for the network settings.  A proxy that needs a password
     is passed through the environment (see subprocess_env), never here."""
     cfg = cfg if cfg is not None else get()

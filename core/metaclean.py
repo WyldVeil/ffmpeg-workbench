@@ -179,9 +179,9 @@ def _category(key: str) -> str:
     return "text"
 
 
-def inspect(info: ff.MediaInfo) -> list:
+def inspect(info: ff.MediaInfo) -> list[Finding]:
     """Everything personal or identifying in *info*."""
-    out = []
+    out: list[Finding] = []
     for key, value in (info.tags or {}).items():
         if key.lower() in STRUCTURAL_KEYS:
             continue
@@ -217,16 +217,14 @@ def inspect(info: ff.MediaInfo) -> list:
             if k == "vendor_id" and str(value).strip("[]0 ") == "":
                 continue
             out.append(Finding(_category(key), key, str(value), where))
-    titled = [c for c in (info.chapters or []) if (c.get("tags") or {}).get("title")]
+    titled = [str(t) for c in info.chapters if (t := ff.json_object(c.get("tags")).get("title"))]
     if titled:
-        names = ", ".join(str(c["tags"]["title"]) for c in titled[:4]) + (
-            "…" if len(titled) > 4 else ""
-        )
+        names = ", ".join(titled[:4]) + ("…" if len(titled) > 4 else "")
         out.append(Finding("chapters", f"{len(titled)} chapter title(s)", names, "chapters"))
     return out
 
 
-def _is_hdr(s) -> bool:
+def _is_hdr(s: ff.Stream) -> bool:
     return (s.color_transfer or "") in ("smpte2084", "arib-std-b67")
 
 
@@ -240,11 +238,11 @@ def clean_command(
     keep_chapters: bool = False,
     keep_cover: bool = False,
     deep: bool = False,
-) -> tuple:
+) -> tuple[list[str], list[str]]:
     """(argv, notes) for a lossless copy without the metadata."""
-    notes = []
+    notes: list[str] = []
     argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", src]
-    kept = []  # streams in output order
+    kept: list[ff.Stream] = []  # streams in output order
     for s in info.streams:
         telemetry = (s.raw.get("codec_tag_string") or "").lower() in ("gpmd", "camm")
         if s.type == "audio":
@@ -315,14 +313,14 @@ def clean_command(
 
 
 def leftovers(
-    after: list,
+    after: list[Finding],
     *,
     keep_chapters: bool = False,
     keep_cover: bool = False,
     keep_subtitles: bool = True,
-) -> list:
+) -> list[Finding]:
     """Findings still in the cleaned file that weren't asked to be kept."""
-    out = []
+    out: list[Finding] = []
     for f in after:
         if (f.category == "chapters" and keep_chapters) or (f.category == "cover" and keep_cover):
             continue
@@ -341,14 +339,14 @@ ENCODER_SIGNATURES = {
 }
 
 
-def stream_notes(path: str, limit: int = 4 << 20) -> list:
+def stream_notes(path: str, limit: int = 4 << 20) -> list[Finding]:
     """Encoder / device notes written inside the media data itself (not tags)."""
     try:
         with open(path, "rb") as fh:
             head = fh.read(limit)
     except OSError:
         return []
-    out = []
+    out: list[Finding] = []
     for sig, label in ENCODER_SIGNATURES.items():
         i = head.find(sig)
         if i >= 0:
