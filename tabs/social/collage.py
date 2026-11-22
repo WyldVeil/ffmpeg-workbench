@@ -471,7 +471,6 @@ class VideoCollageTab(BaseTab):
 
     # ── Render ────────────────────────────────────────────────────────
     def _render(self):
-        from core import encoders as enc
         from tabs import common
 
         key = self._layout_key()
@@ -513,7 +512,6 @@ class VideoCollageTab(BaseTab):
         fps = frame_rate(infos[0]) if infos[0] is not None else "30"
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
-        cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
         if spec.get("custom") == "pip":
             canvas = grid.Canvas(W, H, fps=fps, gap=self._gap(), background=bg)
             graph, has_a = grid.pip_filter(
@@ -522,8 +520,6 @@ class VideoCollageTab(BaseTab):
                 shortest=length_key == "shortest",
                 audio=audio,
             )
-            for p in paths:
-                cmd += ["-i", p]
         else:
             gclips = [
                 grid.Clip(i, s["aspect"], s["duration"], s["has_audio"])
@@ -539,17 +535,8 @@ class VideoCollageTab(BaseTab):
             )
             timing = grid.Timing(total, loop=loop, end=end, audio=audio)
             graph, has_a = grid.collage_filter(gclips, canvas, timing, layouts)
-            for p in paths:
-                cmd += (["-stream_loop", "-1"] if loop else []) + ["-i", p]
-        if venc.filter_suffix:
-            graph += f";[v]{venc.filter_suffix}[venc]"
-        cmd += ["-filter_complex", graph, "-map", "[venc]" if venc.filter_suffix else "[v]"]
-        cmd += (
-            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-            if has_a
-            else ["-an"]
-        )
-        cmd += [*venc.args, "-t", f"{total:.3f}", out]
+        looped = loop and spec.get("custom") != "pip"
+        cmd = grid.collage_cmd(paths, graph, venc, container, total, out, audio=has_a, loop=looped)
         what = (
             spec["label"]
             if not spec.get("auto")

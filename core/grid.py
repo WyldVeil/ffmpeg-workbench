@@ -23,6 +23,9 @@ import math
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
+from core import encoders as enc
+from core import ffmpeg as ff
+
 Rect = tuple[int, int, int, int]  # x, y, w, h
 Size = tuple[int, int]
 LayoutKey = tuple[int, ...] | str  # the clip indices a layout is for, or "all"
@@ -405,3 +408,32 @@ def pip_filter(
             f"normalize=0,aresample=48000[a]"
         )
     return ";".join(parts), True
+
+
+def collage_cmd(
+    paths: Sequence[str],
+    graph: str,
+    venc: enc.VideoEncode,
+    container: str,
+    total: float,
+    out: str,
+    *,
+    audio: bool,
+    loop: bool,
+) -> list[str]:
+    """The collage (*graph*: [v], and [a] with *audio*) of *paths*, *total* seconds;
+    each input repeated to fill the time when *loop*."""
+    cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
+    for p in paths:
+        cmd += [*(["-stream_loop", "-1"] if loop else []), "-i", p]
+    vmap = "[v]"
+    if venc.filter_suffix:
+        graph += f";[v]{venc.filter_suffix}[venc]"
+        vmap = "[venc]"
+    cmd += ["-filter_complex", graph, "-map", vmap]
+    cmd += (
+        ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+        if audio
+        else ["-an"]
+    )
+    return [*cmd, *venc.args, "-t", f"{total:.3f}", out]
