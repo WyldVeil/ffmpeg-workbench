@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 
 from core import settings
 from core.errors import OutputError
@@ -146,3 +146,14 @@ def resolve_output(
     if answer is None:
         raise OutputRejected("")
     return out if answer else alt
+
+
+def free_name(path: str, taken: Collection[str]) -> str:
+    """*path*, or "name (2).ext", "name (3).ext"... - the first that neither exists
+    nor is already *taken* (normcase'd paths) by another output of the same job."""
+    base, ext = os.path.splitext(path)
+    cand, n = path, 2
+    while os.path.exists(cand) or os.path.normcase(cand) in taken:
+        cand = f"{base} ({n}){ext}"
+        n += 1
+    return cand

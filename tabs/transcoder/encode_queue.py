@@ -558,7 +558,7 @@ class EncodeQueueTab(BaseTab):
         self._queue_job(src, out)
 
     def _add_folder(self):
-        from tabs.transcoder.converter import free_name
+        from core.outputs import free_name
 
         folder = dialogs.askdirectory()
         if not folder:

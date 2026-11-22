@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops import batch as batch_ops
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -333,7 +334,7 @@ class BatchTab(BaseTab):
                 ctx.log(f"[{i + 1}/{len(files)}] {os.path.basename(src)}")
                 try:
                     info = ff.probe(src)
-                    plan = batch_plan(op, info, src, out_dir, opts, taken)
+                    plan = batch_ops.plan(op, info, src, out_dir, opts, taken)
                     if isinstance(plan, str):
                         skipped.append((src, plan))
                         ctx.log(f"  skipped: {plan}")
@@ -376,166 +377,3 @@ class BatchTab(BaseTab):
             btn=self.btn_render,
             console=self.console,
         )
-
-
-def batch_plan(op, info, src, out_dir, opts, taken):
-    """(output path, [argv | callable(ctx) -> argv]) or a reason string to skip.
-    '{OUT}' in an argv stands for the temporary output file."""
-    from core import encoders as enc
-    from core import loudness
-    from tabs.transcoder.converter import free_name, stream_args
-
-    base = os.path.splitext(os.path.basename(src))[0]
-    src_ext = os.path.splitext(src)[1].lower()
-    ffm = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
-
-    def name(suffix, ext):
-        return free_name(os.path.join(out_dir, f"{base}{suffix}{ext}"), taken)
-
-    if op in ("audio_mp3", "audio_aac"):
-        if not info.has_audio:
-            return "no audio"
-        mp3 = op == "audio_mp3"
-        out = name("", ".mp3" if mp3 else ".m4a")
-        codec = ["-c:a", "libmp3lame", "-q:a", "2"] if mp3 else ["-c:a", "aac", "-b:a", "192k"]
-        return out, [
-            [*ffm, "-i", src, "-map", "0:a:0", "-vn", *codec, "-map_metadata", "0", "{OUT}"]
-        ]
-    if op == "loudness":
-        if not info.has_audio:
-            return "no audio to normalise"
-        ext = (
-            src_ext
-            if src_ext in (".mp4", ".mkv", ".mov", ".webm", ".m4a", ".mp3", ".flac", ".wav")
-            else ".mkv"
-        )
-        out = name("_loud", ext)
-        rate = info.require_audio().sample_rate or 48000
-        container = ext.lstrip(".")
-
-        def second_pass(ctx):
-            res = ctx.run(
-                loudness.measure_cmd(src, -16.0, -1.5, 11.0),
-                duration=info.duration or None,
-                tail=200000,
-            )
-            meas = loudness.parse_measurement(res.log_tail)
-            acodec = (
-                enc.default_audio_for(container)
-                if container not in ("wav", "flac", "mp3")
-                else {"wav": "pcm16", "flac": "flac", "mp3": "mp3"}[container]
-            )
-            vargs = ["-map", "0:v?", "-c:v", "copy"]
-            if (
-                info.has_video
-                and info.require_video().codec == "hevc"
-                and container in ("mp4", "mov")
-            ):
-                vargs += ["-tag:v", "hvc1"]
-            return [
-                *ffm,
-                "-i",
-                src,
-                *vargs,
-                "-map",
-                "0:a:0",
-                "-af",
-                loudness.normalise_filter(-16.0, -1.5, 11.0, meas, rate),
-                *enc.audio(acodec, "192k", container=container),
-                "-map",
-                "0:s?",
-                "-c:s",
-                "copy",
-                "-map_metadata",
-                "0",
-                "{OUT}",
-            ]
-
-        return out, [second_pass]
-    if op == "strip_meta":
-        out = name("_clean", src_ext or ".mkv")
-        keep = []
-        for st in info.streams:
-            lang = st.tags.get("language")
-            if lang:
-                keep += [f"-metadata:s:{st.index}", f"language={lang}"]
-        return out, [
-            [
-                *ffm,
-                "-i",
-                src,
-                "-map",
-                "0",
-                "-c",
-                "copy",
-                "-map_metadata",
-                "-1",
-                "-map_chapters",
-                "-1",
-                *keep,
-                "-fflags",
-                "+bitexact",
-                "{OUT}",
-            ]
-        ]
-    if not info.has_video:
-        return "no video"
-    if op == "to_mp4":
-        out = name("", ".mp4") if src_ext != ".mp4" else name("_converted", ".mp4")
-        pre, args, _notes, _summary = stream_args(info, "mp4", True)
-        return out, [ffm + pre + ["-i", src, *args, "{OUT}"]]
-    crf = opts["crf"]
-    quality = (
-        "very_high"
-        if crf <= 18
-        else "high"
-        if crf <= 22
-        else "good"
-        if crf <= 26
-        else "low"
-        if crf <= 30
-        else "lowest"
-    )
-    speed = {
-        "ultrafast": "fastest",
-        "superfast": "fastest",
-        "veryfast": "fast",
-        "faster": "fast",
-        "fast": "fast",
-        "medium": "balanced",
-        "slow": "slow",
-        "slower": "slowest",
-        "veryslow": "slowest",
-    }.get(opts["preset"], "balanced")
-    ve = enc.video("h264", quality, speed=speed, hw="auto", container="mp4")
-    vf = []
-    suffix = "_h264"
-    if op == "resize":
-        bw, bh = (int(x) for x in opts["res"].split("x"))
-        w, h = info.require_video().display_size
-        if h > w:
-            bw, bh = bh, bw  # portrait videos get a portrait box
-        if w <= bw and h <= bh:
-            return "already that size or smaller"
-        vf.append(
-            f"scale={bw}:{bh}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1"
-        )
-        suffix = f"_{min(bw, bh)}p"
-    out = name(suffix, ".mp4")
-    audio = ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
-    return out, [
-        ffm
-        + ve.pre_input
-        + [
-            "-i",
-            src,
-            "-map",
-            "0:v:0",
-            *ve.vf_args(",".join(vf) or None),
-            *ve.args,
-            *audio,
-            "-map_metadata",
-            "0",
-            "{OUT}",
-        ]
-    ]
