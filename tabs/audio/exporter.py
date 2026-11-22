@@ -22,13 +22,14 @@ import math
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core import ffmpeg as ff
 from core import proc as _proc
 from core import tasks
 from core.hardware import get_binary_path
 from core.i18n import t
-from core.queue_manager import Hooks
+from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -1151,115 +1152,20 @@ class AudioExporterTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
 
-        def work(_p, _c, ctx):
-            from core import loudness
-
-            inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
-            if cfg["start"] > 0:
-                inp += ["-ss", f"{cfg['start']:.3f}"]
-            if end is not None:
-                inp += ["-to", f"{end:.3f}"]
-            inp += ["-i", src]
-            keep = None
-            seg_len = length
-            if cfg["strip_silence"]:
-                ctx.log("Finding leading and trailing silence…")
-                res = ctx.span(0, 0.2).run(
-                    [
-                        *inp,
-                        "-map",
-                        "0:a:0",
-                        "-af",
-                        "silencedetect=n=-50dB:d=0.1",
-                        "-f",
-                        "null",
-                        "-",
-                    ],
-                    duration=length,
-                    tail=200000,
-                )
-                keep = silence_bounds(res.log_tail, length)
-                seg_len = keep[1] - keep[0]
-                ctx.log(f"Keeping {keep[0]:.2f}s → {keep[1]:.2f}s")
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
+            inp = _input_args(src, cfg["start"], end)
+            keep = _silence_kept(ctx, inp, length) if cfg["strip_silence"] else None
+            seg_len = keep[1] - keep[0] if keep else length
             chain = self.base_chain(cfg, length, keep)
-            gain_db = 0.0
             if cfg["replay_gain"]:
-                ctx.log("Measuring ReplayGain…")
-                res = ctx.span(0.2, 0.4).run(
-                    [
-                        *inp,
-                        "-map",
-                        "0:a:0",
-                        "-af",
-                        ",".join([*chain, "replaygain"]),
-                        "-f",
-                        "null",
-                        "-",
-                    ],
-                    duration=length,
-                    tail=200000,
-                )
-                gain_db, peak = parse_replaygain(res.log_tail)
-                if peak > 0:  # never push the peak above -1 dBFS
-                    gain_db = min(gain_db, -20 * math.log10(peak) - 1.0)
-                ctx.log(f"ReplayGain: {gain_db:+.2f} dB")
-                chain.append(f"volume={gain_db:.2f}dB")
+                chain.append(_replay_gain(ctx, inp, chain, length))
             rate = cfg["sr"] or str(info.require_audio().sample_rate or 48000)
-            if cfg["norm"] == "EBU R128 (loudnorm)":
-                ctx.log("Measuring loudness (pass 1 of 2)…")
-                cmd = [
-                    *inp,
-                    "-map",
-                    "0:a:0",
-                    "-af",
-                    ",".join(
-                        [
-                            *chain,
-                            f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json",
-                        ]
-                    ),
-                    "-f",
-                    "null",
-                    "-",
-                ]
-                res = ctx.span(0.4, 0.6).run(cmd, duration=length, tail=200000)
-                meas = loudness.parse_measurement(res.log_tail)
-                chain.append(loudness.normalise_filter(cfg["lufs"], cfg["tp"], 11, meas, int(rate)))
-            elif cfg["norm"] == "Peak normalize":
-                ctx.log("Measuring the peak level…")
-                res = ctx.span(0.4, 0.6).run(
-                    [
-                        *inp,
-                        "-map",
-                        "0:a:0",
-                        "-af",
-                        ",".join([*chain, "volumedetect"]),
-                        "-f",
-                        "null",
-                        "-",
-                    ],
-                    duration=length,
-                    tail=200000,
-                )
-                peak = parse_max_volume(res.log_tail)
-                chain.append(f"volume={cfg['tp'] - peak:.2f}dB")
-                ctx.log(f"Peak {peak:.1f} dBFS → {cfg['tp']:.1f} dBFS")
-            cmd = [*list(inp), "-map", "0:a:0"]
+            level = _levelling(ctx, inp, chain, cfg, length, int(rate))
+            chain += [level] if level else []
+            cmd = [*inp, "-map", "0:a:0"]
             if cover is not None:
                 cmd += ["-map", f"0:{cover}", "-c:v", "copy", "-disposition:v:0", "attached_pic"]
-            cmd += self.codec_args(cfg, seg_len)
-            if cfg["sr"]:
-                cmd += ["-ar", cfg["sr"]]
-            if cfg["ch"]:
-                cmd += ["-ac", cfg["ch"]]
-            if chain:
-                cmd += ["-af", ",".join(chain)]
-            if cfg["strip_meta"]:
-                cmd += ["-map_metadata", "-1"]
-            for key, val in cfg["tags"].items():
-                cmd += ["-metadata", f"{key}={val}"]
-            if out.lower().endswith(".m4a"):
-                cmd += ["-movflags", "+faststart"]
+            cmd += [*self.codec_args(cfg, seg_len), *_output_options(cfg, chain, out)]
             ctx.log("Encoding…")
             analysed = cfg["norm"] != "None" or cfg["replay_gain"] or cfg["strip_silence"]
             ctx.span(0.6 if analysed else 0.0, 1.0).run([*cmd, ctx.output(out)], duration=seg_len)
@@ -1327,3 +1233,80 @@ def parse_max_volume(log) -> float:
         if "max_volume:" in line:
             return float(line.split("max_volume:")[1].split("dB")[0])
     raise RuntimeError("Could not measure the peak level.")
+
+
+# ── the export job's steps ────────────────────────────────────────────────────
+
+
+def _input_args(src: str, start: float, end: float | None) -> list[str]:
+    inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
+    inp += ["-ss", f"{start:.3f}"] if start > 0 else []
+    inp += ["-to", f"{end:.3f}"] if end is not None else []
+    return [*inp, "-i", src]
+
+
+def _analysis(
+    ctx: TaskContext, inp: list[str], af: str, length: float, span: tuple[float, float]
+) -> list[str]:
+    """Run the audio through *af* without writing anything; its log."""
+    cmd = [*inp, "-map", "0:a:0", "-af", af, "-f", "null", "-"]
+    return ctx.span(*span).run(cmd, duration=length, tail=200000).log_tail
+
+
+def _silence_kept(ctx: TaskContext, inp: list[str], length: float) -> tuple[float, float]:
+    ctx.log("Finding leading and trailing silence…")
+    keep = silence_bounds(
+        _analysis(ctx, inp, "silencedetect=n=-50dB:d=0.1", length, (0, 0.2)), length
+    )
+    ctx.log(f"Keeping {keep[0]:.2f}s → {keep[1]:.2f}s")
+    return keep
+
+
+def _replay_gain(ctx: TaskContext, inp: list[str], chain: list[str], length: float) -> str:
+    ctx.log("Measuring ReplayGain…")
+    gain_db, peak = parse_replaygain(
+        _analysis(ctx, inp, ",".join([*chain, "replaygain"]), length, (0.2, 0.4))
+    )
+    if peak > 0:  # never push the peak above -1 dBFS
+        gain_db = min(gain_db, -20 * math.log10(peak) - 1.0)
+    ctx.log(f"ReplayGain: {gain_db:+.2f} dB")
+    return f"volume={gain_db:.2f}dB"
+
+
+def _levelling(
+    ctx: TaskContext,
+    inp: list[str],
+    chain: list[str],
+    cfg: dict[str, Any],
+    length: float,
+    rate: int,
+) -> str | None:
+    """The loudness (EBU R128, two passes) or peak normalisation filter, if asked for."""
+    from core import loudness
+
+    if cfg["norm"] == "EBU R128 (loudnorm)":
+        ctx.log("Measuring loudness (pass 1 of 2)…")
+        probe = f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json"
+        meas = loudness.parse_measurement(
+            _analysis(ctx, inp, ",".join([*chain, probe]), length, (0.4, 0.6))
+        )
+        return loudness.normalise_filter(cfg["lufs"], cfg["tp"], 11, meas, rate)
+    if cfg["norm"] == "Peak normalize":
+        ctx.log("Measuring the peak level…")
+        peak = parse_max_volume(
+            _analysis(ctx, inp, ",".join([*chain, "volumedetect"]), length, (0.4, 0.6))
+        )
+        ctx.log(f"Peak {peak:.1f} dBFS → {cfg['tp']:.1f} dBFS")
+        return f"volume={cfg['tp'] - peak:.2f}dB"
+    return None
+
+
+def _output_options(cfg: dict[str, Any], chain: list[str], out: str) -> list[str]:
+    """Sample rate, channels, filters, tags and container flags."""
+    cmd = ["-ar", cfg["sr"]] if cfg["sr"] else []
+    cmd += ["-ac", cfg["ch"]] if cfg["ch"] else []
+    cmd += ["-af", ",".join(chain)] if chain else []
+    cmd += ["-map_metadata", "-1"] if cfg["strip_meta"] else []
+    for key, val in cfg["tags"].items():
+        cmd += ["-metadata", f"{key}={val}"]
+    return cmd + (["-movflags", "+faststart"] if out.lower().endswith(".m4a") else [])
