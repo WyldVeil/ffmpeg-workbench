@@ -11,16 +11,11 @@ from tkinter import messagebox, ttk
 from core import concat
 from core import encoders as enc
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import t, t_or
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.widgets import SaveRow
-
-
-def _tr(key, fallback):
-    text = t(key)
-    return fallback if text == key else text
 
 
 class BatchJoinerTab(BaseTab):
@@ -95,8 +90,8 @@ class BatchJoinerTab(BaseTab):
         self.enc_frame = tk.Frame(opt_lf)
         tk.Label(self.enc_frame, text=t("common.resolution")).pack(side="left")
         self._res_choices = [
-            ("first", _tr("batch_joiner.same_as_first", "Same as first clip")),
-            ("largest", _tr("batch_joiner.largest_clip", "Largest clip")),
+            ("first", t_or("batch_joiner.same_as_first", "Same as first clip")),
+            ("largest", t_or("batch_joiner.largest_clip", "Largest clip")),
             ("3840x2160", "3840x2160"),
             ("2560x1440", "2560x1440"),
             ("1920x1080", "1920x1080"),
@@ -113,8 +108,8 @@ class BatchJoinerTab(BaseTab):
         ).pack(side="left", padx=px(4))
         tk.Label(self.enc_frame, text=t("batch_joiner.lbl_fps")).pack(side="left")
         self._fps_choices = [
-            ("first", _tr("batch_joiner.same_as_first", "Same as first clip")),
-            ("largest", _tr("batch_joiner.highest", "Highest")),
+            ("first", t_or("batch_joiner.same_as_first", "Same as first clip")),
+            ("largest", t_or("batch_joiner.highest", "Highest")),
             ("24", "24"),
             ("25", "25"),
             ("30", "30"),
@@ -265,20 +260,20 @@ class BatchJoinerTab(BaseTab):
     def _agree_to_reencode(self, problems):
         """Say why the files can't be joined losslessly; offer to re-encode (and switch to it)."""
         msg = (
-            _tr(
+            t_or(
                 "batch_joiner.not_copyable",
                 "These files can't be joined losslessly because they differ:",
             )
             + "\n\n"
             + "\n".join("\u2022 " + p for p in problems[:8])
             + "\n\n"
-            + _tr(
+            + t_or(
                 "batch_joiner.offer_reencode",
                 "Re-encode them so they match? (slower, but the result will play correctly)",
             )
         )
         if not messagebox.askyesno(
-            _tr("batch_joiner.files_differ", "Files differ"), msg, parent=self
+            t_or("batch_joiner.files_differ", "Files differ"), msg, parent=self
         ):
             return False
         self.reencode_var.set(True)

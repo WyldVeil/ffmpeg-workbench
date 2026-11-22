@@ -291,3 +291,9 @@ def t(key: str, **kwargs: object) -> str:
         except Exception:
             logger.debug("t: best-effort step failed", exc_info=True)
     return text
+
+
+def t_or(key: str, fallback: str) -> str:
+    """``t(key)``, or *fallback* (English) while the key has no translation yet."""
+    text = t(key)
+    return fallback if text == key else text

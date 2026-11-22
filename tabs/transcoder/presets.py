@@ -116,10 +116,10 @@ class PresetManagerTab(BaseTab):
 
     # ── Editor panel ──────────────────────────────────────────────────────
     def _build_editor(self, parent):
-        ef = self._build_editor_quick_insert(parent)
-        self._build_editor_quick_run_section(ef)
+        ef = self._build_preset_form(parent)
+        self._build_quick_run(ef)
 
-    def _build_editor_quick_insert(self, parent):
+    def _build_preset_form(self, parent):
         tk.Label(
             parent, text=t("presets.editor_section"), font=(UI_FONT, 9, "bold"), fg=CLR["fgdim"]
         ).pack(anchor="w", padx=px(8), pady=px(6, 2))
@@ -151,7 +151,12 @@ class PresetManagerTab(BaseTab):
                 tk.Entry(row, textvariable=var, width=42, relief="flat").pack(
                     side="left", padx=px(6)
                 )
+        self._build_command_editor(ef)
+        self._build_preset_buttons(ef)
+        return ef
 
+    def _build_command_editor(self, ef):
+        """The FFmpeg command, with snippets to insert."""
         # FFmpeg command template
         cmd_lbl = tk.Frame(ef)
         cmd_lbl.pack(fill="x", pady=px(8, 2))
@@ -185,6 +190,8 @@ class PresetManagerTab(BaseTab):
                 command=lambda s=snippet: self._insert_snippet(s),
             ).pack(side="left", padx=px(2))
 
+    def _build_preset_buttons(self, ef):
+        """Save, delete and test."""
         # Buttons
         act_f = tk.Frame(ef)
         act_f.pack(fill="x", pady=px(8))
@@ -210,11 +217,9 @@ class PresetManagerTab(BaseTab):
             fg=CLR["fg"],
             command=self._clear_editor,
         ).pack(side="left", padx=px(4))
-        return ef
 
-    def _build_editor_quick_run_section(self, ef):
+    def _build_quick_run(self, ef):
         """Quick Run section."""
-        # ── Quick Run section ─────────────────────────────────────────────
         run_lf = tk.LabelFrame(
             ef, text=f"  {t('presets.quick_run_section')}  ", padx=px(10), pady=px(8)
         )

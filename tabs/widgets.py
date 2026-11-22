@@ -35,7 +35,7 @@ from tkinter import ttk
 
 from core import encoders, tasks
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import t_or
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from tabs import framestep
@@ -47,11 +47,6 @@ def _clr():
     from tabs.base_tab import CLR
 
     return CLR
-
-
-def _tr(key: str, fallback: str) -> str:
-    text = t(key)
-    return fallback if text == key else text
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +98,7 @@ class FramePreview(tk.Frame):
             self._time_lbl.pack(anchor="e")
         if on_click:
             self.canvas.bind("<Button-1>", lambda _e: on_click())
-        self._placeholder(_tr("preview.no_file", "No video loaded"))
+        self._placeholder(t_or("preview.no_file", "No video loaded"))
 
     # ── public ───────────────────────────────────────────────────────────────
 
@@ -114,16 +109,16 @@ class FramePreview(tk.Frame):
         self._shown_t = None
         if not self._path:
             self._duration = 0.0
-            self._placeholder(_tr("preview.no_file", "No video loaded"))
+            self._placeholder(t_or("preview.no_file", "No video loaded"))
             return
         if duration is None:
             info = ff.try_probe(self._path)
             duration = info.duration if info else 0.0
             if info is not None and not info.has_video:
-                self._placeholder(_tr("preview.audio_only", "Audio file — no picture"))
+                self._placeholder(t_or("preview.audio_only", "Audio file — no picture"))
                 return
         self._duration = max(0.0, float(duration or 0.0))
-        self._placeholder(_tr("preview.loading", "Loading preview…"))
+        self._placeholder(t_or("preview.loading", "Loading preview…"))
         self.show(at)
 
     def show(self, at: float) -> None:
@@ -199,12 +194,12 @@ class FramePreview(tk.Frame):
         if gen != self._gen or not self.winfo_exists():
             return
         if png is None:
-            self._placeholder(_tr("preview.failed", "Could not decode a frame here"))
+            self._placeholder(t_or("preview.failed", "Could not decode a frame here"))
             return
         try:
             photo = tk.PhotoImage(master=self, data=base64.b64encode(png).decode("ascii"))
         except tk.TclError:
-            self._placeholder(_tr("preview.failed", "Could not decode a frame here"))
+            self._placeholder(t_or("preview.failed", "Could not decode a frame here"))
             return
         self._photo = photo
         self.canvas.delete("all")
@@ -245,8 +240,8 @@ class CompareView(tk.Frame):
         row.pack()
         self.views = []
         for label in (
-            before_label or _tr("preview.before", "Before"),
-            after_label or _tr("preview.after", "After"),
+            before_label or t_or("preview.before", "Before"),
+            after_label or t_or("preview.after", "After"),
         ):
             col = tk.Frame(row, bg=clr["bg"])
             col.pack(side="left", padx=px(4))
@@ -350,7 +345,7 @@ class FileRow(tk.Frame):
         self.var.set(path)
 
     def _button_text(self) -> str:
-        return _tr("btn.browse", "Browse…")
+        return t_or("btn.browse", "Browse…")
 
     def _choose(self) -> str:
         from tabs.kit import dialogs
@@ -402,7 +397,7 @@ class SaveRow(FileRow):
         super().__init__(parent, label, var, kind=kind)
 
     def _button_text(self) -> str:
-        return _tr("common.save_as", "Save as…")
+        return t_or("common.save_as", "Save as…")
 
     def _choose(self) -> str:
         from tabs.kit import dialogs
@@ -430,7 +425,7 @@ class FolderRow(FileRow):
         super().__init__(parent, label, var, kind="folder", width=width, label_width=label_width)
 
     def _button_text(self) -> str:
-        return _tr("btn.choose_folder", "Choose…")
+        return t_or("btn.choose_folder", "Choose…")
 
     def _choose(self) -> str:
         from tabs.kit import dialogs
@@ -532,13 +527,13 @@ class EncoderPanel(tk.Frame):
             value=dict(_QUALITY_LABELS)[encoders.quality_key(default_quality)]
         )
         self._speed_var = tk.StringVar(value=dict(_SPEED_LABELS).get(default_speed, "Balanced"))
-        self._hw_var = tk.StringVar(value=_tr("encoder.hw_auto", "Auto (use GPU if available)"))
+        self._hw_var = tk.StringVar(value=t_or("encoder.hw_auto", "Auto (use GPU if available)"))
         self._ten_bit = tk.BooleanVar(value=False)
 
         def lbl(text):
             return tk.Label(self, text=text, bg=clr["bg"], fg=clr["fg"], font=(UI_FONT, 9))
 
-        lbl(_tr("encoder.codec", "Codec")).grid(
+        lbl(t_or("encoder.codec", "Codec")).grid(
             row=0, column=0, sticky="w", padx=px(0, 6), pady=px(2)
         )
         cb = ttk.Combobox(
@@ -549,7 +544,7 @@ class EncoderPanel(tk.Frame):
             values=[v for _, v in self._codecs],
         )
         cb.grid(row=0, column=1, sticky="w", pady=px(2))
-        lbl(_tr("encoder.quality", "Quality")).grid(row=0, column=2, sticky="w", padx=px(14, 6))
+        lbl(t_or("encoder.quality", "Quality")).grid(row=0, column=2, sticky="w", padx=px(14, 6))
         qb = ttk.Combobox(
             self,
             textvariable=self._quality_var,
@@ -558,7 +553,7 @@ class EncoderPanel(tk.Frame):
             values=[v for _, v in _QUALITY_LABELS],
         )
         qb.grid(row=0, column=3, sticky="w")
-        lbl(_tr("encoder.speed", "Speed")).grid(
+        lbl(t_or("encoder.speed", "Speed")).grid(
             row=1, column=0, sticky="w", padx=px(0, 6), pady=px(2)
         )
         sb = ttk.Combobox(
@@ -569,13 +564,13 @@ class EncoderPanel(tk.Frame):
             values=[v for _, v in _SPEED_LABELS],
         )
         sb.grid(row=1, column=1, sticky="w", pady=px(2))
-        lbl(_tr("encoder.hardware", "Encoder")).grid(row=1, column=2, sticky="w", padx=px(14, 6))
+        lbl(t_or("encoder.hardware", "Encoder")).grid(row=1, column=2, sticky="w", padx=px(14, 6))
         self._hw_box = ttk.Combobox(self, textvariable=self._hw_var, state="readonly", width=26)
         self._hw_box.grid(row=1, column=3, sticky="w")
         if show_ten_bit:
             tk.Checkbutton(
                 self,
-                text=_tr("encoder.ten_bit", "10-bit colour (HDR-safe, less compatible)"),
+                text=t_or("encoder.ten_bit", "10-bit colour (HDR-safe, less compatible)"),
                 variable=self._ten_bit,
                 bg=clr["bg"],
                 fg=clr["fg"],
@@ -589,7 +584,7 @@ class EncoderPanel(tk.Frame):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self._hw_choices = [
             ("auto", self._hw_var.get()),
-            ("off", _tr("encoder.hw_off", "Software (best quality per MB)")),
+            ("off", t_or("encoder.hw_off", "Software (best quality per MB)")),
         ]
         self._hw_box.config(values=[v for _, v in self._hw_choices])
         tasks.submit(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
@@ -652,7 +647,7 @@ class EncoderPanel(tk.Frame):
     def _changed(self, notify: bool = True) -> None:
         try:
             ve = self.video_encode()
-            self._status.config(text=_tr("encoder.using", "Will encode with") + f": {ve.label}")
+            self._status.config(text=t_or("encoder.using", "Will encode with") + f": {ve.label}")
         except Exception:
             logger.debug("_changed: best-effort step failed", exc_info=True)
         if notify and self._on_change:

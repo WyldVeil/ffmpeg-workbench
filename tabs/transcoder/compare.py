@@ -183,7 +183,10 @@ class CompareQualityTab(BaseTab):
 
         self.btn = self.make_render_btn(body, "📊  MEASURE QUALITY", self._run, width=24)
         self.btn.pack(pady=px(8))
+        self._build_scores(body)
 
+    def _build_scores(self, body):
+        """The scores, the verdict, the graph over time and the worst moments."""
         self.res = tk.LabelFrame(body, text="  Results  ", padx=px(12), pady=px(8))
         self.res.pack(fill="x", padx=px(20), pady=px(4))
         scores = tk.Frame(self.res)

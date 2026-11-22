@@ -7,6 +7,7 @@ in a grid), as a video or one snapshot.
 from __future__ import annotations
 
 from core import ffmpeg as ff
+from core.filters import even
 
 # key: (label, filter chain, display aspect (w/h) or None = same as video, help)
 SCOPES: dict[str, tuple[str, str, float | None, str]] = {
@@ -46,16 +47,12 @@ SCOPES: dict[str, tuple[str, str, float | None, str]] = {
 GRID = ("waveform", "parade", "vectorscope", "histogram")
 
 
-def _even(x: float) -> int:
-    return max(2, round(x / 2) * 2)
-
-
 def scope_box(key: str, width: int, height: int, *, fit: str = "height") -> tuple[int, int]:
     """Size for scope *key* next to a WxH picture (fit='height') or under it ('width')."""
     aspect = SCOPES[key][2] or (width / height)
     if fit == "width":
-        return _even(width), _even(width / aspect)
-    return _even(height * aspect), _even(height)
+        return even(width), even(width / aspect)
+    return even(height * aspect), even(height)
 
 
 def export_graph(key: str, layout: str, width: int, height: int) -> str:
@@ -65,7 +62,7 @@ def export_graph(key: str, layout: str, width: int, height: int) -> str:
         return f"{SCOPES[k][1]},scale={bw}:{bh},setsar=1,format=yuv420p"
 
     if layout == "grid":
-        hw, hh = _even(width / 2), _even(height / 2)
+        hw, hh = even(width / 2), even(height / 2)
         parts = ["[0:v]setsar=1,format=yuv420p,split=5[src][s0][s1][s2][s3]"]
         for i, k in enumerate(GRID):
             parts.append(f"[s{i}]{chain(k, hw, hh)}[g{i}]")

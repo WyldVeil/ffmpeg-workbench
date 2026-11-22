@@ -222,16 +222,16 @@ class WebMTab(BaseTab):
 
     def _build_advanced_tab(self, parent):
         left, right = self._build_advanced_columns(parent)
-        crf_row = self._build_advanced_tab_size_limit(left)
+        crf_row = self._build_size_limit(left)
         self._build_advanced_quality_slider(crf_row)
-        self._build_advanced_tab_quality_preset(left)
-        self._build_advanced_tab_codec(left)
-        self._build_advanced_tab_audio(left)
-        h_row, res_lf = self._build_advanced_tab_resolution(right)
-        self._build_advanced_tab_res_h(h_row, res_lf)
-        self._build_advanced_tab_trim(right)
-        ex3, tile_cb, tile_lbl = self._build_advanced_tab_extra_options(right)
-        self._build_advanced_tab_rowmt(ex3, tile_cb, tile_lbl)
+        self._build_quality_preset(left)
+        self._build_codec(left)
+        self._build_audio(left)
+        h_row, res_lf = self._build_resolution(right)
+        self._build_height_and_presets(h_row, res_lf)
+        self._build_trim(right)
+        ex3, tile_cb, tile_lbl = self._build_extra_options(right)
+        self._build_threading_options(ex3, tile_cb, tile_lbl)
 
     def _build_advanced_columns(self, parent):
         # ── Two-column layout for the main controls ───────────────────────
@@ -243,9 +243,8 @@ class WebMTab(BaseTab):
         right.pack(side="left", fill="both", expand=True, padx=px(6, 0))
         return left, right
 
-    def _build_advanced_tab_size_limit(self, left):
+    def _build_size_limit(self, left):
         """Size limit."""
-        # ── Size limit ────────────────────────────────────────────────────
         size_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.target_size_section')}  ", padx=px(14), pady=px(10)
         )
@@ -325,9 +324,8 @@ class WebMTab(BaseTab):
             self.crf_controls, text=t("webm_maker.crf_hint"), fg=CLR["fgdim"], font=(UI_FONT, 8)
         ).pack(anchor="w", pady=px(2, 0))
 
-    def _build_advanced_tab_quality_preset(self, left):
+    def _build_quality_preset(self, left):
         """Quality preset."""
-        # ── Quality preset ────────────────────────────────────────────────
         qual_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.speed_section')}  ", padx=px(14), pady=px(10)
         )
@@ -350,9 +348,8 @@ class WebMTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w", pady=px(4, 0))
 
-    def _build_advanced_tab_codec(self, left):
+    def _build_codec(self, left):
         """Codec."""
-        # ── Codec ─────────────────────────────────────────────────────────
         codec_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.video_codec_section')}  ", padx=px(14), pady=px(10)
         )
@@ -376,9 +373,8 @@ class WebMTab(BaseTab):
             codec_lf, text=t("webm_maker.two_pass_checkbox"), variable=self.twopass_var
         ).pack(anchor="w", pady=px(6, 0))
 
-    def _build_advanced_tab_audio(self, left):
+    def _build_audio(self, left):
         """Audio."""
-        # ── Audio ─────────────────────────────────────────────────────────
         audio_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.audio_section')}  ", padx=px(14), pady=px(10)
         )
@@ -406,9 +402,8 @@ class WebMTab(BaseTab):
         )
         self.audio_br_cb.pack(side="left", padx=px(4))
 
-    def _build_advanced_tab_resolution(self, right):
+    def _build_resolution(self, right):
         """Resolution."""
-        # ── Resolution ────────────────────────────────────────────────────
         res_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.output_resolution_section')}  ", padx=px(14), pady=px(10)
         )
@@ -472,7 +467,7 @@ class WebMTab(BaseTab):
         h_row.pack(fill="x", pady=px(2, 4))
         return h_row, res_lf
 
-    def _build_advanced_tab_res_h(self, h_row, res_lf):
+    def _build_height_and_presets(self, h_row, res_lf):
         tk.Label(h_row, text=t("crop.height_label"), width=7, anchor="e").pack(side="left")
         self.res_h_var = tk.IntVar(value=1080)
         self.res_h_entry_var = tk.StringVar(value="1080")
@@ -530,9 +525,8 @@ class WebMTab(BaseTab):
             btn.pack(side="left", padx=px(1))
             self._res_preset_btns.append(btn)
 
-    def _build_advanced_tab_trim(self, right):
+    def _build_trim(self, right):
         """Trim."""
-        # ── Trim ──────────────────────────────────────────────────────────
         trim_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.trim_section')}  ", padx=px(14), pady=px(8)
         )
@@ -546,9 +540,8 @@ class WebMTab(BaseTab):
         )
         self.trim.pack(side="left", padx=px(4))
 
-    def _build_advanced_tab_extra_options(self, right):
+    def _build_extra_options(self, right):
         """Extra options."""
-        # ── Extra options ─────────────────────────────────────────────────
         extra_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.extra_options_section')}  ", padx=px(14), pady=px(8)
         )
@@ -600,7 +593,7 @@ class WebMTab(BaseTab):
         )
         return ex3, tile_cb, tile_lbl
 
-    def _build_advanced_tab_rowmt(self, ex3, tile_cb, tile_lbl):
+    def _build_threading_options(self, ex3, tile_cb, tile_lbl):
         tile_cb.pack(side="left", padx=px(4))
         self.add_tooltip(tile_lbl, t("webm_maker.tile_columns_tooltip"))
         self.add_tooltip(tile_cb, t("webm_maker.tile_columns_tooltip"))

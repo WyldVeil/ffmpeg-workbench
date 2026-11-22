@@ -134,7 +134,6 @@ class AudioMixerTab(BaseTab):
 
     def _build_track_grid(self):
         """Track grid."""
-        # ── Track grid ────────────────────────────────────────────────────
         tk.Frame(self, bg="#333", height=px(1)).pack(fill="x", padx=px(16), pady=px(4))
 
         # Column headers
@@ -188,7 +187,6 @@ class AudioMixerTab(BaseTab):
 
     def _build_master_output(self):
         """Master output."""
-        # ── Master output ─────────────────────────────────────────────────
         tk.Frame(self, bg="#333", height=px(1)).pack(fill="x", padx=px(16), pady=px(4))
         master_f = tk.Frame(self)
         master_f.pack(fill="x", padx=px(16), pady=px(4))

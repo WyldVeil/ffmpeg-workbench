@@ -108,7 +108,6 @@ class KaraokeTab(BaseTab):
 
     def _build_whisper_status_banner(self):
         """Whisper status banner."""
-        # ── Whisper status banner ──────────────────────────────────────────
         self._banner = tk.Frame(self, bg="#1A2A1A", relief="groove", bd=px(1))
         self._banner.pack(fill="x", padx=px(16), pady=px(8, 4))
         self._whisper_lbl = tk.Label(
@@ -130,7 +129,6 @@ class KaraokeTab(BaseTab):
 
     def _build_source(self):
         """Source."""
-        # ── Source ────────────────────────────────────────────────────────
         r1 = tk.Frame(self)
         r1.pack(fill="x", padx=px(16), pady=px(8))
         tk.Label(
@@ -150,7 +148,6 @@ class KaraokeTab(BaseTab):
 
     def _build_settings(self):
         """Settings."""
-        # ── Settings ──────────────────────────────────────────────────────
         sf = tk.LabelFrame(
             self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10)
         )
@@ -248,7 +245,6 @@ class KaraokeTab(BaseTab):
 
     def _build_output(self):
         """Output."""
-        # ── Output ────────────────────────────────────────────────────────
         self._out_var = tk.StringVar()
         SaveRow(self, t("common.output_file"), self._out_var).pack(
             fill="x", padx=px(16), pady=px(6)
@@ -256,7 +252,6 @@ class KaraokeTab(BaseTab):
 
     def _build_action_buttons(self):
         """Action buttons."""
-        # ── Action buttons ─────────────────────────────────────────────────
         btn_row = tk.Frame(self)
         btn_row.pack(pady=px(8))
         self._btn_go = self.make_render_btn(

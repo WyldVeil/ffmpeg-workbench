@@ -123,7 +123,6 @@ class ChapterMarkersTab(BaseTab):
 
     def _build_source_video(self, body):
         """Source video."""
-        # ── Source video ──────────────────────────────────────────────────
         sf = tk.Frame(body)
         sf.pack(pady=px(10))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
@@ -140,7 +139,6 @@ class ChapterMarkersTab(BaseTab):
 
     def _build_timeline_scrubber(self, body):
         """Timeline scrubber."""
-        # ── Timeline scrubber ─────────────────────────────────────────────
         scrub_lf = tk.LabelFrame(
             body, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10)
         )
@@ -189,7 +187,6 @@ class ChapterMarkersTab(BaseTab):
 
     def _build_mark_name(self, body):
         """Mark + name."""
-        # ── Mark + name ───────────────────────────────────────────────────
         mark_row = tk.Frame(body)
         mark_row.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mark_row, text=t("chapter_markers.chapter_title_label")).pack(side="left")
@@ -229,7 +226,6 @@ class ChapterMarkersTab(BaseTab):
 
     def _build_chapter_list(self, body):
         """Chapter list."""
-        # ── Chapter list ──────────────────────────────────────────────────
         list_hdr = tk.Frame(body)
         list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
         tk.Label(
@@ -287,7 +283,6 @@ class ChapterMarkersTab(BaseTab):
 
     def _build_export(self, body):
         """Export."""
-        # ── Export ────────────────────────────────────────────────────────
         export_lf = tk.LabelFrame(
             body, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8)
         )

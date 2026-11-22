@@ -67,7 +67,6 @@ class BatchTab(BaseTab):
 
     def _build_input_files(self):
         """Input files."""
-        # ── Input files ───────────────────────────────────────────────────
         inp_lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(12), pady=px(8))
         inp_lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
@@ -106,7 +105,6 @@ class BatchTab(BaseTab):
 
     def _build_operation(self):
         """Operation."""
-        # ── Operation ─────────────────────────────────────────────────────
         op_lf = tk.LabelFrame(
             self, text=f"  {t('batch.operation_section')}  ", padx=px(14), pady=px(10)
         )
@@ -168,7 +166,6 @@ class BatchTab(BaseTab):
 
     def _build_output_folder(self):
         """Output folder."""
-        # ── Output folder ─────────────────────────────────────────────────
         out_lf = tk.LabelFrame(self, text=t("section.output"), padx=px(14), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(4))
 
@@ -183,7 +180,6 @@ class BatchTab(BaseTab):
 
     def _build_controls(self):
         """Controls."""
-        # ── Controls ─────────────────────────────────────────────────────
         ctrl_f = tk.Frame(self)
         ctrl_f.pack(pady=px(8))
         self.btn_render = self.make_render_btn(

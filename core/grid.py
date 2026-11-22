@@ -24,6 +24,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
 from core import encoders as enc
+from core.filters import even
 from core.ops.shared import graph_encode_cmd
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
@@ -51,10 +52,6 @@ class Layout:
         return f"{self.kind} - {self.coverage * 100:.0f}% of the frame used"
 
 
-def _even(v: float) -> int:
-    return max(2, round(v / 2) * 2)
-
-
 def _fit_in(cell_w: float, cell_h: float, aspect: float) -> tuple[float, float]:
     if cell_w / cell_h > aspect:
         return cell_h * aspect, cell_h
@@ -79,14 +76,14 @@ def uniform(
         )  # centre a short last row
         y0 = gap + r * (ch + gap)
         if fill:
-            rects.append((_even(x0), _even(y0), _even(cw), _even(ch)))
-            crops.append((_even(cw), _even(ch)))
+            rects.append((even(x0), even(y0), even(cw), even(ch)))
+            crops.append((even(cw), even(ch)))
             visible = cw * ch * min(cw / ch / a, a / (cw / ch))  # share of the clip still shown
             area += visible
             logs += math.log(max(visible, 1.0))
         else:
             w, h = _fit_in(cw, ch, a)
-            rects.append((_even(x0 + (cw - w) / 2), _even(y0 + (ch - h) / 2), _even(w), _even(h)))
+            rects.append((even(x0 + (cw - w) / 2), even(y0 + (ch - h) / 2), even(w), even(h)))
             crops.append(None)
             area += w * h
             logs += math.log(max(w * h, 1.0))
@@ -130,7 +127,7 @@ def _justified(
         row_w = sum(widths) + gap * (size - 1)
         x = (W - row_w) / 2
         for w in widths:
-            rects.append((_even(x), _even(y), _even(w), _even(h)))
+            rects.append((even(x), even(y), even(w), even(h)))
             area += w * h
             logs += math.log(max(w * h, 1.0))
             x += w + gap

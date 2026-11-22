@@ -12,15 +12,11 @@ from dataclasses import dataclass
 
 from core import encoders as enc
 from core import ffmpeg as ff
-from core.i18n import t
+from core.filters import even_below
+from core.i18n import t_or
 from core.ops import transitions
 
 TRANS_DEFAULT = "fade"
-
-
-def _tr(key: str, fallback: str) -> str:
-    text = t(key)
-    return fallback if text == key else text
 
 
 @dataclass
@@ -38,7 +34,7 @@ class Clip:
     def from_info(cls, info: ff.MediaInfo) -> Clip:
         v = info.video
         if v is None:
-            raise ValueError(_tr("crossfader.no_video_stream", "No video stream in this file."))
+            raise ValueError(t_or("crossfader.no_video_stream", "No video stream in this file."))
         dur = v.duration if v.duration > 0.05 else info.duration
         rate = v.raw.get("avg_frame_rate") or v.raw.get("r_frame_rate") or "30/1"
         if not v.fps or v.fps > 240 or rate in ("0/0", ""):
@@ -56,10 +52,6 @@ class Clip:
         )
 
 
-def _even(n: float) -> int:
-    return max(2, round(n) // 2 * 2)
-
-
 def segment_lengths(clips: Sequence[Clip], T: float, freeze: bool) -> list[float]:
     """Length of each clip as it enters the xfade chain (freeze pads it)."""
     n = len(clips)
@@ -75,9 +67,9 @@ def segment_lengths(clips: Sequence[Clip], T: float, freeze: bool) -> list[float
 def validate(clips: Sequence[Clip], T: float, freeze: bool) -> str | None:
     """Return a user-facing problem description, or None when renderable."""
     if len(clips) < 2:
-        return _tr("crossfader.need_two", "Add at least two clips.")
+        return t_or("crossfader.need_two", "Add at least two clips.")
     if not (0.04 <= T <= 30):
-        return _tr(
+        return t_or(
             "crossfader.bad_duration", "The transition must last between 0.04 and 30 seconds."
         )
     if freeze:
@@ -86,7 +78,7 @@ def validate(clips: Sequence[Clip], T: float, freeze: bool) -> str | None:
     for i, c in enumerate(clips):
         need = T if i in (0, n - 1) else 2 * T
         if c.duration + 1e-3 < need:
-            return _tr(
+            return t_or(
                 "crossfader.clip_too_short",
                 "Clip {n} is {d:.2f} s long but needs at least {need:.2f} s for "
                 "{t:.2f} s transitions. Shorten the transition or use Freeze mode.",
@@ -210,7 +202,7 @@ def build_command(
     """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
     if venc is None:
         venc = enc.video("h264", "high", hw="off", container=os.path.splitext(out)[1] or "mp4")
-    W, H = size or (_even(clips[0].width), _even(clips[0].height))
+    W, H = size or (even_below(clips[0].width), even_below(clips[0].height))
     plan = _Plan(
         clips,
         fade,

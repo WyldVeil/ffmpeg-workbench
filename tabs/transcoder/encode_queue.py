@@ -21,7 +21,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
-from tabs.widgets import SaveRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 RESOLUTIONS = ["Source", "3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "640x360"]
 
@@ -175,19 +175,24 @@ class EncodeQueueTab(BaseTab):
 
         # Source / output
         self.ed_src_var = tk.StringVar()
-        f_src = tk.Frame(ef)
-        f_src.pack(fill="x", padx=px(10), pady=px(4))
-        tk.Label(f_src, text=t("encode_queue.source_label"), width=14, anchor="e").pack(side="left")
-        tk.Entry(f_src, textvariable=self.ed_src_var, width=32, relief="flat").pack(
-            side="left", padx=px(4)
-        )
-        tk.Button(f_src, text="…", width=2, command=self._ed_browse_src).pack(side="left")
+        FileRow(
+            ef,
+            t("encode_queue.source_label"),
+            self.ed_src_var,
+            width=32,
+            label_width=14,
+            on_change=self._ed_source_chosen,
+        ).pack(fill="x", padx=px(10), pady=px(4))
 
         self.ed_out_var = tk.StringVar()
         SaveRow(ef, t("encode_queue.output_label"), self.ed_out_var).pack(
             fill="x", padx=px(10), pady=px(4)
         )
+        self._build_editor_fields(ef)
+        self._build_editor_buttons(ef)
 
+    def _build_editor_fields(self, ef):
+        """Codec, quality and the other encode settings, and extra filters and arguments."""
         # Codec / quality fields
         fields = [
             (t("encode_queue.video_codec"), "ed_vcodec_var", eq.VIDEO_CODECS, "libx264"),
@@ -229,6 +234,8 @@ class EncodeQueueTab(BaseTab):
             tk.Label(f, text=label, width=14, anchor="e").pack(side="left")
             tk.Entry(f, textvariable=var, width=34, relief="flat").pack(side="left", padx=px(4))
 
+    def _build_editor_buttons(self, ef):
+        """Add to queue, and add a whole folder."""
         # Submit button
         tk.Button(
             ef,
@@ -318,14 +325,9 @@ class EncodeQueueTab(BaseTab):
     # ═══════════════════════════════════════════════════════════════════════
     #  Editor: add new encode jobs
     # ═══════════════════════════════════════════════════════════════════════
-    def _ed_browse_src(self):
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))]
-        )
-        if p:
-            self.ed_src_var.set(p)
-            if not self.ed_out_var.get():
-                self.ed_out_var.set(os.path.splitext(p)[0] + "_encoded.mp4")
+    def _ed_source_chosen(self, path):
+        if path and not self.ed_out_var.get():
+            self.ed_out_var.set(os.path.splitext(path)[0] + "_encoded.mp4")
 
     def _queue_job(self, src, out) -> bool:
         j = self._read_editor()

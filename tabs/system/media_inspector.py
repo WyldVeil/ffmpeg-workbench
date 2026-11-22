@@ -17,151 +17,13 @@ from functools import partial
 from tkinter import ttk
 
 from core import ffmpeg as ff
-from core import tasks
-from core.i18n import t
+from core import media_notes, tasks
+from core.i18n import t_or
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.widgets import FramePreview
-
-
-def _tr(key: str, fallback: str) -> str:
-    text = t(key)
-    return fallback if text == key else text
-
-
-def _human_bytes(n: int) -> str:
-    if not n:
-        return "—"
-    size = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024 or unit == "TB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.2f} {unit}"
-        size /= 1024
-    return str(n)
-
-
-def _human_rate(bps: int) -> str:
-    if not bps:
-        return "—"
-    if bps >= 1_000_000:
-        return f"{bps / 1_000_000:.2f} Mb/s"
-    return f"{bps / 1000:.0f} kb/s"
-
-
-def _fps_text(fps: float) -> str:
-    if not fps:
-        return "—"
-    return f"{fps:.3f}".rstrip("0").rstrip(".")
-
-
-def diagnose(info: ff.MediaInfo) -> list[tuple[str, str]]:
-    """Return ``[(level, message)]`` notes about things worth knowing."""
-    notes: list[tuple[str, str]] = []
-    v, a = info.video, info.audio
-    if v:
-        if (
-            v.r_fps
-            and v.fps
-            and abs(v.r_fps - v.fps) / max(v.fps, 1e-6) > 0.01
-            and not info.is_image
-        ):
-            notes.append(
-                (
-                    "warn",
-                    _tr(
-                        "inspector.vfr",
-                        "Variable frame rate likely (average {avg} fps vs nominal {nom} fps). "
-                        "Editing tools may drift; convert to constant frame rate first.",
-                    ).format(avg=_fps_text(v.fps), nom=_fps_text(v.r_fps)),
-                )
-            )
-        if v.field_order and v.field_order not in ("progressive", "unknown"):
-            notes.append(
-                (
-                    "warn",
-                    _tr(
-                        "inspector.interlaced",
-                        "Interlaced video ({order}). Use the Deinterlace tool before scaling or "
-                        "slow motion.",
-                    ).format(order=v.field_order),
-                )
-            )
-        if v.is_hdr:
-            notes.append(
-                (
-                    "info",
-                    _tr(
-                        "inspector.hdr",
-                        "HDR video ({tr}). Converting to SDR needs tone-mapping or colours "
-                        "will look washed out.",
-                    ).format(tr=v.color_transfer),
-                )
-            )
-        if v.rotation:
-            notes.append(
-                (
-                    "info",
-                    _tr(
-                        "inspector.rotation",
-                        "Rotation metadata: {deg}°. Players rotate it on display; FFmpeg "
-                        "applies it automatically when re-encoding.",
-                    ).format(deg=v.rotation),
-                )
-            )
-        if v.width % 2 or v.height % 2:
-            notes.append(
-                (
-                    "warn",
-                    _tr(
-                        "inspector.odd_size",
-                        "Odd frame size ({w}×{h}): H.264/H.265 in 4:2:0 need even "
-                        "dimensions, so tools will round them.",
-                    ).format(w=v.width, h=v.height),
-                )
-            )
-        if (
-            v.pix_fmt
-            and not v.pix_fmt.startswith(("yuv420p", "yuvj420p", "nv12", "p010"))
-            and not info.is_image
-        ):
-            notes.append(
-                (
-                    "info",
-                    _tr(
-                        "inspector.pixfmt",
-                        "Pixel format {pf} is not 4:2:0; some players and web sites will "
-                        "not play it until converted.",
-                    ).format(pf=v.pix_fmt),
-                )
-            )
-        if v.sar and v.sar not in ("1:1", "0:1", ""):
-            notes.append(
-                ("info", _tr("inspector.sar", "Non-square pixels (SAR {sar}).").format(sar=v.sar))
-            )
-    if not a and v and not info.is_image:
-        notes.append(("info", _tr("inspector.no_audio", "No audio stream.")))
-    if len(info.audio_streams) > 1:
-        notes.append(
-            (
-                "info",
-                _tr(
-                    "inspector.multi_audio", "{n} audio tracks - most tools use the first one."
-                ).format(n=len(info.audio_streams)),
-            )
-        )
-    if not notes:
-        notes.append(("ok", _tr("inspector.all_good", "Nothing unusual detected.")))
-    return notes
-
-
-def _seconds(value: object) -> float:
-    """A time from ffprobe's JSON (a string or a number), or 0."""
-    try:
-        return float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0.0
 
 
 class MediaInspectorTab(BaseTab):
@@ -176,8 +38,8 @@ class MediaInspectorTab(BaseTab):
     def _build_ui(self):
         self.make_header(
             self,
-            _tr("tab.media_inspector", "Media Inspector"),
-            _tr(
+            t_or("tab.media_inspector", "Media Inspector"),
+            t_or(
                 "inspector.subtitle",
                 "Everything inside a media file - streams, codecs, colour, chapters, tags",
             ),
@@ -187,11 +49,11 @@ class MediaInspectorTab(BaseTab):
         row.pack(fill="x", padx=px(20), pady=px(12, 6))
         self.src_var = tk.StringVar()
         self.make_file_row(
-            row, _tr("common.source_file", "Source file"), self.src_var, self._browse
+            row, t_or("common.source_file", "Source file"), self.src_var, self._browse
         ).pack(side="left")
         tk.Button(
             row,
-            text=_tr("inspector.copy_report", "Copy report"),
+            text=t_or("inspector.copy_report", "Copy report"),
             relief="flat",
             bg=CLR["panel"],
             fg=CLR["fg"],
@@ -200,14 +62,18 @@ class MediaInspectorTab(BaseTab):
         ).pack(side="left", padx=px(8, 0))
         tk.Button(
             row,
-            text=_tr("inspector.export_json", "Export JSON…"),
+            text=t_or("inspector.export_json", "Export JSON…"),
             relief="flat",
             bg=CLR["panel"],
             fg=CLR["fg"],
             cursor="hand2",
             command=self._export_json,
         ).pack(side="left", padx=px(6, 0))
+        self._build_overview()
+        self._build_pages()
 
+    def _build_overview(self):
+        """The frame preview beside the summary, the notes and a scrubber."""
         top = tk.Frame(self, bg=CLR["bg"])
         top.pack(fill="x", padx=px(20), pady=px(4))
         self.preview = FramePreview(top, width=384, height=216)
@@ -216,7 +82,7 @@ class MediaInspectorTab(BaseTab):
         side.pack(side="left", fill="both", expand=True, padx=px(16, 0))
         self.summary_lbl = tk.Label(
             side,
-            text=_tr("inspector.drop_hint", "Open or drop a video, audio or image file."),
+            text=t_or("inspector.drop_hint", "Open or drop a video, audio or image file."),
             bg=CLR["bg"],
             fg=CLR["accent"],
             font=(UI_FONT, 11, "bold"),
@@ -243,7 +109,7 @@ class MediaInspectorTab(BaseTab):
         scrub_row.pack(fill="x", pady=px(4, 0))
         tk.Label(
             scrub_row,
-            text=_tr("inspector.scrub", "Preview position"),
+            text=t_or("inspector.scrub", "Preview position"),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
@@ -258,6 +124,8 @@ class MediaInspectorTab(BaseTab):
         self.scrub.pack(side="left", fill="x", expand=True, padx=px(6))
         framestep.slider(self.scrub, self.preview)  # , and . step a frame
 
+    def _build_pages(self):
+        """Streams, Container, Chapters, Tags and Raw JSON, in tabs."""
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=px(20), pady=px(8, 12))
 
@@ -265,12 +133,12 @@ class MediaInspectorTab(BaseTab):
         cols = ("idx", "type", "codec", "detail", "rate", "lang", "flags")
         heads = (
             "#",
-            _tr("inspector.col_type", "Type"),
-            _tr("inspector.col_codec", "Codec"),
-            _tr("inspector.col_detail", "Details"),
-            _tr("inspector.col_bitrate", "Bitrate"),
-            _tr("inspector.col_lang", "Language / title"),
-            _tr("inspector.col_flags", "Flags"),
+            t_or("inspector.col_type", "Type"),
+            t_or("inspector.col_codec", "Codec"),
+            t_or("inspector.col_detail", "Details"),
+            t_or("inspector.col_bitrate", "Bitrate"),
+            t_or("inspector.col_lang", "Language / title"),
+            t_or("inspector.col_flags", "Flags"),
         )
         self.tree = ttk.Treeview(streams, columns=cols, show="headings", height=7)
         widths = (40, 80, 150, 420, 100, 180, 120)
@@ -281,12 +149,12 @@ class MediaInspectorTab(BaseTab):
         self.tree.configure(yscrollcommand=ysb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         ysb.pack(side="right", fill="y")
-        self.nb.add(streams, text=_tr("inspector.tab_streams", "Streams"))
+        self.nb.add(streams, text=t_or("inspector.tab_streams", "Streams"))
 
-        self.format_txt = self._text_page(_tr("inspector.tab_format", "Container"))
-        self.chapters_txt = self._text_page(_tr("inspector.tab_chapters", "Chapters"))
-        self.tags_txt = self._text_page(_tr("inspector.tab_tags", "Tags"))
-        self.json_txt = self._text_page(_tr("inspector.tab_json", "Raw JSON"))
+        self.format_txt = self._text_page(t_or("inspector.tab_format", "Container"))
+        self.chapters_txt = self._text_page(t_or("inspector.tab_chapters", "Chapters"))
+        self.tags_txt = self._text_page(t_or("inspector.tab_tags", "Tags"))
+        self.json_txt = self._text_page(t_or("inspector.tab_json", "Raw JSON"))
 
     def _text_page(self, title: str) -> tk.Text:
         frame = tk.Frame(self.nb, bg=CLR["bg"])
@@ -297,7 +165,7 @@ class MediaInspectorTab(BaseTab):
     # ── actions ──────────────────────────────────────────────────────────────
 
     def _browse(self):
-        path = dialogs.ask_open("any", title=_tr("inspector.open_title", "Inspect a media file"))
+        path = dialogs.ask_open("any", title=t_or("inspector.open_title", "Inspect a media file"))
         if path:
             self.load_file(path)
 
@@ -307,7 +175,7 @@ class MediaInspectorTab(BaseTab):
         self.file_path = path
         self.src_var.set(path)
         self.info = None
-        self.summary_lbl.config(text=_tr("inspector.reading", "Reading..."), fg=CLR["fgdim"])
+        self.summary_lbl.config(text=t_or("inspector.reading", "Reading..."), fg=CLR["fgdim"])
         tasks.submit(
             partial(ff.probe, path, use_cache=False),
             on_done=partial(self._probed, path),
@@ -327,7 +195,7 @@ class MediaInspectorTab(BaseTab):
             return
         self.info = None
         self.summary_lbl.config(
-            text=_tr("inspector.unreadable", "Not a readable media file:") + f" {exc}",
+            text=t_or("inspector.unreadable", "Not a readable media file:") + f" {exc}",
             fg=CLR["red"],
         )
         self._fill_notes([])
@@ -353,71 +221,14 @@ class MediaInspectorTab(BaseTab):
     def _populate(self, info: ff.MediaInfo) -> None:
         name = os.path.basename(info.path)
         self.summary_lbl.config(text=f"{name}\n{info.summary()}", fg=CLR["accent"])
-        self._fill_notes(diagnose(info))
+        self._fill_notes(media_notes.diagnose(info))
 
         self.tree.delete(*self.tree.get_children())
-        for s in info.streams:
-            if s.type == "video":
-                w, h = s.display_size
-                detail = f"{w}×{h}  {_fps_text(s.fps)} fps  {s.pix_fmt or ''}  {s.bit_depth}-bit"
-                if s.color_transfer or s.color_primaries:
-                    detail += f"  {s.color_primaries or '?'}/{s.color_transfer or '?'}"
-                if s.rotation:
-                    detail += f"  rot {s.rotation}°"
-                if s.attached_pic:
-                    detail = f"cover art {w}×{h}"
-            elif s.type == "audio":
-                detail = (
-                    f"{s.sample_rate} Hz  {s.channels} ch "
-                    f"({s.channel_layout or '?'})  {s.sample_fmt}"
-                )
-            else:
-                detail = s.codec_long
-            flags = ", ".join(
-                f
-                for f, on in (
-                    ("default", s.default),
-                    ("forced", s.forced),
-                    ("cover", s.attached_pic),
-                )
-                if on
-            )
-            lang = " / ".join(x for x in (s.language if s.language != "und" else "", s.title) if x)
-            codec = s.codec + (f" ({s.profile})" if s.profile else "")
-            self.tree.insert(
-                "",
-                "end",
-                values=(s.index, s.type, codec, detail, _human_rate(s.bit_rate), lang, flags),
-            )
-
-        fmt_lines = [
-            f"File:        {info.path}",
-            f"Container:   {info.format_long} ({info.format_name})",
-            f"Size:        {_human_bytes(info.size)}",
-            f"Duration:    {ff.format_time(info.duration)}  ({info.duration:.3f} s)",
-            f"Bitrate:     {_human_rate(info.bit_rate)}",
-            f"Start time:  {info.start_time:.3f} s",
-            f"Streams:     {len(info.video_streams)} video, {len(info.audio_streams)} audio, "
-            f"{len(info.subtitle_streams)} subtitle, {len(info.streams)} total",
-        ]
-        self._set_text(self.format_txt, "\n".join(fmt_lines))
-
-        if info.chapters:
-            chap = []
-            for i, c in enumerate(info.chapters, 1):
-                start = _seconds(c.get("start_time"))
-                end = _seconds(c.get("end_time"))
-                title = (c.get("tags") or {}).get("title", "")
-                chap.append(f"{i:>3}. {ff.format_time(start)} → {ff.format_time(end)}  {title}")
-            self._set_text(self.chapters_txt, "\n".join(chap))
-        else:
-            self._set_text(self.chapters_txt, _tr("inspector.no_chapters", "No chapters."))
-
-        tag_lines = [f"{k}: {v}" for k, v in sorted(info.tags.items())]
-        for s in info.streams:
-            for k, v in sorted(s.tags.items()):
-                tag_lines.append(f"[stream {s.index}] {k}: {v}")
-        self._set_text(self.tags_txt, "\n".join(tag_lines) or _tr("inspector.no_tags", "No tags."))
+        for stream in info.streams:
+            self.tree.insert("", "end", values=media_notes.stream_row(stream))
+        self._set_text(self.format_txt, media_notes.container_text(info))
+        self._set_text(self.chapters_txt, media_notes.chapters_text(info))
+        self._set_text(self.tags_txt, media_notes.tags_text(info))
         self._set_text(self.json_txt, json.dumps(info.raw, indent=2, ensure_ascii=False))
 
         if info.has_video:
@@ -459,7 +270,7 @@ class MediaInspectorTab(BaseTab):
             default,
             kind="preset",
             defaultextension=".json",
-            title=_tr("inspector.export_json", "Export JSON…"),
+            title=t_or("inspector.export_json", "Export JSON…"),
         )
         if out:
             with open(out, "w", encoding="utf-8") as fh:

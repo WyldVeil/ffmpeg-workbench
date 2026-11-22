@@ -544,3 +544,13 @@ def atempo_chain(speed: float, engine: str = "atempo") -> str:
         rem /= 100.0
     parts.append(f"atempo={rem:.6f}")
     return ",".join(parts)
+
+
+def even(x: float) -> int:
+    """The nearest even number, at least 2 (frame sizes and positions in 4:2:0)."""
+    return max(2, round(x / 2) * 2)
+
+
+def even_below(x: float) -> int:
+    """*x* rounded, then down to even, at least 2 (a size that must not grow)."""
+    return max(2, round(x) // 2 * 2)

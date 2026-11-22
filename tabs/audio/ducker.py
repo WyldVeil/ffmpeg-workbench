@@ -61,7 +61,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_source_video(self, lw):
         """Source video."""
-        # ── Source video ──────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(16), pady=px(8))
         tk.Label(
@@ -77,7 +76,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_music_file(self, lw):
         """Music file."""
-        # ── Music file ────────────────────────────────────────────────────────
         mf = tk.Frame(self)
         mf.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(
@@ -93,7 +91,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_preset_selector(self, lw):
         """Preset selector."""
-        # ── Preset selector ───────────────────────────────────────────────────
         pf = tk.Frame(self)
         pf.pack(fill="x", padx=px(16), pady=px(6))
         tk.Label(
@@ -120,7 +117,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_duck_settings(self):
         """Duck settings."""
-        # ── Duck settings ─────────────────────────────────────────────────────
         settings_f = tk.LabelFrame(
             self, text=t("ducker.sect_duck_settings"), padx=px(16), pady=px(10)
         )
@@ -230,7 +226,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_options(self):
         """Options."""
-        # ── Options ───────────────────────────────────────────────────────────
         opt_f = tk.Frame(self)
         opt_f.pack(anchor="w", padx=px(16), pady=px(4))
         self._loop_music = tk.BooleanVar(value=True)
@@ -244,7 +239,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_output(self, lw):
         """Output."""
-        # ── Output ────────────────────────────────────────────────────────────
         self._out_var = tk.StringVar()
         SaveRow(self, t("common.output_file"), self._out_var).pack(
             fill="x", padx=px(16), pady=px(6)
@@ -252,7 +246,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_render_button(self):
         """Render button."""
-        # ── Render button ──────────────────────────────────────────────────────
         self.btn_render = self.make_render_btn(
             self, t("ducker.btn_duck_render"), self._render, width=30
         )
@@ -260,7 +253,6 @@ class AudioDuckerTab(BaseTab):
 
     def _build_console(self):
         """Console."""
-        # ── Console ───────────────────────────────────────────────────────────
         self.console = self.make_console_block(self, height=7, padx=px(16), pady=px(4))
 
     # ─── Callbacks ────────────────────────────────────────────────────────────

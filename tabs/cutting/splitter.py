@@ -12,7 +12,7 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core import outputs
 from core.hardware import get_video_duration
-from core.i18n import t
+from core.i18n import t, t_or
 from core.ops.splitter import clip_command
 from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
@@ -21,11 +21,6 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, add_tooltip
 from tabs.kit.contracts import Transport
 from tabs.widgets import FileRow
-
-
-def _tr(key, fallback):
-    text = t(key)
-    return fallback if text == key else text
 
 
 def _ts(seconds):
@@ -261,7 +256,7 @@ class MultiSplitterTab(BaseTab):
 
     def _warn(self, key: str, fallback: str, **values: object) -> None:
         messagebox.showwarning(
-            t("common.warning"), _tr(key, fallback).format(**values), parent=self
+            t("common.warning"), t_or(key, fallback).format(**values), parent=self
         )
 
     def _clips(self, total: float, base: str, ext: str) -> list[tuple[float, float, str]] | None:
@@ -303,8 +298,8 @@ class MultiSplitterTab(BaseTab):
         if not existing:
             return jobs
         ans = messagebox.askyesnocancel(
-            _tr("splitter.exists_title", "Files already exist"),
-            _tr(
+            t_or("splitter.exists_title", "Files already exist"),
+            t_or(
                 "splitter.exists_msg",
                 "{n} of the output files already exist.\n\nYes = overwrite them\nNo = save with new names\nCancel = stop",
             ).format(n=len(existing)),
@@ -323,7 +318,7 @@ class MultiSplitterTab(BaseTab):
                 t("msg.done_title"), t("msg.batch_split_done") + "\n\n" + names, parent=self
             )
             return
-        head = _tr("splitter.partial", "{ok} clip(s) saved, {bad} failed:").format(
+        head = t_or("splitter.partial", "{ok} clip(s) saved, {bad} failed:").format(
             ok=len(ok), bad=len(bad)
         )
         lines = "\n".join(f"{os.path.basename(o)}: {e.splitlines()[-1]}" for o, e in bad)

@@ -43,6 +43,56 @@ from tabs.widgets import FolderRow, scroll_body
 logger = logging.getLogger("crossfader.system.advanced_settings")
 
 
+def _custom_sections():
+    """The custom skin's colours by section: (title, [(label, colour key), ...])."""
+    return [
+        (
+            "Sidebar",
+            [
+                (t("advanced_settings.sidebar_background"), "sb_bg"),
+                (t("advanced_settings.category_header"), "sb_cat"),
+                (t("advanced_settings.button_text_icons"), "sb_btn"),
+                (t("advanced_settings.button_hover_background"), "sb_hover"),
+                (t("advanced_settings.active_button_background"), "sb_active"),
+            ],
+        ),
+        (
+            "Content Area",
+            [
+                ("Content background", "content"),
+                ("Panel / card background", "panel"),
+                ("Primary text", "fg"),
+                ("Dimmed / secondary text", "fgdim"),
+                ("Border color", "border"),
+            ],
+        ),
+        (
+            "Accent & Inputs",
+            [
+                ("Accent color", "accent"),
+                ("Input field background", "input_bg"),
+                ("Input field text", "input_fg"),
+            ],
+        ),
+        (
+            "Status Colors",
+            [
+                ("Success / green", "green"),
+                ("Error / red", "red"),
+                ("Warning / orange", "orange"),
+                ("Highlight / pink", "pink"),
+            ],
+        ),
+        (
+            "Console",
+            [
+                ("Console background", "console_bg"),
+                ("Console text", "console_fg"),
+            ],
+        ),
+    ]
+
+
 class _NetForm:
     """What every section of the Network tab builds with: the scrolling body,
     the saved settings, one Tk variable per setting (kept in *variables*)."""
@@ -366,70 +416,19 @@ class AdvancedSettingsTab(BaseTab):
         )
         self._net_situation_var = tk.StringVar(value=kind)
 
-        def radio(value, text, desc="", extra=None):
-            r = tk.Frame(sit)
-            r.pack(anchor="w", fill="x", pady=px(2))
-            top = tk.Frame(r)
-            top.pack(anchor="w")
-            tk.Radiobutton(
-                top,
-                text=text,
-                variable=self._net_situation_var,
-                value=value,
-                command=lambda: self._net_choose(value),
-            ).pack(side="left")
-            if extra:
-                extra(top)
-            if desc:
-                tk.Label(
-                    r,
-                    text=desc,
-                    fg=CLR["fgdim"],
-                    font=(UI_FONT, 8),
-                    wraplength=px(720),
-                    justify="left",
-                ).pack(anchor="w", padx=px(24, 0))
-
         def app_box(parent):
-            self._net_app_var = tk.StringVar(
-                value=next(
-                    (t_ for t_, i in self._net_app_labels.items() if i == current), apps[0][1]
-                )
-            )
-            cb = ttk.Combobox(
-                parent,
-                textvariable=self._net_app_var,
-                values=list(self._net_app_labels),
-                state="readonly",
-                width=44,
-            )
-            cb.pack(side="left", padx=px(6))
-            cb.bind(
-                "<<ComboboxSelected>>",
-                lambda _e: self._net_pick("app"),
+            self._net_app_var = self._net_pick_list(
+                parent, "app", self._net_app_labels, current, 44
             )
             tk.Button(parent, text="Find…", command=self._net_find_local).pack(side="left")
 
         def tor_box(parent):
-            self._net_tor_var = tk.StringVar(
-                value=next(
-                    (t_ for t_, i in self._net_tor_labels.items() if i == current), tors[0][1]
-                )
-            )
-            cb = ttk.Combobox(
-                parent,
-                textvariable=self._net_tor_var,
-                values=list(self._net_tor_labels),
-                state="readonly",
-                width=34,
-            )
-            cb.pack(side="left", padx=px(6))
-            cb.bind(
-                "<<ComboboxSelected>>",
-                lambda _e: self._net_pick("tor"),
+            self._net_tor_var = self._net_pick_list(
+                parent, "tor", self._net_tor_labels, current, 34
             )
 
         desc = {sid: d for sid, _t, d, _v in _net.SITUATIONS}
+        radio = partial(self._net_radio, sit)
         radio("auto", "Automatic - follow this computer's settings", desc["auto"])
         radio("direct", "No proxy - connect directly", desc["direct"])
         radio(
@@ -452,6 +451,38 @@ class AdvancedSettingsTab(BaseTab):
         self._net_found_lbl.pack(anchor="w", padx=px(24, 0))
         self._net_found_frame = tk.Frame(sit)
         self._net_found_frame.pack(anchor="w", padx=px(24, 0))
+
+    def _net_radio(self, sit, value, text, desc="", extra=None):
+        """One way of connecting: its radio button, any extra controls beside it, and a note."""
+        r = tk.Frame(sit)
+        r.pack(anchor="w", fill="x", pady=px(2))
+        top = tk.Frame(r)
+        top.pack(anchor="w")
+        tk.Radiobutton(
+            top,
+            text=text,
+            variable=self._net_situation_var,
+            value=value,
+            command=lambda: self._net_choose(value),
+        ).pack(side="left")
+        if extra:
+            extra(top)
+        if desc:
+            tk.Label(
+                r, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 8), wraplength=px(720), justify="left"
+            ).pack(anchor="w", padx=px(24, 0))
+
+    def _net_pick_list(self, parent, kind, labels, current, width):
+        """Which proxy app (or which Tor): the current one, else the first."""
+        var = tk.StringVar(
+            value=next((t_ for t_, i in labels.items() if i == current), next(iter(labels)))
+        )
+        cb = ttk.Combobox(
+            parent, textvariable=var, values=list(labels), state="readonly", width=width
+        )
+        cb.pack(side="left", padx=px(6))
+        cb.bind("<<ComboboxSelected>>", lambda _e: self._net_pick(kind))
+        return var
 
     def _net_own_proxy(self, form: _NetForm) -> None:
         section = form.section
@@ -966,12 +997,12 @@ class AdvancedSettingsTab(BaseTab):
 
     # ── Themes sub-tab ────────────────────────────────────────────────────────
     def _build_themes_subtab(self, inner_nb):
-        current_skin, f = self._build_themes_subtab_skin(inner_nb)
-        self._build_themes_subtab_skin_status(f)
-        self._build_themes_subtab_star_speed_control_only_visi(f)
-        self._build_themes_subtab_star_density_count(current_skin)
+        current_skin, f = self._build_skin_cards(inner_nb)
+        self._build_skin_apply(f)
+        self._build_star_speed(f)
+        self._build_star_density(current_skin)
 
-    def _build_themes_subtab_skin(self, inner_nb):
+    def _build_skin_cards(self, inner_nb):
         f = ttk.Frame(inner_nb)
         inner_nb.add(f, text="  Themes  ")
 
@@ -992,74 +1023,80 @@ class AdvancedSettingsTab(BaseTab):
         self._skin_previews = {}
 
         for idx, name in enumerate(theme_names):
-            skin = SKINS[name]
-            row = idx // COLS
-            col = idx % COLS
-
-            card = tk.Frame(
-                grid_host,
-                relief="raised",
-                bd=px(2),
-                bg=skin["sb_bg"],
-                highlightthickness=px(3),
-                highlightbackground=skin["accent"],
-            )
-            card.grid(row=row, column=col, padx=px(10), pady=px(10), sticky="nsew")
-            grid_host.columnconfigure(col, weight=1)
-
-            c = tk.Canvas(
-                card, width=px(180), height=px(80), bg=skin["sb_bg"], highlightthickness=0
-            )
-            c.pack(pady=px(8, 4))
-            c.create_rectangle(0, 0, 40, 80, fill=skin["sb_bg"], outline="")
-            c.create_rectangle(42, 0, 180, 80, fill=skin.get("content", "#1E1E1E"), outline="")
-            for i in range(4):
-                c.create_rectangle(
-                    4,
-                    8 + i * 18,
-                    36,
-                    20 + i * 18,
-                    fill=skin["sb_hover"] if i == 1 else skin["sb_bg"],
-                    outline="",
-                )
-                c.create_text(20, 14 + i * 18, text="─", fill=skin["sb_btn"], font=(UI_FONT, 7))
-            c.create_rectangle(44, 8, 176, 26, fill=skin["panel"], outline="")
-            c.create_text(110, 17, text=name, fill=skin["accent"], font=(UI_FONT, 8, "bold"))
-            if skin.get("stars"):
-                for sx, sy in [(20, 5), (60, 15), (120, 8), (155, 30), (80, 55), (30, 65)]:
-                    c.create_text(sx, sy, text="✦", fill=skin["accent"], font=(UI_FONT, 6))
-            scale_drawing(c)
-            self._skin_previews[name] = c
-
-            tk.Label(
-                card, text=name, font=(UI_FONT, 11, "bold"), bg=skin["sb_bg"], fg=skin["accent"]
-            ).pack()
-            tk.Label(
-                card,
-                text=skin["desc"],
-                font=(UI_FONT, 8),
-                bg=skin["sb_bg"],
-                fg=skin["sb_btn"],
-                wraplength=px(170),
-                justify="center",
-            ).pack(pady=px(2, 6))
-
-            rb = tk.Radiobutton(
-                card,
-                text=t("advanced_settings.select_this_skin"),
-                variable=self._skin_var,
-                value=name,
-                bg=skin["sb_bg"],
-                fg=skin["accent"],
-                selectcolor=skin["sb_active"],
-                activebackground=skin["sb_hover"],
-                font=(UI_FONT, 9),
-                command=lambda n=name: self._on_skin_select(n),
-            )
-            rb.pack(pady=px(0, 8))
+            self._skin_card(grid_host, idx, name, COLS)
         return current_skin, f
 
-    def _build_themes_subtab_skin_status(self, f):
+    def _skin_card(self, grid_host, idx, name, cols):
+        """One theme: its preview, name, description and Select button, in skin colours."""
+        skin = SKINS[name]
+        row, col = divmod(idx, cols)
+
+        card = tk.Frame(
+            grid_host,
+            relief="raised",
+            bd=px(2),
+            bg=skin["sb_bg"],
+            highlightthickness=px(3),
+            highlightbackground=skin["accent"],
+        )
+        card.grid(row=row, column=col, padx=px(10), pady=px(10), sticky="nsew")
+        grid_host.columnconfigure(col, weight=1)
+
+        self._skin_previews[name] = self._skin_preview(card, name, skin)
+
+        tk.Label(
+            card, text=name, font=(UI_FONT, 11, "bold"), bg=skin["sb_bg"], fg=skin["accent"]
+        ).pack()
+        tk.Label(
+            card,
+            text=skin["desc"],
+            font=(UI_FONT, 8),
+            bg=skin["sb_bg"],
+            fg=skin["sb_btn"],
+            wraplength=px(170),
+            justify="center",
+        ).pack(pady=px(2, 6))
+
+        rb = tk.Radiobutton(
+            card,
+            text=t("advanced_settings.select_this_skin"),
+            variable=self._skin_var,
+            value=name,
+            bg=skin["sb_bg"],
+            fg=skin["accent"],
+            selectcolor=skin["sb_active"],
+            activebackground=skin["sb_hover"],
+            font=(UI_FONT, 9),
+            command=lambda n=name: self._on_skin_select(n),
+        )
+        rb.pack(pady=px(0, 8))
+
+    @staticmethod
+    def _skin_preview(card, name, skin):
+        """A miniature of the window in this skin: sidebar, buttons, title bar (and stars)."""
+        c = tk.Canvas(card, width=px(180), height=px(80), bg=skin["sb_bg"], highlightthickness=0)
+        c.pack(pady=px(8, 4))
+        c.create_rectangle(0, 0, 40, 80, fill=skin["sb_bg"], outline="")
+        c.create_rectangle(42, 0, 180, 80, fill=skin.get("content", "#1E1E1E"), outline="")
+        for i in range(4):
+            c.create_rectangle(
+                4,
+                8 + i * 18,
+                36,
+                20 + i * 18,
+                fill=skin["sb_hover"] if i == 1 else skin["sb_bg"],
+                outline="",
+            )
+            c.create_text(20, 14 + i * 18, text="─", fill=skin["sb_btn"], font=(UI_FONT, 7))
+        c.create_rectangle(44, 8, 176, 26, fill=skin["panel"], outline="")
+        c.create_text(110, 17, text=name, fill=skin["accent"], font=(UI_FONT, 8, "bold"))
+        if skin.get("stars"):
+            for sx, sy in [(20, 5), (60, 15), (120, 8), (155, 30), (80, 55), (30, 65)]:
+                c.create_text(sx, sy, text="✦", fill=skin["accent"], font=(UI_FONT, 6))
+        scale_drawing(c)
+        return c
+
+    def _build_skin_apply(self, f):
         apply_f = tk.Frame(f)
         apply_f.pack(pady=px(10))
         tk.Button(
@@ -1083,9 +1120,8 @@ class AdvancedSettingsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(pady=px(2, 6))
 
-    def _build_themes_subtab_star_speed_control_only_visi(self, f):
+    def _build_star_speed(self, f):
         """Star speed control (only visible when Mystical is active)."""
-        # ── Star speed control (only visible when Mystical is active) ─────────
         self._star_speed_frame = tk.LabelFrame(
             f, text=t("advanced_settings.star_speed"), padx=px(16), pady=px(10)
         )
@@ -1126,9 +1162,8 @@ class AdvancedSettingsTab(BaseTab):
         )
         self._star_speed_lbl.pack()
 
-    def _build_themes_subtab_star_density_count(self, current_skin):
+    def _build_star_density(self, current_skin):
         """Star density (count)."""
-        # ── Star density (count) ───────────────────────────────────────────
         tk.Frame(self._star_speed_frame, height=px(6)).pack()  # spacer
 
         density_row = tk.Frame(self._star_speed_frame)
@@ -1169,11 +1204,11 @@ class AdvancedSettingsTab(BaseTab):
     # ── Custom skin sub-tab ───────────────────────────────────────────────────
     def _build_custom_subtab(self, inner_nb):
         """Scrollable color-property editor for the 'Custom' skin."""
-        current_custom, inner, sections = self._build_custom_subtab_custom_status(inner_nb)
+        current_custom, inner, sections = self._build_custom_header(inner_nb)
         self._build_custom_colour_rows(current_custom, inner, sections)
         self._build_custom_reset(inner)
 
-    def _build_custom_subtab_custom_status(self, inner_nb):
+    def _build_custom_header(self, inner_nb):
         f = ttk.Frame(inner_nb)
         inner_nb.add(f, text="  Custom  ")
 
@@ -1207,53 +1242,7 @@ class AdvancedSettingsTab(BaseTab):
         self._custom_vars: dict[str, tk.StringVar] = {}
         self._custom_swatches: dict[str, ColourButton] = {}
 
-        # Color sections: (Section title, [(display_label, color_key), ...])
-        sections = [
-            (
-                "Sidebar",
-                [
-                    (t("advanced_settings.sidebar_background"), "sb_bg"),
-                    (t("advanced_settings.category_header"), "sb_cat"),
-                    (t("advanced_settings.button_text_icons"), "sb_btn"),
-                    (t("advanced_settings.button_hover_background"), "sb_hover"),
-                    (t("advanced_settings.active_button_background"), "sb_active"),
-                ],
-            ),
-            (
-                "Content Area",
-                [
-                    ("Content background", "content"),
-                    ("Panel / card background", "panel"),
-                    ("Primary text", "fg"),
-                    ("Dimmed / secondary text", "fgdim"),
-                    ("Border color", "border"),
-                ],
-            ),
-            (
-                "Accent & Inputs",
-                [
-                    ("Accent color", "accent"),
-                    ("Input field background", "input_bg"),
-                    ("Input field text", "input_fg"),
-                ],
-            ),
-            (
-                "Status Colors",
-                [
-                    ("Success / green", "green"),
-                    ("Error / red", "red"),
-                    ("Warning / orange", "orange"),
-                    ("Highlight / pink", "pink"),
-                ],
-            ),
-            (
-                "Console",
-                [
-                    ("Console background", "console_bg"),
-                    ("Console text", "console_fg"),
-                ],
-            ),
-        ]
+        sections = _custom_sections()
         return current_custom, inner, sections
 
     def _build_custom_colour_rows(self, current_custom, inner, sections):

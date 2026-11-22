@@ -59,7 +59,8 @@ def test_inspector_shows_streams_and_preview(tkroot, media):
 @pytest.mark.ffmpeg
 def test_inspector_diagnostics(tkroot, media, tmp_path):
     from core import ffmpeg as ff
-    from tabs.system.media_inspector import MediaInspectorTab, diagnose
+    from core.media_notes import diagnose
+    from tabs.system.media_inspector import MediaInspectorTab
 
     notes = dict((m, lvl) for lvl, m in diagnose(ff.probe(media["vertical_noaudio"])))
     assert any("No audio" in m for m in notes)

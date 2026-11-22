@@ -78,6 +78,11 @@ class ResolutionScalerTab(BaseTab):
         self.src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
         self.info_lbl.pack(fill="x", padx=px(20))
+        self._build_size_options(body)
+        self._build_output(body)
+
+    def _build_size_options(self, body):
+        """Size, shape, method and sharpening."""
         opt = tk.LabelFrame(
             body, text=f"  {t('scaler.scale_options_section')}  ", padx=px(12), pady=px(8)
         )
@@ -154,6 +159,8 @@ class ResolutionScalerTab(BaseTab):
         for v in (self.size_var, self.shape_var, self.w_var, self.h_var):
             v.trace_add("write", lambda *_a: self._update())
 
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "ffv1"))
@@ -304,6 +311,11 @@ class FPSInterpolatorTab(BaseTab):
         self.src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
         self.info_lbl.pack(fill="x", padx=px(20))
+        self._build_rate_options(body)
+        self._build_output(body)
+
+    def _build_rate_options(self, body):
+        """The new rate, how frames are made, and slow motion."""
         opt = tk.LabelFrame(body, text="  Frame rate  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         r0 = tk.Frame(opt)
@@ -349,6 +361,8 @@ class FPSInterpolatorTab(BaseTab):
             variable=self.parallel_var,
         ).pack(anchor="w")
 
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))

@@ -346,15 +346,15 @@ class ScreenRecorderTab(BaseTab):
     #  Pro Studio Tab
     # ─────────────────────────────────────────────────────────────────────────
     def _build_studio_tab(self):
-        self._build_studio_tab_capture_source()
-        self._build_studio_tab_video_settings()
-        self._build_studio_tab_audio_devices_dynamic()
-        self._build_studio_tab_obs_feature_1_global_hotkey()
-        self._build_studio_tab_obs_feature_2_output_path()
-        self._build_studio_tab_obs_feature_3_auto_stop_time()
-        self._build_studio_tab_start_button()
+        self._build_capture_source()
+        self._build_video_settings()
+        self._build_audio_devices()
+        self._build_hotkey()
+        self._build_output_path()
+        self._build_auto_stop()
+        self._build_start_button()
 
-    def _build_studio_tab_capture_source(self):
+    def _build_capture_source(self):
         # ── Capture source ────────────────────────────────────────────────────
         src_f = tk.LabelFrame(
             self.tab_studio,
@@ -390,7 +390,12 @@ class ScreenRecorderTab(BaseTab):
             selectcolor=CLR["panel"],
             command=self._on_mode_change,
         ).pack(side="left", padx=px(20, 0))
+        self._build_region_row(src_f)
+        self._build_window_row(src_f)
+        self._on_mode_change()  # set initial visibility
 
+    def _build_region_row(self, src_f):
+        """Desktop mode: the region to record."""
         # Row 1: Region selector (visible in desktop mode)
         self.region_row = tk.Frame(src_f, bg=CLR["bg"])
         self.region_row.pack(fill="x", pady=px(6, 0))
@@ -422,6 +427,8 @@ class ScreenRecorderTab(BaseTab):
             command=self._reset_area,
         ).pack(side="left")
 
+    def _build_window_row(self, src_f):
+        """Window mode: the window to record."""
         # Row 2: Window picker (visible in window mode)
         self.window_row = tk.Frame(src_f, bg=CLR["bg"])
         self.window_row.pack(fill="x", pady=px(6, 0))
@@ -455,11 +462,8 @@ class ScreenRecorderTab(BaseTab):
         )
         self.lbl_window.pack(side="left", padx=px(4))
 
-        self._on_mode_change()  # set initial visibility
-
-    def _build_studio_tab_video_settings(self):
+    def _build_video_settings(self):
         """Video Settings."""
-        # ── Video Settings ────────────────────────────────────────────────────
         tk.Frame(self.tab_studio, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
         vid_f = tk.LabelFrame(
             self.tab_studio,
@@ -495,7 +499,11 @@ class ScreenRecorderTab(BaseTab):
             label_width=12,
             pady=4,
         )
+        self._build_quality_row(vid_f)
+        self._build_colour_options(vid_f)
 
+    def _build_quality_row(self, vid_f):
+        """Quality: the CRF slider and its value."""
         crf_row = tk.Frame(vid_f, bg=CLR["bg"])
         self.form_row(vid_f, 1, t("codec.lbl_crf_quality"), crf_row, label_width=12, pady=4)
         tk.Scale(
@@ -517,6 +525,8 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(5))
 
+    def _build_colour_options(self, vid_f):
+        """Chroma, pixel format and encoder preset."""
         self.chroma = ChoiceBox(
             vid_f,
             {
@@ -551,8 +561,8 @@ class ScreenRecorderTab(BaseTab):
             pady=4,
         )
 
-    def _build_studio_tab_audio_devices_dynamic(self):
-        """Audio Devices (Dynamic)."""
+    def _build_audio_devices(self):
+        """Which microphones and system sound to record."""
         # ── Audio Devices (Dynamic) ────────────────────────────────────────────
         aud_f = tk.LabelFrame(
             self.tab_studio,
@@ -621,9 +631,9 @@ class ScreenRecorderTab(BaseTab):
         self.cb_audio1.set(LOADING_DEVICES)
         tasks.submit(self._load_audio_devices)
 
-    def _build_studio_tab_obs_feature_1_global_hotkey(self):
-        """OBS Feature 1 – Global Hotkey."""
-        # ── OBS Feature 1 – Global Hotkey ─────────────────────────────────────
+    def _build_hotkey(self):
+        """A global hotkey to start and stop."""
+
         hotkey_f = tk.LabelFrame(
             self.tab_studio,
             text=f" {t('screen_recorder.hotkey_section')} ",
@@ -663,9 +673,9 @@ class ScreenRecorderTab(BaseTab):
         )
         self.lbl_hotkey_status.pack(side="left", padx=px(8))
 
-    def _build_studio_tab_obs_feature_2_output_path(self):
-        """OBS Feature 2 – Output Path."""
-        # ── OBS Feature 2 – Output Path ───────────────────────────────────────
+    def _build_output_path(self):
+        """Where recordings are saved."""
+
         path_f = tk.LabelFrame(
             self.tab_studio,
             text=f" {t('screen_recorder.output_path_section')} ",
@@ -700,9 +710,9 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(4))
 
-    def _build_studio_tab_obs_feature_3_auto_stop_time(self):
-        """OBS Feature 3 – Auto-Stop Timer."""
-        # ── OBS Feature 3 – Auto-Stop Timer ───────────────────────────────────
+    def _build_auto_stop(self):
+        """Stop by itself after a set time."""
+
         timer_f = tk.LabelFrame(
             self.tab_studio,
             text=f" {t('screen_recorder.auto_stop_section')} ",
@@ -750,9 +760,8 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(6))
 
-    def _build_studio_tab_start_button(self):
+    def _build_start_button(self):
         """Start button."""
-        # ── Start button ──────────────────────────────────────────────────────
         self.btn_start_pro = tk.Button(
             self.tab_studio,
             text=t("screen_recorder.start_studio_recording"),
@@ -849,7 +858,7 @@ class ScreenRecorderTab(BaseTab):
         return recorder.recording_name(folder, self.out_template_var.get(), ext)
 
     # ─────────────────────────────────────────────────────────────────────────
-    #  OBS Feature 1 – Global Hotkey
+    #  Global hotkey
     # ─────────────────────────────────────────────────────────────────────────
     _HOTKEY_MAP: ClassVar[dict[str, tuple[int, int]]] = {
         "Alt+F9": (0x0001, 0x78),  # MOD_ALT,      VK_F9

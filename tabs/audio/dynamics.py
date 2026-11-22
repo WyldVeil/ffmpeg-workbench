@@ -132,37 +132,30 @@ class AudioDynamicsTab(BaseTab):
 
     def _build_scrollable_chain(self):
         """Scrollable chain."""
-        # ── Scrollable chain ─────────────────────────────────────────────
         return scroll_body(self)
 
     def _build_1_noise_gate(self, inner):
         """1. Noise Gate."""
-        # ── 1. Noise Gate ─────────────────────────────────────────────────
         self._build_gate(inner)
 
     def _build_2_eq(self, inner):
         """2. EQ."""
-        # ── 2. EQ ─────────────────────────────────────────────────────────
         self._build_eq(inner)
 
     def _build_3_compressor(self, inner):
         """3. Compressor."""
-        # ── 3. Compressor ─────────────────────────────────────────────────
         self._build_compressor(inner)
 
     def _build_4_de_esser(self, inner):
         """4. De-esser."""
-        # ── 4. De-esser ───────────────────────────────────────────────────
         self._build_deesser(inner)
 
     def _build_5_limiter(self, inner):
         """5. Limiter."""
-        # ── 5. Limiter ────────────────────────────────────────────────────
         self._build_limiter(inner)
 
     def _build_filter_preview(self, inner):
         """Filter preview."""
-        # ── Filter preview ────────────────────────────────────────────────
         self.filter_preview = tk.Label(
             inner, text="", fg=CLR["fgdim"], font=(MONO_FONT, 8), wraplength=px(860), justify="left"
         )
@@ -170,7 +163,6 @@ class AudioDynamicsTab(BaseTab):
 
     def _build_output_render(self, inner):
         """Output & render."""
-        # ── Output & render ───────────────────────────────────────────────
         self.out_var = tk.StringVar()
         SaveRow(inner, t("common.output_file"), self.out_var, kind="media").pack(
             pady=px(6), padx=px(16), fill="x"

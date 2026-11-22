@@ -68,7 +68,10 @@ class ProxyGenTab(BaseTab):
             tk.Button(bf, text=label, command=cmd, relief="flat", cursor="hand2").pack(
                 side="left", padx=px(4)
             )
+        self._build_options()
 
+    def _build_options(self):
+        """Proxy format, size, sound and where the proxies go."""
         opt = tk.LabelFrame(
             self, text=f"  {t('proxy.proxy_options_section')}  ", padx=px(15), pady=px(8)
         )

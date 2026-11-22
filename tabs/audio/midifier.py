@@ -57,7 +57,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_dependencies_status(self):
         """Dependencies status."""
-        # ── Dependencies status ──────────────────────────────────────────
         dep_sec = self.make_section(self._inner, title=t("midifier.section.deps"))
         self._dep_lbl = tk.Label(
             dep_sec,
@@ -83,7 +82,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_source(self):
         """Source."""
-        # ── Source ───────────────────────────────────────────────────────
         src_sec = self.make_section(self._inner, title=t("midifier.section.source"))
         self.src_var = tk.StringVar()
         row = self.make_file_row(src_sec, t("midifier.input_file"), self.src_var, self._browse_src)
@@ -91,7 +89,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_pipeline_overview(self):
         """Pipeline overview."""
-        # ── Pipeline overview ────────────────────────────────────────────
         pipe_sec = self.make_section(self._inner, title=t("midifier.section.pipeline"))
         steps = [
             ("1", t("midifier.step1_title"), t("midifier.step1_desc")),
@@ -126,7 +123,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_options(self):
         """Options."""
-        # ── Options ──────────────────────────────────────────────────────
         opt_sec = self.make_section(self._inner, title=t("midifier.section.options"))
 
         r0 = tk.Frame(opt_sec, bg=CLR["bg"])
@@ -262,7 +258,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_output(self):
         """Output."""
-        # ── Output ───────────────────────────────────────────────────────
         out_sec = self.make_section(self._inner, title=t("midifier.section.output"))
         self.out_var = tk.StringVar()
         out_row = self.make_file_row(out_sec, t("midifier.save_as"), self.out_var, self._browse_out)
@@ -270,7 +265,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_run_button(self):
         """Run button."""
-        # ── Run button ───────────────────────────────────────────────────
         btn_f = tk.Frame(self._inner, bg=CLR["bg"])
         btn_f.pack(fill="x", pady=px(12, 6))
         self.btn_render = self.make_render_btn(btn_f, t("midifier.run_btn"), self._run, width=30)
@@ -279,7 +273,6 @@ class MIDIfierTab(BaseTab):
 
     def _build_console(self):
         """Console."""
-        # ── Console ──────────────────────────────────────────────────────
         self.console = self.make_console_block(
             self._inner, height=10, bg=CLR["bg"], padx=px(20), pady=px(4, 14)
         )

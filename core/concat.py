@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
+from core.filters import even_below
 
 
 @dataclass
@@ -46,10 +47,6 @@ class Piece:
     @classmethod
     def of(cls, path: str, start: float = 0.0, end: float | None = None) -> Piece:
         return cls(path, ff.probe(path), start, end)
-
-
-def _even(n: float) -> int:
-    return max(2, round(n) // 2 * 2)
 
 
 def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list[str]:
@@ -146,12 +143,12 @@ def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple[int, 
         return 1280, 720, "30/1"
     if "x" in mode:
         w, h = mode.lower().split("x", 1)
-        size = (_even(int(w)), _even(int(h)))
+        size = (even_below(int(w)), even_below(int(h)))
     elif mode == "largest":
         best = max(vids, key=lambda v: v.display_size[0] * v.display_size[1])
-        size = (_even(best.display_size[0]), _even(best.display_size[1]))
+        size = (even_below(best.display_size[0]), even_below(best.display_size[1]))
     else:
-        size = (_even(vids[0].display_size[0]), _even(vids[0].display_size[1]))
+        size = (even_below(vids[0].display_size[0]), even_below(vids[0].display_size[1]))
     fps = str(vids[0].raw.get("avg_frame_rate") or "30/1")
     if fps in ("0/0", "") or not vids[0].fps or vids[0].fps > 240:
         fps = "30/1"

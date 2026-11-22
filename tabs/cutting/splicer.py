@@ -12,18 +12,13 @@ from core import concat
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.hardware import get_video_duration
-from core.i18n import t
+from core.i18n import t, t_or
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
 from tabs.widgets import SaveRow, scroll_body
-
-
-def _tr(key, fallback):
-    text = t(key)
-    return fallback if text == key else text
 
 
 class SplicerTab(BaseTab):
@@ -283,14 +278,14 @@ class SplicerTab(BaseTab):
                 ee = ff.parse_time(seg["end"].get())
             except ValueError:
                 raise ValueError(
-                    _tr(
+                    t_or(
                         "splicer.bad_time",
                         "Segment {n}: times must look like 12.5, 01:23.4 or 1:02:03.",
                     ).format(n=i)
                 ) from None
             if ee <= ss:
                 raise ValueError(
-                    _tr("splicer.empty_segment", "Segment {n} ends before it starts.").format(n=i)
+                    t_or("splicer.empty_segment", "Segment {n} ends before it starts.").format(n=i)
                 )
             pieces.append(concat.Piece.of(seg["path"], ss, ee))
         return pieces
@@ -326,12 +321,12 @@ class SplicerTab(BaseTab):
 
     def _agree_to_reencode(self, problems):
         return messagebox.askyesno(
-            _tr("batch_joiner.files_differ", "Files differ"),
-            _tr("splicer.not_copyable", "These segments can't be joined losslessly:")
+            t_or("batch_joiner.files_differ", "Files differ"),
+            t_or("splicer.not_copyable", "These segments can't be joined losslessly:")
             + "\n\n"
             + "\n".join("\u2022 " + x for x in problems[:8])
             + "\n\n"
-            + _tr("batch_joiner.offer_reencode", "Re-encode them so they match?"),
+            + t_or("batch_joiner.offer_reencode", "Re-encode them so they match?"),
             parent=self,
         )
 

@@ -68,7 +68,6 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_source(self):
         """Source."""
-        # ── Source ────────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(20), pady=px(10, 4))
         tk.Label(sf, text=t("common.source_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
@@ -89,7 +88,6 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_engine_selector(self):
         """Engine Selector."""
-        # ── Engine Selector ───────────────────────────────────────────────
         eng_f = tk.Frame(self)
         eng_f.pack(fill="x", padx=px(20), pady=px(4, 8))
         tk.Label(eng_f, text=t("laugh_track.engine_section"), font=(UI_FONT, 10, "bold")).pack(
@@ -117,7 +115,6 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_engine_container_frame(self):
         """Engine Container Frame."""
-        # ── Engine Container Frame ────────────────────────────────────────
         # This prevents Tkinter layout crashes when swapping sections
         self.engine_container = tk.Frame(self)
         self.engine_container.pack(fill="x", pady=0)
@@ -388,7 +385,6 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_output(self):
         """Output."""
-        # ── Output ────────────────────────────────────────────────────────
         out_lf = tk.LabelFrame(
             self, text=t("section.output"), padx=px(15), pady=px(8), font=(UI_FONT, 9, "bold")
         )
@@ -411,7 +407,6 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_action_buttons(self):
         """Action buttons."""
-        # ── Action buttons ────────────────────────────────────────────────
         bf = tk.Frame(self)
         bf.pack(pady=px(10))
         self._btn_preview = tk.Button(
@@ -432,7 +427,6 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_console(self):
         """Console."""
-        # ── Console ───────────────────────────────────────────────────────
         self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4, 10))
 
         # ==================================================================

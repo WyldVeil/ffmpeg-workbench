@@ -17,6 +17,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks, upscale
+from core.filters import even
 from core.ops.shared import final_copy_args, intermediate_args
 from core.queue_manager import TaskContext
 
@@ -26,21 +27,17 @@ GPU_METHODS = {"gpu", *upscale.SHADERS}
 Size = tuple[float, float]  # width, height
 
 
-def _even(x: float) -> int:
-    return max(2, round(x / 2) * 2)
-
-
 def geometry(src: Size, box: Size, shape: str) -> tuple[tuple[int, int], tuple[int, int]]:
     """((scaled_w, scaled_h), (out_w, out_h)) for *shape*."""
     sw, sh = src
     bw, bh = box
     if shape == "stretch":
-        return (_even(bw), _even(bh)), (_even(bw), _even(bh))
+        return (even(bw), even(bh)), (even(bw), even(bh))
     ratio = (max if shape == "crop" else min)(bw / sw, bh / sh)
-    scaled = (_even(sw * ratio), _even(sh * ratio))
+    scaled = (even(sw * ratio), even(sh * ratio))
     if shape == "fit":
         return scaled, scaled
-    return scaled, (_even(bw), _even(bh))
+    return scaled, (even(bw), even(bh))
 
 
 def scale_chain(

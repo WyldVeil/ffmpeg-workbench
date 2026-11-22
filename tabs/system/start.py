@@ -71,15 +71,23 @@ class StartTab(BaseTab):
 
     # ── Layout ────────────────────────────────────────────────────────────
     def _build_ui(self):
-        outer = scroll_body(self)
-        self._col = tk.Frame(outer, bg=CLR["bg"])
-        self._col.pack(fill="x", padx=px(32), pady=px(26, 30))
         # Centre on the visible width (the scroll canvas), not the inner frame:
         # the padding changes the frame's own width, so reacting to that fed
         # back into itself and grew without end when the content was wider
         # than MAX_WIDTH (HiDPI screens), until X refused the window.
-        outer.master.bind("<Configure>", self._on_width, add=True)
+        outer = scroll_body(self, on_resize=self._on_width)
+        self._col = tk.Frame(outer, bg=CLR["bg"])
+        self._col.pack(fill="x", padx=px(32), pady=px(26, 30))
 
+        self._build_intro()
+        self._build_search()
+        self._build_file_area()
+        self._build_footer()
+        self._render_recent()
+        self._render_results()
+
+    def _build_intro(self):
+        """The page title and what it is for."""
         tk.Label(
             self._col, text="START", font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["accent"]
         ).pack(anchor="w")
@@ -101,6 +109,8 @@ class StartTab(BaseTab):
             anchor="w",
         ).pack(anchor="w")
 
+    def _build_search(self):
+        """The search box."""
         # Search
         box = tk.Frame(
             self._col,
@@ -133,6 +143,8 @@ class StartTab(BaseTab):
         self._search.bind("<Escape>", lambda _e: self.clear_search())
         self._search.bind("<Down>", lambda _e: self._focus_first_result())
 
+    def _build_file_area(self):
+        """The file drop area, the recent files, and where suggestions and results go."""
         # File drop area + recent
         row = tk.Frame(self._col, bg=CLR["bg"])
         row.pack(fill="x")
@@ -151,6 +163,8 @@ class StartTab(BaseTab):
         self._results = tk.Frame(self._col, bg=CLR["bg"])
         self._results.pack(fill="x", pady=px(14, 0))
 
+    def _build_footer(self):
+        """Browse all tools, and a tip."""
         foot = tk.Frame(self._col, bg=CLR["bg"])
         foot.pack(fill="x", pady=px(22, 0))
         total = len(catalog.TOOLS)
@@ -172,14 +186,11 @@ class StartTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="right")
 
-        self._render_recent()
-        self._render_results()
-
-    def _on_width(self, event):
+    def _on_width(self, width: int) -> None:
         max_w, margin = px(MAX_WIDTH), px(24)
-        pad = max(margin, (event.width - max_w) // 2)
+        pad = max(margin, (width - max_w) // 2)
         self._col.pack_configure(padx=pad)
-        avail = min(event.width, max_w) - 2 * margin
+        avail = min(width, max_w) - 2 * margin
         cols = max(1, min(4, avail // px(250)))
         if cols != self._cols:
             self._cols = cols
@@ -554,14 +565,17 @@ class StartTab(BaseTab):
         )
         text = tk.Frame(card, bg=CLR["panel"])
         text.pack(side="left", fill="both", expand=True, pady=px(10), padx=px(0, 10))
-        tk.Label(
+        title = tk.Label(
             text,
             text=g.title,
             font=(UI_FONT, 11, "bold"),
             bg=CLR["panel"],
             fg=CLR["fg"],
             anchor="w",
-        ).pack(anchor="w")
+            justify="left",
+            wraplength=px(190),
+        )
+        title.pack(anchor="w", fill="x")
         blurb = tk.Label(
             text,
             text=g.blurb,
@@ -573,7 +587,7 @@ class StartTab(BaseTab):
             wraplength=px(190),
         )
         blurb.pack(anchor="w", fill="x")
-        self._wrap(text, blurb)
+        self._wrap(text, title, blurb)
         return self._wire(card, lambda: self.show_goal(g.key))
 
     def _tool_row(self, parent, name: str, reason: str = ""):
@@ -607,12 +621,13 @@ class StartTab(BaseTab):
         return self._wire(card, lambda: self.open_tool(name))
 
     @staticmethod
-    def _wrap(frame, label):
-        """Wrap *label* to the width its card actually has."""
+    def _wrap(frame, *labels):
+        """Wrap *labels* to the width their card actually has."""
 
         def fit(event):
             width = max(px(120), event.width - px(6))
-            if int(label.cget("wraplength")) != width:
-                label.configure(wraplength=width)
+            for label in labels:
+                if int(label.cget("wraplength")) != width:
+                    label.configure(wraplength=width)
 
         frame.bind("<Configure>", fit, add=True)

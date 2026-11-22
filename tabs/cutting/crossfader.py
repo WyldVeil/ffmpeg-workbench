@@ -24,15 +24,14 @@ from tkinter import messagebox, ttk
 
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.filters import even_below
 from core.hardware import launch_preview
-from core.i18n import t
+from core.i18n import t, t_or
 from core.ops import transitions as tr
 from core.ops.crossfader import (
     TRANS_DEFAULT,
     Clip,
     Crossfade,
-    _even,
-    _tr,
     build_command,
     total_duration,
     validate,
@@ -90,7 +89,7 @@ class CrossfaderTab(BaseTab):
         self.trans_type_var = tk.StringVar(value=TRANS_DEFAULT)
         self.per_clip_trans = tk.BooleanVar(value=False)
         self.trans_behavior_var = tk.StringVar(value="overlap")
-        self._audio_labels = {key: _tr(k, fb) for key, k, fb in AUDIO_MODES}
+        self._audio_labels = {key: t_or(k, fb) for key, k, fb in AUDIO_MODES}
         self.audio_var.set(self._audio_labels["normal"])
         self._build_ui()
 
@@ -130,7 +129,7 @@ class CrossfaderTab(BaseTab):
         self.btn_add_clip.pack(side="left", padx=px(4))
         tk.Button(
             btn_row,
-            text=_tr("crossfader.add_many", "➕  Add several…"),
+            text=t_or("crossfader.add_many", "➕  Add several…"),
             bg=CLR["panel"],
             fg=CLR["fg"],
             relief="flat",
@@ -139,7 +138,7 @@ class CrossfaderTab(BaseTab):
         ).pack(side="left", padx=px(4))
         tk.Label(
             btn_row,
-            text=_tr("crossfader.max_clips", "Up to {n} clips").format(n=MAX_CLIPS),
+            text=t_or("crossfader.max_clips", "Up to {n} clips").format(n=MAX_CLIPS),
             fg=CLR["fgdim"],
             bg=CLR["bg"],
             font=(UI_FONT, 8),
@@ -282,7 +281,7 @@ class CrossfaderTab(BaseTab):
         )
         self.run_btn.config(state="disabled")
         self.run_btn.pack(side="left", padx=px(6))
-        self._preview_label = _tr("crossfader.preview_button", "\U0001f441  Quick preview")
+        self._preview_label = t_or("crossfader.preview_button", "\U0001f441  Quick preview")
         self.preview_btn = tk.Button(
             btn_row,
             text=self._preview_label,
@@ -500,11 +499,11 @@ class CrossfaderTab(BaseTab):
             self._status_lbl.config(text="⚠ " + problem, fg=CLR["orange"])
         else:
             total = total_duration(clips, T, freeze)
-            note = _tr("crossfader.summary", "{n} clips → {d} total").format(
+            note = t_or("crossfader.summary", "{n} clips → {d} total").format(
                 n=len(clips), d=ff.format_time(total, ms=False)
             )
             if any(not c.has_audio for c in clips) and any(c.has_audio for c in clips):
-                note += "  ·  " + _tr(
+                note += "  ·  " + t_or(
                     "crossfader.silence_note", "silence added for clips without audio"
                 )
             self._status_lbl.config(text=note, fg=CLR["accent"])
@@ -516,7 +515,7 @@ class CrossfaderTab(BaseTab):
         if T is None:
             messagebox.showwarning(
                 t("common.warning"),
-                _tr("crossfader.bad_duration", "Enter a valid transition length."),
+                t_or("crossfader.bad_duration", "Enter a valid transition length."),
                 parent=self,
             )
             return None
@@ -530,12 +529,12 @@ class CrossfaderTab(BaseTab):
             venc = enc.video("h264", "low", speed="fastest", hw="auto", container="mp4")
             w0, h0 = clips[0].width, clips[0].height
             scale = min(1.0, 640 / max(w0, 1), 360 / max(h0, 1))
-            size = (_even(w0 * scale), _even(h0 * scale))
+            size = (even_below(w0 * scale), even_below(h0 * scale))
         else:
             if not enc.video_ok_for(container, self.encoder.codec):
                 messagebox.showwarning(
                     t("common.warning"),
-                    _tr(
+                    t_or(
                         "crossfader.codec_container",
                         "{codec} can't be stored in a .{ext} file. Pick another codec or file type.",
                     ).format(codec=self.encoder.codec.upper(), ext=container),
@@ -554,7 +553,7 @@ class CrossfaderTab(BaseTab):
         if len(clips) < 2:
             messagebox.showwarning(
                 t("common.warning"),
-                _tr("crossfader.need_two", "Add at least two clips."),
+                t_or("crossfader.need_two", "Add at least two clips."),
                 parent=self,
             )
             return

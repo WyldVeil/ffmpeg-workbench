@@ -75,7 +75,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_source(self):
         """Source."""
-        # ── Source ────────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(20), pady=px(14, 4))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
@@ -97,7 +96,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_frame_selection(self):
         """Frame selection."""
-        # ── Frame selection ───────────────────────────────────────────────
         frame_lf = tk.LabelFrame(
             self,
             text=f"  {t('thumbnail.frame_section')}  ",
@@ -204,7 +202,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_size_preset(self):
         """Size preset."""
-        # ── Size preset ───────────────────────────────────────────────────
         size_lf = tk.LabelFrame(
             self,
             text=f"  {t('thumbnail.output_size_section')}  ",
@@ -224,7 +221,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_image_adjustments(self):
         """Image adjustments."""
-        # ── Image adjustments ─────────────────────────────────────────────
         adj_lf = tk.LabelFrame(
             self,
             text=f"  {t('thumbnail.adjustments_section')}  ",
@@ -290,7 +286,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_text_overlay(self):
         """Text overlay."""
-        # ── Text overlay ──────────────────────────────────────────────────
         txt_lf = tk.LabelFrame(
             self,
             text=f"  {t('thumbnail.text_overlay_section')}  ",
@@ -357,7 +352,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_batch_mode(self):
         """Batch mode."""
-        # ── Batch mode ────────────────────────────────────────────────────
         batch_lf = tk.LabelFrame(
             self,
             text=f"  {t('thumbnail.batch_section')}  ",
@@ -386,7 +380,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_output(self):
         """Output."""
-        # ── Output ────────────────────────────────────────────────────────
         self._out_var = tk.StringVar()
         SaveRow(
             self, t("encode_queue.output_label"), self._out_var, kind="image", ext=self._get_ext
@@ -403,7 +396,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_run(self):
         """Run."""
-        # ── Run ───────────────────────────────────────────────────────────
         bf = tk.Frame(self)
         bf.pack(pady=px(8))
         self.btn_render = self.make_render_btn(
@@ -413,7 +405,6 @@ class ThumbnailMakerTab(BaseTab):
 
     def _build_console(self):
         """Console."""
-        # ── Console ───────────────────────────────────────────────────────
         self.console = self.make_console_block(self, height=4, padx=px(20), pady=px(4, 10))
 
     # ── Callbacks ──────────────────────────────────────────────────────
