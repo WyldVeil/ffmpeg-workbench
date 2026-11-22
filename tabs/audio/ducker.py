@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core.i18n import t
+from core.ops import duck as dk
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -360,79 +361,23 @@ class AudioDuckerTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("ducker.msg_invalid_values"))
             return
 
-        # Clamp to sidechaincompress valid ranges
-        threshold = max(0.000976, min(1.0, threshold))
-        ratio = max(1.0, min(20.0, ratio))
-        attack = max(0.01, min(2000.0, attack))
-        release = max(0.01, min(9000.0, release))
-
-        ffmpeg = _ff.ffmpeg_path()
-
-        # ── Build FFmpeg command ───────────────────────────────────────────────
-        # Input 0: source video (voice/speech audio on [0:a])
-        # Input 1: background music
-        cmd = [ffmpeg, "-y", "-i", src]
-        if self._loop_music.get():
-            cmd += ["-stream_loop", "-1"]
-        cmd += ["-i", music]
-
-        # Filter graph:
-        #   [1:a]volume=X[music]
-        #   → apply pre-gain to music
-        #
-        #   [music][0:a]sidechaincompress=....[ducked]
-        #   → compress music using voice as the sidechain trigger
-        #
-        #   [0:a][ducked]amix=inputs=2:duration=first[mixed]
-        #   → blend original voice + ducked music
-        #
-        #   (optional) [mixed]loudnorm=...[aout]
-
-        # Both branches in the same layout/rate (amix takes the first input's layout,
-        # which turned stereo music mono whenever the voice was mono), the voice is
-        # split so it can be both mixed and used as the side-chain key, the music is
-        # bounded to the video, and the mix is not halved (normalize=0).
+        duck = dk.Ducking(
+            threshold=threshold,
+            ratio=ratio,
+            attack=attack,
+            release=release,
+            music_volume=music_vol,
+            loop_music=self._loop_music.get(),
+            normalise=self._normalize.get(),
+        ).clamped()
         dur = info.duration
-        st = "aformat=sample_rates=48000:channel_layouts=stereo"
-        fc_parts = [
-            f"[0:a:0]{st},asplit=2[voice][key]",
-            f"[1:a:0]{st},volume={music_vol:.3f},apad,atrim=duration={dur:.3f}[music]",
-            (
-                f"[music][key]sidechaincompress=threshold={threshold}:ratio={ratio}:attack={attack}:"
-                f"release={release}[ducked]"
-            ),
-            "[voice][ducked]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[mixed]",
-        ]
-        if self._normalize.get():
-            fc_parts.append("[mixed]loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]")
-            final_a = "[aout]"
-        else:
-            final_a = "[mixed]"
-        cmd += [
-            "-filter_complex",
-            ";".join(fc_parts),
-            "-map",
-            "0:v?",
-            "-map",
-            final_a,
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "256k",
-            "-t",
-            f"{dur:.3f}",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = dk.duck_cmd(src, music, out, dur, duck)
 
         self.log(self.console, f"▶ Ducking music into: {os.path.basename(src)}")
         self.log(
             self.console,
-            f"  Threshold={threshold}  Ratio={int(ratio)}:1  "
-            f"Attack={int(attack)}ms  Release={int(release)}ms  Music vol={music_vol:.0%}",
+            f"  Threshold={duck.threshold}  Ratio={int(duck.ratio)}:1  "
+            f"Attack={int(duck.attack)}ms  Release={int(duck.release)}ms  Music vol={music_vol:.0%}",
         )
 
         self.run_ffmpeg(
