@@ -121,6 +121,49 @@ class TextMark:
     seed: int = 7
 
 
+Placement = tuple[float, float, str]  # (from, to, ASS position/motion tags)
+
+
+def _jumps(
+    mark: TextMark, w: int, h: int, duration: float, margin: float, rot: str
+) -> list[Placement]:
+    """A corner or edge chosen at random every few seconds, never the same twice running."""
+    rng = random.Random(mark.seed)
+    spots = [k for k in _ANCHOR if k != "center"]
+    out: list[Placement] = []
+    tm, last = 0.0, None
+    while tm < duration:
+        step = rng.uniform(*mark.random_every) if mark.random_every else mark.every
+        key = rng.choice([k for k in spots if k != last])
+        last = key
+        an, x, y = anchor_xy(key, w, h, margin)
+        out.append((tm, min(tm + step, duration), f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}"))
+        tm += step
+    return out
+
+
+def _placements(
+    mark: TextMark, w: int, h: int, duration: float, text_size: tuple[float, float]
+) -> list[Placement]:
+    """Where the mark is, when: bouncing, jumping about, at a custom spot or an anchor."""
+    u = min(w, h) / 1080
+    margin = 30 * u
+    rot = f"\\frz{-mark.angle:g}" if mark.angle else ""
+    if mark.place == "bounce":
+        path = bounce_path(duration, w, h, *text_size, mark.speed * u, mark.seed)
+        return [
+            (a, b, f"\\an7\\move({x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f})")
+            for a, b, x0, y0, x1, y1 in path
+        ]
+    if mark.place == "jump":
+        return _jumps(mark, w, h, duration, margin, rot)
+    if mark.place == "custom":
+        x, y = w * mark.custom[0] / 100, h * mark.custom[1] / 100
+        return [(0, duration, f"\\an5\\pos({x:.0f},{y:.0f}){rot}")]
+    an, x, y = anchor_xy(mark.place, w, h, margin)
+    return [(0, duration, f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")]
+
+
 def build_script(mark: TextMark, w: int, h: int, duration: float) -> ass.Script:
     """The watermark as a subtitle script for a *w* x *h* video of *duration* s."""
     sc = ass.Script(w, h)
@@ -143,35 +186,11 @@ def build_script(mark: TextMark, w: int, h: int, duration: float) -> ass.Script:
     alpha = f"\\alpha{ass.alpha_tag(1 - mark.opacity)}"
     windows = mark.ranges or [(0.0, duration)]
     fade_tag = "\\fad(300,300)" if mark.fade else ""
-    margin = 30 * u
-    tw, th = ass.text_width(mark.text, px, bold=mark.bold), px * 1.2
-
-    def add(a: float, b: float, tags: str) -> None:
-        for ra, rb in windows:
+    text_size = ass.text_width(mark.text, px, bold=mark.bold), px * 1.2
+    for a, b, tags in _placements(mark, w, h, duration, text_size):
+        for ra, rb in windows:  # shown only inside the chosen time ranges
             s, e = max(a, ra), min(b, rb)
             if e - s > 0.04:
                 fades = fade_tag if (s == ra or e == rb) and mark.fade else ""
                 sc.add(s, e, f"{{{tags}{alpha}{fades}}}{body}", "WM")
-
-    rot = f"\\frz{-mark.angle:g}" if mark.angle else ""
-    if mark.place == "bounce":
-        for a, b, x0, y0, x1, y1 in bounce_path(duration, w, h, tw, th, mark.speed * u, mark.seed):
-            add(a, b, f"\\an7\\move({x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f})")
-    elif mark.place == "jump":
-        rng = random.Random(mark.seed)
-        spots = [k for k in _ANCHOR if k != "center"]
-        tm, last = 0.0, None
-        while tm < duration:
-            step = rng.uniform(*mark.random_every) if mark.random_every else mark.every
-            key = rng.choice([k for k in spots if k != last])
-            last = key
-            an, x, y = anchor_xy(key, w, h, margin)
-            add(tm, min(tm + step, duration), f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")
-            tm += step
-    elif mark.place == "custom":
-        x, y = w * mark.custom[0] / 100, h * mark.custom[1] / 100
-        add(0, duration, f"\\an5\\pos({x:.0f},{y:.0f}){rot}")
-    else:
-        an, x, y = anchor_xy(mark.place, w, h, margin)
-        add(0, duration, f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")
     return sc

@@ -147,6 +147,25 @@ def latest_ytdlp_release(force: bool = False) -> str | None:
         return None
 
 
+def _ytdlp_release(asset: str) -> tuple[str, dict[str, str]]:
+    """(release tag, file name -> download URL), through the configured mirror."""
+    from core import network
+
+    try:
+        rel = _json(_YTDLP_API)
+        tag = str(rel.get("tag_name"))
+        assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+    except Exception:
+        if not network.get().get("network.github_mirror"):
+            raise
+        # api.github.com is often blocked together with GitHub; mirrors serve the
+        # release files themselves, so use the stable "latest" links.
+        base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
+        tag = "latest"
+        assets = {name: base + name for name in (asset, "SHA2-256SUMS")}
+    return tag, {k: network.mirror_url(v) for k, v in assets.items()}
+
+
 def install_ytdlp(log: Log) -> bool:
     """Download the newest yt-dlp stand-alone build into the user tools folder."""
     if offline():
@@ -158,25 +177,12 @@ def install_ytdlp(log: Log) -> bool:
         log("No yt-dlp build is published for this platform - update it with your package manager.")
         return False
     try:
-        from core import network
-
-        try:
-            rel = _json(_YTDLP_API)
-            assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
-        except Exception:
-            if not network.get().get("network.github_mirror"):
-                raise
-            # api.github.com is often blocked together with GitHub; mirrors serve the
-            # release files themselves, so use the stable "latest" links.
-            base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
-            rel = {"tag_name": "latest"}
-            assets = {name: base + name for name in (asset, "SHA2-256SUMS")}
-        assets = {k: network.mirror_url(v) for k, v in assets.items()}
+        tag, assets = _ytdlp_release(asset)
         sums = _sums(_text(assets["SHA2-256SUMS"]))
         os.makedirs(target_root, exist_ok=True)
         exe_name = "yt-dlp" + (".exe" if os.name == "nt" else "")
         tmp = os.path.join(target_root, exe_name + ".download")
-        log(f"Downloading yt-dlp {rel.get('tag_name')}…")
+        log(f"Downloading yt-dlp {tag}…")
         _download(assets[asset], tmp, sums[asset], log)
         if os.name != "nt":
             os.chmod(tmp, 0o755)

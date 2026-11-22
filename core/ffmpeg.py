@@ -387,24 +387,48 @@ _PROBE_LOCK = threading.Lock()
 _PROBE_CACHE_MAX = 256
 
 
+def _probe_key(path: str) -> tuple[str, int, int] | None:
+    """What identifies this version of the file (None for a URL)."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (os.path.abspath(path), st.st_mtime_ns, st.st_size)
+
+
+def _cached(key: tuple[str, int, int]) -> MediaInfo | None:
+    with _PROBE_LOCK:
+        hit = _PROBE_CACHE.get(key)
+        if hit is not None:
+            _PROBE_CACHE.move_to_end(key)
+        return hit
+
+
+def _remember(key: tuple[str, int, int], info: MediaInfo) -> None:
+    with _PROBE_LOCK:
+        _PROBE_CACHE[key] = info
+        while len(_PROBE_CACHE) > _PROBE_CACHE_MAX:
+            _PROBE_CACHE.popitem(last=False)
+
+
 def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaInfo:
     """Probe *path* with ffprobe (JSON).  Raises :class:`ProbeError`."""
     if not path:
         raise ProbeError("no file given")
     if not os.path.exists(path) and "://" not in path:
         raise ProbeError(f"file not found: {path}")
-    key = None
-    try:
-        st = os.stat(path)
-        key = (os.path.abspath(path), st.st_mtime_ns, st.st_size)
-    except OSError:
-        pass
-    if use_cache and key is not None:
-        with _PROBE_LOCK:
-            hit = _PROBE_CACHE.get(key)
-            if hit is not None:
-                _PROBE_CACHE.move_to_end(key)
-                return hit
+    key = _probe_key(path)
+    hit = _cached(key) if use_cache and key is not None else None
+    if hit is not None:
+        return hit
+    info = parse_probe_json(path, _run_ffprobe(path, timeout))
+    if key is not None:
+        _remember(key, info)
+    return info
+
+
+def _run_ffprobe(path: str, timeout: float) -> dict[str, Any]:
+    """ffprobe's JSON for *path*; ProbeError with a readable reason when there is none."""
     cmd = [
         ffprobe_path(),
         "-v",
@@ -436,13 +460,7 @@ def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaI
         raise ProbeError(f"unreadable ffprobe output: {exc}") from exc
     if not data.get("streams") and not data.get("format"):
         raise ProbeError("no media streams found")
-    info = parse_probe_json(path, data)
-    if key is not None:
-        with _PROBE_LOCK:
-            _PROBE_CACHE[key] = info
-            while len(_PROBE_CACHE) > _PROBE_CACHE_MAX:
-                _PROBE_CACHE.popitem(last=False)
-    return info
+    return data
 
 
 def try_probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaInfo | None:

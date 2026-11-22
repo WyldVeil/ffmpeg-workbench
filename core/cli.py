@@ -32,13 +32,16 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 from core import ffmpeg as ff
 from core import proc as _proc
 from core.encoders import VideoEncode
 from core.errors import InputError
 from core.ops.shared import Steps
+
+if TYPE_CHECKING:
+    from core import remux
 
 logger = logging.getLogger("crossfader.cli")
 
@@ -1031,21 +1034,8 @@ def _remux_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--drop-chapters", action="store_true")
 
 
-@operation(
-    "remux",
-    "Keep only some audio/subtitle tracks, set languages/defaults, change MKV/MP4/MOV - no "
-    "re-encoding",
-    "Convert",
-    options=_remux_options,
-)
-def op_remux(ctx: Ctx) -> Result:
-    from core import remux
-
-    a = ctx.args
-    src = a.inputs[0]
-    probe(src)
-    plan = remux.Plan()
-    plan.load(src)
+def _remux_select(plan: remux.Plan, a: argparse.Namespace) -> None:
+    """Drop the tracks the options leave out; add the files asked for (always kept)."""
     langs = {x.strip() for x in (a.keep_languages or "").split(",") if x.strip()}
     audio_n = 0
     for tr in plan.tracks:
@@ -1064,23 +1054,43 @@ def op_remux(ctx: Ctx) -> Result:
         except (ValueError, ff.ProbeError) as exc:
             raise CliError(str(exc)) from None
 
-    def choose_default(kind: str, wanted: str | None) -> None:
-        if wanted is None:
-            return
-        same = [i for i, tr in enumerate(plan.tracks) if tr.kind == kind and tr.keep]
-        if wanted == "none":
-            for i in same:
-                plan.tracks[i].default = False
-            return
-        pick = [i for i in same if plan.tracks[i].language == wanted]
-        if not pick and wanted.isdigit() and int(wanted) < len(same):
-            pick = [same[int(wanted)]]
-        if not pick:
-            raise CliError(f"No kept {kind} track matches '{wanted}'.")
-        plan.set_default(pick[0])
 
-    choose_default("audio", a.default_audio)
-    choose_default("subtitle", a.default_subtitles)
+def _remux_default(plan: remux.Plan, kind: str, wanted: str | None) -> None:
+    """Make the kept *kind* track in language *wanted* (or number *wanted*) the
+    default; "none": no default."""
+    if wanted is None:
+        return
+    same = [i for i, tr in enumerate(plan.tracks) if tr.kind == kind and tr.keep]
+    if wanted == "none":
+        for i in same:
+            plan.tracks[i].default = False
+        return
+    pick = [i for i in same if plan.tracks[i].language == wanted]
+    if not pick and wanted.isdigit() and int(wanted) < len(same):
+        pick = [same[int(wanted)]]
+    if not pick:
+        raise CliError(f"No kept {kind} track matches '{wanted}'.")
+    plan.set_default(pick[0])
+
+
+@operation(
+    "remux",
+    "Keep only some audio/subtitle tracks, set languages/defaults, change MKV/MP4/MOV - no "
+    "re-encoding",
+    "Convert",
+    options=_remux_options,
+)
+def op_remux(ctx: Ctx) -> Result:
+    from core import remux
+
+    a = ctx.args
+    src = a.inputs[0]
+    probe(src)
+    plan = remux.Plan()
+    plan.load(src)
+    _remux_select(plan, a)
+    _remux_default(plan, "audio", a.default_audio)
+    _remux_default(plan, "subtitle", a.default_subtitles)
     container = a.to or (
         os.path.splitext(src)[1].lstrip(".").lower()
         if os.path.splitext(src)[1].lower() in (".mkv", ".mp4", ".mov", ".webm")
@@ -2104,59 +2114,69 @@ def tools_catalogue() -> list[dict[str, Any]]:
     return out
 
 
+def _emit(d: Result, *, as_json: bool) -> None:
+    """Print a result: one JSON line, or "key: value" lines (an error to stderr)."""
+    if as_json:
+        print(json.dumps(d, ensure_ascii=False))
+    elif d.get("ok"):
+        for k, v in d.items():
+            if k != "ok":
+                print(f"{k}: {v}")
+    else:
+        print("error: " + d.get("error", "failed"), file=sys.stderr)
+
+
+def _print_tools(*, as_json: bool) -> None:
+    """Every operation, by category (or as JSON)."""
+    cat = tools_catalogue()
+    if as_json:
+        print(json.dumps({"ok": True, "operations": cat}, ensure_ascii=False))
+        return
+    current = None
+    for op in sorted(cat, key=lambda o: (o["category"], o["name"])):
+        if op["category"] != current:
+            current = op["category"]
+            print(f"\n{current}:")
+        print(f"  {op['name']:<16} {op['summary']}")
+    print("\nDetails: ffmpeg-workbench --cli OPERATION --help")
+
+
+def _run_operation(args: argparse.Namespace) -> Result:
+    """The command's result (info, guide and paths answer without running FFmpeg)."""
+    if args.command == "info":
+        return describe_file(args.file)
+    if args.command == "guide":
+        from core.paths import resource_path
+
+        with open(resource_path("AGENTS.md"), encoding="utf-8") as fh:
+            print(fh.read())
+        return {}
+    if args.command == "paths":
+        return {"ok": True, **tool_paths()}
+    ctx = Ctx(args)
+    t0 = time.monotonic()
+    try:
+        res = OPERATIONS[args.command].run(ctx)
+    finally:
+        ctx.cleanup()
+    res.setdefault("seconds", round(time.monotonic() - t0, 2))
+    return res
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
+    args = build_parser().parse_args(argv)
     as_json = getattr(args, "json", False)
-
-    def emit(d: Result) -> None:
-        if as_json:
-            print(json.dumps(d, ensure_ascii=False))
-        elif d.get("ok"):
-            for k, v in d.items():
-                if k != "ok":
-                    print(f"{k}: {v}")
-        else:
-            print("error: " + d.get("error", "failed"), file=sys.stderr)
-
     if args.command in (None, "tools"):
-        cat = tools_catalogue()
-        if as_json:
-            print(json.dumps({"ok": True, "operations": cat}, ensure_ascii=False))
-        else:
-            current = None
-            for op in sorted(cat, key=lambda o: (o["category"], o["name"])):
-                if op["category"] != current:
-                    current = op["category"]
-                    print(f"\n{current}:")
-                print(f"  {op['name']:<16} {op['summary']}")
-            print("\nDetails: ffmpeg-workbench --cli OPERATION --help")
+        _print_tools(as_json=as_json)
         return 0
     try:
-        if args.command == "info":
-            emit(describe_file(args.file))
-            return 0
-        if args.command == "guide":
-            from core.paths import resource_path
-
-            with open(resource_path("AGENTS.md"), encoding="utf-8") as fh:
-                print(fh.read())
-            return 0
-        if args.command == "paths":
-            emit({"ok": True, **tool_paths()})
-            return 0
-        ctx = Ctx(args)
-        t0 = time.monotonic()
-        try:
-            res = OPERATIONS[args.command].run(ctx)
-        finally:
-            ctx.cleanup()
-        res.setdefault("seconds", round(time.monotonic() - t0, 2))
-        emit(res)
-        return 0
+        res = _run_operation(args)
     except (CliError, OSError, ValueError, RuntimeError) as exc:
-        emit({"ok": False, "error": str(exc)})
+        _emit({"ok": False, "error": str(exc)}, as_json=as_json)
         return 1
+    if res:  # the guide prints itself
+        _emit(res, as_json=as_json)
+    return 0
 
 
 def _ensure_streams() -> None:

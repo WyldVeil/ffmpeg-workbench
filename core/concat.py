@@ -161,6 +161,71 @@ def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple[int, 
     return size[0], size[1], fps
 
 
+def _silent_inputs(pieces: Sequence[Piece], first: int) -> tuple[list[str], dict[int, int]]:
+    """Inputs of silence for the pieces without sound, numbered from *first*;
+    (arguments, piece -> its silent input)."""
+    args: list[str] = []
+    silence: dict[int, int] = {}
+    for i, p in enumerate(pieces):
+        if not p.info.has_audio:
+            silence[i] = first + len(silence)
+            args += [
+                "-f",
+                "lavfi",
+                "-t",
+                ff.ts(p.length),
+                "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=48000",
+            ]
+    return args, silence
+
+
+def _piece_video(i: int, p: Piece, size: tuple[int, int], fps: str, pix: str) -> str:
+    """Piece *i*'s picture, cut and fitted (letterboxed) to the join's size and rate."""
+    w, h = size
+    trim = f"trim=start={p.start:.6f}:duration={p.length:.6f},"
+    fit = (
+        f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:-1:-1:color=black,setsar=1"
+    )
+    return f"[{i}:v]{trim}setpts=PTS-STARTPTS,{fit},fps={fps},format={pix}[v{i}]"
+
+
+def _piece_audio(i: int, p: Piece, silent_input: int | None) -> str:
+    """Piece *i*'s sound (or silence), cut and made alike: 48 kHz stereo, exactly its length."""
+    if silent_input is not None:
+        src, atrim = f"[{silent_input}:a]", ""
+    else:
+        src, atrim = f"[{i}:a]", f"atrim=start={p.start:.6f}:duration={p.length:.6f},"
+    alike = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
+    return f"{src}{atrim}asetpts=PTS-STARTPTS,{alike},apad,atrim=duration={p.length:.6f}[a{i}]"
+
+
+def _join_graph(
+    pieces: Sequence[Piece],
+    size: tuple[int, int],
+    fps: str,
+    venc: enc.VideoEncode,
+    silence: dict[int, int] | None,
+) -> str:
+    """Every piece made alike, then concatenated: [vout], and [aout] when *silence* is given."""
+    pix = venc.pix_fmt or "yuv420p"
+    graph: list[str] = []
+    labels: list[str] = []
+    for i, p in enumerate(pieces):
+        graph.append(_piece_video(i, p, size, fps, pix))
+        labels.append(f"[v{i}]")
+        if silence is not None:
+            graph.append(_piece_audio(i, p, silence.get(i)))
+            labels.append(f"[a{i}]")
+    concat = "".join(labels) + f"concat=n={len(pieces)}:v=1:a={1 if silence is not None else 0}"
+    aout = "[aout]" if silence is not None else ""
+    if venc.filter_suffix:
+        graph += [f"{concat}[vc]{aout}", f"[vc]{venc.filter_suffix}[vout]"]
+    else:
+        graph.append(f"{concat}[vout]{aout}")
+    return ";".join(graph)
+
+
 def filter_join_command(
     pieces: Sequence[Piece],
     out: str,
@@ -179,54 +244,13 @@ def filter_join_command(
         w, h, f = target_geometry(pieces)
         size = size or (w, h)
         fps = fps or f
-    W, H = size
-    pix = venc.pix_fmt or "yuv420p"
     use_audio = audio and any(p.info.has_audio for p in pieces)
-    argv = [ff.ffmpeg_path(), "-y", *venc.pre_input]
-    for p in pieces:
-        argv += ["-i", p.path]
-    silence: dict[int, int] = {}  # piece -> input number of its silent track
+    argv = [ff.ffmpeg_path(), "-y", *venc.pre_input, *(a for p in pieces for a in ("-i", p.path))]
+    silence: dict[int, int] | None = None
     if use_audio:
-        for i, p in enumerate(pieces):
-            if not p.info.has_audio:
-                silence[i] = len(pieces) + len(silence)
-                argv += [
-                    "-f",
-                    "lavfi",
-                    "-t",
-                    ff.ts(p.length),
-                    "-i",
-                    "anullsrc=channel_layout=stereo:sample_rate=48000",
-                ]
-    graph: list[str] = []
-    labels: list[str] = []
-    for i, p in enumerate(pieces):
-        trim = f"trim=start={p.start:.6f}:duration={p.length:.6f},"
-        graph.append(
-            f"[{i}:v]{trim}setpts=PTS-STARTPTS,"
-            f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-            f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},format={pix}[v{i}]"
-        )
-        labels.append(f"[v{i}]")
-        if use_audio:
-            if i in silence:
-                src, atrim = f"[{silence[i]}:a]", ""
-            else:
-                src, atrim = f"[{i}:a]", f"atrim=start={p.start:.6f}:duration={p.length:.6f},"
-            graph.append(
-                f"{src}{atrim}asetpts=PTS-STARTPTS,aresample=48000,"
-                f"aformat=sample_fmts=fltp:channel_layouts=stereo,apad,"
-                f"atrim=duration={p.length:.6f}[a{i}]"
-            )
-            labels.append(f"[a{i}]")
-    n = len(pieces)
-    concat = "".join(labels) + f"concat=n={n}:v=1:a={1 if use_audio else 0}"
-    if venc.filter_suffix:
-        graph.append(concat + "[vc]" + ("[aout]" if use_audio else ""))
-        graph.append(f"[vc]{venc.filter_suffix}[vout]")
-    else:
-        graph.append(concat + "[vout]" + ("[aout]" if use_audio else ""))
-    argv += ["-filter_complex", ";".join(graph), "-map", "[vout]"]
+        silent_args, silence = _silent_inputs(pieces, len(pieces))
+        argv += silent_args
+    argv += ["-filter_complex", _join_graph(pieces, size, fps, venc, silence), "-map", "[vout]"]
     container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
     if use_audio:
         argv += ["-map", "[aout]", *enc.audio(audio_codec, audio_bitrate, container=container)]

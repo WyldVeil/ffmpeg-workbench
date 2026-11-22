@@ -446,8 +446,10 @@ class RenderQueueManager:
         finally:
             for d in task.tempdirs:
                 shutil.rmtree(d, ignore_errors=True)
-        rc = self._promote_parts(task, rc)
+        self._finish(task, self._promote_parts(task, rc))
 
+    def _finish(self, task: RenderTask, rc: int) -> None:
+        """Record how the task ended, log it, and tell the page."""
         task.finished_at = time.time()
         if task.cancelled:
             task.status, task.returncode = CANCELLED, -1

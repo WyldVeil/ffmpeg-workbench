@@ -32,7 +32,7 @@ import ssl
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from http.client import HTTPResponse
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -359,36 +359,45 @@ def ssl_context(cfg: NetConfig | None = None) -> ssl.SSLContext:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         return ctx
-    ctx = None
-    if cfg.get("network.system_certs", True):
-        ts = _truststore()
-        if ts is not None:
-            try:
-                ctx = ts.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # the OS's own verifier
-            except Exception:
-                logger.debug("ssl_context: best-effort step failed", exc_info=True)
-                ctx = None
-        if ctx is None:
-            ctx = ssl.create_default_context()  # Windows: loads the system store
-            ca = system_ca_file()
-            if ca:
-                with contextlib.suppress(OSError, ssl.SSLError):
-                    ctx.load_verify_locations(cafile=ca)
-    if ctx is None:
-        ctx = ssl.create_default_context()
+    ctx = (
+        _system_context() if cfg.get("network.system_certs", True) else ssl.create_default_context()
+    )
     extra = (cfg.get("network.extra_ca") or "").strip()
-    if extra:
+    return _with_extra_ca(ctx, extra) if extra else ctx
+
+
+def _system_context() -> ssl.SSLContext:
+    """The operating system's own verifier (truststore), else OpenSSL with the system bundle."""
+    ts = _truststore()
+    if ts is not None:
         try:
-            ctx.load_verify_locations(cafile=extra)
-        except (OSError, ssl.SSLError, NotImplementedError, AttributeError):
-            try:  # plain OpenSSL context + system bundle + extra
-                ctx = ssl.create_default_context()
-                ca = system_ca_file()
-                if ca:
-                    ctx.load_verify_locations(cafile=ca)
-                ctx.load_verify_locations(cafile=extra)
-            except (OSError, ssl.SSLError) as exc:
-                raise OSError(f"The extra certificate file can't be used: {exc}") from exc
+            return ts.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        except Exception:
+            logger.debug("ssl_context: best-effort step failed", exc_info=True)
+    ctx = ssl.create_default_context()  # Windows: loads the system store
+    ca = system_ca_file()
+    if ca:
+        with contextlib.suppress(OSError, ssl.SSLError):
+            ctx.load_verify_locations(cafile=ca)
+    return ctx
+
+
+def _with_extra_ca(ctx: ssl.SSLContext, extra: str) -> ssl.SSLContext:
+    """*ctx* also trusting the certificates in *extra* (truststore contexts can't
+    load files: then a plain OpenSSL context with the system bundle and *extra*)."""
+    try:
+        ctx.load_verify_locations(cafile=extra)
+        return ctx
+    except (OSError, ssl.SSLError, NotImplementedError, AttributeError):
+        pass
+    try:
+        ctx = ssl.create_default_context()
+        ca = system_ca_file()
+        if ca:
+            ctx.load_verify_locations(cafile=ca)
+        ctx.load_verify_locations(cafile=extra)
+    except (OSError, ssl.SSLError) as exc:
+        raise OSError(f"The extra certificate file can't be used: {exc}") from exc
     return ctx
 
 
@@ -494,18 +503,7 @@ def urlopen(
             timeout = float(cfg.get("network.socket_timeout") or 60)
         except (TypeError, ValueError):
             timeout = 60.0
-    req_headers: dict[str, str] = {}
-    ua = (cfg.get("network.user_agent") or "").strip()
-    if ua:
-        req_headers["User-Agent"] = ua
-    if headers:
-        req_headers.update(headers)
-    if isinstance(url, urllib.request.Request):
-        req = url
-        for k, v in req_headers.items():
-            req.add_header(k, v)
-    else:
-        req = urllib.request.Request(url, headers=req_headers, data=data)
+    req = _request(url, headers, cfg, data)
     full = req.full_url
     if cfg.get("network.allow_http", True) is False and full.lower().startswith("http://"):
         raise ValueError("Plain HTTP downloads are blocked by your network settings.")
@@ -514,7 +512,34 @@ def urlopen(
         raise OSError(
             "The proxy is not set up, and strict mode doesn't allow connecting without it."
         )
-    ctx = ssl_context(cfg)
+    return _open_by_routes(req, routes, ssl_context(cfg), timeout)
+
+
+def _request(
+    url: str | urllib.request.Request,
+    headers: Mapping[str, str] | None,
+    cfg: NetConfig,
+    data: bytes | None,
+) -> urllib.request.Request:
+    """The request with the configured User-Agent and *headers*."""
+    req_headers: dict[str, str] = {}
+    ua = (cfg.get("network.user_agent") or "").strip()
+    if ua:
+        req_headers["User-Agent"] = ua
+    if headers:
+        req_headers.update(headers)
+    if not isinstance(url, urllib.request.Request):
+        return urllib.request.Request(url, headers=req_headers, data=data)
+    for k, v in req_headers.items():
+        url.add_header(k, v)
+    return url
+
+
+def _open_by_routes(
+    req: urllib.request.Request, routes: Sequence[str], ctx: ssl.SSLContext, timeout: float
+) -> HTTPResponse:
+    """Try each route in turn while the previous one couldn't connect (a PAC fall-back)."""
+    full = req.full_url
     last = None
     for i, route in enumerate(routes):
         # urllib rewrites a Request when it sends it through a proxy, so every

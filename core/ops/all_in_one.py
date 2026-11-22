@@ -12,6 +12,7 @@ after the speed change).
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from core import ffmpeg as ff
@@ -52,103 +53,71 @@ _SVT_PRESET = {
 }
 
 
+def _x26x(vcodec: str, q: int, preset: str) -> list[str]:
+    args = ["-c:v", vcodec, "-crf", str(q), "-preset", preset, "-pix_fmt", "yuv420p"]
+    return args + (["-x265-params", "log-level=error"] if vcodec == "libx265" else [])
+
+
+def _nvenc(vcodec: str, q: int, preset: str) -> list[str]:
+    head = ["-c:v", vcodec, "-preset", _NVENC_PRESET.get(preset, "p5"), "-tune", "hq"]
+    return [*head, "-rc", "vbr", "-cq", str(q), "-b:v", "0", "-pix_fmt", "yuv420p"]
+
+
+def _amf(vcodec: str, q: int, preset: str) -> list[str]:
+    head = ["-c:v", vcodec, "-quality", _AMF_QUALITY.get(preset, "balanced"), "-rc", "cqp"]
+    return [*head, "-qp_i", str(q), "-qp_p", str(q + 2), "-pix_fmt", "yuv420p"]
+
+
+_QSV_PRESETS = ("veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")
+
+
+def _qsv(vcodec: str, q: int, preset: str) -> list[str]:
+    qsv_preset = preset if preset in _QSV_PRESETS else "medium"
+    return ["-c:v", vcodec, "-preset", qsv_preset, "-global_quality", str(q), "-pix_fmt", "nv12"]
+
+
+def _svt_av1(_vcodec: str, q: int, preset: str) -> list[str]:
+    crf = str(min(63, round(q * 1.6)))
+    return [
+        "-c:v",
+        "libsvtav1",
+        "-crf",
+        crf,
+        "-preset",
+        str(_SVT_PRESET.get(preset, 8)),
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def _vpx(vcodec: str, q: int, preset: str) -> list[str]:
+    cpu = "2" if preset in ("slow", "slower", "veryslow") else "4"
+    head = ["-c:v", vcodec, "-b:v", "0", "-crf", str(min(63, round(q * 1.65))), "-row-mt", "1"]
+    return [*head, "-deadline", "good", "-cpu-used", cpu, "-pix_fmt", "yuv420p"]
+
+
+def _prores(_vcodec: str, _q: int, _preset: str) -> list[str]:
+    return ["-c:v", "prores_ks", "-profile:v", "3", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"]
+
+
+def _family(vcodec: str) -> Callable[[str, int, str], list[str]] | None:
+    """The argument builder for *vcodec*'s encoder family (None: just name it)."""
+    if vcodec in ("libx264", "libx265"):
+        return _x26x
+    for suffix, build in (("_nvenc", _nvenc), ("_amf", _amf), ("_qsv", _qsv)):
+        if vcodec.endswith(suffix):
+            return build
+    return {"libsvtav1": _svt_av1, "libvpx-vp9": _vpx, "libvpx": _vpx, "prores_ks": _prores}.get(
+        vcodec
+    )
+
+
 def video_codec_args(vcodec: str, crf: str, preset: str, container: str) -> list[str]:
     """Encoder arguments per encoder family (x264 preset names and CRF are
     translated - NVENC/AMF/QSV reject x264 names)."""
     q = int(crf) if str(crf).isdigit() else 18
-    if vcodec in ("libx264", "libx265"):
-        args = ["-c:v", vcodec, "-crf", str(q), "-preset", preset, "-pix_fmt", "yuv420p"]
-        if vcodec == "libx265":
-            args += ["-x265-params", "log-level=error"]
-    elif vcodec.endswith("_nvenc"):
-        args = [
-            "-c:v",
-            vcodec,
-            "-preset",
-            _NVENC_PRESET.get(preset, "p5"),
-            "-tune",
-            "hq",
-            "-rc",
-            "vbr",
-            "-cq",
-            str(q),
-            "-b:v",
-            "0",
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec.endswith("_amf"):
-        args = [
-            "-c:v",
-            vcodec,
-            "-quality",
-            _AMF_QUALITY.get(preset, "balanced"),
-            "-rc",
-            "cqp",
-            "-qp_i",
-            str(q),
-            "-qp_p",
-            str(q + 2),
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec.endswith("_qsv"):
-        qsv_preset = (
-            preset
-            if preset in ("veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")
-            else "medium"
-        )
-        args = [
-            "-c:v",
-            vcodec,
-            "-preset",
-            qsv_preset,
-            "-global_quality",
-            str(q),
-            "-pix_fmt",
-            "nv12",
-        ]
-    elif vcodec == "libsvtav1":
-        args = [
-            "-c:v",
-            "libsvtav1",
-            "-crf",
-            str(min(63, round(q * 1.6))),
-            "-preset",
-            str(_SVT_PRESET.get(preset, 8)),
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec in ("libvpx-vp9", "libvpx"):
-        args = [
-            "-c:v",
-            vcodec,
-            "-b:v",
-            "0",
-            "-crf",
-            str(min(63, round(q * 1.65))),
-            "-row-mt",
-            "1",
-            "-deadline",
-            "good",
-            "-cpu-used",
-            "2" if preset in ("slow", "slower", "veryslow") else "4",
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec == "prores_ks":
-        args = [
-            "-c:v",
-            "prores_ks",
-            "-profile:v",
-            "3",
-            "-vendor",
-            "apl0",
-            "-pix_fmt",
-            "yuv422p10le",
-        ]
-    else:
-        args = ["-c:v", vcodec]
+    build = _family(vcodec)
+    args = build(vcodec, q, preset) if build else ["-c:v", vcodec]
     if container in ("mp4", "mov", "m4v") and ("265" in vcodec or "hevc" in vcodec):
         args += ["-tag:v", "hvc1"]
     return args
