@@ -535,6 +535,28 @@ def test_colours_are_picked_with_the_kit():
     assert not hits, f"use ColourButton: {hits}"
 
 
+#: a variable holding where an output goes (out_var, _out_var, out_dir_var, out_folder_var, ...)
+OUTPUT_VAR = re.compile(r"(^|_)out(_dir|_folder)?_var$")
+
+
+def test_output_rows_come_from_the_kit():
+    """ "Output: [entry] [Save as…]" is a SaveRow (or FolderRow): one look, the
+    dialog's kind and extension, typed paths treated like chosen ones."""
+    hits = [
+        f"{rel}:{n.lineno}"
+        for rel, path in _py_files("tabs")
+        if rel != "tabs/widgets.py" and "/kit/" not in rel
+        for n in ast.walk(ast.parse(open(path, encoding="utf-8").read(), path))
+        if isinstance(n, ast.Call)
+        and ast.unparse(n.func) in ("tk.Entry", "ttk.Entry")
+        and any(
+            k.arg == "textvariable" and OUTPUT_VAR.search(ast.unparse(k.value).split(".")[-1])
+            for k in n.keywords
+        )
+    ]
+    assert not hits, f"use SaveRow / FolderRow: {hits}"
+
+
 def test_the_whole_engine_is_type_checked_strictly():
     """pyright's strict mode covers the engine, the window shell and the page kit;
     CI fails on any error, so this list may only grow."""

@@ -15,6 +15,7 @@ from core.ops import duck as dk
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 PRESETS = {
     t("ducker.gentle_podcast"): dict(threshold=0.025, ratio=4, attack=20, release=600),
@@ -232,18 +233,10 @@ class AudioDuckerTab(BaseTab):
     def _build_output(self, lw):
         """Output."""
         # ── Output ────────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=px(16), pady=px(6))
-        tk.Label(
-            of, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), width=lw, anchor="e"
-        ).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=58, relief="flat").pack(
-            side="left", padx=px(8)
+        SaveRow(self, t("common.output_file"), self._out_var).pack(
+            fill="x", padx=px(16), pady=px(6)
         )
-        tk.Button(
-            of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
 
     def _build_render_button(self):
         """Render button."""
@@ -288,13 +281,6 @@ class AudioDuckerTab(BaseTab):
         )
         if p:
             self._music_var.set(p)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")]
-        )
-        if p:
-            self._out_var.set(p)
 
     # ─── Render ───────────────────────────────────────────────────────────────
     def _render(self):

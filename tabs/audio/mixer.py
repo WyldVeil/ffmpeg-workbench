@@ -27,6 +27,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
+from tabs.widgets import SaveRow
 
 MAX_TRACKS = 8
 
@@ -86,6 +87,9 @@ class AudioMixerTab(BaseTab):
         self.video_path = ""
         self.tracks = []
         self._build_ui()
+
+    def _out_ext(self) -> str:
+        return AUDIO_ONLY.get(self.out_fmt.value, ".mp4")
 
     def _build_ui(self):
         self._build_vid()
@@ -230,16 +234,10 @@ class AudioMixerTab(BaseTab):
         self.out_fmt.pack(side="left", padx=px(4))
 
         # Output file
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=px(16), pady=px(6))
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=62, relief="flat").pack(
-            side="left", padx=px(8)
+        SaveRow(self, t("common.output_file"), self.out_var, kind="media", ext=self._out_ext).pack(
+            fill="x", padx=px(16), pady=px(6)
         )
-        tk.Button(
-            of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
 
         self.btn_render = self.make_render_btn(self, t("mixer.mix_button"), self._render)
         self.btn_render.pack(pady=px(8), padx=px(16), fill="x")
@@ -366,12 +364,6 @@ class AudioMixerTab(BaseTab):
             self.vid_dur_lbl.config(text=f"{m}m {s}s", fg=CLR["fgdim"])
             base = os.path.splitext(p)[0]
             self.out_var.set(base + "_mixed.mp4")
-
-    def _browse_out(self):
-        ext = AUDIO_ONLY.get(self.out_fmt.value, ".mp4")
-        p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=[("Media", f"*{ext}")])
-        if p:
-            self.out_var.set(p)
 
     # ── Render ────────────────────────────────────────────────────────────
     def _track_specs(

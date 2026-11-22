@@ -21,6 +21,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 RESOLUTIONS = ["Source", "3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "640x360"]
 
@@ -192,13 +193,9 @@ class EncodeQueueTab(BaseTab):
         tk.Button(f_src, text="…", width=2, command=self._ed_browse_src).pack(side="left")
 
         self.ed_out_var = tk.StringVar()
-        f_out = tk.Frame(ef)
-        f_out.pack(fill="x", padx=px(10), pady=px(4))
-        tk.Label(f_out, text=t("encode_queue.output_label"), width=14, anchor="e").pack(side="left")
-        tk.Entry(f_out, textvariable=self.ed_out_var, width=32, relief="flat").pack(
-            side="left", padx=px(4)
+        SaveRow(ef, t("encode_queue.output_label"), self.ed_out_var).pack(
+            fill="x", padx=px(10), pady=px(4)
         )
-        tk.Button(f_out, text="…", width=2, command=self._ed_browse_out).pack(side="left")
 
         # Codec / quality fields
         fields = [
@@ -338,13 +335,6 @@ class EncodeQueueTab(BaseTab):
             self.ed_src_var.set(p)
             if not self.ed_out_var.get():
                 self.ed_out_var.set(os.path.splitext(p)[0] + "_encoded.mp4")
-
-    def _ed_browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("All", t("ducker.item_2"))]
-        )
-        if p:
-            self.ed_out_var.set(p)
 
     def _queue_job(self, src, out) -> bool:
         j = self._read_editor()

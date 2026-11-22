@@ -13,8 +13,9 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
+from tabs.base_tab import CLR, MONO_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 
 def _tr(key, fallback):
@@ -145,22 +146,8 @@ class BatchJoinerTab(BaseTab):
 
     def _build_out(self):
         # Output
-        out_row = tk.Frame(self)
-        out_row.pack(pady=px(5))
-        tk.Label(out_row, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(
-            side="left"
-        )
         self.out_var = tk.StringVar()
-        tk.Entry(out_row, textvariable=self.out_var, width=65, relief="flat").pack(
-            side="left", padx=px(8)
-        )
-        tk.Button(
-            out_row,
-            text=t("common.save_as"),
-            command=self._browse_out,
-            cursor="hand2",
-            relief="flat",
-        ).pack(side="left")
+        SaveRow(self, t("common.output_file"), self.out_var).pack(pady=px(5), fill="x")
 
         # Render
         self.btn_render = self.make_render_btn(
@@ -237,13 +224,6 @@ class BatchJoinerTab(BaseTab):
     def _clear(self):
         self.file_paths.clear()
         self.listbox.delete(0, tk.END)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")]
-        )
-        if p:
-            self.out_var.set(p)
 
     def _choice(self, var, choices):
         return {lbl: key for key, lbl in choices}.get(var.get(), choices[0][0])

@@ -20,6 +20,7 @@ from core.ops import presets as pr
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 #: the category filter's "show every category" entry (the others are the presets' own)
 ALL_CATEGORIES = "All"
@@ -230,16 +231,10 @@ class PresetManagerTab(BaseTab):
             run_row, text="…", command=self._browse_run_src, width=2, cursor="hand2", relief="flat"
         ).pack(side="left")
 
-        run_row2 = tk.Frame(run_lf)
-        run_row2.pack(fill="x", pady=px(4))
-        tk.Label(run_row2, text=t("encode_queue.output_label")).pack(side="left")
         self.run_out_var = tk.StringVar()
-        tk.Entry(run_row2, textvariable=self.run_out_var, width=36, relief="flat").pack(
-            side="left", padx=px(4)
+        SaveRow(run_lf, t("encode_queue.output_label"), self.run_out_var, kind="media").pack(
+            fill="x", pady=px(4)
         )
-        tk.Button(
-            run_row2, text="…", command=self._browse_run_out, width=2, cursor="hand2", relief="flat"
-        ).pack(side="left")
 
         self.btn_render = self.make_render_btn(run_lf, t("presets.run_now_button"), self._quick_run)
         self.btn_render.pack(pady=px(4), fill="x")
@@ -467,13 +462,6 @@ class PresetManagerTab(BaseTab):
             if self._selected_idx is not None:
                 ext = self.presets[self._selected_idx].get("ext") or ".mp4"
             self.run_out_var.set(self.suggest_output(p, "preset", ext))
-
-    def _browse_run_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("All", t("ducker.item_2"))]
-        )
-        if p:
-            self.run_out_var.set(p)
 
     def _quick_run(self):
         if self._selected_idx is None:

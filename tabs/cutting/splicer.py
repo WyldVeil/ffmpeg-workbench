@@ -18,6 +18,7 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
+from tabs.widgets import SaveRow
 
 
 def _tr(key, fallback):
@@ -141,16 +142,8 @@ class SplicerTab(BaseTab):
         ).pack(side="left", padx=px(6))
 
         # Output row
-        out_f = tk.Frame(self)
-        out_f.pack(pady=px(5))
-        tk.Label(out_f, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(out_f, textvariable=self.out_var, width=60, relief="flat").pack(
-            side="left", padx=px(8)
-        )
-        tk.Button(
-            out_f, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
+        SaveRow(self, t("common.output_file"), self.out_var).pack(pady=px(5), fill="x")
 
         # Options
         opt_f = tk.Frame(self)
@@ -290,13 +283,6 @@ class SplicerTab(BaseTab):
         self.segments[idx], self.segments[new_idx] = self.segments[new_idx], self.segments[idx]
         self._rebuild_rows()
         self._select_row(new_idx)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")]
-        )
-        if p:
-            self.out_var.set(p)
 
     # ─── Render ───────────────────────────────────────────────────────────────
     def _pieces(self, segs):

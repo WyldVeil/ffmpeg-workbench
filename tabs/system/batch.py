@@ -16,6 +16,7 @@ from core.ops import batch as batch_ops
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.system.batch")
 
@@ -171,16 +172,8 @@ class BatchTab(BaseTab):
         out_lf = tk.LabelFrame(self, text=t("section.output"), padx=px(14), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(4))
 
-        of = tk.Frame(out_lf)
-        of.pack(fill="x", pady=px(4))
-        tk.Label(of, text=t("common.output_folder"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=52, relief="flat").pack(
-            side="left", padx=px(8)
-        )
-        tk.Button(
-            of, text=t("btn.browse"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
+        FolderRow(out_lf, t("common.output_folder"), self._out_var).pack(fill="x", pady=px(4))
         tk.Label(
             out_lf,
             text=t("batch.output_files_are_saved_as_originalname_batch_ext"),
@@ -247,11 +240,6 @@ class BatchTab(BaseTab):
     def _update_count(self):
         n = len(self.input_files)
         self._count_lbl.config(text=f"{n} file{'s' if n != 1 else ''} queued")
-
-    def _browse_out(self):
-        p = dialogs.askdirectory()
-        if p:
-            self._out_var.set(p)
 
     def load_file(self, path) -> bool:
         if os.path.isfile(path) and path not in self.input_files:

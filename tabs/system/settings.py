@@ -15,8 +15,8 @@ from core.i18n import t
 from core.scaling import px
 from core.settings import StartPage, load_settings, update
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
-from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
+from tabs.widgets import FolderRow
 
 START_CHOICES: dict[StartPage, str] = {
     StartPage.START: "Start - What do you want to do?",
@@ -80,20 +80,10 @@ class SettingsTab(BaseTab):
                 )
 
         # Output folder
-        of_row = tk.Frame(lf)
-        of_row.grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(8))
-        tk.Label(of_row, text=t("settings.output_folder_label"), width=24, anchor="e").pack(
-            side="left"
-        )
         self._out_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
-        tk.Entry(of_row, textvariable=self._out_var, width=44, relief="flat").pack(
-            side="left", padx=px(8)
-        )
-        tk.Button(
-            of_row,
-            text=t("btn.browse"),
-            command=lambda: self._out_var.set(dialogs.askdirectory() or self._out_var.get()),
-        ).pack(side="left")
+        FolderRow(
+            lf, t("settings.output_folder_label"), self._out_var, width=44, label_width=24
+        ).grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(8))
 
         # Auto-open
         self._auto_open = tk.BooleanVar(value=self.settings.get("auto_open_output", False))

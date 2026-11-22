@@ -380,8 +380,9 @@ class FileRow(tk.Frame):
 
 class SaveRow(FileRow):
     """``Label [entry......] [Save as…]``: where an output goes.  *suggest()*
-    proposes a name when the row is empty; the dialog adds *ext* when the
-    name has none."""
+    proposes a name when the row is empty; the dialog adds *ext* (or what
+    *ext()* says now, for a page whose output type is a choice) when the name
+    has none."""
 
     def __init__(
         self,
@@ -390,7 +391,7 @@ class SaveRow(FileRow):
         var: tk.StringVar | None = None,
         *,
         kind: str = "video",
-        ext: str = ".mp4",
+        ext: str | Callable[[], str] = ".mp4",
         suggest: Callable[[], str] | None = None,
     ):
         self._ext, self._suggest = ext, suggest
@@ -403,10 +404,37 @@ class SaveRow(FileRow):
         from tabs.kit import dialogs
 
         current = self.path or (self._suggest() if self._suggest else "")
-        return dialogs.ask_save(current, kind=self._kind, defaultextension=self._ext, parent=self)
+        ext = self._ext() if callable(self._ext) else self._ext
+        return dialogs.ask_save(current, kind=self._kind, defaultextension=ext, parent=self)
 
     def _accepts(self, path: str) -> bool:
         return True
+
+
+class FolderRow(FileRow):
+    """``Label [entry......] [Choose…]``: a folder (where outputs go)."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        label: str,
+        var: tk.StringVar | None = None,
+        *,
+        width: int = 56,
+        label_width: int = 16,
+    ):
+        super().__init__(parent, label, var, kind="folder", width=width, label_width=label_width)
+
+    def _button_text(self) -> str:
+        return _tr("btn.choose_folder", "Choose…")
+
+    def _choose(self) -> str:
+        from tabs.kit import dialogs
+
+        return dialogs.ask_directory(parent=self, initialdir=self.path or None)
+
+    def _accepts(self, path: str) -> bool:
+        return os.path.isdir(path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

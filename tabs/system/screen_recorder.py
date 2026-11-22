@@ -24,8 +24,8 @@ from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
+from tabs.widgets import FolderRow
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Region selector overlay
@@ -672,28 +672,7 @@ class ScreenRecorderTab(BaseTab):
         )
         path_f.pack(fill="x", pady=px(0, 6))
 
-        r0 = tk.Frame(path_f, bg=CLR["bg"])
-        r0.pack(fill="x")
-        tk.Label(
-            r0, text=t("screen_recorder.folder"), bg=CLR["bg"], fg=CLR["fg"], width=10, anchor="e"
-        ).pack(side="left")
-        tk.Entry(
-            r0,
-            textvariable=self.out_folder_var,
-            width=38,
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            insertbackground=CLR["fg"],
-        ).pack(side="left", padx=px(4))
-        tk.Button(
-            r0,
-            text=t("btn.browse"),
-            font=(UI_FONT, 8),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-            cursor="hand2",
-            command=self._browse_output_folder,
-        ).pack(side="left")
+        FolderRow(path_f, t("screen_recorder.folder"), self.out_folder_var).pack(fill="x")
 
         r1 = tk.Frame(path_f, bg=CLR["bg"])
         r1.pack(fill="x", pady=px(6, 0))
@@ -856,12 +835,6 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Output path helpers
     # ─────────────────────────────────────────────────────────────────────────
-    def _browse_output_folder(self):
-        folder = dialogs.askdirectory(
-            title="Choose output folder", initialdir=self.out_folder_var.get()
-        )
-        if folder:
-            self.out_folder_var.set(folder)
 
     def _resolve_output_path(self, ext: str) -> str:
         from core import recorder

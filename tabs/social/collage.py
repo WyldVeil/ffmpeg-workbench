@@ -29,7 +29,7 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-from tabs.widgets import EncoderPanel
+from tabs.widgets import EncoderPanel, SaveRow
 
 
 def _fmt(seconds):
@@ -263,13 +263,9 @@ class VideoCollageTab(BaseTab):
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
         self.encoder.pack(anchor="w", pady=px(4, 0))
 
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=px(20), pady=px(4))
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55).pack(side="left", padx=px(8))
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, relief="flat").pack(
-            side="left"
+        SaveRow(self, t("common.output_file"), self._out_var).pack(
+            fill="x", padx=px(20), pady=px(4)
         )
         self.btn_render = self.make_render_btn(
             self, t("collage.build_collage"), self._render, width=26
@@ -448,11 +444,6 @@ class VideoCollageTab(BaseTab):
             self._slot_list.insert("end", f"  #{i + 1}   {s['name']:<40s}  {_fmt(s['duration'])}")
         self._slot_count_lbl.config(text=f"{len(self._slots)} clip(s)")
         self._changed()
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4", "*.mp4")])
-        if p:
-            self._out_var.set(p)
 
     # ── Render ────────────────────────────────────────────────────────
     def _render(self):

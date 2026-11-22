@@ -24,6 +24,7 @@ from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
 EQ_BANDS = [
@@ -180,16 +181,10 @@ class AudioDynamicsTab(BaseTab):
     def _build_output_render(self, inner):
         """Output & render."""
         # ── Output & render ───────────────────────────────────────────────
-        of = tk.Frame(inner)
-        of.pack(pady=px(6), padx=px(16), fill="x")
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(
-            side="left", padx=px(8)
+        SaveRow(inner, t("common.output_file"), self.out_var, kind="media").pack(
+            pady=px(6), padx=px(16), fill="x"
         )
-        tk.Button(
-            of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
 
         btn_row = tk.Frame(inner)
         btn_row.pack(pady=px(8), padx=px(16))
@@ -392,14 +387,6 @@ class AudioDynamicsTab(BaseTab):
             base = os.path.splitext(p)[0]
             self.out_var.set(base + "_dynamics.mp4")
         self._update_filter_preview()
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"), ("WAV", "*.wav")],
-        )
-        if p:
-            self.out_var.set(p)
 
     def _preview(self):
         """Listen to 12 seconds with the chain applied (in-app, no files left behind)."""

@@ -27,6 +27,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.transcoder.converter")
 
@@ -82,15 +83,10 @@ class FormatConverterTab(BaseTab):
             "loss) and convert only the rest",
             variable=self.copy_var,
         ).pack(anchor="w")
-        r2 = tk.Frame(opts)
-        r2.pack(fill="x", pady=px(4))
-        tk.Label(r2, text=t("common.output_folder")).pack(side="left")
         self.out_dir_var = tk.StringVar()
-        tk.Entry(r2, textvariable=self.out_dir_var, width=50).pack(side="left", padx=px(6))
-        tk.Button(r2, text=t("btn.browse"), command=self._browse_dir, relief="flat").pack(
-            side="left"
-        )
-        tk.Label(r2, text=t("converter.lbl_blank_hint"), fg=CLR["fgdim"]).pack(
+        out_row = FolderRow(opts, t("common.output_folder"), self.out_dir_var, width=50)
+        out_row.pack(fill="x", pady=px(4))
+        tk.Label(out_row, text=t("converter.lbl_blank_hint"), fg=CLR["fgdim"]).pack(
             side="left", padx=px(6)
         )
         self.btn_render = self.make_render_btn(
@@ -117,11 +113,6 @@ class FormatConverterTab(BaseTab):
     def _clear(self):
         self.file_paths.clear()
         self.listbox.delete(0, tk.END)
-
-    def _browse_dir(self):
-        p = dialogs.ask_directory(parent=self)
-        if p:
-            self.out_dir_var.set(p)
 
     def _fmt(self) -> str:
         return next((k for k, v in FORMATS.items() if v[0] == self.fmt_var.get()), "mp4")

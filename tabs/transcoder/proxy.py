@@ -22,6 +22,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.transcoder.proxy")
 
@@ -123,15 +124,7 @@ class ProxyGenTab(BaseTab):
             side="left"
         )
         self.out_dir_var = tk.StringVar()
-        tk.Entry(r4, textvariable=self.out_dir_var, width=44).pack(side="left", padx=px(4))
-        tk.Button(
-            r4,
-            text=t("btn.browse"),
-            relief="flat",
-            command=lambda: self.out_dir_var.set(
-                dialogs.ask_directory(parent=self) or self.out_dir_var.get()
-            ),
-        ).pack(side="left")
+        FolderRow(r4, "", self.out_dir_var, width=44, label_width=0).pack(side="left")
         self.btn_render = self.make_render_btn(
             self, t("proxy.render_button"), self._render, width=28
         )

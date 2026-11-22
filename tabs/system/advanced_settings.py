@@ -38,6 +38,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.stars import set_star_count, set_star_speed
 from tabs.kit.widgets import ColourButton, normal_colour
+from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.system.advanced_settings")
 
@@ -248,18 +249,10 @@ class AdvancedSettingsTab(BaseTab):
                     row=i, column=1, sticky="w", padx=px(8)
                 )
 
-        of = tk.Frame(opts)
-        of.grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(6))
-        tk.Label(of, text="Default Output Folder:", width=24, anchor="e").pack(side="left")
         self.out_folder_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
-        tk.Entry(of, textvariable=self.out_folder_var, width=40).pack(side="left", padx=px(8))
-        tk.Button(
-            of,
-            text=t("btn.browse"),
-            command=lambda: self.out_folder_var.set(
-                dialogs.askdirectory() or self.out_folder_var.get()
-            ),
-        ).pack(side="left")
+        FolderRow(
+            opts, "Default Output Folder:", self.out_folder_var, width=40, label_width=24
+        ).grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(6))
 
         self.auto_open_var = tk.BooleanVar(value=self.settings.get("auto_open_output", False))
         tk.Checkbutton(

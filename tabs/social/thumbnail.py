@@ -27,7 +27,7 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.contracts import ScrubTransport, Transport
-from tabs.widgets import FramePreview
+from tabs.widgets import FramePreview, SaveRow
 
 logger = logging.getLogger("crossfader.social.thumbnail")
 
@@ -378,23 +378,10 @@ class ThumbnailMakerTab(BaseTab):
     def _build_output(self):
         """Output."""
         # ── Output ────────────────────────────────────────────────────────
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=px(20), pady=px(6))
-        tk.Label(of, text=t("encode_queue.output_label"), font=(UI_FONT, 10, "bold")).pack(
-            side="left"
-        )
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=55, relief="flat", font=(UI_FONT, 10)).pack(
-            side="left", padx=px(8)
-        )
-        tk.Button(
-            of,
-            text=t("common.save_as"),
-            command=self._browse_out,
-            cursor="hand2",
-            relief="flat",
-            font=(UI_FONT, 9),
-        ).pack(side="left")
+        SaveRow(
+            self, t("encode_queue.output_label"), self._out_var, kind="image", ext=self._get_ext
+        ).pack(fill="x", padx=px(20), pady=px(6))
 
         fmt_f = tk.Frame(self)
         fmt_f.pack(fill="x", padx=px(20), pady=px(2))
@@ -473,14 +460,6 @@ class ThumbnailMakerTab(BaseTab):
         self._preview_job = None
         if getattr(self, "file_path", ""):
             self._preview.set_filter(",".join(self._build_vf()))
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("WebP", "*.webp")],
-        )
-        if p:
-            self._out_var.set(p)
 
     def _on_scrub(self, val):
         try:

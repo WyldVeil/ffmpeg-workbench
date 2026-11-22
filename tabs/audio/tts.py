@@ -28,6 +28,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ChoiceBox
+from tabs.widgets import SaveRow
 
 logger = logging.getLogger("crossfader.audio.tts")
 
@@ -125,6 +126,10 @@ class TTSVoiceOverTab(BaseTab):
         super().__init__(parent)
         self._tts_audio_path = ""  # last generated TTS audio file
         self._build_ui()
+
+    def _out_ext(self) -> str:
+        """A video, or the speech alone in the chosen format."""
+        return ".mp4" if self.mode_var.get() == "video" else vo.SPEECH_EXT[self.audio_fmt.value]
 
     # ─────────────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -398,14 +403,10 @@ class TTSVoiceOverTab(BaseTab):
         self.audio_fmt.pack(side="left", padx=px(8))
 
         # Output path
-        out_row = tk.Frame(lf)
-        out_row.pack(fill="x", pady=px(4))
-        tk.Label(out_row, text=t("common.output_file"), width=16, anchor="e").pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(out_row, textvariable=self.out_var, width=52, relief="flat").pack(
-            side="left", padx=px(8)
+        SaveRow(lf, t("common.output_file"), self.out_var, kind="media", ext=self._out_ext).pack(
+            fill="x", pady=px(4)
         )
-        tk.Button(out_row, text=t("common.save_as"), command=self._browse_out).pack(side="left")
 
     # ── Video section ─────────────────────────────────────────────────────
     def _build_video_section(self, parent):
@@ -709,18 +710,6 @@ class TTSVoiceOverTab(BaseTab):
             base = os.path.splitext(p)[0]
             if not self.out_var.get():
                 self.out_var.set(base + "_voiceover.mp4")
-
-    def _browse_out(self):
-        mode = self.mode_var.get()
-        if mode == "video":
-            ext = ".mp4"
-            ft = [("MP4", "*.mp4"), ("MKV", "*.mkv")]
-        else:
-            ext = vo.SPEECH_EXT[self.audio_fmt.value]
-            ft = [(ext.upper().strip("."), f"*{ext}")]
-        p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=ft)
-        if p:
-            self.out_var.set(p)
 
     # ─────────────────────────────────────────────────────────────────────
     #  TTS generation

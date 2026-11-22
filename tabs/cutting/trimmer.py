@@ -24,7 +24,7 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import ScrubTransport, Transport
-from tabs.widgets import FramePreview
+from tabs.widgets import FramePreview, SaveRow
 
 logger = logging.getLogger("crossfader.cutting.trimmer")
 
@@ -235,16 +235,10 @@ class TrimmerTab(BaseTab):
         ).pack(side="left")
 
         # Output + action buttons
-        of = tk.Frame(self)
-        of.pack(fill="x", padx=px(20), pady=px(6))
-        tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self._out_var, width=62, relief="flat").pack(
-            side="left", padx=px(8)
+        SaveRow(self, t("common.output_file"), self._out_var).pack(
+            fill="x", padx=px(20), pady=px(6)
         )
-        tk.Button(
-            of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
 
         bf = tk.Frame(self)
         bf.pack(pady=px(8))
@@ -316,13 +310,6 @@ class TrimmerTab(BaseTab):
         self._draw()
         self.preview.load(p, duration=self.duration, at=0.0)
         return True
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")]
-        )
-        if p:
-            self._out_var.set(p)
 
     # ─── Canvas timeline ──────────────────────────────────────────────────
     _HR = 9  # handle radius

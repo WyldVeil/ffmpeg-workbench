@@ -40,7 +40,7 @@ from core.ops.crossfader import (
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-from tabs.widgets import EncoderPanel
+from tabs.widgets import EncoderPanel, SaveRow
 
 #: every transition (core/ops/transitions.py), by its name
 TRANSITIONS = list(tr.LABELS)
@@ -268,34 +268,10 @@ class CrossfaderTab(BaseTab):
 
     def _build_output_section(self, parent):
         lf = self.make_section(parent, "\U0001f4be  " + t("section.output"), padx=16)
-        row = tk.Frame(lf, bg=CLR["bg"])
-        row.pack(fill="x")
-        tk.Label(
-            row,
-            text=t("crossfader.output_file"),
-            font=(UI_FONT, 10, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-        ).pack(side="left")
         self.out_var = tk.StringVar()
-        self.entry_out = tk.Entry(
-            row,
-            textvariable=self.out_var,
-            width=70,
-            relief="flat",
-            bg=CLR["input_bg"],
-            fg=CLR["input_fg"],
-            insertbackground=CLR["accent"],
-        )
-        self.entry_out.pack(side="left", padx=px(8), fill="x", expand=True)
-        tk.Button(
-            row,
-            text=t("common.save_as"),
-            command=self._browse_output,
-            relief="flat",
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-        ).pack(side="left")
+        SaveRow(
+            lf, t("crossfader.output_file"), self.out_var, suggest=lambda: "crossfaded.mp4"
+        ).pack(fill="x")
 
     def _build_render_section(self, parent):
         btn_row = tk.Frame(parent, bg=CLR["bg"])
@@ -481,18 +457,6 @@ class CrossfaderTab(BaseTab):
         if row is self.clip_rows[0] and row["clip"] and not self.out_var.get().strip():
             self.out_var.set(self.suggest_output(path, "crossfaded", ".mp4"))
         self._validate()
-
-    def _browse_output(self):
-        current = self.out_var.get().strip()
-        path = dialogs.ask_save(
-            os.path.basename(current) or "crossfaded.mp4",
-            kind="video",
-            defaultextension=".mp4",
-            parent=self,
-            initialdir=os.path.dirname(current) or None,
-        )
-        if path:
-            self.out_var.set(path)
 
     # ── state ────────────────────────────────────────────────────────────────
     def _clips(self) -> list:

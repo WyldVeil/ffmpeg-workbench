@@ -44,6 +44,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
 from tabs.kit.widgets import ChoiceBox
+from tabs.widgets import SaveRow
 
 logger = logging.getLogger("crossfader.social.youtube")
 
@@ -1221,47 +1222,14 @@ class YouTubeDownloaderTab(BaseTab):
     # ── Output row ───────────────────────────────────────────────────────────
 
     def _build_output_row(self, root):
-        out_f = tk.Frame(root, bg=CLR["bg"])
-        out_f.pack(fill="x", padx=px(20), pady=px(0, 8))
-        tk.Label(
-            out_f, text=t("youtube.save_to"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]
-        ).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(
-            out_f,
-            textvariable=self._out_var,
-            width=54,
-            relief="flat",
-            font=(UI_FONT, 10),
-            bg=CLR["input_bg"],
-            fg=CLR["input_fg"],
-            insertbackground=CLR["accent"],
-            highlightthickness=px(1),
-            highlightbackground=CLR["border"],
-            highlightcolor=CLR["accent"],
-        ).pack(side="left", padx=px(8))
+        out_row = SaveRow(root, t("youtube.save_to"), self._out_var)
+        out_row.pack(fill="x", padx=px(20), pady=px(0, 8))
         tk.Button(
-            out_f,
-            text=t("btn.browse"),
-            relief="flat",
-            font=(UI_FONT, 9),
-            cursor="hand2",
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            activebackground=CLR["accent"],
-            activeforeground="white",
-            command=self._browse_out,
-        ).pack(side="left")
-        tk.Button(
-            out_f,
+            out_row,
             text=t("youtube.open_folder"),
             relief="flat",
-            font=(UI_FONT, 9),
             cursor="hand2",
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            activebackground=CLR["accent"],
-            activeforeground="white",
             command=self._open_output_folder,
         ).pack(side="left", padx=px(6, 0))
 
@@ -1539,19 +1507,6 @@ class YouTubeDownloaderTab(BaseTab):
         url = self._url_var.get().strip()
         if url:
             webbrowser.open(url)
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[
-                ("MP4", "*.mp4"),
-                ("MKV", "*.mkv"),
-                ("WebM", "*.webm"),
-                (t("youtube.all_files"), t("ducker.item_2")),
-            ],
-        )
-        if p:
-            self._out_var.set(p)
 
     def _browse_cookies(self):
         p = dialogs.askopenfilename(

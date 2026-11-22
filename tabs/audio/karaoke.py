@@ -25,6 +25,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -236,18 +237,10 @@ class KaraokeTab(BaseTab):
     def _build_output(self):
         """Output."""
         # ── Output ────────────────────────────────────────────────────────
-        ro = tk.Frame(self)
-        ro.pack(fill="x", padx=px(16), pady=px(6))
-        tk.Label(
-            ro, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), width=16, anchor="e"
-        ).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(ro, textvariable=self._out_var, width=60, relief="flat").pack(
-            side="left", padx=px(8)
+        SaveRow(self, t("common.output_file"), self._out_var).pack(
+            fill="x", padx=px(16), pady=px(6)
         )
-        tk.Button(
-            ro, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
-        ).pack(side="left")
 
     def _build_action_buttons(self):
         """Action buttons."""
@@ -328,13 +321,6 @@ class KaraokeTab(BaseTab):
             self._src_var.set(p)
             if not self._out_var.get():
                 self._out_var.set(os.path.splitext(p)[0] + "_karaoke.mp4")
-
-    def _browse_out(self):
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")]
-        )
-        if p:
-            self._out_var.set(p)
 
     def _append_log(self, msg):
         self.console.insert(tk.END, msg + "\n")

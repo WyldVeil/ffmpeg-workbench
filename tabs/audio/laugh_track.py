@@ -20,6 +20,7 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.widgets import SaveRow
 
 
 def _fmt(seconds):
@@ -44,6 +45,9 @@ class LaughTrackRemoverTab(BaseTab):
 
         self._build_ui()
         self._check_ai_tools()
+
+    def _out_ext(self) -> str:
+        return ".mp4" if self._export_mode.get() == "video" else ".wav"
 
     def _build_ui(self):
         self._build_header()
@@ -390,18 +394,10 @@ class LaughTrackRemoverTab(BaseTab):
         )
         out_lf.pack(fill="x", padx=px(20), pady=px(4))
 
-        of1 = tk.Frame(out_lf)
-        of1.pack(fill="x", pady=px(2))
-        tk.Label(
-            of1, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), width=12, anchor="e"
-        ).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(of1, textvariable=self._out_var, width=52, font=(UI_FONT, 10)).pack(
-            side="left", padx=px(8)
-        )
-        tk.Button(of1, text=t("common.save_as"), command=self._browse_out, cursor="hand2").pack(
-            side="left"
-        )
+        SaveRow(
+            out_lf, t("common.output_file"), self._out_var, kind="media", ext=self._out_ext
+        ).pack(fill="x", pady=px(2))
 
         of2 = tk.Frame(out_lf)
         of2.pack(fill="x", pady=px(4))
@@ -566,14 +562,6 @@ class LaughTrackRemoverTab(BaseTab):
         self._info_lbl.config(
             text=f"{_fmt(self.duration)}   {layout or str(self._channels) + ' ch'}"
         )
-
-    def _browse_out(self):
-        ext = ".mp4" if self._export_mode.get() == "video" else ".wav"
-        p = dialogs.asksaveasfilename(
-            defaultextension=ext, filetypes=[("MP4", "*.mp4"), ("WAV", "*.wav")]
-        )
-        if p:
-            self._out_var.set(p)
 
     # ── Render Logic ──────────────────────────────────────────────────
     def _cleanup(self) -> lt.Cleanup:
