@@ -7,6 +7,8 @@ import subprocess
 import pytest
 
 from core import ffmpeg as ff
+from tabs.audio import exporter, mixer
+from tabs.kit.widgets import ChoiceBox
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +87,7 @@ def test_dynamics_default_chain(ui, media, outdir):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("fmt", ["AAC 256k  (keep video)", "WAV  (audio only)"])
+@pytest.mark.parametrize("fmt", [mixer.MixOutput.AAC_256, mixer.MixOutput.WAV])
 def test_mixer_two_tracks(ui, media, outdir, fmt):
     ui.reset()
     tab = ui.open("Audio Mixer")
@@ -101,15 +103,15 @@ def test_mixer_two_tracks(ui, media, outdir, fmt):
     b.loop_var.set(True)
     for extra in tab.tracks[2:]:
         extra.enabled.set(False)
-    tab.out_fmt_var.set(fmt)
-    out = str(outdir / ("mix.mp4" if "keep" in fmt else "mix.wav"))
+    tab.out_fmt.value = fmt
+    out = str(outdir / ("mix.wav" if fmt in mixer.AUDIO_ONLY else "mix.mp4"))
     tab.out_var.set(out)
     tab._render()
     ui.wait_idle(120)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     assert info.has_audio and info.require_audio().channels == 2
-    assert info.has_video == ("keep" in fmt)
+    assert info.has_video == (fmt not in mixer.AUDIO_ONLY)
     assert info.duration == pytest.approx(ff.duration_of(media["h264"]), abs=0.15)
 
 
@@ -234,7 +236,7 @@ def test_tts_offline_standalone(ui, outdir):
     tab.text_box.delete("1.0", "end")
     tab.text_box.insert("1.0", "Testing the offline voice. One, two, three.")
     tab.mode_var.set("standalone")
-    tab.audio_fmt_var.set("WAV")
+    tab.audio_fmt.value = tts_tab.SpeechFormat.WAV
     out = str(outdir / "speech.wav")
     tab.out_var.set(out)
     tab._render()
@@ -245,8 +247,6 @@ def test_tts_offline_standalone(ui, outdir):
 
 
 def test_converter_helpers():
-    from tabs.audio import exporter
-
     log = [
         "[silencedetect @ 0x1] silence_start: 0",
         "[silencedetect @ 0x1] silence_end: 1.25 | silence_duration: 1.25",
@@ -262,7 +262,7 @@ def test_converter_helpers():
             "[Parsed_replaygain_0 @ 0x1] track_peak = 0.060887",
         ]
     ) == (9.89, 0.060887)
-    cfg = {"fmt": "FLAC", "depth": "s32:24", "compression": "8"}
+    cfg = {"fmt": exporter.AudioFormat.FLAC, "depth": "s32:24", "compression": "8"}
     assert exporter.AudioExporterTab.codec_args(cfg, 10) == [
         "-c:a",
         "flac",
@@ -273,14 +273,18 @@ def test_converter_helpers():
         "-compression_level",
         "8",
     ]
-    assert exporter.AudioExporterTab.codec_args({"fmt": "MP3", "size_bytes": 1_000_000}, 60) == [
+    assert exporter.AudioExporterTab.codec_args(
+        {"fmt": exporter.AudioFormat.MP3, "size_bytes": 1_000_000}, 60
+    ) == [
         "-c:a",
         "libmp3lame",
         "-b:a",
         "129k",
     ]
     with pytest.raises(ValueError):
-        exporter.AudioExporterTab.codec_args({"fmt": "MP3", "size_bytes": 1000}, 600)
+        exporter.AudioExporterTab.codec_args(
+            {"fmt": exporter.AudioFormat.MP3, "size_bytes": 1000}, 600
+        )
     chain = exporter.AudioExporterTab.base_chain(
         {"volume": 0, "fade_in": 1, "fade_out": 2}, 10.0, (1.0, 9.0)
     )
@@ -291,10 +295,14 @@ def _converter(ui, src, fmt, out, **opts):
     ui.reset()
     tab = ui.open("Audio Converter")
     tab.src_var.set(src)
-    tab.fmt_var.set(fmt)
+    tab.fmt_box.value = fmt
     tab._on_format_change()
     for name, value in opts.items():
-        getattr(tab, name).set(value)
+        target = getattr(tab, name)
+        if isinstance(target, ChoiceBox):
+            target.value = value
+        else:
+            target.set(value)
     tab.out_var.set(out)
     tab._export()
     ui.wait_idle(120)
@@ -306,7 +314,12 @@ def _converter(ui, src, fmt, out, **opts):
 @pytest.mark.ffmpeg
 def test_converter_trim_is_start_to_end(ui, media, outdir):
     info = _converter(
-        ui, media["h264"], "WAV", str(outdir / "trim.wav"), trim_start="1", trim_end="3"
+        ui,
+        media["h264"],
+        exporter.AudioFormat.WAV,
+        str(outdir / "trim.wav"),
+        trim_start="1",
+        trim_end="3",
     )
     assert info.duration == pytest.approx(2.0, abs=0.05) and not info.has_video
 
@@ -314,7 +327,11 @@ def test_converter_trim_is_start_to_end(ui, media, outdir):
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 @pytest.mark.parametrize(
-    "fmt,ext,want", [("FLAC", ".flac", ("s32", 24)), ("ALAC (M4A)", ".m4a", ("s32p", 24))]
+    "fmt,ext,want",
+    [
+        (exporter.AudioFormat.FLAC, ".flac", ("s32", 24)),
+        (exporter.AudioFormat.ALAC, ".m4a", ("s32p", 24)),
+    ],
 )
 def test_converter_24_bit(ui, media, outdir, fmt, ext, want):
     out = str(outdir / f"deep{ext}")
@@ -372,11 +389,13 @@ def test_converter_keeps_cover_and_rate_when_normalising(ui, media, outdir, tmp_
     )
     rate = ff.probe(src).require_audio().sample_rate
     out = str(outdir / "norm.flac")
-    info = _converter(ui, src, "FLAC", out, norm_var="EBU R128 (loudnorm)")
+    info = _converter(ui, src, exporter.AudioFormat.FLAC, out, norm_box=exporter.Normalise.LOUDNESS)
     assert info.require_audio().sample_rate == rate  # no silent 192 kHz upsample
     assert any(s.attached_pic for s in info.streams)  # cover art kept
     peak_out = str(outdir / "peak.wav")
-    _converter(ui, src, "WAV", peak_out, norm_var="Peak normalize", tp_var="-3")
+    _converter(
+        ui, src, exporter.AudioFormat.WAV, peak_out, norm_box=exporter.Normalise.PEAK, tp_var="-3"
+    )
     assert _volume(peak_out)[1] == pytest.approx(-3.0, abs=0.3)
 
 

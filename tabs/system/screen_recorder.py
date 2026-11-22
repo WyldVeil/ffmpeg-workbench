@@ -16,6 +16,7 @@ import os
 import sys
 import threading
 import tkinter as tk
+from enum import StrEnum
 from tkinter import messagebox, ttk
 from typing import ClassVar
 
@@ -24,11 +25,45 @@ from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-
+from tabs.kit.widgets import ChoiceBox
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Region selector overlay
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+#: the audio-device lists' entries that aren't devices (the rest are the devices' names)
+NO_AUDIO = "None"
+LOADING_DEVICES = "Loading devices..."
+
+
+class RecordCodec(StrEnum):
+    AUTO = "auto"
+    X264 = "x264"
+    X265 = "x265"
+    NVENC_H264 = "nvenc_h264"
+    NVENC_HEVC = "nvenc_hevc"
+    AMF_H264 = "amf_h264"
+    SVTAV1 = "svtav1"
+
+
+class Chroma(StrEnum):
+    STANDARD = "yuv420p"
+    FULL = "yuv444p"  # every pixel's own colour: sharper text, bigger files
+
+
+#: codec choice -> (what the drop-down shows, codec family, hardware)
+RECORD_CODECS = {
+    RecordCodec.AUTO: ("Auto (GPU when available)", "h264", "auto"),
+    RecordCodec.X264: ("libx264 (CPU - High Compatibility)", "h264", "off"),
+    RecordCodec.X265: ("libx265 (CPU - High Efficiency)", "hevc", "off"),
+    RecordCodec.NVENC_H264: ("h264_nvenc (NVIDIA GPU)", "h264", "nvenc"),
+    RecordCodec.NVENC_HEVC: ("hevc_nvenc (NVIDIA GPU)", "hevc", "nvenc"),
+    RecordCodec.AMF_H264: ("h264_amf (AMD GPU)", "h264", "amf"),
+    RecordCodec.SVTAV1: ("libsvtav1 (AV1 - Next Gen)", "av1", "off"),
+}
+
+
 class AreaSelector(tk.Toplevel):
     """Transparent overlay for clicking and dragging to select a screen region."""
 
@@ -179,14 +214,12 @@ class ScreenRecorderTab(BaseTab):
 
         # ── Advanced recording variables ──────────────────────────────────────
         self.fps_var = tk.StringVar(value="60")
-        self.vcodec_var = tk.StringVar(value="Auto (GPU when available)")
         self.preset_var = tk.StringVar(value="superfast")
         self.crf_var = tk.IntVar(value=18)
-        self.pix_fmt_var = tk.StringVar(value="yuv420p (Standard)")
 
         # Dynamic Audio Sources
-        self.audio_src1_var = tk.StringVar(value="None")
-        self.audio_src2_var = tk.StringVar(value="None")
+        self.audio_src1_var = tk.StringVar(value=NO_AUDIO)
+        self.audio_src2_var = tk.StringVar(value=NO_AUDIO)
         self.acodec_var = tk.StringVar(value="aac")
 
         self.container_var = tk.StringVar(value=".mp4")
@@ -444,20 +477,10 @@ class ScreenRecorderTab(BaseTab):
         tk.Label(
             vid_f, text=t("common.codec"), bg=CLR["bg"], fg=CLR["fg"], width=12, anchor="e"
         ).grid(row=0, column=0, pady=px(4))
-        ttk.Combobox(
-            vid_f,
-            textvariable=self.vcodec_var,
-            width=32,
-            state="readonly",
-            values=[
-                "libx264 (CPU - High Compatibility)",
-                "libx265 (CPU - High Efficiency)",
-                "h264_nvenc (NVIDIA GPU)",
-                "hevc_nvenc (NVIDIA GPU)",
-                "h264_amf (AMD GPU)",
-                "libsvtav1 (AV1 - Next Gen)",
-            ],
-        ).grid(row=0, column=1, padx=px(5))
+        self.vcodec = ChoiceBox(
+            vid_f, {c: spec[0] for c, spec in RECORD_CODECS.items()}, RecordCodec.AUTO, width=32
+        )
+        self.vcodec.grid(row=0, column=1, padx=px(5))
 
         tk.Label(
             vid_f,
@@ -503,13 +526,16 @@ class ScreenRecorderTab(BaseTab):
             width=12,
             anchor="e",
         ).grid(row=2, column=0, pady=px(4))
-        ttk.Combobox(
+        self.chroma = ChoiceBox(
             vid_f,
-            textvariable=self.pix_fmt_var,
+            {
+                Chroma.STANDARD: "yuv420p (Standard)",
+                Chroma.FULL: "yuv444p (Full Color, large file)",
+            },
+            Chroma.STANDARD,
             width=32,
-            state="readonly",
-            values=["yuv420p (Standard)", "yuv444p (Full Color, large file)"],
-        ).grid(row=2, column=1, padx=px(5))
+        )
+        self.chroma.grid(row=2, column=1, padx=px(5))
 
         tk.Label(
             vid_f,
@@ -589,7 +615,7 @@ class ScreenRecorderTab(BaseTab):
         ).grid(row=2, column=1, sticky="w", padx=px(5))
 
         # Start the background scan for audio hardware
-        self.cb_audio1.set("Loading devices...")
+        self.cb_audio1.set(LOADING_DEVICES)
         tasks.submit(self._load_audio_devices)
 
     def _build_studio_tab_obs_feature_1_global_hotkey(self):
@@ -770,21 +796,21 @@ class ScreenRecorderTab(BaseTab):
         from core import recorder
 
         self._audio_ids = {label: sid for sid, label in sources}
-        labels = ["None"] + [label for _sid, label in sources]
+        labels = [NO_AUDIO] + [label for _sid, label in sources]
         try:
             self.cb_audio1.config(values=labels)
             self.cb_audio2.config(values=labels)
             system = recorder.system_sound_source(sources)
             self.audio_src1_var.set(
-                next((label for sid, label in sources if sid == system), "None")
+                next((label for sid, label in sources if sid == system), NO_AUDIO)
             )
-            self.audio_src2_var.set("None")
+            self.audio_src2_var.set(NO_AUDIO)
         except tk.TclError:
             pass
 
     def _audio_choice(self, var) -> str:
         label = var.get()
-        if not label or label == "None" or "Loading" in label:
+        if not label or label in (NO_AUDIO, LOADING_DEVICES):
             return ""
         return getattr(self, "_audio_ids", {}).get(label, label)
 
@@ -1075,22 +1101,7 @@ class ScreenRecorderTab(BaseTab):
                     t("common.warning"), "The auto-stop time must be whole numbers.", parent=self
                 )
                 return
-        label = self.vcodec_var.get()
-        codec, hw = (
-            ("hevc", "off")
-            if label.startswith("libx265")
-            else ("av1", "off")
-            if "svtav1" in label
-            else ("h264", "nvenc")
-            if label.startswith("h264_nvenc")
-            else ("hevc", "nvenc")
-            if label.startswith("hevc_nvenc")
-            else ("h264", "amf")
-            if label.startswith("h264_amf")
-            else ("h264", "auto")
-            if label.startswith("Auto")
-            else ("h264", "off")
-        )
+        _label, codec, hw = RECORD_CODECS[self.vcodec.value]
         crf = int(self.crf_var.get())
         quality = (
             "very_high"
@@ -1114,7 +1125,7 @@ class ScreenRecorderTab(BaseTab):
         }.get(self.preset_var.get(), "fastest")
         ve = enc.video(codec, quality, speed=speed, hw=hw, container=ext.lstrip("."))
         if (
-            self.pix_fmt_var.get().startswith("yuv444p")
+            self.chroma.value is Chroma.FULL
             and ve.encoder in ("libx264", "libx265", "h264_nvenc", "hevc_nvenc")
             and "-pix_fmt" in ve.args
         ):

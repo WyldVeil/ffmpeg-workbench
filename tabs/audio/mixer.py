@@ -16,6 +16,7 @@ The result is the original video re-encoded with the new mixed audio.
 import os
 import tkinter as tk
 from collections.abc import Callable
+from enum import StrEnum
 from tkinter import messagebox, ttk
 from typing import Any
 
@@ -25,6 +26,7 @@ from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.widgets import ChoiceBox
 
 MAX_TRACKS = 8
 
@@ -38,6 +40,25 @@ TRACK_TYPES = [
     t("mixer.interview"),
     t("mixer.other"),
 ]
+
+
+class MixOutput(StrEnum):
+    AAC_256 = "aac256"
+    AAC_320 = "aac320"
+    MP3 = "mp3"
+    WAV = "wav"
+    FLAC = "flac"
+
+
+MIX_OUTPUTS = {
+    MixOutput.AAC_256: "AAC 256k  (keep video)",
+    MixOutput.AAC_320: "AAC 320k  (keep video)",
+    MixOutput.MP3: "MP3 320k  (audio only)",
+    MixOutput.WAV: "WAV  (audio only)",
+    MixOutput.FLAC: "FLAC  (audio only)",
+}
+#: the outputs without the video -> their file extension
+AUDIO_ONLY = {MixOutput.MP3: ".mp3", MixOutput.WAV: ".wav", MixOutput.FLAC: ".flac"}
 
 
 class Track:
@@ -224,20 +245,8 @@ class AudioMixerTab(BaseTab):
         tk.Label(norm_row, text=f"  {t('mixer.output_format_label')}").pack(
             side="left", padx=px(16, 0)
         )
-        self.out_fmt_var = tk.StringVar(value="AAC 256k  (keep video)")
-        ttk.Combobox(
-            norm_row,
-            textvariable=self.out_fmt_var,
-            values=[
-                "AAC 256k  (keep video)",
-                "AAC 320k  (keep video)",
-                "MP3 320k  (audio only)",
-                "WAV  (audio only)",
-                "FLAC  (audio only)",
-            ],
-            state="readonly",
-            width=24,
-        ).pack(side="left", padx=px(4))
+        self.out_fmt = ChoiceBox(norm_row, MIX_OUTPUTS, MixOutput.AAC_256, width=24)
+        self.out_fmt.pack(side="left", padx=px(4))
 
         # Output file
         of = tk.Frame(self)
@@ -390,15 +399,7 @@ class AudioMixerTab(BaseTab):
             self.out_var.set(base + "_mixed.mp4")
 
     def _browse_out(self):
-        fmt = self.out_fmt_var.get()
-        if "audio only" in fmt.lower():
-            ext = (
-                ".mp3"
-                if "MP3" in fmt
-                else (".wav" if "WAV" in fmt else (".flac" if "FLAC" in fmt else ".aac"))
-            )
-        else:
-            ext = ".mp4"
+        ext = AUDIO_ONLY.get(self.out_fmt.value, ".mp4")
         p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=[("Media", f"*{ext}")])
         if p:
             self.out_var.set(p)
@@ -482,19 +483,11 @@ class AudioMixerTab(BaseTab):
         )
         cmd = [ff.ffmpeg_path(), "-y", "-i", video, *mx.input_args(tracks)]
         sources = len(tracks) + (1 if keep_own else 0)
-        fmt = self.out_fmt_var.get()
-        audio_only = "audio only" in fmt.lower()
+        fmt = self.out_fmt.value
+        audio_only = fmt in AUDIO_ONLY
         out = self.out_var.get().strip() or self.suggest_output(video, "mixed", ".mp4")
         if audio_only and not out.lower().endswith(AUDIO_ONLY_EXTS):
-            out = os.path.splitext(out)[0] + (
-                ".mp3"
-                if "MP3" in fmt
-                else ".wav"
-                if "WAV" in fmt
-                else ".flac"
-                if "FLAC" in fmt
-                else ".m4a"
-            )
+            out = os.path.splitext(out)[0] + AUDIO_ONLY[fmt]
         out = self.confirm_output(out, [video] + [track_path(x) for x in active])
         if not out:
             return
@@ -513,7 +506,7 @@ class AudioMixerTab(BaseTab):
                 "-c:a",
                 "aac",
                 "-b:a",
-                "320k" if "320" in fmt else "256k",
+                "320k" if fmt is MixOutput.AAC_320 else "256k",
             ]
             if out.lower().endswith((".mp4", ".mov", ".m4v")):
                 cmd += ["-movflags", "+faststart"]

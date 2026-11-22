@@ -249,6 +249,16 @@ def _hint(parent, text):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+#: Ken Burns pan (what the drop-down shows -> where the pan starts)
+_KB_PANS = {
+    "Left → Right": "left",
+    "Right → Left": "right",
+    "Top → Bottom": "top",
+    "Bottom → Top": "bottom",
+    "Centre zoom only": "centre",
+}
+
+
 class SpecialEffectsTab(BaseTab):
     """
     Special Effects Studio - six categories of popular video effects,
@@ -2470,7 +2480,7 @@ class SpecialEffectsTab(BaseTab):
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._kb_zoom_start = tk.StringVar(value="1.0")
         self._kb_zoom_end = tk.StringVar(value="1.15")
-        self._kb_dir = tk.StringVar(value="Left → Right")
+        self._kb_dir = tk.StringVar(value=next(iter(_KB_PANS)))
         self._kb_crf = tk.StringVar(value="18")
 
         _spin(opts, "Zoom start (×):", self._kb_zoom_start, 1.0, 2.0, 0.05).pack(
@@ -2481,7 +2491,7 @@ class SpecialEffectsTab(BaseTab):
             opts,
             "Pan direction:",
             self._kb_dir,
-            ["Left → Right", "Right → Left", "Top → Bottom", "Bottom → Top", "Centre zoom only"],
+            list(_KB_PANS),
             width=18,
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._kb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
@@ -2502,15 +2512,15 @@ class SpecialEffectsTab(BaseTab):
             return
         w, h, fps, dur = self._fx_geom(info)
         p = f"it/{max(dur, 0.1):.3f}"
-        d = self._kb_dir.get()
+        d = _KB_PANS.get(self._kb_dir.get(), "centre")
         x, y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-        if d.startswith("Left"):
+        if d == "left":
             x = f"(iw-iw/zoom)*{p}"
-        elif d.startswith("Right"):
+        elif d == "right":
             x = f"(iw-iw/zoom)*(1-{p})"
-        elif d.startswith("Top"):
+        elif d == "top":
             y = f"(ih-ih/zoom)*{p}"
-        elif d.startswith("Bottom"):
+        elif d == "bottom":
             y = f"(ih-ih/zoom)*(1-{p})"
         graph = (
             f"zoompan=z='{z0}+({z1}-{z0})*{p}':x='{x}':y='{y}':d=1:s={w}x{h}:fps={fps},"

@@ -21,6 +21,7 @@ import logging
 import math
 import os
 import tkinter as tk
+from enum import StrEnum
 from tkinter import messagebox, ttk
 from typing import Any
 
@@ -34,13 +35,29 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.widgets import ChoiceBox
 
 logger = logging.getLogger("crossfader.audio.exporter")
 
+
 # ── Format definitions ───────────────────────────────────────────────────────
 #  key: (extension, codec_args, supports_bitrate, supports_vbr, supports_bit_depth)
-FORMAT_DEFS = {
-    "MP3": {
+class AudioFormat(StrEnum):
+    MP3 = "mp3"
+    AAC = "aac"
+    VORBIS = "vorbis"
+    OPUS = "opus"
+    WAV = "wav"
+    FLAC = "flac"
+    ALAC = "alac"
+    AIFF = "aiff"
+    WMA = "wma"
+    AC3 = "ac3"
+
+
+FORMAT_DEFS: dict[AudioFormat, dict[str, Any]] = {
+    AudioFormat.MP3: {
+        "label": "MP3",
         "ext": ".mp3",
         "codec": ["-c:a", "libmp3lame"],
         "lossy": True,
@@ -51,7 +68,8 @@ FORMAT_DEFS = {
         "vbr_default": 2,
         "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
     },
-    "AAC (M4A)": {
+    AudioFormat.AAC: {
+        "label": "AAC (M4A)",
         "ext": ".m4a",
         "codec": ["-c:a", "aac"],
         "lossy": True,
@@ -60,7 +78,8 @@ FORMAT_DEFS = {
         "vbr_flag": None,
         "sample_rates": [22050, 32000, 44100, 48000, 96000],
     },
-    "OGG Vorbis": {
+    AudioFormat.VORBIS: {
+        "label": "OGG Vorbis",
         "ext": ".ogg",
         "codec": ["-c:a", "libvorbis"],
         "lossy": True,
@@ -71,7 +90,8 @@ FORMAT_DEFS = {
         "vbr_default": 6,
         "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
     },
-    "Opus": {
+    AudioFormat.OPUS: {
+        "label": "Opus",
         "ext": ".opus",
         "codec": ["-c:a", "libopus"],
         "lossy": True,
@@ -92,7 +112,8 @@ FORMAT_DEFS = {
         "vbr_flag": None,
         "sample_rates": [8000, 12000, 16000, 24000, 48000],
     },
-    "WAV": {
+    AudioFormat.WAV: {
+        "label": "WAV",
         "ext": ".wav",
         "codec": [],  # set dynamically from bit depth
         "lossy": False,
@@ -117,7 +138,8 @@ FORMAT_DEFS = {
             192000,
         ],
     },
-    "FLAC": {
+    AudioFormat.FLAC: {
+        "label": "FLAC",
         "ext": ".flac",
         "codec": ["-c:a", "flac"],
         "lossy": False,
@@ -128,7 +150,8 @@ FORMAT_DEFS = {
         "compression_default": 5,
         "sample_rates": [8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000],
     },
-    "ALAC (M4A)": {
+    AudioFormat.ALAC: {
+        "label": "ALAC (M4A)",
         "ext": ".m4a",
         "codec": ["-c:a", "alac"],
         "lossy": False,
@@ -136,7 +159,8 @@ FORMAT_DEFS = {
         "default_depth": "16-bit",
         "sample_rates": [44100, 48000, 88200, 96000, 176400, 192000],
     },
-    "AIFF": {
+    AudioFormat.AIFF: {
+        "label": "AIFF",
         "ext": ".aiff",
         "codec": [],  # set from bit depth
         "lossy": False,
@@ -144,7 +168,8 @@ FORMAT_DEFS = {
         "default_depth": "16-bit",
         "sample_rates": [22050, 32000, 44100, 48000, 88200, 96000],
     },
-    "WMA": {
+    AudioFormat.WMA: {
+        "label": "WMA",
         "ext": ".wma",
         "codec": ["-c:a", "wmav2"],
         "lossy": True,
@@ -153,7 +178,8 @@ FORMAT_DEFS = {
         "vbr_flag": None,
         "sample_rates": [22050, 32000, 44100, 48000],
     },
-    "AC3": {
+    AudioFormat.AC3: {
+        "label": "AC3",
         "ext": ".ac3",
         "codec": ["-c:a", "ac3"],
         "lossy": True,
@@ -163,6 +189,9 @@ FORMAT_DEFS = {
         "sample_rates": [32000, 44100, 48000],
     },
 }
+
+#: what the drop-down shows for each format
+FORMATS = {fmt: str(spec["label"]) for fmt, spec in FORMAT_DEFS.items()}
 
 CHANNEL_LAYOUTS = [
     ("Auto (keep original)", ""),
@@ -175,11 +204,30 @@ CHANNEL_LAYOUTS = [
     ("7.1 Surround", "8"),
 ]
 
-NORM_MODES = [
-    "None",
-    "EBU R128 (loudnorm)",
-    "Peak normalize",
-]
+
+class Normalise(StrEnum):
+    NONE = "none"
+    LOUDNESS = "loudness"
+    PEAK = "peak"
+
+
+NORMALISE = {
+    Normalise.NONE: "None",
+    Normalise.LOUDNESS: "EBU R128 (loudnorm)",
+    Normalise.PEAK: "Peak normalize",
+}
+
+
+class SizeUnit(StrEnum):
+    KB = "KB"
+    MB = "MB"
+
+
+#: the sample-rate drop-down: what it shows -> the rate ("" = the source's)
+SAMPLE_RATES = {"Auto": ""} | {
+    f"{r} Hz": str(r)
+    for r in (8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000)
+}
 
 
 class AudioExporterTab(BaseTab):
@@ -257,16 +305,10 @@ class AudioExporterTab(BaseTab):
             bg=CLR["bg"],
             fg=CLR["fg"],
         ).pack(side="left")
-        self.fmt_var = tk.StringVar(value="MP3")
-        cb = ttk.Combobox(
-            row,
-            textvariable=self.fmt_var,
-            values=list(FORMAT_DEFS.keys()),
-            state="readonly",
-            width=16,
+        self.fmt_box = ChoiceBox(
+            row, FORMATS, AudioFormat.MP3, width=16, on_change=self._on_format_change
         )
-        cb.pack(side="left", padx=px(8))
-        cb.bind("<<ComboboxSelected>>", self._on_format_change)
+        self.fmt_box.pack(side="left", padx=px(8))
 
         self._fmt_note = tk.Label(
             row,
@@ -333,7 +375,7 @@ class AudioExporterTab(BaseTab):
         self._br_cb = ttk.Combobox(
             self._cbr_row,
             textvariable=self.bitrate_var,
-            values=FORMAT_DEFS["MP3"]["bitrates"],
+            values=FORMAT_DEFS[AudioFormat.MP3]["bitrates"],
             state="readonly",
             width=8,
         )
@@ -441,12 +483,8 @@ class AudioExporterTab(BaseTab):
             fg=CLR["fg"],
         ).pack(side="left")
         self.sr_var = tk.StringVar(value="Auto")
-        sr_vals = ["Auto"] + [
-            f"{r} Hz"
-            for r in [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000]
-        ]
         self._sr_cb = ttk.Combobox(
-            r0, textvariable=self.sr_var, values=sr_vals, state="readonly", width=14
+            r0, textvariable=self.sr_var, values=list(SAMPLE_RATES), state="readonly", width=14
         )
         self._sr_cb.pack(side="left", padx=px(8))
 
@@ -593,10 +631,8 @@ class AudioExporterTab(BaseTab):
         tk.Label(
             r2, text=t("exporter.normalize"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left")
-        self.norm_var = tk.StringVar(value="None")
-        ttk.Combobox(
-            r2, textvariable=self.norm_var, values=NORM_MODES, state="readonly", width=22
-        ).pack(side="left", padx=px(8))
+        self.norm_box = ChoiceBox(r2, NORMALISE, Normalise.NONE, width=22)
+        self.norm_box.pack(side="left", padx=px(8))
 
         self._norm_opts = tk.Frame(sec, bg=CLR["bg"])
         self._norm_opts.pack(fill="x", pady=px(2))
@@ -697,10 +733,8 @@ class AudioExporterTab(BaseTab):
             font=(UI_FONT, 9),
         ).pack(side="left", padx=px(4))
 
-        self.size_unit_var = tk.StringVar(value="MB")
-        ttk.Combobox(
-            row, textvariable=self.size_unit_var, values=["KB", "MB"], state="readonly", width=4
-        ).pack(side="left", padx=px(4))
+        self.size_unit = ChoiceBox(row, {u: u.value for u in SizeUnit}, SizeUnit.MB, width=4)
+        self.size_unit.pack(side="left", padx=px(4))
         tk.Label(
             row, text=t("exporter.auto_calc_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left", padx=px(8))
@@ -845,12 +879,12 @@ class AudioExporterTab(BaseTab):
             self._probe_source(p)
 
     def _browse_out(self):
-        fmt_def = FORMAT_DEFS[self.fmt_var.get()]
+        fmt_def = FORMAT_DEFS[self.fmt_box.value]
         ext = fmt_def["ext"]
         p = dialogs.asksaveasfilename(
             title="Save audio as",
             defaultextension=ext,
-            filetypes=[(self.fmt_var.get(), f"*{ext}"), ("All files", "*.*")],
+            filetypes=[(FORMATS[self.fmt_box.value], f"*{ext}"), ("All files", "*.*")],
         )
         if p:
             self.out_var.set(p)
@@ -953,7 +987,7 @@ class AudioExporterTab(BaseTab):
 
     def _on_format_change(self, *_):
         """Reconfigure quality section when format changes."""
-        fmt = self.fmt_var.get()
+        fmt = self.fmt_box.value
         fd = FORMAT_DEFS[fmt]
 
         # Update format note
@@ -962,7 +996,7 @@ class AudioExporterTab(BaseTab):
         else:
             self._fmt_note.config(
                 text=t("exporter.lossless_uncompressed")
-                if fmt in ("WAV", "AIFF")
+                if fmt in (AudioFormat.WAV, AudioFormat.AIFF)
                 else t("exporter.lossless_compressed")
             )
 
@@ -970,7 +1004,7 @@ class AudioExporterTab(BaseTab):
 
     def _toggle_br_mode(self):
         """Show/hide quality controls based on format + mode."""
-        fmt = self.fmt_var.get()
+        fmt = self.fmt_box.value
         fd = FORMAT_DEFS[fmt]
 
         # Hide everything first
@@ -1017,7 +1051,7 @@ class AudioExporterTab(BaseTab):
                 self.depth_var.set(fd.get("default_depth", "16-bit"))
 
             # FLAC compression
-            if fmt == "FLAC":
+            if fmt is AudioFormat.FLAC:
                 self._comp_row.pack(fill="x", pady=px(4))
                 cr = fd.get("compression_range", (0, 12))
                 self._comp_scale.config(from_=cr[0], to=cr[1])
@@ -1027,7 +1061,7 @@ class AudioExporterTab(BaseTab):
 
     def _settings(self) -> dict:
         """Validate the form (UI thread).  Raises ValueError with a readable message."""
-        fmt = self.fmt_var.get()
+        fmt = self.fmt_box.value
         fd = FORMAT_DEFS[fmt]
         ss, to = self.trim_start.get().strip(), self.trim_end.get().strip()
         start = ff.parse_time(ss) if ss else 0.0
@@ -1052,24 +1086,24 @@ class AudioExporterTab(BaseTab):
             "volume": num(self.volume_var, "Volume", -60, 40),
             "fade_in": num(self.fade_in, "Fade in", 0, 600),
             "fade_out": num(self.fade_out, "Fade out", 0, 600),
-            "norm": self.norm_var.get(),
+            "norm": self.norm_box.value,
             "strip_silence": self.strip_silence_var.get(),
             "replay_gain": self.replay_gain_var.get(),
             "strip_meta": self.strip_meta_var.get() or not self.copy_meta_var.get(),
             "strip_art": self.strip_art_var.get(),
             "tags": {k: v.get().strip() for k, v in self.meta_vars.items() if v.get().strip()},
-            "sr": "" if self.sr_var.get() == "Auto" else self.sr_var.get().replace(" Hz", ""),
+            "sr": SAMPLE_RATES.get(self.sr_var.get(), ""),
             "ch": next((val for label, val in CHANNEL_LAYOUTS if label == self.ch_var.get()), ""),
         }
-        if cfg["norm"] == "EBU R128 (loudnorm)":
+        if cfg["norm"] is Normalise.LOUDNESS:
             cfg["lufs"] = num(self.lufs_var, "Target loudness", -70, -5)
             cfg["tp"] = num(self.tp_var, "True peak", -9, 0)
-        elif cfg["norm"] == "Peak normalize":
+        elif cfg["norm"] is Normalise.PEAK:
             cfg["tp"] = num(self.tp_var, "Peak level", -20, 0)
         if fd["lossy"]:
             if self.limit_enabled.get():
                 cfg["size_bytes"] = num(self.max_size_var, "Maximum size", 0.001, 1e6) * (
-                    1024 * 1024 if self.size_unit_var.get() == "MB" else 1024
+                    1024 * 1024 if self.size_unit.value is SizeUnit.MB else 1024
                 )
             elif self.br_mode_var.get() == "VBR" and fd.get("vbr_flag"):
                 cfg["vbr"] = str(self.vbr_var.get())
@@ -1077,7 +1111,7 @@ class AudioExporterTab(BaseTab):
                 cfg["bitrate"] = self.bitrate_var.get()
         else:
             cfg["depth"] = fd.get("bit_depths", {}).get(self.depth_var.get(), "")
-            if fmt == "FLAC":
+            if fmt is AudioFormat.FLAC:
                 cfg["compression"] = str(self.comp_var.get())
         return cfg
 
@@ -1092,7 +1126,7 @@ class AudioExporterTab(BaseTab):
                 kbps = int(cfg["size_bytes"] * 8 * 0.97 / max(seconds, 0.1) / 1000)
                 if kbps < lo:
                     raise ValueError(
-                        f"{fmt} can't get this short enough for that size "
+                        f"{FORMATS[fmt]} can't get this short enough for that size "
                         f"(it would need {kbps} kbps; the minimum is {lo})."
                     )
                 args += ["-b:a", f"{min(kbps, hi)}k"]
@@ -1102,13 +1136,13 @@ class AudioExporterTab(BaseTab):
                 args += ["-b:a", cfg["bitrate"]]
             return args
         depth = cfg.get("depth", "")
-        if fmt in ("WAV", "AIFF"):
-            return ["-c:a", depth or ("pcm_s16le" if fmt == "WAV" else "pcm_s16be")]
+        if fmt in (AudioFormat.WAV, AudioFormat.AIFF):
+            return ["-c:a", depth or ("pcm_s16le" if fmt is AudioFormat.WAV else "pcm_s16be")]
         args = list(fd["codec"])
         if depth:
             sample_fmt, _, bits = depth.partition(":")
             args += ["-sample_fmt", sample_fmt] + (["-bits_per_raw_sample", bits] if bits else [])
-        if fmt == "FLAC":
+        if fmt is AudioFormat.FLAC:
             args += ["-compression_level", cfg.get("compression", "5")]
         return args
 
@@ -1187,7 +1221,9 @@ class AudioExporterTab(BaseTab):
                 cmd += ["-map", f"0:{cover}", "-c:v", "copy", "-disposition:v:0", "attached_pic"]
             cmd += [*self.codec_args(cfg, seg_len), *_output_options(cfg, chain, out)]
             ctx.log("Encoding…")
-            analysed = cfg["norm"] != "None" or cfg["replay_gain"] or cfg["strip_silence"]
+            analysed = (
+                cfg["norm"] is not Normalise.NONE or cfg["replay_gain"] or cfg["strip_silence"]
+            )
             ctx.span(0.6 if analysed else 0.0, 1.0).run([*cmd, ctx.output(out)], duration=seg_len)
             return 0
 
@@ -1206,12 +1242,12 @@ class AudioExporterTab(BaseTab):
 
 
 BITRATE_LIMITS_K = {
-    "MP3": (8, 320),
-    "AAC (M4A)": (16, 512),
-    "OGG Vorbis": (45, 500),
-    "Opus": (6, 510),
-    "WMA": (24, 320),
-    "AC3": (32, 640),
+    AudioFormat.MP3: (8, 320),
+    AudioFormat.AAC: (16, 512),
+    AudioFormat.VORBIS: (45, 500),
+    AudioFormat.OPUS: (6, 510),
+    AudioFormat.WMA: (24, 320),
+    AudioFormat.AC3: (32, 640),
 }
 COVER_ART_EXTS = (".mp3", ".flac", ".m4a")
 
@@ -1304,14 +1340,14 @@ def _levelling(
     """The loudness (EBU R128, two passes) or peak normalisation filter, if asked for."""
     from core import loudness
 
-    if cfg["norm"] == "EBU R128 (loudnorm)":
+    if cfg["norm"] is Normalise.LOUDNESS:
         ctx.log("Measuring loudness (pass 1 of 2)…")
         probe = f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json"
         meas = loudness.parse_measurement(
             _analysis(ctx, inp, ",".join([*chain, probe]), length, (0.4, 0.6))
         )
         return loudness.normalise_filter(cfg["lufs"], cfg["tp"], 11, meas, rate)
-    if cfg["norm"] == "Peak normalize":
+    if cfg["norm"] is Normalise.PEAK:
         ctx.log("Measuring the peak level…")
         peak = parse_max_volume(
             _analysis(ctx, inp, ",".join([*chain, "volumedetect"]), length, (0.4, 0.6))

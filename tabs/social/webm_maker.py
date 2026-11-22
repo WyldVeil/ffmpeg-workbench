@@ -13,6 +13,7 @@ import math
 import os
 import tkinter as tk
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import partial
 from tkinter import messagebox, ttk
 from typing import Any
@@ -24,6 +25,7 @@ from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.social.webm_maker")
@@ -62,6 +64,24 @@ def _snap_even(n: int) -> int:
 
 # Pixel formats supported by libvpx-vp9 / libvpx (VP8). Source pix_fmts
 # outside these sets fall back to yuv420p with a console warning.
+
+
+class PixFmt(StrEnum):
+    SOURCE = "source"  # what the file has, when the codec can keep it
+    YUV420P = "yuv420p"
+    YUVA420P = "yuva420p"
+    YUV444P = "yuv444p"
+    GBRP = "gbrp"
+
+
+PIX_FORMATS = {
+    PixFmt.SOURCE: "Source (auto-detect)",
+    PixFmt.YUV420P: "yuv420p",
+    PixFmt.YUVA420P: "yuva420p (transparency)",
+    PixFmt.YUV444P: "yuv444p",
+    PixFmt.GBRP: "gbrp",
+}
+
 VP9_PIXFMTS = frozenset(
     {
         "yuv420p",
@@ -770,22 +790,9 @@ class WebMTab(BaseTab):
         ).pack(side="left", padx=px(4))
 
         tk.Label(ex1, text=t("webm_maker.pixel_format")).pack(side="left", padx=px(12, 0))
-        # Default value used until ffprobe relabels it after a file loads.
-        self.pixfmt_var = tk.StringVar(value="Source (auto-detect)")
-        self.pixfmt_cb = ttk.Combobox(
-            ex1,
-            textvariable=self.pixfmt_var,
-            values=[
-                "Source (auto-detect)",
-                "yuv420p",
-                "yuva420p (transparency)",
-                "yuv444p",
-                "gbrp",
-            ],
-            state="readonly",
-            width=22,
-        )
-        self.pixfmt_cb.pack(side="left", padx=px(4))
+        # "Source" is relabelled with the detected format once a file loads.
+        self.pixfmt = ChoiceBox(ex1, PIX_FORMATS, PixFmt.SOURCE, width=22)
+        self.pixfmt.pack(side="left", padx=px(4))
 
         # Row 2
         ex2 = tk.Frame(extra_lf)
@@ -952,17 +959,10 @@ class WebMTab(BaseTab):
 
     def _refresh_pixfmt_dropdown(self):
         """Update the dropdown's first entry to show the detected source pix_fmt."""
-        detected_label = (
-            f"Source ({self._src_pixfmt})" if self._src_pixfmt else "Source (auto-detect)"
+        detected = (
+            f"Source ({self._src_pixfmt})" if self._src_pixfmt else PIX_FORMATS[PixFmt.SOURCE]
         )
-        current_values = list(self.pixfmt_cb["values"])
-        # The Source entry is always at index 0
-        current_values[0] = detected_label
-        self.pixfmt_cb["values"] = current_values
-        # If the user hasn't changed away from the source option, refresh
-        # the visible text too.
-        if self.pixfmt_var.get().startswith("Source"):
-            self.pixfmt_var.set(detected_label)
+        self.pixfmt.relabel(PixFmt.SOURCE, detected)
 
     @staticmethod
     def _validate_int_or_empty(proposed: str) -> bool:
@@ -1333,7 +1333,7 @@ class WebMTab(BaseTab):
         preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
         _, vp9_cpu, vp9_deadline, vp8_cpu, _crf_hint = preset
         vf = self._video_filters()
-        pixfmt, warn = _resolve_pixfmt(self.pixfmt_var.get().split(" ")[0], self._src_pixfmt, codec)
+        pixfmt, warn = _resolve_pixfmt(self.pixfmt.value.value, self._src_pixfmt, codec)
         if warn:
             self._log(warn)
         if codec == "VP9":

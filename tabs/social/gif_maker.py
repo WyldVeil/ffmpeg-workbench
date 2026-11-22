@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from enum import StrEnum
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
@@ -21,6 +22,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.time_fields import MomentPicker
+from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
 
 DITHERS = {
@@ -30,6 +32,14 @@ DITHERS = {
     "bayer4": "Bayer pattern - coarse (smaller files)",
     "none": "None (posterised, smallest)",
 }
+
+
+class AnimFormat(StrEnum):
+    GIF = "gif"
+    WEBP = "webp"
+
+
+ANIM_FORMATS = {AnimFormat.GIF: "GIF", AnimFormat.WEBP: "Animated WebP"}
 
 
 class GIFMakerTab(BaseTab):
@@ -159,18 +169,8 @@ class GIFMakerTab(BaseTab):
             tk.Label(opt, text="Max size (MB, optional):"),
             tk.Entry(opt, textvariable=self.limit_var, width=6),
         )
-        self.format_var = tk.StringVar(value="GIF")
-        row(
-            4,
-            "Format:",
-            ttk.Combobox(
-                opt,
-                textvariable=self.format_var,
-                values=["GIF", "Animated WebP"],
-                state="readonly",
-                width=16,
-            ),
-        )
+        self.format = ChoiceBox(opt, ANIM_FORMATS, AnimFormat.GIF, width=16)
+        row(4, "Format:", self.format)
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
@@ -205,7 +205,7 @@ class GIFMakerTab(BaseTab):
 
     def _suggest(self):
         src = self.src_row.path
-        ext = ".webp" if self.format_var.get().startswith("Animated") else ".gif"
+        ext = "." + self.format.value.value
         return self.suggest_output(src, "anim", ext) if src else ""
 
     def _source_changed(self, path):
@@ -237,7 +237,7 @@ class GIFMakerTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         dur = min(dur, info.duration - start)
-        webp = self.format_var.get().startswith("Animated")
+        webp = self.format.value is AnimFormat.WEBP
         out = self.out_row.path or self._suggest()
         want = ".webp" if webp else ".gif"
         if not out.lower().endswith(want):

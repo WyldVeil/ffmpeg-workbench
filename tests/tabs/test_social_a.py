@@ -7,6 +7,7 @@ import pytest
 from core import ffmpeg as ff
 from core.ops import gif_maker, image_watermark, text_watermark
 from core.ops import shortifier as shortifier_ops
+from tabs.social import gif_maker as gif_page
 from tabs.social import shortifier
 
 
@@ -97,15 +98,22 @@ def test_auto_cropper(ui, media, outdir):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("fmt,limit", [("GIF", ""), ("GIF", "0.4"), ("Animated WebP", "")])
+@pytest.mark.parametrize(
+    "fmt,limit",
+    [
+        (gif_page.AnimFormat.GIF, ""),
+        (gif_page.AnimFormat.GIF, "0.4"),
+        (gif_page.AnimFormat.WEBP, ""),
+    ],
+)
 def test_gif(ui, media, outdir, fmt, limit):
     ui.reset()
     tab = ui.open("Pro GIF Maker")
     _src(ui, tab, media["h264"])
-    tab.format_var.set(fmt)
+    tab.format.value = fmt
     tab.limit_var.set(limit)
     tab.dur_var.set("2")
-    ext = ".webp" if "WebP" in fmt else ".gif"
+    ext = "." + fmt.value
     out = str(outdir / f"anim_{bool(limit)}{ext}")
     tab.out_row.set(out)
     tab._render()

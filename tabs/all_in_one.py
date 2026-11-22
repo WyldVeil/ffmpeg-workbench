@@ -40,16 +40,17 @@ from tabs.kit.time_fields import RangePicker
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
 
-_RES_PRESETS = [
-    "7680x4320 (8K)",
-    "3840x2160 (4K UHD)",
-    "2560x1440 (QHD/2K)",
-    "1920x1080 (Full HD)",
-    "1280x720 (HD)",
-    "854x480 (SD)",
-    "640x360 (360p)",
-    "Custom…",
-]
+#: size presets: what the drop-down shows -> (width, height); None = type your own
+_RES_PRESETS: dict[str, tuple[int, int] | None] = {
+    "7680x4320 (8K)": (7680, 4320),
+    "3840x2160 (4K UHD)": (3840, 2160),
+    "2560x1440 (QHD/2K)": (2560, 1440),
+    "1920x1080 (Full HD)": (1920, 1080),
+    "1280x720 (HD)": (1280, 720),
+    "854x480 (SD)": (854, 480),
+    "640x360 (360p)": (640, 360),
+    "Custom…": None,
+}
 _SCALE_ALGO = {
     "Lanczos (best downscale)": "lanczos",
     "Lanczos4 (best upscale)": "lanczos",  # Changed from lanczos4 for compatibility
@@ -428,7 +429,7 @@ class AllInOneTab(BaseTab):
         self._sec_scale.pack(fill="x", pady=px(1))
         b = self._sec_scale.body
 
-        self._scale_preset = tk.StringVar(value=_RES_PRESETS[3])
+        self._scale_preset = tk.StringVar(value="1920x1080 (Full HD)")
         self._scale_w = tk.StringVar(value="1920")
         self._scale_h = tk.StringVar(value="1080")
         self._scale_algo = tk.StringVar(value=next(iter(_SCALE_ALGO.keys())))
@@ -440,7 +441,7 @@ class AllInOneTab(BaseTab):
 
         r1 = _row(b)
         _lbl(r1, "Preset:").pack(side="left")
-        cb = _combo(r1, self._scale_preset, _RES_PRESETS, width=24)
+        cb = _combo(r1, self._scale_preset, list(_RES_PRESETS), width=24)
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", self._on_res_preset)
         _lbl(r1, "  W:").pack(side="left")
@@ -468,12 +469,10 @@ class AllInOneTab(BaseTab):
         ).pack(side="left", padx=px(10))
 
     def _on_res_preset(self, *_):
-        val = self._scale_preset.get()
-        if "Custom" not in val:
-            wh = val.split(" ")[0].split("x")
-            if len(wh) == 2:
-                self._scale_w.set(wh[0])
-                self._scale_h.set(wh[1])
+        size = _RES_PRESETS.get(self._scale_preset.get())
+        if size is not None:
+            self._scale_w.set(str(size[0]))
+            self._scale_h.set(str(size[1]))
         self._rebuild_cmd()
 
     # ── 🎬 Frame Rate ─────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import os
 import tempfile
 import time
 import tkinter as tk
+from enum import StrEnum
 from functools import partial
 from tkinter import messagebox, ttk
 
@@ -27,6 +28,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.time_fields import MomentPicker
+from tabs.kit.widgets import ChoiceBox
 
 logger = logging.getLogger("crossfader.audio.tts")
 
@@ -108,6 +110,37 @@ STYLE_PRESETS = {
 
 # Average reading speed for duration estimate
 WORDS_PER_MINUTE_BASE = 150
+
+
+class SpeechFormat(StrEnum):
+    MP3_320 = "mp3_320"
+    MP3_192 = "mp3_192"
+    WAV = "wav"
+    AAC = "aac"
+    FLAC = "flac"
+
+
+SPEECH_FORMATS = {
+    SpeechFormat.MP3_320: "MP3  320k",
+    SpeechFormat.MP3_192: "MP3  192k",
+    SpeechFormat.WAV: "WAV  (lossless)",
+    SpeechFormat.AAC: "AAC  256k",
+    SpeechFormat.FLAC: "FLAC  (lossless)",
+}
+SPEECH_EXT = {
+    SpeechFormat.MP3_320: ".mp3",
+    SpeechFormat.MP3_192: ".mp3",
+    SpeechFormat.WAV: ".wav",
+    SpeechFormat.AAC: ".m4a",
+    SpeechFormat.FLAC: ".flac",
+}
+MP3_RATES = {SpeechFormat.MP3_320: "320k", SpeechFormat.MP3_192: "192k"}
+
+
+class VideoOut(StrEnum):
+    COPY = "copy"  # keep the video as it is
+    CRF18 = "crf18"
+    CRF23 = "crf23"
 
 
 class TTSVoiceOverTab(BaseTab):
@@ -393,14 +426,8 @@ class TTSVoiceOverTab(BaseTab):
         fmt_row = tk.Frame(lf)
         fmt_row.pack(fill="x", pady=px(4))
         tk.Label(fmt_row, text=t("tts.audio_format_label"), width=16, anchor="e").pack(side="left")
-        self.audio_fmt_var = tk.StringVar(value="MP3  320k")
-        ttk.Combobox(
-            fmt_row,
-            textvariable=self.audio_fmt_var,
-            values=["MP3  320k", "MP3  192k", "WAV  (lossless)", "AAC  256k", "FLAC  (lossless)"],
-            state="readonly",
-            width=18,
-        ).pack(side="left", padx=px(8))
+        self.audio_fmt = ChoiceBox(fmt_row, SPEECH_FORMATS, SpeechFormat.MP3_320, width=18)
+        self.audio_fmt.pack(side="left", padx=px(8))
 
         # Output path
         out_row = tk.Frame(lf)
@@ -481,18 +508,13 @@ class TTSVoiceOverTab(BaseTab):
         vfmt_row = tk.Frame(self._video_lf)
         vfmt_row.pack(fill="x", pady=px(2))
         tk.Label(vfmt_row, text=t("tts.video_output"), width=16, anchor="e").pack(side="left")
-        self.vid_fmt_var = tk.StringVar(value="Copy video stream  (fast, no re-encode)")
-        ttk.Combobox(
-            vfmt_row,
-            textvariable=self.vid_fmt_var,
-            values=[
-                "Copy video stream  (fast, no re-encode)",
-                t("tts.tts_re_encode_h_264_crf_18_high_quality"),
-                t("tts.tts_re_encode_h_264_crf_23_balanced"),
-            ],
-            state="readonly",
-            width=38,
-        ).pack(side="left", padx=px(8))
+        video_outs = {
+            VideoOut.COPY: "Copy video stream  (fast, no re-encode)",
+            VideoOut.CRF18: t("tts.tts_re_encode_h_264_crf_18_high_quality"),
+            VideoOut.CRF23: t("tts.tts_re_encode_h_264_crf_23_balanced"),
+        }
+        self.vid_fmt = ChoiceBox(vfmt_row, video_outs, VideoOut.COPY, width=38)
+        self.vid_fmt.pack(side="left", padx=px(8))
 
     # ── Extras section ────────────────────────────────────────────────────
     def _build_extras_section(self, parent):
@@ -737,16 +759,7 @@ class TTSVoiceOverTab(BaseTab):
             ext = ".mp4"
             ft = [("MP4", "*.mp4"), ("MKV", "*.mkv")]
         else:
-            fmt = self.audio_fmt_var.get()
-            ext = (
-                ".wav"
-                if "WAV" in fmt
-                else ".flac"
-                if "FLAC" in fmt
-                else ".aac"
-                if "AAC" in fmt
-                else ".mp3"
-            )
+            ext = SPEECH_EXT[self.audio_fmt.value]
             ft = [(ext.upper().strip("."), f"*{ext}")]
         p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=ft)
         if p:
@@ -935,16 +948,7 @@ class TTSVoiceOverTab(BaseTab):
             inputs = [vid]
             default = self.suggest_output(vid, "voiceover")
         else:
-            fmt = self.audio_fmt_var.get()
-            ext = (
-                ".wav"
-                if "WAV" in fmt
-                else ".flac"
-                if "FLAC" in fmt
-                else ".m4a"
-                if "AAC" in fmt
-                else ".mp3"
-            )
+            ext = SPEECH_EXT[self.audio_fmt.value]
             default = os.path.join(os.path.expanduser("~"), "voiceover" + ext)
         try:
             pads = (
@@ -971,10 +975,10 @@ class TTSVoiceOverTab(BaseTab):
             "offset": offset,
             "vol": 1.0 + self.vol_var.get() / 100.0,
             "normalise": self.normalise_var.get(),
-            "fmt": self.audio_fmt_var.get(),
+            "fmt": self.audio_fmt.value,
             "mix": self.mix_mode_var.get(),
             "orig_vol": float(self.orig_vol_var.get()),
-            "vid_fmt": self.vid_fmt_var.get(),
+            "vid_fmt": self.vid_fmt.value,
         }
 
         def work(_p, _c, ctx):
@@ -1028,7 +1032,7 @@ class TTSVoiceOverTab(BaseTab):
             cmd = [ff.ffmpeg_path(), "-y", "-i", speech, "-af", ",".join(chain), "-vn"]
             fmt = cfg["fmt"]
             if out.lower().endswith(".mp3"):
-                cmd += ["-c:a", "libmp3lame", "-b:a", "320k" if "320" in fmt else "192k"]
+                cmd += ["-c:a", "libmp3lame", "-b:a", MP3_RATES.get(fmt, "320k")]
             else:
                 cmd += audio_encoder_args(out)
             return [*cmd, out], None
@@ -1044,14 +1048,14 @@ class TTSVoiceOverTab(BaseTab):
                 "[orig][tts]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[aout]"
             )
         cmd += ["-filter_complex", graph, "-map", "0:v:0", "-map", "[aout]"]
-        if "copy" in cfg["vid_fmt"].lower():
+        if cfg["vid_fmt"] is VideoOut.COPY:
             cmd += ["-c:v", "copy"]
         else:
             cmd += [
                 "-c:v",
                 "libx264",
                 "-crf",
-                "18" if "18" in cfg["vid_fmt"] else "23",
+                "18" if cfg["vid_fmt"] is VideoOut.CRF18 else "23",
                 "-preset",
                 "medium",
                 "-pix_fmt",

@@ -63,3 +63,15 @@ class ChoiceBox(ttk.Combobox, Generic[E]):
     @property
     def choices(self) -> tuple[E, ...]:
         return tuple(self._labels)
+
+    def relabel(self, member: E, text: str) -> None:
+        """Show *member* as *text* from now on (say, with what was detected:
+        "Source (yuv420p10le)"); the choice made stays."""
+        if self._by_label.get(text, member) is not member:
+            raise ValueError("two choices share a label")
+        chosen = self.value
+        del self._by_label[self._labels[member]]
+        self._labels[member] = text
+        self._by_label[text] = member
+        self.configure(values=list(self._labels.values()))
+        self.value = chosen

@@ -16,7 +16,7 @@ side of this page.
 |---|---|---|---|
 | R1 | Page Protocols instead of probing private attributes | Adopted | `tabs/kit/contracts.py`, `shell/shortcuts.py`; ruff SLF001 on |
 | R2 | One composable range/moment picker widget | Adopted | `MomentPicker` / `RangePicker` (`tabs/kit/time_fields.py`) on 20 pages; `test_pages_read_times_through_the_kit` (1.2.6) |
-| R3 | Enums + `ChoiceBox[E]` instead of labels in StringVars | Partly | `ChoiceBox` (`tabs/kit/widgets.py`), `StartPage`, `TaskStatus`, `ToolId`, `Category`; older drop-downs move over when touched |
+| R3 | Enums + `ChoiceBox[E]` instead of labels in StringVars | Adopted | every drop-down that code compares is a `ChoiceBox` of an enum or is read through a lookup table; `ChoiceBox.relabel` for a detected value; `test_drop_downs_are_read_by_value_not_by_label` (1.2.6) |
 | R4 | Narrow `Optional` once, at a blessed boundary | Adopted | `MediaInfo.require_video()/require_audio()`, `capabilities.peek()` |
 | R5 | Pure ops below the UI | Adopted | `core/ops/`; `core/cli.py` imports no page (enforced) |
 | R6 | Parameter objects instead of long keyword lists | Adopted | spec dataclasses (`Canvas`, `Timing`, `Arrangement`, `Recipe`, `TextMark`...); PLR0913 at 8 with no exceptions (1.2.6) |
@@ -69,7 +69,7 @@ side of this page.
 | # | Recommendation | Status | Where |
 |---|---|---|---|
 | R1 | Capability Protocols | Adopted | see Robust Python R1 |
-| R2 | Enums for choice sets + a choice widget | Partly | see Robust Python R3 |
+| R2 | Enums for choice sets + a choice widget | Adopted | see Robust Python R3 |
 | R3 | Immutable media values | Adopted | frozen probe results |
 | R4 | Typed settings model | Adopted | `Setting[T]` |
 | R5 | `ToolSpec` registry with stable ids | Adopted | `core/tools.py` |

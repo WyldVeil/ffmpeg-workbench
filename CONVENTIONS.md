@@ -61,7 +61,9 @@ structure they protect. **(enforced)** means a test or CI checks it.
   choices)`), then use it as `settings.NAME.get()` / `.set(value)`. Reading
   an undeclared key fails a test **(enforced)**.
 * Choices are `StrEnum`s; show them with `ChoiceBox` (never compare a
-  widget's displayed text with a literal).
+  widget's displayed text with a literal - it is translated, and the code
+  breaks in other languages) **(enforced)**. A list that is data (devices,
+  people's own categories) is read through a lookup table instead.
 
 ## Pages
 

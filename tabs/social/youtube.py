@@ -30,6 +30,7 @@ import time
 import tkinter as tk
 import webbrowser
 from datetime import datetime
+from enum import StrEnum
 from functools import partial
 from tkinter import messagebox, ttk
 
@@ -44,6 +45,7 @@ from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.widgets import ChoiceBox
 
 logger = logging.getLogger("crossfader.social.youtube")
 
@@ -103,6 +105,17 @@ _X264_PRESETS = [
     "veryslow",
 ]
 
+
+#: the format list's filter (radio value -> what it shows); numbers are heights
+_FORMAT_FILTERS = {
+    "all": "All",
+    "2160": "4K",
+    "1080": "1080p",
+    "720": "720p",
+    "480": "480p",
+    "audio": "Audio only",
+}
+
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".qve_yt_history.json")
 
 _DL_PROGRESS_RE = re.compile(
@@ -155,14 +168,25 @@ def _video_codec_args(vcodec: str, crf: int, preset: str, container: str) -> lis
     return args
 
 
-def _scale_filter(res: str, custom: str) -> str | None:
-    """The scale filter for a resolution choice ("Original", "1280x720", "Custom…")."""
-    if res == "Original":
+class Resolution(StrEnum):
+    ORIGINAL = "original"
+    R2160 = "3840x2160"
+    R1440 = "2560x1440"
+    R1080 = "1920x1080"
+    R720 = "1280x720"
+    R480 = "854x480"
+    R360 = "640x360"
+    CUSTOM = "custom"
+
+
+def _scale_filter(res: Resolution, custom: str) -> str | None:
+    """The scale filter for a resolution choice (*custom*: the typed size)."""
+    if res is Resolution.ORIGINAL:
         return None
-    if res == "Custom…":
+    if res is Resolution.CUSTOM:
         parts = custom.strip().replace("×", "x").split("x")  # 1280x720 or 1280×720
         return f"scale={parts[0].strip()}:{parts[1].strip()}" if len(parts) == 2 else None
-    parts = res.replace("×", "x").split("x")
+    parts = res.value.split("x")
     if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
         return f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1"
     return None
@@ -635,13 +659,13 @@ class YouTubeDownloaderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left")
 
-        self._filter_var = tk.StringVar(value="All")
-        for label in ("All", "4K", "1080p", "720p", "480p", "Audio only"):
+        self._filter_var = tk.StringVar(value="all")
+        for code, label in _FORMAT_FILTERS.items():
             tk.Radiobutton(
                 filter_row,
                 text=label,
                 variable=self._filter_var,
-                value=label,
+                value=code,
                 font=(UI_FONT, 9),
                 bg=CLR["bg"],
                 fg=CLR["fg"],
@@ -765,13 +789,12 @@ class YouTubeDownloaderTab(BaseTab):
         return _combo, _row, col_left, col_right
 
     def _show_custom_res(self, _e=None):
-        if self._res_var.get() == "Custom…":
+        if self._res.value is Resolution.CUSTOM:
             self._custom_res_entry.pack(side="left", padx=px(4))
         else:
             self._custom_res_entry.pack_forget()
 
     def _build_encode_tab_res(self, col_left, col_right):
-        self._res_var = tk.StringVar(value="Original")
         res_row = tk.Frame(col_left, bg=CLR["bg"])
         res_row.pack(fill="x", pady=px(3))
         tk.Label(
@@ -783,24 +806,16 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["bg"],
             fg=CLR["fgdim"],
         ).pack(side="left")
-        res_cb = ttk.Combobox(
-            res_row,
-            textvariable=self._res_var,
-            values=[
-                "Original",
-                "3840×2160",
-                "2560×1440",
-                "1920×1080",
-                "1280×720",
-                "854×480",
-                "640×360",
-                t("youtube.smart_reframe_custom"),
-            ],
-            state="readonly",
-            width=14,
-            font=(UI_FONT, 9),
+        sizes = {r: r.value.replace("x", "×") for r in Resolution}
+        sizes |= {
+            Resolution.ORIGINAL: "Original",
+            Resolution.CUSTOM: t("youtube.smart_reframe_custom"),
+        }
+        self._res = ChoiceBox(
+            res_row, sizes, Resolution.ORIGINAL, width=14, on_change=self._show_custom_res
         )
-        res_cb.pack(side="left", padx=px(6))
+        self._res.configure(font=(UI_FONT, 9))
+        self._res.pack(side="left", padx=px(6))
         self._custom_res_var = tk.StringVar(value="1280×720")
         self._custom_res_entry = tk.Entry(
             res_row,
@@ -811,10 +826,6 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["input_bg"],
             fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
-        )
-        res_cb.bind(
-            "<<ComboboxSelected>>",
-            self._show_custom_res,
         )
 
         # Right column
@@ -1802,14 +1813,13 @@ class YouTubeDownloaderTab(BaseTab):
         flt = self._filter_var.get()
         if not self._format_options:
             return
-        heights = {"4K": "2160p", "1080p": "1080p", "720p": "720p", "480p": "480p"}
 
         def shown(label: str) -> bool:
-            if flt == "All":
+            if flt == "all":
                 return True
-            if flt == "Audio only":
+            if flt == "audio":
                 return "audio" in label.lower() or "(video only" not in label.lower()
-            return flt in heights and heights[flt] in label
+            return f"{flt}p" in label  # yt-dlp's format names say "1080p"
 
         filtered = [label for label, _fmt_str in self._format_options if shown(label)]
         if not filtered:
@@ -2451,7 +2461,7 @@ class YouTubeDownloaderTab(BaseTab):
         filters = [
             f
             for f in (
-                _scale_filter(self._res_var.get(), self._custom_res_var.get()),
+                _scale_filter(self._res.value, self._custom_res_var.get()),
                 _subtitles(sub_path),
             )
             if f

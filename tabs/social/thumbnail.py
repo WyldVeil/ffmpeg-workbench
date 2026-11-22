@@ -45,6 +45,15 @@ PRESETS = {  # stable id: (label, (width, height)); (0, 0) = original size
 }
 
 
+#: picture format (the radio buttons' value) -> (what they show, extension, FFmpeg arguments)
+PICTURE_FORMATS: dict[str, tuple[str, str, tuple[str, ...]]] = {
+    "png": ("PNG", ".png", ("-c:v", "png")),
+    "jpg95": ("JPEG (q95)", ".jpg", ("-c:v", "mjpeg", "-q:v", "2")),
+    "jpg85": ("JPEG (q85)", ".jpg", ("-c:v", "mjpeg", "-q:v", "5")),
+    "webp": ("WebP", ".webp", ("-c:v", "libwebp", "-quality", "90")),
+}
+
+
 class ThumbnailMakerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -398,11 +407,11 @@ class ThumbnailMakerTab(BaseTab):
         fmt_f = tk.Frame(self)
         fmt_f.pack(fill="x", padx=px(20), pady=px(2))
         tk.Label(fmt_f, text=t("common.format"), font=(UI_FONT, 10)).pack(side="left")
-        self._fmt_var = tk.StringVar(value="PNG")
-        for v in ["PNG", "JPEG (q95)", "JPEG (q85)", "WebP"]:
-            tk.Radiobutton(fmt_f, text=v, variable=self._fmt_var, value=v, font=(UI_FONT, 10)).pack(
-                side="left", padx=px(8)
-            )
+        self._fmt_var = tk.StringVar(value="png")
+        for code, (label, _ext, _args) in PICTURE_FORMATS.items():
+            tk.Radiobutton(
+                fmt_f, text=label, variable=self._fmt_var, value=code, font=(UI_FONT, 10)
+            ).pack(side="left", padx=px(8))
 
     def _build_run(self):
         """Run."""
@@ -656,22 +665,7 @@ class ThumbnailMakerTab(BaseTab):
         return parts
 
     def _get_ext(self):
-        fmt = self._fmt_var.get()
-        if "PNG" in fmt:
-            return ".png"
-        elif "WebP" in fmt:
-            return ".webp"
-        else:
-            return ".jpg"
+        return PICTURE_FORMATS[self._fmt_var.get()][1]
 
     def _get_format_args(self):
-        fmt = self._fmt_var.get()
-        if "PNG" in fmt:
-            return ["-c:v", "png"]
-        elif "q95" in fmt:
-            return ["-c:v", "mjpeg", "-q:v", "2"]
-        elif "q85" in fmt:
-            return ["-c:v", "mjpeg", "-q:v", "5"]
-        elif "WebP" in fmt:
-            return ["-c:v", "libwebp", "-quality", "90"]
-        return ["-c:v", "png"]
+        return list(PICTURE_FORMATS[self._fmt_var.get()][2])

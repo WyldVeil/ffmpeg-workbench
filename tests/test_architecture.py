@@ -246,3 +246,102 @@ def test_lambdas_do_one_thing():
             if isinstance(node, ast.Lambda) and (why := _busy_lambda(node)):
                 busy.append(f"{rel}:{node.lineno} {why}")
     assert not busy, "Give these lambdas a name:\n" + "\n".join(busy)
+
+
+def _drop_down_vars(tree: ast.AST) -> set[str]:
+    """Names of the variables shown by a drop-down (ttk.Combobox / OptionMenu)."""
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = (
+            node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        )
+        if fn == "Combobox":
+            found |= {_last_name(k.value) for k in node.keywords if k.arg == "textvariable"}
+        elif fn == "OptionMenu" and len(node.args) > 1:
+            found.add(_last_name(node.args[1]))
+    return found - {""}
+
+
+def _last_name(node: ast.expr) -> str:
+    return (
+        node.attr
+        if isinstance(node, ast.Attribute)
+        else node.id
+        if isinstance(node, ast.Name)
+        else ""
+    )
+
+
+def _reads_drop_down(node: ast.expr, shown: set[str]) -> bool:
+    """*node* is ``var.get()`` (perhaps ``.strip()``/``.lower()``/``.split()[0]``) on a drop-down."""
+    while isinstance(node, ast.Call | ast.Subscript):
+        if isinstance(node, ast.Subscript):
+            node = node.value
+            continue
+        f = node.func
+        if not isinstance(f, ast.Attribute):
+            return False
+        if f.attr == "get" and not node.args:
+            return _last_name(f.value) in shown
+        if f.attr not in ("strip", "lower", "upper", "split"):
+            return False
+        node = f.value
+    return False
+
+
+def _is_text(node: ast.expr) -> bool:
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, str)
+    return isinstance(node, ast.Tuple | ast.List | ast.Set) and any(_is_text(e) for e in node.elts)
+
+
+def _label_tests(tree: ast.AST) -> list[int]:
+    """Lines comparing a drop-down's shown text with a literal (directly or via a local)."""
+    shown = _drop_down_vars(tree)
+    hits: list[int] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) or not shown:
+            continue
+        local = {
+            t.id
+            for n in ast.walk(fn)
+            if isinstance(n, ast.Assign) and _reads_drop_down(n.value, shown)
+            for t in n.targets
+            if isinstance(t, ast.Name)
+        }
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Compare) and len(n.comparators) == 1:
+                pair = (n.left, n.comparators[0])
+            elif (
+                isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr in ("startswith", "endswith")
+                and n.args
+            ):
+                pair = (n.func.value, n.args[0])
+            else:
+                continue
+            for side, other in (pair, pair[::-1]):
+                if _is_text(other) and (
+                    _reads_drop_down(side, shown)
+                    or (isinstance(side, ast.Name) and side.id in local)
+                ):
+                    hits.append(n.lineno)
+                    break
+    return sorted(set(hits))
+
+
+def test_drop_downs_are_read_by_value_not_by_label():
+    """A drop-down's text is for people (and translated): code compares what was
+    chosen - a ChoiceBox's enum value, or a table looked up by the label - never
+    the text itself (``var.get() == "Custom…"`` silently breaks in other languages)."""
+    found = []
+    for rel, path in _py_files("tabs", "shell"):
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        found += [f"{rel}:{line}" for line in _label_tests(tree)]
+    assert not found, "Use a ChoiceBox (tabs/kit/widgets.py) or a lookup table:\n" + "\n".join(
+        found
+    )

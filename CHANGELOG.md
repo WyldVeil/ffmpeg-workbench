@@ -26,6 +26,14 @@
   the frame the preview shows. A time that can't be read says which box and
   what to type, instead of a general error.
 
+### Fixed
+
+- Video Downloader: in languages other than English, choosing a custom
+  re-encode size didn't show the box to type it in.
+- Screen Recorder: "Auto (GPU when available)" was the starting codec but
+  missing from the list, so it couldn't be chosen again.
+- TTS Voice-Over: a saved AAC file now gets the usual .m4a extension.
+
 ### Under the hood
 
 - No function in the app is longer than 120 lines or 50 statements, more
@@ -36,6 +44,8 @@
   graphs. Each move was checked by comparing the old and new FFmpeg
   commands over thousands of combinations.
 - Lambdas are one step; anything more has a name (checked by a test).
+- Every drop-down that the code acts on is read by what was chosen, never by
+  its (translated) text - checked by a test.
 - The engine (`core/`) has no exceptions to its layering rules, and
   `core`, `shell` and `tabs/kit` are type-checked in strict mode.
 

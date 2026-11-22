@@ -70,7 +70,7 @@ def test_chapters_embed(ui, media, outdir, monkeypatch):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("fmt", ["PNG", "WebP"])
+@pytest.mark.parametrize("fmt", ["png", "webp"])
 def test_thumbnail_end_and_text(ui, media, outdir, fmt):
     ui.reset()
     tab = ui.open("Thumbnail Maker")
@@ -79,14 +79,13 @@ def test_thumbnail_end_and_text(ui, media, outdir, fmt):
     tab._scrub_var.set(9999)  # past the end: clamped to the last frame
     tab._use_text.set(True)
     tab._text_var.set("It's 50% OFF: now")
-    fmts = [v for v in ("PNG", "JPEG (q95)", "WebP") if fmt in v]
-    tab._fmt_var.set(next(iter(fmts)) if fmts else fmt)
+    tab._fmt_var.set(fmt)
     out = str(outdir / "thumb.jpg")  # wrong extension: the format wins
     tab._out_var.set(out)
     tab._render()
     ui.wait_idle(60)
     _ok(ui)
-    want = os.path.splitext(out)[0] + (".png" if fmt == "PNG" else ".webp")
+    want = os.path.splitext(out)[0] + "." + fmt
     assert os.path.getsize(want) > 1000
 
 

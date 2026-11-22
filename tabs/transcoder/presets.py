@@ -194,6 +194,10 @@ def _save_user_presets(presets) -> str:
         return str(exc)
 
 
+#: the category filter's "show every category" entry (the others are the presets' own)
+ALL_CATEGORIES = "All"
+
+
 class PresetManagerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -257,9 +261,13 @@ class PresetManagerTab(BaseTab):
         self.search_var.trace_add("write", lambda *_: self._refresh_list())
         tk.Entry(search_f, textvariable=self.search_var, width=30).pack(side="left", padx=px(4))
         tk.Label(search_f, text=t("presets.category_label")).pack(side="left", padx=px(12, 4))
-        self.cat_filter_var = tk.StringVar(value="All")
+        self.cat_filter_var = tk.StringVar(value=ALL_CATEGORIES)
         self.cat_cb = ttk.Combobox(
-            search_f, textvariable=self.cat_filter_var, values=["All"], state="readonly", width=12
+            search_f,
+            textvariable=self.cat_filter_var,
+            values=[ALL_CATEGORIES],
+            state="readonly",
+            width=12,
         )
         self.cat_cb.pack(side="left")
         self.cat_filter_var.trace_add("write", lambda *_: self._refresh_list())
@@ -458,7 +466,7 @@ class PresetManagerTab(BaseTab):
         cat = self.cat_filter_var.get()
 
         # Update category dropdown
-        cats = sorted({"All"} | {p.get("category", "Custom") for p in self.presets})
+        cats = sorted({ALL_CATEGORIES} | {p.get("category", "Custom") for p in self.presets})
         self.cat_cb.config(values=cats)
 
         self.tree.delete(*self.tree.get_children())
@@ -470,7 +478,7 @@ class PresetManagerTab(BaseTab):
                 and search not in p.get("description", "").lower()
             ):
                 continue
-            if cat != "All" and p.get("category", "Custom") != cat:
+            if cat != ALL_CATEGORIES and p.get("category", "Custom") != cat:
                 continue
             tag = "builtin" if p["name"] in bi_names else "custom"
             self.tree.insert(
