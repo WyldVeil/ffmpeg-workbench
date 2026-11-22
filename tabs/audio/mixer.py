@@ -22,7 +22,7 @@ from typing import Any
 
 from core.i18n import t
 from core.ops import mixer as mx
-from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
+from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -444,7 +444,6 @@ class AudioMixerTab(BaseTab):
         return specs
 
     def _render(self):
-        from core import ffmpeg as ff
         from tabs import common
 
         video = (self.vid_var.get() or getattr(self, "video_path", "")).strip()
@@ -481,7 +480,6 @@ class AudioMixerTab(BaseTab):
             volume=float(self.master_vol_var.get()),
             normalise=self.normalize_var.get(),
         )
-        cmd = [ff.ffmpeg_path(), "-y", "-i", video, *mx.input_args(tracks)]
         sources = len(tracks) + (1 if keep_own else 0)
         fmt = self.out_fmt.value
         audio_only = fmt in AUDIO_ONLY
@@ -492,25 +490,8 @@ class AudioMixerTab(BaseTab):
         if not out:
             return
         self.out_var.set(out)
-        cmd += ["-filter_complex", mx.mix_graph(tracks, master, dur)]
-        if audio_only:
-            cmd += ["-map", "[aout]", "-vn", *audio_encoder_args(out)]
-        else:
-            cmd += [
-                "-map",
-                "0:v:0",
-                "-c:v",
-                "copy",
-                "-map",
-                "[aout]",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "320k" if fmt is MixOutput.AAC_320 else "256k",
-            ]
-            if out.lower().endswith((".mp4", ".mov", ".m4v")):
-                cmd += ["-movflags", "+faststart"]
-        cmd += ["-t", f"{dur:.3f}", out]
+        bitrate = "320k" if fmt is MixOutput.AAC_320 else "256k"
+        cmd = mx.mix_cmd(video, tracks, master, dur, out, audio_only=audio_only, bitrate=bitrate)
         self.log(self.console, f"Mixing {sources} source(s) → {os.path.basename(out)}")
         self.run_ffmpeg(
             cmd,

@@ -9,6 +9,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from core import ffmpeg as ff
+from core.ops.shared import audio_encoder_args
+
 _STEREO = "aformat=sample_rates=48000:channel_layouts=stereo"
 
 
@@ -88,3 +91,32 @@ def mix_graph(tracks: Sequence[Track], master: Master, total: float) -> str:
     if master.normalise:
         last += ",loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,asetnsamples=n=4096:p=0"
     return ";".join([*parts, last + ",alimiter=limit=0.97[aout]"])
+
+
+def mix_cmd(
+    video: str,
+    tracks: Sequence[Track],
+    master: Master,
+    duration: float,
+    out: str,
+    *,
+    audio_only: bool,
+    bitrate: str = "256k",
+) -> list[str]:
+    """The mix as sound alone, or under *video*'s picture (copied)."""
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        "-i",
+        video,
+        *input_args(tracks),
+        "-filter_complex",
+        mix_graph(tracks, master, duration),
+    ]
+    if audio_only:
+        cmd += ["-map", "[aout]", "-vn", *audio_encoder_args(out)]
+    else:
+        cmd += ["-map", "0:v:0", "-c:v", "copy", "-map", "[aout]", "-c:a", "aac", "-b:a", bitrate]
+        if out.lower().endswith((".mp4", ".mov", ".m4v")):
+            cmd += ["-movflags", "+faststart"]
+    return [*cmd, "-t", f"{duration:.3f}", out]
