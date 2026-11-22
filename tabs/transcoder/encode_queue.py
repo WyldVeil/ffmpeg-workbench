@@ -96,7 +96,7 @@ class Job:
             raise ValueError(f"{self.acodec} audio can't go into .{ext}.")
 
     def _filters(self) -> list[str]:
-        from tabs.transcoder.scaler import rate_fraction
+        from core.ops.scaler import rate_fraction
 
         filters: list[str] = []
         if self.resolution != "Source":

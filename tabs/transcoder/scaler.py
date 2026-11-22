@@ -16,22 +16,18 @@ joined video stays in sync with its audio.
 
 from __future__ import annotations
 
-import math
 import os
 import tkinter as tk
-from dataclasses import dataclass
 from fractions import Fraction
-from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core import tasks, upscale
-from core.encoders import VideoEncode
+from core import upscale
 from core.i18n import t
-from core.ops.scaler import GPU_METHODS, fps_filter, geometry, rate_fraction, scale_chain
-from core.ops.shared import RenderJob, final_copy_args, frame_rate, intermediate_args
-from core.queue_manager import TaskContext
+from core.ops import scaler as scaler_ops
+from core.ops.scaler import GPU_METHODS, geometry, rate_fraction, scale_chain
+from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -66,107 +62,6 @@ METHODS = {
     "neighbor": "Nearest (pixel art)",
 }
 METHODS.update({key: "Upscale: " + spec[0] for key, spec in upscale.SHADERS.items()})
-
-
-def _slow_audio(factor: Fraction) -> str:
-    """atempo steps that stretch the sound *factor* times (keeping its pitch)."""
-    tempo, steps = 1 / float(factor), []
-    while tempo < 0.5:
-        steps.append("atempo=0.5")
-        tempo /= 0.5
-    return ",".join([*steps, f"atempo={tempo:.6f}"])
-
-
-@dataclass(frozen=True)
-class _FrameRateJob:
-    """A frame-rate change (or slow motion) in one go, or in pieces side by side."""
-
-    src: str
-    info: ff.MediaInfo
-    venc: VideoEncode
-    chain: str
-    pieces: list[tuple[float, float]]
-    factor: Fraction
-    audio_mode: str  # keep | slow | none
-    out_dur: float
-    container: str
-
-    def audio_args(self, input_index: int) -> list[str]:
-        if not self.info.has_audio or self.audio_mode == "none":
-            return ["-an"]
-        slow = ["-af", _slow_audio(self.factor)] if self.audio_mode == "slow" else []
-        return ["-map", f"{input_index}:a:0", *slow, "-c:a", "aac", "-b:a", "192k"]
-
-    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
-        final = ctx.output()
-        if len(self.pieces) == 1:
-            v = self.venc
-            cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *v.pre_input, "-i", self.src]
-            cmd += [
-                "-map",
-                "0:v:0",
-                *v.vf_args(self.chain),
-                *v.args,
-                *self.audio_args(0),
-                "-map_metadata",
-                "0",
-                final,
-            ]
-            ctx.run(cmd, duration=self.out_dur)
-            return 0
-        tmp = ctx.tempdir()
-        names = [os.path.join(tmp, f"piece{i:03d}.mkv") for i in range(len(self.pieces))]
-        done = [0.0] * len(self.pieces)
-        ctx.log(f"Interpolating {len(self.pieces)} pieces in parallel…")
-        tasks.run_all(
-            [partial(self._piece, ctx, i, names[i], done) for i in range(len(self.pieces))],
-            name="FpsPiece",
-        )
-        listing = fl.write_concat_list(names, os.path.join(tmp, "pieces.txt"))
-        ctx.log("Joining the pieces…")
-        cmd = [
-            ff.ffmpeg_path(),
-            "-hide_banner",
-            "-nostdin",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            listing,
-        ]
-        cmd += [
-            "-i",
-            self.src,
-            "-map",
-            "0:v:0",
-            "-c:v",
-            "copy",
-            *final_copy_args(self.venc, self.container),
-        ]
-        cmd += [*self.audio_args(1), "-t", f"{self.out_dur:.3f}", "-map_metadata", "1", final]
-        ctx.span(0.92, 1.0).run(cmd, duration=self.out_dur)
-        return 0
-
-    def _piece(self, ctx: TaskContext, i: int, name: str, done: list[float]) -> None:
-        start, length = self.pieces[i]
-        v = self.venc
-        cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *v.pre_input]
-        cmd += ["-ss", f"{start:.6f}", "-t", f"{length:.6f}", "-i", self.src, "-map", "0:v:0"]
-        cmd += [*v.vf_args(self.chain), *intermediate_args(v), "-an", name]
-        stretched = length * float(self.factor)
-
-        def prog(p: ff.Progress) -> None:
-            if p.out_time is not None:
-                done[i] = min(1.0, p.out_time / max(0.01, stretched))
-                ctx.progress(0.92 * sum(done) / len(done))
-
-        res = ff.run(cmd, duration=stretched, on_progress=prog, cancel=ctx.cancelled)
-        if res.cancelled:
-            raise ff.CancelledError("cancelled")
-        if res.returncode != 0:
-            raise RuntimeError(f"Piece {i + 1} failed:\n" + "\n".join(res.log_tail[-5:]))
 
 
 class ResolutionScalerTab(BaseTab):
@@ -405,31 +300,6 @@ FPS_METHODS = {
 }
 
 
-def chunk_step(src: Fraction, dst: Fraction) -> Fraction:
-    """Shortest time after which source and output frames line up again."""
-    return Fraction(
-        math.lcm(src.denominator, dst.denominator), math.gcd(src.numerator, dst.numerator)
-    )
-
-
-def chunks(duration: float, step: Fraction, parts: int) -> list:
-    """[(start, length)] cut on multiples of *step*, about *parts* pieces."""
-    if parts <= 1 or duration < float(step) * 2:
-        return [(0.0, duration)]
-    size = max(1, round(duration / parts / float(step))) * step
-    out, t0 = [], Fraction(0)
-    while float(t0) < duration - 1e-6:
-        length = min(float(size), duration - float(t0))
-        out.append((float(t0), length))
-        t0 += size
-    if (
-        len(out) > 1 and out[-1][1] < float(size) / 2
-    ):  # fold a short leftover into the previous piece
-        a, la = out[-2]
-        out[-2:] = [(a, la + out[-1][1])]
-    return out
-
-
 class FPSInterpolatorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -563,16 +433,13 @@ class FPSInterpolatorTab(BaseTab):
         out_dur = dur * float(factor)
         # slow motion: make factor x more frames, then stretch time so they play at the target rate
         work_rate = target * factor
-        chain = fps_filter(method, work_rate)
-        if factor > 1:
-            r = f"{target.numerator}/{target.denominator}"
-            chain += f",setpts={float(factor):.6f}*PTS,fps={r}"
+        chain = scaler_ops.frame_rate_chain(method, target, factor)
         audio_mode = self.audio_var.get() if factor > 1 else "keep"
         parts = 1
         if method == "motion" and self.parallel_var.get():
             limit = 4 if venc.hw else max(1, (os.cpu_count() or 2) - 1)
             parts = max(1, min(limit, int(dur // 4)))
-        pieces = chunks(dur, chunk_step(src_rate, work_rate), parts)
+        pieces = scaler_ops.chunks(dur, scaler_ops.chunk_step(src_rate, work_rate), parts)
         self.log(
             self.console,
             f"{float(src_rate):.3f} → {float(target):.3f} fps"
@@ -580,7 +447,9 @@ class FPSInterpolatorTab(BaseTab):
             + (f", {len(pieces)} parallel pieces" if len(pieces) > 1 else ""),
         )
 
-        job = _FrameRateJob(src, info, venc, chain, pieces, factor, audio_mode, out_dur, container)
+        job = scaler_ops.FrameRateJob(
+            src, info, venc, chain, pieces, factor, audio_mode, out_dur, container
+        )
 
         common.queue_job(
             self,

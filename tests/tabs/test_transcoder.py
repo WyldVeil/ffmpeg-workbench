@@ -186,7 +186,7 @@ def test_downsizer_hits_target(ui, media, outdir, speed):
 def test_scaler_helpers():
     from fractions import Fraction as F
 
-    from tabs.transcoder.scaler import chunk_step, chunks, geometry
+    from core.ops.scaler import chunk_step, chunks, geometry
 
     assert chunk_step(F(30000, 1001), F(60000, 1001)) == F(1001, 30000)
     assert chunk_step(F(25), F(60)) == F(1, 5)
