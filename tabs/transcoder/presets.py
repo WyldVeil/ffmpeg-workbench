@@ -11,188 +11,15 @@ User presets live in the app's config folder.
 
 import json
 import os
-import shlex
-import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
 from core import ffmpeg as ff
-from core import filters as fl
 from core.i18n import t
-from core.paths import config_dir
+from core.ops import presets as pr
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-
-#: where presets were kept before 2.0 (inside the program folder - read once, never written)
-LEGACY_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "encode_presets.json"
-)
-SHELL_TOKENS = {"&&", "||", "|", ";", "&", ">", ">>", "<", "2>", "2>&1", "1>", "&>"}
-
-
-def presets_file() -> str:
-    return os.path.join(config_dir(), "encode_presets.json")
-
-
-# Built-in starter presets ("ext" = default output type)
-BUILT_IN = [
-    {
-        "name": t("presets.instagram_reel_1080_1920_h_264"),
-        "category": "Social",
-        "description": t("presets.vertical_9_16_for_instagram_reels_and_tiktok"),
-        "cmd": '-i {INPUT} -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -crf 20 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart {OUTPUT}',
-        "ext": ".mp4",
-    },
-    {
-        "name": t("presets.youtube_upload_1080p_h_264_high_quality"),
-        "category": "Web",
-        "description": "Optimised for YouTube's recommended settings.",
-        "cmd": '-i {INPUT} -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -c:a aac -b:a 320k -movflags +faststart {OUTPUT}',
-        "ext": ".mp4",
-    },
-    {
-        "name": t("presets.quick_compress_h_265_crf_28"),
-        "category": "Compression",
-        "description": t("presets.shrink_file_size_fast_half_the_size_of_h_264_at"),
-        "cmd": "-i {INPUT} -c:v libx265 -crf 28 -preset fast -tag:v hvc1 -c:a aac -b:a 128k -movflags +faststart {OUTPUT}",
-        "ext": ".mp4",
-    },
-    {
-        "name": t("presets.archive_master_lossless_h_265"),
-        "category": "Archive",
-        "description": t("presets.lossless_encode_for_long_term_archival_storage"),
-        "cmd": "-i {INPUT} -map 0 -c:v libx265 -x265-params lossless=1:log-level=error -c:a flac -c:s copy {OUTPUT}",
-        "ext": ".mkv",
-    },
-    {
-        "name": t("presets.streaming_proxy_low_bitrate_h_264"),
-        "category": "Proxy",
-        "description": t("presets.fast_tiny_proxy_for_editing_on_slow_machines"),
-        "cmd": '-i {INPUT} -vf "scale=trunc(iw/8)*2:trunc(ih/8)*2" -c:v libx264 -crf 28 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 96k {OUTPUT}',
-        "ext": ".mp4",
-    },
-    {
-        "name": t("presets.audio_only_hq_aac"),
-        "category": "Audio",
-        "description": t("presets.strip_video_keep_audio_as_high_quality_aac"),
-        "cmd": "-i {INPUT} -vn -c:a aac -b:a 320k {OUTPUT}",
-        "ext": ".m4a",
-    },
-    {
-        "name": "WebM for the web (VP9, constant quality)",
-        "category": "Web",
-        "description": t("presets.efficient_vp9_webm_for_web_embedding"),
-        "cmd": "-i {INPUT} -c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -deadline good -cpu-used 2 -c:a libopus -b:a 128k {OUTPUT}",
-        "ext": ".webm",
-    },
-    {
-        "name": t("presets.4k_downscale_to_1080p_lanczos"),
-        "category": "Compression",
-        "description": t("presets.downscale_4k_footage_to_1080p_with_best_quality"),
-        "cmd": '-i {INPUT} -vf "scale=-2:1080:flags=lanczos" -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a copy {OUTPUT}',
-        "ext": ".mp4",
-    },
-]
-
-
-def split_args(template: str) -> list:
-    """Split like a shell would (quotes group words) but keep backslashes,
-    so Windows paths survive."""
-    lex = shlex.shlex(template, posix=True)
-    lex.whitespace_split = True
-    lex.escape = ""
-    lex.commenters = ""
-    return list(lex)
-
-
-def check_template(template: str) -> list:
-    """Arguments of *template*; ValueError if it isn't a plain FFmpeg option list."""
-    try:
-        args = split_args(template.replace("\n", " ").replace("\r", " "))
-    except ValueError as exc:
-        raise ValueError(f"The command has an unclosed quote ({exc}).") from None
-    if args and os.path.splitext(os.path.basename(args[0]))[0].lower() == "ffmpeg":
-        args = args[1:]  # a pasted "ffmpeg ..." line
-    if any(
-        a in SHELL_TOKENS or a[:1] in ("|", ">", "<") or a.endswith(("&&", "||", ";")) for a in args
-    ):
-        raise ValueError(
-            "A preset holds FFmpeg options only - shell operators such as '&&', '|' or "
-            "'>' are not allowed."
-        )
-    joined = " ".join(args)
-    if "{INPUT}" not in joined:
-        raise ValueError("The command needs {INPUT} where the source file goes.")
-    if args.count("{OUTPUT}") != 1:
-        raise ValueError("The command needs {OUTPUT} once, as its own word, where the result goes.")
-    return args
-
-
-def build_command(template: str, src: str, out: str) -> list:
-    """Final argument list - no shell involved."""
-    final = []
-    for a in check_template(template):
-        if a == "{INPUT}":
-            final.append(src)
-        elif a == "{OUTPUT}":
-            final.append(out)
-        elif "{INPUT}" in a:  # e.g. subtitles={INPUT} inside a filter
-            final.append(a.replace("{INPUT}", fl.filter_path(src)))
-        elif a not in ("-y", "-n"):
-            final.append(a)
-    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *final]
-
-
-def _load_presets():
-    """(presets, warning).  A file that can't be read is set aside, never overwritten."""
-    presets = list(BUILT_IN)
-    path = presets_file()
-    src = path if os.path.exists(path) else (LEGACY_FILE if os.path.exists(LEGACY_FILE) else None)
-    if not src:
-        return presets, ""
-    try:
-        with open(src, encoding="utf-8") as f:
-            custom = json.load(f)
-        if not isinstance(custom, list):
-            raise ValueError("it is not a list of presets")
-    except (OSError, ValueError) as exc:
-        backup = f"{src}.unreadable-{time.strftime('%Y%m%d-%H%M%S')}"
-        try:
-            os.replace(src, backup)
-        except OSError:
-            backup = ""
-        return presets, (
-            f"Your saved presets could not be read ({exc})."
-            + (f"\nThe file was kept as:\n{backup}" if backup else "")
-        )
-    bi_names = {p["name"] for p in BUILT_IN}
-    presets += [
-        p
-        for p in custom
-        if isinstance(p, dict)
-        and isinstance(p.get("name"), str)
-        and isinstance(p.get("cmd"), str)
-        and p["name"] not in bi_names
-    ]
-    return presets, ""
-
-
-def _save_user_presets(presets) -> str:
-    """Write the user's presets (atomically).  Returns "" or an error message."""
-    bi_names = {p["name"] for p in BUILT_IN}
-    user_only = [p for p in presets if p.get("name") not in bi_names]
-    path = presets_file()
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(user_only, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, path)
-        return ""
-    except OSError as exc:
-        return str(exc)
-
 
 #: the category filter's "show every category" entry (the others are the presets' own)
 ALL_CATEGORIES = "All"
@@ -202,7 +29,7 @@ class PresetManagerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.editor: dict[str, tk.StringVar] = {}  # the preset editor's fields, by name
-        self.presets, warning = _load_presets()
+        self.presets, warning = pr.load_presets()
         self._selected_idx = None
         self._build_ui()
         if warning:
@@ -366,15 +193,7 @@ class PresetManagerTab(BaseTab):
             ef, text=f"  {t('presets.quick_insert_section')}  ", padx=px(8), pady=px(4)
         )
         help_lf.pack(fill="x", pady=px(4))
-        snippets = [
-            ("H.264", "-c:v libx264 -crf 18 -preset fast"),
-            ("H.265", "-c:v libx265 -crf 22 -preset fast"),
-            ("Scale 1080p", '-vf "scale=-2:1080,setsar=1" -pix_fmt yuv420p'),
-            ("AAC audio", "-c:a aac -b:a 192k"),
-            ("Copy all", "-map 0 -c copy"),
-            ("No audio", "-an"),
-        ]
-        for label, snippet in snippets:
+        for label, snippet in pr.SNIPPETS:
             tk.Button(
                 help_lf,
                 text=label,
@@ -470,7 +289,7 @@ class PresetManagerTab(BaseTab):
         self.cat_cb.config(values=cats)
 
         self.tree.delete(*self.tree.get_children())
-        bi_names = {p["name"] for p in BUILT_IN}
+        bi_names = {p["name"] for p in pr.BUILT_IN}
         for i, p in enumerate(self.presets):
             if (
                 search
@@ -528,7 +347,7 @@ class PresetManagerTab(BaseTab):
             )
             return
         try:
-            check_template(cmd)
+            pr.check_template(cmd)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -540,7 +359,7 @@ class PresetManagerTab(BaseTab):
             "cmd": cmd,
         }
 
-        bi_names = {p["name"] for p in BUILT_IN}
+        bi_names = {p["name"] for p in pr.BUILT_IN}
         if name in bi_names:
             messagebox.showwarning(
                 t("common.warning"),
@@ -556,7 +375,7 @@ class PresetManagerTab(BaseTab):
         else:
             self.presets.append(entry)
 
-        err = _save_user_presets(self.presets)
+        err = pr.save_user_presets(self.presets)
         self._refresh_list()
         if err:
             messagebox.showerror(
@@ -569,14 +388,14 @@ class PresetManagerTab(BaseTab):
         if self._selected_idx is None:
             return
         p = self.presets[self._selected_idx]
-        bi_names = {p2["name"] for p2 in BUILT_IN}
+        bi_names = {p2["name"] for p2 in pr.BUILT_IN}
         if p["name"] in bi_names:
             messagebox.showwarning(t("common.warning"), "Built-in presets cannot be deleted.")
             return
         if messagebox.askyesno("Delete", f'Delete preset "{p["name"]}"?'):
             del self.presets[self._selected_idx]
             self._selected_idx = None
-            err = _save_user_presets(self.presets)
+            err = pr.save_user_presets(self.presets)
             self._refresh_list()
             if err:
                 messagebox.showerror(
@@ -594,7 +413,7 @@ class PresetManagerTab(BaseTab):
             p["name"] = f"{base} {n}"
             n += 1
         self.presets.append(p)
-        err = _save_user_presets(self.presets)
+        err = pr.save_user_presets(self.presets)
         self._refresh_list()
         if err:
             messagebox.showerror(
@@ -605,7 +424,7 @@ class PresetManagerTab(BaseTab):
         path = dialogs.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
         if not path:
             return
-        bi_names = {p["name"] for p in BUILT_IN}
+        bi_names = {p["name"] for p in pr.BUILT_IN}
         mine = [p for p in self.presets if p["name"] not in bi_names] or self.presets
         try:
             with open(path, "w", encoding="utf-8") as f:
@@ -639,7 +458,7 @@ class PresetManagerTab(BaseTab):
             ):
                 continue
             try:
-                check_template(p["cmd"])
+                pr.check_template(p["cmd"])
             except ValueError:
                 skipped.append(p["name"])
                 continue
@@ -652,7 +471,7 @@ class PresetManagerTab(BaseTab):
                 )
                 existing.add(p["name"])
                 added += 1
-        err = _save_user_presets(self.presets)
+        err = pr.save_user_presets(self.presets)
         self._refresh_list()
         msg = f"Added {added} new preset(s)."
         if skipped:
@@ -704,7 +523,7 @@ class PresetManagerTab(BaseTab):
         self.run_src_var.set(src)
         self.run_out_var.set(out)
         try:
-            cmd = build_command(p.get("cmd", ""), src, out)
+            cmd = pr.build_command(p.get("cmd", ""), src, out)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

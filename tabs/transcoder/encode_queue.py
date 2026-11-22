@@ -12,30 +12,16 @@ import contextlib
 import os
 import time
 import tkinter as tk
-from dataclasses import dataclass
 from tkinter import messagebox, scrolledtext, ttk
 
 from core import ffmpeg as ff
-from core.hardware import get_binary_path
 from core.i18n import t
+from core.ops import encode_queue as eq
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 
-VIDEO_CODECS = ["libx264", "libx265", "libvpx-vp9", "libvpx", "prores_ks", "dnxhd", "copy"]
-AUDIO_CODECS = ["aac", "libmp3lame", "libopus", "libvorbis", "flac", "pcm_s16le", "copy", "none"]
-PRESETS = [
-    "ultrafast",
-    "superfast",
-    "veryfast",
-    "faster",
-    "fast",
-    "medium",
-    "slow",
-    "slower",
-    "veryslow",
-]
 RESOLUTIONS = ["Source", "3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "640x360"]
 
 
@@ -68,142 +54,6 @@ def progress_text(task) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Job  -  settings model for encoding jobs added through the editor panel
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-@dataclass
-class Job:
-    """Settings model for one encode job created in the editor panel."""
-
-    src: str = ""
-    out: str = ""
-    vcodec: str = "libx264"
-    crf: str = "18"
-    preset: str = "fast"
-    resolution: str = "Source"
-    fps: str = "Source"
-    acodec: str = "aac"
-    abitrate: str = "192k"
-    extra_vf: str = ""
-    extra_args: str = ""
-
-    def _check(self, ext: str) -> None:
-        if ext not in OK_VIDEO.get(self.vcodec, (ext,)):
-            fits = " / ".join("." + e for e in OK_VIDEO[self.vcodec])
-            raise ValueError(f"{self.vcodec} can't be saved as .{ext} - use {fits}.")
-        if self.acodec not in ("none", "copy") and ext not in OK_AUDIO.get(self.acodec, (ext,)):
-            raise ValueError(f"{self.acodec} audio can't go into .{ext}.")
-
-    def _filters(self) -> list[str]:
-        from core.ops.scaler import rate_fraction
-
-        filters: list[str] = []
-        if self.resolution != "Source":
-            w, h = (int(x) for x in self.resolution.split("x"))
-            filters.append(
-                f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
-                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1"
-            )
-        if self.fps not in ("Source", "0", ""):
-            r = rate_fraction(self.fps)
-            filters.append(f"fps={r.numerator}/{r.denominator}")
-        if self.extra_vf.strip():
-            filters.append(self.extra_vf.strip())
-        if self.vcodec == "copy" and filters:
-            raise ValueError(
-                "The video can't be resized or filtered while it is copied - choose a codec."
-            )
-        return filters
-
-    def _video_args(self, ext: str) -> list[str]:
-        v = self.vcodec
-        if v in ("libx264", "libx265"):
-            args = ["-crf", self.crf, "-preset", self.preset, "-pix_fmt", "yuv420p"]
-            if v == "libx265":
-                args += [
-                    "-x265-params",
-                    "log-level=error",
-                    *(["-tag:v", "hvc1"] if ext in ("mp4", "mov") else []),
-                ]
-            return ["-c:v", v, *args]
-        rest = {
-            "libvpx-vp9": [
-                "-crf",
-                self.crf,
-                "-b:v",
-                "0",
-                "-row-mt",
-                "1",
-                "-deadline",
-                "good",
-                "-cpu-used",
-                "2",
-            ],
-            "libvpx": ["-crf", self.crf, "-b:v", "20M", "-deadline", "good", "-cpu-used", "2"],
-            "prores_ks": ["-profile:v", "3", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"],
-            "dnxhd": ["-profile:v", "dnxhr_hq", "-pix_fmt", "yuv422p"],
-        }
-        return ["-c:v", v, *rest.get(v, [])]
-
-    def _audio_args(self) -> list[str]:
-        if self.acodec == "none":
-            return ["-an"]
-        if self.acodec in ("copy", "flac", "pcm_s16le"):
-            return ["-c:a", self.acodec]
-        return ["-c:a", self.acodec, "-b:a", self.abitrate]
-
-    def build_cmd(self, ffmpeg: str) -> list[str]:
-        """Argument list for this job; ValueError with a readable reason when
-        the choices can't work together."""
-        from tabs.transcoder.presets import split_args
-
-        ext = os.path.splitext(self.out)[1].lower().lstrip(".")
-        self._check(ext)
-        filters = self._filters()
-        cmd = [
-            ffmpeg,
-            "-hide_banner",
-            "-nostdin",
-            "-y",
-            "-i",
-            self.src,
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a?",
-        ]
-        cmd += ["-vf", ",".join(filters)] if filters else []
-        cmd += [*self._video_args(ext), *self._audio_args()]
-        if self.extra_args.strip():
-            try:
-                cmd += split_args(self.extra_args)
-            except ValueError as exc:
-                raise ValueError(f"The extra arguments have an unclosed quote ({exc}).") from None
-        cmd += ["-movflags", "+faststart"] if ext in ("mp4", "mov", "m4v") else []
-        return [*cmd, self.out]
-
-
-OK_VIDEO = {
-    "libx264": ("mp4", "mkv", "mov", "m4v", "ts"),
-    "libx265": ("mp4", "mkv", "mov", "m4v", "ts"),
-    "libvpx-vp9": ("webm", "mkv", "mp4"),
-    "libvpx": ("webm", "mkv"),
-    "prores_ks": ("mov", "mkv"),
-    "dnxhd": ("mov", "mkv", "mxf"),
-}
-OK_AUDIO = {
-    "aac": ("mp4", "mkv", "mov", "m4v", "ts"),
-    "libmp3lame": ("mp4", "mkv", "mov", "ts", "avi"),
-    "libopus": ("webm", "mkv", "mp4"),
-    "libvorbis": ("webm", "mkv"),
-    "flac": ("mkv", "mp4", "mov"),
-    "pcm_s16le": ("mov", "mkv", "avi", "mxf"),
-}
-DEFAULT_EXT = {"libvpx-vp9": ".webm", "libvpx": ".webm", "prores_ks": ".mov", "dnxhd": ".mov"}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 #  EncodeQueueTab
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -212,7 +62,7 @@ class EncodeQueueTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.editor: dict[str, tk.StringVar] = {}  # the job editor's fields, by name
-        self._editor_job: Job | None = None
+        self._editor_job: eq.EncodeJob | None = None
         self._selected_task_id: str | None = None
         self._build_ui()
 
@@ -328,7 +178,7 @@ class EncodeQueueTab(BaseTab):
         )
         self.console.pack(fill="both", expand=True, padx=px(4), pady=px(4))
 
-    # ── Job editor panel ─────────────────────────────────────────────────
+    # ── eq.EncodeJob editor panel ─────────────────────────────────────────────────
     def _build_editor_panel(self, parent):
         tk.Label(
             parent,
@@ -371,9 +221,9 @@ class EncodeQueueTab(BaseTab):
 
         # Codec / quality fields
         fields = [
-            (t("encode_queue.video_codec"), "ed_vcodec_var", VIDEO_CODECS, "libx264"),
+            (t("encode_queue.video_codec"), "ed_vcodec_var", eq.VIDEO_CODECS, "libx264"),
             (t("common.crf"), "ed_crf_var", None, "18"),
-            (t("common.preset"), "ed_preset_var", PRESETS, "fast"),
+            (t("common.preset"), "ed_preset_var", eq.PRESETS, "fast"),
             (t("common.resolution"), "ed_res_var", RESOLUTIONS, "Source"),
             (
                 t("batch_joiner.lbl_fps"),
@@ -381,7 +231,7 @@ class EncodeQueueTab(BaseTab):
                 ["Source", "23.976", "24", "25", "29.97", "30", "50", "60"],
                 "Source",
             ),
-            ("Audio codec:", "ed_acodec_var", AUDIO_CODECS, "aac"),
+            ("Audio codec:", "ed_acodec_var", eq.AUDIO_CODECS, "aac"),
             (
                 "Audio bitrate:",
                 "ed_abitrate_var",
@@ -519,7 +369,7 @@ class EncodeQueueTab(BaseTab):
         j = self._read_editor()
         j.src, j.out = src, out
         try:
-            cmd = j.build_cmd(get_binary_path("ffmpeg"))
+            cmd = j.build_cmd()
         except ValueError as exc:
             messagebox.showwarning(
                 t("common.warning"), f"{os.path.basename(src)}:\n{exc}", parent=self
@@ -539,7 +389,7 @@ class EncodeQueueTab(BaseTab):
         return True
 
     def _default_ext(self):
-        return DEFAULT_EXT.get(self.editor["ed_vcodec_var"].get(), ".mp4")
+        return eq.DEFAULT_EXT.get(self.editor["ed_vcodec_var"].get(), ".mp4")
 
     def _add_to_queue(self):
         src = self.ed_src_var.get().strip()
@@ -592,8 +442,8 @@ class EncodeQueueTab(BaseTab):
                 t("common.warning"), "No video files to add were found.", parent=self
             )
 
-    def _read_editor(self) -> Job:
-        j = Job()
+    def _read_editor(self) -> eq.EncodeJob:
+        j = eq.EncodeJob()
         j.vcodec = self.editor["ed_vcodec_var"].get()
         j.crf = self.editor["ed_crf_var"].get()
         j.preset = self.editor["ed_preset_var"].get()

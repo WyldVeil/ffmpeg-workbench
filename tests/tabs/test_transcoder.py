@@ -26,7 +26,7 @@ def _ok(ui):
 
 
 def test_preset_templates_are_not_shell():
-    from tabs.transcoder import presets as pr
+    from core.ops import presets as pr
 
     for bad in (
         "-i {INPUT} -c copy {OUTPUT} && rm -rf ~",
@@ -57,7 +57,7 @@ def test_preset_run_with_hostile_file_name(ui, media, tmp_path, outdir):
     ]
     ui.reset()
     tab = ui.open("Preset Manager")
-    from tabs.transcoder import presets as pr
+    from core.ops import presets as pr
 
     tab._selected_idx = next(
         i for i, p in enumerate(tab.presets) if p["cmd"] == pr.BUILT_IN[5]["cmd"]
@@ -74,18 +74,18 @@ def test_preset_run_with_hostile_file_name(ui, media, tmp_path, outdir):
 
 
 def test_presets_file_corrupt_is_kept(tmp_path, monkeypatch):
-    from tabs.transcoder import presets as pr
+    from core.ops import presets as pr
 
     path = tmp_path / "encode_presets.json"
     path.write_text("{not json")
     monkeypatch.setattr(pr, "presets_file", lambda: str(path))
-    presets, warning = pr._load_presets()
+    presets, warning = pr.load_presets()
     assert warning and len(presets) == len(pr.BUILT_IN)
     assert not path.exists() and any(
         f.name.startswith("encode_presets.json.unreadable-") for f in tmp_path.iterdir()
     )
-    assert pr._save_user_presets([*presets, {"name": "Mine", "cmd": "-i {INPUT} {OUTPUT}"}]) == ""
-    again, warning = pr._load_presets()
+    assert pr.save_user_presets([*presets, {"name": "Mine", "cmd": "-i {INPUT} {OUTPUT}"}]) == ""
+    again, warning = pr.load_presets()
     assert not warning and again[-1]["name"] == "Mine"
 
 
@@ -325,7 +325,7 @@ def test_proxy_generator(ui, media, tmp_path):
     ],
 )
 def test_encode_queue_commands_run(media, tmp_path, vcodec, acodec, ext):
-    from tabs.transcoder.encode_queue import Job
+    from core.ops.encode_queue import EncodeJob as Job
 
     j = Job()
     j.src = str(tmp_path / "in.mp4")
@@ -349,7 +349,7 @@ def test_encode_queue_commands_run(media, tmp_path, vcodec, acodec, ext):
     )
     j.out = str(tmp_path / f"out{ext}")
     j.vcodec, j.acodec, j.resolution, j.fps = vcodec, acodec, "640x360", "29.97"
-    cmd = j.build_cmd(ff.ffmpeg_path())
+    cmd = j.build_cmd()
     r = subprocess.run(cmd, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-800:]
     v = ff.probe(j.out, use_cache=False).require_video()
@@ -357,13 +357,13 @@ def test_encode_queue_commands_run(media, tmp_path, vcodec, acodec, ext):
 
 
 def test_encode_queue_rejects_bad_combinations():
-    from tabs.transcoder.encode_queue import Job
+    from core.ops.encode_queue import EncodeJob as Job
 
     j = Job()
     j.src, j.out = "a.mp4", "b.mp4"
     j.vcodec = "libvpx"
     with pytest.raises(ValueError):
-        j.build_cmd("ffmpeg")
+        j.build_cmd()
     j.vcodec, j.resolution = "copy", "1280x720"
     with pytest.raises(ValueError):
-        j.build_cmd("ffmpeg")
+        j.build_cmd()
