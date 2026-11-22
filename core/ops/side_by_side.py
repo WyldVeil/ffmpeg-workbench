@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import ass
-from core.ops.speed_ramp import atempo_chain
+from core.filters import atempo_chain
 
 Cell = tuple[int, int, int, int]  # x, y, width, height
 

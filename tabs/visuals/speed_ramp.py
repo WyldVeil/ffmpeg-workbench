@@ -22,9 +22,9 @@ from tkinter import messagebox, ttk
 
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.filters import atempo_chain
 from core.i18n import t
 from core.ops.shared import frame_rate
-from core.ops.speed_ramp import atempo_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab

@@ -528,3 +528,19 @@ def vulkan_ok() -> bool:
     from core import capabilities
 
     return bool(capabilities.get("vulkan"))
+
+
+def atempo_chain(speed: float, engine: str = "atempo") -> str:
+    """Pitch-preserving constant tempo for any speed (atempo takes 0.5..100 in one step)."""
+    if engine == "rubberband" and 0.01 <= speed <= 100:
+        return f"rubberband=tempo={speed:.6f}"
+    parts: list[str] = []
+    rem = speed
+    while rem < 0.5:
+        parts.append("atempo=0.5")
+        rem /= 0.5
+    while rem > 100.0:
+        parts.append("atempo=100")
+        rem /= 100.0
+    parts.append(f"atempo={rem:.6f}")
+    return ",".join(parts)

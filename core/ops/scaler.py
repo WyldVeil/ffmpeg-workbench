@@ -129,15 +129,6 @@ def frame_rate_chain(method: str, target: Fraction, factor: Fraction) -> str:
     return chain
 
 
-def slow_audio(factor: Fraction) -> str:
-    """atempo steps that stretch the sound *factor* times (keeping its pitch)."""
-    tempo, steps = 1 / float(factor), list[str]()
-    while tempo < 0.5:
-        steps.append("atempo=0.5")
-        tempo /= 0.5
-    return ",".join([*steps, f"atempo={tempo:.6f}"])
-
-
 def chunk_step(src: Fraction, dst: Fraction) -> Fraction:
     """Shortest time after which source and output frames line up again."""
     return Fraction(
@@ -181,7 +172,7 @@ class FrameRateJob:
     def audio_args(self, input_index: int) -> list[str]:
         if not self.info.has_audio or self.audio_mode == "none":
             return ["-an"]
-        slow = ["-af", slow_audio(self.factor)] if self.audio_mode == "slow" else []
+        slow = ["-af", fl.atempo_chain(1 / float(self.factor))] if self.audio_mode == "slow" else []
         return ["-map", f"{input_index}:a:0", *slow, "-c:a", "aac", "-b:a", "192k"]
 
     def run(self, _p: object, _c: object, ctx: TaskContext) -> int:

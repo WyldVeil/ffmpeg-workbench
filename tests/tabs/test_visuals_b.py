@@ -7,6 +7,7 @@ import shutil
 import pytest
 
 from core import ffmpeg as ff
+from core import filters as fl
 from core.ops import green_key as gk
 from core.ops import lut as lut_ops
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
@@ -29,7 +30,7 @@ def test_speed_curve_maths():
     # 0-2 s at 1x, 2-4 s ramp 1->3x (ln 3 / 1 s), 4-10 s at 3x
     expected = 2 + __import__("math").log(3) + 2
     assert speed_ramp.output_duration(pts) == pytest.approx(expected, abs=1e-6)
-    assert speed_ramp.atempo_chain(0.2) == "atempo=0.5,atempo=0.5,atempo=0.800000"
+    assert fl.atempo_chain(0.2) == "atempo=0.5,atempo=0.5,atempo=0.800000"
     assert "rubberband tempo" in speed_ramp.tempo_commands(pts, "rubberband")
     assert speed_ramp.tempo_commands(pts, "atempo").count("atempo@") >= 4
 

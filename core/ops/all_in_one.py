@@ -346,24 +346,12 @@ def video_filters(r: Recipe, notes: list[str]) -> list[str]:
     return vf
 
 
-def _pitch_kept(speed: float) -> list[str]:
-    rem: float = speed
-    chain: list[str] = []
-    while rem > 2.0:
-        chain.append("atempo=2.0")
-        rem /= 2.0
-    while rem < 0.5:
-        chain.append("atempo=0.5")
-        rem *= 2.0
-    return [*chain, f"atempo={rem:.4f}"]
-
-
 def audio_filters(r: Recipe) -> list[str]:
     af: list[str] = []
     if abs(r.speed - 1.0) > 1e-3:
         sr = r.sample_rate or 48000
         af += (
-            _pitch_kept(r.speed)
+            [fl.atempo_chain(r.speed)]
             if r.keep_pitch
             else [f"asetrate={round(sr * r.speed)}", f"aresample={sr}"]
         )

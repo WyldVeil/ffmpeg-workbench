@@ -608,7 +608,7 @@ def _speed_options(p: argparse.ArgumentParser) -> None:
     options=_speed_options,
 )
 def op_speed(ctx: Ctx) -> Result:
-    from core.ops.speed_ramp import atempo_chain
+    from core.filters import atempo_chain
 
     src = ctx.args.inputs[0]
     info = probe(src)
@@ -945,7 +945,7 @@ def op_framerate(ctx: Ctx) -> Result:
     out = output_path(ctx, [src], "slowmo" if factor > 1 else f"{float(target):g}fps")
     audio = ["-an"]
     if info.has_audio:
-        from core.ops.speed_ramp import atempo_chain
+        from core.filters import atempo_chain
 
         audio = (
             keep_audio(info, container_of(out), filters=atempo_chain(1 / factor))
