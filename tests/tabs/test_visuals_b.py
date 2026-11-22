@@ -7,6 +7,7 @@ import shutil
 import pytest
 
 from core import ffmpeg as ff
+from core.ops import green_key as gk
 from core.ops import lut as lut_ops
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
 
@@ -50,10 +51,10 @@ def test_scope_layout_sizes():
 
 
 def test_green_key_chains():
-    assert green_key.spill_type("00B140") == "green" and green_key.spill_type("0047BB") == "blue"
-    assert "despill=type=green" in green_key.key_chain("chroma", "00B140", 0.1, 0.1, True)
-    assert green_key.key_chain("color", "FF0000", 0.1, 0.1, True).startswith("colorkey")
-    assert "lumakey=threshold=1" in green_key.key_chain("luma_white", "FFFFFF", 0.1, 0.1, True)
+    assert gk.spill_type("00B140") == "green" and gk.spill_type("0047BB") == "blue"
+    assert "despill=type=green" in gk.key_chain("chroma", "00B140", 0.1, 0.1, True)
+    assert gk.key_chain("color", "FF0000", 0.1, 0.1, True).startswith("colorkey")
+    assert "lumakey=threshold=1" in gk.key_chain("luma_white", "FFFFFF", 0.1, 0.1, True)
 
 
 # ── renders through the GUI ──────────────────────────────────────────────────
@@ -203,10 +204,8 @@ def test_green_key(ui, media, outdir, bg):
     tab = ui.open("Green Screen Keyer")
     _set_source(ui, tab, media["greenscreen"])
     # auto-sampled from the edges: the plate's green (exact value depends on the FFmpeg that made it)
-    plate = green_key.sample_border_colour(media["greenscreen"], tab._info.duration * 0.1)
-    assert (
-        plate and green_key.spill_type(plate) == "green" and plate != "00B140"
-    )  # not the start colour
+    plate = gk.sample_border_colour(media["greenscreen"], tab._info.duration * 0.1)
+    assert plate and gk.spill_type(plate) == "green" and plate != "00B140"  # not the start colour
     ui.wait_for(lambda: tab.key_colour == plate, 30)
     ext = ".mp4"
     if bg == "image":

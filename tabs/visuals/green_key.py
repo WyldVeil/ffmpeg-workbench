@@ -16,16 +16,15 @@ subject over a video, an image, a solid colour - or keep it transparent
 from __future__ import annotations
 
 import os
-import statistics
 import tkinter as tk
 from functools import partial
 from tkinter import colorchooser, messagebox, ttk
 
 from core import ffmpeg as ff
-from core import filters as fl
 from core import tasks
 from core.i18n import t
-from core.ops.shared import RenderJob, frame_rate, keep_audio_args
+from core.ops import green_key as gk
+from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -42,118 +41,6 @@ BACKGROUNDS = {
     "color": "Solid colour",
     "alpha": "Transparent (keep alpha channel)",
 }
-IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".avif")
-
-
-def hex_colour(value: str) -> str:
-    v = value.strip().lstrip("#").upper()
-    if len(v) != 6 or any(c not in "0123456789ABCDEF" for c in v):
-        raise ValueError(f"Not a colour: {value}")
-    return v
-
-
-def spill_type(hex_rgb: str) -> str | None:
-    r, g, b = (int(hex_rgb[i : i + 2], 16) for i in (0, 2, 4))
-    if g > r and g >= b:
-        return "green"
-    if b > r and b > g:
-        return "blue"
-    return None
-
-
-def key_chain(method: str, colour: str, similarity: float, blend: float, despill: bool) -> str:
-    """Filter chain that makes the background transparent (yuva output)."""
-    if method == "luma_white":
-        return (
-            f"format=yuva420p,lumakey=threshold=1:tolerance={similarity:.3f}:softness={blend:.3f}"
-        )
-    if method == "luma_black":
-        return (
-            f"format=yuva420p,lumakey=threshold=0:tolerance={similarity:.3f}:softness={blend:.3f}"
-        )
-    if method == "color":
-        return f"colorkey=color=0x{colour}:similarity={similarity:.3f}:blend={blend:.3f}"
-    chain = f"chromakey=color=0x{colour}:similarity={similarity:.3f}:blend={blend:.3f}"
-    kind = spill_type(colour)
-    if despill and kind:
-        chain += f",despill=type={kind}:mix=0.5:expand=0.1"
-    return chain
-
-
-def background_chain(width: int, height: int, fps: str) -> str:
-    """Cover-fit a background stream to WxH at *fps* (no distortion)."""
-    return (
-        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},setsar=1,fps={fps}"
-    )
-
-
-def sample_border_colour(path: str, at: float = 0.5) -> str | None:
-    """Median colour of the frame edges (where a backdrop usually is)."""
-    w, h = 64, 36
-    r = ff.capture(
-        [
-            ff.ffmpeg_path(),
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-ss",
-            ff.ts(at),
-            "-i",
-            path,
-            "-frames:v",
-            "1",
-            "-vf",
-            f"scale={w}:{h}:flags=area,format=rgb24",
-            "-f",
-            "rawvideo",
-            "-",
-        ],
-        timeout=30,
-        text=False,
-    )
-    data = r.stdout or b""
-    if r.returncode != 0 or len(data) != w * h * 3:
-        return None
-    px = [
-        data[(y * w + x) * 3 : (y * w + x) * 3 + 3]
-        for y in range(h)
-        for x in range(w)
-        if x < 3 or x >= w - 3 or y < 3 or y >= h - 3
-    ]
-    med = [int(statistics.median(p[i] for p in px)) for i in range(3)]
-    return "".join(f"{c:02X}" for c in med)
-
-
-def sample_point(path: str, at: float, x: int, y: int) -> str | None:
-    """Average colour of a 5x5 patch at source pixel (x, y)."""
-    r = ff.capture(
-        [
-            ff.ffmpeg_path(),
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-ss",
-            ff.ts(at),
-            "-i",
-            path,
-            "-frames:v",
-            "1",
-            "-vf",
-            f"crop=5:5:{max(0, x - 2)}:{max(0, y - 2)},scale=1:1:flags=area,format=rgb24",
-            "-f",
-            "rawvideo",
-            "-",
-        ],
-        timeout=30,
-        text=False,
-    )
-    data = r.stdout or b""
-    if r.returncode != 0 or len(data) != 3:
-        return None
-    return "".join(f"{c:02X}" for c in data)
 
 
 class GreenKeyerTab(BaseTab):
@@ -348,7 +235,7 @@ class GreenKeyerTab(BaseTab):
         return next((k for k, v in BACKGROUNDS.items() if v == label), "file")
 
     def keyer(self) -> str:
-        return key_chain(
+        return gk.key_chain(
             self.method(),
             self.key_colour,
             self.sim_var.get(),
@@ -360,23 +247,12 @@ class GreenKeyerTab(BaseTab):
         info = self._info
         if info is None or not info.has_video:
             return ""
-        w, h = common.even_size(info)
-        kind = self.bg_kind()
-        src = ""
-        if kind == "file":
-            bg = self.bg_row.path
-            if not bg or not os.path.isfile(bg):
-                kind = "alpha"
-            else:
-                src = f"{fl.preview_movie(bg)}{background_chain(w, h, frame_rate(info))}[bg]"
-        if kind == "color":
-            src = f"color=c=0x{self.bg_colour}:s={w}x{h}[bg]"
-        if kind == "alpha":  # checkerboard so transparency is visible
-            src = (
-                f"nullsrc=s={w}x{h},geq=lum='if(mod(floor(X/24)+floor(Y/24),2),200,140)'"
-                f":cb=128:cr=128[bg]"
-            )
-        return f"{src};[in]{self.keyer()}[fg];[bg][fg]overlay=format=auto:shortest=1"
+        kind, bg = self.bg_kind(), self.bg_row.path
+        if kind == "file" and not (bg and os.path.isfile(bg)):
+            kind = "alpha"  # no background yet: show the transparency
+        return gk.preview_graph(
+            kind, self.keyer(), common.even_size(info), frame_rate(info), bg, self.bg_colour
+        )
 
     def _suggest(self, src):
         return self.suggest_output(src, "keyed", ".mov" if self.bg_kind() == "alpha" else ".mp4")
@@ -397,7 +273,7 @@ class GreenKeyerTab(BaseTab):
         at = (self._info.duration * 0.1) if self._info else 0.0
 
         def done(colour):
-            if colour and (force or spill_type(colour)):
+            if colour and (force or gk.spill_type(colour)):
                 self._set_key(colour)
                 self.log(self.console, f"Key colour sampled from the frame edges: #{colour}")
             elif force:
@@ -408,7 +284,7 @@ class GreenKeyerTab(BaseTab):
                 )
             self._schedule()
 
-        tasks.submit(partial(sample_border_colour, path, at), on_done=done, name="KeySample")
+        tasks.submit(partial(gk.sample_border_colour, path, at), on_done=done, name="KeySample")
 
     def _eyedropper(self, event):
         info, path = self._info, self.src_row.path
@@ -430,7 +306,7 @@ class GreenKeyerTab(BaseTab):
                 self._schedule()
 
         tasks.submit(
-            partial(sample_point, path, self.compare.position, x, y),
+            partial(gk.sample_point, path, self.compare.position, x, y),
             on_done=done,
             name="KeyEyedropper",
         )
@@ -447,13 +323,13 @@ class GreenKeyerTab(BaseTab):
     def _pick_key_colour(self):
         res = colorchooser.askcolor(f"#{self.key_colour}", parent=self)
         if res and res[1]:
-            self._set_key(hex_colour(res[1]))
+            self._set_key(gk.hex_colour(res[1]))
             self._schedule()
 
     def _pick_bg_colour(self):
         res = colorchooser.askcolor(f"#{self.bg_colour}", parent=self)
         if res and res[1]:
-            self.bg_colour = hex_colour(res[1])
+            self.bg_colour = gk.hex_colour(res[1])
             self.bg_swatch.config(bg=f"#{self.bg_colour}")
             self._schedule()
 
@@ -505,11 +381,8 @@ class GreenKeyerTab(BaseTab):
         )
         if not out:
             return
-        w, h = common.even_size(info)
-        fps = frame_rate(info)
         keyer = self.keyer()
         container = common.container_of(out)
-        extra_inputs: list = []
         if kind == "alpha":
             if container not in ("mov", "webm", "mkv"):
                 messagebox.showwarning(
@@ -518,55 +391,9 @@ class GreenKeyerTab(BaseTab):
                     parent=self,
                 )
                 return
-            graph = (
-                f"[0:v]{keyer},format=yuva444p10le[v]"
-                if container != "webm"
-                else f"[0:v]{keyer},format=yuva420p[v]"
-            )
-            if container == "webm":
-                venc_args = [
-                    "-c:v",
-                    "libvpx-vp9",
-                    "-pix_fmt",
-                    "yuva420p",
-                    "-crf",
-                    "28",
-                    "-b:v",
-                    "0",
-                    "-row-mt",
-                    "1",
-                    "-auto-alt-ref",
-                    "0",
-                ]
-            else:
-                venc_args = [
-                    "-c:v",
-                    "prores_ks",
-                    "-profile:v",
-                    "4444",
-                    "-pix_fmt",
-                    "yuva444p10le",
-                    "-alpha_bits",
-                    "16",
-                    "-vendor",
-                    "apl0",
-                ]
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-i",
-                src,
-                "-filter_complex",
-                graph,
-                "-map",
-                "[v]",
-                *keep_audio_args(info, container),
-                *venc_args,
-                out,
-            ]
             self.log(self.console, "Keying to a transparent video…")
             self.run_ffmpeg(
-                cmd,
+                gk.transparent_cmd(src, out, keyer, info),
                 self.console,
                 on_done=lambda rc: self.show_result(rc, out),
                 btn=self.btn_render,
@@ -576,22 +403,18 @@ class GreenKeyerTab(BaseTab):
                 name="Green screen",
             )
             return
-        if kind == "color":
-            bg_src = f"color=c=0x{self.bg_colour}:s={w}x{h}:r={fps},setsar=1[bg]"
-        else:
+        backdrop = gk.Backdrop(
+            kind=kind, colour=self.bg_colour, path=bg, still=False, loop=self.loop_var.get()
+        )
+        if kind == "file":
             bg_info = ff.try_probe(bg)
-            still = bool(bg_info and bg_info.is_image) or bg.lower().endswith(IMAGE_EXTS)
-            if still:
-                extra_inputs = ["-loop", "1", "-framerate", fps, "-i", bg]
-                hold = ""
-            elif self.loop_var.get():
-                extra_inputs = ["-stream_loop", "-1", "-i", bg]
-                hold = ""
-            else:
-                extra_inputs = ["-i", bg]
-                hold = ",tpad=stop_mode=clone:stop=-1"
-            bg_src = f"[1:v]{background_chain(w, h, fps)}{hold}[bg]"
-        graph = f"{bg_src};[0:v]setsar=1,{keyer}[fg];[bg][fg]overlay=format=auto:shortest=1[v]"
+            still = bool(bg_info and bg_info.is_image) or bg.lower().endswith(gk.IMAGE_EXTS)
+            backdrop = gk.Backdrop(
+                kind=kind, colour=self.bg_colour, path=bg, still=still, loop=self.loop_var.get()
+            )
+        graph, extra_inputs = gk.composite_graph(
+            backdrop, keyer, common.even_size(info), frame_rate(info)
+        )
         self.log(self.console, f"Keying #{self.key_colour} ({self.method_var.get()})")
         common.render(
             self,
