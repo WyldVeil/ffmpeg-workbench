@@ -18,83 +18,14 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox
 
-from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops import color_match as cm
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
-
-_SQ = [i * i for i in range(256)]
-_SAMPLE_W, _SAMPLE_H = 160, 90
-
-
-def sample_times(info: ff.MediaInfo, count: int = 10) -> list:
-    if info.is_image or info.duration <= 0.2:
-        return [0.0]
-    d = info.duration
-    count = max(1, min(count, int(d * 4) or 1))
-    if count == 1:
-        return [d / 2]
-    return [d * (0.08 + 0.84 * i / (count - 1)) for i in range(count)]
-
-
-def rgb_stats(path: str, count: int = 10) -> dict:
-    """{'R': (mean, std), 'G': ..., 'B': ...} over *count* sampled frames.
-
-    Raises RuntimeError when no frame could be decoded."""
-    info = ff.probe(path)
-    raw = bytearray()
-    for at in sample_times(info, count):
-        cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error"]
-        if at > 0:
-            cmd += ["-ss", ff.ts(at)]
-        cmd += [
-            "-i",
-            path,
-            "-frames:v",
-            "1",
-            "-an",
-            "-sn",
-            "-vf",
-            f"scale={_SAMPLE_W}:{_SAMPLE_H}:flags=area,format=rgb24",
-            "-f",
-            "rawvideo",
-            "-",
-        ]
-        r = ff.capture(cmd, timeout=60, text=False)
-        frame = r.stdout or b""
-        if r.returncode == 0 and len(frame) == _SAMPLE_W * _SAMPLE_H * 3:
-            raw += frame
-    if not raw:
-        raise RuntimeError(f"Could not decode any frames from {path}")
-    data = bytes(raw)
-    out = {}
-    for i, ch in enumerate("RGB"):
-        chan = data[i::3]
-        n = len(chan)
-        mean = sum(chan) / n
-        var = max(sum(map(_SQ.__getitem__, chan)) / n - mean * mean, 0.0)
-        out[ch] = (mean, var**0.5)
-    return out
-
-
-def build_filter(
-    src: dict, ref: dict, *, strength: float = 1.0, channels: str = "RGB", contrast: bool = True
-) -> str:
-    """lutrgb chain moving *src* statistics towards *ref* ('' if nothing to do)."""
-    parts = []
-    for ch in "RGB":
-        if ch not in channels:
-            continue
-        sm, ss = src[ch]
-        rm, rs = ref[ch]
-        k = min(max(rs / max(ss, 1.0), 0.25), 4.0) if contrast else 1.0
-        expr = f"clip(val+{strength:.3f}*((val-{sm:.2f})*{k:.4f}+{rm:.2f}-val),0,255)"
-        parts.append(f"{ch.lower()}='{expr}'")
-    return "lutrgb=" + ":".join(parts) if parts else ""
 
 
 class ColorMatchTab(BaseTab):
@@ -245,7 +176,7 @@ class ColorMatchTab(BaseTab):
         if stats is None:
             return ""
         channels = "".join(ch for ch, v in self.ch_vars.items() if v.get())
-        return build_filter(
+        return cm.build_filter(
             *stats,
             strength=self.strength_var.get(),
             channels=channels,
@@ -274,7 +205,7 @@ class ColorMatchTab(BaseTab):
         self.log(self.console, t("log.color_match.extracting_colour_statistics"))
 
         def work():
-            return rgb_stats(src), rgb_stats(ref)
+            return cm.rgb_stats(src), cm.rgb_stats(ref)
 
         def done(result, error=None):
             self._analysing = False
