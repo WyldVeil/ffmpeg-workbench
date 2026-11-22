@@ -15,9 +15,12 @@ The result is the original video re-encoded with the new mixed audio.
 
 import os
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core.i18n import t
+from core.ops import mixer as mx
 from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -392,6 +395,44 @@ class AudioMixerTab(BaseTab):
             self.out_var.set(p)
 
     # ── Render ────────────────────────────────────────────────────────────
+    def _track_specs(
+        self, active: list[Any], path_of: Callable[[Any], str]
+    ) -> list[mx.Track] | None:
+        """Every active track as a spec; None (after saying why) when one can't be used."""
+        from core import ffmpeg as ff
+
+        specs: list[mx.Track] = []
+        for trk in active:
+            path = path_of(trk)
+            tinfo = ff.try_probe(path)
+            if tinfo is None or not tinfo.has_audio:
+                messagebox.showwarning(
+                    t("common.warning"),
+                    f"Track {trk.idx + 1} has no readable audio:\n{path}",
+                    parent=self,
+                )
+                return None
+            try:
+                offset = ff.parse_time(trk.offset_var.get() or "0")
+                fade_in, fade_out = (
+                    float(trk.fadein_var.get() or 0),
+                    float(trk.fadeout_var.get() or 0),
+                )
+            except ValueError:
+                messagebox.showwarning(
+                    t("common.warning"),
+                    f"Track {trk.idx + 1}: start and fades must be numbers of seconds.",
+                    parent=self,
+                )
+                return None
+            volume, pan = float(trk.vol_var.get()), float(trk.pan_var.get())
+            specs.append(
+                mx.Track(
+                    path, tinfo.duration, offset, fade_in, fade_out, volume, pan, trk.loop_var.get()
+                )
+            )
+        return specs
+
     def _render(self):
         from core import ffmpeg as ff
         from tabs import common
@@ -416,78 +457,22 @@ class AudioMixerTab(BaseTab):
             )
             return
         dur = info.duration
-        st = "aformat=sample_rates=48000:channel_layouts=stereo"
-        cmd = [ff.ffmpeg_path(), "-y", "-i", video]
-        parts, mix = [], []
-        if self.keep_vid_audio_var.get() and info.has_audio:
-            parts.append(
-                f"[0:a:0]{st},volume={float(self.vid_audio_vol_var.get()):.3f},apad,"
-                f"atrim=duration={dur:.3f}[orig]"
-            )
-            mix.append("[orig]")
-        idx = 1
-        for trk in active:
-            path = track_path(trk)
-            tinfo = ff.try_probe(path)
-            if tinfo is None or not tinfo.has_audio:
-                messagebox.showwarning(
-                    t("common.warning"),
-                    f"Track {trk.idx + 1} has no readable audio:\n{path}",
-                    parent=self,
-                )
-                return
-            try:
-                offset = ff.parse_time(trk.offset_var.get() or "0")
-                fade_in = float(trk.fadein_var.get() or 0)
-                fade_out = float(trk.fadeout_var.get() or 0)
-            except ValueError:
-                messagebox.showwarning(
-                    t("common.warning"),
-                    f"Track {trk.idx + 1}: start and fades must be numbers of seconds.",
-                    parent=self,
-                )
-                return
-            loop = trk.loop_var.get()
-            if loop:
-                cmd += ["-stream_loop", "-1"]
-            cmd += ["-i", path]
-            clip_len = max(0.01, (dur - offset) if loop else min(tinfo.duration, dur - offset))
-            chain = [
-                f"[{idx}:a:0]{st}",
-                "asetpts=PTS-STARTPTS",
-                f"atrim=duration={clip_len:.3f}",
-                f"volume={float(trk.vol_var.get()):.3f}",
-            ]
-            if fade_in > 0:
-                chain.append(f"afade=t=in:st=0:d={fade_in:.2f}")
-            if fade_out > 0:
-                chain.append(f"afade=t=out:st={max(0.0, clip_len - fade_out):.3f}:d={fade_out:.2f}")
-            pan = float(trk.pan_var.get())
-            if abs(pan) > 0.02:
-                chain.append(
-                    f"pan=stereo|c0={min(1.0, 1.0 - pan):.3f}*c0|c1={min(1.0, 1.0 + pan):.3f}*c1"
-                )
-            if offset > 0:
-                chain.append(f"adelay=delays={round(offset * 1000)}:all=1")
-            chain += ["apad", f"atrim=duration={dur:.3f}"]
-            parts.append(",".join(chain) + f"[t{idx}]")
-            mix.append(f"[t{idx}]")
-            idx += 1
-        if not mix:
+        tracks = self._track_specs(active, track_path)
+        if tracks is None:
+            return
+        keep_own = self.keep_vid_audio_var.get() and info.has_audio
+        if not tracks and not keep_own:
             messagebox.showwarning(
                 t("mixer.no_tracks_title"), t("mixer.no_tracks_message"), parent=self
             )
             return
-        master = f"volume={float(self.master_vol_var.get()):.3f}"
-        if len(mix) == 1:
-            parts.append(f"{mix[0]}{master}")
-        else:
-            parts.append(
-                "".join(mix) + f"amix=inputs={len(mix)}:duration=longest:normalize=0,{master}"
-            )
-        if self.normalize_var.get():
-            parts[-1] += ",loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,asetnsamples=n=4096:p=0"
-        parts[-1] += ",alimiter=limit=0.97[aout]"
+        master = mx.Master(
+            video_volume=float(self.vid_audio_vol_var.get()) if keep_own else None,
+            volume=float(self.master_vol_var.get()),
+            normalise=self.normalize_var.get(),
+        )
+        cmd = [ff.ffmpeg_path(), "-y", "-i", video, *mx.input_args(tracks)]
+        sources = len(tracks) + (1 if keep_own else 0)
         fmt = self.out_fmt_var.get()
         audio_only = "audio only" in fmt.lower()
         out = self.out_var.get().strip() or self.suggest_output(video, "mixed", ".mp4")
@@ -505,7 +490,7 @@ class AudioMixerTab(BaseTab):
         if not out:
             return
         self.out_var.set(out)
-        cmd += ["-filter_complex", ";".join(parts)]
+        cmd += ["-filter_complex", mx.mix_graph(tracks, master, dur)]
         if audio_only:
             cmd += ["-map", "[aout]", "-vn", *audio_encoder_args(out)]
         else:
@@ -524,7 +509,7 @@ class AudioMixerTab(BaseTab):
             if out.lower().endswith((".mp4", ".mov", ".m4v")):
                 cmd += ["-movflags", "+faststart"]
         cmd += ["-t", f"{dur:.3f}", out]
-        self.log(self.console, f"Mixing {len(mix)} source(s) → {os.path.basename(out)}")
+        self.log(self.console, f"Mixing {sources} source(s) → {os.path.basename(out)}")
         self.run_ffmpeg(
             cmd,
             self.console,
