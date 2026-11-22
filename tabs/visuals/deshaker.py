@@ -12,8 +12,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from core import ffmpeg as ff
 from core.i18n import t
+from core.ops import deshake as ds
 from core.ops.shared import keep_audio_args
 from core.queue_manager import Hooks
 from core.scaling import px
@@ -27,30 +27,6 @@ ZOOM_MODES = {
     "No automatic zoom": 0,
 }
 EDGE_MODES = {"Keep previous frame at edges": "keep", "Black edges": "black"}
-TRF = "transforms.trf"  # relative: pass 1 and 2 run inside the job's temp dir
-
-
-def detect_filter(shakiness: int, accuracy: int, tripod: bool) -> str:
-    f = f"vidstabdetect=shakiness={shakiness}:accuracy={accuracy}:result={TRF}"
-    return f + (":tripod=1" if tripod else "")
-
-
-def transform_filter(
-    smoothing: int, zoom_mode: int, zoom: float, edges: str, tripod: bool, sharpen: bool
-) -> str:
-    f = (
-        f"vidstabtransform=input={TRF}:smoothing={smoothing}:optzoom={zoom_mode}"
-        f":zoom={zoom:g}:crop={edges}:interpol=bicubic"
-    )
-    if tripod:
-        f += ":tripod=1"
-    if sharpen:
-        f += ",unsharp=5:5:0.8:3:3:0.4"
-    return f
-
-
-def fallback_filter(edges: str) -> str:
-    return f"deshake=rx=32:ry=32:edge={'blank' if edges == 'black' else 'clamp'}"
 
 
 class DeshakerTab(BaseTab):
@@ -210,86 +186,44 @@ class DeshakerTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "stabilised")
         if not out:
             return
-        edges = EDGE_MODES.get(self.edge_var.get(), "keep")
-        tripod = self.tripod_var.get()
-        two_pass = ff.has_filter("vidstabdetect") and ff.has_filter("vidstabtransform")
-        if two_pass:
-            stab = transform_filter(
-                self.smooth_var.get(),
-                ZOOM_MODES.get(self.zoom_mode.get(), 1),
-                zoom,
-                edges,
-                tripod,
-                self.sharpen_var.get(),
-            )
-            detect = detect_filter(self.shake_var.get(), self.accuracy_var.get(), tripod)
-        else:
+        settings = ds.Stabilise(
+            shakiness=self.shake_var.get(),
+            accuracy=self.accuracy_var.get(),
+            smoothing=self.smooth_var.get(),
+            zoom_mode=ZOOM_MODES.get(self.zoom_mode.get(), 1),
+            zoom=zoom,
+            edges=EDGE_MODES.get(self.edge_var.get(), "keep"),
+            tripod=self.tripod_var.get(),
+            sharpen=self.sharpen_var.get(),
+            compare=self.compare_var.get(),
+        )
+        two_pass = ds.vidstab_available()
+        if not two_pass:
             self.log_tagged(
                 self.console,
                 "This FFmpeg build has no vid.stab - using the "
                 "single-pass 'deshake' filter instead.",
                 "warn",
             )
-            stab, detect = fallback_filter(edges), None
-        if self.compare_var.get():
-            graph = f"[0:v]setsar=1,split[a][b];[b]{stab},setsar=1[s];[a][s]hstack=inputs=2[v]"
-        else:
-            graph = f"[0:v]{stab}[v]"
-
         container = common.container_of(out)
-        venc = self.encoder.video_encode(container)
-        if venc.filter_suffix:
-            graph += f";[v]{venc.filter_suffix}[venc]"
-        vlabel = "[venc]" if venc.filter_suffix else "[v]"
         duration = info.duration or None
-        encode = [
-            ff.ffmpeg_path(),
-            "-y",
-            *venc.pre_input,
-            "-i",
-            src,
-            "-filter_complex",
-            graph,
-            "-map",
-            vlabel,
-            *keep_audio_args(info, container),
-            *venc.args,
-        ]
-
-        def work(_progress, _cancelled, ctx):
-            workdir = ctx.tempdir()
-            if detect:
-                ctx.log("Pass 1 of 2 - analysing camera motion…")
-                ctx.span(0.0, 0.4).run(
-                    [
-                        ff.ffmpeg_path(),
-                        "-y",
-                        "-i",
-                        src,
-                        "-an",
-                        "-sn",
-                        "-vf",
-                        detect,
-                        "-f",
-                        "null",
-                        "-",
-                    ],
-                    duration=duration,
-                    cwd=workdir,
-                )
-                ctx.log("Pass 2 of 2 - stabilising and encoding…")
-                ctx.span(0.4, 1.0)
-            ctx.run([*encode, ctx.output()], duration=duration, cwd=workdir)
-            return 0
+        job = ds.DeshakeJob(
+            src=src,
+            settings=settings,
+            two_pass=two_pass,
+            venc=self.encoder.video_encode(container),
+            audio=keep_audio_args(info, container),
+            duration=duration,
+        )
 
         def on_start(_tid):
             self.status_lbl.config(
-                text="Stabilising… (analysis pass first)" if detect else "Stabilising…"
+                text="Stabilising… (analysis pass first)" if two_pass else "Stabilising…"
             )
 
         common.queue_job(
             self,
-            common.Job(name="Deshaker", out=out, work=work, duration=duration, inputs=[src]),
+            common.Job(name="Deshaker", out=out, work=job.run, duration=duration, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
             hooks=Hooks(on_start=on_start),
