@@ -10,6 +10,7 @@ result is checked again afterwards.
 """
 from __future__ import annotations
 
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -20,6 +21,8 @@ from core import metaclean as mc
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+
+logger = logging.getLogger("crossfader.system.metadata_cleaner")
 
 
 class MetadataCleanerTab(BaseTab):
@@ -171,6 +174,7 @@ class MetadataCleanerTab(BaseTab):
                         os.remove(part)
                     raise
                 except Exception as exc:
+                    logger.debug("work: best-effort step failed", exc_info=True)
                     if os.path.exists(part):
                         os.remove(part)
                     reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]

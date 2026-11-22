@@ -137,7 +137,7 @@ def test_add_track_with_delay_and_extract(ui, multi, media, outdir):
     tab._render()
     ui.wait_idle(120)
     data = streams(out)
-    added = [s for s in data["streams"] if s.get("tags", {}).get("language") == "deu"][0]
+    added = next(s for s in data["streams"] if s.get("tags", {}).get("language") == "deu")
     assert added["codec_name"] == "mp3" and float(added["start_time"]) == pytest.approx(0.5, abs=0.05)
     # save the French subtitles and the font on their own
     tab.extract(4, str(outdir / "fr.ass"))

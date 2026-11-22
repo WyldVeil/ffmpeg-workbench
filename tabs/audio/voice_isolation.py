@@ -20,9 +20,9 @@ from tkinter import messagebox, ttk
 
 from core import capabilities
 from core import ffmpeg as ff
-from core import filters as fl
 from core.i18n import t
-from core.paths import resource_path
+from core.ops.shared import audio_job_args
+from core.ops.voice_isolation import denoise_filter, models_dir
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -38,25 +38,9 @@ MODELS = {   # file: label (signal / noise the model was trained for)
 _CUSTOM = "Custom model (.rnnn file)…"
 
 
-def models_dir() -> str:
-    return resource_path("assets", "models", "rnnoise")
-
-
 def anlmdn_works() -> bool:
     """anlmdn crashes (heap corruption) in some FFmpeg builds: it is tested once (core.capabilities)."""
     return bool(capabilities.get("anlmdn"))
-
-
-def denoise_filter(method: str, *, model: str = "", blend: float = 0.0, floor_db: float = -30,
-                   reduction_db: float = 12, strength: float = 0.00015, rumble: bool = True) -> str:
-    parts = ["highpass=f=80"] if rumble else []
-    if method == "neural":
-        parts.append(f"arnndn=model={fl.filter_path(model)}:mix={1.0 - blend:.2f}")
-    elif method == "nlm":
-        parts.append(f"anlmdn=s={strength:g}")
-    else:
-        parts.append(f"afftdn=nf={floor_db:g}:nr={reduction_db:g}:tn=1")
-    return ",".join(parts)
 
 
 class VoiceIsolationTab(BaseTab):
@@ -170,7 +154,7 @@ class VoiceIsolationTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "clean")
         if not out:
             return
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *common.audio_job_args(out, info), out]
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label="🎤  CLEAN UP", duration=info.duration or None, output=out, inputs=[src],
                         name="Voice Isolation")

@@ -1,3 +1,4 @@
+
 """
 tab_audioexporter.py  ─  Audio Exporter
 
@@ -16,6 +17,7 @@ video-with-audio) file and re-save it with full control over:
   • ReplayGain tagging
 """
 import json
+import logging
 import math
 import os
 import tkinter as tk
@@ -29,6 +31,8 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+
+logger = logging.getLogger("crossfader.audio.exporter")
 
 # ── Format definitions ───────────────────────────────────────────────────────
 #  key: (extension, codec_args, supports_bitrate, supports_vbr, supports_bit_depth)
@@ -596,6 +600,7 @@ class AudioExporterTab(BaseTab):
                 r = _proc.run(cmd, timeout=60)
                 data = json.loads(r.stdout)
             except Exception:
+                logger.debug("_do: best-effort step failed", exc_info=True)
                 self.after(0, lambda: self._info_lbl.config(
                     text="  Could not read file info", fg=CLR["red"]))
                 return
@@ -878,8 +883,7 @@ class AudioExporterTab(BaseTab):
             seg_len = length
             if cfg["strip_silence"]:
                 ctx.log("Finding leading and trailing silence…")
-                res = ctx.span(0, 0.2).run(inp + ["-map", "0:a:0", "-af", "silencedetect=n=-50dB:d=0.1",
-                                                  "-f", "null", "-"], duration=length, tail=200000)
+                res = ctx.span(0, 0.2).run([*inp, "-map", "0:a:0", "-af", "silencedetect=n=-50dB:d=0.1", "-f", "null", "-"], duration=length, tail=200000)
                 keep = silence_bounds(res.log_tail, length)
                 seg_len = keep[1] - keep[0]
                 ctx.log(f"Keeping {keep[0]:.2f}s → {keep[1]:.2f}s")
@@ -887,29 +891,26 @@ class AudioExporterTab(BaseTab):
             gain_db = 0.0
             if cfg["replay_gain"]:
                 ctx.log("Measuring ReplayGain…")
-                res = ctx.span(0.2, 0.4).run(inp + ["-map", "0:a:0", "-af", ",".join(chain + ["replaygain"]),
-                                                    "-f", "null", "-"], duration=length, tail=200000)
+                res = ctx.span(0.2, 0.4).run([*inp, "-map", "0:a:0", "-af", ",".join([*chain, "replaygain"]), "-f", "null", "-"], duration=length, tail=200000)
                 gain_db, peak = parse_replaygain(res.log_tail)
                 if peak > 0:   # never push the peak above -1 dBFS
                     gain_db = min(gain_db, -20 * math.log10(peak) - 1.0)
                 ctx.log(f"ReplayGain: {gain_db:+.2f} dB")
                 chain.append(f"volume={gain_db:.2f}dB")
-            rate = cfg["sr"] or str(info.audio.sample_rate or 48000)
+            rate = cfg["sr"] or str(info.require_audio().sample_rate or 48000)
             if cfg["norm"] == "EBU R128 (loudnorm)":
                 ctx.log("Measuring loudness (pass 1 of 2)…")
-                cmd = inp + ["-map", "0:a:0", "-af", ",".join(chain + [
-                    f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json"]), "-f", "null", "-"]
+                cmd = [*inp, "-map", "0:a:0", "-af", ",".join([*chain, f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json"]), "-f", "null", "-"]
                 res = ctx.span(0.4, 0.6).run(cmd, duration=length, tail=200000)
                 meas = loudness.parse_measurement(res.log_tail)
                 chain.append(loudness.normalise_filter(cfg["lufs"], cfg["tp"], 11, meas, int(rate)))
             elif cfg["norm"] == "Peak normalize":
                 ctx.log("Measuring the peak level…")
-                res = ctx.span(0.4, 0.6).run(inp + ["-map", "0:a:0", "-af", ",".join(chain + ["volumedetect"]),
-                                                    "-f", "null", "-"], duration=length, tail=200000)
+                res = ctx.span(0.4, 0.6).run([*inp, "-map", "0:a:0", "-af", ",".join([*chain, "volumedetect"]), "-f", "null", "-"], duration=length, tail=200000)
                 peak = parse_max_volume(res.log_tail)
                 chain.append(f"volume={cfg['tp'] - peak:.2f}dB")
                 ctx.log(f"Peak {peak:.1f} dBFS → {cfg['tp']:.1f} dBFS")
-            cmd = list(inp) + ["-map", "0:a:0"]
+            cmd = [*list(inp), "-map", "0:a:0"]
             if cover is not None:
                 cmd += ["-map", f"0:{cover}", "-c:v", "copy", "-disposition:v:0", "attached_pic"]
             cmd += self.codec_args(cfg, seg_len)
@@ -927,7 +928,7 @@ class AudioExporterTab(BaseTab):
                 cmd += ["-movflags", "+faststart"]
             ctx.log("Encoding…")
             analysed = cfg["norm"] != "None" or cfg["replay_gain"] or cfg["strip_silence"]
-            ctx.span(0.6 if analysed else 0.0, 1.0).run(cmd + [ctx.output(out)], duration=seg_len)
+            ctx.span(0.6 if analysed else 0.0, 1.0).run([*cmd, ctx.output(out)], duration=seg_len)
             return 0
 
         def opened(rc):

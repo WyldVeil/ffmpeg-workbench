@@ -14,6 +14,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.i18n import t
+from core.ops.sharpen import sharpen_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -22,17 +23,6 @@ from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 METHODS = {"cas": "Smart sharpen (CAS) - recommended", "unsharp": "Unsharp mask (classic)",
            "clarity": "Clarity (local contrast)"}
 PRESETS = {"Subtle": 0.25, "Light": 0.45, "Medium": 0.65, "Strong": 0.85}
-
-
-def sharpen_chain(method: str, amount: float, radius: int = 5) -> str:
-    """*amount* 0..1, *radius* odd 3..13 (unsharp only)."""
-    a = max(0.0, min(1.0, amount))
-    if method == "unsharp":
-        r = max(3, min(13, int(radius) | 1))
-        return f"unsharp={r}:{r}:{a * 2.5:.2f}:{r}:{r}:0"
-    if method == "clarity":
-        return f"unsharp=13:13:{a * 1.2:.2f}:5:5:0"
-    return f"cas=strength={a:.2f}"
 
 
 class SharpenTab(BaseTab):

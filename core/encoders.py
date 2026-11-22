@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import sys
 import threading
@@ -29,6 +30,8 @@ from dataclasses import dataclass, field
 
 from core import proc as _proc
 from core import settings, tasks
+
+logger = logging.getLogger("crossfader.encoders")
 
 # ── Vocabularies ─────────────────────────────────────────────────────────────
 
@@ -124,6 +127,7 @@ def _cache_file() -> str | None:
         from core.paths import cache_dir
         return os.path.join(cache_dir(), "encoders.json")
     except Exception:
+        logger.debug("_cache_file: best-effort step failed", exc_info=True)
         return None
 
 
@@ -208,8 +212,7 @@ def _hw_test(ff: str, kind: str) -> bool:
     attempts = []
     if kind == "vaapi":
         for node in _vaapi_nodes():
-            attempts.append((node, base + ["-vaapi_device", node] + src +
-                             ["-vf", "format=nv12,hwupload"] + tail))
+            attempts.append((node, [*base, "-vaapi_device", node, *src, "-vf", "format=nv12,hwupload", *tail]))
     elif kind == "qsv":
         attempts.append((None, base + src + ["-pix_fmt", "nv12"] + tail))
     else:
@@ -276,7 +279,7 @@ def preferred_hw() -> str | None:
 
 def _setting_hw_mode() -> str:
     mode = settings.HW_ENCODE.get()
-    return mode if mode in ("auto", "off") + HW_KINDS else "auto"
+    return mode if mode in ("auto", "off", *HW_KINDS) else "auto"
 
 
 # ── Video arguments ──────────────────────────────────────────────────────────
@@ -441,7 +444,7 @@ def video(codec: str = "h264", quality: str = "high", *, speed: str = "balanced"
     if maxrate and encoder not in ("prores_ks", "dnxhd", "ffv1"):
         a += ["-maxrate", maxrate, "-bufsize", _double_rate(maxrate)]
     if gop_seconds and fps and encoder not in ("prores_ks", "dnxhd", "ffv1"):
-        a += ["-g", str(max(1, int(round(gop_seconds * fps))))]
+        a += ["-g", str(max(1, round(gop_seconds * fps)))]
     if ve.pix_fmt:
         a += ["-pix_fmt", ve.pix_fmt]
     a += container_video_args(container, codec)
@@ -562,9 +565,7 @@ def audio(codec: str = "aac", bitrate: str | None = "192k", *,
     a = ["-c:a", enc]
     if enc == "copy":
         return a
-    if enc == "libmp3lame":
-        a += ["-q:a", f"{vbr_quality:g}"] if vbr_quality is not None else ["-b:a", bitrate or "192k"]
-    elif enc == "libvorbis":
+    if enc == "libmp3lame" or enc == "libvorbis":
         a += ["-q:a", f"{vbr_quality:g}"] if vbr_quality is not None else ["-b:a", bitrate or "192k"]
     elif enc == "libopus":
         a += ["-b:a", bitrate or "128k", "-vbr", "on"]

@@ -1,3 +1,4 @@
+
 """
 tab_ttsvoiceover.py  ─  TTS Voice-Over
 Generate natural-sounding voice-over from text using Microsoft Edge TTS
@@ -7,25 +8,25 @@ or export as standalone audio.
 Dependencies are auto-installed into  <project_root>/libs/  on first run.
 No manual pip install required.
 """
+import contextlib
+import logging
 import os
-import sys
 import tempfile
+import time
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, tasks
+from core import proc as _proc
+from core import tts as tts_core
 from core.hardware import get_binary_path
+from core.i18n import t
+from core.ops.shared import audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
-CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
-
-# ── Engines (core/tts.py): online neural voices + the OS's own offline voice ──
-from functools import partial
-
-from core import tasks
-from core import tts as tts_core
-from core.i18n import t
+logger = logging.getLogger("crossfader.audio.tts")
 
 EDGE_TTS_OK = tts_core.edge_available()
 SYSTEM_TTS = tts_core.system_engine_label()       # "" when the OS has no voice engine
@@ -243,8 +244,8 @@ class TTSVoiceOverTab(BaseTab):
                            fg=CLR["accent"], font=(MONO_FONT, 9))
             lbl.pack(side="left")
             var.trace_add("write",
-                lambda *_, l=lbl, v=var, f=fmt_fn, u=unit:
-                l.config(text=f(v.get()) + u))
+                lambda *_, label=lbl, v=var, f=fmt_fn, u=unit:
+                label.config(text=f(v.get()) + u))
             return sl
 
         # Rate:   -50 … +100  (percent)
@@ -481,7 +482,7 @@ class TTSVoiceOverTab(BaseTab):
             self.text_box.insert(tk.INSERT, text)
             self._update_stats()
         except Exception:
-            pass
+            logger.debug("_paste_text: best-effort step failed", exc_info=True)
 
     def _load_text_file(self):
         p = dialogs.askopenfilename(
@@ -632,16 +633,13 @@ class TTSVoiceOverTab(BaseTab):
         if not self._player_path or not os.path.exists(self._player_path):
             return
         self._player_stop()
-        ffplay = get_binary_path("ffplay.exe")
-        cmd = [ffplay, "-nodisp", "-autoexit",
-               "-loglevel", "quiet", self._player_path]
+        cmd = [get_binary_path("ffplay"), "-nodisp", "-autoexit", "-loglevel", "quiet", self._player_path]
         try:
-            self._player_proc = __import__("subprocess").Popen(
-                cmd, creationflags=CREATE_NO_WINDOW)
-        except Exception as e:
+            self._player_proc = _proc.spawn(cmd)
+        except _proc.ProcessError as e:
             self.log(self.console, f"[WARN] ffplay failed: {e}")
             return
-        self._player_start_time = __import__("time").time()
+        self._player_start_time = time.monotonic()
         self._btn_play.config(state="disabled")
         self._btn_stop.config(state="normal")
         self._player_tick()
@@ -649,16 +647,11 @@ class TTSVoiceOverTab(BaseTab):
     def _player_stop(self):
         """Stop playback and reset the timer."""
         if self._player_proc:
-            try:
-                self._player_proc.terminate()
-            except Exception:
-                pass
+            _proc.kill_tree(self._player_proc)
             self._player_proc = None
         if self._player_timer:
-            try:
+            with contextlib.suppress(tk.TclError):
                 self.after_cancel(self._player_timer)
-            except Exception:
-                pass
             self._player_timer = None
         self._player_time_lbl.config(text="00:00")
         if self._player_path:
@@ -668,7 +661,7 @@ class TTSVoiceOverTab(BaseTab):
     def _player_tick(self):
         """Update the elapsed-time counter every second."""
         if self._player_proc and self._player_proc.poll() is None:
-            elapsed = int(__import__("time").time() - self._player_start_time)
+            elapsed = int(time.monotonic() - self._player_start_time)
             m, s = divmod(elapsed, 60)
             self._player_time_lbl.config(text=f"{m:02d}:{s:02d}")
             self._player_timer = self.after(1000, self._player_tick)
@@ -774,7 +767,6 @@ class TTSVoiceOverTab(BaseTab):
     def _build_cmd(self, speech, out, info, cfg):
         """FFmpeg command for the spoken track -> standalone audio or the video."""
         from core import ffmpeg as ff
-        from tabs import common
         pad_b, pad_a = cfg["pads"]
         chain = ["aformat=sample_rates=48000:channel_layouts=stereo", f"volume={cfg['vol']:.3f}"]
         if cfg["normalise"]:
@@ -790,8 +782,8 @@ class TTSVoiceOverTab(BaseTab):
             if out.lower().endswith(".mp3"):
                 cmd += ["-c:a", "libmp3lame", "-b:a", "320k" if "320" in fmt else "192k"]
             else:
-                cmd += common.audio_encoder_args(out)
-            return cmd + [out], None
+                cmd += audio_encoder_args(out)
+            return [*cmd, out], None
         dur = info.duration
         cmd = [ff.ffmpeg_path(), "-y", "-i", self._vid_path, "-i", speech]
         tts = "[1:a:0]" + ",".join(chain) + f",apad,atrim=duration={dur:.3f}"
@@ -810,7 +802,7 @@ class TTSVoiceOverTab(BaseTab):
         cmd += ["-c:a", "aac", "-b:a", "256k", "-t", f"{dur:.3f}"]
         if out.lower().endswith((".mp4", ".mov", ".m4v")):
             cmd += ["-movflags", "+faststart"]
-        return cmd + [out], dur
+        return [*cmd, out], dur
 
 
 def _shift_srt(srt: str, seconds: float) -> str:

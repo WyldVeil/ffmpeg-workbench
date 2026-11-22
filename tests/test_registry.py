@@ -96,9 +96,9 @@ def test_registry_is_lazy():
     import subprocess
     import sys
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    code = ("import sys; sys.path.insert(0, %r); import tabs.registry as r; "
+    code = (f"import sys; sys.path.insert(0, {root!r}); import tabs.registry as r; "
             "loaded = [m for m in sys.modules if m.startswith('tabs.') and m.count('.') >= 2]; "
-            "print(loaded)" % root)
+            "print(loaded)")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
     assert out == "[]", out
 

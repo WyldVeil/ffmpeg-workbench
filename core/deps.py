@@ -1,3 +1,4 @@
+
 """
 core/deps.py  ─  Vendored dependency manager
 
@@ -18,13 +19,16 @@ Usage (hard dependency - raises ImportError if it can't be loaded):
     from core.deps import ensure
     ensure("edge-tts", import_name="edge_tts")
 """
-
 import importlib
+import logging
 import os
 import sys
 import threading
+from types import ModuleType
 
 from core import proc as _proc
+
+logger = logging.getLogger("crossfader.deps")
 
 # ── Locate libs/ relative to this file ───────────────────────────────────────
 _HERE     = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +43,7 @@ def _user_libs_dir():
         from core.paths import _base  # the path only - nothing is created here
         base = _base("data")
     except Exception:
+        logger.debug("_user_libs_dir: best-effort step failed", exc_info=True)
         base = os.path.join(os.path.expanduser("~"), ".local", "share", "wyldveil-media-editor")
     return os.path.join(base, "python-libs", "py{}.{}".format(*sys.version_info[:2]))
 
@@ -54,7 +59,7 @@ def _install_dir():
     return _user_libs_dir()
 
 
-def _ensure_libs_on_path():
+def ensure_libs_on_path() -> None:
     """Make libs/ (and the per-user add-on folder) importable without creating
     anything, *after* the interpreter's own packages, so a stray copy can never
     shadow them."""
@@ -63,7 +68,7 @@ def _ensure_libs_on_path():
             sys.path.append(folder)
 
 
-_ensure_libs_on_path()
+ensure_libs_on_path()
 
 # Thread lock so parallel tab loads don't double-install the same package
 _install_lock = threading.Lock()
@@ -86,6 +91,7 @@ def _pip_install(pip_name):
         from core import network as _net
         env = _net.subprocess_env()
     except Exception:
+        logger.debug("_pip_install: best-effort step failed", exc_info=True)
         env = None
     target = _install_dir()
     try:
@@ -102,14 +108,14 @@ def _pip_install(pip_name):
                 "--no-warn-script-location",
             ], timeout=120, text=False, env=env)
         if result.returncode == 0:
-            _ensure_libs_on_path()
+            ensure_libs_on_path()
         return result.returncode == 0
     except Exception:
+        logger.debug("_pip_install: best-effort step failed", exc_info=True)
         return False
 
 
-def require(pip_name, import_name=None, auto_install=False):
-    # type: (str, str | None, bool) -> object | None
+def require(pip_name: str, import_name: str | None = None, auto_install: bool = False) -> ModuleType | None:
     """
     Try to import *import_name* (defaults to *pip_name* with hyphens → underscores).
     If missing and *auto_install* is True, install into libs/ and retry.
@@ -118,7 +124,7 @@ def require(pip_name, import_name=None, auto_install=False):
     if import_name is None:
         import_name = pip_name.replace("-", "_")
 
-    _ensure_libs_on_path()
+    ensure_libs_on_path()
 
     # Fast path - already importable
     try:
@@ -175,7 +181,7 @@ def is_available(pip_name, import_name=None):
     """
     if import_name is None:
         import_name = pip_name.replace("-", "_")
-    _ensure_libs_on_path()
+    ensure_libs_on_path()
     try:
         importlib.invalidate_caches()
         importlib.import_module(import_name)

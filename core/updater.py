@@ -24,7 +24,7 @@ from core import proc as _proc
 from core import settings
 from core.hardware import find_binary, platform_tag, user_tools_dir
 
-_log = logging.getLogger("crossfader.updater")
+logger = logging.getLogger("crossfader.updater")
 Log = Callable[[str], None]
 
 _BTBN_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases?per_page=8"
@@ -41,6 +41,7 @@ def _offline() -> bool:
         from core import network
         return network.is_offline()
     except Exception:
+        logger.debug("_offline: best-effort step failed", exc_info=True)
         return False
 
 
@@ -133,7 +134,7 @@ def latest_ytdlp_release(force: bool = False) -> str | None:
     try:
         return _json(_YTDLP_API).get("tag_name")
     except Exception as exc:
-        _log.info("yt-dlp update check failed: %s", exc)
+        logger.info("yt-dlp update check failed: %s", exc, exc_info=True)
         return None
 
 
@@ -178,7 +179,7 @@ def install_ytdlp(log: Log) -> bool:
         log(f"✅ yt-dlp {r.stdout.strip()} installed to {target_root}")
         return True
     except Exception as exc:
-        _log.exception("yt-dlp update failed")
+        logger.exception("yt-dlp update failed")
         log(f"❌ Update failed: {exc}")
         return False
 

@@ -28,6 +28,7 @@ accepts a third parameter receives a :class:`TaskContext` with ``run()``
 """
 from __future__ import annotations
 
+import contextlib
 import inspect
 import logging
 import os
@@ -41,7 +42,7 @@ from enum import StrEnum
 from core import ffmpeg as ff
 from core import settings, tasks
 
-_log = logging.getLogger("crossfader.queue")
+logger = logging.getLogger("crossfader.queue")
 
 class TaskStatus(StrEnum):
     """Where a job is in its life.  A StrEnum, so it still compares equal to
@@ -89,15 +90,15 @@ class RenderTask:
         self.on_start = on_start
         self.on_progress = on_progress
         self.on_complete = on_complete
-        self._cancel = threading.Event()
+        self.cancel_event = threading.Event()
         self._proc = None
-        self._completed_fired = False
-        self._tempdirs: list = []
-        self._parts: list = []          # (part, final) promoted on success
+        self.completed_fired = False
+        self.tempdirs: list = []
+        self.parts: list = []          # (part, final) promoted on success
 
     @property
     def cancelled(self) -> bool:
-        return self._cancel.is_set()
+        return self.cancel_event.is_set()
 
     @property
     def elapsed(self) -> float:
@@ -130,7 +131,7 @@ class TaskContext:
 
     def progress(self, fraction: float | None) -> None:
         """Report overall progress 0..1 for this task."""
-        self._m._set_fraction(self.task, fraction)
+        self._m.set_fraction(self.task, fraction)
 
     def span(self, start: float, end: float) -> TaskContext:
         """Map the next :meth:`run`'s 0..1 progress onto *start*..*end*."""
@@ -140,7 +141,7 @@ class TaskContext:
     def tempdir(self) -> str:
         from core.paths import temp_dir
         d = temp_dir(prefix=f"task_{self.task.id}_")
-        self.task._tempdirs.append(d)
+        self.task.tempdirs.append(d)
         return d
 
     def output(self, path: str | None = None) -> str:
@@ -150,7 +151,7 @@ class TaskContext:
         final = path or self.task.output_path
         base, ext = os.path.splitext(final)
         part = f"{base}.part{ext}"
-        self.task._parts.append((part, final))
+        self.task.parts.append((part, final))
         return part
 
     def run(self, cmd: Sequence[str], *, duration: float | None = None,
@@ -162,7 +163,7 @@ class TaskContext:
 
         def on_prog(p: ff.Progress):
             if p.fraction is not None:
-                self._m._set_fraction(self.task, lo + (hi - lo) * p.fraction, p)
+                self._m.set_fraction(self.task, lo + (hi - lo) * p.fraction, p)
 
         self._progress_cb("$ " + ff.format_cmd(cmd))
         res = ff.run(cmd, duration=duration, on_line=self._progress_cb,
@@ -241,7 +242,7 @@ class RenderQueueManager:
             self._work.notify()
         self._ensure_workers()
         self._fire_update(force=True)
-        _log.info("queued %s [%s] -> %s", task.name, task.id, task.output_path or "-")
+        logger.info("queued %s [%s] -> %s", task.name, task.id, task.output_path or "-")
         return task.id
 
     def get_task(self, task_id: str) -> RenderTask | None:
@@ -254,7 +255,7 @@ class RenderQueueManager:
             task = next((t for t in self._tasks if t.id == task_id), None)
             if task is None or task.status in (DONE, FAILED, CANCELLED):
                 return
-            task._cancel.set()
+            task.cancel_event.set()
             if task.status == PENDING:
                 task.status = CANCELLED
                 task.returncode = -1
@@ -326,7 +327,7 @@ class RenderQueueManager:
         from core import ui
         ui.call_soon(_safe_call, fn, *args)
 
-    def _set_fraction(self, task: RenderTask, fraction: float | None,
+    def set_fraction(self, task: RenderTask, fraction: float | None,
                       prog: ff.Progress | None = None) -> None:
         if fraction is not None:
             task.fraction = max(task.fraction or 0.0, min(1.0, fraction))
@@ -351,7 +352,7 @@ class RenderQueueManager:
             try:
                 self._execute(task)
             except Exception:  # pragma: no cover - last-resort guard
-                _log.exception("queue worker crashed on %s", task.name)
+                logger.exception("queue worker crashed on %s", task.name)
                 task.status = FAILED
                 task.error = "Internal error - see the log file."
                 self._complete(task)
@@ -378,12 +379,12 @@ class RenderQueueManager:
             task.error = exc.result.error_summary
             task.log_tail = exc.result.log_tail[-60:]
         except Exception as exc:
-            _log.exception("task %s failed", task.name)
+            logger.exception("task %s failed", task.name)
             progress_cb(f"⚠ {type(exc).__name__}: {exc}")
             task.error = f"{type(exc).__name__}: {exc}"
             rc = 1
         finally:
-            for d in task._tempdirs:
+            for d in task.tempdirs:
                 shutil.rmtree(d, ignore_errors=True)
         rc = self._promote_parts(task, rc)
 
@@ -398,7 +399,7 @@ class RenderQueueManager:
             task.status, task.returncode = FAILED, rc
             if not task.error:
                 task.error = ff.summarize_error(task.log_tail, rc)
-        _log.info("%s %s [%s] in %.1fs%s", task.status, task.name, task.id, task.elapsed,
+        logger.info("%s %s [%s] in %.1fs%s", task.status, task.name, task.id, task.elapsed,
                   f": {task.error.splitlines()[0]}" if task.status == FAILED and task.error else "")
         self._complete(task)
 
@@ -406,7 +407,7 @@ class RenderQueueManager:
     def _promote_parts(task: RenderTask, rc: int) -> int:
         """Rename a worker's ``.part`` outputs on success, delete them otherwise."""
         ok = rc == 0 and not task.cancelled
-        for part, final in task._parts:
+        for part, final in task.parts:
             if ok and (not os.path.exists(part) or os.path.getsize(part) == 0):
                 task.error = "The job finished but wrote no output."
                 ok, rc = False, 1
@@ -426,6 +427,7 @@ class RenderQueueManager:
 
     def _run_worker_fn(self, task: RenderTask, progress_cb) -> int:
         fn = task.worker_fn
+        assert fn is not None, "only called for worker tasks"
         wants_ctx = False
         try:
             params = [p for p in inspect.signature(fn).parameters.values()
@@ -457,7 +459,7 @@ class RenderQueueManager:
 
             def on_prog(p: ff.Progress, lo=lo, hi=hi):
                 if p.fraction is not None:
-                    self._set_fraction(task, lo + (hi - lo) * p.fraction, p)
+                    self.set_fraction(task, lo + (hi - lo) * p.fraction, p)
 
             progress_cb("$ " + ff.format_cmd(cmd))
             res = ff.run(argv, duration=task.expected_duration, on_line=progress_cb,
@@ -465,10 +467,8 @@ class RenderQueueManager:
             task.log_tail = res.log_tail[-60:]
             if res.cancelled or res.returncode != 0:
                 if part and os.path.exists(part):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(part)
-                    except OSError:
-                        pass
                 if res.cancelled:
                     return -1
                 task.error = res.error_summary
@@ -482,20 +482,20 @@ class RenderQueueManager:
 
     def _complete(self, task: RenderTask) -> None:
         with self._lock:
-            if task._completed_fired:
+            if task.completed_fired:
                 return
-            task._completed_fired = True
+            task.completed_fired = True
         self._fire_update(force=True)
         self._dispatch(task.on_complete, task.id, task.returncode)
         try:
             from core.notify import job_finished
             job_finished(task)
         except Exception:
-            pass
+            logger.debug("_complete: best-effort step failed", exc_info=True)
 
 
 def _safe_call(fn, *args):
     try:
         fn(*args)
     except Exception:
-        _log.exception("queue callback %r failed", getattr(fn, "__name__", fn))
+        logger.exception("queue callback %r failed", getattr(fn, "__name__", fn))

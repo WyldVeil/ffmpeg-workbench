@@ -114,7 +114,7 @@ def test_pip_keeps_background_length(ui, media, outdir):
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     assert info.duration == pytest.approx(ff.duration_of(media["h264_1080p25"]), abs=0.15)
-    assert (info.video.width, info.video.height) == (1920, 1080) and info.has_audio
+    assert (info.require_video().width, info.require_video().height) == (1920, 1080) and info.has_audio
 
 
 @pytest.mark.gui
@@ -137,7 +137,7 @@ def test_animated_zoom_keeps_length(ui, media, outdir, monkeypatch, gpu):
     src = ff.probe(media["h264"])
     info = ff.probe(out, use_cache=False)
     assert info.duration == pytest.approx(src.duration, abs=0.15)
-    assert info.video.fps == pytest.approx(src.video.fps, abs=0.05)
+    assert info.require_video().fps == pytest.approx(src.require_video().fps, abs=0.05)
 
 
 @pytest.mark.gui

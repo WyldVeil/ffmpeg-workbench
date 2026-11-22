@@ -91,15 +91,13 @@ def test_snapshot_saves_the_exact_frame(ui, media, outdir):
                 timeout=60)
     assert "Saved" in tab.result_lbl.cget("text"), tab.result_lbl.cget("text")
     info = ff.probe(out, use_cache=False)
-    assert (info.video.width, info.video.height) == (1280, 720) and info.video.pix_fmt == "rgb24"
+    assert (info.require_video().width, info.require_video().height) == (1280, 720) and info.require_video().pix_fmt == "rgb24"
     # the very same frame (number 45, counted from 0) straight from FFmpeg
     raw = [ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error"]
-    want = _rgb(raw + ["-i", media["h264"], "-vf", f"select=eq(n\\,45),{tab.chain()}", "-frames:v", "1",
-                       "-f", "rawvideo", "-"])
-    got = _rgb(raw + ["-i", out, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+    want = _rgb([*raw, "-i", media["h264"], "-vf", f"select=eq(n\\,45),{tab.chain()}", "-frames:v", "1", "-f", "rawvideo", "-"])
+    got = _rgb([*raw, "-i", out, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
     assert got == want
-    before = _rgb(raw + ["-i", media["h264"], "-vf", f"select=eq(n\\,44),{tab.chain()}", "-frames:v", "1",
-                         "-f", "rawvideo", "-"])
+    before = _rgb([*raw, "-i", media["h264"], "-vf", f"select=eq(n\\,44),{tab.chain()}", "-frames:v", "1", "-f", "rawvideo", "-"])
     assert got != before                     # the frames do differ, so the check means something
 
 
@@ -125,9 +123,9 @@ def test_snapshot_options_and_quick_save(ui, media, outdir):
     first = [p for p in pngs if not p.endswith(" (2).png")]
     assert len(pngs) == 2 and len(first) == 1, pngs
     info = ff.probe(str(outdir / first[0]), use_cache=False)
-    assert info.video.pix_fmt == "rgb48be"
+    assert info.require_video().pix_fmt == "rgb48be"
     src = ff.probe(media["hevc10"])
-    assert info.video.width == src.video.width // 2 // 2 * 2
+    assert info.require_video().width == src.require_video().width // 2 // 2 * 2
 
 
 @pytest.mark.gui

@@ -134,7 +134,7 @@ def build_command(template: str, src: str, out: str) -> list:
             final.append(a.replace("{INPUT}", fl.filter_path(src)))
         elif a not in ("-y", "-n"):
             final.append(a)
-    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"] + final
+    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *final]
 
 
 def _load_presets():
@@ -182,6 +182,7 @@ def _save_user_presets(presets) -> str:
 class PresetManagerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
+        self.editor: dict[str, tk.StringVar] = {}           # the preset editor's fields, by name
         self.presets, warning = _load_presets()
         self._selected_idx = None
         self._build_ui()
@@ -284,7 +285,7 @@ class PresetManagerTab(BaseTab):
             row = tk.Frame(ef); row.pack(fill="x", pady=px(4))
             tk.Label(row, text=label, width=12, anchor="e").pack(side="left")
             var = tk.StringVar()
-            setattr(self, attr, var)
+            self.editor[attr] = var
             if choices:
                 ttk.Combobox(row, textvariable=var, values=choices,
                              width=22).pack(side="left", padx=px(6))
@@ -390,9 +391,9 @@ class PresetManagerTab(BaseTab):
         idx = int(sel[0])
         self._selected_idx = idx
         p = self.presets[idx]
-        self.ed_name_var.set(p.get("name",""))
-        self.ed_cat_var.set(p.get("category","Custom"))
-        self.ed_desc_var.set(p.get("description",""))
+        self.editor["ed_name_var"].set(p.get("name",""))
+        self.editor["ed_cat_var"].set(p.get("category","Custom"))
+        self.editor["ed_desc_var"].set(p.get("description",""))
         self.ed_cmd_text.delete("1.0", tk.END)
         self.ed_cmd_text.insert(tk.END, p.get("cmd",""))
         # Auto-fill output name hint
@@ -406,16 +407,16 @@ class PresetManagerTab(BaseTab):
         self._clear_editor()
 
     def _clear_editor(self):
-        self.ed_name_var.set("")
-        self.ed_cat_var.set("Custom")
-        self.ed_desc_var.set("")
+        self.editor["ed_name_var"].set("")
+        self.editor["ed_cat_var"].set("Custom")
+        self.editor["ed_desc_var"].set("")
         self.ed_cmd_text.delete("1.0", tk.END)
 
     def _insert_snippet(self, s):
         self.ed_cmd_text.insert(tk.INSERT, " " + s + " ")
 
     def _save_preset(self):
-        name = self.ed_name_var.get().strip()
+        name = self.editor["ed_name_var"].get().strip()
         cmd  = self.ed_cmd_text.get("1.0", tk.END).strip()
         if not name:
             messagebox.showwarning(t("common.warning"), "Enter a preset name.")
@@ -431,8 +432,8 @@ class PresetManagerTab(BaseTab):
 
         entry = {
             "name":        name,
-            "category":    self.ed_cat_var.get(),
-            "description": self.ed_desc_var.get(),
+            "category":    self.editor["ed_cat_var"].get(),
+            "description": self.editor["ed_desc_var"].get(),
             "cmd":         cmd,
         }
 

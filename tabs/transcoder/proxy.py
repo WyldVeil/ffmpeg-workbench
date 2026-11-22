@@ -9,6 +9,8 @@ checked; failures are reported and never counted as done.
 """
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -20,6 +22,8 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.transcoder.converter import free_name
+
+logger = logging.getLogger("crossfader.transcoder.proxy")
 
 PRESETS = {   # key: (label, ext, video args, audio mode)
     "prores": ("ProRes Proxy (.mov) - Premiere, Resolve, Final Cut", ".mov",
@@ -211,6 +215,7 @@ class ProxyGenTab(BaseTab):
                     _remove(part)
                     raise
                 except Exception as exc:
+                    logger.debug("work: best-effort step failed", exc_info=True)
                     _remove(part)
                     reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
                     failed.append((src, reason))
@@ -227,7 +232,5 @@ class ProxyGenTab(BaseTab):
 
 
 def _remove(path):
-    try:
+    with contextlib.suppress(OSError):
         os.remove(path)
-    except OSError:
-        pass

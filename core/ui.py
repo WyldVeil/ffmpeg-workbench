@@ -19,16 +19,19 @@ from __future__ import annotations
 import contextlib
 import logging
 import queue
+import sys
 import threading
 from collections.abc import Callable, Iterator
 from typing import Any
 
-_log = logging.getLogger("crossfader.ui")
+logger = logging.getLogger("crossfader.ui")
 
 _q: queue.SimpleQueue[tuple] = queue.SimpleQueue()
 _root = None
 _main_ident: int | None = None
 _POLL_MS = 15
+_IDLE_MS = 100
+_quiet_ms = 0
 _BATCH = 400
 
 
@@ -39,6 +42,18 @@ def install(root, poll_ms: int = 15) -> None:
     _main_ident = threading.get_ident()
     _POLL_MS = max(5, int(poll_ms))
     root.after(_POLL_MS, _drain)
+
+
+def tk_error() -> type[Exception]:
+    """tkinter.TclError, without importing Tk here."""
+    tkinter = sys.modules.get("tkinter")
+    return tkinter.TclError if tkinter is not None else RuntimeError
+
+
+def tk_default_root() -> Any:
+    """Tk's default root window, if Tk is loaded and has one (without loading Tk)."""
+    tkinter = sys.modules.get("tkinter")
+    return getattr(tkinter, "_default_root", None)      # Tk keeps it private; this is the one place we read it
 
 
 def installed() -> bool:
@@ -67,26 +82,32 @@ def on_main_thread() -> bool:
 
 
 def _drain() -> None:
+    did_work = False
     try:
         for _ in range(_BATCH):
             try:
                 fn, args, kwargs = _q.get_nowait()
             except queue.Empty:
                 break
+            did_work = True
             try:
                 fn(*args, **kwargs)
             except Exception:  # never let one bad callback stop the pump
-                _log.exception("UI callback %r failed", getattr(fn, "__name__", fn))
+                logger.exception("UI callback %r failed", getattr(fn, "__name__", fn))
     finally:
         root = _root
         if root is not None:
+            # Every _POLL_MS while there is work; when idle, back off gradually to
+            # _IDLE_MS so an idle app doesn't wake the CPU 66 times a second.
+            global _quiet_ms
+            _quiet_ms = 0 if did_work else min(_IDLE_MS, _quiet_ms + _POLL_MS)
             try:
-                root.after(_POLL_MS, _drain)
-            except Exception:
-                pass  # root destroyed
+                root.after(max(_POLL_MS, _quiet_ms), _drain)
+            except tk_error():
+                logger.debug("_drain: the window is gone", exc_info=True)
 
 
-def call_soon(fn: Callable, *args: Any, **kwargs: Any) -> None:
+def call_soon(fn: Callable[..., object], *args: Any, **kwargs: Any) -> None:
     """Run ``fn(*args, **kwargs)`` on the Tk thread as soon as possible.
     Safe to call from any thread."""
     if _root is None:
@@ -94,15 +115,11 @@ def call_soon(fn: Callable, *args: Any, **kwargs: Any) -> None:
         if on_main_thread():
             fn(*args, **kwargs)
             return
-        try:
-            import tkinter
-            r = tkinter._default_root  # type: ignore[attr-defined]
-            if r is not None:
-                r.after(0, lambda: fn(*args, **kwargs))
-                return
-        except Exception:
-            pass
-        _log.warning("ui.call_soon before install(); dropping %r", fn)
+        r = tk_default_root()
+        if r is not None:
+            r.after(0, lambda: fn(*args, **kwargs))
+            return
+        logger.warning("ui.call_soon before install(); dropping %r", fn)
         return
     _q.put((fn, args, kwargs))
 
@@ -117,7 +134,7 @@ def debounce(widget, delay_ms: int, fn: Callable[[], None]) -> Callable[[], None
             try:
                 widget.after_cancel(state["after"])
             except Exception:
-                pass
+                logger.debug("trigger: best-effort step failed", exc_info=True)
         state["after"] = widget.after(delay_ms, _fire)
 
     def _fire():

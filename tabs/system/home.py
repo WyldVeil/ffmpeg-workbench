@@ -18,6 +18,8 @@ sidebar - it's reachable as the launch page and via the persistent
 
 from __future__ import annotations
 
+import contextlib
+import logging
 import tkinter as tk
 from collections.abc import Callable, Sequence
 
@@ -27,6 +29,8 @@ from core.scaling import px
 from core.tools import Category, ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import labels
+
+logger = logging.getLogger("crossfader.system.home")
 
 #: Shown at the top, one click from the launch screen: (tool, card text).
 _QUICK: tuple[tuple[ToolId, str], ...] = (
@@ -147,10 +151,8 @@ class HomeTab(BaseTab):
             return
         # Clear existing children
         for w in body.winfo_children():
-            try:
+            with contextlib.suppress(tk.TclError):
                 w.destroy()
-            except Exception:
-                pass
 
         # 1. Favourites
         favs = self._favourites()
@@ -201,6 +203,7 @@ class HomeTab(BaseTab):
         try:
             avail = self._scroll_body.winfo_width() or self.winfo_width() or px(1000)
         except Exception:
+            logger.debug("_render_grid: best-effort step failed", exc_info=True)
             avail = 1000
         col_w = px(self._CARD_WIDTH + 2 * self._GRID_PAD_X)
         cols = max(self._MIN_COLS, min(self._MAX_COLS, max(1, avail // col_w)))
@@ -271,7 +274,7 @@ class HomeTab(BaseTab):
                 card.config(bg=hover_bg, highlightbackground=CLR["accent"])
                 name_lbl.config(bg=hover_bg)
                 star_lbl.config(bg=hover_bg)
-            except Exception:
+            except tk.TclError:
                 pass
 
         def on_leave(_e):
@@ -279,7 +282,7 @@ class HomeTab(BaseTab):
                 card.config(bg=normal_bg, highlightbackground=CLR["border"])
                 name_lbl.config(bg=normal_bg)
                 star_lbl.config(bg=normal_bg)
-            except Exception:
+            except tk.TclError:
                 pass
 
         for w in (card, name_lbl, star_lbl):

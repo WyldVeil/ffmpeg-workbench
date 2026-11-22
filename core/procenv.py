@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Mapping
 
 _RESTORE = ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME",
             "GST_PLUGIN_PATH", "GIO_MODULE_DIR", "GDK_PIXBUF_MODULE_FILE",
             "QT_PLUGIN_PATH", "TCL_LIBRARY", "TK_LIBRARY", "SSL_CERT_FILE")
 
 
-def child_env(extra: dict | None = None) -> dict:
+def child_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ)
     if getattr(sys, "frozen", False) or os.environ.get("APPIMAGE"):
         for key in _RESTORE:

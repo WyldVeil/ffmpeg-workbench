@@ -91,7 +91,7 @@ class StallWatch:
             if gap > self.threshold:
                 if current is None:
                     current = (self._label, stamp, collections.Counter())
-                frame = sys._current_frames().get(self._main or 0)
+                frame = sys._current_frames().get(self._main or 0)  # noqa: SLF001 - CPython's sampling hook
                 if frame is not None:
                     current[2][_app_frames(traceback.extract_stack(frame), 4)] += 1
             elif current is not None:
@@ -128,7 +128,7 @@ class MainThreadSampler:
 
     def _loop(self) -> None:
         while self._running:
-            frame = sys._current_frames().get(self._main or 0)
+            frame = sys._current_frames().get(self._main or 0)  # noqa: SLF001 - CPython's sampling hook
             seen: set[str] = set()
             first = None
             while frame is not None:

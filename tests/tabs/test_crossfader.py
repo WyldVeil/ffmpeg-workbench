@@ -63,7 +63,7 @@ def test_hostile_filename_and_webm_output(media, outdir):
     res = ff.run(cmd, duration=seconds)
     assert res.ok, res.error_summary
     info = ff.probe(out, use_cache=False)
-    assert info.video.codec == "vp9" and info.audio.codec == "opus"
+    assert info.require_video().codec == "vp9" and info.require_audio().codec == "opus"
 
 
 def test_validation_messages(media):

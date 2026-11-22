@@ -139,14 +139,16 @@ def clean_command(info: ff.MediaInfo, src: str, out: str, *, keep_language: bool
     argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", src]
     kept = []                                   # streams in output order
     for s in info.streams:
-        if s.type == "video" and not s.attached_pic:
-            kept.append(s)
-        elif s.type == "audio":
-            kept.append(s)
-        elif s.type == "subtitle" and keep_subtitles and (s.raw.get("codec_tag_string") or "").lower() not in (
-                "gpmd", "camm"):
-            kept.append(s)
-        elif s.attached_pic and keep_cover:
+        telemetry = (s.raw.get("codec_tag_string") or "").lower() in ("gpmd", "camm")
+        if s.type == "audio":
+            keep = True
+        elif s.attached_pic:
+            keep = keep_cover                     # a cover picture
+        elif s.type == "video":
+            keep = True
+        else:
+            keep = s.type == "subtitle" and keep_subtitles and not telemetry
+        if keep:
             kept.append(s)
     ext = os.path.splitext(out)[1].lower()
     ass = any(s.type == "subtitle" and s.codec in ("ass", "ssa") for s in kept)
@@ -178,7 +180,7 @@ def clean_command(info: ff.MediaInfo, src: str, out: str, *, keep_language: bool
             notes.append(f"Removed {TELEMETRY_TAGS.get((s.raw.get('codec_tag_string') or '').lower()) or 'a data track'}.")
     if ext in (".mp4", ".mov", ".m4v", ".m4a"):
         argv += ["-movflags", "+faststart"]
-    return argv + [out], notes
+    return [*argv, out], notes
 
 
 def leftovers(after: list, *, keep_chapters: bool = False, keep_cover: bool = False,

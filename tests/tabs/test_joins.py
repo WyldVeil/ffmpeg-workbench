@@ -28,7 +28,7 @@ def test_filter_join_normalises_and_fills_silence(media, outdir):
     info = ff.probe(out, use_cache=False)
     assert info.duration == pytest.approx(7.0, abs=0.15)
     assert (info.width, info.height) == (1280, 720) and info.has_audio
-    assert abs(info.video.duration - info.audio.duration) < 0.1
+    assert abs(info.require_video().duration - info.require_audio().duration) < 0.1
 
 
 def _add_files(ui, tab, paths):

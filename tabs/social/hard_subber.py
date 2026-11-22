@@ -11,9 +11,11 @@ to UTF-8 automatically, and odd file names can't break the filter.
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tkinter as tk
+from pathlib import Path
 from tkinter import colorchooser, messagebox, ttk
 
 from core import ass
@@ -25,6 +27,8 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
+logger = logging.getLogger("crossfader.social.hard_subber")
+
 POSITIONS = {"bottom": ("Bottom centre", 2), "top": ("Top centre", 8),
              "middle": ("Middle", 5), "bottom_left": ("Bottom left", 1),
              "bottom_right": ("Bottom right", 3)}
@@ -33,7 +37,7 @@ _EXTERNAL = "External subtitle file"
 
 def to_utf8_copy(path: str, folder: str) -> str:
     """Copy a subtitle file into *folder* as UTF-8 with a safe name."""
-    raw = open(path, "rb").read()
+    raw = Path(path).read_bytes()
     text = None
     for enc in ("utf-8-sig", "utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else ("utf-8-sig",):
         try:
@@ -47,6 +51,7 @@ def to_utf8_copy(path: str, folder: str) -> str:
             best = from_bytes(raw).best()
             text = str(best) if best is not None else None
         except Exception:
+            logger.debug("to_utf8_copy: best-effort step failed", exc_info=True)
             text = None
     if text is None:
         text = raw.decode("cp1252", errors="replace")
@@ -229,7 +234,7 @@ class HardSubberTab(BaseTab):
         """The burn filter; external files are first copied (UTF-8) into *folder*."""
         track = next((tr for tr in self._tracks if tr[0] == self.track_var.get()), None)
         if track is not None:
-            label, index, codec = track
+            _label, index, codec = track
             if codec in ("hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle"):
                 raise ValueError("Picture-based subtitle tracks are burned with the overlay "
                                  "method - choose a text track or an external file.")

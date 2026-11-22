@@ -17,6 +17,7 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.denoise import denoise_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -25,22 +26,6 @@ from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 METHODS = {"fast": "Fast - spatial + temporal (hqdn3d)", "nlm": "Best quality - non-local means",
            "temporal": "Temporal - static / tripod shots (atadenoise)", "grain": "Film grain - frequency domain"}
 PRESETS = {"Light": 2.5, "Medium": 5.0, "Strong": 7.5, "Very strong": 10.0}
-
-
-def denoise_chain(method: str, strength: float, *, gpu: bool = False) -> str:
-    """Filter chain for *strength* 1..10 (CPU chain unless *gpu*)."""
-    s = max(0.5, min(10.0, strength))
-    if method == "nlm":
-        sigma = 1.0 + s * 0.8
-        if gpu:
-            return f"format=yuv420p,hwupload,nlmeans_vulkan=s={sigma:.2f}:p=7:r=15,hwdownload,format=yuv420p"
-        return f"nlmeans=s={sigma:.2f}:p=7:r=15"
-    if method == "temporal":
-        return (f"atadenoise=0a={0.01 + s * 0.006:.3f}:0b={0.02 + s * 0.012:.3f}:"
-                f"1a={0.01 + s * 0.006:.3f}:1b={0.02 + s * 0.012:.3f}:s={min(99, 5 + int(s) * 2) | 1}")
-    if method == "grain":
-        return f"fftdnoiz=sigma={s * 2.5:.1f}:amount=1:overlap=0.5"
-    return f"hqdn3d={s * 0.8:.2f}:{s * 0.6:.2f}:{s * 1.2:.2f}:{s * 0.9:.2f}"
 
 
 class DenoiseTab(BaseTab):

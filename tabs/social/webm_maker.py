@@ -1,3 +1,4 @@
+
 """
 tab_webmmaker.py  ─  WebM Maker
 Produces the highest quality WebM possible within a user-defined file-size
@@ -6,6 +7,8 @@ budget, using proper two-pass bitrate targeting.
 Quality presets map to cpu-used + deadline settings for VP8/VP9.
 Resolution sliders lock to original aspect ratio if desired.
 """
+import contextlib
+import logging
 import math
 import os
 import tkinter as tk
@@ -19,6 +22,8 @@ from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
+
+logger = logging.getLogger("crossfader.social.webm_maker")
 
 # ─── Quality preset definitions ──────────────────────────────────────────────
 # Each entry: (label, vp9_cpu_used, vp9_deadline, vp8_cpu_used, crf_hint)
@@ -590,7 +595,7 @@ class WebMTab(BaseTab):
             self.src_info_lbl.config(text="Not a readable video.", fg=CLR["red"])
             self._update_simple_estimate()
             return
-        v = info.video
+        v = info.require_video()
         w, h = v.display_size
         self._src_path = path
         self._src_w, self._src_h = w, h
@@ -696,18 +701,14 @@ class WebMTab(BaseTab):
         """Slider drag → commit width via the same path as entry-commit."""
         if self._lock_updating:
             return
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             self._apply_w(int(float(val)))
-        except (ValueError, TypeError):
-            pass
 
     def _on_h_slider(self, val):
         if self._lock_updating:
             return
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             self._apply_h(int(float(val)))
-        except (ValueError, TypeError):
-            pass
 
     def _commit_w_from_entry(self):
         """User pressed Enter or tabbed away — parse and apply, or revert."""
@@ -752,7 +753,7 @@ class WebMTab(BaseTab):
             self.res_w_var.set(w)
             self.res_w_entry_var.set(str(w))
             if self.lock_ar_var.get() and self._aspect:
-                h = _snap_even(int(round(w / self._aspect)))
+                h = _snap_even(round(w / self._aspect))
                 self.res_h_var.set(h)
                 self.res_h_entry_var.set(str(h))
         finally:
@@ -767,7 +768,7 @@ class WebMTab(BaseTab):
             self.res_h_var.set(h)
             self.res_h_entry_var.set(str(h))
             if self.lock_ar_var.get() and self._aspect:
-                w = _snap_even(int(round(h * self._aspect)))
+                w = _snap_even(round(h * self._aspect))
                 self.res_w_var.set(w)
                 self.res_w_entry_var.set(str(w))
         finally:
@@ -812,6 +813,7 @@ class WebMTab(BaseTab):
                     audio_kbps = int(
                         self.audio_br_var.get().replace("k", ""))
                 except Exception:
+                    logger.debug("_update_budget_label: best-effort step failed", exc_info=True)
                     audio_kbps = 128
 
             if dur > 0:
@@ -969,7 +971,7 @@ class WebMTab(BaseTab):
         two_pass = self.twopass_var.get()
         size_limited = self.size_limit_enabled_var.get()
         preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
-        _, vp9_cpu, vp9_deadline, vp8_cpu, crf_hint = preset
+        _, vp9_cpu, vp9_deadline, vp8_cpu, _crf_hint = preset
         t_start = ff.parse_time(self.trim_start_var.get() or "0")
         t_end_txt = (self.trim_end_var.get() or "0").strip()
         t_end = ff.parse_time(t_end_txt) if t_end_txt not in ("", "0") else 0.0
@@ -1088,7 +1090,7 @@ class WebMTab(BaseTab):
             self.btn_cancel.config(state="disabled")
             self.progress.config(value=100 if rc == 0 else 0)
             task = self.task(tid)
-            self._last_task = task
+            self.last_task = task
             if rc == 0 and os.path.exists(out):
                 mb = os.path.getsize(out) / 1024 / 1024
                 self.status_var.set(f"✅  Done  →  {mb:.2f} MB  ({out})")

@@ -32,7 +32,7 @@ def lossless_cmd(src: str, out: str, offset: float, track: int, n_audio: int) ->
     cmd += ["-map", "0:s?", "-c", "copy", "-map_metadata", "0"]
     if out.lower().endswith((".mp4", ".mov", ".m4v")):
         cmd += ["-movflags", "+faststart"]
-    return cmd + [out]
+    return [*cmd, out]
 
 
 def reencode_filter(offset: float) -> str:

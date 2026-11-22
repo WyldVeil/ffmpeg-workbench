@@ -8,6 +8,7 @@ noise or silence, at any common resolution and frame rate.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
@@ -95,7 +96,7 @@ def video_source(pattern: str, w: int, h: int, rate: str, dur: float, colour: st
 
 
 def countdown_length(dur: float) -> int:
-    return max(3, int(round(dur)))
+    return max(3, round(dur))
 
 
 def countdown_source(w: int, h: int, rate: str, dur: float, textfile: str | None) -> str:
@@ -298,11 +299,9 @@ class MediaGeneratorTab(BaseTab):
         if not audio_only:
             codec = {"mov": "prores", "webm": "vp9"}.get(container, "h264")
             venc = enc.video(codec, "high", hw="off", container=container)
-            cmd += venc.args + ["-t", f"{dur:.3f}"]
+            cmd += [*venc.args, "-t", f"{dur:.3f}"]
         if asrc:
-            if container in ("wav",):
-                cmd += ["-c:a", "pcm_s24le"]
-            elif container == "mov":
+            if container in ("wav",) or container == "mov":
                 cmd += ["-c:a", "pcm_s24le"]
             else:
                 cmd += enc.audio(enc.default_audio_for(container), container=container,
@@ -314,10 +313,8 @@ class MediaGeneratorTab(BaseTab):
 
         def done(rc):
             if textfile:
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(textfile)
-                except OSError:
-                    pass
             self.show_result(rc, out)
 
         self.run_ffmpeg(cmd, self.console, on_done=done, btn=self.btn_render,

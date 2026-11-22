@@ -6,6 +6,8 @@ CLR palette; the Mystical theme adds a slow star field behind the window.
 """
 from __future__ import annotations
 
+import contextlib
+import logging
 import random
 import sys
 import tkinter as tk
@@ -14,6 +16,8 @@ from tkinter import ttk
 from core import settings
 from core.scaling import px
 from core.skins import UI_FONT, get_skin, load_skin_name
+
+logger = logging.getLogger("crossfader.kit.theme")
 
 # ── Module-level state for star animation ────────────────────────────────────
 _star_canvas   = None
@@ -57,7 +61,7 @@ def stop_stars():
         try:
             if _star_canvas and _star_canvas.winfo_exists():
                 _star_canvas.after_cancel(_star_after_id)
-        except Exception:
+        except tk.TclError:
             pass
         _star_after_id = None
     # Destroying the Toplevel also destroys the canvas inside it
@@ -65,7 +69,7 @@ def stop_stars():
         try:
             if _star_toplevel.winfo_exists():
                 _star_toplevel.destroy()
-        except Exception:
+        except tk.TclError:
             pass
         _star_toplevel = None
         _star_canvas   = None
@@ -73,7 +77,7 @@ def stop_stars():
         try:
             if _star_canvas.winfo_exists():
                 _star_canvas.destroy()
-        except Exception:
+        except tk.TclError:
             pass
         _star_canvas = None
     _star_data.clear()
@@ -128,7 +132,7 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
                 ctypes.windll.user32.SetWindowLongW(
                     hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED | WS_EX_TRANSPARENT)
             except Exception:
-                pass
+                logger.debug("_make_clickthrough: best-effort step failed", exc_info=True)
         app.after(80, _make_clickthrough)
 
         _star_canvas = tk.Canvas(
@@ -151,7 +155,7 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
                     h = app.winfo_height()
                     _star_toplevel.geometry(f"{w}x{h}+{x}+{y}")
             except Exception:
-                pass
+                logger.debug("_sync: best-effort step failed", exc_info=True)
             _star_toplevel.after(500, _sync)
 
         # Bind to Configure for immediate response to resize/move
@@ -164,7 +168,7 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
                     h = app.winfo_height()
                     _star_toplevel.geometry(f"{w}x{h}+{x}+{y}")
             except Exception:
-                pass
+                logger.debug("_on_configure: best-effort step failed", exc_info=True)
         app.bind("<Configure>", _on_configure, add=True)
         app.after(50, _sync)
 
@@ -173,12 +177,10 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
         _star_canvas = tk.Canvas(app, bg=skin["sb_bg"],
                                   highlightthickness=0, bd=0)
         _star_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
-        try:
-            # Canvas.lower() reorders the canvas's *items*; the window-stacking
-            # lower is Misc.lower - without it the canvas covered the whole UI.
+        # Canvas.lower() reorders the canvas's *items*; the window-stacking
+        # lower is Misc.lower - without it the canvas covered the whole UI.
+        with contextlib.suppress(tk.TclError):
             tk.Misc.lower(_star_canvas)
-        except tk.TclError:
-            pass
 
     # _star_data is populated lazily on the first tick.
     # We use the MAIN APP window dimensions (always reliable) rather than the
@@ -218,10 +220,8 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
 
         for s in _star_data:
             if s["id"] is not None:
-                try:
+                with contextlib.suppress(tk.TclError):
                     _star_canvas.delete(s["id"])
-                except Exception:
-                    pass
                 s["id"] = None
 
             s["y"] += px(s["speed"] * _star_speed_mult)
@@ -386,7 +386,7 @@ def apply_default_options(app: tk.Tk, skin: dict):
         app.option_add("*Menu.TearOff",                "0",   P)
 
     except Exception:
-        pass
+        logger.debug("apply_default_options: best-effort step failed", exc_info=True)
 
 
 # ── Main entry point ─────────────────────────────────────────────────────────
@@ -398,7 +398,7 @@ def _blend(a: str, b: str, amount: float) -> str:
         cb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
     except (ValueError, IndexError, TypeError):
         return a
-    return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb))
+    return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb, strict=False))
 
 
 def apply_skin(app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame, stars_behind: tk.Misc | None = None) -> dict:
@@ -514,7 +514,7 @@ def apply_ttk_styles(skin: dict):
                   foreground=[("active", acc)])
 
     except Exception:
-        pass
+        logger.debug("apply_ttk_styles: best-effort step failed", exc_info=True)
 
 
 def _recolour_frame(widget, bg_col: str):
@@ -524,12 +524,12 @@ def _recolour_frame(widget, bg_col: str):
         if cls in ("Frame", "Label", "Checkbutton"):
             widget.config(bg=bg_col)
     except Exception:
-        pass
+        logger.debug("_recolour_frame: best-effort step failed", exc_info=True)
     try:
         for child in widget.winfo_children():
             _recolour_frame(child, bg_col)
     except Exception:
-        pass
+        logger.debug("_recolour_frame: best-effort step failed", exc_info=True)
 
 
 def _recolour_widget_tree(widget, skin: dict):
@@ -543,16 +543,13 @@ def _recolour_widget_tree(widget, skin: dict):
         c   = skin["content"]
 
         if cls == "Frame":
-            try: widget.config(bg=c)
-            except Exception: pass
+            with contextlib.suppress(tk.TclError): widget.config(bg=c)
         elif cls == "Label":
-            try: widget.config(bg=c, fg=skin["fg"])
-            except Exception: pass
+            with contextlib.suppress(tk.TclError): widget.config(bg=c, fg=skin["fg"])
         elif cls == "LabelFrame":
-            try: widget.config(bg=c, fg=skin["fgdim"])
-            except Exception: pass
+            with contextlib.suppress(tk.TclError): widget.config(bg=c, fg=skin["fgdim"])
 
         for child in widget.winfo_children():
             _recolour_widget_tree(child, skin)
     except Exception:
-        pass
+        logger.debug("_recolour_widget_tree: best-effort step failed", exc_info=True)

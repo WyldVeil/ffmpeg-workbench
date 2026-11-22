@@ -9,7 +9,6 @@ preview, then render.
 """
 from __future__ import annotations
 
-import re
 import tkinter as tk
 from functools import partial
 from tkinter import messagebox
@@ -17,30 +16,11 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.auto_cropper import detect_bars
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
-
-
-def detect_bars(path: str, duration: float, samples: int = 6) -> tuple | None:
-    """(x, y, w, h) of the picture area, or None when there are no bars."""
-    boxes = []
-    for i in range(samples):
-        at = duration * (i + 0.5) / samples
-        r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-ss", ff.ts(at), "-t", "1.5",
-                        "-i", path, "-an", "-sn", "-vf", "cropdetect=limit=0.094:round=2:reset=0",
-                        "-f", "null", "-"], timeout=60)
-        found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", r.stderr or "")
-        if found:
-            w, h, x, y = (int(v) for v in found[-1])
-            boxes.append((x, y, x + w, y + h))
-    if not boxes:
-        return None
-    # union of what each sample considered picture: never cut into a bright scene
-    x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
-    x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
-    return x0 // 2 * 2, y0 // 2 * 2, (x1 - x0) // 2 * 2, (y1 - y0) // 2 * 2
 
 
 class AutoCropperTab(BaseTab):
@@ -104,7 +84,7 @@ class AutoCropperTab(BaseTab):
 
         def done(box):
             self.btn_detect.config(state="normal")
-            w, h = info.video.display_size
+            w, h = info.require_video().display_size
             if not box or (box[2] >= w - 2 and box[3] >= h - 2):
                 self.box = None
                 self.result_lbl.config(text="No black bars found - nothing to crop.")
@@ -127,7 +107,7 @@ class AutoCropperTab(BaseTab):
         if shown is None or self.box is None or self._info is None or not self._info.has_video:
             return
         ix, iy, iw, ih = shown
-        vw, vh = self._info.video.display_size
+        vw, vh = self._info.require_video().display_size
         sx, sy = iw / max(1, vw), ih / max(1, vh)
         x, y, bw, bh = self.box
         kx0, ky0, kx1, ky1 = ix + x * sx, iy + y * sy, ix + (x + bw) * sx, iy + (y + bh) * sy

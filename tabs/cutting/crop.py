@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.crop import fit_aspect
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -26,18 +27,6 @@ ASPECTS = [("free", "Free", None), ("16:9", "16:9 (YouTube)", (16, 9)),
            ("9:16", "9:16 (Shorts / Reels)", (9, 16)), ("1:1", "1:1 (square)", (1, 1)),
            ("4:5", "4:5 (Instagram)", (4, 5)), ("4:3", "4:3 (classic)", (4, 3)),
            ("21:9", "21:9 (cinema)", (21, 9))]
-
-
-def fit_aspect(vw: int, vh: int, rw: int, rh: int) -> tuple:
-    """Largest centred rectangle of aspect rw:rh inside vw x vh (even sizes)."""
-    if vw / vh > rw / rh:
-        h = vh
-        w = int(h * rw / rh)
-    else:
-        w = vw
-        h = int(w * rh / rw)
-    w, h = min(w, vw) // 2 * 2, min(h, vh) // 2 * 2
-    return (vw - w) // 4 * 2, (vh - h) // 4 * 2, w, h
 
 
 def parse_cropdetect(text: str):
@@ -162,7 +151,7 @@ class ManualCropTab(BaseTab):
         h = max(16, min(int(h), self.vid_h))
         x = max(0, min(int(x), self.vid_w - w))
         y = max(0, min(int(y), self.vid_h - h))
-        for var, val in zip((self._cx, self._cy, self._cw, self._ch), (x, y, w, h)):
+        for var, val in zip((self._cx, self._cy, self._cw, self._ch), (x, y, w, h), strict=False):
             var.set(val)
         self._draw()
 
@@ -285,10 +274,10 @@ class ManualCropTab(BaseTab):
             self.info_lbl.config(text="Not a readable video.")
             self._draw()
             return
-        self.vid_w, self.vid_h = info.video.display_size
+        self.vid_w, self.vid_h = info.require_video().display_size
         self.duration = info.duration
         self.info_lbl.config(text=f"{ff.format_time(self.duration)}  ·  {self.vid_w}×{self.vid_h}"
-                                  + (f"  (rotated {info.video.rotation}°)" if info.video.rotation else ""))
+                                  + (f"  (rotated {info.require_video().rotation}°)" if info.require_video().rotation else ""))
         self.slider.configure(to=max(self.duration, 0.01))
         self.pos_var.set(min(self.duration * 0.25, 30))
         self._photo = None

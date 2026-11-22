@@ -19,6 +19,7 @@ from core import ass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -261,7 +262,7 @@ class SideBySideTab(BaseTab):
             return
         w, h = SIZES.get(self.size_var.get(), (1920, 1080))
         first = ff.probe(clips[0].path)
-        fps = common.frame_rate(first)
+        fps = frame_rate(first)
         out = common.output_for(self, self.out_row, clips[0].path, "side_by_side",
                                 inputs=[c.path for c in clips[1:]])
         if not out:

@@ -29,11 +29,11 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from functools import partial
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 from core import paths, proc, tasks, ui
 
-_log = logging.getLogger("crossfader.capabilities")
+logger = logging.getLogger("crossfader.capabilities")
 
 Name = Literal["filters", "vulkan", "anlmdn"]
 NAMES: Final[tuple[Name, ...]] = ("filters", "vulkan", "anlmdn")
@@ -54,7 +54,7 @@ def _ffmpeg() -> str:
 
 def _learn_filters() -> list[str]:
     out = proc.run([_ffmpeg(), "-hide_banner", "-filters"], timeout=20).stdout
-    names = set()
+    names: set[str] = set()
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 3 and len(parts[0]) <= 4 and "->" in parts[2]:
@@ -111,22 +111,22 @@ def _read_disk() -> dict[str, Any]:
             data = json.load(f)
     except (OSError, ValueError):
         return {}
-    return data if isinstance(data, dict) else {}
+    return cast("dict[str, Any]", data) if isinstance(data, dict) else {}
 
 
 def _from_disk(name: Name, ident: str) -> Any:
-    entry = _read_disk().get(f"{name}|{ident}")
-    if isinstance(entry, dict) and time.time() - float(entry.get("at", 0)) < _MAX_AGE:
-        return entry.get("value", _MISSING)
+    entry: Any = _read_disk().get(f"{name}|{ident}")
+    if isinstance(entry, dict) and time.time() - float(entry.get("at", 0)) < _MAX_AGE:  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        return entry.get("value", _MISSING)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     return _MISSING
 
 
 def _to_disk(name: Name, ident: str, value: Any) -> None:
     with _disk_lock:
-        data = {k: v for k, v in _read_disk().items()
-                if isinstance(v, dict) and time.time() - float(v.get("at", 0)) < _MAX_AGE}
+        data: dict[str, Any] = {k: v for k, v in _read_disk().items()
+                                if isinstance(v, dict) and time.time() - float(v.get("at", 0)) < _MAX_AGE}  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         if isinstance(value, (set, frozenset)):
-            value = sorted(value)
+            value = sorted(cast("set[str]", value))
         data[f"{name}|{ident}"] = {"value": value, "at": time.time()}
         tmp = _cache_file() + ".tmp"
         try:
@@ -134,7 +134,7 @@ def _to_disk(name: Name, ident: str, value: Any) -> None:
                 json.dump(data, f)
             os.replace(tmp, _cache_file())
         except OSError:
-            _log.debug("could not save %s", _cache_file(), exc_info=True)
+            logger.debug("could not save %s", _cache_file(), exc_info=True)
 
 
 # ── Reading ───────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ def get(name: Name) -> Any:
     if value is not _MISSING:
         return value
     if ui.installed() and ui.on_main_thread():
-        _log.debug("UI thread waits for capability %r - call warm() earlier or use peek()", name)
+        logger.debug("UI thread waits for capability %r - call warm() earlier or use peek()", name)
         return tasks.submit(partial(get, name), name=f"capability {name}").result()
     with _locks[name]:
         value = _values.get(name, _MISSING)
@@ -159,7 +159,7 @@ def get(name: Name) -> Any:
             try:
                 value = learn()
             except proc.ProcessError:
-                _log.info("capability %s: FFmpeg could not be run; assuming %r", name, fallback, exc_info=True)
+                logger.info("capability %s: FFmpeg could not be run; assuming %r", name, fallback, exc_info=True)
                 value, ident = fallback, None           # don't remember a guess
             if ident:
                 _to_disk(name, ident, value)

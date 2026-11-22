@@ -23,6 +23,7 @@ from core import ass, concat, tasks
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -288,9 +289,7 @@ class IntroMakerTab(BaseTab):
         cmd = [ff.ffmpeg_path(), "-y", *args]
         if preview_at is not None:
             pw, ph = px(384), px(216)                 # the preview box, in screen pixels
-            return cmd + ["-filter_complex", chain + f",scale={pw}:{ph}:force_original_aspect_ratio=decrease[v]",
-                          "-map", "[v]", "-ss", f"{preview_at:.3f}", "-frames:v", "1",
-                          "-f", "image2pipe", "-c:v", "png", "-"]
+            return [*cmd, "-filter_complex", chain + f",scale={pw}:{ph}:force_original_aspect_ratio=decrease[v]", "-map", "[v]", "-ss", f"{preview_at:.3f}", "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "-"]
         music = self.music_row.path
         if music and os.path.isfile(music):
             cmd += ["-i", music]
@@ -303,8 +302,7 @@ class IntroMakerTab(BaseTab):
             chain += "[v]"
             amap = ["-map", "1:a"]
         venc = venc or enc.video("h264", "very_high", hw="off", container="mp4")
-        return cmd + ["-filter_complex", chain, "-map", "[v]", *amap, *venc.args,
-                      "-c:a", "aac", "-b:a", "192k", "-t", f"{dur:.3f}", out]
+        return [*cmd, "-filter_complex", chain, "-map", "[v]", *amap, *venc.args, "-c:a", "aac", "-b:a", "192k", "-t", f"{dur:.3f}", out]
 
     def settings(self):
         dur = common.number(self.dur_var.get(), "Length", 0.5, 120)
@@ -384,7 +382,7 @@ class IntroMakerTab(BaseTab):
         venc = self.encoder.video_encode(container)
         if main_info is not None:
             w, h = common.even_size(main_info)
-            fps = common.frame_rate(main_info)
+            fps = frame_rate(main_info)
         else:
             w, h = RESOLUTIONS.get(self.res_var.get(), (1920, 1080))
             fps = self.fps_var.get() or "30"

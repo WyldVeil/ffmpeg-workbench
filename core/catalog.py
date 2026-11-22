@@ -185,7 +185,7 @@ def describe(info) -> str:
         if info.duration > 0.05 and v.fps:
             parts.append(f"{v.fps:.3g} fps")
     if info.duration > 0.05:
-        m, s = divmod(int(round(info.duration)), 60)
+        m, s = divmod(round(info.duration), 60)
         h_, m = divmod(m, 60)
         parts.append(f"{h_}:{m:02d}:{s:02d}" if h_ else f"{m}:{s:02d}")
     if info.size:

@@ -39,10 +39,10 @@ def _cruncher(ui, src, out, *, codec, container="auto", audio="aac256", copy_vid
 @pytest.mark.ffmpeg
 def test_cruncher_reencodes(ui, media, outdir):
     info = _cruncher(ui, media["h264"], str(outdir / "c.mkv"), codec="hevc", container="mkv", audio="opus")
-    assert (info.video.codec, info.audio.codec) == ("hevc", "opus")
+    assert (info.require_video().codec, info.require_audio().codec) == ("hevc", "opus")
     assert info.duration == pytest.approx(6.0, abs=0.1)
     info = _cruncher(ui, media["h264_b"], str(outdir / "p.mov"), codec="prores", audio="pcm24")
-    assert (info.video.codec, info.audio.codec) == ("prores", "pcm_s24le")
+    assert (info.require_video().codec, info.require_audio().codec) == ("prores", "pcm_s24le")
 
 
 @pytest.mark.gui
@@ -50,7 +50,7 @@ def test_cruncher_reencodes(ui, media, outdir):
 def test_cruncher_copies_video(ui, media, outdir):
     info = _cruncher(ui, media["vp9"], str(outdir / "v.mkv"), codec="h264", container="mkv", audio="copy",
                      copy_video=True)
-    assert (info.video.codec, info.audio.codec) == ("vp9", "opus")
+    assert (info.require_video().codec, info.require_audio().codec) == ("vp9", "opus")
 
 
 # ── Audio Sync Shifter ───────────────────────────────────────────────────────
@@ -74,8 +74,8 @@ def test_sync_shifter(ui, media, outdir, offset, lossless):
     info = ff.probe(out, use_cache=False)
     if lossless:
         # the sound's timestamps start later; nothing re-encoded
-        assert info.audio.start_time - info.video.start_time == pytest.approx(offset, abs=0.05)
-        assert info.audio.codec == ff.probe(media["h264"]).audio.codec
+        assert info.require_audio().start_time - info.require_video().start_time == pytest.approx(offset, abs=0.05)
+        assert info.require_audio().codec == ff.probe(media["h264"]).audio.codec
     elif offset > 0:
         assert _mean_db(out, 0.0, offset - 0.05) < -60          # silence in front...
         assert _mean_db(out, 1.0, 1.0) > -30                    # ...then the sound
@@ -125,6 +125,6 @@ def test_every_effect_renders(ui, media, outdir, render, src_attr, out_attr, sou
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     src = ff.probe(media[source])
-    assert info.video.width % 2 == 0 and info.video.pix_fmt == "yuv420p"
+    assert info.require_video().width % 2 == 0 and info.require_video().pix_fmt == "yuv420p"
     assert info.duration >= src.duration - 0.2
     assert info.has_audio == src.has_audio

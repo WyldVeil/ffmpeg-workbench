@@ -18,6 +18,7 @@ from tkinter import messagebox, ttk
 
 from core import dialogs
 from core.i18n import t
+from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
@@ -212,7 +213,7 @@ class AudioMixerTab(BaseTab):
             if p:
                 tr.path = p
                 tr.path_var.set(p)
-                tr._full_path = p
+                tr.full_path = p
         tk.Button(row, text="…", width=2, command=_browse, cursor="hand2", relief="flat").pack(side="left", padx=px(1))
 
         # Type
@@ -227,8 +228,8 @@ class AudioMixerTab(BaseTab):
         vol_lbl = tk.Label(vol_f, text="100%", width=4, fg=CLR["accent"],
                            font=(UI_FONT, 7))
         vol_lbl.pack()
-        trk.vol_var.trace_add("write", lambda *_, l=vol_lbl, v=trk.vol_var:
-                            l.config(text=f"{int(v.get()*100)}%"))
+        trk.vol_var.trace_add("write", lambda *_, label=vol_lbl, v=trk.vol_var:
+                            label.config(text=f"{int(v.get()*100)}%"))
 
         # Pan
         pan_f = tk.Frame(row); pan_f.pack(side="left", padx=px(2))
@@ -237,7 +238,7 @@ class AudioMixerTab(BaseTab):
         pan_lbl = tk.Label(pan_f, text="C", width=3, fg=CLR["fgdim"],
                            font=(UI_FONT, 7))
         pan_lbl.pack()
-        trk.pan_var.trace_add("write", lambda *_, l=pan_lbl, v=trk.pan_var: l.config(
+        trk.pan_var.trace_add("write", lambda *_, label=pan_lbl, v=trk.pan_var: label.config(
             text="L" if v.get() < -0.1 else ("R" if v.get() > 0.1 else "C")))
 
         # Offset, fade in, fade out
@@ -292,7 +293,7 @@ class AudioMixerTab(BaseTab):
             return
         def track_path(trk):
             typed = trk.path_var.get().strip()
-            return typed if os.path.isfile(typed) else getattr(trk, "_full_path", trk.path)
+            return typed if os.path.isfile(typed) else getattr(trk, "full_path", trk.path)
 
         active = [trk for trk in self.tracks
                   if trk.enabled.get() and not trk.mute_var.get() and track_path(trk)]
@@ -357,7 +358,7 @@ class AudioMixerTab(BaseTab):
         fmt = self.out_fmt_var.get()
         audio_only = "audio only" in fmt.lower()
         out = self.out_var.get().strip() or self.suggest_output(video, "mixed", ".mp4")
-        if audio_only and not out.lower().endswith(common.AUDIO_ONLY_EXTS):
+        if audio_only and not out.lower().endswith(AUDIO_ONLY_EXTS):
             out = os.path.splitext(out)[0] + (".mp3" if "MP3" in fmt else ".wav" if "WAV" in fmt else
                                               ".flac" if "FLAC" in fmt else ".m4a")
         out = self.confirm_output(out, [video] + [track_path(x) for x in active])
@@ -366,7 +367,7 @@ class AudioMixerTab(BaseTab):
         self.out_var.set(out)
         cmd += ["-filter_complex", ";".join(parts)]
         if audio_only:
-            cmd += ["-map", "[aout]", "-vn", *common.audio_encoder_args(out)]
+            cmd += ["-map", "[aout]", "-vn", *audio_encoder_args(out)]
         else:
             cmd += ["-map", "0:v:0", "-c:v", "copy", "-map", "[aout]",
                     "-c:a", "aac", "-b:a", "320k" if "320" in fmt else "256k"]

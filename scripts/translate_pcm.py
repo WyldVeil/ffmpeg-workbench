@@ -45,7 +45,7 @@ def translate_batch(token: str, texts: list[str]) -> list[str]:
                 "max_length": 512,
             }
         }
-        for attempt in range(3):
+        for _attempt in range(3):
             resp = requests.post(API_URL, headers=headers, json=payload, timeout=30)
 
             if resp.status_code == 503:
@@ -130,7 +130,7 @@ def main() -> None:
     translated_count = 0
     total = len(keys)
 
-    for i, (key, eng_text) in enumerate(zip(keys, values)):
+    for i, (key, eng_text) in enumerate(zip(keys, values, strict=False)):
         print(f"  [{i+1}/{total}] {key[:50]:<50}  ", end="", flush=True)
         try:
             result = translate_batch(token, [eng_text])
@@ -139,7 +139,7 @@ def main() -> None:
             # Print a short preview (safe ASCII-ish truncation for Windows console)
             preview = result[0][:40].encode("ascii", errors="replace").decode()
             print(preview)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a dev script: keep English and go on
             print(f"ERROR: {exc} - keeping English")
             pcm[key] = eng_text
 

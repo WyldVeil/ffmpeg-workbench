@@ -221,8 +221,8 @@ class BatchJoinerTab(BaseTab):
             src_ext = os.path.splitext(self.file_paths[0])[1].lstrip(".").lower()
             if not problems and container in ("mp4", "mov", "m4v") and src_ext not in ("mp4", "mov", "m4v") \
                     and pieces[0].info.audio and not enc.audio_ok_for(container, enc.audio_key_from_probe(
-                        pieces[0].info.audio.codec) or "x"):
-                problems.append(f"{pieces[0].info.audio.codec} audio can't be stored in .{container}")
+                        pieces[0].info.require_audio().codec) or "x"):
+                problems.append(f"{pieces[0].info.require_audio().codec} audio can't be stored in .{container}")
             if problems:
                 msg = (_tr("batch_joiner.not_copyable",
                            "These files can't be joined losslessly because they differ:") + "\n\n"

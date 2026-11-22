@@ -19,11 +19,15 @@ video, so stepping always lands exactly on a frame.
 """
 from __future__ import annotations
 
+import logging
+import tkinter as tk
 import weakref
 from collections.abc import Callable
 
 from core import ffmpeg as ff
 from tabs.kit.contracts import Shell
+
+logger = logging.getLogger("crossfader.framestep")
 
 DEFAULT_FPS = 30.0
 HINT = "Drag, or press , and . to step one frame (with Shift, one second)"
@@ -108,6 +112,7 @@ def _usable(widget, page) -> bool:
     try:
         return bool(widget.winfo_exists() and widget.winfo_viewable() and _inside(widget, page))
     except Exception:
+        logger.debug("_usable: best-effort step failed", exc_info=True)
         return False
 
 
@@ -126,11 +131,12 @@ def target(page):
     return None
 
 
-def on_key(app, event, direction: int, second: bool = False) -> str | None:
+def on_key(app: tk.Misc, event: object, direction: int, second: bool = False) -> str | None:
     """Key handler for the main window: , and . (*second*: with Shift)."""
     try:
         focus = app.focus_get()
     except Exception:
+        logger.debug("on_key: best-effort step failed", exc_info=True)
         focus = None
     if focus is not None and focus.winfo_class() in TYPING_CLASSES:
         return None

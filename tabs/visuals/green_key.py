@@ -24,6 +24,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks
 from core.i18n import t
+from core.ops.shared import frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -239,7 +240,7 @@ class GreenKeyerTab(BaseTab):
             if not bg or not os.path.isfile(bg):
                 kind = "alpha"
             else:
-                src = f"{fl.preview_movie(bg)}{background_chain(w, h, common.frame_rate(info))}[bg]"
+                src = f"{fl.preview_movie(bg)}{background_chain(w, h, frame_rate(info))}[bg]"
         if kind == "color":
             src = f"color=c=0x{self.bg_colour}:s={w}x{h}[bg]"
         if kind == "alpha":     # checkerboard so transparency is visible
@@ -280,7 +281,7 @@ class GreenKeyerTab(BaseTab):
         info, path = self._info, self.src_row.path
         if info is None or not info.has_video or not path:
             return
-        vw, vh = info.video.display_size
+        vw, vh = info.require_video().display_size
         pw, ph = 400, 225
         scale = min(pw / vw, ph / vh)
         iw, ih = vw * scale, vh * scale
@@ -364,7 +365,7 @@ class GreenKeyerTab(BaseTab):
         if not out:
             return
         w, h = common.even_size(info)
-        fps = common.frame_rate(info)
+        fps = frame_rate(info)
         keyer = self.keyer()
         container = common.container_of(out)
         extra_inputs: list = []
@@ -383,7 +384,7 @@ class GreenKeyerTab(BaseTab):
                 venc_args = ["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
                              "-alpha_bits", "16", "-vendor", "apl0"]
             cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-filter_complex", graph, "-map", "[v]",
-                   *common.keep_audio_args(info, container), *venc_args, out]
+                   *keep_audio_args(info, container), *venc_args, out]
             self.log(self.console, "Keying to a transparent video…")
             self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                             btn=self.btn_render, btn_label=t("green_key.composite_button"),

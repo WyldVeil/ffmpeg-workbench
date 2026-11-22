@@ -23,9 +23,9 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from core.timecode import Timecode
-from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow
 
@@ -206,7 +206,7 @@ class WaveformEditorTab(BaseTab):
         info = ff.probe(path)
         if not info.has_audio:
             raise ValueError("This file has no audio.")
-        rate = info.audio.sample_rate or 48000
+        rate = info.require_audio().sample_rate or 48000
         dur = info.duration or 0.0
         slices = max(200, min(20000, int(dur * 100)))         # up to 10 ms resolution
         slice_samples = max(64, math.ceil(dur * rate / slices)) if dur else 4800
@@ -273,7 +273,7 @@ class WaveformEditorTab(BaseTab):
         c.create_line(0, mid, w, mid, fill="#333333", width=px(1))
         for x in range(w):                                       # one column per pixel: max of its slices
             t0, t1 = a + (b - a) * x / w, a + (b - a) * (x + 1) / w
-            i0, i1 = int(t0 / per), max(int(t0 / per) + 1, int(math.ceil(t1 / per)))
+            i0, i1 = int(t0 / per), max(int(t0 / per) + 1, math.ceil(t1 / per))
             chunk = self._peaks[max(0, i0):min(n, i1)]
             if not chunk:
                 continue
@@ -424,7 +424,7 @@ class WaveformEditorTab(BaseTab):
             return
         audio_only = self._export_mode.get() == "audio" or not info.has_video
         out = self.out_row.path or self._suggest()
-        if audio_only and not out.lower().endswith(common.AUDIO_ONLY_EXTS):
+        if audio_only and not out.lower().endswith(AUDIO_ONLY_EXTS):
             out = os.path.splitext(out)[0] + ".wav"
         out = self.confirm_output(out, [src], default_ext=".wav" if audio_only else ".mp4")
         if not out:
@@ -433,7 +433,7 @@ class WaveformEditorTab(BaseTab):
         af = region_filter(self._regions)
         cmd = [ff.ffmpeg_path(), "-y", "-i", src]
         if audio_only:
-            cmd += ["-map", "0:a:0", "-af", af, "-vn", *common.audio_encoder_args(out)]
+            cmd += ["-map", "0:a:0", "-af", af, "-vn", *audio_encoder_args(out)]
         else:
             cmd += ["-map", "0:v:0", "-map", "0:a:0", "-af", af, "-c:v", "copy", "-c:a", "aac", "-b:a", "256k"]
             if out.lower().endswith((".mp4", ".mov", ".m4v")):

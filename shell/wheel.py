@@ -22,7 +22,7 @@ def can_scroll(widget: tk.Misc) -> bool:
         first, last = widget.yview()  # type: ignore[attr-defined]
     except (tk.TclError, ValueError, AttributeError):
         return False
-    return first > 0.0 or last < 1.0
+    return float(first) > 0.0 or float(last) < 1.0
 
 
 def units(num: int, delta: int, carry: int) -> tuple[int, int]:
@@ -67,7 +67,8 @@ class WheelRouter:
                     window.bind_class(cls, seq, f'if {{[focus] eq "%W"}} {{{script}; break}}')
 
     def _on_wheel(self, event: tk.Event) -> None:
-        steps, self._carry = units(event.num if isinstance(event.num, int) else 0, event.delta or 0, self._carry)
+        num = event.num if isinstance(event.num, int) else 0  # pyright: ignore[reportUnnecessaryIsInstance] - Tk sends '??'
+        steps, self._carry = units(num, event.delta or 0, self._carry)
         if steps:
             target = self.target(event.x_root, event.y_root)
             if target is not None:

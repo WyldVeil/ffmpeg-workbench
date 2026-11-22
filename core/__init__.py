@@ -1,16 +1,14 @@
 """
-core  -  Quintessential Video Editor internal utilities
+core - the engine of WyldVeil's Media Editor: everything that is not the window.
 
-Submodules
-----------
-  hardware  - binary resolution, GPU detection, ffprobe/ffplay helpers
-  settings  - centralised settings.json I/O (single source of truth)
-  deps      - vendored dependency manager (auto-install into libs/)
-  skins     - theming engine (skin palette, live switching, star particles)
+It never imports Tk (tests/test_architecture.py).  The modules to know first:
+errors (the exception tree), proc (starting programs), tasks (background work),
+settings, tools (every tool's id), ffmpeg (probing and running) and ops (the
+command builders).  ARCHITECTURE.md has the map.
 """
 
 # ── Application identity (single source of truth) ────────────────────────────
-APP_VERSION = "1.2.4"
+APP_VERSION = "1.2.5"
 APP_NAME = "WyldVeil's Media Editor"
 APP_ID = "io.github.wyldveil.MediaEditor"     # Linux desktop/AppStream id
 APP_SLUG = "wyldveil-media-editor"            # Linux executable / folder names

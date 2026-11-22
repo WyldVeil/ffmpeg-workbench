@@ -20,7 +20,7 @@ RATE = 44100
 
 
 def _note(freq: float, seconds: float, volume: float = 0.28) -> list[float]:
-    out = []
+    out: list[float] = []
     for i in range(int(RATE * seconds)):
         t = i / RATE
         envelope = (1.0 - math.exp(-t * 55.0)) * math.exp(-t * 5.5)       # fast attack, smooth decay

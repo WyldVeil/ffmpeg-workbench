@@ -6,6 +6,7 @@ import pytest
 
 from core import catalog, settings
 from core import ffmpeg as ff
+from core.settings import StartPage
 from core.tools import ToolId
 
 # ── catalogue ────────────────────────────────────────────────────────────────
@@ -59,14 +60,15 @@ def test_suggestions_follow_the_file(media, tmp_path):
 @pytest.mark.gui
 def test_opens_on_start_by_default(ui):
     app = ui.app
-    settings.START_PAGE.set("start")
+    settings.START_PAGE.set(StartPage.START)
     assert app.first_page() is ToolId.START
-    settings.START_PAGE.set("home")
+    settings.START_PAGE.set(StartPage.HOME)
     assert app.first_page() is ToolId.HOME
     ui.open("Denoise")
-    settings.START_PAGE.set("last")
+    settings.START_PAGE.set(StartPage.LAST)
     assert app.first_page() is ToolId.DENOISE
-    assert settings.RECENT_TOOLS.get()[0] == "denoise"          # stored by id, not by name
+    ui.pump(2.3)                                                 # saved after a quiet moment...
+    assert settings.RECENT_TOOLS.get()[0] == "denoise"          # ...by id, not by name
     settings.set("start_page", "start")
 
 
@@ -76,13 +78,15 @@ def test_goals_lead_to_tools(ui):
     page.clear_search()
     page.show_goal(None)
     ui.pump(0.2)
-    cards = [w for w in page._results.winfo_children()[-1].winfo_children() if getattr(w, "_goal", None)]
+    cards = [w for w in page._results.winfo_children()[-1].winfo_children() if getattr(w, "goal", None)]
     assert len(cards) == len(catalog.GOALS)
-    smaller = next(c for c in cards if c._goal == "smaller")
+    smaller = next(c for c in cards if c.goal == "smaller")
     smaller.event_generate("<Button-1>")                     # a real click on the card
     ui.pump(0.2)
-    rows = [w for w in page._results.winfo_children()[-1].winfo_children() if getattr(w, "_tool", None)]
-    assert [r._tool for r in rows] == list(catalog.goal("smaller").tools)
+    rows = [w for w in page._results.winfo_children()[-1].winfo_children() if getattr(w, "tool", None)]
+    smaller_goal = catalog.goal("smaller")
+    assert smaller_goal is not None
+    assert [r.tool for r in rows] == list(smaller_goal.tools)
     rows[0].event_generate("<Button-1>")
     ui.pump(0.3)
     assert ui.app.current_page is ToolId.UNIVERSAL_DOWNSIZER
@@ -93,8 +97,8 @@ def test_search_box(ui):
     page = ui.open("Start")
     page.search("too big")
     ui.pump(0.2)
-    rows = [w for w in page._results.winfo_children()[-1].winfo_children() if getattr(w, "_tool", None)]
-    assert rows and rows[0]._tool == "Universal Downsizer"
+    rows = [w for w in page._results.winfo_children()[-1].winfo_children() if getattr(w, "tool", None)]
+    assert rows and rows[0].tool == "Universal Downsizer"
     page._search_enter()
     ui.pump(0.3)
     assert ui.app.current_page is ToolId.UNIVERSAL_DOWNSIZER
@@ -114,8 +118,8 @@ def test_dropped_file_gets_suggestions_and_opens_in_the_tool(ui, media, tmp_path
     ui.pump(0.3)
     assert ui.app.current_page is ToolId.START and page._file[0] == tagged
     rows = [w for grid in page._suggest_frame.winfo_children() for w in grid.winfo_children()
-            if getattr(w, "_tool", None)]
-    assert rows[0]._tool == "Metadata Cleaner"
+            if getattr(w, "tool", None)]
+    assert rows[0].tool == "Metadata Cleaner"
     rows[0].event_generate("<Button-1>")
     ui.pump(0.4)
     assert ui.app.current_page is ToolId.METADATA_CLEANER
@@ -142,10 +146,10 @@ def test_recent_tools_and_home_link(ui):
 @pytest.mark.gui
 def test_settings_choice_is_saved(ui):
     page = ui.open("Settings")
-    page._start_var.set(page._start_choices["last"])
+    page.start_box.value = StartPage.LAST
     page._save()
     assert settings.get("start_page") == "last"
-    page._start_var.set(page._start_choices["start"])
+    page.start_box.value = StartPage.START
     page._save()
     assert settings.get("start_page") == "start"
 

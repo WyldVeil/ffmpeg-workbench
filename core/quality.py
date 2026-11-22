@@ -41,6 +41,8 @@ def verdict(vmaf: float) -> str:
 
 def _rate(info: ff.MediaInfo) -> str:
     v = info.video
+    if v is None:
+        return "30/1"
     rate = v.raw.get("avg_frame_rate") or v.raw.get("r_frame_rate") or "30/1"
     if rate in ("0/0", "") or not v.fps or v.fps > 240:
         return "30/1"
@@ -145,7 +147,7 @@ class Result:
 
     def worst(self, n: int = 8, gap: float = 2.0) -> list:
         """[(time, vmaf)] of the lowest-scoring moments, at least *gap* s apart."""
-        pts = sorted(zip(self.vmaf.values, self.vmaf.times))
+        pts = sorted(zip(self.vmaf.values, self.vmaf.times, strict=False))
         out = []
         for value, at in pts:
             if all(abs(at - t0) >= gap for t0, _v in out):
@@ -171,7 +173,7 @@ class Result:
         rows = {}
         for name in METRICS:
             s = getattr(self, name)
-            for t, v in zip(s.times, s.values):
+            for t, v in zip(s.times, s.values, strict=False):
                 rows.setdefault(round(t, 4), {})[name] = v
         with open(path, "w", encoding="utf-8", newline="") as fh:
             fh.write("time," + ",".join(METRICS) + "\n")

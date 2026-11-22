@@ -10,7 +10,6 @@ any number of cuts works), keeping picture and sound in sync.
 from __future__ import annotations
 
 import os
-import re
 import tkinter as tk
 from tkinter import messagebox
 
@@ -18,66 +17,12 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
+from core.ops.silence import cut_graph, detect_cmd, keep_zones, parse_silences
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
-
-
-def detect_cmd(src: str, threshold_db: float, min_silence: float, stream: int = 0) -> list:
-    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-i", src, "-map", f"0:a:{stream}", "-vn", "-sn",
-            "-af", f"silencedetect=noise={threshold_db:g}dB:d={min_silence:g}", "-f", "null", "-"]
-
-
-def parse_silences(text: str, duration: float) -> list:
-    starts = [float(x) for x in re.findall(r"silence_start:\s*(-?[\d.]+)", text)]
-    ends = [float(x) for x in re.findall(r"silence_end:\s*([\d.]+)", text)]
-    if len(ends) < len(starts):          # silent until the very end
-        ends.append(duration)
-    return [(max(0.0, a), b) for a, b in zip(starts, ends) if b > a]
-
-
-def keep_zones(silences, duration: float, padding: float, fps: float = 0.0, min_keep: float = 0.05) -> list:
-    """Parts to keep: everything except silences, with *padding* left around speech."""
-    zones, pos = [], 0.0
-    for a, b in silences:
-        end = min(duration, a + padding)
-        if end - pos > min_keep:
-            zones.append((pos, end))
-        pos = max(pos, b - padding)
-    if duration - pos > min_keep:
-        zones.append((pos, duration))
-    if fps:
-        def snap(x):
-            return round(x * fps) / fps
-        zones = [(snap(a), snap(b)) for a, b in zones if snap(b) > snap(a)]
-    merged = []
-    for a, b in zones:
-        if merged and a <= merged[-1][1] + 1e-6:
-            merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
-        else:
-            merged.append((a, b))
-    return merged
-
-
-def cut_graph(zones, has_video: bool, has_audio: bool) -> str:
-    n = len(zones)
-    parts = []
-    if has_video:
-        parts.append(f"[0:v]split={n}" + "".join(f"[vs{i}]" for i in range(n)))
-    if has_audio:
-        parts.append(f"[0:a:0]asplit={n}" + "".join(f"[as{i}]" for i in range(n)))
-    pads = ""
-    for i, (a, b) in enumerate(zones):
-        if has_video:
-            parts.append(f"[vs{i}]trim=start={a:.4f}:end={b:.4f},setpts=PTS-STARTPTS[v{i}]")
-            pads += f"[v{i}]"
-        if has_audio:
-            parts.append(f"[as{i}]atrim=start={a:.4f}:end={b:.4f},asetpts=PTS-STARTPTS[a{i}]")
-            pads += f"[a{i}]"
-    outs = ("[v]" if has_video else "") + ("[a]" if has_audio else "")
-    parts.append(f"{pads}concat=n={n}:v={1 if has_video else 0}:a={1 if has_audio else 0}{outs}")
-    return ";\n".join(parts)
 
 
 class SilenceTab(BaseTab):
@@ -143,7 +88,7 @@ class SilenceTab(BaseTab):
     def _detect(self, src, info, thr, min_s, pad, runner):
         res = runner(detect_cmd(src, thr, min_s))
         text = "\n".join(res.log_tail if hasattr(res, "log_tail") else [])
-        fps = info.video.fps if info.has_video and info.video else 0.0
+        fps = info.require_video().fps if info.has_video and info.video else 0.0
         zones = keep_zones(parse_silences(text, info.duration), info.duration, pad, fps)
         return zones
 
@@ -189,7 +134,7 @@ class SilenceTab(BaseTab):
         if not out:
             return
         container = common.container_of(out)
-        audio_only = not info.has_video or out.lower().endswith(common.AUDIO_ONLY_EXTS)
+        audio_only = not info.has_video or out.lower().endswith(AUDIO_ONLY_EXTS)
         venc = None if audio_only else self.encoder.video_encode(container)
 
         def work(_p, _c, ctx):
@@ -205,13 +150,13 @@ class SilenceTab(BaseTab):
                 fh.write(graph)
             cmd = [ff.ffmpeg_path(), "-y", *(venc.pre_input if venc else []), "-i", src, "-/filter_complex", "cuts.txt"]
             if audio_only:
-                cmd += ["-map", "[a]", *common.audio_encoder_args(out)]
+                cmd += ["-map", "[a]", *audio_encoder_args(out)]
             else:
                 if venc.filter_suffix:
                     raise RuntimeError("Choose a software or NVENC/QSV encoder for this tool.")
                 cmd += ["-map", "[v]", "-map", "[a]", *venc.args,
                         *enc.audio(enc.default_audio_for(container), container=container)]
-            ctx.span(0.25, 1.0).run(cmd + [ctx.output()], duration=kept, cwd=tmp)
+            ctx.span(0.25, 1.0).run([*cmd, ctx.output()], duration=kept, cwd=tmp)
             return 0
 
         common.queue_job(self, name="Silence Remover", out=out, work=work, btn=self.btn_render,

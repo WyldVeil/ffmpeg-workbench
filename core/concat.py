@@ -43,7 +43,7 @@ class Piece:
 
 
 def _even(n: float) -> int:
-    return max(2, int(round(n)) // 2 * 2)
+    return max(2, round(n) // 2 * 2)
 
 
 def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
@@ -65,7 +65,7 @@ def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
             return None
         return (a.codec, a.sample_rate, a.channels)
 
-    for n, info in enumerate(infos[1:], start=2):
+    for _n, info in enumerate(infos[1:], start=2):
         name = os.path.basename(info.path)
         if vkey(info) != vkey(ref):
             rv, iv = ref.video, info.video
@@ -103,7 +103,7 @@ def copy_join_command(paths: Sequence[str], out: str, list_path: str,
            "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-sn", "-dn"]
     if container in ("mp4", "m4v", "mov"):
         cmd += ["-movflags", "+faststart"]
-    return cmd + [out]
+    return [*cmd, out]
 
 
 def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple:

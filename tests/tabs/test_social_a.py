@@ -4,7 +4,9 @@ import os
 import pytest
 
 from core import ffmpeg as ff
-from tabs.social import gif_maker, image_watermark, shortifier, watermark
+from core.ops import gif_maker, image_watermark
+from core.ops import shortifier as shortifier_ops
+from tabs.social import shortifier, watermark
 
 
 def test_pure_helpers():
@@ -14,7 +16,7 @@ def test_pure_helpers():
     segs = watermark.bounce_path(10, 1920, 1080, 300, 60, 200)
     assert segs[-1][1] == pytest.approx(10, abs=0.01)
     assert all(-1 <= x <= 1920 - 300 + 1 for s in segs for x in (s[2], s[4]))
-    g = shortifier.reframe_graph(1080, 1920, "crop", "left")
+    g = shortifier_ops.reframe_graph(1080, 1920, "crop", "left")
     assert "x=(iw-ow)*0.0" in g
     assert "paletteuse=dither=bayer:bayer_scale=4" in gif_maker.gif_graph(15, 480, 128, "bayer4")
     assert "scale=192:-1" in image_watermark.logo_graph(1280, 720, pct=15, opacity=1, place="br")
@@ -50,7 +52,7 @@ def test_shortifier(ui, media, outdir, layout):
     ui.wait_idle(240)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.video.display_size == (1080, 1920) and info.has_audio
+    assert info.require_video().display_size == (1080, 1920) and info.has_audio
 
 
 @pytest.mark.gui
@@ -92,7 +94,7 @@ def test_gif(ui, media, outdir, fmt, limit):
     if limit:
         assert os.path.getsize(out) <= 0.4 * 1024 * 1024
     info = ff.probe(out, use_cache=False)
-    assert info.video.codec.startswith("webp" if ext == ".webp" else "gif")
+    assert info.require_video().codec.startswith("webp" if ext == ".webp" else "gif")
 
 
 @pytest.mark.gui

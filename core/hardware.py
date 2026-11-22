@@ -1,3 +1,4 @@
+
 """
 core/hardware.py  ─  Platform-safe hardware and binary utilities
 
@@ -18,10 +19,9 @@ Platform notes
 • macOS    - ffmpeg / ffplay / ffprobe  (no .exe)
 • Linux    - ffmpeg / ffplay / ffprobe  (no .exe)
 
-CREATE_NO_WINDOW is a Windows-only subprocess flag (0x08000000). On other
-platforms it is defined as 0 so it can be passed safely without guards.
+Programs are started through core.proc, which owns the Windows process flags.
 """
-
+import logging
 import os
 import platform
 import shutil
@@ -29,13 +29,14 @@ import sys
 
 from core import proc as _proc
 
+logger = logging.getLogger("crossfader.hardware")
+
 # ── Platform constants ────────────────────────────────────────────────────────
 _IS_WIN = platform.system() == "Windows"
 _IS_MAC = platform.system() == "Darwin"
 _IS_LINUX = platform.system() == "Linux"
 
 # Suppress the console window on Windows; harmless (0) elsewhere.
-CREATE_NO_WINDOW: int = 0x08000000 if _IS_WIN else 0
 
 # Binary extension depends on platform
 _EXE = ".exe" if _IS_WIN else ""
@@ -70,6 +71,7 @@ def user_tools_dir() -> str | None:
         from core.paths import data_dir
         return os.path.join(data_dir(), "bin", platform_tag())
     except Exception:
+        logger.debug("user_tools_dir: best-effort step failed", exc_info=True)
         return None
 
 
@@ -198,6 +200,7 @@ def detect_gpu() -> str:
         from core.encoders import preferred_hw
         kind = preferred_hw()
     except Exception:
+        logger.debug("detect_gpu: best-effort step failed", exc_info=True)
         kind = None
     _CACHED_GPU = {"nvenc": "nvidia", "amf": "amd", "qsv": "intel",
                    "videotoolbox": "apple", "vaapi": "vaapi"}.get(kind or "", "cpu")

@@ -1,3 +1,4 @@
+
 """
 tab_thumbnailmaker.py  ─  Thumbnail Maker
 
@@ -10,7 +11,7 @@ image suitable for YouTube/TikTok thumbnails.  Options for:
   • Border / vignette effects
   • Batch: export a frame every N seconds for selection
 """
-
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -26,6 +27,8 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
+
+logger = logging.getLogger("crossfader.social.thumbnail")
 
 
 def _fmt(seconds):
@@ -276,7 +279,7 @@ class ThumbnailMakerTab(BaseTab):
                 return
             self.file_path = p
             self.duration = info.duration
-            self._fps = info.video.fps or 30.0
+            self._fps = info.require_video().fps or 30.0
             self._dur_lbl.config(text=_fmt(self.duration))
             self._scrub.config(to=max(0.1, self.duration))
             self._preview.load(p, self.duration, float(self._scrub_var.get()))
@@ -322,7 +325,7 @@ class ThumbnailMakerTab(BaseTab):
             try:
                 self.preview_proc.terminate()
             except Exception:
-                pass
+                logger.debug("_preview_frame: best-effort step failed", exc_info=True)
         self.preview_proc = launch_preview(self.file_path, start_time=pos)
 
     def _render(self):
@@ -375,7 +378,7 @@ class ThumbnailMakerTab(BaseTab):
             cmd = [ffmpeg, "-y", "-ss", ff.ts(pos), "-i", src, "-frames:v", "1", "-an"]
         if vf_parts:
             cmd += ["-vf", ",".join(vf_parts)]
-        cmd += self._get_format_args() + ["-update", "1", out]
+        cmd += [*self._get_format_args(), "-update", "1", out]
         self.log(self.console, f"Extracting frame at {_fmt(pos)}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                         btn=self.btn_render, btn_label="🖼  EXPORT THUMBNAIL", duration=0.1,

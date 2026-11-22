@@ -15,6 +15,7 @@ import tkinter as tk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.rotate_flip import lossless_args, reencode_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -23,30 +24,6 @@ from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 ROTATIONS = [(0, "No rotation"), (90, "90° clockwise ↻"), (180, "180°"),
              (270, "90° anticlockwise ↺")]
 LOSSLESS_CONTAINERS = ("mp4", "m4v", "mov", "mkv", "3gp")
-
-
-def reencode_chain(rot_cw: int, hflip: bool, vflip: bool) -> str:
-    """Pixel filters: rotate clockwise by *rot_cw*, then mirror (as displayed)."""
-    parts = {90: ["transpose=clock"], 180: ["hflip", "vflip"], 270: ["transpose=cclock"]}.get(
-        rot_cw % 360, [])
-    if hflip:
-        parts.append("hflip")
-    if vflip:
-        parts.append("vflip")
-    return ",".join(parts)
-
-
-def lossless_args(existing_cw: int, rot_cw: int, hflip: bool, vflip: bool) -> list:
-    """Input options that rewrite the orientation flag (display matrix): the
-    total rotation, then mirroring as displayed (verified against the pixel
-    filters for all 16 combinations, including already-rotated sources)."""
-    total_cw = (existing_cw + rot_cw) % 360
-    args = ["-display_rotation:v:0", str((-total_cw) % 360)]
-    if hflip:
-        args.append("-display_hflip:v:0")
-    if vflip:
-        args.append("-display_vflip:v:0")
-    return args
 
 
 class RotateFlipTab(BaseTab):
@@ -118,7 +95,7 @@ class RotateFlipTab(BaseTab):
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
         if self._info is not None and self._info.video is not None:
-            v = self._info.video
+            v = self._info.require_video()
             w, h = v.display_size
             flag = f", orientation flag: {v.rotation}° clockwise" if v.rotation else ""
             self.info_lbl.config(text=f"{w}×{h} as displayed{flag}")
@@ -152,7 +129,7 @@ class RotateFlipTab(BaseTab):
                                               "re-encoding instead.", "warn")
             else:
                 cmd = [ff.ffmpeg_path(), "-y",
-                       *lossless_args(info.video.rotation, rot, hf, vf),
+                       *lossless_args(info.require_video().rotation, rot, hf, vf),
                        "-i", src, "-map", "0", "-c", "copy", "-map_metadata", "0", out]
                 self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                                 btn=self.btn_render, btn_label="🔄  APPLY",

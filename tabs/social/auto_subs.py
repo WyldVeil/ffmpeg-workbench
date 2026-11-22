@@ -265,7 +265,7 @@ class AutoSubsTab(BaseTab):
             if res.returncode != 0:
                 ctx.task.log_tail = res.log_tail[-40:]
                 raise RuntimeError("Speech recognition failed:\n" + "\n".join(res.log_tail[-6:]))
-            for fmt_, final in zip(formats, outputs):
+            for fmt_, final in zip(formats, outputs, strict=False):
                 produced = f"{out_base}.{fmt_}"
                 if not os.path.isfile(produced) or os.path.getsize(produced) == 0:
                     raise RuntimeError("No speech was recognised in this file.")
@@ -276,7 +276,7 @@ class AutoSubsTab(BaseTab):
             self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
             self._fill_models(key)
             task = self.task(tid)
-            self._last_task = task
+            self.last_task = task
             if rc == 0:
                 self._last_subs = outputs[0]
                 self._last_lang = "en" if translate else detected["lang"]

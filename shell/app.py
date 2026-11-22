@@ -48,7 +48,7 @@ from tabs.kit import labels
 from tabs.kit.contracts import ClosingAware, Previewing
 from tabs.kit.theme import apply_default_options, apply_skin, apply_ttk_styles
 
-_log = logging.getLogger("crossfader.shell")
+logger = logging.getLogger("crossfader.shell")
 
 
 class App(tk.Tk):
@@ -66,6 +66,8 @@ class App(tk.Tk):
 
         self.title(f"{APP_NAME}  ·  {APP_VERSION}")
         self._size_window()
+        self._recent: list[ToolId] = tools.parse_all(settings.RECENT_TOOLS.get())
+        self._recent_job: str | None = None
         self.debug_mode = tk.BooleanVar(master=self, value=False)
         self.skin = get_skin(load_skin_name())
         apply_default_options(self, self.skin)        # before any page widget exists
@@ -122,7 +124,7 @@ class App(tk.Tk):
                            for n in (256, 128, 64, 48, 32, 16)]
             self.iconphoto(True, *self._icons)
         except tk.TclError:
-            _log.info("window icons not found")
+            logger.info("window icons not found")
 
     def _size_window(self) -> None:
         """1480x920 design pixels (bigger on HiDPI screens), never bigger than the screen."""
@@ -153,7 +155,7 @@ class App(tk.Tk):
         """Open *tool* (an id, or its English name) and return its page."""
         tid = tool if isinstance(tool, ToolId) else tools.parse(tool)
         if tid is None:
-            _log.warning("no such tool: %r", tool)
+            logger.warning("no such tool: %r", tool)
             return None
         self.stop_previews()
         page = self.pages.show(tid)
@@ -207,17 +209,29 @@ class App(tk.Tk):
         if choice == "home":
             return ToolId.HOME
         if choice == "last":
-            recent = tools.parse_all(settings.RECENT_TOOLS.get())
+            recent = self._recent or tools.parse_all(settings.RECENT_TOOLS.get())
             if recent:
                 return recent[0]
         return ToolId.START
 
     def _remember_tool(self, tool: ToolId) -> None:
-        """Recently used tools, newest first (the Start page lists them)."""
+        """Recently used tools, newest first (the Start page lists them).  Saved
+        after two quiet seconds rather than on every click (High Performance
+        Python: one settings write per page switch was the app's only disk churn)."""
         if tools.spec(tool).category is Category.HIDDEN:
             return
-        recent = [t for t in tools.parse_all(settings.RECENT_TOOLS.get()) if t is not tool]
-        settings.RECENT_TOOLS.set([t.value for t in [tool, *recent][:8]])
+        self._recent = [tool, *(t for t in self._recent if t is not tool)][:8]
+        if self._recent_job is not None:
+            self.after_cancel(self._recent_job)
+        self._recent_job = self.after(2000, self._save_recent_tools)
+
+    def recent_tools(self) -> list[ToolId]:
+        """Recently used tools, newest first (saved to settings after a quiet moment)."""
+        return list(self._recent)
+
+    def _save_recent_tools(self) -> None:
+        self._recent_job = None
+        settings.RECENT_TOOLS.set([t.value for t in self._recent])
 
     def _file_loaded(self, path: str) -> None:
         tool = self.pages.current
@@ -283,8 +297,10 @@ class App(tk.Tk):
                 try:
                     page.on_app_closing()
                 except Exception:                    # one page's clean-up failing must not stop the others
-                    _log.exception("on_app_closing failed in %s", type(page).__name__)
+                    logger.exception("on_app_closing failed in %s", type(page).__name__)
         self.stop_previews()
+        if self._recent_job is not None:
+            self._save_recent_tools()
         tasks.shutdown()                             # queued background jobs are dropped...
         proc.kill_all()                              # ...and running ones end with their programs
         self.destroy()

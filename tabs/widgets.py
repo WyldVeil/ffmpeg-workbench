@@ -24,6 +24,8 @@ EncoderPanel
 from __future__ import annotations
 
 import base64
+import contextlib
+import logging
 import os
 import threading
 import tkinter as tk
@@ -36,6 +38,8 @@ from core.i18n import t
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from tabs import framestep
+
+logger = logging.getLogger("crossfader.widgets")
 
 
 def _clr():
@@ -313,10 +317,8 @@ class FileRow(tk.Frame):
 
     def _changed(self, *_a) -> None:
         if self._job is not None:
-            try:
+            with contextlib.suppress(tk.TclError):
                 self.after_cancel(self._job)
-            except tk.TclError:
-                pass
         self._job = self.after(350, self._fire)
 
     def _fire(self) -> None:
@@ -470,7 +472,7 @@ class EncoderPanel(tk.Frame):
             ve = self.video_encode()
             self._status.config(text=_tr("encoder.using", "Will encode with") + f": {ve.label}")
         except Exception:
-            pass
+            logger.debug("_changed: best-effort step failed", exc_info=True)
         if notify and self._on_change:
             self._on_change()
 
@@ -549,14 +551,12 @@ class FramePicker(tk.Toplevel):
         self.pos.set(start)
         self._moved()
         self.slider.focus_set()
-        try:
+        with contextlib.suppress(tk.TclError):
             self.grab_set()
-        except tk.TclError:
-            pass
 
     def _moved(self):
         at = framestep.snap(float(self.pos.get()), self._fps)
-        self.time_lbl.config(text=f"{ff.format_time(at)}   ·   frame {int(round(at * self._fps)) + 1:,}")
+        self.time_lbl.config(text=f"{ff.format_time(at)}   ·   frame {round(at * self._fps) + 1:,}")
         self.preview.show(at)
 
     def _use(self):

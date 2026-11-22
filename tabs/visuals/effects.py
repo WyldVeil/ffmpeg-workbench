@@ -1,3 +1,4 @@
+
 """
 tab_specialeffects.py  ─  Special Effects Studio
 
@@ -17,7 +18,7 @@ All effects use FFmpeg filter chains. The video is never cropped or
 shortened unless the user explicitly chooses to trim - intro and outro
 effects overlay onto the existing video so no content is lost.
 """
-
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -31,6 +32,8 @@ from core.hardware import (
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+
+logger = logging.getLogger("crossfader.visuals.effects")
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Shared helpers
@@ -60,7 +63,7 @@ def _probe_wh(path):
     info = ff.try_probe(path)
     if info is None or not info.has_video:
         return 1920, 1080
-    w, h = info.video.display_size
+    w, h = info.require_video().display_size
     return max(2, w // 2 * 2), max(2, h // 2 * 2)
 
 
@@ -73,6 +76,7 @@ def _first_visible_time(path, scan=10.0):
         m = _re.search(r"black_start:0(?:\.0+)?\s+black_end:([\d.]+)", r.stderr or "")
         return float(m.group(1)) + 0.05 if m else 0.0
     except Exception:
+        logger.debug("_first_visible_time: best-effort step failed", exc_info=True)
         return 0.0
 
 
@@ -248,7 +252,7 @@ class SpecialEffectsTab(BaseTab):
             try:
                 val = float(str(var.get()).replace(",", "."))
             except ValueError:
-                raise ValueError(f"'{label}' must be a number.")
+                raise ValueError(f"'{label}' must be a number.") from None
         if (lo is not None and val < lo) or (hi is not None and val > hi):
             raise ValueError(f"'{label}' must be between {lo} and {hi}.")
         return val
@@ -273,7 +277,7 @@ class SpecialEffectsTab(BaseTab):
     @staticmethod
     def _fx_geom(info):
         """(even width, even height, exact fps string, duration) of a source."""
-        v = info.video
+        v = info.require_video()
         w, h = v.display_size
         w, h = max(2, w // 2 * 2), max(2, h // 2 * 2)
         fps = v.raw.get("avg_frame_rate") or "30/1"
@@ -292,7 +296,7 @@ class SpecialEffectsTab(BaseTab):
     def _fx_audio(self, info, copy=True):
         if not info.has_audio:
             return ["-an"]
-        if copy and (info.audio.codec in ("aac", "mp3", "ac3", "opus", "alac", "flac")):
+        if copy and (info.require_audio().codec in ("aac", "mp3", "ac3", "opus", "alac", "flac")):
             return ["-map", "0:a:0", "-c:a", "copy"]
         return ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"]
 
@@ -492,7 +496,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         w, h, fps, _dur = self._fx_geom(info)
-        n = max(1, int(round(d * (info.video.fps or 30))))
+        n = max(1, round(d * (info.require_video().fps or 30)))
         graph = (f"zoompan=z='if(lte(on,{n}),{z}-({z}-1)*on/{n},1)':x='iw/2-(iw/zoom/2)':"
                  f"y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps},{self.FX_GUARD}")
         self._fx_run(src, out, info, graph, self._zb_crf, self._zb_btn, label, self._zb_console,
@@ -1168,7 +1172,7 @@ class SpecialEffectsTab(BaseTab):
         pos     = self._sub_pos.get()
 
         def _start(probed):
-            w, h = probed
+            _w, _h = probed
 
             pos_map = {
                 "Bottom Centre": ("(w-text_w)/2", "h-text_h-40"),

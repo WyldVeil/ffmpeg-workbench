@@ -30,11 +30,11 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import overload
+from typing import Any, overload
 
 from core import proc as _proc
 
-_log = logging.getLogger("crossfader.scaling")
+logger = logging.getLogger("crossfader.scaling")
 
 BASE_DPI = 96.0
 MIN_FACTOR, MAX_FACTOR = 0.75, 4.0
@@ -55,14 +55,14 @@ def px(value: int, /) -> int: ...
 @overload
 def px(value: float, /) -> float: ...
 @overload
-def px(value: tuple | list, /) -> tuple[int, ...]: ...
+def px(value: tuple[float, ...] | list[float], /) -> tuple[int, ...]: ...
 @overload
 def px(a: int, b: int, /) -> tuple[int, int]: ...
 @overload
 def px(a: int, b: int, c: int, d: int, /) -> tuple[int, int, int, int]: ...
 
 
-def px(*values):  # type: ignore[misc]
+def px(*values: Any) -> Any:  # type: ignore[misc]
     """Design pixels -> screen pixels.
 
     ``px(8)`` -> ``16`` at 200 %; ``px(0, 8)`` or ``px((0, 8))`` -> ``(0, 16)``
@@ -81,7 +81,7 @@ def _one(v):
     if _factor == 1.0 or not v:
         return v
     if isinstance(v, int):
-        r = int(round(v * _factor))
+        r = round(v * _factor)
         if r == 0:
             r = 1 if v > 0 else -1
         return r
@@ -201,7 +201,7 @@ def xft_dpi() -> float | None:
         value = float(raw.decode("ascii", "replace")) if raw else 0.0
         return value if value > 0 else None
     except Exception:
-        _log.debug("could not read Xft.dpi", exc_info=True)
+        logger.debug("could not read Xft.dpi", exc_info=True)
         return None
 
 
@@ -256,7 +256,7 @@ def prepare() -> None:
     try:
         _set_xft_dpi(BASE_DPI * _override)
     except OSError:
-        _log.warning("could not apply ui_scale %s to fonts", _override, exc_info=True)
+        logger.warning("could not apply ui_scale %s to fonts", _override, exc_info=True)
 
 
 def apply(root) -> float:
@@ -284,10 +284,10 @@ def apply(root) -> float:
             try:
                 tk_call("font", "measure", "TkDefaultFont", "M")
             except Exception:
-                pass
+                logger.debug("apply: best-effort step failed", exc_info=True)
             _restore_xenvironment()
     set_factor(value)
-    _log.info("UI scale %.2f", _factor)
+    logger.info("UI scale %.2f", _factor)
     return _factor
 
 
@@ -298,6 +298,7 @@ def _undo_tk_font_doubling(tk_call) -> None:
     try:
         factor_ = int(tk_call("::tk::FontScalingFactor"))
     except Exception:
+        logger.debug("_undo_tk_font_doubling: best-effort step failed", exc_info=True)
         return
     if factor_ <= 1:
         return
@@ -309,6 +310,7 @@ def _undo_tk_font_doubling(tk_call) -> None:
             size = int(tk_call("font", "configure", name, "-size"))
             tk_call("font", "configure", name, "-size", round(size / factor_))
         except Exception:
+            logger.debug("_undo_tk_font_doubling: best-effort step failed", exc_info=True)
             continue
 
 

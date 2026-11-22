@@ -4,6 +4,7 @@ The bundled programs are found and run, a short test encode works, and every
 tool page loads.  Prints what it checked; the exit code is 1 on any problem."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from typing import TYPE_CHECKING
@@ -12,6 +13,8 @@ from core import ffmpeg as ff
 from core.hardware import find_binary
 from core.tools import ToolId
 from shell.pages import ErrorPage
+
+logger = logging.getLogger("crossfader.shell.selftest")
 
 if TYPE_CHECKING:
     from shell.app import App
@@ -40,6 +43,7 @@ def run(app: App) -> int:
             if isinstance(page, ErrorPage):
                 problems.append(f"tool failed to load: {tool.value}")
         except Exception as exc:                     # report every problem, not just the first
+            logger.debug("run: best-effort step failed", exc_info=True)
             problems.append(f"{tool.value}: {exc}")
     print(f"pages    {len(ToolId)} checked")
     for problem in problems:

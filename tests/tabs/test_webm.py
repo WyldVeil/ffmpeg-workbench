@@ -35,7 +35,7 @@ def test_simple_profile_fits(ui, media, outdir):
     _ok(ui)
     assert os.path.getsize(out) <= 4 * 1024 * 1024
     info = ff.probe(out, use_cache=False)
-    assert info.video.codec == "vp9" and info.audio.codec == "opus"
+    assert info.require_video().codec == "vp9" and info.require_audio().codec == "opus"
 
 
 @pytest.mark.gui

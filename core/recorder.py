@@ -17,6 +17,7 @@ core/recorder.py  -  Screen-recording back end
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -153,11 +154,11 @@ def screen_input(fps: str = "30", *, region: tuple | None = None, cursor: bool =
         if not cursor:
             args += ["-draw_mouse", "0"]
         if window_title:
-            return args + ["-i", f"title={window_title}"]
+            return [*args, "-i", f"title={window_title}"]
         if region:
             x, y, w, h = region
             args += ["-offset_x", str(x), "-offset_y", str(y), "-video_size", f"{w // 2 * 2}x{h // 2 * 2}"]
-        return args + ["-i", "desktop"]
+        return [*args, "-i", "desktop"]
     if IS_MAC:
         return ["-f", "avfoundation", "-capture_cursor", "1" if cursor else "0", "-framerate", str(fps),
                 "-i", "1:none"]
@@ -165,8 +166,8 @@ def screen_input(fps: str = "30", *, region: tuple | None = None, cursor: bool =
             "-draw_mouse", "1" if cursor else "0"]
     if region:
         x, y, w, h = region
-        return args + ["-video_size", f"{w // 2 * 2}x{h // 2 * 2}", "-i", f"{x11_display()}+{x},{y}"]
-    return args + ["-i", x11_display()]
+        return [*args, "-video_size", f"{w // 2 * 2}x{h // 2 * 2}", "-i", f"{x11_display()}+{x},{y}"]
+    return [*args, "-i", x11_display()]
 
 
 def ffmpeg_command(video_in: list, audio_sources_: list, out: str, video_args: list, *,
@@ -204,7 +205,7 @@ def ffmpeg_command(video_in: list, audio_sources_: list, out: str, video_args: l
         cmd += ["-t", str(int(seconds))]                    # output option: stops every input
     if out.lower().endswith((".mp4", ".mov")):
         cmd += ["-movflags", "+frag_keyframe+empty_moov+default_base_moof"]   # playable after a crash
-    return cmd + [out]
+    return [*cmd, out]
 
 
 def wayland_command(tool: str, out: str, *, fps: str = "60", audio: tuple = ("output",),
@@ -219,10 +220,8 @@ def wayland_command(tool: str, out: str, *, fps: str = "60", audio: tuple = ("ou
     cmd = [tool, "-f", out, "-r", str(fps)]
     if "output" in audio:
         sink = ""
-        try:
+        with contextlib.suppress(OSError, _proc.ProcessError):
             sink = _proc.run(["pactl", "get-default-sink"], timeout=5).stdout.strip()
-        except (OSError, _proc.ProcessError):
-            pass
         cmd += [f"--audio={sink}.monitor"] if sink else ["--audio"]
     return cmd
 

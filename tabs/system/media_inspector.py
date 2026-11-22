@@ -99,6 +99,14 @@ def diagnose(info: ff.MediaInfo) -> list[tuple[str, str]]:
     return notes
 
 
+
+def _seconds(value: object) -> float:
+    """A time from ffprobe's JSON (a string or a number), or 0."""
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
 class MediaInspectorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -161,7 +169,7 @@ class MediaInspectorTab(BaseTab):
                  _tr("inspector.col_lang", "Language / title"), _tr("inspector.col_flags", "Flags"))
         self.tree = ttk.Treeview(streams, columns=cols, show="headings", height=7)
         widths = (40, 80, 150, 420, 100, 180, 120)
-        for c, h, w in zip(cols, heads, widths):
+        for c, h, w in zip(cols, heads, widths, strict=False):
             self.tree.heading(c, text=h)
             self.tree.column(c, width=px(w), anchor="w", stretch=c == "detail")
         ysb = ttk.Scrollbar(streams, command=self.tree.yview)
@@ -280,8 +288,8 @@ class MediaInspectorTab(BaseTab):
         if info.chapters:
             chap = []
             for i, c in enumerate(info.chapters, 1):
-                start = ff._f(c.get("start_time"))
-                end = ff._f(c.get("end_time"))
+                start = _seconds(c.get("start_time"))
+                end = _seconds(c.get("end_time"))
                 title = (c.get("tags") or {}).get("title", "")
                 chap.append(f"{i:>3}. {ff.format_time(start)} → {ff.format_time(end)}  {title}")
             self._set_text(self.chapters_txt, "\n".join(chap))

@@ -1,9 +1,11 @@
+
 """
 tab_batch.py  ─  Batch Processor
 Apply the same FFmpeg operation to an entire folder of videos at once.
 Supports: re-encode, resize, extract audio, convert format.
 Progress is shown per-file in the console.
 """
+import logging
 import os
 import threading
 import tkinter as tk
@@ -14,6 +16,8 @@ from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+
+logger = logging.getLogger("crossfader.system.batch")
 
 # (id, label) - looked up by position, so translations can never mix them up
 OPERATION_LIST = [
@@ -87,7 +91,7 @@ class BatchTab(BaseTab):
 
         op_row = tk.Frame(op_lf); op_row.pack(fill="x", pady=px(4))
         tk.Label(op_row, text=t("batch.operation"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self._op_var = tk.StringVar(value=list(OPERATIONS.keys())[0])
+        self._op_var = tk.StringVar(value=next(iter(OPERATIONS.keys())))
         op_cb = ttk.Combobox(op_row, textvariable=self._op_var,
                               values=list(OPERATIONS.keys()),
                               state="readonly", width=28)
@@ -272,6 +276,7 @@ class BatchTab(BaseTab):
                 except ff.CancelledError:
                     raise
                 except Exception as exc:
+                    logger.debug("work: best-effort step failed", exc_info=True)
                     reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
                     failed.append((src, reason))
                     ctx.log(f"  ✖ {reason}")
@@ -305,13 +310,13 @@ def batch_plan(op, info, src, out_dir, opts, taken):
         mp3 = op == "audio_mp3"
         out = name("", ".mp3" if mp3 else ".m4a")
         codec = ["-c:a", "libmp3lame", "-q:a", "2"] if mp3 else ["-c:a", "aac", "-b:a", "192k"]
-        return out, [ffm + ["-i", src, "-map", "0:a:0", "-vn", *codec, "-map_metadata", "0", "{OUT}"]]
+        return out, [[*ffm, "-i", src, "-map", "0:a:0", "-vn", *codec, "-map_metadata", "0", "{OUT}"]]
     if op == "loudness":
         if not info.has_audio:
             return "no audio to normalise"
         ext = src_ext if src_ext in (".mp4", ".mkv", ".mov", ".webm", ".m4a", ".mp3", ".flac", ".wav") else ".mkv"
         out = name("_loud", ext)
-        rate = info.audio.sample_rate or 48000
+        rate = info.require_audio().sample_rate or 48000
         container = ext.lstrip(".")
 
         def second_pass(ctx):
@@ -320,12 +325,9 @@ def batch_plan(op, info, src, out_dir, opts, taken):
             acodec = enc.default_audio_for(container) if container not in ("wav", "flac", "mp3") else \
                 {"wav": "pcm16", "flac": "flac", "mp3": "mp3"}[container]
             vargs = ["-map", "0:v?", "-c:v", "copy"]
-            if info.has_video and info.video.codec == "hevc" and container in ("mp4", "mov"):
+            if info.has_video and info.require_video().codec == "hevc" and container in ("mp4", "mov"):
                 vargs += ["-tag:v", "hvc1"]
-            return ffm + ["-i", src, *vargs, "-map", "0:a:0", "-af",
-                          loudness.normalise_filter(-16.0, -1.5, 11.0, meas, rate),
-                          *enc.audio(acodec, "192k", container=container), "-map", "0:s?", "-c:s", "copy",
-                          "-map_metadata", "0", "{OUT}"]
+            return [*ffm, "-i", src, *vargs, "-map", "0:a:0", "-af", loudness.normalise_filter(-16.0, -1.5, 11.0, meas, rate), *enc.audio(acodec, "192k", container=container), "-map", "0:s?", "-c:s", "copy", "-map_metadata", "0", "{OUT}"]
         return out, [second_pass]
     if op == "strip_meta":
         out = name("_clean", src_ext or ".mkv")
@@ -334,8 +336,7 @@ def batch_plan(op, info, src, out_dir, opts, taken):
             lang = st.tags.get("language")
             if lang:
                 keep += [f"-metadata:s:{st.index}", f"language={lang}"]
-        return out, [ffm + ["-i", src, "-map", "0", "-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1",
-                            *keep, "-fflags", "+bitexact", "{OUT}"]]
+        return out, [[*ffm, "-i", src, "-map", "0", "-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1", *keep, "-fflags", "+bitexact", "{OUT}"]]
     if not info.has_video:
         return "no video"
     if op == "to_mp4":
@@ -353,7 +354,7 @@ def batch_plan(op, info, src, out_dir, opts, taken):
     suffix = "_h264"
     if op == "resize":
         bw, bh = (int(x) for x in opts["res"].split("x"))
-        w, h = info.video.display_size
+        w, h = info.require_video().display_size
         if h > w:
             bw, bh = bh, bw                       # portrait videos get a portrait box
         if w <= bw and h <= bh:

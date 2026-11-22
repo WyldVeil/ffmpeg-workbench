@@ -90,13 +90,11 @@ _SRT = (
 
 def _write_cube(path: str, size: int = 17) -> None:
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write('TITLE "warm"\nLUT_3D_SIZE %d\n' % size)
+        fh.write(f'TITLE "warm"\nLUT_3D_SIZE {size}\n')
         for b in range(size):
             for g in range(size):
                 for r in range(size):
-                    fh.write("%.6f %.6f %.6f\n" % (
-                        min(1.0, r / (size - 1) * 1.05), g / (size - 1),
-                        b / (size - 1) * 0.95))
+                    fh.write(f"{min(1.0, r / (size - 1) * 1.05):.6f} {g / (size - 1):.6f} {b / (size - 1) * 0.95:.6f}\n")
 
 
 def ffmpeg_exe() -> str | None:

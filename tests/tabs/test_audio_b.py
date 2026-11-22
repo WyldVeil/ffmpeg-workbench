@@ -85,7 +85,7 @@ def test_mixer_two_tracks(ui, media, outdir, fmt):
     ui.wait_idle(120)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.has_audio and info.audio.channels == 2
+    assert info.has_audio and info.require_audio().channels == 2
     assert info.has_video == ("keep" in fmt)
     assert info.duration == pytest.approx(ff.duration_of(media["h264"]), abs=0.15)
 
@@ -103,7 +103,7 @@ def test_ducker_keeps_stereo_music(ui, media, outdir):
     ui.wait_idle(120)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.audio.channels == 2
+    assert info.require_audio().channels == 2
     assert info.duration == pytest.approx(ff.duration_of(media["h264"]), abs=0.15)
 
 
@@ -154,7 +154,7 @@ def test_tts_build_cmd_video_keeps_length(ui, media, outdir, tmp_path):
     info = ff.probe(media["h264"])
     for mix in ("mix", "replace"):
         out = str(outdir / f"tts_{mix}.mp4")
-        cmd, dur = tab._build_cmd(speech, out, info, {
+        cmd, _dur = tab._build_cmd(speech, out, info, {
             "mode": "video", "pads": (0.0, 0.3), "offset": 2.0, "vol": 1.0, "normalise": False,
             "fmt": "", "mix": mix, "orig_vol": 0.5, "vid_fmt": "Copy video stream"})
         subprocess.run(cmd, check=True, capture_output=True)
@@ -254,7 +254,7 @@ def test_converter_keeps_cover_and_rate_when_normalising(ui, media, outdir, tmp_
     rate = ff.probe(src).audio.sample_rate
     out = str(outdir / "norm.flac")
     info = _converter(ui, src, "FLAC", out, norm_var="EBU R128 (loudnorm)")
-    assert info.audio.sample_rate == rate                     # no silent 192 kHz upsample
+    assert info.require_audio().sample_rate == rate                     # no silent 192 kHz upsample
     assert any(s.attached_pic for s in info.streams)          # cover art kept
     peak_out = str(outdir / "peak.wav")
     _converter(ui, src, "WAV", peak_out, norm_var="Peak normalize", tp_var="-3")

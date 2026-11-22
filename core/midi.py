@@ -13,6 +13,7 @@ system SoundFonts (FluidR3, TimGM6mb...) are found on Linux.
 from __future__ import annotations
 
 import glob
+import logging
 import math
 import os
 import shutil
@@ -20,6 +21,8 @@ import sys
 
 from core import ffmpeg as ff
 from core.hardware import bundled_bin_dirs, find_binary
+
+logger = logging.getLogger("crossfader.midi")
 
 FIRST_NOTE = 24           # C1
 N_BINS = 84               # 7 octaves -> B7
@@ -197,7 +200,7 @@ def soundfont_dirs() -> list:
         from core.paths import data_dir
         dirs.append(os.path.join(data_dir(), "soundfonts"))     # user-added SoundFonts
     except Exception:
-        pass
+        logger.debug("soundfont_dirs: best-effort step failed", exc_info=True)
     if sys.platform == "win32":
         dirs.append(os.path.join(os.environ.get("LOCALAPPDATA", ""), "soundfonts"))
     else:

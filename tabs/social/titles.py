@@ -12,6 +12,7 @@ so 720p, 4K and vertical videos all look right.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import tkinter as tk
@@ -381,10 +382,8 @@ class TitlesGeneratorTab(BaseTab):
         sc.write(path)
         old = os.path.join(self._preview_dir, f"p{self._preview_n - 3}.ass")
         if os.path.exists(old):
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(old)
-            except OSError:
-                pass
         self.preview.set_filter(ass.subtitles_filter(path), keep_time=True)
 
     # ── Render ───────────────────────────────────────────────────────────────

@@ -131,7 +131,7 @@ def resolve_output(out: str, inputs: Iterable[str] = (), *, default_ext: str = "
         f"{os.path.basename(out)} already exists.\n\n"
         f"Yes — overwrite it\nNo — save as {os.path.basename(alt)}\n"
         "Cancel — don't render",
-        parent=parent)
+        parent=parent)  # pyright: ignore[reportArgumentType] - None means "the main window", as Tk allows
     if answer is None:
         raise OutputRejected("")
     return out if answer else alt

@@ -11,8 +11,9 @@ import json
 import logging
 import os
 import sys
+from typing import Any
 
-_log = logging.getLogger("crossfader.skins")
+logger = logging.getLogger("crossfader.skins")
 SKIN_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "skin.json")
@@ -48,7 +49,7 @@ _CUSTOM_DEFAULTS: dict = {
     "desc": "Your personal color scheme.",
 }
 
-SKINS = {
+SKINS: dict[str, dict[str, Any]] = {
     "Classic": {
         # Professional dark - all surfaces dark, blue-cyan accent
         "sb_bg":      "#111111", "sb_cat":     "#424242", "sb_btn":     "#B0B0B0",
@@ -134,7 +135,7 @@ def load_skin_name() -> str:
                 settings.THEME.set(old)
             os.remove(SKIN_FILE)
         except (OSError, ValueError, AttributeError):
-            _log.warning("could not move the theme from %s into the settings", SKIN_FILE, exc_info=True)
+            logger.warning("could not move the theme from %s into the settings", SKIN_FILE, exc_info=True)
     name = settings.THEME.get()
     return name if name in SKINS else "Classic"
 

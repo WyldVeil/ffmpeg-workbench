@@ -9,6 +9,8 @@ Provides:
 """
 from __future__ import annotations
 
+import contextlib
+import logging
 import time
 import tkinter as tk
 from collections.abc import Callable
@@ -19,11 +21,14 @@ from core import dialogs, logs, outputs, proc, settings, ui
 from core import ffmpeg as ff
 from core.hardware import open_in_explorer, reveal_file
 from core.i18n import t
+from core.queue_manager import RenderTask
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from core.timecode import Timecode
 from core.tools import ToolId
 from tabs.kit.contracts import Shell, Transport
+
+logger = logging.getLogger("crossfader.base_tab")
 
 
 def _load_clr():
@@ -47,6 +52,7 @@ def _load_clr():
             "input_fg":   skin.get("input_fg", "#E2E2E2"),
         }
     except Exception:
+        logger.debug("_load_clr: best-effort step failed", exc_info=True)
         return {
             "bg": "#1A1A1A", "panel": "#212121", "accent": "#3A8EE6",
             "fg": "#E2E2E2", "fgdim": "#7A7A7A", "green": "#2ECC71",
@@ -279,10 +285,8 @@ class ToolTip:
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         # Attempt to remove from taskbar on Windows
-        try:
+        with contextlib.suppress(tk.TclError):
             tw.wm_attributes("-toolwindow", True)
-        except Exception:
-            pass
         lbl = tk.Label(tw, text=self._text,
                        bg="#2A2A2A", fg="#E0E0E0",
                        font=(UI_FONT, 8),
@@ -462,10 +466,10 @@ class VideoTimeline(tk.Frame):
         c.create_rectangle(pad, cy - px(5), w - pad, cy + px(5),
                            fill="#222222", outline="")
 
+        xs = self._t2x(self._start, w)
+        xe = self._t2x(self._end, w)
         if self._show_handles:
             # Selection highlight
-            xs = self._t2x(self._start, w)
-            xe = self._t2x(self._end, w)
             c.create_rectangle(xs, cy - px(5), xe, cy + px(5),
                                fill="#1A5A98", outline="")
 
@@ -630,6 +634,7 @@ class BaseTab(ttk.Frame):
         self._render_thread = None      # last task id (kept for compatibility)
         self.preview_proc: proc.Popen[bytes] | None = None
         self._active_tasks: set = set()
+        self.last_task: RenderTask | None = None    # the most recent finished job (its log, its error)
 
     def shell(self) -> Shell | None:
         """The window this page lives in, when it is the app's (not in some tests)."""
@@ -708,6 +713,8 @@ class BaseTab(ttk.Frame):
             else:
                 ui.call_soon(lambda: tk.Misc.after(self, ms, func, *args))
             return ""                                  # no id: it was handed to the UI thread
+        if func is None:
+            return super().after(ms)  # pyright: ignore[reportCallIssue, reportArgumentType] - Tk's "just wait"
         return super().after(ms, func, *args)
 
     # ── Files ────────────────────────────────────────────────────────────────
@@ -847,10 +854,8 @@ class BaseTab(ttk.Frame):
         def _on_start(task_id):
             state["t0"] = time.time()
             if btn is not None:
-                try:
+                with contextlib.suppress(tk.TclError):
                     btn.config(text="✖ " + _cancel_label())
-                except tk.TclError:
-                    pass
             if shell is not None:
                 shell.set_status(t("app.status.processing"))
 
@@ -863,20 +868,16 @@ class BaseTab(ttk.Frame):
                 self.log(console, line)
             tk_task = self.task(task_id)
             if btn is not None and tk_task is not None and tk_task.fraction is not None:
-                try:
+                with contextlib.suppress(tk.TclError):
                     btn.config(text="✖ " + _cancel_label(tk_task.fraction * 100))
-                except tk.TclError:
-                    pass
 
         def _on_complete(task_id, returncode):
             elapsed = time.time() - state["t0"]
             elapsed_str = (f"{elapsed:.1f}s" if elapsed < 60
                            else f"{int(elapsed // 60)}m {int(elapsed % 60)}s")
             if btn is not None:
-                try:
+                with contextlib.suppress(tk.TclError):
                     btn.config(state="normal", text=btn_label, command=state["orig_cmd"] or "")
-                except tk.TclError:
-                    pass
             tk_task = self.task(task_id)
             status = tk_task.status if tk_task else ("done" if returncode == 0 else "failed")
             if shell is not None:
@@ -888,7 +889,7 @@ class BaseTab(ttk.Frame):
                     shell.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
             if console is not None and tk_task is not None and status == "failed" and tk_task.error:
                 self.log_tagged(console, tk_task.error, "error")
-            self._last_task = tk_task
+            self.last_task = tk_task
             if on_done:
                 on_done(0 if status == "done" else (returncode if returncode else 1))
 
@@ -902,16 +903,15 @@ class BaseTab(ttk.Frame):
 
     def show_result(self, returncode, out_path=""):
         """Success / cancelled / error feedback after a render."""
-        task = getattr(self, "_last_task", None)
+        task = getattr(self, "last_task", None)
         status = task.status if task is not None else ("done" if returncode == 0 else "failed")
         if status == "cancelled":
             return
         if returncode == 0 and status == "done":
             msg = "{}\n\n{}".format(t("common.complete"), out_path) if out_path else t("common.complete")
             messagebox.showinfo(t("common.done"), msg, parent=self)
-            if out_path:
-                if settings.AUTO_OPEN_OUTPUT.get():
-                    reveal_file(out_path)
+            if out_path and settings.AUTO_OPEN_OUTPUT.get():
+                reveal_file(out_path)
             return
         detail = (task.error if task is not None and task.error else
                   t("common.render_error_msg", code=returncode))

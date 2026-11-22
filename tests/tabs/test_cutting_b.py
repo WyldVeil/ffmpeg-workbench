@@ -15,7 +15,7 @@ def test_pure_helpers():
     segs = beat_sync.assign_sources(plan, [("a", 1.0), ("b", 10.0)], "sequential", 30)
     assert [s[0] for s in segs] == ["a", "b", "a", "b"]
     assert all(start + frames / 30 <= dur + 1e-6 for (path, start, frames), (p2, dur) in
-               zip(segs, [("a", 1.0), ("b", 10.0)] * 2))
+               zip(segs, [("a", 1.0), ("b", 10.0)] * 2, strict=False))
     assert side_by_side.cells("grid", 4, 1920, 1080)[3] == (960, 540, 960, 540)
 
 
@@ -60,7 +60,7 @@ def test_rotate(ui, media, outdir, lossless):
     ui.wait_idle(120)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.video.display_size == (720, 1280) and info.has_audio
+    assert info.require_video().display_size == (720, 1280) and info.has_audio
 
 
 @pytest.mark.gui
@@ -75,7 +75,7 @@ def test_crop_detect_and_render(ui, media, outdir):
     ui.pump(0.6)
     tab._detect_bars()
     ui.wait_for(lambda: tab.rect()[3] < 720, 60)
-    x, y, w, h = tab.rect()
+    _x, y, w, h = tab.rect()
     assert (w, h) == (1280, 536) and y == 92
     out = str(outdir / "cropped.mp4")
     tab.out_row.set(out)
@@ -90,7 +90,7 @@ def test_crop_detect_and_render(ui, media, outdir):
 def test_side_by_side_grid(ui, media, outdir):
     ui.reset()
     tab = ui.open("Side-by-Side")
-    for row, key in zip(tab.rows, ("h264", "vertical_noaudio", "hevc10", "nasty")):
+    for row, key in zip(tab.rows, ("h264", "vertical_noaudio", "hevc10", "nasty"), strict=False):
         row.set(media[key])
     tab.layout_var.set(side_by_side.LAYOUTS["grid"])
     tab.length_var.set(side_by_side.LENGTH["loop"])
@@ -118,7 +118,7 @@ def test_smart_reframe(ui, media, outdir):
     ui.wait_idle(240)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.video.display_size == (1080, 1920)
+    assert info.require_video().display_size == (1080, 1920)
     assert info.duration == pytest.approx(ff.duration_of(media["h264"]), abs=0.1)
 
 
@@ -142,4 +142,4 @@ def test_beat_montage(ui, media, outdir, tmp_path):
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     assert info.duration == pytest.approx(8.0, abs=0.1)
-    assert info.has_audio and info.video.display_size == (1280, 720)
+    assert info.has_audio and info.require_video().display_size == (1280, 720)

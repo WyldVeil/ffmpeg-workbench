@@ -8,6 +8,7 @@ second while jobs run.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import tkinter as tk
 from collections.abc import Callable
@@ -19,7 +20,7 @@ from core.queue_manager import RenderQueueManager, TaskStatus
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 
-_log = logging.getLogger("crossfader.shell")
+logger = logging.getLogger("crossfader.shell")
 
 _BUSY_WORDS = ("Processing", "Rendering", "Encoding", "Updating", "Downloading")
 
@@ -97,10 +98,8 @@ class StatusBar(tk.Frame):
         bg = skin["sb_bg"]
         for frame in (self, *self.winfo_children()):
             for widget in (frame, *frame.winfo_children()):
-                try:
+                with contextlib.suppress(tk.TclError):     # ttk widgets have no background option
                     widget["background"] = bg
-                except tk.TclError:
-                    pass                                # ttk widgets have no background option
 
     # ── The render queue ──────────────────────────────────────────────────────
     def queue_changed(self) -> None:

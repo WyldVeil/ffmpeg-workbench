@@ -14,7 +14,7 @@ from core import dialogs, settings
 from core.tools import ToolId
 from tabs.kit.contracts import AcceptsFiles
 
-_log = logging.getLogger("crossfader.shell")
+logger = logging.getLogger("crossfader.shell")
 MAX_RECENT = 10
 
 #: Pages that are not tools: a file dropped on them goes to the Media Inspector.
@@ -59,7 +59,7 @@ class FileOpener:
                 try:
                     accepted = bool(page.load_file(path)) or accepted
                 except Exception:                 # a page's bug: log it, fall back to the inspector
-                    _log.exception("load_file failed in %s", tool)
+                    logger.exception("load_file failed in %s", tool)
         if not accepted:
             inspector = self._show(ToolId.MEDIA_INSPECTOR)
             if isinstance(inspector, AcceptsFiles):
@@ -101,13 +101,13 @@ class FileOpener:
     def accept_drops(self, *targets: tk.Misc) -> None:
         try:
             from tkinterdnd2 import DND_FILES, TkinterDnD  # pyright: ignore[reportMissingImports] - optional
-            TkinterDnD._require(self._window)
+            TkinterDnD._require(self._window)  # noqa: SLF001 - tkinterdnd2's documented set-up call
             for widget in targets:
                 widget.drop_target_register(DND_FILES)  # type: ignore[attr-defined]
                 widget.dnd_bind("<<Drop>>", self._dropped)  # type: ignore[attr-defined]
             self.drag_and_drop = True
         except Exception as exc:                  # no tkdnd for this Tk: the app works without it
-            _log.info("Drag-and-drop unavailable: %s", exc)
+            logger.info("Drag-and-drop unavailable: %s", exc, exc_info=True)
 
     def _dropped(self, event: tk.Event) -> str:
         data = str(getattr(event, "data", ""))

@@ -193,23 +193,23 @@ def remux_command(inputs: list, tracks: list, out: str, *, keep_chapters: bool =
             argv += [f"-disposition:{n}", "attached_pic"]
     if container in ("mp4", "mov"):
         argv += ["-movflags", "+faststart"]
-    return argv + [out], notes
+    return [*argv, out], notes
 
 
 def extract_command(path: str, track: Track, out: str) -> list:
     """Save one track on its own (copied; MP4 text subtitles become SRT)."""
     argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
     if track.kind == "attachment":
-        return argv + [f"-dump_attachment:{track.index}", out, "-i", path]
+        return [*argv, f"-dump_attachment:{track.index}", out, "-i", path]
     argv += ["-i", path, "-map", f"0:{track.index}"]
     if track.kind == "cover":
-        return argv + ["-c", "copy", "-frames:v", "1", out]
+        return [*argv, "-c", "copy", "-frames:v", "1", out]
     if track.codec == "mov_text":
-        return argv + ["-c", "srt", out]
+        return [*argv, "-c", "srt", out]
     ext = os.path.splitext(out)[1].lower()
     if ext == ".wav":
-        return argv + ["-c", "pcm_s24le" if "24" in track.codec else "pcm_s16le", out]
-    return argv + ["-c", "copy", out]
+        return [*argv, "-c", "pcm_s24le" if "24" in track.codec else "pcm_s16le", out]
+    return [*argv, "-c", "copy", out]
 
 
 def extract_ext(track: Track) -> str:

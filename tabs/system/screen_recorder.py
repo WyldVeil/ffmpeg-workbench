@@ -8,6 +8,7 @@ Advanced mode features:
   • Custom output folder + filename template ({date}, {time}, {counter} tokens)
   • Auto-stop after configurable duration (adds -t to FFmpeg)
 """
+import contextlib
 import ctypes
 import ctypes.wintypes
 import os
@@ -15,6 +16,7 @@ import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import ClassVar
 
 from core import dialogs, tasks
 from core.i18n import t
@@ -538,7 +540,7 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  OBS Feature 1 – Global Hotkey
     # ─────────────────────────────────────────────────────────────────────────
-    _HOTKEY_MAP = {
+    _HOTKEY_MAP: ClassVar[dict[str, tuple[int, int]]] = {
         "Alt+F9":     (0x0001, 0x78),   # MOD_ALT,      VK_F9
         "Alt+F10":    (0x0001, 0x79),   # MOD_ALT,      VK_F10
         "Ctrl+Alt+R": (0x0003, 0x52),   # MOD_ALT|CTRL, VK_R
@@ -595,10 +597,8 @@ class ScreenRecorderTab(BaseTab):
         if sys.platform == "win32" and tid:
             ctypes.windll.user32.PostThreadMessageW(tid, 0x0012, 0, 0)       # WM_QUIT ends GetMessage
             self._hotkey_tid = None
-        try:
+        with contextlib.suppress(tk.TclError):
             self.lbl_hotkey_status.config(text=t("screen_recorder.inactive"), fg=CLR["fgdim"])
-        except tk.TclError:
-            pass
         if was_active:
             self.log(self.console, t("log.screen_recorder.global_hotkey_unregistered"))
 
@@ -785,11 +785,9 @@ class ScreenRecorderTab(BaseTab):
         self.record_proc = None
         self._recording = False
         self._set_buttons(False)
-        try:
+        with contextlib.suppress(tk.TclError):
             self.btn_stop.config(text=t("screen_recorder.stop_button") if t("screen_recorder.stop_button") !=
                                  "screen_recorder.stop_button" else "■  STOP")
-        except tk.TclError:
-            pass
         ok = os.path.isfile(rec.out) and os.path.getsize(rec.out) > 1024
         if ok and (rec.stopping or rc == 0 or rec.seconds):
             self.log(self.console, f"Saved: {rec.out}")

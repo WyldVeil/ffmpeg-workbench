@@ -55,9 +55,9 @@ def test_clean_is_lossless_and_complete(ui, phone_video, deep):
     before, after = ff.probe(phone_video), ff.probe(out, use_cache=False)
     left = mc.leftovers(mc.inspect(after) + (mc.stream_notes(out) if deep else []))
     assert left == [], [f.line() for f in left]
-    assert after.video.rotation == before.video.rotation != 0           # still the right way up
-    assert after.audio.tags.get("language") == "eng"
-    assert after.video.codec == before.video.codec and abs(after.duration - before.duration) < 0.05
+    assert after.require_video().rotation == before.require_video().rotation != 0           # still the right way up
+    assert after.require_audio().tags.get("language") == "eng"
+    assert after.require_video().codec == before.require_video().codec and abs(after.duration - before.duration) < 0.05
     raw = open(out, "rb").read()
     for secret in (b"Alice", b"iPhone", b"51.5074", b"Lavf"):
         assert secret not in raw

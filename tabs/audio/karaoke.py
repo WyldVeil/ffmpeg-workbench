@@ -60,7 +60,7 @@ ASS_COLOURS = {
 
 def _ass_time(seconds: float) -> str:
     """Format seconds → ASS timestamp  H:MM:SS.cs"""
-    total_cs = int(round(seconds * 100))
+    total_cs = round(seconds * 100)
     cs  = total_cs % 100
     s   = (total_cs // 100) % 60
     m   = (total_cs // 6000) % 60
@@ -114,7 +114,7 @@ def _build_ass(segments, path, font_size, primary, secondary,
             if not text:
                 continue
             t0, t1 = seg["start"], seg["end"]
-            dur_cs = max(1, int(round((t1 - t0) * 100)))
+            dur_cs = max(1, round((t1 - t0) * 100))
             dialogue_lines.append(
                 f"Dialogue: 0,{_ass_time(t0)},{_ass_time(t1)},Karaoke,,0,0,0,,{{\\kf{dur_cs}}}{text}\n"
             )
@@ -134,11 +134,11 @@ def _build_ass(segments, path, font_size, primary, secondary,
 
             # Silence/gap before this word: an empty timed token keeps the sweep in
             # sync (no extra space - the word already carries its own).
-            gap_cs = max(0, int(round((w_start - prev_end) * 100)))
+            gap_cs = max(0, round((w_start - prev_end) * 100))
             if gap_cs > 0:
                 parts.append(f"{{\\kf{gap_cs}}}")
 
-            dur_cs = max(1, int(round((w_end - w_start) * 100)))
+            dur_cs = max(1, round((w_end - w_start) * 100))
             parts.append(f"{{\\kf{dur_cs}}}{word_text}")
             prev_end = w_end
 
@@ -432,7 +432,7 @@ class KaraokeTab(BaseTab):
 
         def done(tid, rc):
             self._finish()
-            self._last_task = self.task(tid)
+            self.last_task = self.task(tid)
             self.show_result(rc, out)
 
         self._task = self.enqueue_render("Karaoke", output_path=out,
@@ -469,7 +469,7 @@ class KaraokeTab(BaseTab):
         if not segments:
             raise RuntimeError("No sung or spoken words were recognised.")
         ctx.log(f"Step 2/3: {len(segments)} lyric lines.")
-        w, h = (info.video.display_size if info.has_video else (1920, 1080))
+        w, h = (info.require_video().display_size if info.has_video else (1920, 1080))
         ass_path = os.path.join(tmp, "karaoke.ass")
         _build_ass(segments, ass_path, font_size=round(cfg["font_size"] * min(w, h) / 1080),
                    primary=cfg["primary"], secondary=cfg["secondary"], res_x=w, res_y=h)

@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.2.5
+
+### Smoother
+
+- **No more short freezes when opening a tool.** What the bundled FFmpeg can
+  do (its filters, whether your graphics card's Vulkan driver works, whether
+  one noise filter is safe on this build) is now checked in the background
+  when the app starts and remembered between sessions. HDR to SDR, Voice
+  Isolation, the Resolution Scaler, Denoise and Animated Zoom open at once.
+- The Media Inspector, HDR to SDR, the Video Downloader and Advanced Settings
+  read files and ask programs in the background instead of pausing the window.
+- Frame previews of 10-bit and HDR video are about a quarter of the size, so
+  scrubbing is lighter.
+- The TTS page no longer loads the online voice engine until it is used.
+- An idle window wakes the processor far less often (kinder to laptop
+  batteries).
+
+### Sturdier
+
+- Every program the app starts now has a time limit, can be stopped, and is
+  stopped when the app closes - nothing is left running in the background.
+- A broken settings file can no longer overwrite the good backup copy.
+- Settings edited by hand with a wrong value fall back to the default for that
+  setting (with a note in the log) instead of misbehaving.
+- Problems that used to be silently ignored are now written to the log.
+
+### Fixed
+
+- Special Effects: Emoji, Subscribe reminder and Camera shake renders read
+  their settings safely (they could fail or use stale values).
+- HDR to SDR: pressing Render straight after choosing a file could use the
+  previous file's details.
+- TTS Voice-Over: playing the result works on Linux and macOS.
+- The Encode Queue's job editor is spaced correctly on HiDPI screens.
+- Recently used tools and favourites are stored by tool id, so they survive
+  tool renames (lists saved by earlier versions are read as before).
+
+### Under the hood
+
+- The code was reorganised along the lines of *Robust Python*, *Effective
+  Python*, *Fluent Python* and *High Performance Python*: an engine that
+  never touches the window, typed settings and tool ids, page contracts,
+  one gateway for programs and one for background work, a typed error tree,
+  and tests that keep the structure from eroding. See
+  [ARCHITECTURE.md](ARCHITECTURE.md).
+- Python 3.11 or newer is needed to run from source.
+
 ## 1.2.4
 
 ### New

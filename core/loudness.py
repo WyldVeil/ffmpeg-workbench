@@ -44,8 +44,7 @@ def measure_cmd(path: str, i: float, tp: float, lra: float, *, stream: int = 0,
         cmd += ["-ss", ff.ts(start)]
     if duration:
         cmd += ["-t", ff.ts(duration)]
-    return cmd + ["-i", path, "-map", f"0:a:{stream}", "-vn", "-sn", "-dn",
-                  "-af", f"loudnorm=I={i}:TP={tp}:LRA={lra}:print_format=json", "-f", "null", "-"]
+    return [*cmd, "-i", path, "-map", f"0:a:{stream}", "-vn", "-sn", "-dn", "-af", f"loudnorm=I={i}:TP={tp}:LRA={lra}:print_format=json", "-f", "null", "-"]
 
 
 def parse_measurement(lines: Sequence[str]) -> Measurement:

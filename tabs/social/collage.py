@@ -22,6 +22,7 @@ from tkinter import messagebox, ttk
 from core import dialogs, grid
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import frame_rate
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -309,14 +310,14 @@ class VideoCollageTab(BaseTab):
         if info is None or not info.has_video:
             self.log(self.console, f"{os.path.basename(path)}: no video - skipped.")
             return True
-        w, h = info.video.display_size
-        sar = info.video.sar or "1:1"
+        w, h = info.require_video().display_size
+        sar = info.require_video().sar or "1:1"
         try:
             num, den = (int(x) for x in sar.split(":"))
             sar_f = num / den if num and den else 1.0
         except ValueError:
             sar_f = 1.0
-        dur = info.video.duration if info.video.duration > 0.05 else info.duration
+        dur = info.require_video().duration if info.require_video().duration > 0.05 else info.duration
         self._slots.append({"path": path, "name": os.path.basename(path), "duration": dur,
                             "aspect": (w * sar_f) / max(1, h), "has_audio": info.has_audio})
         self._refresh_list()
@@ -396,7 +397,7 @@ class VideoCollageTab(BaseTab):
         audio = self._key(AUDIO_MODES, self._audio_mode, "first")
         bg = BACKGROUNDS.get(self._bg_color.get(), "black")
         infos = [ff.try_probe(p) for p in paths]
-        fps = common.frame_rate(infos[0]) if infos[0] is not None else "30"
+        fps = frame_rate(infos[0]) if infos[0] is not None else "30"
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
         cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]

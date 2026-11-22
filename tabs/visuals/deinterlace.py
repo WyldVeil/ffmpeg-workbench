@@ -20,6 +20,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.deinterlace import deinterlace_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -30,25 +31,6 @@ MODES = {"smart": "Smart - only frames that are interlaced (recommended)", "all"
 ENGINES = {"bwdif": "BWDIF (best)", "yadif": "YADIF (classic)", "w3fdif": "W3FDIF (BBC)",
            "estdif": "ESTDIF (edge-directed)"}
 ORDERS = {"auto": "From the file", "tff": "Top field first", "bff": "Bottom field first"}
-
-
-def deinterlace_chain(mode: str, engine: str = "bwdif", order: str = "auto") -> str:
-    parts = [] if order == "auto" else [f"setfield={order}"]
-    if mode == "ivtc":
-        parts += ["fieldmatch=order=" + ("auto" if order == "auto" else order[:3]),
-                  "yadif=deint=interlaced", "decimate"]
-        return ",".join(parts)
-    rate = "send_field" if mode == "double" else "send_frame"
-    deint = "interlaced" if mode == "smart" else "all"
-    if mode == "smart":
-        parts.append("idet")
-    if engine == "w3fdif":
-        parts.append(f"w3fdif=filter=complex:mode={'field' if mode == 'double' else 'frame'}:deint={deint}")
-    elif engine == "estdif":
-        parts.append(f"estdif=mode={'field' if mode == 'double' else 'frame'}:deint={deint}")
-    else:
-        parts.append(f"{engine}=mode={rate}:deint={deint}")
-    return ",".join(p for p in parts if p)
 
 
 class DeinterlaceTab(BaseTab):
@@ -111,11 +93,11 @@ class DeinterlaceTab(BaseTab):
     def _source_changed(self, path):
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
-            fo = info.video.field_order or "unknown"
+            fo = info.require_video().field_order or "unknown"
             label = {"progressive": "progressive", "tt": "interlaced, top field first",
                      "bb": "interlaced, bottom field first", "tb": "interlaced (top coded first)",
                      "bt": "interlaced (bottom coded first)"}.get(fo, fo)
-            self.info_lbl.config(text=f"{info.video.width}×{info.video.height} · {info.video.fps:.3f} fps · "
+            self.info_lbl.config(text=f"{info.require_video().width}×{info.require_video().height} · {info.require_video().fps:.3f} fps · "
                                       f"the file says: {label}")
         self.compare.load(path)
         self._changed()

@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -159,9 +160,9 @@ class MuterTab(BaseTab):
         if mode == "remove":
             cmd += ["-map", "0", "-map", "-0:a", "-c", "copy", out]
         elif mode == "silent_track":
-            cmd += ["-af", "volume=0", *common.audio_job_args(out, info), out]
+            cmd += ["-af", "volume=0", *audio_job_args(out, info), out]
         else:
-            cmd += ["-af", mute_filter(self.ranges, fade, mode == "bleep"), *common.audio_job_args(out, info), out]
+            cmd += ["-af", mute_filter(self.ranges, fade, mode == "bleep"), *audio_job_args(out, info), out]
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label="🔇  APPLY", duration=info.duration or None, output=out, inputs=[src],
                         name="Muter")

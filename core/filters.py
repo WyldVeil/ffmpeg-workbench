@@ -265,8 +265,8 @@ def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (),
             fh.write(f"{_meta_escape(k)}={_meta_escape(v)}\n")
         for start, end, title in chapters:
             fh.write("\n[CHAPTER]\nTIMEBASE=1/1000\n")
-            fh.write(f"START={int(round(start * 1000))}\n")
-            fh.write(f"END={int(round(end * 1000))}\n")
+            fh.write(f"START={round(start * 1000)}\n")
+            fh.write(f"END={round(end * 1000)}\n")
             fh.write(f"title={_meta_escape(title)}\n")
     return path
 

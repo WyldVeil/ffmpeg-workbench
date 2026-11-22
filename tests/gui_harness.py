@@ -324,7 +324,7 @@ class Harness:
                 quiet_since = time.monotonic()
             elif time.monotonic() - quiet_since >= settle:
                 return
-        raise TimeoutError("app did not become idle within %.0fs" % timeout)
+        raise TimeoutError(f"app did not become idle within {timeout:.0f}s")
 
     def wait_for(self, predicate: Callable[[], bool], timeout: float = 60.0) -> None:
         deadline = time.monotonic() + timeout
@@ -332,7 +332,7 @@ class Harness:
             self.pump(0.05)
             if predicate():
                 return
-        raise TimeoutError("condition not met within %.0fs" % timeout)
+        raise TimeoutError(f"condition not met within {timeout:.0f}s")
 
     # ── navigation ───────────────────────────────────────────────────────────
 

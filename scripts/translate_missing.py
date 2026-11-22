@@ -165,7 +165,7 @@ def process_language(lang_code: str, google_code: str, en_strings: dict,
             existing.update(translations)
             translated_count += len(translations)
             print(f"done  ({translated_count}/{len(missing_keys)})")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a dev script: report the batch and go on
             print(f"FAILED: {exc}")
             print("    Retrying in 5s…")
             time.sleep(5)
@@ -174,7 +174,7 @@ def process_language(lang_code: str, google_code: str, en_strings: dict,
                 existing.update(translations)
                 translated_count += len(translations)
                 print(f"    retry ok  ({translated_count}/{len(missing_keys)})")
-            except Exception as exc2:
+            except Exception as exc2:  # noqa: BLE001 - as above
                 print(f"    Retry also failed ({exc2}), skipping batch.")
 
         time.sleep(0.3)   # be polite to Google's free endpoint

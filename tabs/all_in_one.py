@@ -203,7 +203,7 @@ class _Section(tk.Frame):
     """
     def __init__(self, parent, title, on_toggle, **kw):
         super().__init__(parent, bg=CLR["bg"], **kw)
-        self._en  = tk.BooleanVar(value=False)
+        self.enabled = tk.BooleanVar(value=False)
         self._cb  = on_toggle
 
         # ── Header row ────────────────────────────────────────────────────
@@ -211,10 +211,10 @@ class _Section(tk.Frame):
         hdr.pack(fill="x")
         tk.Checkbutton(
             hdr, text=title,
-            variable=self._en,
+            variable=self.enabled,
             font=(UI_FONT, 10, "bold"),
             bg=CLR["panel"], fg=CLR["fg"],
-            selectcolor=CLR["sb_active"] if "sb_active" in CLR else "#333333",
+            selectcolor=CLR.get("sb_active", "#333333"),
             activebackground=CLR["panel"],
             command=self._toggled,
         ).pack(side="left", padx=px(10), pady=px(6))
@@ -225,11 +225,16 @@ class _Section(tk.Frame):
         self._set_body_state("disabled")
 
     def get(self):
-        return self._en.get()
+        return self.enabled.get()
 
     def _toggled(self):
-        self._set_body_state("normal" if self._en.get() else "disabled")
+        self._set_body_state("normal" if self.enabled.get() else "disabled")
         self._cb()
+
+    def set_enabled(self, on: bool) -> None:
+        """Tick (or untick) the section without notifying anyone."""
+        self.enabled.set(on)
+        self._set_body_state("normal" if on else "disabled")
 
     def _set_body_state(self, state):
         fg = CLR["fg"] if state == "normal" else CLR["fgdim"]
@@ -245,7 +250,7 @@ class _Section(tk.Frame):
                 widget.config(fg=fg)
             if cls == "TCombobox":
                 widget.config(state="readonly" if state == "normal" else "disabled")
-        except Exception:
+        except tk.TclError:
             pass
         for child in widget.winfo_children():
             self._walk(child, state, fg)
@@ -368,7 +373,7 @@ class AllInOneTab(BaseTab):
         info = _ff.try_probe(path)
         dur = info.duration if info else 0.0
         self._duration = dur
-        self._sample_rate = info.audio.sample_rate if info is not None and info.audio else 0
+        self._sample_rate = info.require_audio().sample_rate if info is not None and info.audio else 0
         self.after(0, lambda: self._dur_lbl.config(
             text=f"{dur:.2f}s" if dur else ""))
         self.after(0, self._rebuild_cmd)
@@ -438,7 +443,7 @@ class AllInOneTab(BaseTab):
         self._scale_preset = tk.StringVar(value=_RES_PRESETS[3])
         self._scale_w      = tk.StringVar(value="1920")
         self._scale_h      = tk.StringVar(value="1080")
-        self._scale_algo   = tk.StringVar(value=list(_SCALE_ALGO.keys())[0])
+        self._scale_algo   = tk.StringVar(value=next(iter(_SCALE_ALGO.keys())))
         self._scale_pad    = tk.BooleanVar(value=False)
 
         for v in (self._scale_preset, self._scale_w, self._scale_h,
@@ -808,8 +813,7 @@ class AllInOneTab(BaseTab):
                                     self._rebuild_cmd)
         self._sec_encode.pack(fill="x", pady=px(1))
         # Default ON - you almost always want to set these
-        self._sec_encode._en.set(True)
-        self._sec_encode._set_body_state("normal")
+        self._sec_encode.set_enabled(True)
         b = self._sec_encode.body
 
         self._vcodec  = tk.StringVar(value="H.264 (CPU)")
@@ -1108,7 +1112,7 @@ class AllInOneTab(BaseTab):
                 while rem < 0.5:
                     chain.append("atempo=0.5")
                     rem *= 2.0
-                af += chain + [f"atempo={rem:.4f}"]
+                af += [*chain, f"atempo={rem:.4f}"]
             else:
                 sr = int(getattr(self, "_sample_rate", 0) or 48000)
                 af += [f"asetrate={round(sr * speed)}", f"aresample={sr}"]

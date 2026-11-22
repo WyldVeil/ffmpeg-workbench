@@ -48,7 +48,7 @@ def base_argv(ytdlp: str | None = None, *, network: bool = True,
     if tails.direct_enabled():
         # Tails: the user opened the direct route for this session - run yt-dlp
         # outside Tor the way Tails runs its Unsafe Browser.
-        return tails.wrap(argv + ["--proxy", ""])
+        return tails.wrap([*argv, "--proxy", ""])
     argv += list(_net.build_yt_dlp_args(url=url))
     return _net.wrapper_prefix() + argv
 

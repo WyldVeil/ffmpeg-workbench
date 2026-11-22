@@ -210,7 +210,7 @@ def test_auto_layout_any_canvas_any_clips(seed):
                 overlap_h = min(y1 + h1, y2 + h2) - max(y1, y2)
                 assert overlap_w <= 2 or overlap_h <= 2          # at most rounding slivers
         if mode == "fit":                                        # whole clips: shapes kept (within rounding)
-            for (x, y, w, h), a in zip(lay.rects, shapes):
+            for (_x, _y, w, h), a in zip(lay.rects, shapes, strict=False):
                 assert abs(w / h - a) / a < 0.08 or min(w, h) < 40
 
 

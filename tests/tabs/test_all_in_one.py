@@ -28,15 +28,15 @@ def test_pipeline_trim_speed_text_fade(ui, media, outdir):
     tab._out_var.set(out)
     tab._src_var.set(media["hevc10"])
     ui.wait_for(lambda: getattr(tab, "_duration", 0) > 0, 30)
-    tab._sec_trim._en.set(True)
+    tab._sec_trim.enabled.set(True)
     tab._trim_start.set("1")
     tab._trim_end.set("4")
-    tab._sec_speed._en.set(True)
+    tab._sec_speed.enabled.set(True)
     tab._speed_val.set("1.5")
-    tab._sec_text._en.set(True)
+    tab._sec_text.enabled.set(True)
     tab._text_val.set("It's 50% off: \\o/ {now}")
-    tab._sec_fade._en.set(True)
-    tab._sec_scale._en.set(True)
+    tab._sec_fade.enabled.set(True)
+    tab._sec_scale.enabled.set(True)
     tab._scale_w.set("854")
     tab._scale_h.set("-1")
     tab._rebuild_cmd()
@@ -48,4 +48,4 @@ def test_pipeline_trim_speed_text_fade(ui, media, outdir):
     info = ff.probe(out, use_cache=False)
     assert info.duration == pytest.approx(3 / 1.5, abs=0.1)
     assert info.width == 854 and info.height % 2 == 0
-    assert info.video.pix_fmt == "yuv420p"
+    assert info.require_video().pix_fmt == "yuv420p"

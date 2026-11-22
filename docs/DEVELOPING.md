@@ -1,17 +1,22 @@
 # Developing WyldVeil's Media Editor
 
-This guide covers how the app is put together, the shared building blocks
-every tool uses, and how to test changes. Read it before you change a tab.
+This guide covers the shared building blocks every tool uses, and how to
+test changes. The structure and its reasons are in
+[ARCHITECTURE.md](../ARCHITECTURE.md); the house rules in
+[CONVENTIONS.md](../CONVENTIONS.md).
 
 ## Layout
 
 ```
-main.py                 application shell: window, sidebar, menus, status bar
-core/                   shared, UI-independent building blocks (see below)
+main.py                 entry point: --cli -> core/cli.py, otherwise shell/app.py
+core/                   the engine - no Tk (see below); core/ops = command builders
+shell/                  the window: sidebar, pages, menus, status bar, shortcuts
 tabs/base_tab.py        BaseTab + UI helpers that every tool tab inherits
+tabs/kit/               page contracts (Protocols), ChoiceBox, theme, labels
 tabs/widgets.py         FramePreview (in-app frame viewer), EncoderPanel
 tabs/<category>/*.py    one module per tool
-tabs/registry.py        which tools appear in the sidebar
+core/tools.py           every tool's id, name, section and search words
+tabs/registry.py        which page class builds each tool
 locale/<lang>.json      UI strings; locale/fragments/*.json = new English strings
 bin/<platform>/         bundled tools (scripts/fetch_binaries.py); never committed
 tests/                  pytest suite + tests/gui_harness.py (headless Tk driver)
@@ -24,14 +29,14 @@ packaging/              PyInstaller spec, build script, Linux/Windows installers
    - `core.ffmpeg` for probing, timing, and running commands.
    - `core.encoders` for codec arguments.
    - `core.filters` for escaping paths and text inside filtergraphs.
-2. **Never touch Tk from a worker thread.** Use `self.call_ui(fn, ...)`
-   (`core.ui.call_soon`) or `self.log(...)`. Never call `widget.after` from a
-   thread, and never run `subprocess.run` on the Tk thread for anything that
-   can take more than about 100 ms.
+2. **Never touch Tk from a worker thread, never run a program on the UI
+   thread.** Background work goes through `core.tasks.submit(fn, on_done=...,
+   on_error=...)`; read widgets first and pass values in. Programs start only
+   through `core.proc` (tests enforce both).
 3. **Every render goes through the queue**: `self.run_ffmpeg(...)` or
    `self.enqueue_render(...)`. That gives the user progress, a Cancel
    button, atomic outputs and error messages for free. Never spawn ffmpeg
-   with `subprocess` yourself, and never `taskkill /IM`.
+   yourself, and never `taskkill /IM`.
 4. **Never overwrite the input, and never silently overwrite anything.** Call
    `out = self.confirm_output(out, inputs=[src, ...])` right before
    rendering. It returns `None` when the user cancels.
@@ -135,8 +140,10 @@ self.enqueue_render("Crossfader", out, worker_fn=job, inputs=[...],
 ### Threads and the UI
 ```python
 self.call_ui(label.config, text="Done")             # from any thread
-core.ui.run_in_thread(work, on_done=show, on_error=fail)
+tasks.submit(partial(work, path), on_done=show, on_error=fail)   # core.tasks
+capabilities.peek("vulkan", False)                  # never blocks (core.capabilities)
 core.ui.debounce(widget, 120, regenerate_preview)   # for sliders
+proc.run([exe, "--version"], timeout=10)            # core.proc: a ProcResult
 ```
 
 ### Widgets

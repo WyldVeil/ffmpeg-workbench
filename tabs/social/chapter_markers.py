@@ -45,7 +45,7 @@ def _fmt_srt_tc(secs: float) -> str:
     h = int(secs) // 3600
     m = (int(secs) % 3600) // 60
     s = int(secs) % 60
-    ms = min(999, int(round((secs - int(secs)) * 1000)))
+    ms = min(999, round((secs - int(secs)) * 1000))
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 

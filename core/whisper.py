@@ -8,6 +8,7 @@ against pinned SHA-256 sums.  Everything runs offline after that.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import re
@@ -83,7 +84,7 @@ def adopt_file(key: str, path: str | None = None) -> bool:
         return False
     h = hashlib.sha256()
     with open(src, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
+        while chunk := fh.read(1 << 20):
             h.update(chunk)
     if h.hexdigest() != m.sha256:
         return False
@@ -127,10 +128,8 @@ def download_model(key: str, progress: Callable[[float], None] | None = None,
                 if progress is not None:
                     progress(min(1.0, done / total))
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(part)
-        except OSError:
-            pass
         raise
     if h.hexdigest() != m.sha256:
         os.remove(part)
@@ -180,5 +179,4 @@ def audio_extract_cmd(src: str, wav: str, *, start: float = 0.0,
         cmd += ["-ss", ff.ts(start)]
     if duration:
         cmd += ["-t", ff.ts(duration)]
-    return cmd + ["-i", src, "-map", f"0:a:{stream}", "-vn", "-sn", "-ac", "1", "-ar", "16000",
-                  "-c:a", "pcm_s16le", wav]
+    return [*cmd, "-i", src, "-map", f"0:a:{stream}", "-vn", "-sn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", wav]

@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import ClassVar
 
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -87,7 +89,8 @@ def zoom_filter(exprs: tuple, size: tuple, fps: str, *, gpu: bool, pix_fmt: str 
 
 class AnimatedZoomTab(BaseTab):
     # i / o: the move starts / ends at the frame shown (for the chosen kind of move)
-    _MARKS = {"punch": ("p_start", "p_end"), "keyframes": ("k_t0", "k_t1"), "pulse": ("u_time", None)}
+    _MARKS: ClassVar[dict[str, tuple[str, str | None]]] = {
+        "punch": ("p_start", "p_end"), "keyframes": ("k_t0", "k_t1"), "pulse": ("u_time", None)}
 
     def _mark(self, which):
         key = next((k for k, v in MODES.items() if v == self.mode_var.get()), "")
@@ -260,7 +263,7 @@ class AnimatedZoomTab(BaseTab):
             exprs = zoom_exprs(self._mode(), self.params(info.duration), info.duration)
         except ValueError:
             return
-        self.preview.set_filter(zoom_filter(exprs, common.even_size(info), common.frame_rate(info), gpu=False,
+        self.preview.set_filter(zoom_filter(exprs, common.even_size(info), frame_rate(info), gpu=False,
                                             supersample=False), keep_time=True)
 
     def _render(self):
@@ -278,7 +281,7 @@ class AnimatedZoomTab(BaseTab):
             return
         size = common.even_size(info)
         gpu = fl.vulkan_ok()
-        chain = zoom_filter(exprs, size, common.frame_rate(info), gpu=gpu,
+        chain = zoom_filter(exprs, size, frame_rate(info), gpu=gpu,
                             pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
                             supersample=max(size) <= 1920)
         common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder, console=self.console,

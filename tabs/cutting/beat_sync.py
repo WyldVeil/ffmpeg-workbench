@@ -18,6 +18,7 @@ then the segments are joined losslessly and the song is laid underneath.
 from __future__ import annotations
 
 import array
+import itertools
 import math
 import os
 import random
@@ -29,6 +30,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks
 from core.i18n import t
+from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -76,14 +78,14 @@ def estimate_tempo(onset: list, lo_bpm: float = 70, hi_bpm: float = 180) -> floa
     x = [v - mean for v in seg]
     best, best_lag = -1e18, ENV_RATE * 0.5
     for lag in range(int(ENV_RATE * 60 / hi_bpm), int(ENV_RATE * 60 / lo_bpm) + 1):
-        r = sum(a * b for a, b in zip(x, x[lag:])) / (len(x) - lag)
+        r = sum(a * b for a, b in zip(x, x[lag:], strict=False)) / (len(x) - lag)
         bpm = 60 * ENV_RATE / lag
         weight = math.exp(-0.5 * (math.log2(bpm / 120) / 0.9) ** 2)
         if r * weight > best:
             best, best_lag = r * weight, lag
     # sub-sample refinement with the neighbours (parabolic)
     def ac(lag):
-        return sum(a * b for a, b in zip(x, x[lag:])) / (len(x) - lag)
+        return sum(a * b for a, b in zip(x, x[lag:], strict=False)) / (len(x) - lag)
     y0, y1, y2 = ac(best_lag - 1), ac(best_lag), ac(best_lag + 1)
     denom = y0 - 2 * y1 + y2
     shift = 0.5 * (y0 - y2) / denom if denom else 0.0
@@ -97,14 +99,14 @@ def beat_grid(onset: list, period: float) -> list:
         return []
     best, phase = -1.0, 0
     for ph in range(int(period)):
-        s = sum(onset[int(round(ph + k * period))] for k in range(int((n - ph) / period)))
+        s = sum(onset[round(ph + k * period)] for k in range(int((n - ph) / period)))
         if s > best:
             best, phase = s, ph
     peak = sorted(onset)[int(len(onset) * 0.9)] if onset else 0
     beats, pos = [], float(phase)
     win = max(1, int(period * 0.12))
     while pos < n:
-        i = int(round(pos))
+        i = round(pos)
         lo, hi = max(0, i - win), min(n, i + win + 1)
         j = max(range(lo, hi), key=lambda k: onset[k]) if hi > lo else i
         if onset[j] >= peak:
@@ -135,8 +137,8 @@ def frame_plan(cuts, total: float, fps: float) -> list:
     """[(start_s, frames)] covering 0..total with cuts on the given times."""
     marks = [0.0] + [c for c in cuts if 0 < c < total] + [total]
     plan = []
-    for a, b in zip(marks, marks[1:]):
-        frames = int(round(b * fps)) - int(round(a * fps))
+    for a, b in itertools.pairwise(marks):
+        frames = round(b * fps) - round(a * fps)
         if frames > 0:
             plan.append((a, frames))
     return plan
@@ -364,7 +366,7 @@ class BeatSyncCutterTab(BaseTab):
         first = ff.probe(self.clips[0][0])
         size = SIZES.get(self.size_var.get())
         w, h = size if size else common.even_size(first)
-        fps_str = common.frame_rate(first)
+        fps_str = frame_rate(first)
         num, _, den = fps_str.partition("/")
         fps = float(num) / float(den or 1)
         every = int(self.every_var.get() or 1)

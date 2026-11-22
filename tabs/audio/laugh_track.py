@@ -397,8 +397,8 @@ class LaughTrackRemoverTab(BaseTab):
         if self._src_var.get() != p:
             self._src_var.set(p)
         self.duration = info.duration if info else 0.0
-        self._channels = info.audio.channels if info is not None and info.audio else 2
-        layout = info.audio.channel_layout if info is not None and info.audio else ""
+        self._channels = info.require_audio().channels if info is not None and info.audio else 2
+        layout = info.require_audio().channel_layout if info is not None and info.audio else ""
         self._info_lbl.config(text=f"{_fmt(self.duration)}   {layout or str(self._channels) + ' ch'}")
 
     def _browse_out(self):
@@ -464,7 +464,7 @@ class LaughTrackRemoverTab(BaseTab):
 
             def _done(_tid, rc):
                 self.btn_render.config(state="normal")
-                self._last_task = self.task(_tid)
+                self.last_task = self.task(_tid)
                 self.show_result(rc, _out)
 
             self.enqueue_render("Laugh Track (AI)", output_path=_out, worker_fn=_ai_worker_fn,
@@ -522,5 +522,5 @@ class LaughTrackRemoverTab(BaseTab):
             cmd += ["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
         else:
             cmd += ["-map", "1:a:0", "-c:a", "pcm_s16le"]
-        ctx.span(0.95, 1.0).run(cmd + [ctx.output(out)], duration=self.duration or None)
+        ctx.span(0.95, 1.0).run([*cmd, ctx.output(out)], duration=self.duration or None)
         return 0

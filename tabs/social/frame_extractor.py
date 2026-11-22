@@ -24,6 +24,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.frame_extractor import quality_args
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
@@ -32,17 +33,6 @@ from tabs.widgets import FileRow, FramePreview, scroll_body
 FORMATS = {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"}
 MODES = {"single": "This frame", "interval": "Every N seconds", "scenes": "Scene starts",
          "sheet": "Contact sheet"}
-
-
-def quality_args(ext: str, quality: int) -> list:
-    q = max(1, min(100, int(quality)))
-    if ext == "jpg":
-        return ["-c:v", "mjpeg", "-q:v", str(max(2, min(31, round(31 - (q - 1) * 29 / 99))))]
-    if ext == "webp":
-        return ["-c:v", "libwebp", "-quality", str(q), "-lossless", "0"]
-    if ext == "tiff":
-        return ["-c:v", "tiff", "-compression_algo", "deflate"]
-    return ["-c:v", "png"]
 
 
 def times_select(times, fps: float) -> str:
@@ -202,7 +192,7 @@ class FrameExtractorTab(BaseTab):
             self.dir_var.set(default_output_folder(path))
 
     def _fps(self) -> float:
-        return (self._info.video.fps if self._info and self._info.video else 0) or 30.0
+        return (self._info.require_video().fps if self._info and self._info.video else 0) or 30.0
 
     def _moved(self):
         pos = float(self.pos_var.get())
@@ -340,7 +330,7 @@ class FrameExtractorTab(BaseTab):
         pad = 6
         chain.append(f"tile={cols}x{rows}:padding={pad}:margin={pad}:color=0x181818")
         head = max(28, tile_w // 9)
-        v = info.video
+        v = info.require_video()
         title = (f"{os.path.basename(src)}   ·   {ff.format_time(dur)}   ·   "
                  f"{v.display_size[0]}×{v.display_size[1]}   ·   {v.fps:.3g} fps")
         chain.append(f"pad=iw:ih+{head}:0:{head}:color=0x181818")

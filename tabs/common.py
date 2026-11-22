@@ -8,6 +8,7 @@ hold it, and queue one render with progress, cancel and overwrite protection.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 import tkinter as tk
@@ -15,30 +16,14 @@ from collections.abc import Sequence
 from functools import partial
 from tkinter import messagebox
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.shared import keep_audio_args
 
 
 def container_of(path: str) -> str:
     return os.path.splitext(path)[1].lower().lstrip(".") or "mp4"
-
-
-def keep_audio_args(info: ff.MediaInfo | None, container: str, *, index: int = 0,
-                    filters: str = "") -> list:
-    """Map all audio of input *index*: stream-copied when the container accepts
-    the codec and no *filters* are applied, otherwise re-encoded."""
-    if info is None or not info.has_audio:
-        return ["-an"]
-    args = ["-map", f"{index}:a?"]
-    if filters:
-        return args + ["-af", filters] + enc.audio(enc.default_audio_for(container),
-                                                   container=container)
-    key = enc.audio_key_from_probe(info.audio.codec)
-    if key and enc.audio_ok_for(container, key):
-        return args + ["-c:a", "copy"]
-    return args + enc.audio(enc.default_audio_for(container), container=container)
 
 
 def check_source(tab, path: str, *, need_video: bool = True,
@@ -72,20 +57,8 @@ def number(value, label: str, lo: float | None = None, hi: float | None = None) 
 
 
 def even_size(info: ff.MediaInfo) -> tuple[int, int]:
-    w, h = info.video.display_size
+    w, h = info.require_video().display_size
     return max(2, w // 2 * 2), max(2, h // 2 * 2)
-
-
-def frame_rate(info: ff.MediaInfo) -> str:
-    """Exact source frame rate as a rational string (e.g. 30000/1001)."""
-    v = info.video
-    if v is None or not (0 < (v.fps or 0) <= 240):
-        return "30"
-    for key in ("avg_frame_rate", "r_frame_rate"):
-        rate = v.raw.get(key) or ""
-        if rate and not rate.startswith("0/") and rate != "0":
-            return rate
-    return f"{v.fps:g}"
 
 
 def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn,
@@ -152,17 +125,13 @@ def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
         tab.log(console, line)
         task = tab.task(tid)
         if task is not None and task.fraction is not None:
-            try:
+            with contextlib.suppress(tk.TclError):
                 btn.config(text=f"\u2716 {t('btn.cancel')}  {task.fraction * 100:.0f}%")
-            except tk.TclError:
-                pass
 
     def on_complete(tid, rc):
-        try:
+        with contextlib.suppress(tk.TclError):
             btn.config(text=btn_label, command=orig, state="normal")
-        except tk.TclError:
-            pass
-        tab._last_task = tab.task(tid)
+        tab.last_task = tab.task(tid)
         tab.show_result(rc, out)
         if on_done is not None:
             on_done(rc)
@@ -203,39 +172,6 @@ def final_copy_args(venc, container: str) -> list:
 
 
 # ── Audio tools ──────────────────────────────────────────────────────────────
-
-AUDIO_ONLY_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".mka", ".aiff", ".aif")
-
-
-def audio_encoder_args(out: str) -> list:
-    """Encoder for processed audio, chosen from the output file's type."""
-    ext = os.path.splitext(out)[1].lower()
-    return {
-        ".mp3": ["-c:a", "libmp3lame", "-q:a", "2"],
-        ".wav": ["-c:a", "pcm_s16le"],
-        ".aiff": ["-c:a", "pcm_s16be"], ".aif": ["-c:a", "pcm_s16be"],
-        ".flac": ["-c:a", "flac", "-compression_level", "8"],
-        ".m4a": ["-c:a", "aac", "-b:a", "256k"], ".aac": ["-c:a", "aac", "-b:a", "256k"],
-        ".ogg": ["-c:a", "libvorbis", "-q:a", "6"],
-        ".opus": ["-c:a", "libopus", "-b:a", "160k"],
-        ".mka": ["-c:a", "flac"],
-        ".webm": ["-c:a", "libopus", "-b:a", "160k"],
-    }.get(ext, ["-c:a", "aac", "-b:a", "256k"])
-
-
-def audio_job_args(out: str, info: ff.MediaInfo | None, *, stream: int = 0) -> list:
-    """Mapping + codecs when an audio tool writes *out*: audio-only files get
-    just the processed track; video files keep the picture (copied) and
-    subtitles where the container allows."""
-    ext = os.path.splitext(out)[1].lower()
-    if ext in AUDIO_ONLY_EXTS or info is None or not info.has_video:
-        return ["-vn", "-sn", "-map", f"0:a:{stream}", *audio_encoder_args(out)]
-    args = ["-map", "0:v?", "-c:v", "copy", "-map", f"0:a:{stream}", *audio_encoder_args(out)]
-    if ext == ".mkv":
-        args += ["-map", "0:s?", "-c:s", "copy"]
-    if ext in (".mp4", ".mov", ".m4v"):
-        args += ["-movflags", "+faststart"]
-    return args
 
 
 def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 12.0) -> None:

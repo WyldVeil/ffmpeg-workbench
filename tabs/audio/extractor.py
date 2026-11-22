@@ -14,6 +14,8 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import loudness as ln
 from core.i18n import t
+from core.ops.extractor import copy_extension
+from core.ops.shared import audio_encoder_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -28,14 +30,6 @@ FORMATS = {   # id: (label, extension or None = from codec, encoder args)
     "opus": ("Opus (160 kbps)", ".opus", ["-c:a", "libopus", "-b:a", "160k"]),
     "ogg": ("Ogg Vorbis (quality 6)", ".ogg", ["-c:a", "libvorbis", "-q:a", "6"]),
 }
-COPY_EXT = {"aac": ".m4a", "mp3": ".mp3", "opus": ".opus", "vorbis": ".ogg", "flac": ".flac", "alac": ".m4a",
-            "ac3": ".ac3", "eac3": ".eac3", "dts": ".mka", "truehd": ".mka", "mp2": ".mp2"}
-
-
-def copy_extension(codec: str) -> str:
-    if codec.startswith("pcm_"):
-        return ".wav"
-    return COPY_EXT.get(codec, ".mka")
 
 
 class AudioExtractorTab(BaseTab):
@@ -143,7 +137,7 @@ class AudioExtractorTab(BaseTab):
         key = self._key()
         enc = FORMATS[key][2]
         if key == "copy" and self.norm_var.get():
-            enc = common.audio_encoder_args(out)
+            enc = audio_encoder_args(out)
         inp = [ff.ffmpeg_path(), "-y"]
         if start:
             inp += ["-ss", ff.ts(start)]
@@ -161,7 +155,7 @@ class AudioExtractorTab(BaseTab):
 
         def work(_p, _c, ctx):
             m = ln.measure(src, -16, -1.5, 11, stream=stream, ctx=ctx.span(0, 0.4))
-            ctx.span(0.4, 1.0).run(inp + ["-af", ln.normalise_filter(-16, -1.5, 11, m, sr)] + enc + [ctx.output()],
+            ctx.span(0.4, 1.0).run([*inp, "-af", ln.normalise_filter(-16, -1.5, 11, m, sr), *enc, ctx.output()],
                                    duration=dur)
             return 0
 

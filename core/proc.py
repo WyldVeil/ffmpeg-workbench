@@ -20,6 +20,7 @@ to be written out).  It can also be cancelled, and returns a frozen
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import signal
@@ -39,7 +40,7 @@ __all__ = [
     "list2cmdline", "run", "spawn",
 ]
 
-_log = logging.getLogger("crossfader.proc")
+logger = logging.getLogger("crossfader.proc")
 
 IS_WINDOWS = os.name == "nt"
 _CREATE_NEW_PROCESS_GROUP = 0x00000200 if IS_WINDOWS else 0
@@ -77,7 +78,7 @@ class ProcResult(Generic[AnyStr]):
 
 
 def _argv(argv: Sequence[object]) -> list[str]:
-    return [str(os.fspath(a)) if isinstance(a, os.PathLike) else str(a) for a in argv]
+    return [os.fsdecode(a) if isinstance(a, os.PathLike) else str(a) for a in argv]  # pyright: ignore[reportUnknownArgumentType]
 
 
 def spawn(argv: Sequence[object], *, stdin: int | IO[Any] | None = DEVNULL,
@@ -197,11 +198,9 @@ def kill_tree(proc: subprocess.Popen[Any] | None, grace: float = 3.0) -> None:
                     proc.kill()
             proc.wait(timeout=5)
     except (OSError, subprocess.SubprocessError):
-        _log.warning("could not stop process %s cleanly", proc.pid, exc_info=True)
-        try:
+        logger.warning("could not stop process %s cleanly", proc.pid, exc_info=True)
+        with contextlib.suppress(OSError):
             proc.kill()
-        except OSError:
-            pass
     finally:
         _forget(proc)
 

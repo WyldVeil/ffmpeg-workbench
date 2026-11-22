@@ -43,7 +43,7 @@ class Layout:
 
 
 def _even(v: float) -> int:
-    return max(2, int(round(v / 2)) * 2)
+    return max(2, round(v / 2) * 2)
 
 
 def _fit_in(cell_w: float, cell_h: float, aspect: float) -> tuple:
@@ -96,7 +96,7 @@ def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: b
     used_h = total * scale + gap * (len(groups) + 1)
     y = (H - used_h) / 2 + gap
     rects, area, idx, logs = [], 0.0, 0, 0.0
-    for size, h0 in zip(groups, heights):
+    for size, h0 in zip(groups, heights, strict=False):
         h = h0 * scale
         widths = [aspects[idx + k] * h for k in range(size)]
         row_w = sum(widths) + gap * (size - 1)
@@ -167,7 +167,7 @@ def best_layout(aspects: list, W: int, H: int, *, gap: int = 0, mode: str = "fit
             seen.add(tuple(groups))
             for columns in (False, True):
                 lay = _justified(aspects, W, H, groups, gap, columns)
-                if key(lay) > key(best):
+                if best is None or key(lay) > key(best):
                     best = lay
     assert best is not None
     return best
@@ -185,7 +185,7 @@ class Clip:
 
 def _place(label: str, rect: tuple, crop: tuple | None, fps: str) -> str:
     """Scale (and crop for 'fill') one clip branch to its rectangle."""
-    x, y, w, h = rect
+    _x, _y, w, h = rect
     if crop:
         cw, ch = crop
         return (f"{label}scale={cw}:{ch}:force_original_aspect_ratio=increase:force_divisible_by=2,"
@@ -203,7 +203,7 @@ def collage_filter(clips: list, W: int, H: int, *, fps: str = "30", gap: int = 0
     parts = []
     if not loop and end == "reflow":
         cuts = sorted({0.0, total, *[c.duration for c in clips if 0 < c.duration < total]})
-        segments = [(a, b) for a, b in zip(cuts, cuts[1:]) if b - a > 0.02]
+        segments = [(a, b) for a, b in itertools.pairwise(cuts) if b - a > 0.02]
         active = [[c for c in clips if c.duration > a + 1e-3] for a, _b in segments]
         uses = {c.index: sum(1 for group in active if c in group) for c in clips}
         branch = {}
@@ -216,7 +216,7 @@ def collage_filter(clips: list, W: int, H: int, *, fps: str = "30", gap: int = 0
                                                                 labels[0]))
             branch[c.index] = labels
         seg_labels = []
-        for k, ((a, b), group) in enumerate(zip(segments, active)):
+        for k, ((a, b), group) in enumerate(zip(segments, active, strict=False)):
             parts.append(f"color=c={bg}:s={W}x{H}:r={fps}:d={b - a:.3f},format=yuv420p[bg{k}]")
             cur = f"[bg{k}]"
             if group:

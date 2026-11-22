@@ -18,7 +18,10 @@ last line on stdout is {"ok": true, "output": ..., ...} or
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import logging
 import os
 import shutil
 import sys
@@ -26,10 +29,14 @@ import tempfile
 import time
 from collections.abc import Callable
 from fractions import Fraction
+from pathlib import Path
+from typing import overload
 
 from core import ffmpeg as ff
 from core import proc as _proc
 from core.errors import InputError
+
+logger = logging.getLogger("crossfader.cli")
 
 OPERATIONS: dict = {}          # name -> (summary, category, configure(parser), run(args) -> dict)
 
@@ -47,7 +54,7 @@ def operation(name: str, summary: str, category: str):
 
 def options(configure: Callable):
     def deco(fn):
-        fn._configure = configure
+        fn._configure = configure  # noqa: SLF001 - our own marker on our own functions
         return fn
     return deco
 
@@ -163,8 +170,8 @@ def container_of(out: str) -> str:
 
 
 def keep_audio(info, container: str, filters: str = "") -> list:
-    from tabs import common
-    return common.keep_audio_args(info, container, filters=filters)
+    from core.ops.shared import keep_audio_args
+    return keep_audio_args(info, container, filters=filters)
 
 
 def render_chain(ctx: Ctx, src: str, info, out: str, chain: str, *, pre: list | None = None,
@@ -188,7 +195,7 @@ def render_graph(ctx: Ctx, inputs: list, info, out: str, graph: str, *, has_audi
     part = part_of(out)
     cmd = [ff.ffmpeg_path(), "-y", *(pre or []), *ve.pre_input]
     for i, path in enumerate(inputs):
-        cmd += list((input_opts or {}).get(i, [])) + ["-i", path]
+        cmd += [*list((input_opts or {}).get(i, [])), "-i", path]
     if ve.filter_suffix:
         graph += f";[v]{ve.filter_suffix}[venc]"
     cmd += ["-filter_complex", graph, "-map", "[venc]" if ve.filter_suffix else "[v]"]
@@ -210,11 +217,17 @@ def result(out: str, **extra) -> dict:
     if info is not None:
         d["duration"] = round(info.duration, 3)
         if info.has_video:
-            d["video"] = f"{info.video.codec} {info.video.width}x{info.video.height} {info.video.fps:.3g}fps"
+            d["video"] = f"{info.require_video().codec} {info.require_video().width}x{info.require_video().height} {info.require_video().fps:.3g}fps"
         if info.has_audio:
-            d["audio"] = f"{info.audio.codec} {info.audio.channels}ch {info.audio.sample_rate}Hz"
+            d["audio"] = f"{info.require_audio().codec} {info.require_audio().channels}ch {info.require_audio().sample_rate}Hz"
     d.update(extra)
     return d
+
+
+@overload
+def time_value(text: str | None, default: float) -> float: ...
+@overload
+def time_value(text: str | None, default: None = None) -> float | None: ...
 
 
 def time_value(text: str | None, default: float | None = None) -> float | None:
@@ -266,7 +279,7 @@ def tool_paths() -> dict:
 # ── Operations ────────────────────────────────────────────────────────────────
 # Each takes (ctx) and returns a result dict.  Grouped like the app's sidebar.
 
-def _in(p, n: str = "+"):
+def _in(p: argparse.ArgumentParser, n: str | int = "+") -> None:
     p.add_argument("inputs", nargs=n, metavar="INPUT", help="input file(s)")
 
 
@@ -309,7 +322,7 @@ def op_join(ctx):
         return result(out, method="lossless")
     if ctx.args.copy:
         raise CliError("These clips can't be joined losslessly: " + "; ".join(problems))
-    pieces = [concat.Piece(x, i) for x, i in zip(paths, infos)]
+    pieces = [concat.Piece(x, i) for x, i in zip(paths, infos, strict=False)]
     argv, secs = concat.filter_join_command(pieces, part, venc=venc(ctx, container_of(out)))
     ctx.run(argv, secs)
     finish(part, out)
@@ -320,7 +333,7 @@ def op_join(ctx):
 @options(lambda p: (_in(p), p.add_argument("--type", default="fade"),
                     p.add_argument("--duration", type=float, default=1.0), _video_opts(p)))
 def op_transition(ctx):
-    from tabs.cutting import crossfader as xf
+    from core.ops import crossfader as xf
     paths = ctx.args.inputs
     if len(paths) < 2:
         raise CliError("Give two (or more) clips.")
@@ -342,14 +355,14 @@ def op_transition(ctx):
                     p.add_argument("--flip", choices=["h", "v"]), p.add_argument("--lossless", action="store_true"),
                     _video_opts(p)))
 def op_rotate(ctx):
-    from tabs.cutting import rotate_flip as rf
+    from core.ops import rotate_flip as rf
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     out = output_path(ctx, [src], "rotated")
     h, v = ctx.args.flip == "h", ctx.args.flip == "v"
     if ctx.args.lossless:
         part = part_of(out)
-        ctx.run([ff.ffmpeg_path(), "-y", *rf.lossless_args(info.video.rotation, ctx.args.degrees, h, v), "-i", src,
+        ctx.run([ff.ffmpeg_path(), "-y", *rf.lossless_args(info.require_video().rotation, ctx.args.degrees, h, v), "-i", src,
                  "-map", "0", "-c", "copy", part], info.duration)
         finish(part, out)
     else:
@@ -362,17 +375,17 @@ def op_rotate(ctx):
 @options(lambda p: (_in(p, 1), p.add_argument("--rect"), p.add_argument("--aspect"),
                     p.add_argument("--auto", action="store_true"), _video_opts(p)))
 def op_crop(ctx):
-    from tabs.cutting import crop as cr
+    from core.ops import crop as cr
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
-    w, h = info.video.display_size
+    w, h = info.require_video().display_size
     if ctx.args.rect:
         x, y, cw, ch = (int(v) for v in ctx.args.rect.replace(",", ":").split(":"))
     elif ctx.args.aspect:
         rw, rh = (int(v) for v in ctx.args.aspect.replace("/", ":").split(":"))
         x, y, cw, ch = cr.fit_aspect(w, h, rw, rh)
     elif ctx.args.auto:
-        from tabs.social import auto_cropper
+        from core.ops import auto_cropper
         box = auto_cropper.detect_bars(src, info.duration)
         if not box:
             raise CliError("No black bars found.")
@@ -387,7 +400,7 @@ def op_crop(ctx):
 @operation("speed", "Play faster or slower (--factor 2 = twice as fast), sound kept in pitch", "Cut")
 @options(lambda p: (_in(p, 1), p.add_argument("--factor", type=float, required=True), _video_opts(p)))
 def op_speed(ctx):
-    from tabs.visuals.speed_ramp import atempo_chain
+    from core.ops.speed_ramp import atempo_chain
     src = ctx.args.inputs[0]
     info = probe(src)
     f = ctx.args.factor
@@ -423,7 +436,7 @@ def op_reverse(ctx):
                     p.add_argument("--min-silence", type=float, default=0.6),
                     p.add_argument("--padding", type=float, default=0.15), _video_opts(p)))
 def op_remove_silence(ctx):
-    from tabs.audio import silence as sl
+    from core.ops import silence as sl
     src = ctx.args.inputs[0]
     info = probe(src)
     if not info.has_audio:
@@ -431,7 +444,7 @@ def op_remove_silence(ctx):
     lines: list = []
     ctx.run(sl.detect_cmd(src, ctx.args.threshold, ctx.args.min_silence), info.duration, 0.0, 0.3, lines=lines)
     silences = sl.parse_silences("\n".join(lines), info.duration)
-    zones = sl.keep_zones(silences, info.duration, ctx.args.padding, fps=info.video.fps if info.has_video else 0)
+    zones = sl.keep_zones(silences, info.duration, ctx.args.padding, fps=info.require_video().fps if info.has_video else 0)
     if not zones:
         raise CliError("Everything is silent at that threshold.")
     out = output_path(ctx, [src], "nosilence")
@@ -440,9 +453,9 @@ def op_remove_silence(ctx):
         render_graph(ctx, [src], info, out, graph, has_audio=True, duration=sum(b - a for a, b in zones))
     else:
         part = part_of(out)
-        from tabs import common
+        from core.ops.shared import audio_encoder_args
         ctx.run([ff.ffmpeg_path(), "-y", "-i", src, "-filter_complex", graph, "-map", "[a]",
-                 *common.audio_encoder_args(out), part], sum(b - a for a, b in zones), 0.3, 1.0)
+                 *audio_encoder_args(out), part], sum(b - a for a, b in zones), 0.3, 1.0)
         finish(part, out)
     return result(out, removed_seconds=round(info.duration - sum(b - a for a, b in zones), 2))
 
@@ -456,7 +469,7 @@ def op_remove_silence(ctx):
                     p.add_argument("--keep-resolution", action="store_true"),
                     p.add_argument("--keep-framerate", action="store_true")))
 def op_compress(ctx):
-    from tabs.transcoder import downsizer as ds
+    from core.ops import downsizer as ds
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     text = ctx.args.size.strip().upper().replace(" ", "")
@@ -467,11 +480,11 @@ def op_compress(ctx):
     except ValueError:
         raise CliError("--size like 10MB") from None
     a, b = time_value(ctx.args.start, 0.0), time_value(ctx.args.end, info.duration)
-    w, h = info.video.display_size
+    w, h = info.require_video().display_size
     try:
-        plan = ds.plan(b - a, target, (w // 2 * 2, h // 2 * 2), info.video.fps, codec=ctx.args.codec,
+        plan = ds.plan(b - a, target, (w // 2 * 2, h // 2 * 2), info.require_video().fps, codec=ctx.args.codec,
                        has_audio=info.has_audio, audio_mode=ctx.args.audio,
-                       audio_src_kbps=int((info.audio.bit_rate or 0) / 1000) if info.has_audio else 0,
+                       audio_src_kbps=int((info.require_audio().bit_rate or 0) / 1000) if info.has_audio else 0,
                        allow_res=not ctx.args.keep_resolution, allow_fps=not ctx.args.keep_framerate)
     except ValueError as exc:
         raise CliError(str(exc)) from None
@@ -492,7 +505,7 @@ def op_compress(ctx):
                                                        "m4a", "wav", "flac", "ogg", "opus"]),
                     p.add_argument("--reencode", action="store_true")))
 def op_convert(ctx):
-    from tabs.transcoder.converter import stream_args
+    from core.ops.converter import stream_args
     src = ctx.args.inputs[0]
     info = probe(src)
     out = output_path(ctx, [src], "converted", "." + ctx.args.to)
@@ -518,10 +531,10 @@ def op_convert(ctx):
                     p.add_argument("--sharpen", type=float, default=0.3), _video_opts(p)))
 def op_scale(ctx):
     from core import filters as fl
-    from tabs.transcoder import scaler as sc
+    from core.ops import scaler as sc
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
-    w, h = info.video.display_size
+    w, h = info.require_video().display_size
     if ctx.args.size:
         bw, bh = (int(v) for v in ctx.args.size.lower().split("x"))
     elif ctx.args.factor:
@@ -550,7 +563,7 @@ def op_scale(ctx):
                     p.add_argument("--method", default="motion", choices=["motion", "blend", "dup"]),
                     p.add_argument("--slowmo", type=float, default=1.0), _video_opts(p)))
 def op_framerate(ctx):
-    from tabs.transcoder import scaler as sc
+    from core.ops import scaler as sc
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     target = sc.rate_fraction(ctx.args.rate)
@@ -561,7 +574,7 @@ def op_framerate(ctx):
     out = output_path(ctx, [src], "slowmo" if factor > 1 else f"{float(target):g}fps")
     audio = ["-an"]
     if info.has_audio:
-        from tabs.visuals.speed_ramp import atempo_chain
+        from core.ops.speed_ramp import atempo_chain
         audio = keep_audio(info, container_of(out), filters=atempo_chain(1 / factor)) if factor > 1 else \
             keep_audio(info, container_of(out))
     render_chain(ctx, src, info, out, chain, audio=audio, duration=info.duration * factor)
@@ -592,7 +605,7 @@ def op_compare(ctx):
     res = ff.run(argv, duration=min(span, a.seconds) if a.seconds else span, cwd=tmp)
     if res.returncode != 0:
         raise CliError("Measuring failed:\n" + "\n".join(res.log_tail[-6:]))
-    result = qual.read(tmp, files, ri.video.fps or 30.0, a.skip_original)
+    result = qual.read(tmp, files, ri.require_video().fps or 30.0, a.skip_original)
     summary = result.summary()
     out = {"ok": True, "original": os.path.abspath(a.original), "copy": os.path.abspath(a.copy), **summary}
     if "vmaf" in summary and isinstance(summary["vmaf"]["mean"], float):
@@ -719,7 +732,7 @@ def op_extract_track(ctx):
 def op_hdr_to_sdr(ctx):
     from core import filters as fl
     from core import hdr
-    from tabs.transcoder.hdr import subtitle_args
+    from core.ops.hdr_args import subtitle_args
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     h = hdr.inspect(info, src)
@@ -745,16 +758,16 @@ def op_hdr_to_sdr(ctx):
                                                                                  "opus", "ogg"]),
                     p.add_argument("--copy", action="store_true")))
 def op_extract_audio(ctx):
-    from tabs import common
-    from tabs.audio.extractor import copy_extension
+    from core.ops.extractor import copy_extension
+    from core.ops.shared import audio_encoder_args
     src = ctx.args.inputs[0]
     info = probe(src)
     if not info.has_audio:
         raise CliError("The file has no sound.")
-    ext = copy_extension(info.audio.codec) if ctx.args.copy else "." + ctx.args.format
+    ext = copy_extension(info.require_audio().codec) if ctx.args.copy else "." + ctx.args.format
     out = output_path(ctx, [src], "audio", ext)
     part = part_of(out)
-    codec = ["-c:a", "copy"] if ctx.args.copy else common.audio_encoder_args(out)
+    codec = ["-c:a", "copy"] if ctx.args.copy else audio_encoder_args(out)
     ctx.run([ff.ffmpeg_path(), "-y", "-i", src, "-map", "0:a:0", "-vn", *codec, part], info.duration)
     finish(part, out)
     return result(out)
@@ -765,7 +778,7 @@ def op_extract_audio(ctx):
                                               choices=["streaming", "youtube", "ebu", "atsc", "film"])))
 def op_normalize(ctx):
     from core import loudness as ln
-    from tabs import common
+    from core.ops.shared import audio_job_args
     src = ctx.args.inputs[0]
     info = probe(src)
     if not info.has_audio:
@@ -773,10 +786,10 @@ def op_normalize(ctx):
     _label, i, tp, lra = ln.TARGETS[ctx.args.target]
     res = ctx.run(ln.measure_cmd(src, i, tp, lra), info.duration, 0.0, 0.5)
     meas = ln.parse_measurement(res.log_tail)
-    af = ln.normalise_filter(i, tp, lra, meas, info.audio.sample_rate or 48000)
+    af = ln.normalise_filter(i, tp, lra, meas, info.require_audio().sample_rate or 48000)
     out = output_path(ctx, [src], "normalized")
     part = part_of(out)
-    ctx.run([ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *common.audio_job_args(part, info), "-map_metadata", "0",
+    ctx.run([ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(part, info), "-map_metadata", "0",
              part], info.duration, 0.5, 1.0)
     finish(part, out)
     return result(out, loudness_target=i)
@@ -785,8 +798,8 @@ def op_normalize(ctx):
 @operation("clean-voice", "Remove background noise from speech (neural or spectral)", "Audio")
 @options(lambda p: (_in(p, 1), p.add_argument("--method", default="neural", choices=["neural", "fft"])))
 def op_clean_voice(ctx):
-    from tabs import common
-    from tabs.audio import voice_isolation as vi
+    from core.ops import voice_isolation as vi
+    from core.ops.shared import audio_job_args
     src = ctx.args.inputs[0]
     info = probe(src)
     if not info.has_audio:
@@ -794,7 +807,7 @@ def op_clean_voice(ctx):
     af = vi.denoise_filter(ctx.args.method, model=os.path.join(vi.models_dir(), "sh.rnnn"))
     out = output_path(ctx, [src], "clean")
     part = part_of(out)
-    ctx.run([ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *common.audio_job_args(part, info), part], info.duration)
+    ctx.run([ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(part, info), part], info.duration)
     finish(part, out)
     return result(out)
 
@@ -854,7 +867,7 @@ def op_burn_subs(ctx):
                     p.add_argument("--fps", type=float, default=15), p.add_argument("--width", type=int, default=480),
                     p.add_argument("--max-mb", type=float, default=0), p.add_argument("--webp", action="store_true")))
 def op_gif(ctx):
-    from tabs.social.gif_maker import make_animation
+    from core.ops.gif_maker import make_animation
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     start = time_value(ctx.args.start, 0.0)
@@ -877,7 +890,7 @@ def op_gif(ctx):
                     p.add_argument("--anchor", default="center", choices=["center", "top", "bottom", "left", "right"]),
                     _video_opts(p)))
 def op_shorts(ctx):
-    from tabs.social import shortifier as sh
+    from core.ops import shortifier as sh
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     if ctx.args.platform not in sh.PLATFORMS or ctx.args.platform == "custom":
@@ -895,7 +908,7 @@ def op_shorts(ctx):
 @options(lambda p: (_in(p, 1), p.add_argument("--at", default="1"), p.add_argument("--format", default="jpg",
                                                                                   choices=["jpg", "png", "webp"])))
 def op_thumbnail(ctx):
-    from tabs.social.frame_extractor import quality_args
+    from core.ops.frame_extractor import quality_args
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     at = min(time_value(ctx.args.at, 1.0), max(0.0, info.duration - 0.05))
@@ -911,7 +924,7 @@ def op_thumbnail(ctx):
 @options(lambda p: (_in(p, 1), p.add_argument("--every", type=float), p.add_argument("--count", type=int),
                     p.add_argument("--format", default="jpg", choices=["jpg", "png", "webp"])))
 def op_frames(ctx):
-    from tabs.social.frame_extractor import quality_args
+    from core.ops.frame_extractor import quality_args
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     every = ctx.args.every or (info.duration / max(1, ctx.args.count) if ctx.args.count else 1.0)
@@ -933,11 +946,11 @@ def op_frames(ctx):
                     p.add_argument("--size", type=float, default=15), p.add_argument("--opacity", type=float, default=0.85),
                     _video_opts(p)))
 def op_logo(ctx):
-    from tabs.social.image_watermark import logo_graph
+    from core.ops.image_watermark import logo_graph
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     probe(ctx.args.logo)
-    w, h = info.video.display_size
+    w, h = info.require_video().display_size
     graph = logo_graph(w // 2 * 2, h // 2 * 2, pct=ctx.args.size, opacity=ctx.args.opacity, place=ctx.args.position)
     out = output_path(ctx, [src], "logo")
     container = container_of(out)
@@ -962,20 +975,20 @@ def op_logo(ctx):
                     p.add_argument("--background", default="black"), _video_opts(p)))
 def op_collage(ctx):
     from core import grid
-    from tabs import common
+    from core.ops.shared import frame_rate
     paths = ctx.args.inputs
     infos = [probe(x, video=True) for x in paths]
     W, H = (int(v) // 2 * 2 for v in ctx.args.size.lower().split("x"))
     clips = []
     for i, info in enumerate(infos):
-        w, h = info.video.display_size
-        dur = info.video.duration if info.video.duration > 0.05 else info.duration
+        w, h = info.require_video().display_size
+        dur = info.require_video().duration if info.require_video().duration > 0.05 else info.duration
         clips.append(grid.Clip(i, w / max(1, h), dur, info.has_audio))
     durs = [c.duration for c in clips]
     total = max(durs) if ctx.args.length == "longest" else min(durs) if ctx.args.length == "shortest" else \
         float(ctx.args.length)
     loop = not ctx.args.no_loop
-    graph, has_a = grid.collage_filter(clips, W, H, fps=common.frame_rate(infos[0]), gap=ctx.args.gap,
+    graph, has_a = grid.collage_filter(clips, W, H, fps=frame_rate(infos[0]), gap=ctx.args.gap,
                                        mode="fill" if ctx.args.fill else "fit", bg=ctx.args.background, total=total,
                                        loop=loop, end=ctx.args.end, audio=ctx.args.audio)
     out = output_path(ctx, paths, "collage", ".mp4")
@@ -992,7 +1005,7 @@ def op_collage(ctx):
                     p.add_argument("--from", dest="start", default="0"), p.add_argument("--to", dest="end"),
                     _video_opts(p)))
 def op_blur_region(ctx):
-    from tabs.visuals.region_blur import Region, blur_graph
+    from core.ops.region_blur import Region, blur_graph
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     regions = []
@@ -1000,7 +1013,7 @@ def op_blur_region(ctx):
         x, y, w, h = (float(v) / 100 for v in r.split(","))
         regions.append(Region(x, y, w, h, ctx.args.type, 0.6, time_value(ctx.args.start, 0.0),
                               time_value(ctx.args.end) if ctx.args.end else None))
-    W, H = info.video.display_size
+    W, H = info.require_video().display_size
     out = output_path(ctx, [src], "blurred")
     render_graph(ctx, [src], info, out, blur_graph(regions, W // 2 * 2, H // 2 * 2) +
                  (";[0:a:0]anull[a]" if info.has_audio else ""), has_audio=info.has_audio)
@@ -1026,22 +1039,22 @@ def _chain_op(name: str, summary: str, build, suffix: str, add_args=None):
 
 
 def _denoise(a):
-    from tabs.visuals.denoise import denoise_chain
+    from core.ops.denoise import denoise_chain
     return denoise_chain(a.method, a.strength)
 
 
 def _sharpen(a):
-    from tabs.visuals.sharpen import sharpen_chain
+    from core.ops.sharpen import sharpen_chain
     return sharpen_chain(a.method, a.amount)
 
 
 def _deinterlace(a):
-    from tabs.visuals.deinterlace import deinterlace_chain
+    from core.ops.deinterlace import deinterlace_chain
     return deinterlace_chain(a.mode)
 
 
 def _lut(a):
-    from tabs.visuals.lut import build_chain
+    from core.ops.lut import build_chain
     return build_chain(a.lut, intensity=a.intensity)
 
 
@@ -1085,7 +1098,7 @@ def op_metadata_clean(ctx):
                     p.add_argument("--voice", default="en-GB-RyanNeural"), p.add_argument("--offline", action="store_true")))
 def op_tts(ctx):
     from core import tts
-    text = ctx.args.text or (open(ctx.args.text_file, encoding="utf-8").read() if ctx.args.text_file else "")
+    text = ctx.args.text or (Path(ctx.args.text_file).read_text(encoding="utf-8") if ctx.args.text_file else "")
     if not text.strip():
         raise CliError("Give --text or --text-file.")
     engine = "system" if ctx.args.offline or not tts.edge_available() else "edge"
@@ -1100,8 +1113,8 @@ def op_tts(ctx):
     if os.path.splitext(out)[1].lower() == os.path.splitext(tmp)[1].lower():
         shutil.copyfile(tmp, out)
     else:
-        from tabs import common
-        ctx.run([ff.ffmpeg_path(), "-y", "-i", tmp, *common.audio_encoder_args(out), out])
+        from core.ops.shared import audio_encoder_args
+        ctx.run([ff.ffmpeg_path(), "-y", "-i", tmp, *audio_encoder_args(out), out])
     return result(out, engine=engine)
 
 
@@ -1163,13 +1176,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def tools_catalogue(parser: argparse.ArgumentParser) -> list:
-    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    # argparse has no public way to list a parser's options; its _actions are stable since 2.7
+    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))  # noqa: SLF001
     out = []
     for name, (summary, cat, _c, _f) in OPERATIONS.items():
         p = sub.choices[name]
         opts = []
-        for a in p._actions:
-            if isinstance(a, argparse._HelpAction) or a.dest in ("output", "overwrite", "json"):
+        for a in p._actions:  # noqa: SLF001
+            if isinstance(a, argparse._HelpAction) or a.dest in ("output", "overwrite", "json"):  # noqa: SLF001
                 continue
             opts.append({"name": a.option_strings[0] if a.option_strings else a.dest,
                          "required": bool(getattr(a, "required", False)) or not a.option_strings,
@@ -1244,17 +1258,18 @@ def _ensure_streams() -> None:
                 import ctypes
                 attached = bool(ctypes.windll.kernel32.AttachConsole(-1))    # ATTACH_PARENT_PROCESS
             except Exception:
+                logger.debug("_ensure_streams: best-effort step failed", exc_info=True)
                 attached = False
         target = "CONOUT$" if attached else os.devnull
+        # these stay open for the life of the process: they *are* its stdout and stderr
         if sys.stdout is None:
-            sys.stdout = open(target, "w", encoding="utf-8", errors="replace", buffering=1)
+            sys.stdout = open(target, "w", encoding="utf-8", errors="replace", buffering=1)  # noqa: SIM115
         if sys.stderr is None:
-            sys.stderr = open(target, "w", encoding="utf-8", errors="replace", buffering=1)
+            sys.stderr = open(target, "w", encoding="utf-8", errors="replace", buffering=1)  # noqa: SIM115
     for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")      # JSON and names with any characters
-        except (AttributeError, ValueError):
-            pass
+        if isinstance(stream, io.TextIOWrapper):                   # JSON and names with any characters
+            with contextlib.suppress(ValueError):
+                stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def entry(argv: list) -> int:

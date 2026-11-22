@@ -129,7 +129,7 @@ class ReverserTab(BaseTab):
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
         if self._info is not None and self._info.has_video:
-            w, h = self._info.video.display_size
+            w, h = self._info.require_video().display_size
             self.info_lbl.config(text=f"{w}×{h}, {ff.format_time(self._info.duration)}")
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "reversed"))
@@ -155,7 +155,7 @@ class ReverserTab(BaseTab):
         if not out:
             return
         w, h = common.even_size(info)
-        fps = info.video.fps or 30.0
+        fps = info.require_video().fps or 30.0
         chunk = chunk_seconds(w, h, fps)
         pieces = plan(mode, dur, start, end, repeats)
         audio = self.audio_var.get() and info.has_audio
@@ -196,7 +196,7 @@ class ReverserTab(BaseTab):
             final += (["-map", "0:a:0", *enc.audio(enc.default_audio_for(container), container=container)]
                       if audio else ["-an"])
             final += common.final_copy_args(venc, container)
-            ctx.span(0.95, 1.0).run(final + [ctx.output()], duration=total)
+            ctx.span(0.95, 1.0).run([*final, ctx.output()], duration=total)
             return 0
 
         n_chunks = sum(len(reverse_chunks(a, b, chunk)) for k, a, b in pieces if k == "rev")

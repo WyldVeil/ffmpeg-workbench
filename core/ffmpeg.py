@@ -19,6 +19,7 @@ The module has no Tk dependency and is safe to use from worker threads.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -37,7 +38,7 @@ from core.hardware import get_binary_path
 from core.timecode import Timecode
 
 _IS_WIN = sys.platform.startswith("win")
-_log = logging.getLogger("crossfader.ffmpeg")
+logger = logging.getLogger("crossfader.ffmpeg")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +219,20 @@ class MediaInfo:
         a = self.audio_streams
         return a[0] if a else None
 
+    def require_video(self) -> Stream:
+        """The first video stream; MediaError when the file has none."""
+        v = self.video
+        if v is None:
+            raise errors.MediaError(f"{os.path.basename(self.path)} has no video")
+        return v
+
+    def require_audio(self) -> Stream:
+        """The first audio stream; MediaError when the file has none."""
+        a = self.audio
+        if a is None:
+            raise errors.MediaError(f"{os.path.basename(self.path)} has no sound")
+        return a
+
     @property
     def has_video(self) -> bool:
         return self.video is not None
@@ -281,7 +296,7 @@ def _parse_stream(d: dict) -> Stream:
     rotation = 0
     for sd in d.get("side_data_list") or []:
         if "rotation" in sd:
-            rotation = int(round(-_f(sd.get("rotation")))) % 360
+            rotation = round(-_f(sd.get("rotation"))) % 360
             break
     else:
         if "rotate" in tags:
@@ -399,10 +414,10 @@ def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaI
     return info
 
 
-def try_probe(path: str, **kw) -> MediaInfo | None:
+def try_probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaInfo | None:
     """Like :func:`probe` but returns None instead of raising."""
     try:
-        return probe(path, **kw)
+        return probe(path, use_cache=use_cache, timeout=timeout)
     except ProbeError:
         return None
 
@@ -611,10 +626,8 @@ def _parse_progress_block(block: dict, duration: float | None,
     if us not in (None, "", "N/A"):
         p.out_time = max(0.0, _f(us) / 1_000_000.0)
     elif block.get("out_time") not in (None, "", "N/A"):
-        try:
+        with contextlib.suppress(ValueError):
             p.out_time = parse_time(block["out_time"])
-        except ValueError:
-            pass
     sp = str(block.get("speed", "")).strip().rstrip("x")
     if sp and sp != "N/A":
         p.speed = _f(sp) or None
@@ -658,6 +671,7 @@ def run(cmd: Sequence[str], *,
         try:
             duration = guess_output_duration(argv)
         except Exception:
+            logger.debug("run: best-effort step failed", exc_info=True)
             duration = None
     progress_on_stderr = ffmpeg_mode and "pipe:2" in argv
 
@@ -684,7 +698,7 @@ def run(cmd: Sequence[str], *,
             try:
                 on_line(text)
             except Exception:                     # a bug in the caller's callback: log, keep running
-                _log.exception("on_line callback failed")
+                logger.exception("on_line callback failed")
 
     def _handle_progress_line(text: str) -> bool:
         key, sep, val = text.partition("=")
@@ -698,7 +712,7 @@ def run(cmd: Sequence[str], *,
                 try:
                     on_progress(_parse_progress_block(dict(block), duration, started))
                 except Exception:
-                    _log.exception("on_progress callback failed")
+                    logger.exception("on_progress callback failed")
             block.clear()
         return True
 
@@ -734,7 +748,7 @@ def run(cmd: Sequence[str], *,
             try:
                 stream.close()
             except Exception:
-                pass
+                logger.debug("_pump: best-effort step failed", exc_info=True)
 
     err_thread = tasks.start_service(partial(_pump, child.stderr, progress_on_stderr),
                                      name="ffmpeg-stderr")
@@ -752,7 +766,7 @@ def run(cmd: Sequence[str], *,
                 try:
                     stop = bool(cancel())
                 except Exception:
-                    _log.exception("cancel callback failed")
+                    logger.exception("cancel callback failed")
                     stop = False
                 if stop:
                     result.cancelled = True
@@ -778,7 +792,7 @@ def run(cmd: Sequence[str], *,
                                  fraction=1.0 if duration else None,
                                  elapsed=result.elapsed, done=True))
         except Exception:
-            _log.exception("on_progress callback failed")
+            logger.exception("on_progress callback failed")
     return result
 
 

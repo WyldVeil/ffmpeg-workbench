@@ -125,7 +125,7 @@ class CodecCruncherTab(BaseTab):
 
     def _codec(self) -> str:
         if self.copy_video.get() and self._info is not None and self._info.has_video:
-            return {"dnxhd": "dnxhr"}.get(self._info.video.codec, self._info.video.codec)
+            return {"dnxhd": "dnxhr"}.get(self._info.require_video().codec, self._info.require_video().codec)
         return self.encoder.codec
 
     def _container(self) -> str:
@@ -146,7 +146,7 @@ class CodecCruncherTab(BaseTab):
     def _source_changed(self, path):
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
-            v = info.video
+            v = info.require_video()
             self.info_lbl.config(text=f"{ff.format_time(info.duration)}  ·  {v.codec} {v.width}×{v.height}  ·  "
                                       f"{v.fps:.3g} fps  ·  {v.pix_fmt}{'  ·  HDR' if v.is_hdr else ''}  ·  "
                                       f"{len([s for s in info.streams if s.type == 'audio'])} audio track(s)")
@@ -173,7 +173,7 @@ class CodecCruncherTab(BaseTab):
         self.out_row.set(out)
         key = next((k for k, v in AUDIO.items() if v[0] == self.audio_var.get()), "aac256")
         a_args, notes = audio_args(info, key, container, self.keep_all.get())
-        v = info.video
+        v = info.require_video()
         cmd = [ff.ffmpeg_path(), "-y"]
         if self.copy_video.get():
             v_args = ["-map", "0:v:0", "-c:v", "copy"]

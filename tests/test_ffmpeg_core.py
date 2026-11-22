@@ -66,7 +66,7 @@ def test_probe_video_with_audio(media):
     assert (info.width, info.height) == (1280, 720)
     assert info.fps == pytest.approx(30, abs=0.01)
     assert info.duration == pytest.approx(6.0, abs=0.1)
-    assert info.video.codec == "h264" and info.audio.channels >= 1
+    assert info.require_video().codec == "h264" and info.require_audio().channels >= 1
     assert not info.is_image and not info.is_hdr
     assert "1280×720" in info.summary()
     # cached object is reused
@@ -78,7 +78,7 @@ def test_probe_variants(media):
     v = ff.probe(media["vertical_noaudio"])
     assert v.has_video and not v.has_audio and v.height == 1920
     h = ff.probe(media["hevc10"])
-    assert h.video.bit_depth == 10 and h.audio.codec == "opus"
+    assert h.require_video().bit_depth == 10 and h.require_audio().codec == "opus"
     n = ff.probe(media["vp9"])
     assert n.fps == pytest.approx(29.97, abs=0.01)
     a = ff.probe(media["mp3"])

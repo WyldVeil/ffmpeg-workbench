@@ -1,4 +1,5 @@
 """Compare & Quality: VMAF/SSIM/PSNR measurement, alignment, the page and the command line."""
+import itertools
 import json
 import math
 import os
@@ -64,7 +65,7 @@ def test_faster_settings(media, copies):
     s = res.summary()
     assert set(s) == {"vmaf"} and s["vmaf"]["frames"] == 12
     worst = res.worst(3, gap=0.5)
-    assert len(worst) == 3 and all(abs(a[0] - b[0]) >= 0.5 for a, b in zip(worst, worst[1:]))
+    assert len(worst) == 3 and all(abs(a[0] - b[0]) >= 0.5 for a, b in itertools.pairwise(worst))
 
 
 def test_build_validates():

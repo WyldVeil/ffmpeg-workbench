@@ -25,6 +25,7 @@ launcher; reports exactly what is missing when it can't be used.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 
@@ -107,10 +108,8 @@ def disable() -> None:
         for i in range(len(_remembered)):
             _remembered[i] = 0
     _remembered = None
-    try:
-        _proc.run(["sudo", "-K"], timeout=10, text=False)     # forget sudo's cached login
-    except (OSError, _proc.ProcessError):
-        pass
+    with contextlib.suppress(OSError, _proc.ProcessError):    # forget sudo's cached login
+        _proc.run(["sudo", "-K"], timeout=10, text=False)
 
 
 def direct_enabled() -> bool:
@@ -121,10 +120,8 @@ def direct_enabled() -> bool:
 def _refresh() -> None:
     """Renew sudo's cached login with the remembered password, if any."""
     if _remembered is not None and sudo_state() != "ok":
-        try:
+        with contextlib.suppress(OSError, _proc.ProcessError):
             _sudo(["-v"], password=_remembered.decode("utf-8"))
-        except (OSError, _proc.ProcessError):
-            pass
 
 
 def wrap(argv: list) -> list:

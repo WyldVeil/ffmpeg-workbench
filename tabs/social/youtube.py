@@ -1,3 +1,4 @@
+
 """
 tab_youtubedownloader.py  ─  Video Downloader & Media Extractor
 
@@ -17,8 +18,9 @@ Requirements
     1. bin/yt-dlp.exe  (drop it next to ffmpeg.exe - recommended)
     2. yt-dlp on the system PATH  (pip install yt-dlp)
 """
-
+import contextlib
 import json
+import logging
 import os
 import re
 import shlex
@@ -39,6 +41,8 @@ from core.i18n import t
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+
+logger = logging.getLogger("crossfader.social.youtube")
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Module-level helpers
@@ -62,6 +66,7 @@ def _ffmpeg_dir() -> str:
     try:
         return os.path.dirname(get_binary_path("ffmpeg"))
     except Exception:
+        logger.debug("_ffmpeg_dir: best-effort step failed", exc_info=True)
         return ""
 
 
@@ -71,7 +76,7 @@ def _ffmpeg_exe() -> str:
         if os.path.isfile(p):
             return p
     except Exception:
-        pass
+        logger.debug("_ffmpeg_exe: best-effort step failed", exc_info=True)
     return shutil.which("ffmpeg") or "ffmpeg"
 
 
@@ -114,7 +119,7 @@ def _ytdlp_version(ytdlp: str) -> str:
 def _fetch_info(ytdlp: str, url: str, *, playlist: bool) -> dict:
     """Worker: ask yt-dlp about *url* (no Tk here - the caller read the settings)."""
     from core import network as _net
-    cmd = _yt(ytdlp, url) + ["--yes-playlist" if playlist else "--no-playlist", "-J", url]
+    cmd = [*_yt(ytdlp, url), "--yes-playlist" if playlist else "--no-playlist", "-J", url]
     r = _proc.run(cmd, timeout=45, env=_net.subprocess_env(url=url))
     if not r.ok:
         raise ToolError("yt-dlp error:\n" + (r.stderr or r.stdout or "")[:600])
@@ -155,14 +160,14 @@ class YouTubeDownloaderTab(BaseTab):
             if os.path.isfile(_HISTORY_FILE):
                 with open(_HISTORY_FILE, encoding="utf-8") as f:
                     self._history = json.load(f)
-        except Exception:
+        except (OSError, ValueError):
             self._history = []
 
     def _save_history(self):
         try:
             with open(_HISTORY_FILE, "w", encoding="utf-8") as f:
                 json.dump(self._history, f, indent=2, ensure_ascii=False)
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     def _append_history(self, title: str, duration: str, url: str, file_path: str):
@@ -448,7 +453,7 @@ class YouTubeDownloaderTab(BaseTab):
             style.configure("YT.TNotebook.Tab", font=(UI_FONT, 9),
                             padding=px(8, 4))
         except Exception:
-            pass
+            logger.debug("_build_settings_notebook: best-effort step failed", exc_info=True)
 
         self._settings_nb = ttk.Notebook(nb_frame)
         self._settings_nb.pack(fill="x")
@@ -1273,21 +1278,16 @@ class YouTubeDownloaderTab(BaseTab):
         flt = self._filter_var.get()
         if not self._format_options:
             return
-        filtered = []
-        for label, fmt_str in self._format_options:
+        heights = {"4K": "2160p", "1080p": "1080p", "720p": "720p", "480p": "480p"}
+
+        def shown(label: str) -> bool:
             if flt == "All":
-                filtered.append(label)
-            elif flt == "4K" and "2160p" in label:
-                filtered.append(label)
-            elif flt == "1080p" and "1080p" in label:
-                filtered.append(label)
-            elif flt == "720p" and "720p" in label:
-                filtered.append(label)
-            elif flt == "480p" and "480p" in label:
-                filtered.append(label)
-            elif flt == "Audio only" and ("audio" in label.lower() or
-                                          "(video only" not in label.lower()):
-                filtered.append(label)
+                return True
+            if flt == "Audio only":
+                return "audio" in label.lower() or "(video only" not in label.lower()
+            return flt in heights and heights[flt] in label
+
+        filtered = [label for label, _fmt_str in self._format_options if shown(label)]
         if not filtered:
             filtered = [self._format_options[0][0]]
         self._format_cb["values"] = filtered
@@ -1469,6 +1469,7 @@ class YouTubeDownloaderTab(BaseTab):
             png = base64.b64encode(res.stdout).decode("ascii")
             self.after(0, lambda: self._set_thumbnail(tk.PhotoImage(master=self, data=png)))
         except Exception as exc:
+            logger.debug("_load_thumbnail: best-effort step failed", exc_info=True)
             err = str(exc) or type(exc).__name__
             self.after(0, lambda e=err: self._set_thumbnail_message(f"Thumbnail failed:\n{e[:80]}"))
             self.after(0, lambda e=err: self.log_tagged(self.console, f"⚠ Thumbnail load error: {e}", "warn"))
@@ -1486,7 +1487,7 @@ class YouTubeDownloaderTab(BaseTab):
                 px(128), px(72), text=msg, fill=CLR["fgdim"],
                 font=(UI_FONT, 9), justify="center", width=px(240))
         except Exception:
-            pass
+            logger.debug("_set_thumbnail_message: best-effort step failed", exc_info=True)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Preview
@@ -1514,10 +1515,8 @@ class YouTubeDownloaderTab(BaseTab):
                         self.console, "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
                         "one and would connect around it). Download the video instead.", "warn"))
                     return
-                r = _proc.run(_yt(ytdlp, url) + [playlist_flag, "-g",
-                     "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
-                     url], timeout=25, env=_net.subprocess_env(url=url))
-                lines = [l.strip() for l in r.stdout.splitlines() if l.strip()]
+                r = _proc.run([*_yt(ytdlp, url), playlist_flag, "-g", "-f", "best[height<=720][ext=mp4]/best[height<=720]/best", url], timeout=25, env=_net.subprocess_env(url=url))
+                lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
                 if not lines:
                     self.after(0, lambda: self.log_tagged(
                         self.console,
@@ -1527,6 +1526,7 @@ class YouTubeDownloaderTab(BaseTab):
                 try:
                     ffplay = get_binary_path("ffplay")
                 except Exception:
+                    logger.debug("_worker: best-effort step failed", exc_info=True)
                     ffplay = shutil.which("ffplay") or "ffplay"
                 self.preview_proc = _proc.spawn(
                     [ffplay, "-autoexit",
@@ -1536,6 +1536,7 @@ class YouTubeDownloaderTab(BaseTab):
                 self.after(0, lambda: self.log_tagged(
                     self.console, "▶ Playing in ffplay.", "info"))
             except Exception as exc:
+                logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(0, lambda e=exc: self.log_tagged(
                     self.console, f"⚠ Preview error: {e}", "error"))
             finally:
@@ -1563,7 +1564,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         from core import network as _net
         try:
-            cmd = _yt(ytdlp, url) + ["-f", "best", "--live-from-start", "-o", out_template, url]
+            cmd = [*_yt(ytdlp, url), "-f", "best", "--live-from-start", "-o", out_template, url]
         except OSError as exc:
             messagebox.showwarning(t("common.warning"), _net.explain_error(exc), parent=self)
             return
@@ -1589,6 +1590,7 @@ class YouTubeDownloaderTab(BaseTab):
                 self._record_proc.stdout.close()
                 self._record_proc.wait()
             except Exception as exc:
+                logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(0, lambda e=exc: self.log_tagged(
                     self.console, f"⚠ Record error: {e}", "error"))
             finally:
@@ -1672,6 +1674,7 @@ class YouTubeDownloaderTab(BaseTab):
             proc.wait()
             rc = proc.returncode
         except Exception as exc:
+            logger.debug("_run_ytdlp_once: best-effort step failed", exc_info=True)
             self.after(0, lambda e=exc: self.log_tagged(self.console, f"⚠ yt-dlp error: {e}", "error"))
             rc = 1
         finally:
@@ -1688,6 +1691,7 @@ class YouTubeDownloaderTab(BaseTab):
             from core import tails
             on = tails.direct_enabled()
         except Exception:
+            logger.debug("_poll_route_banner: best-effort step failed", exc_info=True)
             on = False
         try:
             if on and not self._route_banner.winfo_ismapped():
@@ -1710,6 +1714,7 @@ class YouTubeDownloaderTab(BaseTab):
             try:
                 self._kill_process_tree(proc)
             except Exception as exc:
+                logger.debug("_cancel_download: best-effort step failed", exc_info=True)
                 self.log_tagged(
                     self.console, f"⚠ Cancel error: {exc}", "warn")
         self._batch_running = False
@@ -1933,10 +1938,7 @@ class YouTubeDownloaderTab(BaseTab):
         container = self._container_var.get()
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = _yt(ytdlp, url) + [playlist_flag,
-               "-f", fmt_str,
-               "--merge-output-format", container,
-               "--no-overwrites"]
+        cmd = [*_yt(ytdlp, url), playlist_flag, "-f", fmt_str, "--merge-output-format", container, "--no-overwrites"]
 
         # Subtitles
         if self._dl_subs_var.get():
@@ -1970,10 +1972,7 @@ class YouTubeDownloaderTab(BaseTab):
         audio_out = base + "." + audio_fmt
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = _yt(ytdlp, url) + [playlist_flag, "-x",
-               "--audio-format", audio_fmt,
-               "--audio-quality", quality,
-               "--no-overwrites"]
+        cmd = [*_yt(ytdlp, url), playlist_flag, "-x", "--audio-format", audio_fmt, "--audio-quality", quality, "--no-overwrites"]
         if self._embed_thumb_var.get():
             cmd += ["--embed-thumbnail"]
         if self._add_metadata_var.get():
@@ -2002,10 +2001,7 @@ class YouTubeDownloaderTab(BaseTab):
         tmp = os.path.join(tempfile.gettempdir(), f"_cf_yt_tmp_{os.getpid()}.mkv")
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = _yt(ytdlp, url) + [playlist_flag,
-               "-f", "bv*+ba/b",
-               "--merge-output-format", "mkv",
-               "--no-overwrites"]
+        cmd = [*_yt(ytdlp, url), playlist_flag, "-f", "bv*+ba/b", "--merge-output-format", "mkv", "--no-overwrites"]
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
         cmd += ["-o", tmp, url]
@@ -2048,17 +2044,13 @@ class YouTubeDownloaderTab(BaseTab):
 
         from core import network as _net
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = _yt(ytdlp) + [playlist_flag, "--write-sub",
-               "--skip-download",
-               "--sub-lang", lang,
-               "--sub-format", sub_fmt,
-               "-o", tmp_base, url]
+        cmd = [*_yt(ytdlp), playlist_flag, "--write-sub", "--skip-download", "--sub-lang", lang, "--sub-format", sub_fmt, "-o", tmp_base, url]
         if self._sub_auto_var.get():
             cmd.insert(-3, "--write-auto-sub")
         try:
             _proc.run(cmd, timeout=30, text=False, env=_net.subprocess_env())
         except Exception:
-            pass
+            logger.debug("_download_sub_for_burn: best-effort step failed", exc_info=True)
         # Find the downloaded sub file
         for fname in os.listdir(tmp_dir):
             if fname.startswith("sub") and fname.endswith(
@@ -2095,6 +2087,7 @@ class YouTubeDownloaderTab(BaseTab):
                 proc.wait()
                 rc = proc.returncode
             except Exception as exc:
+                logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(0, lambda e=exc: self.log_tagged(
                     self.console, f"⚠ Encode error: {e}", "error"))
                 rc = 1
@@ -2103,10 +2096,8 @@ class YouTubeDownloaderTab(BaseTab):
             return rc
 
         def _on_done(task_id, rc):
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tmp)
-            except Exception:
-                pass
             self.after(0, lambda c=rc: self._on_single_done(c, out))
 
         self.enqueue_render(
@@ -2150,7 +2141,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _batch_add_urls(self):
         raw = self._batch_text.get("1.0", tk.END).strip()
-        urls = [l.strip() for l in raw.splitlines() if l.strip()]
+        urls = [ln.strip() for ln in raw.splitlines() if ln.strip()]
         for url in urls:
             self._batch_tree.insert("", tk.END, values=("-", url, "Queued"))
         self._batch_text.delete("1.0", tk.END)
@@ -2193,11 +2184,11 @@ class YouTubeDownloaderTab(BaseTab):
             title = "-"
             try:
                 from core import network as _net
-                r = _proc.run(_yt(ytdlp, url) + ["--no-playlist", "--get-title", url], timeout=20, env=_net.subprocess_env(url=url))
+                r = _proc.run([*_yt(ytdlp, url), "--no-playlist", "--get-title", url], timeout=20, env=_net.subprocess_env(url=url))
                 if r.returncode == 0:
                     title = r.stdout.strip().splitlines()[0][:60]
             except Exception:
-                pass
+                logger.debug("_batch_worker: best-effort step failed", exc_info=True)
 
             self.after(0, lambda i=item, t=title: self._batch_tree.item(
                 i, values=(t,
@@ -2208,8 +2199,7 @@ class YouTubeDownloaderTab(BaseTab):
             out_path = os.path.join(dl_dir, "%(title)s.%(ext)s")
 
             try:
-                cmd = _yt(ytdlp, url) + ["--yes-playlist", "-f", "bv*+ba/b",
-                                         "--merge-output-format", self._container_var.get(), "--no-overwrites"]
+                cmd = [*_yt(ytdlp, url), "--yes-playlist", "-f", "bv*+ba/b", "--merge-output-format", self._container_var.get(), "--no-overwrites"]
             except OSError as exc:
                 from core import network as _net
                 self.after(0, lambda e=exc: self.log_tagged(self.console, _net.explain_error(e), "error"))
@@ -2238,7 +2228,7 @@ class YouTubeDownloaderTab(BaseTab):
             try:
                 self._kill_process_tree(proc)
             except Exception:
-                pass
+                logger.debug("_batch_stop: best-effort step failed", exc_info=True)
         self.log_tagged(self.console, "⏹ Batch stopped.", "warn")
 
     def _batch_finished(self):

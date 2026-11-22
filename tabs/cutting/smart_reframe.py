@@ -15,6 +15,7 @@ window follows the action.
 """
 from __future__ import annotations
 
+import itertools
 import os
 import tkinter as tk
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import proc as _proc
 from core.i18n import t
+from core.ops.shared import frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -52,10 +54,10 @@ def crop_box(w: int, h: int, rw: int, rh: int) -> tuple:
     """Largest rw:rh window inside w x h (even sizes)."""
     if w / h > rw / rh:
         ch = h
-        cw = int(round(h * rw / rh))
+        cw = round(h * rw / rh)
     else:
         cw = w
-        ch = int(round(w * rh / rw))
+        ch = round(w * rh / rw)
     return min(cw, w) // 2 * 2, min(ch, h) // 2 * 2
 
 
@@ -73,7 +75,7 @@ def track(frames, tuning: Tuning, cut_factor: float = 6.0) -> list:
         total = sum(rows)
         mean = sum(recent) / len(recent) if recent else 0
         cuts.append(bool(recent) and total > cut_factor * max(mean, 50))
-        recent = (recent + [total])[-24:]
+        recent = ([*recent, total])[-24:]
         if total > GRID_W * GRID_H * 1.5:            # enough motion to trust
             cx = sum(c * (i + 0.5) for i, c in enumerate(cols)) / total / GRID_W
             cy = sum(r * (i + 0.5) for i, r in enumerate(rows)) / total / GRID_H
@@ -81,7 +83,7 @@ def track(frames, tuning: Tuning, cut_factor: float = 6.0) -> list:
             if target is None or cuts[-1]:
                 target = raw
             else:
-                target = [r if abs(r - tg) > tuning.dead_zone else tg for r, tg in zip(raw, target)]
+                target = [r if abs(r - tg) > tuning.dead_zone else tg for r, tg in zip(raw, target, strict=False)]
         targets.append(tuple(target) if target is not None else None)
     first = next((tg for tg in targets if tg is not None), (0.5, 0.5))
     filled, last = [], first
@@ -90,17 +92,17 @@ def track(frames, tuning: Tuning, cut_factor: float = 6.0) -> list:
         filled.append(last)
     out = list(filled)
     starts = [0] + [i for i, c in enumerate(cuts) if c and i > 0] + [len(filled)]
-    for a0, b0 in zip(starts, starts[1:]):
+    for a0, b0 in itertools.pairwise(starts):
         seg = filled[a0:b0]
         if not seg:
             continue
         fwd, cur = [], list(seg[0])
         for p in seg:
-            cur = [c + (v - c) * tuning.alpha for c, v in zip(cur, p)]
+            cur = [c + (v - c) * tuning.alpha for c, v in zip(cur, p, strict=False)]
             fwd.append(tuple(cur))
         cur = list(fwd[-1])
         for i in range(len(fwd) - 1, -1, -1):
-            cur = [c + (v - c) * tuning.alpha for c, v in zip(cur, fwd[i])]
+            cur = [c + (v - c) * tuning.alpha for c, v in zip(cur, fwd[i], strict=False)]
             out[a0 + i] = tuple(cur)
     return out
 
@@ -203,7 +205,7 @@ class SmartReframeTab(BaseTab):
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
         if self._info is not None and self._info.has_video:
-            w, h = self._info.video.display_size
+            w, h = self._info.require_video().display_size
             self.info_lbl.config(text=f"{w}×{h}, {ff.format_time(self._info.duration)}")
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "reframed"))
@@ -226,12 +228,12 @@ class SmartReframeTab(BaseTab):
         rw, rh = RATIOS[self._ratio_key()][1]
         w, h = common.even_size(info)
         cw, ch = crop_box(w, h, rw, rh)
-        fps_str = common.frame_rate(info)
-        fps = info.video.fps or 30.0
+        fps_str = frame_rate(info)
+        fps = info.require_video().fps or 30.0
         dur = info.duration
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
-        audio = common.keep_audio_args(info, container)
+        audio = keep_audio_args(info, container)
         if mode == "fit":
             chain = (f"split[a][b];[a]scale={ow // 8}:{oh // 8}:force_original_aspect_ratio=increase,"
                      f"crop={ow // 8}:{oh // 8},gblur=sigma=4,eq=brightness=-0.1,scale={ow}:{oh}[bg];"
@@ -247,7 +249,7 @@ class SmartReframeTab(BaseTab):
             if mode != "centre" and (cw < w or ch < h):
                 ctx.log("Analysing motion…")
                 path = self._analyse(src, dur, TUNING.get(mode, TUNING["follow"]), cancelled, ctx)
-                moves = max((abs(a[0] - b[0]) for a, b in zip(path, path[1:])), default=0)
+                moves = max((abs(a[0] - b[0]) for a, b in itertools.pairwise(path)), default=0)
                 ctx.log(f"Tracked {len(path)} samples (largest step {moves * 100:.1f}% of the frame).")
             tmp = ctx.tempdir()
             script, (x0, y0) = crop_commands(path, w, h, cw, ch, fps, dur)

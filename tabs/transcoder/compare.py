@@ -193,9 +193,9 @@ class CompareQualityTab(BaseTab):
         di = ff.try_probe(dist) if dist and os.path.isfile(dist) else None
         self._infos = (ri, di)
         parts = []
-        for label, info, path in (("Original", ri, ref), ("Copy", di, dist)):
+        for label, info, _path in (("Original", ri, ref), ("Copy", di, dist)):
             if info is not None and info.has_video:
-                v = info.video
+                v = info.require_video()
                 w, h = v.display_size
                 parts.append(f"{label}: {w}×{h} {v.codec} {v.fps:.3g} fps · {_size(info.size)} · "
                              f"{_fmt(info.duration)}")
@@ -236,8 +236,8 @@ class CompareQualityTab(BaseTab):
             return
         span = min(ri.duration - skip_ref, di.duration - skip_dist)
         span = min(span, seconds) if seconds else span
-        fps = ri.video.fps or 30.0
-        if ri.video.is_hdr or di.video.is_hdr:
+        fps = ri.require_video().fps or 30.0
+        if ri.require_video().is_hdr or di.require_video().is_hdr:
             self.log(self.console, "Note: VMAF is made for normal (SDR) video - scores for HDR are only a rough guide.")
 
         def work(_p, _c, ctx):
@@ -320,7 +320,7 @@ class CompareQualityTab(BaseTab):
                 if y - last_label >= px(11):                # labels too close together would overlap
                     c.create_text(pad_l - px(4), y, text=f"{g:g}", fill="#888888", anchor="e", font=(UI_FONT, 8))
                     last_label = y
-        pts = [xy(t, v) for t, v in zip(series.times, series.values) if math.isfinite(v)]
+        pts = [xy(t, v) for t, v in zip(series.times, series.values, strict=False) if math.isfinite(v)]
         if len(pts) > 1:
             step = max(1, len(pts) // 2000)
             c.create_line(*[coord for p in pts[::step] for coord in p], fill=CLR["accent"], width=px(1.5))

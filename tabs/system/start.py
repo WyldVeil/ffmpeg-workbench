@@ -15,6 +15,7 @@ Plus recently used tools and files, and a link to Home (every tool).
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import tkinter as tk
 from collections.abc import Callable
@@ -38,8 +39,14 @@ def _mix(a: str, b: str, amount: float) -> str:
         cb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
     except (ValueError, IndexError):
         return a
-    return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb))
+    return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb, strict=False))
 
+
+
+class Card(tk.Frame):
+    """A clickable card: a goal or a tool (what it opens is kept on it, for tests and keyboard use)."""
+    goal: str | None = None
+    tool: str | None = None
 
 class StartTab(BaseTab):
     def __init__(self, parent):
@@ -266,7 +273,9 @@ class StartTab(BaseTab):
     def _render_recent(self):
         for w in self._recent.winfo_children():
             w.destroy()
-        recent = [t for t in tools.parse_all(_settings.RECENT_TOOLS.get()) if tools.spec(t).name in catalog.TOOLS][:4]
+        shell = self.shell()
+        used = shell.recent_tools() if shell is not None else tools.parse_all(_settings.RECENT_TOOLS.get())
+        recent = [t for t in used if tools.spec(t).name in catalog.TOOLS][:4]
         files = [p for p in _settings.RECENT_FILES.get() if isinstance(p, str) and os.path.isfile(p)][:3]
         if not recent and not files:
             tk.Label(self._recent, text="New here?", font=(UI_FONT, 10, "bold"), bg=CLR["bg"],
@@ -352,9 +361,9 @@ class StartTab(BaseTab):
             tk.Label(parent, text=sub, font=(UI_FONT, 10), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w",
                                                                                              pady=px(0, 8))
 
-    def _card(self, parent):
-        return tk.Frame(parent, bg=CLR["panel"], highlightthickness=px(1), highlightbackground=CLR["border"],
-                        cursor="hand2", takefocus=1, highlightcolor=CLR["accent"])
+    def _card(self, parent) -> Card:
+        return Card(parent, bg=CLR["panel"], highlightthickness=px(1), highlightbackground=CLR["border"],
+                    cursor="hand2", takefocus=1, highlightcolor=CLR["accent"])
 
     def _wire(self, card, on_click):
         """Click, hover and keyboard behaviour for a card and everything in it."""
@@ -366,10 +375,8 @@ class StartTab(BaseTab):
 
         def paint(bg, border):
             for w in widgets:
-                try:
+                with contextlib.suppress(tk.TclError):
                     w.config(bg=bg)
-                except tk.TclError:
-                    pass
             card.config(highlightbackground=border)
 
         for w in widgets:
@@ -384,7 +391,7 @@ class StartTab(BaseTab):
 
     def _goal_card(self, parent, g: catalog.Goal):
         card = self._card(parent)
-        card._goal = g.key
+        card.goal = g.key
         tk.Label(card, text=g.icon, font=(UI_FONT, 22), bg=CLR["panel"], fg=CLR["fg"]).pack(side="left",
                                                                                            padx=px(14, 8), pady=px(12))
         text = tk.Frame(card, bg=CLR["panel"])
@@ -401,7 +408,7 @@ class StartTab(BaseTab):
         info = catalog.TOOLS.get(name)
         icon, about = (info.icon, info.blurb) if info is not None else ("•", "")
         card = self._card(parent)
-        card._tool = name
+        card.tool = name
         tk.Label(card, text=icon, font=(UI_FONT, 17), bg=CLR["panel"], fg=CLR["fg"], width=2).pack(
             side="left", padx=px(12, 6), pady=px(8))
         tk.Label(card, text="Open ›", font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"]).pack(

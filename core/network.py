@@ -22,6 +22,8 @@ command line.
 """
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
 import socket
 import ssl
@@ -32,6 +34,8 @@ from urllib.parse import quote, urlsplit
 
 from core import errors, sysproxy
 from core import settings as _settings
+
+logger = logging.getLogger("crossfader.network")
 
 DIRECT = sysproxy.DIRECT
 
@@ -230,7 +234,7 @@ def describe(cfg: dict | None = None, url: str = "https://www.youtube.com/") -> 
         found = proxies_for(url, cfg)
     except OSError as exc:
         return str(exc)
-    shown = ", ".join("direct" if p == DIRECT else sysproxy._hide_auth(p) for p in found) or "nothing (blocked)"
+    shown = ", ".join("direct" if p == DIRECT else sysproxy.hide_auth(p) for p in found) or "nothing (blocked)"
     if m == "manual":
         return f"Through {shown}" + (" only (strict)" if strict(cfg) else "")
     return f"Following this computer: {shown}"
@@ -269,6 +273,7 @@ def _truststore():
         from core.deps import require
         return require("truststore")
     except Exception:
+        logger.debug("_truststore: best-effort step failed", exc_info=True)
         return None
 
 
@@ -287,15 +292,14 @@ def ssl_context(cfg: dict | None = None) -> ssl.SSLContext:
             try:
                 ctx = ts.SSLContext(ssl.PROTOCOL_TLS_CLIENT)      # the OS's own verifier
             except Exception:
+                logger.debug("ssl_context: best-effort step failed", exc_info=True)
                 ctx = None
         if ctx is None:
             ctx = ssl.create_default_context()                    # Windows: loads the system store
             ca = system_ca_file()
             if ca:
-                try:
+                with contextlib.suppress(OSError, ssl.SSLError):
                     ctx.load_verify_locations(cafile=ca)
-                except (OSError, ssl.SSLError):
-                    pass
     if ctx is None:
         ctx = ssl.create_default_context()
     extra = (cfg.get("network.extra_ca") or "").strip()
@@ -359,6 +363,7 @@ def _socks_handler(pu: str):
             import socks
             from sockshandler import SocksiPyHandler
         except Exception:
+            logger.debug("_socks_handler: best-effort step failed", exc_info=True)
             return None
     u = urlsplit(pu)
     kind = socks.SOCKS4 if u.scheme.startswith("socks4") else socks.SOCKS5
@@ -530,9 +535,7 @@ def subprocess_env(extra=None, cfg=None, url: str = "https://www.youtube.com/"):
         env["NO_PROXY"] = env["no_proxy"] = no_proxy
     if cfg.get("network.verify_ssl", True) is not False:
         bundle = ca_bundle_for_tools(cfg)
-        if bundle and not sysproxy.IS_WIN:
-            env["SSL_CERT_FILE"] = bundle
-        elif bundle and cfg.get("network.extra_ca"):
+        if bundle and (not sysproxy.IS_WIN or cfg.get("network.extra_ca")):
             env["SSL_CERT_FILE"] = bundle
         if cfg.get("network.system_certs", True):
             env["DENO_TLS_CA_STORE"] = "system,mozilla"
@@ -581,6 +584,7 @@ def test(cfg=None):
             r.read(200)
         return True, f"Connected ({(time.monotonic() - t0) * 1000:.0f} ms). {route}."
     except Exception as exc:
+        logger.debug("test: best-effort step failed", exc_info=True)
         message = explain_error(exc)
     if not strict(cfg) and mode(cfg) != "manual":
         try:
@@ -590,7 +594,7 @@ def test(cfg=None):
                 return False, ("This network wants you to sign in first (hotel, airport or campus Wi-Fi?). "
                                "Open any website in your browser to reach the sign-in page.")
         except Exception:
-            pass
+            logger.debug("test: best-effort step failed", exc_info=True)
     return False, f"{message}  ({route})"
 
 

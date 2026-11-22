@@ -30,8 +30,8 @@ from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
 def scene_ranges(starts, duration: float) -> list:
     """[(start, end)] for each scene."""
-    ends = list(starts[1:]) + [duration]
-    return [(a, b) for a, b in zip(starts, ends) if b - a > 0.01]
+    ends = [*list(starts[1:]), duration]
+    return [(a, b) for a, b in zip(starts, ends, strict=False) if b - a > 0.01]
 
 
 class SceneDetectTab(BaseTab):
@@ -160,7 +160,7 @@ class SceneDetectTab(BaseTab):
                 self._fill()
                 self.log_tagged(self.console, f"{len(self.scenes)} scenes found.", "success")
             elif rc != -1:
-                self._last_task = self.task(tid)
+                self.last_task = self.task(tid)
                 self.show_result(rc)
 
         tid = self.enqueue_render("Scene detection", "", worker_fn=work, on_complete=on_complete,
@@ -206,7 +206,7 @@ class SceneDetectTab(BaseTab):
                    "-f", "segment", "-segment_times", times, "-reset_timestamps", "1"]
             if ext in (".mp4", ".mov", ".m4v"):
                 cmd += ["-segment_format_options", "movflags=+faststart"]
-            self.run_ffmpeg(cmd + [pattern], self.console, on_done=lambda rc: self.show_result(rc, out_dir),
+            self.run_ffmpeg([*cmd, pattern], self.console, on_done=lambda rc: self.show_result(rc, out_dir),
                             btn=self.btn_split, btn_label="✂  SPLIT INTO SCENES", duration=info.duration,
                             output=out_dir, inputs=[src], name="Scene split")
             return

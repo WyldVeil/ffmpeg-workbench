@@ -54,8 +54,8 @@ def test_reverser_chunked(ui, media, outdir, monkeypatch, mode):
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     expected = ff.duration_of(media["h264"]) if mode == "full" else 1.5 * 4
-    assert info.video.duration == pytest.approx(expected, abs=0.1)
-    assert info.audio.duration == pytest.approx(expected, abs=0.1)
+    assert info.require_video().duration == pytest.approx(expected, abs=0.1)
+    assert info.require_audio().duration == pytest.approx(expected, abs=0.1)
     if mode == "full":   # first output frame == last source frame
         last = ff.grab_frame_png(media["h264"], expected - 0.04, width=64)
         first = ff.grab_frame_png(out, 0.0, width=64)
@@ -82,9 +82,9 @@ def test_freeze(ui, media, outdir, mode):
     dur = ff.duration_of(media["h264"])
     info = ff.probe(out, use_cache=False)
     expected = {"insert": dur + 1.5, "end": dur + 1.5, "only": 1.5}[mode]
-    assert info.video.duration == pytest.approx(expected, abs=0.1)
+    assert info.require_video().duration == pytest.approx(expected, abs=0.1)
     if mode != "only":
-        assert info.audio.duration == pytest.approx(expected, abs=0.1)
+        assert info.require_audio().duration == pytest.approx(expected, abs=0.1)
 
 
 @pytest.mark.gui
@@ -112,7 +112,7 @@ def test_looper(ui, media, outdir, mode):
     end = 1.0 + seg
     expected = 1.0 + loops + (dur - end)
     info = ff.probe(out, use_cache=False)
-    assert info.video.duration == pytest.approx(expected, abs=0.15)
+    assert info.require_video().duration == pytest.approx(expected, abs=0.15)
 
 
 @pytest.mark.gui

@@ -63,7 +63,7 @@ def test_presets_file_corrupt_is_kept(tmp_path, monkeypatch):
     presets, warning = pr._load_presets()
     assert warning and len(presets) == len(pr.BUILT_IN)
     assert not path.exists() and any(f.name.startswith("encode_presets.json.unreadable-") for f in tmp_path.iterdir())
-    assert pr._save_user_presets(presets + [{"name": "Mine", "cmd": "-i {INPUT} {OUTPUT}"}]) == ""
+    assert pr._save_user_presets([*presets, {"name": "Mine", "cmd": "-i {INPUT} {OUTPUT}"}]) == ""
     again, warning = pr._load_presets()
     assert not warning and again[-1]["name"] == "Mine"
 
@@ -88,9 +88,9 @@ def test_format_converter_batch(ui, media, outdir):
     assert len([f for f in outs if f.endswith(".mp4")]) == 3, outs
     for f in outs:
         info = ff.probe(str(outdir / f), use_cache=False)
-        assert info.has_audio and info.audio.codec in ("aac", "mp3")
+        assert info.has_audio and info.require_audio().codec in ("aac", "mp3")
         if info.has_video:
-            assert info.video.codec in ("h264", "hevc")
+            assert info.require_video().codec in ("h264", "hevc")
 
 
 @pytest.mark.gui
@@ -117,7 +117,7 @@ def test_format_converter_reports_failures(ui, media, outdir, tmp_path):
 # ── Downsizer ───────────────────────────────────────────────────────────────
 
 def test_downsizer_plan():
-    from tabs.transcoder.downsizer import plan, retry_kbps
+    from core.ops.downsizer import plan, retry_kbps
     p = plan(60, 10_000_000, (1920, 1080), 60, codec="h264")
     assert p.fps == 30 and p.height < 1080 and p.video_kbps + p.audio_kbps < 10_000_000 * 8 / 1000 / 60
     with pytest.raises(ValueError):
@@ -201,10 +201,10 @@ def test_fps_interpolator(ui, media, outdir, slowmo):
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     src_dur = ff.duration_of(media["h264"])
-    assert info.video.fps == pytest.approx(60, abs=0.1)
+    assert info.require_video().fps == pytest.approx(60, abs=0.1)
     assert info.duration == pytest.approx(src_dur * (2 if slowmo else 1), abs=0.15)
     if info.has_audio:
-        assert info.audio.duration == pytest.approx(info.duration, abs=0.2) if info.audio.duration else True
+        assert info.require_audio().duration == pytest.approx(info.duration, abs=0.2) if info.require_audio().duration else True
 
 
 # ── Proxy Generator / Encode Queue ──────────────────────────────────────────
@@ -223,8 +223,8 @@ def test_proxy_generator(ui, media, tmp_path):
     _ok(ui)
     out = tmp_path / "Proxy" / "A001_C002.mov"
     info = ff.probe(str(out), use_cache=False)
-    assert info.video.codec == "prores" and (info.video.width, info.video.height) == (960, 540)
-    assert info.audio.codec == "pcm_s16le"
+    assert info.require_video().codec == "prores" and (info.require_video().width, info.require_video().height) == (960, 540)
+    assert info.require_audio().codec == "pcm_s16le"
 
 
 @pytest.mark.ffmpeg

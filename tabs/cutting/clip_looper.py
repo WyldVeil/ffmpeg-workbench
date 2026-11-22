@@ -17,6 +17,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -157,7 +158,7 @@ class ClipLooperTab(BaseTab):
             return
         dur = info.duration
         mode = self.mode_var.get()
-        fps = info.video.fps or 30.0
+        fps = info.require_video().fps or 30.0
         try:
             start = ff.parse_time(self.start_var.get() or "0")
             if mode == "stutter":
@@ -185,7 +186,7 @@ class ClipLooperTab(BaseTab):
         w, h = common.even_size(info)
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
-        fps_str = common.frame_rate(info)
+        fps_str = frame_rate(info)
         base = f"scale={w}:{h},setsar=1,fps={fps_str},format=yuv420p"
         pieces = ([("plain", 0.0, start, 1.0, 1.0)] if keep and start > 0.01 else [])
         pieces += [("loop", start, end, sp, lv) for sp, lv in units]
@@ -196,7 +197,7 @@ class ClipLooperTab(BaseTab):
         def work(_p, _c, ctx):
             tmp = ctx.tempdir()
             made, files, done = {}, [], 0.0
-            for i, (kind, a, b, sp, lv) in enumerate(pieces):
+            for _i, (_kind, a, b, sp, lv) in enumerate(pieces):
                 key = (a, b, sp, lv)
                 length = (b - a) / sp
                 if key not in made:

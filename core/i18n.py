@@ -1,3 +1,4 @@
+
 """
 core/i18n.py  -  Internationalisation engine for Quintessential Video Editor
 
@@ -12,10 +13,12 @@ Call init() once at application startup (before any widgets are created).
 Language is persisted in settings.json under the "language" key.
 An empty string or missing key triggers auto-detection from the OS locale.
 """
-
 import json
 import locale as _locale
+import logging
 import os
+
+logger = logging.getLogger("crossfader.i18n")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _LOCALE_DIR = os.path.join(
@@ -121,6 +124,7 @@ def _load_file(code: str) -> dict[str, str]:
                 data.pop("_meta", None)
                 return data
         except Exception as exc:
+            logger.debug("_load_file: best-effort step failed", exc_info=True)
             print(f"[i18n] Failed to load {path}: {exc}")
     return {}
 
@@ -137,7 +141,7 @@ def detect_system_language() -> str:
             if key.startswith(prefix + "_"):
                 return val
     except Exception:
-        pass
+        logger.debug("detect_system_language: best-effort step failed", exc_info=True)
     return "en_US"
 
 
@@ -168,6 +172,7 @@ def _load_fragments(code: str) -> dict[str, str]:
                     data.pop("_meta", None)
                     merged.update({k: v for k, v in data.items() if isinstance(v, str)})
                 except Exception as exc:
+                    logger.debug("_load_fragments: best-effort step failed", exc_info=True)
                     print(f"[i18n] Failed to load fragment {name}: {exc}")
     return merged
 
@@ -219,7 +224,7 @@ def init() -> None:
         settings.LANGUAGE.set(detected)
 
 
-def t(key: str, **kwargs) -> str:
+def t(key: str, **kwargs: object) -> str:
     """Return the translated string for *key*.
 
     Falls back to en_US, then to the bare key if nothing is found.
@@ -231,5 +236,5 @@ def t(key: str, **kwargs) -> str:
         try:
             text = text.format(**kwargs)
         except Exception:
-            pass
+            logger.debug("t: best-effort step failed", exc_info=True)
     return text

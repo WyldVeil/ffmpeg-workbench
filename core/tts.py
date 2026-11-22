@@ -13,6 +13,8 @@ core/tts.py  -  Text-to-speech engines
 """
 from __future__ import annotations
 
+import importlib.util
+import logging
 import os
 import shutil
 import sys
@@ -20,6 +22,8 @@ import tempfile
 
 from core import proc as _proc
 from core.errors import ToolError
+
+logger = logging.getLogger("crossfader.tts")
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
@@ -34,11 +38,16 @@ def _edge():
         from core.deps import require
         return require("edge-tts", import_name="edge_tts", auto_install=False)
     except Exception:
+        logger.debug("_edge: best-effort step failed", exc_info=True)
         return None
 
 
 def edge_available() -> bool:
-    return _edge() is not None
+    """Is the online engine installed?  Answered without importing it: edge-tts
+    pulls in aiohttp and asyncio (~70 ms, ~22 MB) that offline users never need."""
+    from core import deps
+    deps.ensure_libs_on_path()
+    return importlib.util.find_spec("edge_tts") is not None
 
 
 def system_engine() -> str | None:
@@ -118,9 +127,9 @@ def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled
         import edge_tts.communicate as _comm
 
         from core import network
-        _comm._SSL_CTX = network.ssl_context()
+        _comm._SSL_CTX = network.ssl_context()  # noqa: SLF001 - edge-tts offers no option for it
     except Exception:
-        pass
+        logger.debug("_edge_synth: best-effort step failed", exc_info=True)
 
     async def run():
         comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume,
@@ -166,7 +175,7 @@ def _run(cmd, cancelled, timeout=600):
                 if (cancelled and cancelled()) or waited > timeout:
                     proc.kill()
                     proc.communicate()
-                    raise TTSError("Cancelled." if cancelled and cancelled() else "The voice engine timed out.")
+                    raise TTSError("Cancelled." if cancelled and cancelled() else "The voice engine timed out.") from None
     finally:
         if proc.poll() is None:
             proc.kill()

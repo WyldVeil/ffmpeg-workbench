@@ -21,8 +21,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.4_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.4-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.5_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.5-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +34,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.4_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `wyldveils-media-editor_1.2.4_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.4_ubuntu_amd64.deb` |
-| **Debian** | `wyldveils-media-editor_1.2.4_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.4_debian_amd64.deb` |
-| **Fedora** | `wyldveils-media-editor-1.2.4-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `wyldveils-media-editor-1.2.4-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.5_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `wyldveils-media-editor_1.2.5_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.5_ubuntu_amd64.deb` |
+| **Debian** | `wyldveils-media-editor_1.2.5_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.5_debian_amd64.deb` |
+| **Fedora** | `wyldveils-media-editor-1.2.5-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `wyldveils-media-editor-1.2.5-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -737,12 +737,16 @@ Every download is checked against a SHA-256 checksum
 
 ```sh
 python scripts/fetch_binaries.py --platform linux-x64   # or windows-x64: fetches the pinned tools
-python main.py
+python main.py                                          # Python 3.11 or newer
 python -m pytest -q                                     # the test suite renders real files
 python packaging/release.py --linux                     # build the release packages
 ```
 
-See [docs/DEVELOPING.md](docs/DEVELOPING.md) for more.
+The code is organised in three layers - the engine (`core/`, no window
+code), the tool pages (`tabs/`) and the window (`shell/`) - with the rules
+that keep them apart checked by the tests. [ARCHITECTURE.md](ARCHITECTURE.md)
+is the map, [CONVENTIONS.md](CONVENTIONS.md) the house rules and
+[docs/DEVELOPING.md](docs/DEVELOPING.md) the cheat sheet.
 
 ## License
 

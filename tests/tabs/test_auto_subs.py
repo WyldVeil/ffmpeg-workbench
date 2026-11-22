@@ -93,7 +93,7 @@ def test_karaoke_from_audio(ui, outdir):
     ui.wait_idle(300)
     assert not ui.dialogs.errors(), ui.dialogs.errors()
     info = ff.probe(out, use_cache=False)
-    assert info.has_video and info.video.pix_fmt == "yuv420p" and info.duration > 10
+    assert info.has_video and info.require_video().pix_fmt == "yuv420p" and info.duration > 10
 
 
 def test_karaoke_word_grouping(tmp_path):

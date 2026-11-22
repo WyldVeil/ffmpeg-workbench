@@ -19,7 +19,7 @@ from core.tools import ToolId, spec
 from tabs.kit.contracts import Navigating, Showable
 from tabs.registry import PAGES
 
-_log = logging.getLogger("crossfader.shell")
+logger = logging.getLogger("crossfader.shell")
 
 
 class ErrorPage(ttk.Frame):
@@ -63,7 +63,7 @@ class PageHost:
         try:
             page = PAGES[tool](self._area)
         except Exception as exc:                        # a broken tool must not take the app down
-            _log.exception("Could not load tool %r", tool.value)
+            logger.exception("Could not load tool %r", tool.value)
             page = ErrorPage(self._area, spec(tool).name, f"{type(exc).__name__}: {exc}")
         if isinstance(page, Navigating):
             page.set_navigator(self._navigate)
@@ -81,5 +81,5 @@ class PageHost:
             try:
                 page.on_show()
             except Exception:                           # a page's refresh failing is its own bug
-                _log.exception("on_show failed in %s", tool.value)
+                logger.exception("on_show failed in %s", tool.value)
         return page

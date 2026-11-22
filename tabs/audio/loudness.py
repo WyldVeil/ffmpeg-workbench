@@ -17,6 +17,7 @@ from core import ffmpeg as ff
 from core import loudness as ln
 from core import tasks
 from core.i18n import t
+from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -144,7 +145,7 @@ class LoudnessNormTab(BaseTab):
             ctx.log(f"Measured {m.input_i:.1f} LUFS, peak {m.input_tp:.1f} dBTP")
             ctx.log("Pass 2 of 2: normalising…")
             ctx.span(0.45, 1.0).run([ff.ffmpeg_path(), "-y", "-i", src, "-af", ln.normalise_filter(i, tp, lra, m, sr),
-                                     *common.audio_job_args(out, info, stream=stream), ctx.output()], duration=dur)
+                                     *audio_job_args(out, info, stream=stream), ctx.output()], duration=dur)
             return 0
 
         common.queue_job(self, name="Loudness", out=out, work=work, btn=self.btn_render,

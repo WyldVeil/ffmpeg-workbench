@@ -16,6 +16,7 @@ from tkinter import messagebox, ttk
 from core import dialogs, midi, tasks
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
 
@@ -299,7 +300,7 @@ class MIDIfierTab(BaseTab):
             return
         program = int(self.program_var.get().split(" - ")[0] or 0)
         out = self.out_var.get().strip() or self.suggest_output(src, "midified", ".mp3")
-        if not out.lower().endswith(common.AUDIO_ONLY_EXTS):
+        if not out.lower().endswith(AUDIO_ONLY_EXTS):
             out = os.path.splitext(out)[0] + ".mp3"
         out = self.confirm_output(out, [src], default_ext=".mp3")
         if not out:
@@ -339,8 +340,8 @@ class MIDIfierTab(BaseTab):
             if out.lower().endswith(".mp3"):
                 cmd += ["-c:a", "libmp3lame", "-b:a", "256k"]
             else:
-                cmd += common.audio_encoder_args(out)
-            ctx.span(0.8, 1.0).run(cmd + [ctx.output(out)], duration=length)
+                cmd += audio_encoder_args(out)
+            ctx.span(0.8, 1.0).run([*cmd, ctx.output(out)], duration=length)
             return 0
 
         self.log_tagged(self.console, t("midifier.starting"), "info")

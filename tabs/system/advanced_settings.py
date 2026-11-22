@@ -1,3 +1,4 @@
+
 """
 tab_advancedsettings.py  ─  Advanced Settings
 
@@ -5,7 +6,9 @@ System information, FFmpeg management, app preferences, skins, and
 developer tools.  All settings I/O is delegated to core.settings -
 no duplicated load/save logic.
 """
+import contextlib
 import json
+import logging
 import os
 import platform
 import tkinter as tk
@@ -32,6 +35,8 @@ from core.skins import (
 )
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit.theme import set_star_count, set_star_speed
+
+logger = logging.getLogger("crossfader.system.advanced_settings")
 
 
 class AdvancedSettingsTab(BaseTab):
@@ -446,6 +451,7 @@ class AdvancedSettingsTab(BaseTab):
                 now = _net.describe()
                 system = sysproxy.system_config(refresh=True).describe()
             except Exception as exc:          # never let a lookup break the settings page
+                logger.debug("work: best-effort step failed", exc_info=True)
                 now, system = f"Couldn't check: {exc}", ""
             return now, system
 
@@ -964,17 +970,16 @@ class AdvancedSettingsTab(BaseTab):
                     from tkinter import colorchooser
                     current_hex = v.get()
                     try:
-                        rgb, hex_color = colorchooser.askcolor(
+                        _rgb, hex_color = colorchooser.askcolor(
                             color=current_hex, title=f"Choose color for {k}")
                     except Exception:
+                        logger.debug("_pick: best-effort step failed", exc_info=True)
                         return
                     if hex_color:
                         hex_color = hex_color.upper()
                         v.set(hex_color)
-                        try:
+                        with contextlib.suppress(tk.TclError):
                             sw.configure(bg=hex_color)
-                        except Exception:
-                            pass
                         save_custom_color(k, hex_color)
                         # Update live preview swatch
                         self._custom_status.config(
@@ -993,7 +998,7 @@ class AdvancedSettingsTab(BaseTab):
                             self._custom_status.config(
                                 text=t("advanced_settings.saved"), fg=CLR["green"])
                         except Exception:
-                            pass
+                            logger.debug("_sync_swatch: best-effort step failed", exc_info=True)
                 entry.bind("<FocusOut>", _sync_swatch)
                 entry.bind("<Return>",   _sync_swatch)
 
@@ -1022,7 +1027,7 @@ class AdvancedSettingsTab(BaseTab):
         try:
             self._custom_status.config(text=t("advanced_settings.reset_to_defaults_2"), fg=CLR["green"])
         except Exception:
-            pass
+            logger.debug("_reset_custom_defaults: best-effort step failed", exc_info=True)
 
     def _on_skin_select(self, name):
         """Save and apply the selected skin live, immediately."""
@@ -1047,7 +1052,7 @@ class AdvancedSettingsTab(BaseTab):
             else:
                 self._star_speed_frame.pack_forget()
         except Exception:
-            pass
+            logger.debug("_update_star_speed_visibility: best-effort step failed", exc_info=True)
 
     @staticmethod
     def _speed_label(mult: float) -> str:
@@ -1063,16 +1068,14 @@ class AdvancedSettingsTab(BaseTab):
         try:
             self._star_speed_lbl.config(text=self._speed_label(mult))
         except Exception:
-            pass
+            logger.debug("_on_star_speed_change: best-effort step failed", exc_info=True)
         settings.STAR_SPEED.set(float(mult))
 
     def _on_star_count_change(self, value):
         count = int(float(value))
         set_star_count(count)
-        try:
+        with contextlib.suppress(tk.TclError):
             self._star_count_lbl.config(text=f"{count} stars")
-        except Exception:
-            pass
         settings.STAR_COUNT.set(count)
         # restart the stars so the new density shows at once
         shell = self.shell()
@@ -1203,7 +1206,7 @@ class AdvancedSettingsTab(BaseTab):
                     h, m = divmod(secs // 60, 60)
                     lines.append(f"  Uptime:       {h}h {m}m")
             except Exception:
-                pass
+                logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
 
         # ── CPU ───────────────────────────────────────────────────────────
         sep("PROCESSOR (CPU)")
@@ -1230,6 +1233,7 @@ class AdvancedSettingsTab(BaseTab):
                         if line.strip().startswith(key):
                             lines.append(f"  {line.strip()}")
         except Exception as exc:
+            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             lines.append(f"  (CPU error: {exc})")
 
         # ── RAM ───────────────────────────────────────────────────────────
@@ -1253,7 +1257,7 @@ class AdvancedSettingsTab(BaseTab):
                         for stick in sticks.splitlines()[:4]:
                             lines.append(f"  Stick:        {stick.strip()}")
                 except Exception:
-                    pass
+                    logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             else:
                 r = _proc.run(["free", "-h"], timeout=30)
                 for line in r.stdout.splitlines():
@@ -1261,6 +1265,7 @@ class AdvancedSettingsTab(BaseTab):
                         p = line.split()
                         lines.append(f"  Total: {p[1]}  Used: {p[2]}  Free: {p[3]}")
         except Exception as exc:
+            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             lines.append(f"  (RAM error: {exc})")
 
         # ── Disk ──────────────────────────────────────────────────────────
@@ -1290,6 +1295,7 @@ class AdvancedSettingsTab(BaseTab):
                 for line in r.stdout.splitlines()[1:6]:
                     lines.append(f"  {line}")
         except Exception as exc:
+            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             lines.append(f"  (Disk error: {exc})")
 
         # ── GPU ───────────────────────────────────────────────────────────
@@ -1316,7 +1322,7 @@ class AdvancedSettingsTab(BaseTab):
                              "--format=csv,noheader,nounits"], timeout=30)
                         vram_mb = int(r.stdout.strip().splitlines()[0].strip())
                     except Exception:
-                        pass
+                        logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
 
                 if vram_mb is None:
                     try:
@@ -1328,7 +1334,7 @@ class AdvancedSettingsTab(BaseTab):
                         if reg_vram and reg_vram.strip():
                             vram_mb = int(reg_vram.strip()) // (1024 * 1024)
                     except Exception:
-                        pass
+                        logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
 
                 if vram_mb and vram_mb > 0:
                     if vram_mb >= 1024:
@@ -1336,6 +1342,7 @@ class AdvancedSettingsTab(BaseTab):
                     else:
                         lines.append(f"  VRAM:         {vram_mb} MB")
         except Exception as exc:
+            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             lines.append(f"  (GPU error: {exc})")
 
         # ── Network ───────────────────────────────────────────────────────
@@ -1354,6 +1361,7 @@ class AdvancedSettingsTab(BaseTab):
             else:
                 lines.append("  Proxy:        none set in the app (system settings apply)")
         except Exception as exc:
+            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             lines.append(f"  (Network settings unavailable: {exc})")
 
         # ── Python & App ──────────────────────────────────────────────────
@@ -1375,13 +1383,14 @@ class AdvancedSettingsTab(BaseTab):
         lines.append(f"  Version:      {local_v}")
         try:
             r = _proc.run([ffmpeg, "-codecs"], timeout=30)
-            hw = [l.strip() for l in r.stdout.split("\n")
-                  if any(x in l for x in
+            hw = [ln.strip() for ln in r.stdout.split("\n")
+                  if any(x in ln for x in
                          ["nvenc", "amf", "qsv", "videotoolbox"])]
             lines.append(f"  HW codecs:    {len(hw)} found")
             for h in hw[:8]:
                 lines.append(f"    {h[:70]}")
         except Exception:
+            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
             lines.append("  Could not query codecs.")
 
         sep()
@@ -1446,11 +1455,12 @@ class AdvancedSettingsTab(BaseTab):
             try:
                 parts = shlex.split(cmd_str)
             except Exception:
+                logger.debug("_work: best-effort step failed", exc_info=True)
                 parts = cmd_str.split()
             proc = _proc.spawn(parts, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True)
             for line in iter(proc.stdout.readline, ""):
-                self.after(0, lambda l=line: [
-                    self.dev_console.insert(tk.END, l),
+                self.after(0, lambda text=line: [
+                    self.dev_console.insert(tk.END, text),
                     self.dev_console.see(tk.END)])
             proc.stdout.close()
             proc.wait()
@@ -1482,9 +1492,7 @@ def _local_addresses() -> list:
     except _proc.ProcessError:
         pass
     if not out:
-        try:
+        with contextlib.suppress(OSError):
             out = sorted({a[4][0] for a in _socket.getaddrinfo(_socket.gethostname(), None)
                           if not a[4][0].startswith(("127.", "::1"))})
-        except OSError:
-            pass
     return out

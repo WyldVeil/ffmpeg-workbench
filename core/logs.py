@@ -21,6 +21,8 @@ import traceback
 
 from core.scaling import px
 
+logger = logging.getLogger("crossfader.logs")
+
 LOGGER_NAME = "crossfader"
 _configured = False
 _last_dialog = 0.0
@@ -61,6 +63,7 @@ def setup(debug: bool = False) -> logging.Logger:
     try:
         from core import APP_VERSION
     except Exception:
+        logger.debug("setup: best-effort step failed", exc_info=True)
         APP_VERSION = "?"
     logger.info("Started v%s on %s %s (Python %s)", APP_VERSION, platform.system(),
                 platform.release(), platform.python_version())
@@ -85,7 +88,9 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
     try:
         import tkinter as tk
         from tkinter import ttk
-        root = tk._default_root  # type: ignore[attr-defined]
+
+        from core import ui
+        root = ui.tk_default_root()
         if root is None:
             return
         win = tk.Toplevel(root)
@@ -112,7 +117,7 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
         ttk.Button(row, text="Open log folder", command=_open).pack(side="left", padx=px(6))
         ttk.Button(row, text="Close", command=win.destroy).pack(side="right")
     except Exception:
-        pass
+        logger.debug("_show_dialog: best-effort step failed", exc_info=True)
 
 
 def report(exc_type, exc, tb, *, where: str = "", dialog: bool = True) -> None:
@@ -125,7 +130,7 @@ def report(exc_type, exc, tb, *, where: str = "", dialog: bool = True) -> None:
             from core import ui
             ui.call_soon(_show_dialog, "Unexpected error", summary, details)
         except Exception:
-            pass
+            logger.debug("report: best-effort step failed", exc_info=True)
 
 
 def install_excepthooks(tk_root=None) -> None:

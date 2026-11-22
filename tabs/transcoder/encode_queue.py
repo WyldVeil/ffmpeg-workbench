@@ -7,6 +7,7 @@ this tab or any other tab in the app.
 Left panel  - queue treeview (all tasks, live-refreshed)
 Right panel - job settings editor for queueing new encode jobs from here
 """
+import contextlib
 import os
 import time
 import tkinter as tk
@@ -50,7 +51,7 @@ def progress_text(task) -> str:
         return "Failed - " + (task.error.splitlines()[0][:60] if task.error else "see the log")
     if task.fraction is None:
         return "Working…"
-    filled = int(round(task.fraction * 10))
+    filled = round(task.fraction * 10)
     text = "▰" * filled + "▱" * (10 - filled) + f"  {task.fraction * 100:.0f}%"
     if task.eta is not None and task.fraction < 1:
         text += f" · {_fmt_elapsed(task.eta)} left"
@@ -131,7 +132,7 @@ class Job:
                 raise ValueError(f"The extra arguments have an unclosed quote ({exc}).") from None
         if ext in ("mp4", "mov", "m4v"):
             cmd += ["-movflags", "+faststart"]
-        return cmd + [self.out]
+        return [*cmd, self.out]
 
 
 OK_VIDEO = {"libx264": ("mp4", "mkv", "mov", "m4v", "ts"), "libx265": ("mp4", "mkv", "mov", "m4v", "ts"),
@@ -150,6 +151,7 @@ DEFAULT_EXT = {"libvpx-vp9": ".webm", "libvpx": ".webm", "prores_ks": ".mov", "d
 class EncodeQueueTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
+        self.editor: dict[str, tk.StringVar] = {}           # the job editor's fields, by name
         self._editor_job: Job | None = None
         self._selected_task_id: str | None = None
         self._build_ui()
@@ -262,11 +264,10 @@ class EncodeQueueTab(BaseTab):
         sb.pack(side="right", fill="y")
 
         ef  = self.editor_frame
-        pad = {"padx": 10, "pady": 4}
 
         # Source / output
         self.ed_src_var = tk.StringVar()
-        f_src = tk.Frame(ef); f_src.pack(fill="x", **pad)
+        f_src = tk.Frame(ef); f_src.pack(fill="x", padx=px(10), pady=px(4))
         tk.Label(f_src, text=t("encode_queue.source_label"), width=14, anchor="e").pack(side="left")
         tk.Entry(f_src, textvariable=self.ed_src_var, width=32,
                  relief="flat").pack(side="left", padx=px(4))
@@ -274,7 +275,7 @@ class EncodeQueueTab(BaseTab):
                   command=self._ed_browse_src).pack(side="left")
 
         self.ed_out_var = tk.StringVar()
-        f_out = tk.Frame(ef); f_out.pack(fill="x", **pad)
+        f_out = tk.Frame(ef); f_out.pack(fill="x", padx=px(10), pady=px(4))
         tk.Label(f_out, text=t("encode_queue.output_label"), width=14, anchor="e").pack(side="left")
         tk.Entry(f_out, textvariable=self.ed_out_var, width=32,
                  relief="flat").pack(side="left", padx=px(4))
@@ -295,8 +296,8 @@ class EncodeQueueTab(BaseTab):
         ]
         for label, attr, choices, default in fields:
             var = tk.StringVar(value=default)
-            setattr(self, attr, var)
-            f = tk.Frame(ef); f.pack(fill="x", **pad)
+            self.editor[attr] = var
+            f = tk.Frame(ef); f.pack(fill="x", padx=px(10), pady=px(4))
             tk.Label(f, text=label, width=14, anchor="e").pack(side="left")
             if choices:
                 ttk.Combobox(f, textvariable=var, values=choices,
@@ -308,8 +309,8 @@ class EncodeQueueTab(BaseTab):
         for label, attr in [("Extra -vf:",   "ed_evf_var"),
                              ("Extra args:",  "ed_eargs_var")]:
             var = tk.StringVar()
-            setattr(self, attr, var)
-            f = tk.Frame(ef); f.pack(fill="x", **pad)
+            self.editor[attr] = var
+            f = tk.Frame(ef); f.pack(fill="x", padx=px(10), pady=px(4))
             tk.Label(f, text=label, width=14, anchor="e").pack(side="left")
             tk.Entry(f, textvariable=var, width=34,
                      relief="flat").pack(side="left", padx=px(4))
@@ -357,10 +358,8 @@ class EncodeQueueTab(BaseTab):
 
         # Re-select
         if sel_id:
-            try:
+            with contextlib.suppress(tk.TclError):
                 self.tree.selection_set(sel_id)
-            except Exception:
-                pass
 
         # Stats
         active, pending, done, failed = self._qmgr.get_stats()
@@ -426,7 +425,7 @@ class EncodeQueueTab(BaseTab):
         return True
 
     def _default_ext(self):
-        return DEFAULT_EXT.get(self.ed_vcodec_var.get(), ".mp4")
+        return DEFAULT_EXT.get(self.editor["ed_vcodec_var"].get(), ".mp4")
 
     def _add_to_queue(self):
         src = self.ed_src_var.get().strip()
@@ -467,15 +466,15 @@ class EncodeQueueTab(BaseTab):
 
     def _read_editor(self) -> Job:
         j = Job()
-        j.vcodec    = self.ed_vcodec_var.get()
-        j.crf       = self.ed_crf_var.get()
-        j.preset    = self.ed_preset_var.get()
-        j.resolution= self.ed_res_var.get()
-        j.fps       = self.ed_fps_var.get()
-        j.acodec    = self.ed_acodec_var.get()
-        j.abitrate  = self.ed_abitrate_var.get()
-        j.extra_vf  = self.ed_evf_var.get()
-        j.extra_args= self.ed_eargs_var.get()
+        j.vcodec    = self.editor["ed_vcodec_var"].get()
+        j.crf       = self.editor["ed_crf_var"].get()
+        j.preset    = self.editor["ed_preset_var"].get()
+        j.resolution= self.editor["ed_res_var"].get()
+        j.fps       = self.editor["ed_fps_var"].get()
+        j.acodec    = self.editor["ed_acodec_var"].get()
+        j.abitrate  = self.editor["ed_abitrate_var"].get()
+        j.extra_vf  = self.editor["ed_evf_var"].get()
+        j.extra_args= self.editor["ed_eargs_var"].get()
         return j
 
     def _on_task_progress(self, task_id, line):
@@ -483,7 +482,7 @@ class EncodeQueueTab(BaseTab):
             try:
                 self.console.insert(tk.END, line + "\n")
                 self.console.see(tk.END)
-            except Exception:
+            except tk.TclError:
                 pass
 
     def _on_task_complete(self, task_id, returncode, out_path):

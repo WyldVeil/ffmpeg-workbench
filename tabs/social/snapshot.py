@@ -45,7 +45,7 @@ LOOK = {"sharpen": 0.0, "denoise": 0, "brightness": 0.0, "contrast": 1.0, "satur
 def colour_matrix(info: ff.MediaInfo) -> str:
     """The matrix to turn this video's YUV into RGB (FFmpeg assumes BT.601 when
     the file doesn't say, which is wrong for HD)."""
-    v = info.video
+    v = info.require_video()
     cs = (v.color_space or "").lower() if v else ""
     if cs in ("bt709",):
         return "bt709"
@@ -84,12 +84,12 @@ def picture_size(v, square_pixels: bool = True, crop=None) -> tuple:
 
 def out_size(info: ff.MediaInfo, size: str = "own", square_pixels: bool = True, crop=None) -> tuple:
     """Width, height of the picture (even numbers)."""
-    v = info.video
+    v = info.require_video()
     if v is None:
         return 2, 2
     w, h = picture_size(v, square_pixels, crop)
     k = {"half": 0.5, "double": 2.0}.get(size, 1.0)
-    return max(2, int(round(w * k / 2)) * 2), max(2, int(round(h * k / 2)) * 2)
+    return max(2, round(w * k / 2) * 2), max(2, round(h * k / 2) * 2)
 
 
 def build_chain(info: ff.MediaInfo, *, accurate: bool = True, square_pixels: bool = True,
@@ -97,7 +97,7 @@ def build_chain(info: ff.MediaInfo, *, accurate: bool = True, square_pixels: boo
                 sharpen: float = 0.0, denoise: int = 0, brightness: float = 0.0, contrast: float = 1.0,
                 saturation: float = 1.0, deep: bool = False, gpu: bool = False) -> str:
     """The FFmpeg filter chain that turns the frame into the picture."""
-    v = info.video
+    v = info.require_video()
     steps = []
     if deinterlace and v and v.field_order not in ("", "progressive", "unknown"):
         steps.append("bwdif=mode=send_frame:parity=auto:deint=all")
@@ -129,7 +129,7 @@ def build_chain(info: ff.MediaInfo, *, accurate: bool = True, square_pixels: boo
 
 def frame_name(path: str, at: float) -> str:
     """``meadow 00-01-02.345.png`` - the video's name and the frame's time."""
-    ms = int(round(max(0.0, at) * 1000))
+    ms = round(max(0.0, at) * 1000)
     h, rest = divmod(ms, 3_600_000)
     m, rest = divmod(rest, 60_000)
     stem = os.path.splitext(os.path.basename(path))[0]
@@ -297,9 +297,8 @@ class SnapshotTab(BaseTab):
         self._info = info
         self._fps = framestep.fps_of(path)
         self._bars = None
-        v = info.video
-        assert v is not None                                    # has_video was checked above
-        frames = max(1, int(round(info.duration * self._fps)))
+        v = info.require_video()                              # has_video was checked above
+        frames = max(1, round(info.duration * self._fps))
         self.info_lbl.config(text=f"{info.summary()}  ·  {frames:,} frames", fg=CLR["fgdim"])
         self._checks["HDR to normal colours"].config(state="normal" if info.is_hdr else "disabled")
         interlaced = v.field_order not in ("", "progressive", "unknown")
@@ -332,7 +331,7 @@ class SnapshotTab(BaseTab):
 
     # ── Position ──────────────────────────────────────────────────────
     def _frame(self) -> int:
-        return int(round(float(self.pos_var.get()) * self._fps))
+        return round(float(self.pos_var.get()) * self._fps)
 
     def _seek(self, t_: float) -> float:
         """Where to seek for the frame starting at *t_*: half a frame early, so

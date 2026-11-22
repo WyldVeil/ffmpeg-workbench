@@ -23,26 +23,13 @@ from tkinter import messagebox, ttk
 from core import capabilities, hdr, tasks
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.hdr_args import subtitle_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 ASSUME = {"": "From the file", "pq": "Treat as HDR10 / PQ (tags were lost)", "hlg": "Treat as HLG (tags were lost)"}
-TEXT_SUBS = {"subrip", "ass", "ssa", "webvtt", "mov_text", "text"}
-
-
-def subtitle_args(info: ff.MediaInfo, container: str) -> list:
-    """Keep subtitles where the container can hold them (text ones converted for MP4/MOV/WebM)."""
-    subs = [s for s in info.streams if s.type == "subtitle"]
-    if not subs:
-        return []
-    if container == "mkv":
-        return ["-map", "0:s?", "-c:s", "copy"]
-    target = {"mp4": "mov_text", "mov": "mov_text", "m4v": "mov_text", "webm": "webvtt"}.get(container)
-    maps = [a for s in subs if s.codec in TEXT_SUBS for a in ("-map", f"0:{s.index}")] if target else []
-    return maps + (["-c:s", target] if maps else [])
-
 
 
 _NO_GPU = "(no Vulkan graphics driver found - GPU mode unavailable)"

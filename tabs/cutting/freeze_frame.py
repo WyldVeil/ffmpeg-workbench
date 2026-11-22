@@ -74,12 +74,10 @@ def freeze_graph(mode: str, at: float, hold: float, dur: float, *, has_audio: bo
     if audio_out:
         if mode == "only":
             audio_out = False
-        elif mode == "end":
-            parts.append(f"[0:a:0]asetpts=PTS-STARTPTS,apad=pad_dur={hold:.4f}[a]")
-        elif audio_mode == "continue":
+        elif mode == "end" or audio_mode == "continue":
             parts.append(f"[0:a:0]asetpts=PTS-STARTPTS,apad=pad_dur={hold:.4f}[a]")
         else:
-            ms = int(round(hold * 1000))
+            ms = round(hold * 1000)
             parts += ["[0:a:0]asetpts=PTS-STARTPTS,asplit[xa][xb]",
                       f"[xa]atrim=end={at:.4f},asetpts=PTS-STARTPTS[a0]",
                       f"[xb]atrim=start={at:.4f},asetpts=PTS-STARTPTS,adelay=delays={ms}:all=1[a1]",

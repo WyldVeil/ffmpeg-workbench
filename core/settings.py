@@ -28,12 +28,13 @@ import tempfile
 import threading
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Final, Generic, TypeVar
 
 from core.errors import InputError
 from core.paths import APP_ROOT, config_dir
 
-_log = logging.getLogger("crossfader.settings")
+logger = logging.getLogger("crossfader.settings")
 
 SETTINGS_FILE = os.path.join(config_dir(), "settings.json")
 
@@ -68,11 +69,11 @@ def _migrate_legacy() -> None:
             if name:
                 data["theme"] = name
     except (OSError, ValueError) as exc:
-        _log.warning("Could not read legacy settings: %s", exc)
+        logger.warning("Could not read legacy settings: %s", exc)
         return
     if data:
         _write(data)
-        _log.info("Migrated settings from %s", APP_ROOT)
+        logger.info("Migrated settings from %s", APP_ROOT)
 
 
 def _read_file() -> dict:
@@ -84,15 +85,25 @@ def _read_file() -> dict:
                 data = json.load(fh)
             if isinstance(data, dict):
                 if path.endswith(".bak"):
-                    _log.warning("settings.json unreadable - recovered from backup")
+                    logger.warning("settings.json unreadable - recovered from backup")
                 return data
         except (OSError, ValueError) as exc:
-            _log.warning("Ignoring unreadable %s: %s", path, exc)
+            logger.warning("Ignoring unreadable %s: %s", path, exc)
     return {}
+
+
+def _readable(path: str) -> bool:
+    """True when *path* holds a settings object (worth keeping as the backup)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return isinstance(json.load(fh), dict)
+    except (OSError, ValueError):
+        return False
 
 
 def _write(data: dict) -> bool:
     folder = os.path.dirname(SETTINGS_FILE)
+    tmp = ""
     try:
         os.makedirs(folder, exist_ok=True)
         fd, tmp = tempfile.mkstemp(prefix=".settings_", suffix=".json", dir=folder)
@@ -100,19 +111,16 @@ def _write(data: dict) -> bool:
             json.dump(data, fh, indent=2, ensure_ascii=False)
             fh.flush()
             os.fsync(fh.fileno())
-        if os.path.exists(SETTINGS_FILE):
-            try:
+        if _readable(SETTINGS_FILE):                          # never let a broken file replace a good backup
+            with contextlib.suppress(OSError):
                 shutil.copy2(SETTINGS_FILE, SETTINGS_FILE + ".bak")
-            except OSError:
-                pass
         os.replace(tmp, SETTINGS_FILE)
         return True
     except OSError as exc:
-        _log.error("Could not save settings to %s: %s", SETTINGS_FILE, exc)
-        try:
-            os.remove(tmp)  # type: ignore[possibly-undefined]
-        except Exception:
-            pass
+        logger.error("Could not save settings to %s: %s", SETTINGS_FILE, exc)
+        if tmp:
+            with contextlib.suppress(OSError):
+                os.remove(tmp)
         return False
 
 
@@ -223,7 +231,7 @@ def defaults() -> dict:
 # A typo in a key is an AttributeError at import, not a silent default, and
 # tests/test_settings_keys.py fails if code reads a key nobody declared.
 
-T = TypeVar("T", bool, int, float, str, list)
+T = TypeVar("T")
 
 _TRUE: Final = frozenset({"1", "true", "yes", "on"})
 _FALSE: Final = frozenset({"0", "false", "no", "off", ""})
@@ -252,8 +260,14 @@ class Setting(Generic[T]):
     def coerce(self, raw: object) -> T:
         """*raw* as this setting's type; raises ValueError when it can't be."""
         d: object = self.default
-        if isinstance(d, bool):
-            value: object = _as_bool(raw)
+        value: object
+        if isinstance(d, StrEnum):                        # before str: a StrEnum is a str
+            try:
+                value = type(d)(str(raw))
+            except ValueError:
+                raise ValueError(f"{self.key}: {raw!r} is not one of {[m.value for m in type(d)]}") from None
+        elif isinstance(d, bool):
+            value = _as_bool(raw)
         elif isinstance(d, (int, float)):
             try:
                 if isinstance(raw, bool):
@@ -282,7 +296,7 @@ class Setting(Generic[T]):
         except (TypeError, ValueError) as exc:
             if self.key not in _complained:
                 _complained[self.key] = None
-                _log.warning("settings.json: %s - using the default %r", exc, self.default)
+                logger.warning("settings.json: %s - using the default %r", exc, self.default)
             return self.coerce(self.default)
 
     def get(self) -> T:
@@ -325,7 +339,14 @@ LANGUAGE: Final = Setting("language", "")
 FAVOURITE_TABS: Final = Setting[list]("favourite_tabs", [])
 RECENT_FILES: Final = Setting[list]("recent_files", [])
 RECENT_TOOLS: Final = Setting[list]("recent_tools", [])
-START_PAGE: Final = Setting("start_page", "start", ("start", "home", "last"))
+class StartPage(StrEnum):
+    """What the app opens on."""
+    START = "start"           # "What do you want to do?"
+    HOME = "home"             # every tool
+    LAST = "last"             # the tool used last
+
+
+START_PAGE: Final = Setting("start_page", StartPage.START)
 
 # network (core/network.py explains each)
 NETWORK: Final[tuple[Setting[Any], ...]] = (

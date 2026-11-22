@@ -29,7 +29,7 @@ from collections.abc import Callable
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from typing import Literal, TypeVar
 
-_log = logging.getLogger("crossfader.tasks")
+logger = logging.getLogger("crossfader.tasks")
 
 T = TypeVar("T")
 Pool = Literal["background", "preview"]
@@ -73,10 +73,10 @@ def _deliver(future: Future[T], name: str, on_done: Callable[[T], object] | None
     if on_error is not None:
         from core.errors import AppError
         if not isinstance(exc, AppError):          # a bug: keep the traceback in the log
-            _log.error("background task %s failed", name, exc_info=exc)
+            logger.error("background task %s failed", name, exc_info=exc)
         _post(on_error, exc)
     else:
-        _log.error("background task %s failed", name, exc_info=exc)
+        logger.error("background task %s failed", name, exc_info=exc)
 
 
 def submit(fn: Callable[[], T], *, on_done: Callable[[T], object] | None = None,
@@ -96,7 +96,7 @@ def start_service(target: Callable[[], object], *, name: str) -> Service:
         try:
             target()
         except Exception:                                  # a crashed service is a bug: log it
-            _log.exception("service thread %s crashed", name)
+            logger.exception("service thread %s crashed", name)
 
     thread = threading.Thread(target=_run, name=name, daemon=True)
     thread.start()

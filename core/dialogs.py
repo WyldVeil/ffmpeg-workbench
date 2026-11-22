@@ -88,6 +88,12 @@ def _last_dir(kind: str) -> str:
     return os.path.expanduser("~")
 
 
+def _start_dir(kw: dict, kind: str) -> str:
+    """The folder a dialog opens in: the one asked for, else the last one used."""
+    asked = kw.get("initialdir")
+    return asked if isinstance(asked, str) and os.path.isdir(asked) else _last_dir(kind)
+
+
 def _remember(kind: str, path: str) -> None:
     if not path:
         return
@@ -117,7 +123,9 @@ def _native_tool() -> str | None:
 def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
     """Run *cmd* in a thread while the Tk event loop keeps running."""
     import tkinter as tk
-    root = parent or tk._default_root  # type: ignore[attr-defined]
+
+    from core import ui
+    root = parent or ui.tk_default_root()
     result: dict = {}
     finished = threading.Event()
 
@@ -365,7 +373,7 @@ def askopenfilename(**kw) -> str:
     filetypes = _normalise_filetypes(kw.pop("filetypes", None))
     kind = _kind_from_filetypes(filetypes)
     title = kw.get("title") or "Open"
-    start = kw.get("initialdir") if kw.get("initialdir") and os.path.isdir(kw["initialdir"]) else _last_dir(kind)
+    start = _start_dir(kw, kind)
     tool = _native_tool()
     if tool:
         if tool == "kdialog":
@@ -390,7 +398,7 @@ def askopenfilenames(**kw) -> tuple:
     filetypes = _normalise_filetypes(kw.pop("filetypes", None))
     kind = _kind_from_filetypes(filetypes)
     title = kw.get("title") or "Open"
-    start = kw.get("initialdir") if kw.get("initialdir") and os.path.isdir(kw["initialdir"]) else _last_dir(kind)
+    start = _start_dir(kw, kind)
     tool = _native_tool()
     if tool:
         if tool == "kdialog":
@@ -419,7 +427,7 @@ def asksaveasfilename(**kw) -> str:
     title = kw.get("title") or "Save as"
     defext = kw.get("defaultextension") or ""
     initialfile = kw.get("initialfile") or ""
-    start = kw.get("initialdir") if kw.get("initialdir") and os.path.isdir(kw["initialdir"]) else _last_dir(kind)
+    start = _start_dir(kw, kind)
     if initialfile and os.path.isabs(initialfile):
         start, initialfile = os.path.dirname(initialfile), os.path.basename(initialfile)
     tool = _native_tool()
@@ -452,7 +460,7 @@ def asksaveasfilename(**kw) -> str:
 
 def askdirectory(**kw) -> str:
     title = kw.get("title") or "Choose folder"
-    start = kw.get("initialdir") if kw.get("initialdir") and os.path.isdir(kw["initialdir"]) else _last_dir("folder")
+    start = _start_dir(kw, "folder")
     tool = _native_tool()
     if tool:
         res = _native_dir(tool, title, start, kw.get("parent"))

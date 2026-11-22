@@ -34,7 +34,7 @@ class Timecode:
     ms: int
 
     def __post_init__(self) -> None:
-        if not isinstance(self.ms, int) or isinstance(self.ms, bool):
+        if not isinstance(self.ms, int) or isinstance(self.ms, bool):  # pyright: ignore[reportUnnecessaryIsInstance] - checked at run time too
             raise TypeError(f"Timecode needs whole milliseconds, not {self.ms!r}")
         if self.ms < 0:
             raise ValueError(f"a timecode can't be negative: {self.ms} ms")
@@ -81,14 +81,14 @@ class Timecode:
     def __bool__(self) -> bool:
         return self.ms != 0
 
-    def __add__(self, other: Timecode | float) -> Timecode:
+    def __add__(self, other: object) -> Timecode:
         if isinstance(other, Timecode):
             return Timecode(self.ms + other.ms)
         if isinstance(other, (int, float)):
             return Timecode.of(self.seconds + other)
         return NotImplemented
 
-    def __sub__(self, other: Timecode | float) -> Timecode:
+    def __sub__(self, other: object) -> Timecode:
         """Clamped at zero: a timeline has no negative times."""
         if isinstance(other, Timecode):
             return Timecode(max(0, self.ms - other.ms))

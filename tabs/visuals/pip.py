@@ -51,7 +51,7 @@ class PipSpec:
         bw, _bh = self.bg_size
         fw, fh = self.fg_size
         w = max(16, int(bw * self.pct / 100) // 2 * 2)
-        h = max(16, int(round(w * fh / max(1, fw) / 2)) * 2)
+        h = max(16, round(w * fh / max(1, fw) / 2) * 2)
         return w, h
 
     def target_xy(self) -> tuple:

@@ -13,6 +13,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -98,7 +99,7 @@ class VoiceChangerTab(BaseTab):
 
     def chain(self, info) -> str:
         key = next((k for k, v in PRESETS.items() if v[0] == self.preset_var.get()), "chipmunk")
-        sr = info.audio.sample_rate if info is not None and info.audio else 48000
+        sr = info.require_audio().sample_rate if info is not None and info.audio else 48000
         return voice_filter(key, float(self.semi_var.get()), sr, self.formant_var.get(),
                             ff.has_filter("rubberband"))
 
@@ -120,7 +121,7 @@ class VoiceChangerTab(BaseTab):
         if not out:
             return
         af = self.chain(info)
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *common.audio_job_args(out, info), out]
+        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]
         self.log(self.console, f"Effect: {self.preset_var.get()}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label=t("voice_changer.apply_button"), duration=info.duration or None,

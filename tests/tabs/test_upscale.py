@@ -87,7 +87,7 @@ def test_shader_upscale_keeps_colours_and_tags(ui, small, media, outdir, key):
     ui.wait_idle(240)
     assert not ui.dialogs.errors() and not ui.dialogs.warnings(), (ui.dialogs.errors(), ui.dialogs.warnings())
     info = ff.probe(out, use_cache=False)
-    assert (info.video.width, info.video.height) == (1280, 720) and info.has_audio
+    assert (info.require_video().width, info.require_video().height) == (1280, 720) and info.has_audio
     want, got = _flat_yuv(media["h264"]), _flat_yuv(out)
     for k in want:                                     # a flat, very saturated colour comes through unchanged
         assert abs(got[k] - want[k]) <= 2.5, (key, want, got)

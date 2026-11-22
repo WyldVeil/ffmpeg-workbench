@@ -81,7 +81,7 @@ def test_software_encoders_really_encode(codec, container, quality, outdir, monk
         pytest.skip(f"{v.encoder} not in this ffmpeg")
     info = _encode_ok(v, outdir, f"{codec}_{quality}", container)
     if codec == "hevc" and container == "mp4":
-        assert info.video.raw.get("codec_tag_string") == "hvc1"
+        assert info.require_video().raw.get("codec_tag_string") == "hvc1"
 
 
 @pytest.mark.ffmpeg
@@ -91,7 +91,7 @@ def test_ten_bit_software(codec, outdir):
     if v.encoder not in enc.list_encoders():
         pytest.skip("encoder missing")
     info = _encode_ok(v, outdir, f"{codec}_10", "mkv")
-    assert info.video.bit_depth == 10
+    assert info.require_video().bit_depth == 10
 
 
 @pytest.mark.ffmpeg

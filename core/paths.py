@@ -27,6 +27,7 @@ Environment overrides (used by the test-suite):
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -62,10 +63,8 @@ def _portable_root() -> str | None:
 
 
 def _ensure(path: str) -> str:
-    try:
+    with contextlib.suppress(OSError):
         os.makedirs(path, exist_ok=True)
-    except OSError:
-        pass
     return path
 
 

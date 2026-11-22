@@ -12,6 +12,7 @@ tabs/visuals/speed_ramp.py  -  Speed Ramper
 """
 from __future__ import annotations
 
+import itertools
 import math
 import os
 import tkinter as tk
@@ -20,6 +21,8 @@ from tkinter import messagebox, ttk
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import frame_rate
+from core.ops.speed_ramp import atempo_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -68,7 +71,7 @@ def normalise_points(points, duration):
 
 
 def speed_at(points, at):
-    for (t0, v0), (t1, v1) in zip(points, points[1:]):
+    for (t0, v0), (t1, v1) in itertools.pairwise(points):
         if t0 <= at <= t1:
             return v0 if t1 - t0 < 1e-9 else v0 + (v1 - v0) * (at - t0) / (t1 - t0)
     return points[-1][1]
@@ -77,7 +80,7 @@ def speed_at(points, at):
 def segments(points):
     """[(t0, t1, v0, v1, out_start, out_len)] for consecutive points."""
     out, acc = [], 0.0
-    for (t0, v0), (t1, v1) in zip(points, points[1:]):
+    for (t0, v0), (t1, v1) in itertools.pairwise(points):
         if t1 - t0 < 1e-9:
             continue
         if abs(v1 - v0) < 1e-9:
@@ -153,21 +156,6 @@ def ramp_audio_chain(points, engine: str = "rubberband") -> str:
 
 def tempo_engine() -> str:
     return "rubberband" if ff.has_filter("rubberband") else "atempo"
-
-
-def atempo_chain(speed: float, engine: str = "atempo") -> str:
-    """Pitch-preserving constant tempo for any speed."""
-    if engine == "rubberband" and 0.01 <= speed <= 100:
-        return f"rubberband=tempo={speed:.6f}"
-    parts, rem = [], speed
-    while rem < 0.5:
-        parts.append("atempo=0.5")
-        rem /= 0.5
-    while rem > 100.0:
-        parts.append("atempo=100")
-        rem /= 100.0
-    parts.append(f"atempo={rem:.6f}")
-    return ",".join(parts)
 
 
 def frame_filter(mode: str, fps: str) -> str:
@@ -425,7 +413,7 @@ class SpeedRamperTab(BaseTab):
         if info is None:
             return
         dur = info.duration
-        fps = common.frame_rate(info)
+        fps = frame_rate(info)
         slowmo = next((k for k, v in SLOWMO.items() if v == self.slowmo_var.get()), "dup")
         audio_mode = next((k for k, v in AUDIO.items() if v == self.audio_var.get()), "tempo")
         speed = 1.0
@@ -448,7 +436,7 @@ class SpeedRamperTab(BaseTab):
         container = common.container_of(out)
         frames = frame_filter(slowmo, fps)
         has_audio = info.has_audio and audio_mode != "mute"
-        sr = int(info.audio.sample_rate or 48000) if info.has_audio else 48000
+        sr = int(info.require_audio().sample_rate or 48000) if info.has_audio else 48000
 
         if points is None:
             graph = f"[0:v]setpts=(PTS-STARTPTS)/{speed:.6f},{frames}[v]"

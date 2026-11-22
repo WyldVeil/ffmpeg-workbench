@@ -20,6 +20,13 @@
   <url type="bugtracker">https://github.com/WyldVeil/wyldveils-media-editor/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.5" date="2026-11-22">
+      <description>
+        <p>Smoother and sturdier: pages never freeze while the app checks what FFmpeg can do, every program
+          the app starts can be stopped and is stopped on exit, and several fixes - Special Effects renders,
+          HDR to SDR with a quick Render, the settings backup, TTS playback on Linux.</p>
+      </description>
+    </release>
     <release version="1.2.4" date="2026-11-22">
       <description>
         <p>Snapshot: save any frame as a full-size, high-quality PNG. The , and . keys step one frame in every

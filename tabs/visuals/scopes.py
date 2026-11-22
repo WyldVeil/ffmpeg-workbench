@@ -50,7 +50,7 @@ LAYOUTS = {
 
 
 def _even(x: float) -> int:
-    return max(2, int(round(x / 2)) * 2)
+    return max(2, round(x / 2) * 2)
 
 
 def scope_box(key: str, width: int, height: int, *, fit: str = "height") -> tuple[int, int]:

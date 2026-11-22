@@ -627,7 +627,7 @@ def fetch_sources(lock: dict, dest: str) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--platform", choices=PLATFORMS + ("all",), default="all")
+    ap.add_argument("--platform", choices=(*PLATFORMS, "all"), default="all")
     ap.add_argument("--refresh", action="store_true", help="resolve the latest versions into the lock file")
     ap.add_argument("--dest", default=os.path.join(ROOT, "bin"))
     ap.add_argument("--cache", default=os.path.join(ROOT, ".cache", "downloads"))

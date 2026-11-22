@@ -122,11 +122,11 @@ def test_batch_operations(ui, media, tmp_path, op):
     assert len(made) == 2 and len(set(made)) == 2, made           # same names never overwrite
     first = ff.probe(str(out / made[0]), use_cache=False)
     if op == "strip_meta":
-        assert "title" not in first.tags and first.audio.tags.get("language") == "eng"
+        assert "title" not in first.tags and first.require_audio().tags.get("language") == "eng"
     if op == "resize":
-        assert first.video.height == 720
+        assert first.require_video().height == 720
     if op == "to_mp4":
-        assert first.video.codec == "h264" and made[0].endswith(".mp4")
+        assert first.require_video().codec == "h264" and made[0].endswith(".mp4")
 
 
 @pytest.mark.gui

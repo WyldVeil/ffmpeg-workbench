@@ -6,6 +6,7 @@ import shutil
 import pytest
 
 from core import ffmpeg as ff
+from core.ops import lut as lut_ops
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
 
 # ── pure helpers ─────────────────────────────────────────────────────────────
@@ -33,10 +34,10 @@ def test_speed_curve_maths():
 def test_lut_kinds(tmp_path, media):
     one_d = tmp_path / "c.cube"
     one_d.write_text("LUT_1D_SIZE 2\n0 0 0\n1 1 1\n")
-    assert lut.lut_kind(str(one_d)) == "1d"
-    assert lut.lut_kind(media["cube"]) == "3d"
-    assert lut.lut_kind(str(tmp_path / "h.png")) == "hald"
-    assert "blend=all_mode=normal:all_opacity=0.500" in lut.build_chain(media["cube"], intensity=0.5)
+    assert lut_ops.lut_kind(str(one_d)) == "1d"
+    assert lut_ops.lut_kind(media["cube"]) == "3d"
+    assert lut_ops.lut_kind(str(tmp_path / "h.png")) == "hald"
+    assert "blend=all_mode=normal:all_opacity=0.500" in lut_ops.build_chain(media["cube"], intensity=0.5)
 
 
 def test_scope_layout_sizes():
@@ -238,8 +239,8 @@ def test_speed(ui, media, outdir, mode):
     ui.wait_idle(240)
     _no_errors(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.video.duration == pytest.approx(expected, abs=0.12)
-    assert info.audio.duration == pytest.approx(expected, abs=0.15)
+    assert info.require_video().duration == pytest.approx(expected, abs=0.12)
+    assert info.require_audio().duration == pytest.approx(expected, abs=0.15)
 
 
 @pytest.mark.gui

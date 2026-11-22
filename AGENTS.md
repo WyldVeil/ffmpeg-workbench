@@ -12,7 +12,7 @@ can be done, use this file.
 
 | What the person has | Command (called `wme` below) |
 |---|---|
-| The source code (this folder) | `python main.py --cli ...` (Python 3.10+) |
+| The source code (this folder) | `python main.py --cli ...` (Python 3.11+) |
 | Portable folder (Linux) | `<folder>/wyldveils-media-editor --cli ...` |
 | Portable folder (Windows) | `<folder>\wme-cli.bat ...` (the `--cli` is optional) |
 | Linux package (Debian, Ubuntu, Arch, Fedora) | `wyldveils-media-editor --cli ...` |
@@ -145,15 +145,20 @@ files you created. Never delete the person's own files.
 
 ## 6. Changing the app (for developers)
 
-- `main.py` holds the window shell. Its first lines hand `--cli` straight to
-  `core/cli.py`, before any window code loads.
-- `core/` is the engine: `ffmpeg.py` (probing, running, progress), `encoders.py`
-  (choosing a CPU or GPU encoder), `filters.py`, `grid.py` (collage layouts),
-  `metaclean.py`, `network.py` (proxies and certificates), `whisper.py`, `tts.py`.
-- `tabs/<category>/<tool>.py` has one tool per file. Plain functions at the top
-  of each module build the FFmpeg commands. Both the window and `core/cli.py`
-  use them, so a fix in one place fixes both.
-- `tabs/registry.py` lists the sidebar's tools. Visible text lives in
+- Start with `ARCHITECTURE.md` (the map and the reasons) and `CONVENTIONS.md`
+  (the house rules; most are enforced by tests).
+- `main.py` only decides: `--cli` goes to `core/cli.py` before any window code
+  loads; anything else opens the window from `shell/`.
+- `core/` is the engine and never imports Tk: `proc.py` (the only place
+  programs start), `tasks.py` (the only place threads start), `errors.py`,
+  `settings.py` (every setting declared with its type), `tools.py` (every
+  tool's id), `ffmpeg.py` (probing, running, progress), `encoders.py`,
+  `filters.py`, `network.py`, `whisper.py`, `tts.py`...
+- `core/ops/<tool>.py` builds the FFmpeg commands as pure functions. Both the
+  window and `core/cli.py` use them, so a fix in one place fixes both.
+- `tabs/<category>/<tool>.py` has one tool page per file; `tabs/registry.py`
+  says which class builds each tool. The window talks to pages only through
+  the protocols in `tabs/kit/contracts.py`. Visible text lives in
   `locale/*.json`.
 - **Sizes scale with the screen.** The UI is designed at 96 DPI. Fonts are in
   points and grow on their own; every size in pixels goes through
@@ -164,11 +169,12 @@ files you created. Never delete the person's own files.
   in one go with `scale_drawing(canvas)`. `tests/test_scaling.py` starts
   the app at 200 %.
 - **To add an operation:** write a function in `core/cli.py` with `@operation`
-  and `@options`, reusing the tool module's functions. Add a test to
+  and `@options`, reusing the builders in `core/ops/`. Add a test to
   `tests/test_cli.py` and a row to the table above. A test fails if any
   operation is missing from this file.
 - **Tests:** `python -m pytest -q`. They need FFmpeg, either on PATH or in `bin/`.
-  GUI tests drive the window without showing it. Lint with `ruff check`.
+  GUI tests drive the window without showing it. Lint with `ruff check`; types
+  with `python scripts/check_types.py` (pyright; it may not get worse).
 - **Bundled programs** are pinned with SHA-256 checksums in `binaries.lock.json`
   and fetched by `scripts/fetch_binaries.py`. Their licences are in
   `THIRD_PARTY_NOTICES.md`.

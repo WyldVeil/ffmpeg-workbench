@@ -17,7 +17,7 @@ def test_open_paths_routes_to_tool_or_inspector(ui, media):
     assert app.current_page is ToolId.MEDIA_INSPECTOR
     insp = app.page(ToolId.MEDIA_INSPECTOR)
     ui.wait_for(lambda: insp.info is not None)
-    assert insp.info is not None and insp.info.video.codec == "hevc"
+    assert insp.info is not None and insp.info.require_video().codec == "hevc"
     app.show_page("Quick Trimmer")
     assert app.open_paths([media["h264"]])
     assert app.current_page is ToolId.QUICK_TRIMMER
@@ -34,7 +34,7 @@ def test_drop_event_with_spaces_and_uri(ui, media):
     for r in tab.clip_rows:
         r["var"].set("")
         r["clip"] = None
-    data = "{%s} file://%s" % (media["nasty"], media["h264_b"])
+    data = "{{{}}} file://{}".format(media["nasty"], media["h264_b"])
     app.files._dropped(types.SimpleNamespace(data=data, action="copy"))
     ui.pump(0.3)
     paths = [r["var"].get() for r in tab.clip_rows if r["var"].get()]

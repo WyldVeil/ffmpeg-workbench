@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import os
 import re
 import shutil
@@ -43,6 +44,8 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from core import proc as _proc
+
+logger = logging.getLogger("crossfader.sysproxy")
 
 DIRECT = "direct://"
 IS_WIN = sys.platform == "win32"
@@ -68,11 +71,11 @@ class SystemProxy:
             return f"Automatic configuration script: {what}  ({self.source})"
         if self.mode == "resolver":
             return f"Decided per address by the desktop ({self.source})"
-        shown = ", ".join(f"{k}: {_hide_auth(v)}" for k, v in self.proxies.items())
+        shown = ", ".join(f"{k}: {hide_auth(v)}" for k, v in self.proxies.items())
         return f"{shown}  ({self.source})"
 
 
-def _hide_auth(url: str) -> str:
+def hide_auth(url: str) -> str:
     return re.sub(r"//[^/@]+@", "//•••@", url)
 
 
@@ -331,8 +334,10 @@ def choose(sp: SystemProxy, url: str) -> list:
 # ── Discovery per platform ────────────────────────────────────────────────────
 
 def _windows() -> SystemProxy:
-    import winreg
     sp = SystemProxy(source="Windows Internet settings")
+    if sys.platform != "win32":                  # (tells the type checker winreg exists below)
+        return sp
+    import winreg
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                              r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
@@ -521,6 +526,7 @@ def _deno() -> str | None:
         from core.hardware import find_binary
         return find_binary("deno")
     except Exception:
+        logger.debug("_deno: best-effort step failed", exc_info=True)
         return shutil.which("deno")
 
 
@@ -535,7 +541,7 @@ def _my_ip() -> str:
 
 def _resolve(host: str) -> str | None:
     try:
-        return socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
+        return str(socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0])
     except (OSError, IndexError, UnicodeError):
         return None
 

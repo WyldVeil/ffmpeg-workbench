@@ -10,7 +10,7 @@ from tabs.audio import extractor, muter, silence, sync
 def test_pure_helpers():
     zones = silence.keep_zones([(1.0, 2.0), (5.0, 9.0)], 10.0, 0.1, fps=25)
     expected = [(0.0, 1.1), (1.9, 5.1), (8.9, 10.0)]          # padding 0.1, snapped to 1/25 s
-    assert all(abs(a - x) <= 0.04 and abs(b - y) <= 0.04 for (a, b), (x, y) in zip(zones, expected))
+    assert all(abs(a - x) <= 0.04 and abs(b - y) <= 0.04 for (a, b), (x, y) in zip(zones, expected, strict=False))
     assert all(round(v * 25, 6) == round(v * 25) for z in zones for v in z)
     g = silence.cut_graph(zones, True, True)
     assert "split=3" in g and "concat=n=3:v=1:a=1[v][a]" in g
@@ -87,7 +87,7 @@ def test_extractor(ui, media, outdir, fmt):
     _ok(ui)
     info = ff.probe(out, use_cache=False)
     assert info.has_audio and not info.has_video
-    assert info.audio.codec == {"copy": "opus", "mp3": "mp3", "flac": "flac"}[fmt]
+    assert info.require_audio().codec == {"copy": "opus", "mp3": "mp3", "flac": "flac"}[fmt]
 
 
 @pytest.mark.gui
@@ -122,8 +122,8 @@ def test_replacer_keeps_video_length(ui, media, outdir):
     ui.wait_idle(120)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    assert info.video.duration == pytest.approx(ff.duration_of(media["h264"]), abs=0.1)
-    assert info.audio.duration == pytest.approx(info.video.duration, abs=0.15)
+    assert info.require_video().duration == pytest.approx(ff.duration_of(media["h264"]), abs=0.1)
+    assert info.require_audio().duration == pytest.approx(info.require_video().duration, abs=0.15)
 
 
 @pytest.mark.gui

@@ -15,7 +15,7 @@ import sys
 from core import proc as _proc
 from core import settings
 
-_log = logging.getLogger("crossfader.notify")
+logger = logging.getLogger("crossfader.notify")
 
 
 def _enabled() -> bool:
@@ -25,17 +25,15 @@ def _enabled() -> bool:
 
 
 def _root():
-    try:
-        import tkinter
-        return tkinter._default_root  # type: ignore[attr-defined]
-    except Exception:
-        return None
+    from core import ui
+    return ui.tk_default_root()
 
 
 def _window_focused(root) -> bool:
     try:
         return root is not None and root.focus_displayof() is not None
     except Exception:
+        logger.debug("_window_focused: best-effort step failed", exc_info=True)
         return True
 
 
@@ -66,7 +64,7 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
                 info = FLASHWINFO(ctypes.sizeof(FLASHWINFO), hwnd, 0x3 | 0xC, 3, 0)
                 ctypes.windll.user32.FlashWindowEx(ctypes.byref(info))  # type: ignore[attr-defined]
     except Exception as exc:
-        _log.debug("notification failed: %s", exc)
+        logger.debug("notification failed: %s", exc, exc_info=True)
 
 
 def job_finished(task) -> None:
@@ -88,4 +86,4 @@ def job_finished(task) -> None:
         from core import ui
         ui.call_soon(_go)
     except Exception:
-        pass
+        logger.debug("job_finished: best-effort step failed", exc_info=True)

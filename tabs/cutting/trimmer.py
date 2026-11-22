@@ -1,9 +1,11 @@
+
 """
 tab_trimmer.py  ─  Quick Trimmer
 Precise clip trimmer with a visual dual-handle canvas timeline,
 inline ffplay preview, and lossless or re-encoded export.
 """
-
+import contextlib
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox
@@ -22,6 +24,8 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
+
+logger = logging.getLogger("crossfader.cutting.trimmer")
 
 
 def fmt_time(seconds):
@@ -46,6 +50,7 @@ def keyframe_at_or_before(path, at, lookback=30.0):
                         "-show_entries", "frame=pts_time,best_effort_timestamp_time",
                         "-of", "csv=p=0", path], timeout=30)
     except Exception:
+        logger.debug("keyframe_at_or_before: best-effort step failed", exc_info=True)
         return None
     best = None
     for line in r.stdout.splitlines():
@@ -245,7 +250,7 @@ class TrimmerTab(BaseTab):
             return False
         self.file_path = p
         self._src_var.set(p)
-        self.duration = info.video.duration if info.video and info.video.duration else info.duration
+        self.duration = info.require_video().duration if info.video and info.require_video().duration else info.duration
         self._out_var.set(self._default_out(p))
         self._start_var.set(fmt_time(0))
         self._end_var.set(fmt_time(self.duration))
@@ -364,6 +369,7 @@ class TrimmerTab(BaseTab):
             c.create_text((xs+xe)//2, px(14), text=f"Clip Length: {fmt_time(sel)}",
                           fill="white", font=(UI_FONT, 9, "bold"))
         except Exception as e:
+            logger.debug("_draw: best-effort step failed", exc_info=True)
             self.log_debug(f"Canvas draw error: {e}")
 
     def _on_press(self, ev):
@@ -422,14 +428,12 @@ class TrimmerTab(BaseTab):
             sel = max(0.0, e_sec - s_sec)
             self._dur_lbl.config(text=f"Clip Length: {fmt_time(sel)}")
         except Exception:
-            pass
+            logger.debug("_update_dur: best-effort step failed", exc_info=True)
 
     def _on_scrub(self, val):
         self._show_frame(float(val))
-        try:
+        with contextlib.suppress(ValueError, tk.TclError):
             self._scrub_lbl.config(text=fmt_time(float(val)))
-        except (ValueError, tk.TclError):
-            pass
         self._draw()
 
     def _toggle_enc(self):
@@ -445,7 +449,8 @@ class TrimmerTab(BaseTab):
             return
         if self.preview_proc:
             try: self.preview_proc.terminate()
-            except Exception: pass
+            except Exception:
+                logger.debug("_preview_at_scrub: best-effort step failed", exc_info=True)
         self.preview_proc = launch_preview(self.file_path, start_time=self._scrub.get())
 
     def _preview_selection(self):
@@ -454,7 +459,8 @@ class TrimmerTab(BaseTab):
             return
         if self.preview_proc:
             try: self.preview_proc.terminate()
-            except Exception: pass
+            except Exception:
+                logger.debug("_preview_selection: best-effort step failed", exc_info=True)
 
         ss = self._tv(self._start_var, 0.0)
         ee = self._tv(self._end_var, self.duration)
@@ -476,7 +482,7 @@ class TrimmerTab(BaseTab):
             self.focus_set()
             self._apply_typed_times()
         except Exception:
-            pass
+            logger.debug("_run_trim: best-effort step failed", exc_info=True)
         try:
             ss = parse_time(self._start_var.get())
             end = parse_time(self._end_var.get())
@@ -492,10 +498,8 @@ class TrimmerTab(BaseTab):
         if not out:
             return
         self._out_var.set(out)
-        try:
+        with contextlib.suppress(tk.TclError):
             self.console.delete("1.0", tk.END)
-        except tk.TclError:
-            pass
 
         ffmpeg = ff.ffmpeg_path()
         container = os.path.splitext(out)[1].lstrip(".").lower()

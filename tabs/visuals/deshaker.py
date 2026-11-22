@@ -13,6 +13,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -166,7 +167,7 @@ class DeshakerTab(BaseTab):
         vlabel = "[venc]" if venc.filter_suffix else "[v]"
         duration = info.duration or None
         encode = [ff.ffmpeg_path(), "-y", *venc.pre_input, "-i", src, "-filter_complex", graph,
-                  "-map", vlabel, *common.keep_audio_args(info, container), *venc.args]
+                  "-map", vlabel, *keep_audio_args(info, container), *venc.args]
 
         def work(_progress, _cancelled, ctx):
             workdir = ctx.tempdir()

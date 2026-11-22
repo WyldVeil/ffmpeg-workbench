@@ -171,7 +171,7 @@ class SplicerTab(BaseTab):
         try:
             d = float(seg["end"].get()) - float(seg["start"].get())
             return f"{d:.2f}s" if d > 0 else "⚠ invalid"
-        except Exception:
+        except (tk.TclError, ValueError, TypeError):
             return "-"
 
     def _refresh_dur(self, seg):
@@ -251,7 +251,7 @@ class SplicerTab(BaseTab):
                 ss = ff.parse_time(seg["start"].get())
                 ee = ff.parse_time(seg["end"].get())
             except ValueError:
-                raise ValueError(_tr("splicer.bad_time", "Segment {n}: times must look like 12.5, 01:23.4 or 1:02:03.").format(n=i))
+                raise ValueError(_tr("splicer.bad_time", "Segment {n}: times must look like 12.5, 01:23.4 or 1:02:03.").format(n=i)) from None
             if ee <= ss:
                 raise ValueError(_tr("splicer.empty_segment", "Segment {n} ends before it starts.").format(n=i))
             pieces.append(concat.Piece.of(seg["path"], ss, ee))
@@ -298,7 +298,7 @@ class SplicerTab(BaseTab):
                     outs.append(p.start + p.length)
                 list_path = os.path.join(temp_dir("splice_"), "list.txt")
                 cmd = concat.copy_join_command([p.path for p in pieces], out, list_path, inpoints=ins, outpoints=outs)
-                total = sum(o - i for i, o in zip(ins, outs))
+                total = sum(o - i for i, o in zip(ins, outs, strict=False))
                 self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
                                 btn=self._render_button(), btn_label=self._render_label(),
                                 duration=total, output=out, inputs=inputs, name="Splicer")
