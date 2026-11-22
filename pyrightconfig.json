@@ -25,18 +25,8 @@
   "typeCheckingMode": "standard",
   "reportMissingModuleSource": "none",
   "strict": [
-    "core/errors.py",
-    "core/proc.py",
-    "core/tasks.py",
-    "core/timecode.py",
-    "core/tools.py",
-    "core/capabilities.py",
-    "shell/chime.py",
-    "shell/menus.py",
-    "shell/pages.py",
-    "shell/statusbar.py",
-    "shell/versions.py",
-    "shell/shortcuts.py",
-    "tabs/kit/labels.py"
+    "core",
+    "shell",
+    "tabs/kit"
   ]
 }

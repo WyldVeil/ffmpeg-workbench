@@ -28,38 +28,50 @@ import shutil
 import sys
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import overload
+from typing import Any, overload
 
 from core import ffmpeg as ff
 from core import proc as _proc
+from core.encoders import VideoEncode
 from core.errors import InputError
 
 logger = logging.getLogger("crossfader.cli")
 
-OPERATIONS: dict = {}  # name -> (summary, category, configure(parser), run(args) -> dict)
+Options = Callable[[argparse.ArgumentParser], None]  # adds an operation's arguments
+Result = dict[str, Any]  # what an operation reports (printed as JSON)
+Run = Callable[["Ctx"], Result]
+
+
+@dataclass(frozen=True, slots=True)
+class Operation:
+    name: str
+    summary: str
+    category: str
+    options: Options | None
+    run: Run
+
+
+OPERATIONS: dict[str, Operation] = {}
 
 
 class CliError(InputError):
     """A command-line request that can't be done; the message says why."""
 
 
-def operation(name: str, summary: str, category: str):
-    def deco(fn):
-        OPERATIONS[name] = (summary, category, getattr(fn, "_configure", None), fn)
+def operation(
+    name: str, summary: str, category: str, *, options: Options | None = None
+) -> Callable[[Run], Run]:
+    """Register the decorated function as the operation *name*."""
+
+    def register(fn: Run) -> Run:
+        OPERATIONS[name] = Operation(name, summary, category, options, fn)
         return fn
 
-    return deco
-
-
-def options(configure: Callable):
-    def deco(fn):
-        fn._configure = configure  # noqa: SLF001 - our own marker on our own functions
-        return fn
-
-    return deco
+    return register
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -68,10 +80,10 @@ def options(configure: Callable):
 class Ctx:
     """What an operation needs: paths, progress, a scratch folder."""
 
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace):
         self.args = args
-        self.notes: list = []
-        self._tmp = None
+        self.notes: list[str] = []
+        self._tmp: str | None = None
         self._last = -10
 
     def tmp(self) -> str:
@@ -79,25 +91,25 @@ class Ctx:
             self._tmp = tempfile.mkdtemp(prefix="wme_cli_")
         return self._tmp
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         if self._tmp:
             shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def log(self, text: str):
+    def log(self, text: str) -> None:
         print(text, file=sys.stderr, flush=True)
 
     def run(
         self,
-        cmd: list,
+        cmd: list[str],
         duration: float | None = None,
         lo: float = 0.0,
         hi: float = 1.0,
-        lines: list | None = None,
-    ):
+        lines: list[str] | None = None,
+    ) -> ff.RunResult:
         """Run one FFmpeg command; progress to stderr.  *lines*, when given,
         receives every log line (for detectors whose output can be long)."""
 
-        def prog(p):
+        def prog(p: ff.Progress) -> None:
             frac = p.fraction
             if frac is None and duration and p.out_time:
                 frac = min(1.0, p.out_time / duration)
@@ -125,7 +137,7 @@ def _same(a: str, b: str) -> bool:
         return os.path.abspath(a) == os.path.abspath(b)
 
 
-def output_path(ctx: Ctx, inputs: list, suffix: str, ext: str | None = None) -> str:
+def output_path(ctx: Ctx, inputs: Sequence[str], suffix: str, ext: str | None = None) -> str:
     """The output file: -o, or '<first input> (suffix).ext' next to it."""
     args = ctx.args
     if args.output:
@@ -174,7 +186,7 @@ def probe(path: str, video: bool = False) -> ff.MediaInfo:
     return info
 
 
-def venc(ctx: Ctx, container: str):
+def venc(ctx: Ctx, container: str) -> VideoEncode:
     from core import encoders as enc
 
     a = ctx.args
@@ -191,7 +203,7 @@ def container_of(out: str) -> str:
     return os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
 
 
-def keep_audio(info, container: str, filters: str = "") -> list:
+def keep_audio(info: ff.MediaInfo, container: str, filters: str = "") -> list[str]:
     from core.ops.shared import keep_audio_args
 
     return keep_audio_args(info, container, filters=filters)
@@ -200,15 +212,15 @@ def keep_audio(info, container: str, filters: str = "") -> list:
 def render_chain(
     ctx: Ctx,
     src: str,
-    info,
+    info: ff.MediaInfo,
     out: str,
     chain: str,
     *,
-    pre: list | None = None,
-    audio: list | None = None,
-    extra: list | None = None,
+    pre: Sequence[str] | None = None,
+    audio: Sequence[str] | None = None,
+    extra: Sequence[str] | None = None,
     duration: float | None = None,
-):
+) -> None:
     """ffmpeg -i src -vf <chain> <encoder> <audio> out (atomically)."""
     container = container_of(out)
     ve = venc(ctx, container)
@@ -232,16 +244,16 @@ def render_chain(
 
 def render_graph(
     ctx: Ctx,
-    inputs: list,
-    info,
+    inputs: Sequence[str],
+    info: ff.MediaInfo,
     out: str,
     graph: str,
     *,
     has_audio: bool,
-    pre: list | None = None,
+    pre: Sequence[str] | None = None,
     duration: float | None = None,
-    input_opts: dict | None = None,
-):
+    input_opts: Mapping[int, Sequence[str]] | None = None,
+) -> None:
     from core import encoders as enc
 
     container = container_of(out)
@@ -266,9 +278,9 @@ def render_graph(
     finish(part, out)
 
 
-def result(out: str, **extra) -> dict:
+def result(out: str, **extra: Any) -> Result:
     info = ff.try_probe(out, use_cache=False) if os.path.isfile(out) else None
-    d = {"ok": True, "output": out}
+    d: Result = {"ok": True, "output": out}
     if os.path.isfile(out):
         d["size_bytes"] = os.path.getsize(out)
     if info is not None:
@@ -300,7 +312,7 @@ def time_value(text: str | None, default: float | None = None) -> float | None:
         raise CliError(f"Not a time: {text} (use seconds or HH:MM:SS)") from None
 
 
-def _video_opts(p):
+def _video_opts(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--codec",
         default="h264",
@@ -324,20 +336,21 @@ def _video_opts(p):
 # ── Information ───────────────────────────────────────────────────────────────
 
 
-def describe_file(path: str) -> dict:
+def describe_file(path: str) -> Result:
     from core import metaclean as mc
 
     info = probe(path)
-    d = {
+    streams: list[dict[str, Any]] = []
+    d: Result = {
         "ok": True,
         "file": os.path.abspath(path),
         "format": info.format_name,
         "duration": round(info.duration, 3),
         "size_bytes": info.size,
-        "streams": [],
+        "streams": streams,
     }
     for s in info.streams:
-        e = {"index": s.index, "type": s.type, "codec": s.codec}
+        e: dict[str, Any] = {"index": s.index, "type": s.type, "codec": s.codec}
         if s.type == "video":
             e.update(
                 width=s.width,
@@ -354,13 +367,13 @@ def describe_file(path: str) -> dict:
             )
         elif s.type == "subtitle":
             e.update(language=s.tags.get("language", ""), title=s.tags.get("title", ""))
-        d["streams"].append(e)
+        streams.append(e)
     d["chapters"] = len(info.chapters or [])
     d["personal_metadata"] = [f.line() for f in mc.inspect(info)]
     return d
 
 
-def tool_paths() -> dict:
+def tool_paths() -> dict[str, str | None]:
     from core.hardware import find_binary
 
     return {
@@ -377,17 +390,21 @@ def _in(p: argparse.ArgumentParser, n: str | int = "+") -> None:
     p.add_argument("inputs", nargs=n, metavar="INPUT", help="input file(s)")
 
 
-@operation("trim", "Keep only part of a video (exact, or --copy for a fast keyframe cut)", "Cut")
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--start", default="0"),
-        p.add_argument("--end"),
-        p.add_argument("--copy", action="store_true", help="no re-encode (starts at a keyframe)"),
-        _video_opts(p),
-    )
+def _trim_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--start", default="0")
+    p.add_argument("--end")
+    p.add_argument("--copy", action="store_true", help="no re-encode (starts at a keyframe)")
+    _video_opts(p)
+
+
+@operation(
+    "trim",
+    "Keep only part of a video (exact, or --copy for a fast keyframe cut)",
+    "Cut",
+    options=_trim_options,
 )
-def op_trim(ctx):
+def op_trim(ctx: Ctx) -> Result:
     src = ctx.args.inputs[0]
     info = probe(src)
     a, b = time_value(ctx.args.start, 0.0), time_value(ctx.args.end, info.duration)
@@ -424,17 +441,19 @@ def op_trim(ctx):
     return result(out)
 
 
+def _join_options(p: argparse.ArgumentParser) -> None:
+    _in(p)
+    p.add_argument("--copy", action="store_true", help="require a lossless join")
+    _video_opts(p)
+
+
 @operation(
-    "join", "Join clips one after another (lossless when they match, else normalised)", "Cut"
+    "join",
+    "Join clips one after another (lossless when they match, else normalised)",
+    "Cut",
+    options=_join_options,
 )
-@options(
-    lambda p: (
-        _in(p),
-        p.add_argument("--copy", action="store_true", help="require a lossless join"),
-        _video_opts(p),
-    )
-)
-def op_join(ctx):
+def op_join(ctx: Ctx) -> Result:
     from core import concat
 
     paths = ctx.args.inputs
@@ -460,18 +479,20 @@ def op_join(ctx):
     return result(out, method="re-encoded (" + "; ".join(problems) + ")")
 
 
+def _transition_options(p: argparse.ArgumentParser) -> None:
+    _in(p)
+    p.add_argument("--type", default="fade")
+    p.add_argument("--duration", type=float, default=1.0)
+    _video_opts(p)
+
+
 @operation(
-    "transition", "Join two clips with a transition (fade, wipeleft, circleopen, ...)", "Cut"
+    "transition",
+    "Join two clips with a transition (fade, wipeleft, circleopen, ...)",
+    "Cut",
+    options=_transition_options,
 )
-@options(
-    lambda p: (
-        _in(p),
-        p.add_argument("--type", default="fade"),
-        p.add_argument("--duration", type=float, default=1.0),
-        _video_opts(p),
-    )
-)
-def op_transition(ctx):
+def op_transition(ctx: Ctx) -> Result:
     from core.ops import crossfader as xf
 
     paths = ctx.args.inputs
@@ -495,21 +516,21 @@ def op_transition(ctx):
     return result(out)
 
 
+def _rotate_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--degrees", type=int, default=90, choices=[0, 90, 180, 270])
+    p.add_argument("--flip", choices=["h", "v"])
+    p.add_argument("--lossless", action="store_true")
+    _video_opts(p)
+
+
 @operation(
     "rotate",
     "Rotate (90/180/270) and/or mirror; --lossless only changes the orientation flag",
     "Cut",
+    options=_rotate_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--degrees", type=int, default=90, choices=[0, 90, 180, 270]),
-        p.add_argument("--flip", choices=["h", "v"]),
-        p.add_argument("--lossless", action="store_true"),
-        _video_opts(p),
-    )
-)
-def op_rotate(ctx):
+def op_rotate(ctx: Ctx) -> Result:
     from core.ops import rotate_flip as rf
 
     src = ctx.args.inputs[0]
@@ -539,21 +560,21 @@ def op_rotate(ctx):
     return result(out)
 
 
+def _crop_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--rect")
+    p.add_argument("--aspect")
+    p.add_argument("--auto", action="store_true")
+    _video_opts(p)
+
+
 @operation(
     "crop",
     "Crop to a rectangle (--rect X:Y:W:H), an aspect (--aspect 9:16) or remove black bars (--auto)",
     "Cut",
+    options=_crop_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--rect"),
-        p.add_argument("--aspect"),
-        p.add_argument("--auto", action="store_true"),
-        _video_opts(p),
-    )
-)
-def op_crop(ctx):
+def op_crop(ctx: Ctx) -> Result:
     from core.ops import crop as cr
 
     src = ctx.args.inputs[0]
@@ -578,13 +599,19 @@ def op_crop(ctx):
     return result(out, crop=[x, y, cw, ch])
 
 
+def _speed_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--factor", type=float, required=True)
+    _video_opts(p)
+
+
 @operation(
-    "speed", "Play faster or slower (--factor 2 = twice as fast), sound kept in pitch", "Cut"
+    "speed",
+    "Play faster or slower (--factor 2 = twice as fast), sound kept in pitch",
+    "Cut",
+    options=_speed_options,
 )
-@options(
-    lambda p: (_in(p, 1), p.add_argument("--factor", type=float, required=True), _video_opts(p))
-)
-def op_speed(ctx):
+def op_speed(ctx: Ctx) -> Result:
     from core.ops.speed_ramp import atempo_chain
 
     src = ctx.args.inputs[0]
@@ -606,9 +633,18 @@ def op_speed(ctx):
     return result(out)
 
 
-@operation("reverse", "Play backwards (video and sound; clips up to 10 minutes)", "Cut")
-@options(lambda p: (_in(p, 1), _video_opts(p)))
-def op_reverse(ctx):
+def _reverse_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    _video_opts(p)
+
+
+@operation(
+    "reverse",
+    "Play backwards (video and sound; clips up to 10 minutes)",
+    "Cut",
+    options=_reverse_options,
+)
+def op_reverse(ctx: Ctx) -> Result:
     src = ctx.args.inputs[0]
     info = probe(src)
     if info.duration > 600:
@@ -621,24 +657,28 @@ def op_reverse(ctx):
     return result(out)
 
 
-@operation("remove-silence", "Cut out silent parts (talking-head videos, podcasts)", "Audio")
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--threshold", type=float, default=-40.0, help="dB"),
-        p.add_argument("--min-silence", type=float, default=0.6),
-        p.add_argument("--padding", type=float, default=0.15),
-        _video_opts(p),
-    )
+def _remove_silence_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--threshold", type=float, default=-40.0, help="dB")
+    p.add_argument("--min-silence", type=float, default=0.6)
+    p.add_argument("--padding", type=float, default=0.15)
+    _video_opts(p)
+
+
+@operation(
+    "remove-silence",
+    "Cut out silent parts (talking-head videos, podcasts)",
+    "Audio",
+    options=_remove_silence_options,
 )
-def op_remove_silence(ctx):
+def op_remove_silence(ctx: Ctx) -> Result:
     from core.ops import silence as sl
 
     src = ctx.args.inputs[0]
     info = probe(src)
     if not info.has_audio:
         raise CliError("The file has no sound to look for silence in.")
-    lines: list = []
+    lines: list[str] = []
     ctx.run(
         sl.detect_cmd(src, ctx.args.threshold, ctx.args.min_silence),
         info.duration,
@@ -686,25 +726,25 @@ def op_remove_silence(ctx):
     return result(out, removed_seconds=round(info.duration - sum(b - a for a, b in zones), 2))
 
 
+def _compress_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--size", required=True, help="e.g. 10MB, 25MB, 500KB")
+    p.add_argument("--codec", default="h264", choices=["h264", "hevc", "av1"])
+    p.add_argument("--fast", action="store_true", help="GPU encoding, less exact")
+    p.add_argument("--audio", default="auto", choices=["auto", "copy", "none"])
+    p.add_argument("--start")
+    p.add_argument("--end")
+    p.add_argument("--keep-resolution", action="store_true")
+    p.add_argument("--keep-framerate", action="store_true")
+
+
 @operation(
     "compress",
     "Make a video fit a size limit (e.g. --size 10MB for Discord) at the best quality",
     "Convert",
+    options=_compress_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--size", required=True, help="e.g. 10MB, 25MB, 500KB"),
-        p.add_argument("--codec", default="h264", choices=["h264", "hevc", "av1"]),
-        p.add_argument("--fast", action="store_true", help="GPU encoding, less exact"),
-        p.add_argument("--audio", default="auto", choices=["auto", "copy", "none"]),
-        p.add_argument("--start"),
-        p.add_argument("--end"),
-        p.add_argument("--keep-resolution", action="store_true"),
-        p.add_argument("--keep-framerate", action="store_true"),
-    )
-)
-def op_compress(ctx):
+def op_compress(ctx: Ctx) -> Result:
     from core.ops import downsizer as ds
 
     src = ctx.args.inputs[0]
@@ -765,37 +805,37 @@ def op_compress(ctx):
     return result(out, target_bytes=target, resolution=f"{plan.width}x{plan.height}")
 
 
+def _convert_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument(
+        "--to",
+        required=True,
+        choices=[
+            "mp4",
+            "mkv",
+            "mov",
+            "webm",
+            "m4v",
+            "ts",
+            "avi",
+            "mp3",
+            "m4a",
+            "wav",
+            "flac",
+            "ogg",
+            "opus",
+        ],
+    )
+    p.add_argument("--reencode", action="store_true")
+
+
 @operation(
     "convert",
     "Change the format (mp4, mkv, mov, webm, mp3, m4a, wav, flac, ogg, opus) - copies what fits",
     "Convert",
+    options=_convert_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument(
-            "--to",
-            required=True,
-            choices=[
-                "mp4",
-                "mkv",
-                "mov",
-                "webm",
-                "m4v",
-                "ts",
-                "avi",
-                "mp3",
-                "m4a",
-                "wav",
-                "flac",
-                "ogg",
-                "opus",
-            ],
-        ),
-        p.add_argument("--reencode", action="store_true"),
-    )
-)
-def op_convert(ctx):
+def op_convert(ctx: Ctx) -> Result:
     from core.ops.converter import stream_args
 
     src = ctx.args.inputs[0]
@@ -814,40 +854,40 @@ def op_convert(ctx):
     return result(out, what=summary, notes=notes)
 
 
+def _scale_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--size")
+    p.add_argument("--factor", type=float)
+    p.add_argument("--height", type=int)
+    p.add_argument("--fit", default="fit", choices=["fit", "pad", "crop", "stretch"])
+    p.add_argument(
+        "--method",
+        default="auto",
+        choices=[
+            "auto",
+            "lanczos",
+            "bicubic",
+            "area",
+            "gpu",
+            "fsr",
+            "nis",
+            "artcnn",
+            "artcnn_best",
+            "anime4k",
+        ],
+        help="auto = FSR on a GPU for upscaling, else Lanczos; artcnn/anime4k suit animation",
+    )
+    p.add_argument("--sharpen", type=float, default=0.3)
+    _video_opts(p)
+
+
 @operation(
     "scale",
     "Resize (--size 1280x720 | --factor 2 | --height 720), --fit fit|pad|crop|stretch",
     "Convert",
+    options=_scale_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--size"),
-        p.add_argument("--factor", type=float),
-        p.add_argument("--height", type=int),
-        p.add_argument("--fit", default="fit", choices=["fit", "pad", "crop", "stretch"]),
-        p.add_argument(
-            "--method",
-            default="auto",
-            choices=[
-                "auto",
-                "lanczos",
-                "bicubic",
-                "area",
-                "gpu",
-                "fsr",
-                "nis",
-                "artcnn",
-                "artcnn_best",
-                "anime4k",
-            ],
-            help="auto = FSR on a GPU for upscaling, else Lanczos; artcnn/anime4k suit animation",
-        ),
-        p.add_argument("--sharpen", type=float, default=0.3),
-        _video_opts(p),
-    )
-)
-def op_scale(ctx):
+def op_scale(ctx: Ctx) -> Result:
     from core import filters as fl
     from core.ops import scaler as sc
 
@@ -893,21 +933,21 @@ def op_scale(ctx):
     return result(out)
 
 
+def _framerate_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--rate", default="60")
+    p.add_argument("--method", default="motion", choices=["motion", "blend", "dup"])
+    p.add_argument("--slowmo", type=float, default=1.0)
+    _video_opts(p)
+
+
 @operation(
     "framerate",
     "Change the frame rate (--rate 60) by motion interpolation / blending, or --slowmo 2",
     "Convert",
+    options=_framerate_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--rate", default="60"),
-        p.add_argument("--method", default="motion", choices=["motion", "blend", "dup"]),
-        p.add_argument("--slowmo", type=float, default=1.0),
-        _video_opts(p),
-    )
-)
-def op_framerate(ctx):
+def op_framerate(ctx: Ctx) -> Result:
     from core.ops import scaler as sc
 
     src = ctx.args.inputs[0]
@@ -931,25 +971,25 @@ def op_framerate(ctx):
     return result(out)
 
 
+def _compare_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("original")
+    p.add_argument("copy")
+    p.add_argument("--model", default="hd", choices=["hd", "4k", "neg"])
+    p.add_argument("--metrics", default="vmaf,ssim,psnr")
+    p.add_argument("--skip-original", type=float, default=0.0)
+    p.add_argument("--skip-copy", type=float, default=0.0)
+    p.add_argument("--seconds", type=float)
+    p.add_argument("--every", type=int, default=1, help="VMAF on every Nth frame (faster)")
+    p.add_argument("--csv", help="also save per-frame scores here")
+
+
 @operation(
     "compare",
     "Measure how much quality a copy lost against its original: VMAF, SSIM, PSNR",
     "Convert",
+    options=_compare_options,
 )
-@options(
-    lambda p: (
-        p.add_argument("original"),
-        p.add_argument("copy"),
-        p.add_argument("--model", default="hd", choices=["hd", "4k", "neg"]),
-        p.add_argument("--metrics", default="vmaf,ssim,psnr"),
-        p.add_argument("--skip-original", type=float, default=0.0),
-        p.add_argument("--skip-copy", type=float, default=0.0),
-        p.add_argument("--seconds", type=float),
-        p.add_argument("--every", type=int, default=1, help="VMAF on every Nth frame (faster)"),
-        p.add_argument("--csv", help="also save per-frame scores here"),
-    )
-)
-def op_compare(ctx):
+def op_compare(ctx: Ctx) -> Result:
     from core import quality as qual
 
     a = ctx.args
@@ -993,34 +1033,34 @@ def op_compare(ctx):
     return out
 
 
+def _remux_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--to", choices=["mkv", "mp4", "mov", "webm"])
+    p.add_argument("--keep-languages", help="e.g. eng,spa: keep only audio/subtitles in these")
+    p.add_argument("--drop-subtitles", action="store_true")
+    p.add_argument(
+        "--drop-audio-except", help="keep only this audio track number (0 = first)", type=int
+    )
+    p.add_argument("--default-audio", help="language code (eng) or track number")
+    p.add_argument("--default-subtitles", help="language code, track number, or 'none'")
+    p.add_argument(
+        "--add",
+        action="append",
+        default=[],
+        help="FILE[:LANG[:DELAY]] - add audio/subtitle tracks from a file (repeatable)",
+    )
+    p.add_argument("--title")
+    p.add_argument("--drop-chapters", action="store_true")
+
+
 @operation(
     "remux",
     "Keep only some audio/subtitle tracks, set languages/defaults, change MKV/MP4/MOV - no "
     "re-encoding",
     "Convert",
+    options=_remux_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--to", choices=["mkv", "mp4", "mov", "webm"]),
-        p.add_argument("--keep-languages", help="e.g. eng,spa: keep only audio/subtitles in these"),
-        p.add_argument("--drop-subtitles", action="store_true"),
-        p.add_argument(
-            "--drop-audio-except", help="keep only this audio track number (0 = first)", type=int
-        ),
-        p.add_argument("--default-audio", help="language code (eng) or track number"),
-        p.add_argument("--default-subtitles", help="language code, track number, or 'none'"),
-        p.add_argument(
-            "--add",
-            action="append",
-            default=[],
-            help="FILE[:LANG[:DELAY]] - add audio/subtitle tracks from a file (repeatable)",
-        ),
-        p.add_argument("--title"),
-        p.add_argument("--drop-chapters", action="store_true"),
-    )
-)
-def op_remux(ctx):
+def op_remux(ctx: Ctx) -> Result:
     from core import remux
 
     a = ctx.args
@@ -1046,7 +1086,7 @@ def op_remux(ctx):
         except (ValueError, ff.ProbeError) as exc:
             raise CliError(str(exc)) from None
 
-    def choose_default(kind, wanted):
+    def choose_default(kind: str, wanted: str | None) -> None:
         if wanted is None:
             return
         same = [i for i, tr in enumerate(plan.tracks) if tr.kind == kind and tr.keep]
@@ -1082,7 +1122,7 @@ def op_remux(ctx):
     return result(out, tracks=kept, notes=notes)
 
 
-def _split_add(spec: str) -> tuple:
+def _split_add(spec: str) -> tuple[str, str, float]:
     """FILE[:LANG[:DELAY]] -> (file, lang, delay); FILE may itself contain ':' (C:\\...)."""
     if os.path.isfile(spec):
         return spec, "", 0.0
@@ -1098,18 +1138,18 @@ def _split_add(spec: str) -> tuple:
     raise CliError(f"File not found: {spec}")
 
 
+def _extract_track_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--track", type=int, required=True, help="stream index, as listed by info")
+
+
 @operation(
     "extract-track",
     "Save one track (audio, subtitles, video, attached font) as its own file, as it is",
     "Convert",
+    options=_extract_track_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--track", type=int, required=True, help="stream index, as listed by info"),
-    )
-)
-def op_extract_track(ctx):
+def op_extract_track(ctx: Ctx) -> Result:
     from core import remux
 
     src = ctx.args.inputs[0]
@@ -1134,26 +1174,26 @@ def op_extract_track(ctx):
     return result(out, track=tr.describe())
 
 
+def _hdr_to_sdr_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument(
+        "--curve",
+        default="bt2390",
+        choices=["bt2390", "spline", "bt2446a", "hable", "mobius", "reinhard", "clip"],
+    )
+    p.add_argument(
+        "--assume", choices=["pq", "hlg"], help="treat an untagged file as HDR10 (pq) or HLG"
+    )
+    _video_opts(p)
+
+
 @operation(
     "hdr-to-sdr",
     "Convert HDR video (HDR10, HDR10+, HLG, Dolby Vision) to normal SDR for phones/TVs/web",
     "Convert",
+    options=_hdr_to_sdr_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument(
-            "--curve",
-            default="bt2390",
-            choices=["bt2390", "spline", "bt2446a", "hable", "mobius", "reinhard", "clip"],
-        ),
-        p.add_argument(
-            "--assume", choices=["pq", "hlg"], help="treat an untagged file as HDR10 (pq) or HLG"
-        ),
-        _video_opts(p),
-    )
-)
-def op_hdr_to_sdr(ctx):
+def op_hdr_to_sdr(ctx: Ctx) -> Result:
     from core import filters as fl
     from core import hdr
     from core.ops.hdr_args import subtitle_args
@@ -1197,19 +1237,19 @@ def op_hdr_to_sdr(ctx):
     )
 
 
+def _extract_audio_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--format", default="mp3", choices=["mp3", "m4a", "wav", "flac", "opus", "ogg"])
+    p.add_argument("--copy", action="store_true")
+
+
 @operation(
-    "extract-audio", "Save the sound as mp3 / m4a / wav / flac / opus (or --copy as is)", "Audio"
+    "extract-audio",
+    "Save the sound as mp3 / m4a / wav / flac / opus (or --copy as is)",
+    "Audio",
+    options=_extract_audio_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument(
-            "--format", default="mp3", choices=["mp3", "m4a", "wav", "flac", "opus", "ogg"]
-        ),
-        p.add_argument("--copy", action="store_true"),
-    )
-)
-def op_extract_audio(ctx):
+def op_extract_audio(ctx: Ctx) -> Result:
     from core.ops.extractor import copy_extension
     from core.ops.shared import audio_encoder_args
 
@@ -1228,20 +1268,20 @@ def op_extract_audio(ctx):
     return result(out)
 
 
+def _normalize_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument(
+        "--target", default="streaming", choices=["streaming", "youtube", "ebu", "atsc", "film"]
+    )
+
+
 @operation(
     "normalize",
     "Even out loudness to a standard (two-pass): streaming, youtube, ebu, atsc, film",
     "Audio",
+    options=_normalize_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument(
-            "--target", default="streaming", choices=["streaming", "youtube", "ebu", "atsc", "film"]
-        ),
-    )
-)
-def op_normalize(ctx):
+def op_normalize(ctx: Ctx) -> Result:
     from core import loudness as ln
     from core.ops.shared import audio_job_args
 
@@ -1276,11 +1316,18 @@ def op_normalize(ctx):
     return result(out, loudness_target=i)
 
 
-@operation("clean-voice", "Remove background noise from speech (neural or spectral)", "Audio")
-@options(
-    lambda p: (_in(p, 1), p.add_argument("--method", default="neural", choices=["neural", "fft"]))
+def _clean_voice_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--method", default="neural", choices=["neural", "fft"])
+
+
+@operation(
+    "clean-voice",
+    "Remove background noise from speech (neural or spectral)",
+    "Audio",
+    options=_clean_voice_options,
 )
-def op_clean_voice(ctx):
+def op_clean_voice(ctx: Ctx) -> Result:
     from core.ops import voice_isolation as vi
     from core.ops.shared import audio_job_args
 
@@ -1299,22 +1346,22 @@ def op_clean_voice(ctx):
     return result(out)
 
 
+def _subtitles_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--model", default="base", choices=["tiny", "base", "small", "turbo"])
+    p.add_argument("--language", default="auto")
+    p.add_argument("--translate", action="store_true", help="into English")
+    p.add_argument("--burn", action="store_true")
+    _video_opts(p)
+
+
 @operation(
     "subtitles",
     "Make subtitles from speech, offline (SRT next to the video, or --burn into it)",
     "Social",
+    options=_subtitles_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--model", default="base", choices=["tiny", "base", "small", "turbo"]),
-        p.add_argument("--language", default="auto"),
-        p.add_argument("--translate", action="store_true", help="into English"),
-        p.add_argument("--burn", action="store_true"),
-        _video_opts(p),
-    )
-)
-def op_subtitles(ctx):
+def op_subtitles(ctx: Ctx) -> Result:
     from core import whisper
 
     src = ctx.args.inputs[0]
@@ -1359,11 +1406,19 @@ def op_subtitles(ctx):
     return result(out)
 
 
+def _burn_subs_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--subs", required=True)
+    _video_opts(p)
+
+
 @operation(
-    "burn-subs", "Burn an existing subtitle file (.srt/.ass/.vtt) into the picture", "Social"
+    "burn-subs",
+    "Burn an existing subtitle file (.srt/.ass/.vtt) into the picture",
+    "Social",
+    options=_burn_subs_options,
 )
-@options(lambda p: (_in(p, 1), p.add_argument("--subs", required=True), _video_opts(p)))
-def op_burn_subs(ctx):
+def op_burn_subs(ctx: Ctx) -> Result:
     from core import filters as fl
 
     src = ctx.args.inputs[0]
@@ -1375,21 +1430,23 @@ def op_burn_subs(ctx):
     return result(out)
 
 
+def _gif_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--start", default="0")
+    p.add_argument("--duration", default="4")
+    p.add_argument("--fps", type=float, default=15)
+    p.add_argument("--width", type=int, default=480)
+    p.add_argument("--max-mb", type=float, default=0)
+    p.add_argument("--webp", action="store_true")
+
+
 @operation(
-    "gif", "Animated GIF (or --webp) of part of a video, optionally under --max-mb", "Social"
+    "gif",
+    "Animated GIF (or --webp) of part of a video, optionally under --max-mb",
+    "Social",
+    options=_gif_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--start", default="0"),
-        p.add_argument("--duration", default="4"),
-        p.add_argument("--fps", type=float, default=15),
-        p.add_argument("--width", type=int, default=480),
-        p.add_argument("--max-mb", type=float, default=0),
-        p.add_argument("--webp", action="store_true"),
-    )
-)
-def op_gif(ctx):
+def op_gif(ctx: Ctx) -> Result:
     from core.ops.gif_maker import make_animation
 
     src = ctx.args.inputs[0]
@@ -1416,25 +1473,25 @@ def op_gif(ctx):
     return result(out)
 
 
+def _shorts_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--platform", default="shorts")
+    p.add_argument(
+        "--background", default="blur", choices=["blur", "crop", "mirror", "black", "white"]
+    )
+    p.add_argument(
+        "--anchor", default="center", choices=["center", "top", "bottom", "left", "right"]
+    )
+    _video_opts(p)
+
+
 @operation(
     "shorts",
     "Reformat for Shorts/TikTok/Reels/square... (--platform, --background blur|crop|mirror|black)",
     "Social",
+    options=_shorts_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--platform", default="shorts"),
-        p.add_argument(
-            "--background", default="blur", choices=["blur", "crop", "mirror", "black", "white"]
-        ),
-        p.add_argument(
-            "--anchor", default="center", choices=["center", "top", "bottom", "left", "right"]
-        ),
-        _video_opts(p),
-    )
-)
-def op_shorts(ctx):
+def op_shorts(ctx: Ctx) -> Result:
     from core.ops import shortifier as sh
 
     src = ctx.args.inputs[0]
@@ -1457,15 +1514,16 @@ def op_shorts(ctx):
     return result(out)
 
 
-@operation("thumbnail", "Save one frame as an image (--at TIME)", "Social")
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--at", default="1"),
-        p.add_argument("--format", default="jpg", choices=["jpg", "png", "webp"]),
-    )
+def _thumbnail_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--at", default="1")
+    p.add_argument("--format", default="jpg", choices=["jpg", "png", "webp"])
+
+
+@operation(
+    "thumbnail", "Save one frame as an image (--at TIME)", "Social", options=_thumbnail_options
 )
-def op_thumbnail(ctx):
+def op_thumbnail(ctx: Ctx) -> Result:
     from core.ops.frame_extractor import quality_args
 
     src = ctx.args.inputs[0]
@@ -1494,24 +1552,26 @@ def op_thumbnail(ctx):
     return result(out)
 
 
+def _frames_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--every", type=float)
+    p.add_argument("--count", type=int)
+    p.add_argument("--format", default="jpg", choices=["jpg", "png", "webp"])
+
+
 @operation(
-    "frames", "Export frames as images (--every SECONDS or --count N) into a folder", "Social"
+    "frames",
+    "Export frames as images (--every SECONDS or --count N) into a folder",
+    "Social",
+    options=_frames_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--every", type=float),
-        p.add_argument("--count", type=int),
-        p.add_argument("--format", default="jpg", choices=["jpg", "png", "webp"]),
-    )
-)
-def op_frames(ctx):
+def op_frames(ctx: Ctx) -> Result:
     from core.ops.frame_extractor import quality_args
 
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     every = ctx.args.every or (info.duration / max(1, ctx.args.count) if ctx.args.count else 1.0)
-    folder = ctx.args.output or os.path.splitext(src)[0] + "_frames"
+    folder: str = ctx.args.output or os.path.splitext(src)[0] + "_frames"
     if os.path.exists(folder) and os.listdir(folder) and not ctx.args.overwrite:
         raise CliError(f"{folder} isn't empty - choose another -o or add --overwrite.")
     os.makedirs(folder, exist_ok=True)
@@ -1532,24 +1592,26 @@ def op_frames(ctx):
     return {"ok": True, "output": folder, "files": len(os.listdir(folder))}
 
 
-@operation(
-    "logo", "Put a logo/watermark image on a video (--logo FILE --position br --size 15)", "Social"
-)
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--logo", required=True),
-        p.add_argument(
-            "--position",
-            default="br",
-            choices=["tl", "tc", "tr", "ml", "c", "mr", "bl", "bc", "br"],
-        ),
-        p.add_argument("--size", type=float, default=15),
-        p.add_argument("--opacity", type=float, default=0.85),
-        _video_opts(p),
+def _logo_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--logo", required=True)
+    p.add_argument(
+        "--position",
+        default="br",
+        choices=["tl", "tc", "tr", "ml", "c", "mr", "bl", "bc", "br"],
     )
+    p.add_argument("--size", type=float, default=15)
+    p.add_argument("--opacity", type=float, default=0.85)
+    _video_opts(p)
+
+
+@operation(
+    "logo",
+    "Put a logo/watermark image on a video (--logo FILE --position br --size 15)",
+    "Social",
+    options=_logo_options,
 )
-def op_logo(ctx):
+def op_logo(ctx: Ctx) -> Result:
     from core.ops.image_watermark import logo_graph
 
     src = ctx.args.inputs[0]
@@ -1588,33 +1650,33 @@ def op_logo(ctx):
     return result(out)
 
 
+def _collage_options(p: argparse.ArgumentParser) -> None:
+    _in(p)
+    p.add_argument("--size", default="1920x1080")
+    p.add_argument("--fill", action="store_true")
+    p.add_argument("--gap", type=int, default=4)
+    p.add_argument("--no-loop", action="store_true")
+    p.add_argument("--end", default="hold", choices=["hold", "background", "reflow"])
+    p.add_argument("--length", default="longest", help="longest, shortest or seconds")
+    p.add_argument("--audio", default="first", choices=["first", "mix", "none"])
+    p.add_argument("--background", default="black")
+    _video_opts(p)
+
+
 @operation(
     "collage",
     "Put several clips on one screen (auto layout; --size, --fill, --no-loop, --end, --audio)",
     "Social",
+    options=_collage_options,
 )
-@options(
-    lambda p: (
-        _in(p),
-        p.add_argument("--size", default="1920x1080"),
-        p.add_argument("--fill", action="store_true"),
-        p.add_argument("--gap", type=int, default=4),
-        p.add_argument("--no-loop", action="store_true"),
-        p.add_argument("--end", default="hold", choices=["hold", "background", "reflow"]),
-        p.add_argument("--length", default="longest", help="longest, shortest or seconds"),
-        p.add_argument("--audio", default="first", choices=["first", "mix", "none"]),
-        p.add_argument("--background", default="black"),
-        _video_opts(p),
-    )
-)
-def op_collage(ctx):
+def op_collage(ctx: Ctx) -> Result:
     from core import grid
     from core.ops.shared import frame_rate
 
     paths = ctx.args.inputs
     infos = [probe(x, video=True) for x in paths]
     W, H = (int(v) // 2 * 2 for v in ctx.args.size.lower().split("x"))
-    clips = []
+    clips: list[grid.Clip] = []
     for i, info in enumerate(infos):
         w, h = info.require_video().display_size
         dur = (
@@ -1660,32 +1722,32 @@ def op_collage(ctx):
     return result(out, layout=lay.describe())
 
 
+def _blur_region_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument(
+        "--region",
+        action="append",
+        required=True,
+        help="X,Y,W,H in percent; repeat for more regions",
+    )
+    p.add_argument("--type", default="blur", choices=["blur", "pixelate", "box"])
+    p.add_argument("--from", dest="start", default="0")
+    p.add_argument("--to", dest="end")
+    _video_opts(p)
+
+
 @operation(
     "blur-region",
     "Blur / pixelate / black-box a region (--region X,Y,W,H as % of the frame)",
     "Visuals",
+    options=_blur_region_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument(
-            "--region",
-            action="append",
-            required=True,
-            help="X,Y,W,H in percent; repeat for more regions",
-        ),
-        p.add_argument("--type", default="blur", choices=["blur", "pixelate", "box"]),
-        p.add_argument("--from", dest="start", default="0"),
-        p.add_argument("--to", dest="end"),
-        _video_opts(p),
-    )
-)
-def op_blur_region(ctx):
+def op_blur_region(ctx: Ctx) -> Result:
     from core.ops.region_blur import Region, blur_graph
 
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
-    regions = []
+    regions: list[Region] = []
     for r in ctx.args.region:
         x, y, w, h = (float(v) / 100 for v in r.split(","))
         regions.append(
@@ -1714,47 +1776,72 @@ def op_blur_region(ctx):
     return result(out)
 
 
-def _chain_op(name: str, summary: str, build, suffix: str, add_args=None):
-    def configure(p):
+def _chain_op(
+    name: str,
+    summary: str,
+    build: Callable[[argparse.Namespace], str],
+    suffix: str,
+    add_args: Options | None = None,
+) -> None:
+    """Register a one-filter-chain visual operation: *build(args)* -> the -vf chain."""
+
+    def options(p: argparse.ArgumentParser) -> None:
         _in(p, 1)
         if add_args:
             add_args(p)
         _video_opts(p)
 
-    @operation(name, summary, "Visuals")
-    @options(configure)
-    def run(ctx):
+    def run(ctx: Ctx) -> Result:
         src = ctx.args.inputs[0]
         info = probe(src, video=True)
         out = output_path(ctx, [src], suffix)
         render_chain(ctx, src, info, out, build(ctx.args))
         return result(out)
 
-    return run
+    operation(name, summary, "Visuals", options=options)(run)
 
 
-def _denoise(a):
+def _denoise(a: argparse.Namespace) -> str:
     from core.ops.denoise import denoise_chain
 
     return denoise_chain(a.method, a.strength)
 
 
-def _sharpen(a):
+def _denoise_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--method", default="fast", choices=["fast", "nlm", "temporal", "grain"])
+    p.add_argument("--strength", type=float, default=5)
+
+
+def _sharpen(a: argparse.Namespace) -> str:
     from core.ops.sharpen import sharpen_chain
 
     return sharpen_chain(a.method, a.amount)
 
 
-def _deinterlace(a):
+def _sharpen_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--method", default="cas", choices=["cas", "unsharp", "clarity"])
+    p.add_argument("--amount", type=float, default=0.45)
+
+
+def _deinterlace(a: argparse.Namespace) -> str:
     from core.ops.deinterlace import deinterlace_chain
 
     return deinterlace_chain(a.mode)
 
 
-def _lut(a):
+def _deinterlace_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--mode", default="smart", choices=["smart", "all", "double", "ivtc"])
+
+
+def _lut(a: argparse.Namespace) -> str:
     from core.ops.lut import build_chain
 
     return build_chain(a.lut, intensity=a.intensity)
+
+
+def _lut_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--lut", required=True)
+    p.add_argument("--intensity", type=float, default=1.0)
 
 
 _chain_op(
@@ -1762,53 +1849,46 @@ _chain_op(
     "Reduce video noise/grain (--method fast|nlm|temporal|grain, --strength 1-10)",
     _denoise,
     "denoised",
-    lambda p: (
-        p.add_argument("--method", default="fast", choices=["fast", "nlm", "temporal", "grain"]),
-        p.add_argument("--strength", type=float, default=5),
-    ),
+    _denoise_options,
 )
 _chain_op(
     "sharpen",
     "Sharpen (--method cas|unsharp|clarity, --amount 0-1)",
     _sharpen,
     "sharp",
-    lambda p: (
-        p.add_argument("--method", default="cas", choices=["cas", "unsharp", "clarity"]),
-        p.add_argument("--amount", type=float, default=0.45),
-    ),
+    _sharpen_options,
 )
 _chain_op(
     "deinterlace",
     "Remove interlacing combs (--mode smart|all|double|ivtc)",
     _deinterlace,
     "progressive",
-    lambda p: p.add_argument("--mode", default="smart", choices=["smart", "all", "double", "ivtc"]),
+    _deinterlace_options,
 )
 _chain_op(
     "lut",
     "Apply a colour look-up table (--lut FILE.cube, --intensity 0-1)",
     _lut,
     "graded",
-    lambda p: (
-        p.add_argument("--lut", required=True),
-        p.add_argument("--intensity", type=float, default=1.0),
-    ),
+    _lut_options,
 )
+
+
+def _metadata_clean_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--deep", action="store_true")
+    p.add_argument("--keep-chapters", action="store_true")
+    p.add_argument("--keep-cover", action="store_true")
+    p.add_argument("--drop-languages", action="store_true")
 
 
 @operation(
-    "metadata-clean", "Remove location, device, dates, names and telemetry - no re-encode", "System"
+    "metadata-clean",
+    "Remove location, device, dates, names and telemetry - no re-encode",
+    "System",
+    options=_metadata_clean_options,
 )
-@options(
-    lambda p: (
-        _in(p, 1),
-        p.add_argument("--deep", action="store_true"),
-        p.add_argument("--keep-chapters", action="store_true"),
-        p.add_argument("--keep-cover", action="store_true"),
-        p.add_argument("--drop-languages", action="store_true"),
-    )
-)
-def op_metadata_clean(ctx):
+def op_metadata_clean(ctx: Ctx) -> Result:
     from core import metaclean as mc
 
     src = ctx.args.inputs[0]
@@ -1834,20 +1914,20 @@ def op_metadata_clean(ctx):
     )
 
 
+def _tts_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--text")
+    p.add_argument("--text-file")
+    p.add_argument("--voice", default="en-GB-RyanNeural")
+    p.add_argument("--offline", action="store_true")
+
+
 @operation(
     "tts",
     "Speak text into an audio file (--text or --text-file; --offline for the system voice)",
     "Audio",
+    options=_tts_options,
 )
-@options(
-    lambda p: (
-        p.add_argument("--text"),
-        p.add_argument("--text-file"),
-        p.add_argument("--voice", default="en-GB-RyanNeural"),
-        p.add_argument("--offline", action="store_true"),
-    )
-)
-def op_tts(ctx):
+def op_tts(ctx: Ctx) -> Result:
     from core import tts
 
     text = ctx.args.text or (
@@ -1873,21 +1953,21 @@ def op_tts(ctx):
     return result(out, engine=engine)
 
 
+def _download_options(p: argparse.ArgumentParser) -> None:
+    p.add_argument("url")
+    p.add_argument("--audio-only", action="store_true")
+    p.add_argument("--max-height", type=int, default=0)
+    p.add_argument("--format", default="mp4", choices=["mp4", "mkv", "webm"])
+
+
 @operation(
     "download",
     "Download a video (or --audio-only) from YouTube and 1000+ sites, following the app's "
     "network settings",
     "Social",
+    options=_download_options,
 )
-@options(
-    lambda p: (
-        p.add_argument("url"),
-        p.add_argument("--audio-only", action="store_true"),
-        p.add_argument("--max-height", type=int, default=0),
-        p.add_argument("--format", default="mp4", choices=["mp4", "mkv", "webm"]),
-    )
-)
-def op_download(ctx):
+def op_download(ctx: Ctx) -> Result:
     from core import network
     from core.ytdlp import base_argv, ytdlp_path
 
@@ -1948,12 +2028,11 @@ def build_parser() -> argparse.ArgumentParser:
     pth = sub.add_parser("paths", help="where the bundled FFmpeg, ffprobe, yt-dlp... are")
     pth.add_argument("--json", action="store_true")
     sub.add_parser("guide", help="print the guide for AI assistants and scripts (AGENTS.md)")
-    for name, (summary, _cat, configure, _fn) in OPERATIONS.items():
-        p = sub.add_parser(
-            name, help=summary.replace("%", "%%"), description=summary.replace("%", "%%")
-        )
-        if configure:
-            configure(p)
+    for op in OPERATIONS.values():
+        summary = op.summary.replace("%", "%%")
+        p = sub.add_parser(op.name, help=summary, description=summary)
+        if op.options:
+            op.options(p)
         p.add_argument("-o", "--output", help="output file (or folder); default: next to the input")
         p.add_argument(
             "--overwrite", action="store_true", help="allow replacing an existing output file"
@@ -1962,37 +2041,49 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def tools_catalogue(parser: argparse.ArgumentParser) -> list:
-    # argparse has no public way to list a parser's options; its _actions are stable since 2.7
-    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))  # noqa: SLF001
-    out = []
-    for name, (summary, cat, _c, _f) in OPERATIONS.items():
-        p = sub.choices[name]
-        opts = []
-        for a in p._actions:  # noqa: SLF001
-            if isinstance(a, argparse._HelpAction) or a.dest in ("output", "overwrite", "json"):  # noqa: SLF001
-                continue
-            opts.append(
-                {
-                    "name": a.option_strings[0] if a.option_strings else a.dest,
-                    "required": bool(getattr(a, "required", False)) or not a.option_strings,
-                    "choices": list(a.choices) if a.choices else None,
-                    "default": a.default
-                    if a.default not in (None, False, argparse.SUPPRESS)
-                    else None,
-                    "help": a.help or "",
-                }
-            )
-        out.append({"name": name, "category": cat, "summary": summary, "options": opts})
+class _Recorder(argparse.ArgumentParser):
+    """A parser that remembers the arguments an operation adds (argparse keeps its list private)."""
+
+    def __init__(self) -> None:
+        super().__init__(add_help=False)
+        self.added: list[argparse.Action] = []
+
+    def add_argument(self, *args: Any, **kwargs: Any) -> argparse.Action:
+        action = super().add_argument(*args, **kwargs)
+        self.added.append(action)
+        return action
+
+
+def _describe_option(a: argparse.Action) -> dict[str, Any]:
+    return {
+        "name": a.option_strings[0] if a.option_strings else a.dest,
+        "required": a.required or not a.option_strings,
+        "choices": list(a.choices) if a.choices else None,
+        "default": a.default if a.default not in (None, False, argparse.SUPPRESS) else None,
+        "help": a.help or "",
+    }
+
+
+def tools_catalogue() -> list[dict[str, Any]]:
+    """Every operation with its options, for ``tools --json`` (scripts and AI assistants)."""
+    out: list[dict[str, Any]] = []
+    for op in OPERATIONS.values():
+        recorder = _Recorder()
+        if op.options:
+            op.options(recorder)
+        opts = [_describe_option(a) for a in recorder.added]
+        out.append(
+            {"name": op.name, "category": op.category, "summary": op.summary, "options": opts}
+        )
     return out
 
 
-def main(argv: list | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     as_json = getattr(args, "json", False)
 
-    def emit(d: dict) -> None:
+    def emit(d: Result) -> None:
         if as_json:
             print(json.dumps(d, ensure_ascii=False))
         elif d.get("ok"):
@@ -2003,7 +2094,7 @@ def main(argv: list | None = None) -> int:
             print("error: " + d.get("error", "failed"), file=sys.stderr)
 
     if args.command in (None, "tools"):
-        cat = tools_catalogue(parser)
+        cat = tools_catalogue()
         if as_json:
             print(json.dumps({"ok": True, "operations": cat}, ensure_ascii=False))
         else:
@@ -2031,7 +2122,7 @@ def main(argv: list | None = None) -> int:
         ctx = Ctx(args)
         t0 = time.monotonic()
         try:
-            res = OPERATIONS[args.command][3](ctx)
+            res = OPERATIONS[args.command].run(ctx)
         finally:
             ctx.cleanup()
         res.setdefault("seconds", round(time.monotonic() - t0, 2))
@@ -2067,7 +2158,7 @@ def _ensure_streams() -> None:
                 stream.reconfigure(encoding="utf-8", errors="replace")
 
 
-def entry(argv: list) -> int:
+def entry(argv: list[str]) -> int:
     """Called by main.py before any window code is imported."""
     _ensure_streams()
     os.environ.setdefault("CROSSFADER_NO_NOTIFY", "1")

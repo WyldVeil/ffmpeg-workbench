@@ -15,6 +15,7 @@ has been fixed but is still listed - remove it, so it can't come back.
 from __future__ import annotations
 
 import ast
+import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -145,3 +146,11 @@ def test_no_hidden_imports():
         and node.func.id == "__import__"
     ]
     assert not hits, f"import modules normally (or with importlib, for lazy tool pages): {hits}"
+
+
+def test_the_whole_engine_is_type_checked_strictly():
+    """pyright's strict mode covers the engine, the window shell and the page kit;
+    CI fails on any error, so this list may only grow."""
+    with open(os.path.join(ROOT, "pyrightconfig.json"), encoding="utf-8") as fh:
+        config = json.load(fh)
+    assert {"core", "shell", "tabs/kit"} <= set(config["strict"])
