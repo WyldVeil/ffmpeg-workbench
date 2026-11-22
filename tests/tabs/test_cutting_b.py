@@ -2,6 +2,7 @@
 
 import pytest
 
+from core import beats as beats_core
 from core import ffmpeg as ff
 from core.ops import side_by_side as side_by_side_ops
 from tabs.cutting import beat_sync, crop, side_by_side, smart_reframe
@@ -42,10 +43,11 @@ def test_beat_detection_on_click_track(tmp_path):
             song,
         ]
     )
-    on = beat_sync.onset_strength(beat_sync.envelope(song))
-    bpm = 60 * beat_sync.ENV_RATE / beat_sync.estimate_tempo(on)
+    on = beats_core.onset_strength(beats_core.envelope(song))
+    bpm = 60 * beats_core.ENV_RATE / beats_core.estimate_tempo(on)
     assert bpm == pytest.approx(120, abs=1)
-    beats = beat_sync.beat_grid(on, beat_sync.estimate_tempo(on))
+    beats = beats_core.beat_grid(on, beats_core.estimate_tempo(on))
+    assert beats_core.find_beats(song)[1] == pytest.approx(120, abs=1)
     assert all(min(abs(b - round(b * 2) / 2), 0.5) < 0.03 for b in beats)
 
 

@@ -26,6 +26,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core.hardware import launch_preview
 from core.i18n import t
+from core.ops import transitions as tr
 from core.ops.crossfader import (
     TRANS_DEFAULT,
     Clip,
@@ -41,66 +42,8 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.widgets import EncoderPanel
 
-TRANSITIONS = [
-    "fade",
-    "dissolve",
-    "fadeblack",
-    "fadewhite",
-    "fadegrays",
-    "fadefast",
-    "fadeslow",
-    "wipeleft",
-    "wiperight",
-    "wipeup",
-    "wipedown",
-    "wipetl",
-    "wipetr",
-    "wipebl",
-    "wipebr",
-    "slideleft",
-    "slideright",
-    "slideup",
-    "slidedown",
-    "smoothleft",
-    "smoothright",
-    "smoothup",
-    "smoothdown",
-    "coverleft",
-    "coverright",
-    "coverup",
-    "coverdown",
-    "revealleft",
-    "revealright",
-    "revealup",
-    "revealdown",
-    "circlecrop",
-    "rectcrop",
-    "circleopen",
-    "circleclose",
-    "vertopen",
-    "vertclose",
-    "horzopen",
-    "horzclose",
-    "diagtl",
-    "diagtr",
-    "diagbl",
-    "diagbr",
-    "hlslice",
-    "hrslice",
-    "vuslice",
-    "vdslice",
-    "hlwind",
-    "hrwind",
-    "vuwind",
-    "vdwind",
-    "radial",
-    "pixelize",
-    "distance",
-    "hblur",
-    "squeezeh",
-    "squeezev",
-    "zoomin",
-]
+#: every transition (core/ops/transitions.py), by its name
+TRANSITIONS = list(tr.LABELS)
 AUDIO_CURVES = [
     "tri",
     "qsin",

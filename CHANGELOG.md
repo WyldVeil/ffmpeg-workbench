@@ -18,6 +18,21 @@
     or off; tile numbers; font, size and colour;
   - PNG, JPEG or WebP. Frames are taken with fast seeking, so a two-hour film
     takes seconds. Also on the command line: `contact-sheet`.
+- **Slideshow Maker, much bigger:**
+  - slides can be photos, **animated GIFs** (they play, looping to fill their
+    time), **video clips** (any part, with or without their own sound) and
+    **title or ending cards**;
+  - every slide can have its own time, transition, motion and caption;
+  - **61 transitions** in groups - fades, wipes, slides, soft edges, shapes,
+    slices and effects - including two new ones, **fading squares** (the
+    picture changes square by square) and **swirl**, or a random one per
+    slide; **Preview** plays the selected slide into the next;
+  - **music**: several tracks one after another, starting part-way into the
+    first, fade in and out, quieter while a video clip speaks; **fit the
+    slideshow to the music**, and **change slides on the beat**;
+  - sort by name or date, shuffle; bars in any colour; an Instagram portrait
+    size.
+- **Crossfader**: the same 61 transitions, including fading squares and swirl.
 
 ### Easier
 

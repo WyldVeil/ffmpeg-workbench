@@ -36,7 +36,8 @@ def test_frame_helpers():
     assert frame_extractor.keep_scenes([0.5, 3.0, 3.5, 9.0], 2.0) == [0.0, 3.0, 9.0]
     assert frame_extractor.quality_args("jpg", 100)[-1] == "2"
     assert frame_extractor.quality_args("jpg", 1)[-1] == "31"
-    starts, total = slideshow.timeline(3, 4.0, 1.0)
+    fade = slideshow.ss.Join("fade", 1.0)
+    starts, total = slideshow.ss.timeline([4.0, 4.0, 4.0], [fade, fade])
     assert starts == [0.0, 3.0, 6.0] and total == 10.0
 
 
@@ -191,8 +192,8 @@ def test_slideshow(ui, media, outdir, tmp_path, trans):
     tab.slides[0].caption = NASTY_TEXT
     tab.dur_var.set("2")
     tab.trans_dur_var.set("0.5")
-    tab.trans_var.set(slideshow.TRANSITIONS[trans])
-    tab.music_row.set(media["mp3"])
+    tab.trans_var.set(slideshow.TRANSITION_NAMES[trans])
+    tab.set_music([(media["mp3"], ff.duration_of(media["mp3"]))])
     out = str(outdir / f"slides_{trans}.mp4")
     tab.out_row.set(out)
     tab._render()
@@ -202,3 +203,61 @@ def test_slideshow(ui, media, outdir, tmp_path, trans):
     expected = 6.0 - (1.0 if trans == "fade" else 0.0)
     assert info.duration == pytest.approx(expected, abs=0.2)
     assert (info.width, info.height) == (1920, 1080) and info.has_audio
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_slideshow_of_every_kind_fitted_to_the_music_on_the_beat(ui, media, outdir, tmp_path):
+    from core.ops import slideshow as ss
+
+    ui.reset()
+    tab = ui.open("Slideshow Maker")
+    tab._clear()
+    gif = str(tmp_path / "loop.gif")
+    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=s=200x150:r=10:d=1", gif])
+    assert tab.add_paths([media["png"], gif, media["h264"], str(tmp_path / "notes.txt")]) == 3
+    ui.wait_for(
+        lambda: all(s.length is not None for s in tab.slides if s.kind is not ss.Kind.PHOTO), 30
+    )
+    video = tab.slides[2]
+    assert video.kind is ss.Kind.VIDEO and video.has_audio and video.sound
+    video.start, video.end = 1.0, 3.0
+    tab.tree.selection_set("0")
+    tab._add_card()  # after the selected slide
+    assert [s.kind for s in tab.slides] == [
+        ss.Kind.PHOTO,
+        ss.Kind.CARD,
+        ss.Kind.ANIMATION,
+        ss.Kind.VIDEO,
+    ]
+    tab.slides[1].card = ss.Card("Chapter two", "the GIF")
+    tab.slides[0].transition = "squares"
+    tab.trans_dur_var.set("0.5")
+    tab.res_var.set("1280×720 (HD)")
+    song = ff.duration_of(media["mp3"])
+    tab.set_music([(media["mp3"], song)])
+    tab.fit_music_var.set(True)
+    tab.on_beat_var.set(True)
+    slides, joins, _music = tab._plan()
+    total = ss.timeline([s.seconds for s in slides], joins)[1]
+    assert total == pytest.approx(song, abs=0.05) and slides[3].seconds == pytest.approx(2.0)
+    out = str(outdir / "mixed.mp4")
+    tab.out_row.set(out)
+    tab._render()
+    ui.wait_idle(300)
+    _no_errors(ui)
+    info = ff.probe(out, use_cache=False)
+    assert (info.width, info.height) == (1280, 720) and info.has_audio
+    assert info.duration == pytest.approx(song, abs=1.0)  # changes moved onto beats
+
+
+@pytest.mark.ffmpeg
+def test_slideshow_transition_preview(media):
+    from core.ops import slideshow as ss
+
+    pair = [
+        ss.Slide(kind=ss.Kind.PHOTO, path=media["png"], seconds=2.0, motion="zoom_in"),
+        ss.Slide(kind=ss.Kind.CARD, seconds=2.0, card=ss.Card("Next")),
+    ]
+    out = slideshow._make_preview(pair, ss.Join("swirl", 0.8), ss.Look(320, 180, "25"))
+    assert ff.probe(out, use_cache=False).duration == pytest.approx(3.2, abs=0.15)

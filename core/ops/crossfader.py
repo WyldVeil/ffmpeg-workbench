@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops import transitions
 
 TRANS_DEFAULT = "fade"
 
@@ -163,9 +164,7 @@ def _video_graph(p: _Plan, suffix: str) -> list[str]:
     for i in range(1, n):
         offset += p.lengths[i - 1] - T
         trans = p.fade.transitions[i - 1] if i - 1 < len(p.fade.transitions) else TRANS_DEFAULT
-        graph.append(
-            f"{last}[v{i}]xfade=transition={trans}:duration={T:.6f}:offset={offset:.6f}[x{i}]"
-        )
+        graph.append(f"{last}[v{i}]{transitions.xfade(trans, T, offset, digits=6)}[x{i}]")
         last = f"[x{i}]"
     graph.append(f"{last}{suffix or 'null'}[vout]")
     return graph
