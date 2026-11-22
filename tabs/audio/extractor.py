@@ -13,25 +13,13 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core import loudness as ln
 from core.i18n import t
-from core.ops.extractor import copy_extension
-from core.ops.shared import audio_encoder_args
+from core.ops import extractor as xo
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.widgets import FileRow, SaveRow, scroll_body
-
-FORMATS = {  # id: (label, extension or None = from codec, encoder args)
-    "copy": ("Original (no re-encoding)", None, ["-c:a", "copy"]),
-    "mp3": ("MP3 (VBR, very high quality)", ".mp3", ["-c:a", "libmp3lame", "-q:a", "0"]),
-    "aac": ("AAC in .m4a (256 kbps)", ".m4a", ["-c:a", "aac", "-b:a", "256k"]),
-    "flac": ("FLAC (lossless)", ".flac", ["-c:a", "flac", "-compression_level", "8"]),
-    "wav": ("WAV (uncompressed)", ".wav", ["-c:a", "pcm_s24le"]),
-    "opus": ("Opus (160 kbps)", ".opus", ["-c:a", "libopus", "-b:a", "160k"]),
-    "ogg": ("Ogg Vorbis (quality 6)", ".ogg", ["-c:a", "libvorbis", "-q:a", "6"]),
-}
 
 
 class AudioExtractorTab(BaseTab):
@@ -56,11 +44,11 @@ class AudioExtractorTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.fmt_var = tk.StringVar(value=FORMATS["copy"][0])
+        self.fmt_var = tk.StringVar(value=xo.FORMATS["copy"][0])
         fb = ttk.Combobox(
             opt,
             textvariable=self.fmt_var,
-            values=[v[0] for v in FORMATS.values()],
+            values=[v[0] for v in xo.FORMATS.values()],
             state="readonly",
             width=34,
         )
@@ -101,7 +89,7 @@ class AudioExtractorTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _key(self):
-        return next((k for k, v in FORMATS.items() if v[0] == self.fmt_var.get()), "copy")
+        return next((k for k, v in xo.FORMATS.items() if v[0] == self.fmt_var.get()), "copy")
 
     def _stream(self):
         values = list(self.track_box.cget("values"))
@@ -111,8 +99,8 @@ class AudioExtractorTab(BaseTab):
         key = self._key()
         if key == "copy" and not self.norm_var.get():
             streams = self._info.audio_streams if self._info else []
-            return copy_extension(streams[self._stream()].codec) if streams else ".mka"
-        return FORMATS[key][1] or ".m4a"
+            return xo.copy_extension(streams[self._stream()].codec) if streams else ".mka"
+        return xo.FORMATS[key][1] or ".m4a"
 
     def _suggest_name(self, force=False):
         src = self.src_row.path
@@ -162,21 +150,20 @@ class AudioExtractorTab(BaseTab):
         self.out_row.set(out)
         stream = self._stream()
         key = self._key()
-        enc = FORMATS[key][2]
-        if key == "copy" and self.norm_var.get():
-            enc = audio_encoder_args(out)
-        inp = [ff.ffmpeg_path(), "-y"]
-        if start:
-            inp += ["-ss", ff.ts(start)]
-        if end is not None:
-            inp += ["-to", ff.ts(end)]
-        inp += ["-i", src, "-map", f"0:a:{stream}", "-vn", "-sn", "-dn"]
         dur = (end if end is not None else info.duration) - start
-        sr = info.audio_streams[stream].sample_rate or 48000
-
+        job = xo.ExtractJob(
+            src=src,
+            stream=stream,
+            start=start,
+            end=end,
+            encode=xo.FORMATS[key][2] if key != "copy" or not self.norm_var.get() else None,
+            normalise=self.norm_var.get(),
+            sample_rate=info.audio_streams[stream].sample_rate or 48000,
+            seconds=dur,
+        )
         if not self.norm_var.get():
             self.run_ffmpeg(
-                inp + enc + [out],
+                job.command(out),
                 self.console,
                 on_done=lambda rc: self.show_result(rc, out),
                 btn=self.btn_render,
@@ -186,18 +173,9 @@ class AudioExtractorTab(BaseTab):
                 name="Audio Extractor",
             )
             return
-
-        def work(_p, _c, ctx):
-            m = ln.measure(src, -16, -1.5, 11, stream=stream, ctx=ctx.span(0, 0.4))
-            ctx.span(0.4, 1.0).run(
-                [*inp, "-af", ln.normalise_filter(-16, -1.5, 11, m, sr), *enc, ctx.output()],
-                duration=dur,
-            )
-            return 0
-
         common.queue_job(
             self,
-            common.Job(name="Audio Extractor", out=out, work=work, duration=dur, inputs=[src]),
+            common.Job(name="Audio Extractor", out=out, work=job.run, duration=dur, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
         )

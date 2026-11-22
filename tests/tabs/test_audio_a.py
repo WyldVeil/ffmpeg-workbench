@@ -4,8 +4,9 @@ import pytest
 
 from core import ffmpeg as ff
 from core import loudness as ln
+from core.ops import extractor as xo
 from core.ops import sync as sy
-from tabs.audio import extractor, muter, silence
+from tabs.audio import muter, silence
 
 
 def test_pure_helpers():
@@ -20,10 +21,7 @@ def test_pure_helpers():
     assert "split=3" in g and "concat=n=3:v=1:a=1[v][a]" in g
     assert muter.gain_expr([], 0.1) == "1"
     assert sy.reencode_filter(-0.25) == "atrim=start=0.250,asetpts=PTS-STARTPTS"
-    assert (
-        extractor.copy_extension("pcm_s24le") == ".wav"
-        and extractor.copy_extension("aac") == ".m4a"
-    )
+    assert xo.copy_extension("pcm_s24le") == ".wav" and xo.copy_extension("aac") == ".m4a"
     m = ln.parse_measurement(
         [
             "[Parsed_loudnorm_0 @ 0x1]",
@@ -101,7 +99,7 @@ def test_extractor(ui, media, outdir, fmt):
     ui.reset()
     tab = ui.open("Audio Extractor")
     _src(ui, tab, media["hevc10"])
-    tab.fmt_var.set(extractor.FORMATS[fmt][0])
+    tab.fmt_var.set(xo.FORMATS[fmt][0])
     tab._suggest_name(force=True)
     out = str(outdir / ("track" + tab._ext()))
     tab.out_row.set(out)
@@ -111,6 +109,24 @@ def test_extractor(ui, media, outdir, fmt):
     info = ff.probe(out, use_cache=False)
     assert info.has_audio and not info.has_video
     assert info.require_audio().codec == {"copy": "opus", "mp3": "mp3", "flac": "flac"}[fmt]
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_extractor_normalises(ui, media, outdir):
+    """The normalise option measures first, then extracts at -16 LUFS."""
+    ui.reset()
+    tab = ui.open("Audio Extractor")
+    _src(ui, tab, media["hevc10"])
+    tab.fmt_var.set(xo.FORMATS["flac"][0])
+    tab.norm_var.set(True)
+    out = str(outdir / "track_norm.flac")
+    tab.out_row.set(out)
+    tab._render()
+    ui.wait_idle(120)
+    _ok(ui)
+    m = ln.measure(out, -16, -1.5, 11)
+    assert m.input_i == pytest.approx(-16, abs=1.0)
 
 
 @pytest.mark.gui
