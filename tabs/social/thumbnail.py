@@ -20,6 +20,7 @@ from core.hardware import (
     launch_preview,
 )
 from core.i18n import t
+from core.ops import thumbnail as th
 from core.scaling import px
 from core.timecode import Timecode
 from tabs import framestep
@@ -42,15 +43,6 @@ PRESETS = {  # stable id: (label, (width, height)); (0, 0) = original size
     "square": ("Instagram (1080×1080)", (1080, 1080)),
     "x": ("X / Twitter (1200×675)", (1200, 675)),
     "original": ("Original resolution", (0, 0)),
-}
-
-
-#: picture format (the radio buttons' value) -> (what they show, extension, FFmpeg arguments)
-PICTURE_FORMATS: dict[str, tuple[str, str, tuple[str, ...]]] = {
-    "png": ("PNG", ".png", ("-c:v", "png")),
-    "jpg95": ("JPEG (q95)", ".jpg", ("-c:v", "mjpeg", "-q:v", "2")),
-    "jpg85": ("JPEG (q85)", ".jpg", ("-c:v", "mjpeg", "-q:v", "5")),
-    "webp": ("WebP", ".webp", ("-c:v", "libwebp", "-quality", "90")),
 }
 
 
@@ -408,7 +400,7 @@ class ThumbnailMakerTab(BaseTab):
         fmt_f.pack(fill="x", padx=px(20), pady=px(2))
         tk.Label(fmt_f, text=t("common.format"), font=(UI_FONT, 10)).pack(side="left")
         self._fmt_var = tk.StringVar(value="png")
-        for code, (label, _ext, _args) in PICTURE_FORMATS.items():
+        for code, (label, _ext, _args) in th.PICTURE_FORMATS.items():
             tk.Radiobutton(
                 fmt_f, text=label, variable=self._fmt_var, value=code, font=(UI_FONT, 10)
             ).pack(side="left", padx=px(8))
@@ -528,15 +520,12 @@ class ThumbnailMakerTab(BaseTab):
         self.preview_proc = launch_preview(self.file_path, start_time=pos)
 
     def _render(self):
-        from core import ffmpeg as ff
-
         src = self._src_var.get().strip()
         if not src or not os.path.isfile(src):
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
         if src != getattr(self, "file_path", ""):
             self._src_typed()
-        ffmpeg = ff.ffmpeg_path()
         ext = self._get_ext()
         vf_parts = self._build_vf()
         if self._batch_mode.get():
@@ -561,17 +550,7 @@ class ThumbnailMakerTab(BaseTab):
             base = os.path.splitext(os.path.basename(src))[0]
             out_dir = fresh_folder(out_root, f"{base} thumbnails")
             pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%04d{ext}"
-            cmd = [
-                ffmpeg,
-                "-y",
-                "-i",
-                src,
-                "-an",
-                "-vf",
-                ",".join([f"fps=1/{interval:g}", *vf_parts]),
-                *self._get_format_args(),
-                pattern,
-            ]
+            cmd = th.batch_cmd(src, interval, vf_parts, self._get_format_args(), pattern)
             self.log(self.console, f"Batch export: every {interval:g}s → {out_dir}")
             self.run_ffmpeg(
                 cmd,
@@ -592,15 +571,8 @@ class ThumbnailMakerTab(BaseTab):
         self._out_var.set(out)
         pos = max(0.0, self._scrub_var.get())
         if pos >= self.duration - 0.5:
-            # the very end: decode the last half second and keep overwriting the image,
-            # so whatever the timestamps say, the final frame is what remains
             pos = self.duration
-            cmd = [ffmpeg, "-y", "-sseof", "-0.5", "-i", src, "-an"]
-        else:
-            cmd = [ffmpeg, "-y", "-ss", ff.ts(pos), "-i", src, "-frames:v", "1", "-an"]
-        if vf_parts:
-            cmd += ["-vf", ",".join(vf_parts)]
-        cmd += [*self._get_format_args(), "-update", "1", out]
+        cmd = th.frame_cmd(src, pos, self.duration, vf_parts, self._get_format_args(), out)
         self.log(self.console, f"Extracting frame at {_fmt(pos)}")
         self.run_ffmpeg(
             cmd,
@@ -613,59 +585,32 @@ class ThumbnailMakerTab(BaseTab):
             name="Thumbnail",
         )
 
-    def _build_vf(self):
-        parts = []
-
-        # Size
-        _label, (w, h) = PRESETS.get(self._size_var.get(), PRESETS["original"])
-        if w > 0 and h > 0:
-            parts.append(
-                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black"
-            )
-
-        # Adjustments
-        br = self._brightness.get()
-        ct = self._contrast.get()
-        sat = self._saturation.get()
-        if br != 0.0 or ct != 1.0 or sat != 1.0:
-            parts.append(f"eq=brightness={br}:contrast={ct}:saturation={sat}")
-
-        # Text overlay (from a UTF-8 file: quotes, %, colons are all safe)
+    def _build_vf(self) -> list[str]:
+        _label, size = PRESETS.get(self._size_var.get(), PRESETS["original"])
+        caption = None
         if self._use_text.get() and self._text_var.get().strip():
-            from core import filters as fl
-
             if getattr(self, "_tmp", None) is None:
                 from core.paths import temp_dir
 
                 self._tmp = temp_dir("thumb_")
-            textfile = os.path.join(self._tmp, "caption.txt")
-            with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(self._text_var.get())
-            x, y = {
-                "center": ("(w-text_w)/2", "(h-text_h)/2"),
-                "top": ("(w-text_w)/2", "h*0.05"),
-                "bottom": ("(w-text_w)/2", "h-text_h-h*0.05"),
-                "top-left": ("w*0.04", "h*0.05"),
-                "top-right": ("w-text_w-w*0.04", "h*0.05"),
-            }.get(self._text_pos.get(), ("(w-text_w)/2", "(h-text_h)/2"))
-            parts.append(
-                fl.DrawText(
-                    textfile=textfile,
-                    font="impact",
-                    fontsize=self._text_size.get() or "64",
-                    fontcolor=self._text_color.get() or "white",
-                    x=x,
-                    y=y,
-                    borderw=4 if self._text_stroke.get() else 0,
-                    bordercolor="black",
-                ).filter()
+            caption = th.Caption(
+                text=self._text_var.get(),
+                size=self._text_size.get() or "64",
+                colour=self._text_color.get() or "white",
+                place=self._text_pos.get(),
+                outline=self._text_stroke.get(),
             )
-
-        return parts
+        look = th.Look(
+            size=size,
+            brightness=self._brightness.get(),
+            contrast=self._contrast.get(),
+            saturation=self._saturation.get(),
+            caption=caption,
+        )
+        return th.look_filters(look, self._tmp if caption else "")
 
     def _get_ext(self):
-        return PICTURE_FORMATS[self._fmt_var.get()][1]
+        return th.PICTURE_FORMATS[self._fmt_var.get()][1]
 
     def _get_format_args(self):
-        return list(PICTURE_FORMATS[self._fmt_var.get()][2])
+        return list(th.PICTURE_FORMATS[self._fmt_var.get()][2])
