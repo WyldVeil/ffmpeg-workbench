@@ -39,6 +39,8 @@
   0:00 to 0:10. Add Split Range now takes the range selected on the
   timeline, each clip has a From timeline button, and a dropped or opened
   file loads the timeline too (before, only Browse did).
+- **Thumbnail Maker** shows the thumbnail itself as you change it (the frame,
+  size, colour and text); before, there was no preview in the app at all.
 - The Trimmer and Thumbnail Maker sliders were too coarse to reach every
   frame.
 - Some tool names in Bengali, Persian and Urdu were wrong (Frame Extractor
