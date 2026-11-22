@@ -10,11 +10,12 @@ centralised core.settings module (no duplicated load/save logic).
 import tkinter as tk
 from tkinter import ttk
 
-from core import dialogs, settings
+from core import settings
 from core.i18n import t
 from core.scaling import px
 from core.settings import StartPage, load_settings, update
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
 
 START_CHOICES: dict[StartPage, str] = {

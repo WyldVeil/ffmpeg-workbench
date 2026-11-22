@@ -354,7 +354,7 @@ class FileRow(tk.Frame):
         self.var.set(path)
 
     def _browse(self) -> None:
-        from core import dialogs
+        from tabs.kit import dialogs
 
         if self._save:
             current = self.path or (self._suggest() if self._suggest else "")

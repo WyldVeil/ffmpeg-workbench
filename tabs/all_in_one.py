@@ -30,10 +30,11 @@ import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
-from core import dialogs, tasks
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
 

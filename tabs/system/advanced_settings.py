@@ -14,8 +14,8 @@ import platform
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-from core import dialogs, settings, tasks
 from core import proc as _proc
+from core import settings, tasks
 from core.hardware import (
     detect_gpu,
     get_binary_path,
@@ -34,6 +34,7 @@ from core.skins import (
     save_skin_name,
 )
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.kit.theme import set_star_count, set_star_speed
 
 logger = logging.getLogger("crossfader.system.advanced_settings")

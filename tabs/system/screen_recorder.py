@@ -19,10 +19,11 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import ClassVar
 
-from core import dialogs, tasks
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 
 # ─────────────────────────────────────────────────────────────────────────────

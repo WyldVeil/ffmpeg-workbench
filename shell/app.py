@@ -47,6 +47,7 @@ from shell.versions import ToolVersions
 from shell.wheel import WheelRouter
 from tabs.kit import labels
 from tabs.kit.contracts import ClosingAware, Previewing
+from tabs.kit.crash import show_crash
 from tabs.kit.theme import apply_default_options, apply_skin, apply_ttk_styles
 
 logger = logging.getLogger("crossfader.shell")
@@ -62,6 +63,7 @@ class App(tk.Tk):
         ui.install(self)
         logs.setup(debug="--debug" in sys.argv)
         logs.install_excepthooks(self)
+        logs.set_presenter(show_crash)  # crashes get a window (tabs/kit/crash.py)
         encoders.detect_in_background()
         capabilities.warm()  # what this FFmpeg can do, learned off the UI thread
 

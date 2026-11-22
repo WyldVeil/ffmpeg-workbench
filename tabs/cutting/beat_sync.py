@@ -425,7 +425,7 @@ class BeatSyncCutterTab(BaseTab):
     def _save_beats(self):
         if not self.beats:
             return
-        from core import dialogs
+        from tabs.kit import dialogs
 
         out = dialogs.ask_save("beats.txt", kind="text", defaultextension=".txt", parent=self)
         if out:

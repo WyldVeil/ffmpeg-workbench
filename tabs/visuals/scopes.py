@@ -242,7 +242,7 @@ class VideoScopesTab(BaseTab):
         info = common.check_source(self, src)
         if info is None:
             return
-        from core import dialogs
+        from tabs.kit import dialogs
 
         base = os.path.splitext(os.path.basename(src))[0]
         out = dialogs.ask_save(

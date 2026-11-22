@@ -11,13 +11,13 @@ import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
 from core import proc as _proc
 from core.hardware import detect_gpu, get_binary_path
 from core.i18n import t
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 
 def _fmt(seconds):

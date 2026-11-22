@@ -1,4 +1,4 @@
-"""Tests for core/dialogs.py (native Linux dialogs are exercised with fake tools)."""
+"""Tests for tabs/kit/dialogs.py (native Linux dialogs are exercised with fake tools)."""
 
 import os
 import stat
@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from core import dialogs
+from tabs.kit import dialogs
 
 
 def test_filetypes_case_insensitive_on_posix():

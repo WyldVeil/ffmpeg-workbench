@@ -552,7 +552,7 @@ class SnapshotTab(BaseTab):
         if self._info is None:
             self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
             return
-        from core import dialogs
+        from tabs.kit import dialogs
 
         at = self._frame() / self._fps
         start = self._last_dir or os.path.dirname(self.file_path)

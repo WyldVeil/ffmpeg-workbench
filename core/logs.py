@@ -4,9 +4,9 @@ core/logs.py - Application logging and crash reporting.
 * :func:`setup` configures the ``crossfader`` logger with a rotating log file
   in the per-user log folder (see core/paths.py) and console output.
 * :func:`install_excepthooks` routes uncaught exceptions from the main thread,
-  worker threads and Tk callbacks to the log and shows a friendly dialog with
-  the details and a button to open the log folder - instead of the old
-  behaviour of failing silently.
+  worker threads and Tk callbacks to the log, and to the presenter the window
+  installs (:func:`set_presenter`): a friendly dialog with the details and a
+  button to open the log folder.
 """
 
 from __future__ import annotations
@@ -17,16 +17,13 @@ import os
 import platform
 import sys
 import threading
-import time
 import traceback
-
-from core.scaling import px
+from collections.abc import Callable
 
 logger = logging.getLogger("crossfader.logs")
 
 LOGGER_NAME = "crossfader"
 _configured = False
-_last_dialog = 0.0
 
 
 def log_file() -> str:
@@ -87,65 +84,29 @@ def _format(exc_type, exc, tb) -> str:
     return "".join(traceback.format_exception(exc_type, exc, tb))
 
 
-def _show_dialog(title: str, summary: str, details: str) -> None:
-    """Modal-less error window with Copy / Open log folder buttons."""
-    global _last_dialog
-    now = time.monotonic()
-    if now - _last_dialog < 3.0:  # avoid a storm of dialogs
-        return
-    _last_dialog = now
-    try:
-        import tkinter as tk
-        from tkinter import ttk
+#: Shows a crash to the person: (title, summary, details).  The window installs
+#: one (tabs/kit/crash.py); without a window, crashes are only logged.
+Presenter = Callable[[str, str, str], object]
+_presenter: Presenter | None = None
 
-        from core import ui
 
-        root = ui.tk_default_root()
-        if root is None:
-            return
-        win = tk.Toplevel(root)
-        win.title(title)
-        win.geometry(f"{px(720)}x{px(420)}")
-        ttk.Label(win, text=summary, wraplength=px(680), justify="left").pack(
-            fill="x", padx=px(14), pady=px(12, 6)
-        )
-        txt = tk.Text(win, height=14, wrap="none")
-        txt.insert("1.0", details)
-        txt.configure(state="disabled")
-        txt.pack(fill="both", expand=True, padx=px(14))
-        row = ttk.Frame(win)
-        row.pack(fill="x", padx=px(14), pady=px(10))
-
-        def _copy():
-            win.clipboard_clear()
-            win.clipboard_append(details)
-
-        def _open():
-            from core.hardware import open_in_explorer
-
-            open_in_explorer(os.path.dirname(log_file()))
-
-        ttk.Button(row, text="Copy details", command=_copy).pack(side="left")
-        ttk.Button(row, text="Open log folder", command=_open).pack(side="left", padx=px(6))
-        ttk.Button(row, text="Close", command=win.destroy).pack(side="right")
-    except Exception:
-        logger.debug("_show_dialog: best-effort step failed", exc_info=True)
+def set_presenter(presenter: Presenter | None) -> None:
+    global _presenter
+    _presenter = presenter
 
 
 def report(exc_type, exc, tb, *, where: str = "", dialog: bool = True) -> None:
     details = _format(exc_type, exc, tb)
     get().error("Unhandled exception%s:\n%s", f" in {where}" if where else "", details)
-    if dialog:
+    presenter = _presenter
+    if dialog and presenter is not None:
         summary = (
             f"Something went wrong{(' in ' + where) if where else ''}:\n"
             f"{exc_type.__name__}: {exc}\n\nThe details were written to the log file."
         )
-        try:
-            from core import ui
+        from core import ui
 
-            ui.call_soon(_show_dialog, "Unexpected error", summary, details)
-        except Exception:
-            logger.debug("report: best-effort step failed", exc_info=True)
+        ui.call_soon(presenter, "Unexpected error", summary, details)
 
 
 def install_excepthooks(tk_root=None) -> None:

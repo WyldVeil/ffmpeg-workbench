@@ -16,12 +16,12 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
 from core import ffmpeg as ff
 from core import metaclean as mc
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.system.metadata_cleaner")
 

@@ -10,7 +10,6 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from core import dialogs
 from core import ffmpeg as ff
 from core import proc as _proc
 from core import ui as _ui
@@ -22,6 +21,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
+from tabs.kit import dialogs
 from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
 

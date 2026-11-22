@@ -18,11 +18,11 @@ import os
 import tkinter as tk
 from tkinter import ttk
 
-from core import dialogs
 from core.i18n import t
 from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
 EQ_BANDS = [

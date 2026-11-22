@@ -21,7 +21,6 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.hardware import launch_preview
@@ -37,6 +36,7 @@ from core.ops.crossfader import (
 )
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.widgets import EncoderPanel
 
 TRANSITIONS = [

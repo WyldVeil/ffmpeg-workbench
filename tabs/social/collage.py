@@ -20,13 +20,14 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs, grid
 from core import ffmpeg as ff
+from core import grid
 from core.i18n import t
 from core.ops.shared import frame_rate
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.widgets import EncoderPanel
 
 

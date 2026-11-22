@@ -10,10 +10,10 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 PRESETS = {
     t("ducker.gentle_podcast"): dict(threshold=0.025, ratio=4, attack=20, release=600),

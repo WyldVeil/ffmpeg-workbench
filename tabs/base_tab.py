@@ -15,11 +15,12 @@ import logging
 import time
 import tkinter as tk
 from collections.abc import Callable
+from functools import partial
 from tkinter import messagebox, ttk
 from typing import Any, Literal
 
-from core import dialogs, logs, outputs, proc, settings, ui
 from core import ffmpeg as ff
+from core import logs, outputs, proc, settings, ui
 from core.hardware import open_in_explorer, reveal_file
 from core.i18n import t
 from core.queue_manager import RenderTask
@@ -27,6 +28,7 @@ from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from core.timecode import Timecode
 from core.tools import ToolId
+from tabs.kit import dialogs
 from tabs.kit.contracts import Shell, Transport
 
 logger = logging.getLogger("crossfader.base_tab")
@@ -700,7 +702,7 @@ class BaseTab(ttk.Frame):
 
     #: Maximum lines kept in a console widget (older lines are trimmed).
     CONSOLE_MAX_LINES = 3000
-    #: Kinds of file this tab accepts by drag-and-drop (see core.dialogs).
+    #: Kinds of file this tab accepts by drag-and-drop (see tabs.kit.dialogs).
     accepted_kinds = ("media",)
 
     #: The page's main button (Render, Export...), set by the page: Ctrl+S presses it.
@@ -833,7 +835,11 @@ class BaseTab(ttk.Frame):
         policy = "overwrite" if dialogs.was_confirmed(out) else None
         try:
             return outputs.resolve_output(
-                out, [i for i in inputs if i], default_ext=default_ext, policy=policy, parent=self
+                out,
+                [i for i in inputs if i],
+                default_ext=default_ext,
+                policy=policy,
+                ask=partial(dialogs.ask_overwrite, parent=self),
             )
         except outputs.OutputRejected as exc:
             if str(exc):

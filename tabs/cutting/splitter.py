@@ -8,15 +8,16 @@ import re
 import tkinter as tk
 from tkinter import messagebox
 
-from core import dialogs, outputs
 from core import encoders as enc
 from core import ffmpeg as ff
+from core import outputs
 from core.hardware import get_video_duration
 from core.i18n import t
 from core.scaling import px
 from core.timecode import Timecode
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, add_tooltip
+from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
 
 

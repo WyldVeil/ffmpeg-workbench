@@ -270,7 +270,7 @@ class FrameExtractorTab(BaseTab):
         self.preview.show(pos)
 
     def _pick_dir(self):
-        from core import dialogs
+        from tabs.kit import dialogs
 
         d = dialogs.ask_directory(parent=self)
         if d:

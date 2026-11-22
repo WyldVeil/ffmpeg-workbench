@@ -15,11 +15,12 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs, remux
 from core import ffmpeg as ff
+from core import remux
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.widgets import FileRow, scroll_body
 
 CONTAINERS = {

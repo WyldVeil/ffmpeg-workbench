@@ -185,3 +185,26 @@ def test_logging_writes_file(tmp_path, monkeypatch):
         for h in logger.handlers:
             h.close()
         logger.handlers = old
+
+
+def test_existing_output_asks_the_injected_question(tmp_path):
+    existing = tmp_path / "out.mp4"
+    existing.write_bytes(b"x")
+    asked = []
+
+    def ask(path: str, alternative: str) -> bool | None:
+        asked.append((path, alternative))
+        return answers.pop(0)
+
+    answers: list[bool | None] = [True, False, None]
+    assert outputs.resolve_output(str(existing), policy="ask", ask=ask) == str(
+        existing
+    )  # overwrite
+    assert outputs.resolve_output(str(existing), policy="ask", ask=ask) == str(
+        tmp_path / "out (2).mp4"
+    )
+    with pytest.raises(outputs.OutputRejected):
+        outputs.resolve_output(str(existing), policy="ask", ask=ask)  # cancelled
+    assert asked[0] == (str(existing), str(tmp_path / "out (2).mp4"))
+    # no question to ask (the command line): never overwrite
+    assert outputs.resolve_output(str(existing), policy="ask") == str(tmp_path / "out (2).mp4")

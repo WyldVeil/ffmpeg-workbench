@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from core import settings
 from core.errors import OutputError
@@ -104,13 +104,15 @@ def resolve_output(
     *,
     default_ext: str = ".mp4",
     policy: str | None = None,
-    parent=None,
-    ask=True,
+    ask: Callable[[str, str], bool | None] | None = None,
 ) -> str:
     """Validate and finalise an output path before rendering.
 
     Returns the path to use (possibly renamed), or raises
-    :class:`OutputRejected` with a user-facing message.
+    :class:`OutputRejected` with a user-facing message.  When the file exists
+    and the policy is "ask", *ask(existing, alternative)* decides: True to
+    overwrite, False for the alternative name, None to cancel.  Without it
+    (the command line) the alternative name is used - nothing is overwritten.
     """
     out = (out or "").strip().strip('"')
     if not out:
@@ -137,18 +139,10 @@ def resolve_output(
     policy = policy or settings.OVERWRITE_POLICY.get()
     if policy == "overwrite":
         return out
-    if policy == "rename" or not ask:
-        return unique_path(out)
-    from tkinter import messagebox
-
     alt = unique_path(out)
-    answer = messagebox.askyesnocancel(
-        "File already exists",
-        f"{os.path.basename(out)} already exists.\n\n"
-        f"Yes — overwrite it\nNo — save as {os.path.basename(alt)}\n"
-        "Cancel — don't render",
-        parent=parent,  # pyright: ignore[reportArgumentType] - None means "the main window", as Tk allows
-    )
+    if policy == "rename" or ask is None:
+        return alt
+    answer = ask(out, alt)
     if answer is None:
         raise OutputRejected("")
     return out if answer else alt

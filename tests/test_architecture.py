@@ -53,11 +53,7 @@ def _top(module: str) -> str:
 
 # ── the exceptions still to fix (may only shrink) ────────────────────────────
 
-ENGINE_EXCEPTIONS: dict[str, set[str]] = {
-    "core/dialogs.py": {"tkinter"},
-    "core/logs.py": {"tkinter"},
-    "core/outputs.py": {"tkinter"},
-}
+ENGINE_EXCEPTIONS: dict[str, set[str]] = {}
 PROCESS_EXCEPTIONS: set[str] = set()  # every program starts through core.proc
 THREAD_EXCEPTIONS: set[str] = set()  # every thread starts through core.tasks
 

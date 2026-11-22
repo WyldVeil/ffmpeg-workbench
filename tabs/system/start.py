@@ -245,7 +245,7 @@ class StartTab(BaseTab):
 
     # ── Files ─────────────────────────────────────────────────────────────
     def _choose_file(self):
-        from core import dialogs
+        from tabs.kit import dialogs
 
         path = dialogs.ask_open("media", title="Choose a file", parent=self)
         if path:

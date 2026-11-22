@@ -14,12 +14,13 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs, midi, tasks
 from core import ffmpeg as ff
+from core import midi, tasks
 from core.i18n import t
 from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
+from tabs.kit import dialogs
 
 
 class MIDIfierTab(BaseTab):

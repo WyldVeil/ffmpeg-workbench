@@ -11,8 +11,9 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox
 
-from core import dialogs, settings
+from core import settings
 from core.tools import ToolId
+from tabs.kit import dialogs
 from tabs.kit.contracts import AcceptsFiles
 
 logger = logging.getLogger("crossfader.shell")

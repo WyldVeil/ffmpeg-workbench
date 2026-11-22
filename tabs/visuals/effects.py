@@ -23,15 +23,16 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs, tasks
 from core import ffmpeg as ff
 from core import filters as fl
+from core import tasks
 from core.hardware import (
     get_binary_path,
 )
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.visuals.effects")
 

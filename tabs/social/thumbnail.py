@@ -16,7 +16,6 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
 from core.hardware import (
     launch_preview,
 )
@@ -25,6 +24,7 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
 

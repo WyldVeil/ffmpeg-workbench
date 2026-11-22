@@ -15,7 +15,6 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
 from core import ffmpeg as ff
 from core import quality as q
 from core.i18n import t
@@ -23,6 +22,7 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
 SPEEDS = {1: "Every frame (most exact)", 2: "Every 2nd frame", 5: "Every 5th frame (fastest)"}

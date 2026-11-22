@@ -373,7 +373,7 @@ class SlideshowMakerTab(BaseTab):
         self.add_paths(self.pick_sources("image"))
 
     def _add_folder(self):
-        from core import dialogs
+        from tabs.kit import dialogs
 
         d = dialogs.ask_directory(parent=self)
         if d:

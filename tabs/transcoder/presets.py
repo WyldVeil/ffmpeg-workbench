@@ -16,13 +16,13 @@ import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-from core import dialogs
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.paths import config_dir
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 #: where presets were kept before 2.0 (inside the program folder - read once, never written)
 LEGACY_FILE = os.path.join(

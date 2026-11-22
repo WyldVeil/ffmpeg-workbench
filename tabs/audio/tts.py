@@ -17,14 +17,15 @@ import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
-from core import dialogs, tasks
 from core import proc as _proc
+from core import tasks
 from core import tts as tts_core
 from core.hardware import get_binary_path
 from core.i18n import t
 from core.ops.shared import audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.audio.tts")
 

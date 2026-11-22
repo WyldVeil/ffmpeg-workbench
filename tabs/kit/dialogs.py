@@ -1,5 +1,5 @@
 """
-core/dialogs.py - File dialogs that feel native and behave the same everywhere.
+tabs/kit/dialogs.py - File dialogs that feel native and behave the same everywhere.
 
 * One set of file-type lists (video, audio, image, subtitles, LUTs …) with
   patterns in BOTH cases on Linux/macOS, where Tk matching is case-sensitive
@@ -20,6 +20,7 @@ import shutil
 import sys
 import threading
 from collections.abc import Sequence
+from typing import Any
 
 from core import proc as _proc
 from core import settings, tasks
@@ -624,3 +625,17 @@ def askdirectory(**kw) -> str:
     path = str(filedialog.askdirectory(**kw) or "")
     _remember("folder", path)
     return path
+
+
+def ask_overwrite(existing: str, alternative: str, *, parent: Any = None) -> bool | None:
+    """The "file already exists" question for core.outputs.resolve_output:
+    True = overwrite, False = save as *alternative*, None = don't render."""
+    from tkinter import messagebox
+
+    return messagebox.askyesnocancel(
+        "File already exists",
+        f"{os.path.basename(existing)} already exists.\n\n"
+        f"Yes — overwrite it\nNo — save as {os.path.basename(alternative)}\n"
+        "Cancel — don't render",
+        parent=parent,
+    )

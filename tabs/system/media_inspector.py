@@ -16,12 +16,13 @@ import tkinter as tk
 from functools import partial
 from tkinter import ttk
 
-from core import dialogs, tasks
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.widgets import FramePreview
 
 

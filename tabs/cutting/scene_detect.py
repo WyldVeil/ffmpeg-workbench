@@ -157,7 +157,7 @@ class SceneDetectTab(BaseTab):
             self.dir_var.set(default_output_folder(path))
 
     def _pick_dir(self):
-        from core import dialogs
+        from tabs.kit import dialogs
 
         d = dialogs.ask_directory(parent=self)
         if d:
@@ -387,7 +387,7 @@ class SceneDetectTab(BaseTab):
     def _save_csv(self):
         if not self._need_scenes():
             return
-        from core import dialogs
+        from tabs.kit import dialogs
 
         base = os.path.splitext(os.path.basename(self.src_row.path))[0]
         out = dialogs.ask_save(
