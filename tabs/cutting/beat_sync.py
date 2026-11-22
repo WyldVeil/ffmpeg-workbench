@@ -18,19 +18,16 @@ then the segments are joined losslessly and the song is laid underneath.
 
 from __future__ import annotations
 
-import itertools
 import os
-import random
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import encoders as enc
 from core import ffmpeg as ff
-from core import filters as fl
 from core import tasks
 from core.beats import ENV_RATE, beat_grid, envelope, estimate_tempo, onset_peaks, onset_strength
 from core.i18n import t
-from core.ops.shared import final_copy_args, frame_rate, intermediate_args
+from core.ops import beat_montage as bm
+from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -47,37 +44,6 @@ SIZES = {
     "1280×720": (1280, 720),
     "1080×1080 (square)": (1080, 1080),
 }
-
-
-def frame_plan(cuts, total: float, fps: float) -> list:
-    """[(start_s, frames)] covering 0..total with cuts on the given times."""
-    marks = [0.0] + [c for c in cuts if 0 < c < total] + [total]
-    plan = []
-    for a, b in itertools.pairwise(marks):
-        frames = round(b * fps) - round(a * fps)
-        if frames > 0:
-            plan.append((a, frames))
-    return plan
-
-
-def assign_sources(plan, clips, order: str, fps: float, seed: int = 7) -> list:
-    """[(clip_path, in_point, frames)] for each planned segment."""
-    rng = random.Random(seed)
-    out, idx, pos = [], 0, {c[0]: 0.0 for c in clips}
-    for _start, frames in plan:
-        seconds = frames / fps
-        if order == "shuffle":
-            path, dur = rng.choice(clips)
-            start = rng.uniform(0, max(0.0, dur - seconds)) if dur > seconds else 0.0
-        else:
-            path, dur = clips[idx % len(clips)]
-            start = pos[path]
-            if start + seconds > dur:
-                start = 0.0 if seconds >= dur else start % max(dur - seconds, 0.001)
-            pos[path] = start + seconds
-            idx += 1
-        out.append((path, start, frames))
-    return out
 
 
 class BeatSyncCutterTab(BaseTab):
@@ -349,9 +315,9 @@ class BeatSyncCutterTab(BaseTab):
         every = int(self.every_var.get() or 1)
         cuts = self.beats[::every]
         total = minfo.duration
-        plan = frame_plan(cuts, total, fps)
+        plan = bm.frame_plan(cuts, total, fps)
         order = next((k for k, v in ORDERS.items() if v == self.order_var.get()), "sequential")
-        segments = assign_sources(plan, self.clips, order, fps)
+        segments = bm.assign_sources(plan, self.clips, order, fps)
         out = self.confirm_output(
             self.out_row.path or self.suggest_output(music, "montage", ".mp4"),
             [music] + [c[0] for c in self.clips],
@@ -360,70 +326,16 @@ class BeatSyncCutterTab(BaseTab):
             return
         self.out_row.set(out)
         container = common.container_of(out)
-        venc = self.encoder.video_encode(container)
-        chain = (
-            f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,"
-            f"fps={fps_str},format=yuv420p"
+        job = bm.MontageJob(
+            segments=segments,
+            music=music,
+            size=(w, h),
+            rate=fps_str,
+            fps=fps,
+            duration=total,
+            venc=self.encoder.video_encode(container),
+            container=container,
         )
-        n = len(segments)
-
-        def work(_p, cancelled, ctx):
-            tmp = ctx.tempdir()
-            files = []
-            for i, (path, start, frames) in enumerate(segments):
-                seg = os.path.join(tmp, f"seg{i:05d}.mkv")
-                ctx.span(0.95 * i / n, 0.95 * (i + 1) / n).run(
-                    [
-                        ff.ffmpeg_path(),
-                        "-y",
-                        *venc.pre_input,
-                        "-stream_loop",
-                        "-1",
-                        "-ss",
-                        ff.ts(start),
-                        "-i",
-                        path,
-                        "-frames:v",
-                        str(frames),
-                        "-an",
-                        "-sn",
-                        *venc.vf_args(chain),
-                        *intermediate_args(venc),
-                        seg,
-                    ],
-                    duration=frames / fps,
-                )
-                files.append(seg)
-            lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
-            ctx.span(0.95, 1.0).run(
-                [
-                    ff.ffmpeg_path(),
-                    "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
-                    "-i",
-                    lst,
-                    "-i",
-                    music,
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    "1:a:0",
-                    "-c:v",
-                    "copy",
-                    *enc.audio(
-                        enc.default_audio_for(container), container=container, bitrate="256k"
-                    ),
-                    "-t",
-                    f"{total:.3f}",
-                    *final_copy_args(venc, container),
-                    ctx.output(),
-                ],
-                duration=total,
-            )
-            return 0
 
         self.log(self.console, f"{len(plan)} cuts · {w}×{h} @ {fps_str} · {ff.format_time(total)}")
         common.queue_job(
@@ -431,7 +343,7 @@ class BeatSyncCutterTab(BaseTab):
             common.Job(
                 name="Beat montage",
                 out=out,
-                work=work,
+                work=job.run,
                 duration=total,
                 inputs=[music] + [c[0] for c in self.clips],
             ),
