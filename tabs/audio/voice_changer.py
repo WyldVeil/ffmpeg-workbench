@@ -14,64 +14,11 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.shared import audio_job_args
+from core.ops import voice as vc
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, SaveRow, scroll_body
-
-PRESETS = {  # id: (label, semitones, extra filters)
-    "chipmunk": ("Chipmunk (high pitch)", 6, ""),
-    "deep": ("Deep / anonymous (low pitch)", -5, ""),
-    "demon": ("Demon", -8, "aecho=0.8:0.85:60:0.35"),
-    "robot": (
-        "Robot",
-        0,
-        "afftfilt=real='hypot(re,im)*sin(0)':imag='hypot(re,im)*cos(0)':"
-        "win_size=512:overlap=0.75,flanger=delay=3:depth=2:regen=40",
-    ),
-    "radio": (
-        "Old radio",
-        0,
-        "highpass=f=300,lowpass=f=3400,acompressor=threshold=0.1:ratio=6,volume=1.5",
-    ),
-    "phone": (
-        "Telephone",
-        0,
-        "highpass=f=400,lowpass=f=3000,aformat=sample_rates=8000,aresample=48000",
-    ),
-    "stadium": ("Stadium echo", 0, "aecho=0.8:0.9:1000|1800:0.3|0.2"),
-    "cave": ("Cave reverb", 0, "aecho=0.8:0.88:60|120|200:0.4|0.3|0.2"),
-    "whisper": (
-        "Whisper",
-        0,
-        "afftfilt=real='hypot(re,im)*cos((random(0)*2-1)*2*3.14)':"
-        "imag='hypot(re,im)*sin((random(1)*2-1)*2*3.14)':win_size=128:overlap=0.8,"
-        "highpass=f=500",
-    ),
-    "custom": ("Custom pitch only", None, ""),
-}
-
-
-def voice_filter(
-    preset: str, semitones: float, sample_rate: int, keep_formants: bool, rubberband: bool
-) -> str:
-    """The -af chain for a preset (semitones used for 'custom' and pitched presets)."""
-    _label, default_st, extra = PRESETS[preset]
-    st = semitones if default_st is None else default_st
-    parts = []
-    if abs(st) > 0.01:
-        k = 2 ** (st / 12)
-        if rubberband:
-            parts.append(
-                f"rubberband=pitch={k:.5f}" + (":formant=preserved" if keep_formants else "")
-            )
-        else:
-            sr = sample_rate or 48000
-            parts += [f"asetrate={round(sr * k)}", f"aresample={sr}", f"atempo={1 / k:.5f}"]
-    if extra:
-        parts.append(extra)
-    return ",".join(parts) or "anull"
 
 
 class VoiceChangerTab(BaseTab):
@@ -94,11 +41,11 @@ class VoiceChangerTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text="  Effect  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.preset_var = tk.StringVar(value=PRESETS["chipmunk"][0])
+        self.preset_var = tk.StringVar(value=vc.PRESETS["chipmunk"][0])
         ttk.Combobox(
             opt,
             textvariable=self.preset_var,
-            values=[v[0] for v in PRESETS.values()],
+            values=[v[0] for v in vc.PRESETS.values()],
             state="readonly",
             width=32,
         ).grid(row=0, column=0, sticky="w")
@@ -155,10 +102,10 @@ class VoiceChangerTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def chain(self, info) -> str:
-        key = next((k for k, v in PRESETS.items() if v[0] == self.preset_var.get()), "chipmunk")
+        key = next((k for k, v in vc.PRESETS.items() if v[0] == self.preset_var.get()), "chipmunk")
         sr = info.require_audio().sample_rate if info is not None and info.audio else 48000
-        return voice_filter(
-            key, float(self.semi_var.get()), sr, self.formant_var.get(), ff.has_filter("rubberband")
+        return vc.voice_filter(
+            key, float(self.semi_var.get()), sr, self.formant_var.get(), vc.rubberband_available()
         )
 
     def _preview(self):
@@ -182,7 +129,7 @@ class VoiceChangerTab(BaseTab):
         if not out:
             return
         af = self.chain(info)
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]
+        cmd = vc.voice_cmd(src, af, out, info)
         self.log(self.console, f"Effect: {self.preset_var.get()}")
         self.run_ffmpeg(
             cmd,
