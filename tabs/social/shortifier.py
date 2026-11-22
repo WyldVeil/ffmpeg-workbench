@@ -62,7 +62,11 @@ class ShortifierTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 300, 300, after_label="Result")
         self.compare.pack(pady=px(4))
+        self._build_format(body)
+        self._build_output(body)
 
+    def _build_format(self, body):
+        """Platform, layout, framing and length."""
         opt = tk.LabelFrame(body, text="  Format  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
@@ -134,6 +138,8 @@ class ShortifierTab(BaseTab):
         for var in (self.cw_var, self.ch_var):
             var.trace_add("write", lambda *_a: self._changed())
 
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)

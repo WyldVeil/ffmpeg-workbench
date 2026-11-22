@@ -106,7 +106,12 @@ class ThumbnailMakerTab(BaseTab):
             font=(UI_FONT, 9, "bold"),
         )
         frame_lf.pack(fill="x", padx=px(20), pady=px(8))
+        self._build_frame_preview(frame_lf)
+        self._build_scrubber(frame_lf)
+        self._build_jump_buttons(frame_lf)
 
+    def _build_frame_preview(self, frame_lf):
+        """Live preview of the thumbnail itself: the export's own filters (size, adjustments, text) on the chosen frame."""
         # Live preview of the thumbnail itself: the export's own filters (size,
         # adjustments, text) on the chosen frame
         self._preview = FramePreview(frame_lf, 320, 180, show_time=False)
@@ -114,6 +119,8 @@ class ThumbnailMakerTab(BaseTab):
         self._preview.canvas.configure(bg=CLR["bg"])
         self._preview_job = None
 
+    def _build_scrubber(self, frame_lf):
+        """The frame slider and its time."""
         fr1 = tk.Frame(frame_lf)
         fr1.pack(fill="x", pady=px(3))
         tk.Label(
@@ -140,6 +147,8 @@ class ThumbnailMakerTab(BaseTab):
         )
         self._time_lbl.pack(side="left")
 
+    def _build_jump_buttons(self, frame_lf):
+        """Preview, and steps of a second or a tenth back and forward."""
         fr2 = tk.Frame(frame_lf)
         fr2.pack(fill="x", pady=px(3))
         tk.Label(fr2, text="", width=14).pack(side="left")

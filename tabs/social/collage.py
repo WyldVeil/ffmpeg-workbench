@@ -27,6 +27,7 @@ from core.i18n import t
 from core.ops.shared import frame_rate
 from core.scaling import px
 from core.timecode import Timecode
+from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.widgets import EncoderPanel, SaveRow
@@ -446,9 +447,48 @@ class VideoCollageTab(BaseTab):
         self._changed()
 
     # ── Render ────────────────────────────────────────────────────────
-    def _render(self):
-        from tabs import common
+    def _length(self, clips, length_key):
+        """The collage's length: the longest clip, the shortest, or the typed one (None: bad number)."""
+        durs = [s["duration"] for s in clips]
+        if length_key == "longest":
+            return max(durs)
+        if length_key == "shortest":
+            return min(durs)
+        try:
+            return common.number(self._custom_len.get(), "Length", 0.5, 24 * 3600)
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+            return None
 
+    def _graph(self, spec, clips, geometry, total, length_key):
+        """(filter graph, has sound): picture-in-picture, or the grid (fixed or automatic)."""
+        W, H, fps = geometry
+        loop = self._loop_var.get()
+        end = self._key(ENDS, self._end_var, "hold")
+        audio = self._key(AUDIO_MODES, self._audio_mode, "first")
+        bg = BACKGROUNDS.get(self._bg_color.get(), "black")
+        if spec.get("custom") == "pip":
+            canvas = grid.Canvas(W, H, fps=fps, gap=self._gap(), background=bg)
+            has_audio = [s["has_audio"] for s in clips]
+            return grid.pip_filter(
+                has_audio, canvas, shortest=length_key == "shortest", audio=audio
+            )
+        gclips = [
+            grid.Clip(i, s["aspect"], s["duration"], s["has_audio"]) for i, s in enumerate(clips)
+        ]
+        layouts: dict[grid.LayoutKey, grid.Layout] | None = (
+            None if spec.get("auto") else {"all": self._layout([c.aspect for c in gclips])}
+        )
+        if not spec.get("auto") and not loop and end == "reflow":
+            end = "hold"  # fixed grids keep their cells
+        canvas = grid.Canvas(
+            W, H, fps=fps, gap=self._gap(), mode=self._mode_var.get(), background=bg
+        )
+        return grid.collage_filter(
+            gclips, canvas, grid.Timing(total, loop=loop, end=end, audio=audio), layouts
+        )
+
+    def _render(self):
         key = self._layout_key()
         spec = LAYOUTS[key]
         clips = self._clips_for_layout()
@@ -461,18 +501,9 @@ class VideoCollageTab(BaseTab):
             )
             return
         W, H = self._canvas_size()
-        durs = [s["duration"] for s in clips]
         length_key = self._key(LENGTHS, self._length_var, "longest")
-        try:
-            total = (
-                max(durs)
-                if length_key == "longest"
-                else min(durs)
-                if length_key == "shortest"
-                else common.number(self._custom_len.get(), "Length", 0.5, 24 * 3600)
-            )
-        except ValueError as exc:
-            messagebox.showwarning(t("common.warning"), str(exc), parent=self)
+        total = self._length(clips, length_key)
+        if total is None:
             return
         paths = [s["path"] for s in clips]
         out = self._out_var.get().strip() or self.suggest_output(paths[0], "collage")
@@ -481,36 +512,11 @@ class VideoCollageTab(BaseTab):
             return
         self._out_var.set(out)
         loop = self._loop_var.get()
-        end = self._key(ENDS, self._end_var, "hold")
-        audio = self._key(AUDIO_MODES, self._audio_mode, "first")
-        bg = BACKGROUNDS.get(self._bg_color.get(), "black")
-        infos = [ff.try_probe(p) for p in paths]
-        fps = frame_rate(infos[0]) if infos[0] is not None else "30"
+        fps_info = ff.try_probe(paths[0])
+        fps = frame_rate(fps_info) if fps_info is not None else "30"
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
-        if spec.get("custom") == "pip":
-            canvas = grid.Canvas(W, H, fps=fps, gap=self._gap(), background=bg)
-            graph, has_a = grid.pip_filter(
-                [s["has_audio"] for s in clips],
-                canvas,
-                shortest=length_key == "shortest",
-                audio=audio,
-            )
-        else:
-            gclips = [
-                grid.Clip(i, s["aspect"], s["duration"], s["has_audio"])
-                for i, s in enumerate(clips)
-            ]
-            layouts: dict[grid.LayoutKey, grid.Layout] | None = (
-                None if spec.get("auto") else {"all": self._layout([c.aspect for c in gclips])}
-            )
-            if not spec.get("auto") and not loop and end == "reflow":
-                end = "hold"  # fixed grids keep their cells
-            canvas = grid.Canvas(
-                W, H, fps=fps, gap=self._gap(), mode=self._mode_var.get(), background=bg
-            )
-            timing = grid.Timing(total, loop=loop, end=end, audio=audio)
-            graph, has_a = grid.collage_filter(gclips, canvas, timing, layouts)
+        graph, has_a = self._graph(spec, clips, (W, H, fps), total, length_key)
         looped = loop and spec.get("custom") != "pip"
         cmd = grid.collage_cmd(paths, graph, venc, container, total, out, audio=has_a, loop=looped)
         what = (

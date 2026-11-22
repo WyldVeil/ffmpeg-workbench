@@ -47,7 +47,11 @@ class ImageWatermarkTab(BaseTab):
         self.logo_row.pack(fill="x", padx=px(20), pady=px(2))
         self.compare = CompareView(body, 400, 225, after_label="With logo")
         self.compare.pack(pady=px(4))
+        self._build_placement(body)
+        self._build_output(body)
 
+    def _build_placement(self, body):
+        """Where the logo goes, its size, opacity and margin, and when it shows."""
         opt = tk.LabelFrame(body, text="  Placement  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.place_var = tk.StringVar(value=POSITIONS["br"][0])
@@ -116,6 +120,8 @@ class ImageWatermarkTab(BaseTab):
         self.fade_var = tk.StringVar(value="0.5")
         tk.Entry(tr, textvariable=self.fade_var, width=5).pack(side="left")
 
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))

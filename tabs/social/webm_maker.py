@@ -103,7 +103,12 @@ class WebMTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.webm_maker"), t("webm_maker.subtitle"), icon="🌐")
         outer = scroll_body(self)
+        self._build_source(outer)
+        self._build_settings(outer)
+        self._build_output(outer)
 
+    def _build_source(self, outer):
+        """The source file and what it is."""
         src_lf = tk.LabelFrame(outer, text=t("section.source_file"), padx=px(14), pady=px(8))
         src_lf.pack(fill="x", padx=px(18), pady=px(10, 4))
         self.src_var = tk.StringVar()
@@ -116,6 +121,8 @@ class WebMTab(BaseTab):
         )
         self.src_info_lbl.pack(anchor="w", pady=px(4, 0))
 
+    def _build_settings(self, outer):
+        """Simple and Advanced settings, in tabs."""
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill="x", padx=px(18), pady=px(4))
         simple = tk.Frame(self.notebook)
@@ -126,6 +133,8 @@ class WebMTab(BaseTab):
         self._build_advanced_tab(advanced)
         self.notebook.bind("<<NotebookTabChanged>>", lambda _e: self._tab_changed())
 
+    def _build_output(self, outer):
+        """Where the result goes, the buttons, progress and the log."""
         out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=px(14), pady=px(8))
         out_lf.pack(fill="x", padx=px(18), pady=px(2, 6))
         self.out_var = tk.StringVar()

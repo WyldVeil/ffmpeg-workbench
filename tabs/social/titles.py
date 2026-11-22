@@ -75,7 +75,12 @@ class TitlesGeneratorTab(BaseTab):
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        self._build_preview(body)
+        self._build_look(body)
+        self._build_cards(body)
 
+    def _build_preview(self, body):
+        """The frame the titles are previewed on."""
         pv = tk.Frame(body)
         pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 480, 270)
@@ -92,6 +97,8 @@ class TitlesGeneratorTab(BaseTab):
         self.slider.pack(fill="x")
         framestep.slider(self.slider, self.preview)  # , and . step a frame
 
+    def _build_look(self, body):
+        """Font, text size and animation length for every card."""
         look = tk.Frame(body)
         look.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(look, text="Font:").pack(side="left")
@@ -113,6 +120,8 @@ class TitlesGeneratorTab(BaseTab):
         tk.Entry(look, textvariable=self.anim_var, width=5).pack(side="left", padx=px(6))
         self.anim_var.trace_add("write", lambda *_a: self._schedule())
 
+    def _build_cards(self, body):
+        """The cards, the output, the button and the log."""
         cards_hdr = tk.Frame(body)
         cards_hdr.pack(fill="x", padx=px(20), pady=px(8, 0))
         tk.Label(
@@ -166,6 +175,21 @@ class TitlesGeneratorTab(BaseTab):
             "duration": tk.StringVar(value=f"{card.duration:g}"),
         }
         row = {"frame": frame, "vars": v}
+        self._card_controls(frame, row, card)
+        self._card_lines(frame, v)
+        for var in v.values():
+            var.trace_add("write", lambda *_a: self._schedule())
+        for w in _walk(frame):
+            if isinstance(w, tk.Entry):
+                w.bind("<FocusIn>", lambda _e, r=row: self._use(r), add=True)
+        self.rows.append(row)
+        self._active = row
+        self._schedule()
+        return row
+
+    def _card_controls(self, frame, row, card):
+        """Style, start (with the i button), duration (and ◉ to end here), colour, show, remove."""
+        v = row["vars"]
         r1 = tk.Frame(frame)
         r1.pack(fill="x")
         ttk.Combobox(
@@ -203,21 +227,16 @@ class TitlesGeneratorTab(BaseTab):
         tk.Button(
             r1, text="✕", relief="flat", cursor="hand2", command=lambda r=row: self._remove(r)
         ).pack(side="right")
+
+    @staticmethod
+    def _card_lines(frame, v):
+        """The card's two lines of text."""
         r2 = tk.Frame(frame)
         r2.pack(fill="x", pady=px(3, 0))
         tk.Label(r2, text=t("titles.line_1_label"), width=7, anchor="w").pack(side="left")
         tk.Entry(r2, textvariable=v["line1"], width=34).pack(side="left", padx=px(0, 10))
         tk.Label(r2, text=t("titles.line_2_label"), width=7, anchor="w").pack(side="left")
         tk.Entry(r2, textvariable=v["line2"], width=34).pack(side="left")
-        for var in v.values():
-            var.trace_add("write", lambda *_a: self._schedule())
-        for w in _walk(frame):
-            if isinstance(w, tk.Entry):
-                w.bind("<FocusIn>", lambda _e, r=row: self._use(r), add=True)
-        self.rows.append(row)
-        self._active = row
-        self._schedule()
-        return row
 
     # ── i / o and the ◉ buttons: a card starts / ends at the frame shown ──
     def _use(self, row):

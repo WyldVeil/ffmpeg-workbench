@@ -369,40 +369,19 @@ class AutoSubsTab(BaseTab):
         if info is None:
             return
         fmt = self._fmt()
-        exts = {"srt": [".srt"], "vtt": [".vtt"], "both": [".srt", ".vtt"], "txt": [".txt"]}[fmt]
-        target = self.out_row.path or self._suggest()
-        base = os.path.splitext(target)[0]
-        first = self.confirm_output(base + exts[0], [src], default_ext=exts[0])
-        if not first:
+        outputs = self._outputs(src, fmt)
+        if outputs is None:
             return
-        base = os.path.splitext(first)[0]
-        outputs = [base + e for e in exts]
-        self.out_row.set(outputs[0])
         key = self.model_key() or whisper.DEFAULT_MODEL
         lang = next((k for k, lbl in whisper.LANGUAGES if lbl == self.lang_var.get()), "auto")
         tracks = list(self.track_box.cget("values"))
         stream = tracks.index(self.track_var.get()) if self.track_var.get() in tracks else 0
-        translate = self.translate_var.get()
-        whisper_opts = _Options(lang, translate, int(self.maxlen_var.get()), self.prompt_var.get())
+        opts = _Options(
+            lang, self.translate_var.get(), int(self.maxlen_var.get()), self.prompt_var.get()
+        )
         formats = {"both": ("srt", "vtt")}.get(fmt, (fmt,))
         duration = info.duration or None
-
-        job = _Transcription(src, key, stream, duration, formats, outputs, whisper_opts)
-
-        def on_complete(tid, rc):
-            self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
-            self._fill_models(key)
-            task = self.task(tid)
-            self.last_task = task
-            if rc == 0:
-                self._last_subs = outputs[0]
-                self._last_lang = "en" if translate else job.detected
-                if outputs[0].endswith((".srt", ".vtt")):
-                    self.burn_btn.config(state="normal")
-                    self.mux_btn.config(state="normal")
-                self.log_tagged(self.console, "Saved: " + ", ".join(outputs), "success")
-            self.show_result(rc, outputs[0])
-
+        job = _Transcription(src, key, stream, duration, formats, outputs, opts)
         tid = self.enqueue_render(
             "Auto-Subtitles",
             outputs[0],
@@ -410,7 +389,8 @@ class AutoSubsTab(BaseTab):
             expected_duration=duration,
             inputs=[src],
             hooks=Hooks(
-                on_progress=lambda _t, line: self.log(self.console, line), on_complete=on_complete
+                on_progress=lambda _t, line: self.log(self.console, line),
+                on_complete=partial(self._transcribed, job, key),
             ),
         )
         self.btn_render.config(text=f"✖ {t('btn.cancel')}", command=lambda: self.cancel_render(tid))
@@ -419,6 +399,33 @@ class AutoSubsTab(BaseTab):
             f"Transcribing with {whisper.MODELS[key].label} "
             f"({'auto language' if lang == 'auto' else lang})…",
         )
+
+    def _outputs(self, src, fmt):
+        """The subtitle files to write (two for SRT + VTT); None if the user backs out."""
+        exts = {"srt": [".srt"], "vtt": [".vtt"], "both": [".srt", ".vtt"], "txt": [".txt"]}[fmt]
+        base = os.path.splitext(self.out_row.path or self._suggest())[0]
+        first = self.confirm_output(base + exts[0], [src], default_ext=exts[0])
+        if not first:
+            return None
+        base = os.path.splitext(first)[0]
+        outputs = [base + e for e in exts]
+        self.out_row.set(outputs[0])
+        return outputs
+
+    def _transcribed(self, job, key, tid, rc):
+        """Back to ready; on success, the follow-up buttons light up."""
+        self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
+        self._fill_models(key)
+        self.last_task = self.task(tid)
+        outputs = job.outputs
+        if rc == 0:
+            self._last_subs = outputs[0]
+            self._last_lang = "en" if job.opts.translate else job.detected
+            if outputs[0].endswith((".srt", ".vtt")):
+                self.burn_btn.config(state="normal")
+                self.mux_btn.config(state="normal")
+            self.log_tagged(self.console, "Saved: " + ", ".join(outputs), "success")
+        self.show_result(rc, outputs[0])
 
     # ── follow-ups ───────────────────────────────────────────────────────────
 

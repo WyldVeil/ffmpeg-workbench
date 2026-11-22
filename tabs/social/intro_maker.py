@@ -107,7 +107,10 @@ class IntroMakerTab(BaseTab):
             highlightbackground=CLR["border"],
         )
         self.canvas.pack(side="right", padx=px(10, 0))
+        return self._build_card_text(body, left)
 
+    def _build_card_text(self, body, left):
+        """The card's text, font, size, animation and position."""
         design = tk.LabelFrame(left, text="  Card  ", padx=px(10), pady=px(6))
         design.pack(fill="x")
 
