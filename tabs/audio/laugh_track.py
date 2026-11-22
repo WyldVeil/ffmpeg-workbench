@@ -14,6 +14,7 @@ from tkinter import messagebox, ttk
 from core import proc as _proc
 from core.hardware import detect_gpu, get_binary_path
 from core.i18n import t
+from core.ops import laugh_track as lt
 from core.queue_manager import Hooks
 from core.scaling import px
 from core.timecode import Timecode
@@ -587,33 +588,24 @@ class LaughTrackRemoverTab(BaseTab):
             self._out_var.set(p)
 
     # ── Render Logic ──────────────────────────────────────────────────
+    def _cleanup(self) -> lt.Cleanup:
+        return lt.Cleanup(
+            profile=self._use_profile.get(),
+            reduction=self._nr_strength.get(),
+            noise_floor=self._noise_floor.get(),
+            centre=self._use_center.get(),
+            centre_mix=float(self._center_mix.get()),
+            channels=getattr(self, "_channels", 2),
+            eq=self._use_eq.get(),
+            eq_depth=self._eq_depth.get(),
+            gate=self._use_gate.get(),
+            gate_threshold=self._gate_thresh.get(),
+            gate_ratio=self._gate_ratio.get(),
+        )
+
     def _build_af(self):
-        """Return the combined -af filter string for FFmpeg mode."""
-        filters = []
-        if self._use_profile.get():
-            filters.append(
-                f"afftdn=nr={self._nr_strength.get():.0f}:nf={self._noise_floor.get():.0f}:tn=1"
-            )
-        if self._use_center.get():
-            # Keep the dialogue: 5.1/7.1 mixes carry it in the centre channel; on
-            # stereo, dialoguenhance pulls the centre-panned voice forward.
-            # (The old pan math dropped the 5.1 centre and unbalanced mono.)
-            channels = getattr(self, "_channels", 2)
-            mix = float(self._center_mix.get())
-            if channels >= 6:
-                filters.append("pan=stereo|c0=FC+0.2*FL+0.1*SL|c1=FC+0.2*FR+0.1*SR")
-            elif channels == 2:
-                filters.append(
-                    f"dialoguenhance=original={max(0.0, 1.0 - mix):.2f}:enhance=2:voice=4"
-                )
-        if self._use_eq.get():
-            depth = self._eq_depth.get()
-            filters.append(f"equalizer=f=2650:t=h:w=4700:g=-{depth:.0f}")
-        if self._use_gate.get():
-            filters.append(
-                f"acompressor=threshold={self._gate_thresh.get():.0f}dB:ratio={self._gate_ratio.get():.1f}:attack=5:release=200:makeup=2"
-            )
-        return ",".join(filters) if filters else None
+        """The combined audio filter for the FFmpeg engine (None: nothing ticked)."""
+        return lt.filter_chain(self._cleanup())
 
     def _preview_result(self):
         if not self.file_path or self._engine_var.get() == "ai":
@@ -621,22 +613,9 @@ class LaughTrackRemoverTab(BaseTab):
         af = self._build_af()
         if not af:
             return
-        ffplay = get_binary_path("ffplay")
-        cmd = [
-            ffplay,
-            "-i",
-            self.file_path,
-            "-af",
-            af,
-            "-t",
-            "30",
-            "-window_title",
-            t("laugh_track.ffmpeg_preview"),
-            "-x",
-            "800",
-            "-y",
-            "450",
-        ]
+        cmd = lt.preview_cmd(
+            get_binary_path("ffplay"), self.file_path, af, t("laugh_track.ffmpeg_preview")
+        )
         self.preview_proc = _proc.spawn(cmd)
 
     def _render(self):
@@ -684,14 +663,7 @@ class LaughTrackRemoverTab(BaseTab):
             self.btn_render.config(state="normal")
             return
 
-        from core import ffmpeg as ff
-
-        cmd = [ff.ffmpeg_path(), "-y", "-i", self.file_path, "-af", af]
-        if self._export_mode.get() == "video":
-            cmd += ["-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
-        else:
-            cmd += ["-map", "0:a:0", "-vn", "-c:a", "pcm_s16le"]
-        cmd.append(out)
+        cmd = lt.render_cmd(self.file_path, af, out, video=self._export_mode.get() == "video")
         self.log(self.console, f"Running FFmpeg engine with filters: {af}")
         self.run_ffmpeg(
             cmd,
@@ -706,66 +678,16 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _render_ai(self, out, ctx):
         """AI stem separation (audio-separator) inside a private job folder."""
-        from core import ffmpeg as ff
-
         ai_cli = self._find_ai_cli()
         if not ai_cli:
             raise RuntimeError(
                 "The audio-separator program was not found - see the install notes above."
             )
-        job = ctx.tempdir()  # private: nothing outside it is ever touched
-        wav = os.path.join(job, "input.wav")
-        ctx.log("Step 1: extracting the audio…")
-        ctx.span(0.0, 0.1).run(
-            [
-                ff.ffmpeg_path(),
-                "-y",
-                "-i",
-                self.file_path,
-                "-map",
-                "0:a:0",
-                "-vn",
-                "-c:a",
-                "pcm_s16le",
-                wav,
-            ],
+        job = lt.AiSeparation(
+            src=self.file_path,
+            cli=ai_cli,
+            model=self._ai_model.get().strip(),
+            video=self._export_mode.get() == "video",
             duration=self.duration or None,
         )
-        ctx.log(f"Step 2: separating with {self._ai_model.get().strip()} (this can take a while)…")
-        res = ff.run(
-            [
-                ai_cli,
-                wav,
-                "--model_filename",
-                self._ai_model.get().strip(),
-                "--output_dir",
-                job,
-                "--output_format",
-                "WAV",
-            ],
-            on_line=ctx.log,
-            cancel=ctx.cancelled,
-        )
-        if res.cancelled:
-            raise ff.CancelledError("cancelled")
-        if res.returncode != 0:
-            raise RuntimeError("The AI separator failed:\n" + "\n".join(res.log_tail[-6:]))
-        stems = [f for f in os.listdir(job) if f.lower().endswith(".wav") and f != "input.wav"]
-        dialogue_tags = ("(other)", "(vocals)", "(no crowd)", "(no_crowd)", "(speech)", "(dialog")
-        crowd_tags = ("(crowd)", "(laugh", "(instrumental)")
-        pick = next((f for f in stems if any(tag in f.lower() for tag in dialogue_tags)), None)
-        if pick is None and len(stems) == 2:
-            pick = next((f for f in stems if not any(tag in f.lower() for tag in crowd_tags)), None)
-        if pick is None:
-            raise RuntimeError(
-                "Could not tell which separated stem is the dialogue: " + ", ".join(stems)
-            )
-        clean = os.path.join(job, pick)
-        ctx.log(f"Step 3: building the final file from {pick}…")
-        cmd = [ff.ffmpeg_path(), "-y", "-i", self.file_path, "-i", clean]
-        if self._export_mode.get() == "video":
-            cmd += ["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
-        else:
-            cmd += ["-map", "1:a:0", "-c:a", "pcm_s16le"]
-        ctx.span(0.95, 1.0).run([*cmd, ctx.output(out)], duration=self.duration or None)
-        return 0
+        return job.run(ctx, out)
