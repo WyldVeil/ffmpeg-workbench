@@ -14,26 +14,18 @@ from __future__ import annotations
 
 import csv
 import os
-import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
-from core.ops.frame_extractor import keep_scenes
+from core.ops import scenes
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
-
-
-def scene_ranges(starts, duration: float) -> list:
-    """[(start, end)] for each scene."""
-    ends = [*list(starts[1:]), duration]
-    return [(a, b) for a, b in zip(starts, ends, strict=False) if b - a > 0.01]
 
 
 class SceneDetectTab(BaseTab):
@@ -178,32 +170,7 @@ class SceneDetectTab(BaseTab):
         result = {}
 
         def work(_p, _c, ctx):
-            tmp = ctx.tempdir()
-            ctx.run(
-                [
-                    ff.ffmpeg_path(),
-                    "-i",
-                    src,
-                    "-an",
-                    "-sn",
-                    "-dn",
-                    "-vf",
-                    f"scale=320:-2,select='gt(scene,{thr:.3f})',metadata=print:file=cuts.txt",
-                    "-fps_mode",
-                    "passthrough",
-                    "-f",
-                    "null",
-                    "-",
-                ],
-                duration=info.duration,
-                cwd=tmp,
-            )
-            try:
-                with open(os.path.join(tmp, "cuts.txt"), encoding="utf-8", errors="replace") as fh:
-                    cuts = [float(m) for m in re.findall(r"pts_time:\s*([\d.]+)", fh.read())]
-            except OSError:
-                cuts = []
-            result["starts"] = keep_scenes(set(cuts), min_len)
+            result["starts"] = scenes.detect(ctx, src, thr, min_len, info.duration)
             return 0
 
         orig = self.btn_detect.cget("command")
@@ -211,7 +178,7 @@ class SceneDetectTab(BaseTab):
         def on_complete(tid, rc):
             self.btn_detect.config(text="🔍 Find scenes", command=orig)
             if rc == 0:
-                self.scenes = scene_ranges(result.get("starts", [0.0]), info.duration)
+                self.scenes = scenes.scene_ranges(result.get("starts", [0.0]), info.duration)
                 self._fill()
                 self.log_tagged(self.console, f"{len(self.scenes)} scenes found.", "success")
             elif rc != -1:
@@ -266,29 +233,8 @@ class SceneDetectTab(BaseTab):
         self.log(self.console, f"Splitting into {len(self.scenes)} files → {out_dir}")
         if self.lossless_var.get():
             pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%03d{ext}"
-            times = ",".join(f"{a:.3f}" for a, _b in self.scenes[1:]) or f"{info.duration + 1:.3f}"
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-i",
-                src,
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
-                "-c",
-                "copy",
-                "-f",
-                "segment",
-                "-segment_times",
-                times,
-                "-reset_timestamps",
-                "1",
-            ]
-            if ext in (".mp4", ".mov", ".m4v"):
-                cmd += ["-segment_format_options", "movflags=+faststart"]
             self.run_ffmpeg(
-                [*cmd, pattern],
+                scenes.split_copy_cmd(src, self.scenes, pattern, info.duration),
                 self.console,
                 on_done=lambda rc: self.show_result(rc, out_dir),
                 btn=self.btn_split,
@@ -299,30 +245,9 @@ class SceneDetectTab(BaseTab):
             )
             return
         # Re-encode: one exact cut per scene, whatever the encoder's keyframe habits.
+        name = os.path.join(out_dir, base).replace("%", "%%") + "_scene_%03d.mp4"
         venc = self.encoder.video_encode("mp4")
-        audio = enc.audio("aac", container="mp4") if info.has_audio else []
-        cmds = []
-        for i, (a, b) in enumerate(self.scenes, 1):
-            cmds.append(
-                [
-                    ff.ffmpeg_path(),
-                    "-y",
-                    *venc.pre_input,
-                    "-ss",
-                    ff.ts(a),
-                    "-t",
-                    ff.ts(b - a),
-                    "-i",
-                    src,
-                    "-map",
-                    "0:v:0",
-                    *(["-map", "0:a:0"] if info.has_audio else ["-an"]),
-                    *venc.vf_args(None),
-                    *venc.args,
-                    *audio,
-                    os.path.join(out_dir, f"{base}_scene_{i:03d}.mp4"),
-                ]
-            )
+        cmds = scenes.split_encode_cmds(src, self.scenes, name, venc, has_audio=info.has_audio)
         self.run_ffmpeg_steps(
             cmds,
             self.console,
@@ -350,25 +275,7 @@ class SceneDetectTab(BaseTab):
             os.path.join(temp_dir("chapters_"), "meta.txt"),
             chapters=[(a, b, f"Scene {i + 1}") for i, (a, b) in enumerate(self.scenes)],
         )
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-i",
-            src,
-            "-f",
-            "ffmetadata",
-            "-i",
-            meta,
-            "-map",
-            "0",
-            "-map_metadata",
-            "0",
-            "-map_chapters",
-            "1",
-            "-c",
-            "copy",
-            out,
-        ]
+        cmd = scenes.chapters_cmd(src, meta, out)
         self.run_ffmpeg(
             cmd,
             self.console,

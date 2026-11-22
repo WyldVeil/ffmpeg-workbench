@@ -6,12 +6,11 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 
 from __future__ import annotations
 
-import os
-import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import ffmpeg as ff
+from core.ops import scenes
 from core.queue_manager import TaskContext
 
 
@@ -30,15 +29,6 @@ def times_select(times: Sequence[float], fps: float) -> str:
     """select= expression picking the frame nearest to each time."""
     half = 0.5 / max(fps, 1.0)
     return "+".join(f"between(t,{tm - half:.4f},{tm + half - 1e-4:.4f})" for tm in times)
-
-
-def keep_scenes(cuts: Iterable[float], min_len: float) -> list[float]:
-    """Scene start times: 0 plus each cut at least *min_len* after the last kept."""
-    kept = [0.0]
-    for c in sorted(cuts):
-        if c - kept[-1] >= min_len:
-            kept.append(c)
-    return kept
 
 
 def single_cmd(src: str, at: float, out: str, quality: Sequence[str]) -> list[str]:
@@ -76,26 +66,9 @@ class SceneFrames:
     quality: tuple[str, ...]
 
     def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
-        tmp = ctx.tempdir()
-        find = f"scale=320:-2,select='gt(scene,{self.threshold:.3f})',metadata=print:file=cuts.txt"
-        scan = [
-            ff.ffmpeg_path(),
-            "-i",
-            self.src,
-            "-an",
-            "-sn",
-            "-vf",
-            find,
-            "-fps_mode",
-            "passthrough",
-        ]
-        ctx.span(0.0, 0.7).run([*scan, "-f", "null", "-"], duration=self.duration, cwd=tmp)
-        try:
-            with open(os.path.join(tmp, "cuts.txt"), encoding="utf-8", errors="replace") as fh:
-                cuts = [float(m) for m in re.findall(r"pts_time:\s*([\d.]+)", fh.read())]
-        except OSError:
-            cuts = []
-        starts = keep_scenes(set(cuts), self.min_len)
+        starts = scenes.detect(
+            ctx.span(0.0, 0.7), self.src, self.threshold, self.min_len, self.duration
+        )
         more = " …" if len(starts) > 20 else ""
         ctx.log(
             f"{len(starts)} scene(s): " + ", ".join(ff.format_time(s) for s in starts[:20]) + more

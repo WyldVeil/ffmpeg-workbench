@@ -6,7 +6,8 @@ import pytest
 
 from core import ffmpeg as ff
 from core.ops import freeze_frame as freeze_ops
-from tabs.cutting import clip_looper, reverser, scene_detect
+from core.ops import scenes
+from tabs.cutting import clip_looper, reverser
 
 
 def test_pure_helpers():
@@ -15,7 +16,7 @@ def test_pure_helpers():
     assert len(reverser.plan("pingpong", 10, 0, 2, 3)) == 6
     assert reverser.chunk_seconds(3840, 2160, 60) < reverser.chunk_seconds(1280, 720, 30)
     assert clip_looper.loop_units("accel", 3, 2.0) == [(1.0, 1.0), (2.0, 1.0), (4.0, 1.0)]
-    assert scene_detect.scene_ranges([0.0, 2.0, 5.0], 8.0) == [(0.0, 2.0), (2.0, 5.0), (5.0, 8.0)]
+    assert scenes.scene_ranges([0.0, 2.0, 5.0], 8.0) == [(0.0, 2.0), (2.0, 5.0), (5.0, 8.0)]
     freeze = freeze_ops.Freeze(mode="insert", at=1.0, hold=2.0)
     graph, total, audio = freeze_ops.freeze_graph(freeze, 6.0, has_audio=True)
     assert total == 8.0 and audio and "tpad=start_mode=clone:start_duration=2.0000" in graph
