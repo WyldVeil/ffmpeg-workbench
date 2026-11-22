@@ -16,7 +16,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.ops.image_watermark import POSITIONS, Logo, logo_graph
-from core.ops.shared import RenderJob
+from core.ops.shared import RenderJob, image_input_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import UI_FONT, BaseTab
@@ -219,14 +219,7 @@ class ImageWatermarkTab(BaseTab):
             logo.lower().endswith((".gif", ".webp", ".apng"))
             and (linfo.require_video().nb_frames or 0) != 1
         )
-        if animated:
-            logo_in = (
-                ["-ignore_loop", "0", "-i", logo]
-                if logo.lower().endswith(".gif")
-                else ["-stream_loop", "-1", "-i", logo]
-            )
-        else:
-            logo_in = ["-loop", "1", "-i", logo]
+        logo_in = image_input_args(logo, animated=animated)
         common.render(
             self,
             RenderJob(

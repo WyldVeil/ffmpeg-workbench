@@ -461,6 +461,11 @@ class Encode:
     audio: tuple[str, ...] = ("-c:a", "aac", "-b:a", "192k")
 
 
+PREVIEW_ENCODE = Encode(
+    video=("-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p")
+)
+
+
 def join_cmd(
     clips: Sequence[str],
     slides: Sequence[Slide],

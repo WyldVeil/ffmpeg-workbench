@@ -246,9 +246,20 @@ def join_pieces_cmd(
     return [*cmd, *(sound if audio else ["-an"]), *final_copy_args(venc, container), out]
 
 
-def audio_filter_cmd(src: str, af: str, out: str, info: ff.MediaInfo) -> list[str]:
-    """*src* with its sound through *af* (the picture, if any, kept)."""
-    return [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]
+def audio_filter_cmd(
+    src: str, af: str, out: str, info: ff.MediaInfo, *, stream: int = 0
+) -> list[str]:
+    """*src* with sound track *stream* through *af* (the picture, if any, kept)."""
+    return [
+        ff.ffmpeg_path(),
+        "-y",
+        "-i",
+        src,
+        "-af",
+        af,
+        *audio_job_args(out, info, stream=stream),
+        out,
+    ]
 
 
 def strip_audio_cmd(src: str, out: str) -> list[str]:
@@ -296,6 +307,15 @@ def graph_encode_cmd(
         *venc.args,
     ]
     return [*cmd, *(["-t", f"{limit:.3f}"] if limit is not None else []), out]
+
+
+def image_input_args(path: str, *, animated: bool) -> list[str]:
+    """An image as an input that lasts: a still one repeated, an animation looped."""
+    if not animated:
+        return ["-loop", "1", "-i", path]
+    if path.lower().endswith(".gif"):
+        return ["-ignore_loop", "0", "-i", path]
+    return ["-stream_loop", "-1", "-i", path]
 
 
 def preview_audio_cmd(src: str, af: str, start: float, seconds: float, wav: str) -> list[str]:

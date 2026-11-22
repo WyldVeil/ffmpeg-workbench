@@ -20,9 +20,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import capabilities
-from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.shared import audio_job_args
+from core.ops.shared import audio_filter_cmd
 from core.ops.voice_isolation import denoise_filter, models_dir
 from core.scaling import px
 from tabs import common
@@ -203,7 +202,7 @@ class VoiceIsolationTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "clean")
         if not out:
             return
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]
+        cmd = audio_filter_cmd(src, af, out, info)
         self.run_ffmpeg(
             cmd,
             self.console,

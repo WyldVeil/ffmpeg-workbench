@@ -881,10 +881,7 @@ def _make_preview(pair: list[ss.Slide], join: ss.Join, look: ss.Look) -> str:
             raise RuntimeError(res.last_error_line() or "a slide couldn't be made")
         clips.append(clip)
     out = os.path.join(folder, "preview.mp4")
-    fast = ss.Encode(
-        video=("-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p")
-    )
-    res = proc.run(ss.join_cmd(clips, pair, [join], out, enc=fast), timeout=300)
+    res = proc.run(ss.join_cmd(clips, pair, [join], out, enc=ss.PREVIEW_ENCODE), timeout=300)
     if not res.ok:
         raise RuntimeError(res.last_error_line() or "the preview couldn't be made")
     return out
