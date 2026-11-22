@@ -258,3 +258,23 @@ def filter_join_command(
         argv += ["-an"]
     argv += [*venc.args, "-sn", "-dn", out]
     return argv, sum(p.length for p in pieces)
+
+
+def copy_problems(pieces: Sequence[Piece], out: str) -> list[str]:
+    """Why the pieces can't be joined without re-encoding into *out* (none: they can)."""
+    problems = copy_compatibility([p.info for p in pieces])
+    container = os.path.splitext(out)[1].lstrip(".").lower()
+    src_ext = os.path.splitext(pieces[0].path)[1].lstrip(".").lower() if pieces else ""
+    first = pieces[0].info if pieces else None
+    if (
+        not problems
+        and first is not None
+        and first.audio
+        and container in ("mp4", "mov", "m4v")
+        and src_ext not in ("mp4", "mov", "m4v")
+        and not enc.audio_ok_for(
+            container, enc.audio_key_from_probe(first.require_audio().codec) or "x"
+        )
+    ):
+        problems.append(f"{first.require_audio().codec} audio can't be stored in .{container}")
+    return problems

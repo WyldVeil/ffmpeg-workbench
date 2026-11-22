@@ -26,7 +26,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FolderRow, FramePreview, scroll_body
 
 
 class SceneDetectTab(BaseTab):
@@ -49,7 +49,12 @@ class SceneDetectTab(BaseTab):
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        self._build_detection(body)
+        self._build_scene_list(body)
+        self._build_actions(body)
 
+    def _build_detection(self, body):
+        """Sensitivity, shortest scene and the Find button."""
         det = tk.Frame(body)
         det.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(det, text="Sensitivity:").pack(side="left")
@@ -71,6 +76,8 @@ class SceneDetectTab(BaseTab):
         )
         self.btn_detect.pack(side="left", padx=px(10))
 
+    def _build_scene_list(self, body):
+        """The scenes found, with a preview of the one chosen."""
         mid = tk.Frame(body)
         mid.pack(fill="x", padx=px(20), pady=px(4))
         self.tree = ttk.Treeview(
@@ -89,6 +96,8 @@ class SceneDetectTab(BaseTab):
         self.preview = FramePreview(mid, 400, 225)
         self.preview.pack(side="left", padx=px(10))
 
+    def _build_actions(self, body):
+        """Split into files, add chapters, or save the list."""
         act = tk.LabelFrame(body, text="  Use the scenes  ", padx=px(12), pady=px(8))
         act.pack(fill="x", padx=px(20), pady=px(6))
         r = tk.Frame(act)
@@ -101,16 +110,8 @@ class SceneDetectTab(BaseTab):
         ).pack(side="left")
         self.encoder = EncoderPanel(act, codecs=("h264", "hevc", "av1"))
         self.encoder.pack(anchor="w", pady=px(4))
-        drow = tk.Frame(act)
-        drow.pack(fill="x")
-        tk.Label(drow, text="Save files to:", width=14, anchor="w").pack(side="left")
         self.dir_var = tk.StringVar()
-        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(
-            side="left", fill="x", expand=True, padx=px(6)
-        )
-        tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(
-            side="left"
-        )
+        FolderRow(act, "Save files to:", self.dir_var, width=50, label_width=14).pack(fill="x")
         btns = tk.Frame(act)
         btns.pack(pady=px(8, 0))
         self.btn_split = self.make_render_btn(btns, "✂  SPLIT INTO SCENES", self._split)
@@ -137,13 +138,6 @@ class SceneDetectTab(BaseTab):
             from core.outputs import default_output_folder
 
             self.dir_var.set(default_output_folder(path))
-
-    def _pick_dir(self):
-        from tabs.kit import dialogs
-
-        d = dialogs.ask_directory(parent=self)
-        if d:
-            self.dir_var.set(d)
 
     def _detect(self):
         src = self.src_row.path

@@ -364,7 +364,6 @@ class TrimmerTab(BaseTab):
         h = c.winfo_height()
         if w < px(10):
             return
-
         try:
             c.delete("all")
             c.create_rectangle(0, 0, w, h, fill="#0D0D0D", outline="")
@@ -377,87 +376,81 @@ class TrimmerTab(BaseTab):
                     font=(UI_FONT, 10),
                 )
                 return
-            cy = h // 2
-            hr = px(self._HR)
             s_sec = self._tv(self._start_var, 0.0)
             e_sec = self._tv(self._end_var, self.duration)
-
-            xs = self._t2x(s_sec, w)
-            xe = self._t2x(e_sec, w)
-            xp = self._t2x(float(self._scrub.get()), w)
-
-            # Track
-            c.create_rectangle(
-                px(24), cy - px(4), w - px(24), cy + px(4), fill="#2A2A2A", outline=""
-            )
-            # Selection
-            c.create_rectangle(xs, cy - px(4), xe, cy + px(4), fill="#1A5A98", outline="")
-
-            # Tick marks
-            for i in range(11):
-                tx = self._t2x(self.duration * i / 10, w)
-                c.create_line(tx, cy + px(6), tx, cy + px(14), fill="#444444", width=px(1))
-                tick_time = self.duration * i / 10
-                c.create_text(
-                    tx,
-                    cy + px(22),
-                    text=f"{int(tick_time // 60):02d}:{int(tick_time % 60):02d}",
-                    fill="#444444",
-                    font=(UI_FONT, 7),
-                )
-
-            # Playhead (Vertical line + Triangle)
-            # Draw line slicing through the track
-            c.create_line(xp, cy - px(18), xp, cy + px(18), fill="#FFEB3B", width=px(2))
-            # Draw downward triangle on top
-            c.create_polygon(
-                xp - px(7),
-                cy - px(18),
-                xp + px(7),
-                cy - px(18),
-                xp,
-                cy - px(8),
-                fill="#FFEB3B",
-                outline="#000000",
-                width=px(1),
-            )
-
-            # Start handle (green)
-            c.create_oval(
-                xs - hr, cy - hr, xs + hr, cy + hr, fill="#4CAF50", outline="white", width=px(2)
-            )
-            c.create_text(
-                xs,
-                cy - px(20),
-                text=f"START {fmt_time(s_sec)}",
-                fill="#4CAF50",
-                font=(MONO_FONT, 8, "bold"),
-            )
-
-            # End handle (red)
-            c.create_oval(
-                xe - hr, cy - hr, xe + hr, cy + hr, fill="#F44336", outline="white", width=px(2)
-            )
-            c.create_text(
-                xe,
-                cy + px(36),
-                text=f"END {fmt_time(e_sec)}",
-                fill="#F44336",
-                font=(MONO_FONT, 8, "bold"),
-            )
-
-            # Selection duration header
-            sel = max(0.0, e_sec - s_sec)
-            c.create_text(
-                (xs + xe) // 2,
-                px(14),
-                text=f"Clip Length: {fmt_time(sel)}",
-                fill="white",
-                font=(UI_FONT, 9, "bold"),
-            )
+            xs, xe = self._t2x(s_sec, w), self._t2x(e_sec, w)
+            self._draw_track(w, h // 2, xs, xe)
+            self._draw_playhead(self._t2x(float(self._scrub.get()), w), h // 2)
+            self._draw_handles(h // 2, (xs, s_sec), (xe, e_sec))
         except Exception as e:
             logger.debug("_draw: best-effort step failed", exc_info=True)
             self.log_debug(f"Canvas draw error: {e}")
+
+    def _draw_track(self, w, cy, xs, xe):
+        """The track, the selection on it, and a tick (with its time) every tenth."""
+        c = self._canvas
+        c.create_rectangle(px(24), cy - px(4), w - px(24), cy + px(4), fill="#2A2A2A", outline="")
+        c.create_rectangle(xs, cy - px(4), xe, cy + px(4), fill="#1A5A98", outline="")
+        for i in range(11):
+            tick_time = self.duration * i / 10
+            tx = self._t2x(tick_time, w)
+            c.create_line(tx, cy + px(6), tx, cy + px(14), fill="#444444", width=px(1))
+            c.create_text(
+                tx,
+                cy + px(22),
+                text=f"{int(tick_time // 60):02d}:{int(tick_time % 60):02d}",
+                fill="#444444",
+                font=(UI_FONT, 7),
+            )
+
+    def _draw_playhead(self, xp, cy):
+        """A yellow line through the track, with a triangle on top."""
+        c = self._canvas
+        c.create_line(xp, cy - px(18), xp, cy + px(18), fill="#FFEB3B", width=px(2))
+        c.create_polygon(
+            xp - px(7),
+            cy - px(18),
+            xp + px(7),
+            cy - px(18),
+            xp,
+            cy - px(8),
+            fill="#FFEB3B",
+            outline="#000000",
+            width=px(1),
+        )
+
+    def _draw_handles(self, cy, start, end):
+        """The start (green) and end (red) handles with their times, and the length above."""
+        c = self._canvas
+        hr = px(self._HR)
+        (xs, s_sec), (xe, e_sec) = start, end
+        c.create_oval(
+            xs - hr, cy - hr, xs + hr, cy + hr, fill="#4CAF50", outline="white", width=px(2)
+        )
+        c.create_text(
+            xs,
+            cy - px(20),
+            text=f"START {fmt_time(s_sec)}",
+            fill="#4CAF50",
+            font=(MONO_FONT, 8, "bold"),
+        )
+        c.create_oval(
+            xe - hr, cy - hr, xe + hr, cy + hr, fill="#F44336", outline="white", width=px(2)
+        )
+        c.create_text(
+            xe,
+            cy + px(36),
+            text=f"END {fmt_time(e_sec)}",
+            fill="#F44336",
+            font=(MONO_FONT, 8, "bold"),
+        )
+        c.create_text(
+            (xs + xe) // 2,
+            px(14),
+            text=f"Clip Length: {fmt_time(max(0.0, e_sec - s_sec))}",
+            fill="white",
+            font=(UI_FONT, 9, "bold"),
+        )
 
     def _on_press(self, ev):
         w = self._canvas.winfo_width()

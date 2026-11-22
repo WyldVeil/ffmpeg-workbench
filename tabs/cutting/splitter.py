@@ -19,8 +19,8 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, add_tooltip
-from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
+from tabs.widgets import FileRow
 
 
 def _tr(key, fallback):
@@ -73,24 +73,15 @@ class MultiSplitterTab(BaseTab):
         self.make_header(self, t("tab.manual_multi_splitter"), t("splitter.subtitle"), icon="✂️")
 
         # Source File
-        sf = tk.Frame(self, bg=CLR["bg"])
-        sf.pack(fill="x", padx=px(20), pady=px(10))
-        tk.Label(
-            sf, text=t("common.source_video"), bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10)
-        ).pack(side="left")
-        self.src_var = tk.StringVar()
-        tk.Entry(
-            sf,
-            textvariable=self.src_var,
-            width=50,
-            bg=CLR["input_bg"],
-            fg=CLR["input_fg"],
-            font=(UI_FONT, 10),
-        ).pack(side="left", padx=px(10))
-        tk.Button(
-            sf, text=t("btn.browse"), command=self._browse_file, bg=CLR["panel"], fg=CLR["fg"]
-        ).pack(side="left")
+        self.src_row = FileRow(self, t("common.source_video"), on_change=self.load_file)
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10))
+        self.src_var = self.src_row.var
+        self._build_timeline()
+        self._build_splits()
+        self._build_output()
 
+    def _build_timeline(self):
+        """The timeline to pick the parts on."""
         # Timeline
         tl_frame = tk.LabelFrame(
             self,
@@ -120,6 +111,8 @@ class MultiSplitterTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w", padx=px(4))
 
+    def _build_splits(self):
+        """Copy or re-encode, and the list of parts (one to start with)."""
         # Options
         opt_f = tk.Frame(self, bg=CLR["bg"])
         opt_f.pack(fill="x", padx=px(20), pady=px(5))
@@ -160,6 +153,8 @@ class MultiSplitterTab(BaseTab):
         # Add first row by default
         self._add_row()
 
+    def _build_output(self):
+        """The button and the log."""
         # Render Button & Console
         self.btn_render = self.make_render_btn(
             self, t("splitter.batch_extract_button"), self._render_all
@@ -169,17 +164,11 @@ class MultiSplitterTab(BaseTab):
             self, height=8, bg=CLR["bg"], padx=px(20), pady=px(4)
         )
 
-    def _browse_file(self):
-        p = dialogs.askopenfilename(
-            filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi *.webm")]
-        )
-        if p:
-            self.load_file(p)
-
     def on_source_loaded(self, p):
         """Browse, drag and drop and File > Open all come here."""
         self.file_path = p
-        self.src_var.set(p)
+        if self.src_var.get() != p:  # not when it came from the row itself
+            self.src_var.set(p)
         self.duration = get_video_duration(p)
         self._timeline.set_duration(self.duration, framestep.fps_of(p))
         self._timeline.set_range(0, self.duration)

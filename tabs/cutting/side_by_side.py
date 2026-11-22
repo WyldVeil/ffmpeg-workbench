@@ -208,24 +208,30 @@ class SideBySideTab(BaseTab):
     def _key(self, table, var, default):
         return next((k for k, v in table.items() if v == var.get()), default)
 
-    def _render(self):
-        layout = self._key(LAYOUTS, self.layout_var, "side")
-        want = 4 if layout == "grid" else 2
-        clips, labels = [], []
-        for i, fr in enumerate(self.rows[:want]):
+    def _clips(self, layout):
+        """The clips to show (two, or up to four in a grid); None after saying what's wrong."""
+        clips = []
+        for i, fr in enumerate(self.rows[: 4 if layout == "grid" else 2]):
             path = fr.path
             if not path and layout == "grid" and i >= 2:
                 continue
             info = common.check_source(self, path, what=f"Clip {i + 1}")
             if info is None:
-                return
+                return None
             try:
                 speed = common.number(self.speed_vars[i].get(), f"Clip {i + 1} speed", 0.1, 4)
             except ValueError as exc:
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
-                return
+                return None
             clips.append(Clip(path, info.duration, info.has_audio, self.label_vars[i].get(), speed))
-            labels.append(self.label_vars[i].get())
+        return clips
+
+    def _render(self):
+        layout = self._key(LAYOUTS, self.layout_var, "side")
+        clips = self._clips(layout)
+        if clips is None:
+            return
+        labels = [c.label for c in clips]
         try:
             period = common.number(self.wipe_period.get() or "0", "Sweep", 0, 600)
         except ValueError as exc:

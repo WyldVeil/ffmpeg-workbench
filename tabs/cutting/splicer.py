@@ -326,50 +326,59 @@ class SplicerTab(BaseTab):
         container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
         if not self.reencode_var.get():
             problems = concat.copy_compatibility([p.info for p in pieces])
-            if problems:
-                if not messagebox.askyesno(
-                    _tr("batch_joiner.files_differ", "Files differ"),
-                    _tr("splicer.not_copyable", "These segments can't be joined losslessly:")
-                    + "\n\n"
-                    + "\n".join("\u2022 " + x for x in problems[:8])
-                    + "\n\n"
-                    + _tr("batch_joiner.offer_reencode", "Re-encode them so they match?"),
-                    parent=self,
-                ):
-                    return
-                self.reencode_var.set(True)
-            else:
-                from core.ops.trim import keyframe_at_or_before
-                from core.paths import temp_dir
-
-                ins, outs = [], []
-                for p in pieces:
-                    k = keyframe_at_or_before(p.path, p.start)
-                    k = p.start if k is None else k
-                    if p.start - k > 0.01:
-                        self.log(
-                            self.console,
-                            f"\u2139 {os.path.basename(p.path)}: lossless cut starts at keyframe "
-                            f"{ff.format_time(k)} instead of {ff.format_time(p.start)}",
-                        )
-                    ins.append(k)
-                    outs.append(p.start + p.length)
-                list_path = os.path.join(temp_dir("splice_"), "list.txt")
-                cmd = concat.copy_join_command(
-                    [p.path for p in pieces], out, list_path, inpoints=ins, outpoints=outs
-                )
-                total = sum(o - i for i, o in zip(ins, outs, strict=False))
-                self.run_ffmpeg(
-                    cmd,
-                    self.console,
-                    on_done=lambda rc: self.show_result(rc, out),
-                    btn=self._render_button(),
-                    duration=total,
-                    output=out,
-                    inputs=inputs,
-                    name="Splicer",
-                )
+            if not problems:
+                self._splice_copy(pieces, out, inputs)
                 return
+            if not self._agree_to_reencode(problems):
+                return
+            self.reencode_var.set(True)
+        self._splice_reencode(pieces, out, inputs, container)
+
+    def _agree_to_reencode(self, problems):
+        return messagebox.askyesno(
+            _tr("batch_joiner.files_differ", "Files differ"),
+            _tr("splicer.not_copyable", "These segments can't be joined losslessly:")
+            + "\n\n"
+            + "\n".join("\u2022 " + x for x in problems[:8])
+            + "\n\n"
+            + _tr("batch_joiner.offer_reencode", "Re-encode them so they match?"),
+            parent=self,
+        )
+
+    def _splice_copy(self, pieces, out, inputs):
+        """Lossless: each segment from the keyframe at or before its start (said when it moves)."""
+        from core.ops.trim import keyframe_at_or_before
+        from core.paths import temp_dir
+
+        ins, outs = [], []
+        for p in pieces:
+            k = keyframe_at_or_before(p.path, p.start)
+            k = p.start if k is None else k
+            if p.start - k > 0.01:
+                self.log(
+                    self.console,
+                    f"\u2139 {os.path.basename(p.path)}: lossless cut starts at keyframe "
+                    f"{ff.format_time(k)} instead of {ff.format_time(p.start)}",
+                )
+            ins.append(k)
+            outs.append(p.start + p.length)
+        list_path = os.path.join(temp_dir("splice_"), "list.txt")
+        cmd = concat.copy_join_command(
+            [p.path for p in pieces], out, list_path, inpoints=ins, outpoints=outs
+        )
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self._render_button(),
+            duration=sum(o - i for i, o in zip(ins, outs, strict=False)),
+            output=out,
+            inputs=inputs,
+            name="Splicer",
+        )
+
+    def _splice_reencode(self, pieces, out, inputs, container):
+        """Every segment cut exactly and made alike, in one encode."""
         venc = enc.video(
             "vp9" if container == "webm" else "h264", "high", hw="auto", container=container
         )

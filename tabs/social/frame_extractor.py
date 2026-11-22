@@ -31,7 +31,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker, RangePicker
-from tabs.widgets import FileRow, FramePreview, scroll_body
+from tabs.widgets import FileRow, FolderRow, FramePreview, scroll_body
 
 FORMATS = {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"}
 MODES = {
@@ -182,15 +182,9 @@ class FrameExtractorTab(BaseTab):
         ).pack(side="left")
 
     def _build_dir(self, body, opts):
-        drow = tk.Frame(opts)
-        drow.pack(fill="x", pady=px(6, 0))
-        tk.Label(drow, text="Save to folder:", width=14, anchor="w").pack(side="left")
         self.dir_var = tk.StringVar()
-        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(
-            side="left", padx=px(6), fill="x", expand=True
-        )
-        tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(
-            side="left"
+        FolderRow(opts, "Save to folder:", self.dir_var, width=50, label_width=14).pack(
+            fill="x", pady=px(6, 0)
         )
 
         self.btn_render = self.make_render_btn(
@@ -240,13 +234,6 @@ class FrameExtractorTab(BaseTab):
             return
         self.pos_var.set(pos)
         self.preview.show(pos)
-
-    def _pick_dir(self):
-        from tabs.kit import dialogs
-
-        d = dialogs.ask_directory(parent=self)
-        if d:
-            self.dir_var.set(d)
 
     # ── render ───────────────────────────────────────────────────────────────
 

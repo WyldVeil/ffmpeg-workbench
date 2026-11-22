@@ -14,10 +14,9 @@ import shutil
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.freeze_frame import Freeze, freeze_graph
+from core.ops.freeze_frame import Freeze, caption_script, freeze_graph
 from core.ops.shared import RenderJob, encoded_audio
 from core.scaling import px
 from tabs import common, framestep
@@ -175,28 +174,8 @@ class FreezeFrameTab(BaseTab):
             from core.paths import temp_dir
 
             work_dir = temp_dir("freeze_")
-            w, h = common.even_size(info)
-            sc = ass.Script(w, h)
-            u = min(w, h) / 1080
-            sc.style(
-                ass.Style(
-                    "Cap",
-                    font="Montserrat",
-                    size=round(64 * u),
-                    bold=True,
-                    outline=4 * u,
-                    shadow=2 * u,
-                    alignment=2,
-                    margin_v=round(80 * u),
-                )
-            )
             start = 0.0 if mode == "only" else (dur if mode == "end" else at)
-            sc.add(
-                start,
-                start + hold,
-                f"{{\\fad(150,150)}}{ass.escape(self.caption_var.get())}",
-                "Cap",
-            )
+            sc = caption_script(self.caption_var.get(), common.even_size(info), start, hold)
             caption_ass = sc.write(os.path.join(work_dir, "caption.ass"))
         audio_mode = next((k for k, v in AUDIO.items() if v == self.audio_var.get()), "pause")
         freeze = Freeze(

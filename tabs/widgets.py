@@ -364,6 +364,7 @@ class FileRow(tk.Frame):
         chosen = self._choose()
         if chosen:
             self.var.set(chosen)
+            self._fire()  # a chosen file needs no typing pause
 
     def _changed(self, *_a: object) -> None:
         if self._job is not None:
@@ -372,6 +373,9 @@ class FileRow(tk.Frame):
         self._job = self.after(350, self._fire)
 
     def _fire(self) -> None:
+        if self._job is not None:
+            with contextlib.suppress(tk.TclError):
+                self.after_cancel(self._job)
         self._job = None
         path = self.path
         if self._on_change is not None and path and self._accepts(path):

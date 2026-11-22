@@ -97,3 +97,23 @@ def freeze_graph(freeze: Freeze, dur: float, *, has_audio: bool) -> tuple[str, f
     if audio_out:
         parts += _freeze_audio(freeze)
     return ";".join(parts), total, audio_out
+
+
+def caption_script(text: str, size: tuple[int, int], start: float, hold: float) -> ass.Script:
+    """*text* low in the frame while the picture is held, fading in and out."""
+    w, h = size
+    u = min(w, h) / 1080
+    sc = ass.Script(w, h)
+    style = ass.Style(
+        "Cap",
+        font="Montserrat",
+        size=round(64 * u),
+        bold=True,
+        outline=4 * u,
+        shadow=2 * u,
+        alignment=2,
+        margin_v=round(80 * u),
+    )
+    sc.style(style)
+    sc.add(start, start + hold, f"{{\\fad(150,150)}}{ass.escape(text)}", "Cap")
+    return sc

@@ -159,6 +159,12 @@ class CrossfaderTab(BaseTab):
 
     def _build_transition_section(self, parent):
         lf = self.make_section(parent, "\U0001f39e  " + t("section.transition"), padx=16)
+        self._transition_length_and_type(lf)
+        self._transition_per_clip(lf)
+        self._transition_behaviour(lf)
+
+    def _transition_length_and_type(self, lf):
+        """Transition length, the type for every cut, and the audio curve."""
         row1 = tk.Frame(lf, bg=CLR["bg"])
         row1.pack(fill="x", pady=px(2))
         tk.Label(
@@ -201,6 +207,8 @@ class CrossfaderTab(BaseTab):
             row1, textvariable=self.audio_curve_var, values=AUDIO_CURVES, state="readonly", width=8
         ).pack(side="left", padx=px(8))
 
+    def _transition_per_clip(self, lf):
+        """A different transition at each cut."""
         row2 = tk.Frame(lf, bg=CLR["bg"])
         row2.pack(fill="x", pady=px(4, 0))
         tk.Checkbutton(
@@ -215,6 +223,8 @@ class CrossfaderTab(BaseTab):
             font=(UI_FONT, 10),
         ).pack(side="left")
 
+    def _transition_behaviour(self, lf):
+        """Overlap the clips, or freeze their ends while the transition plays."""
         row3 = tk.Frame(lf, bg=CLR["bg"])
         row3.pack(fill="x", pady=px(6, 0))
         tk.Label(

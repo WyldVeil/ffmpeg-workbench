@@ -253,63 +253,60 @@ class BatchJoinerTab(BaseTab):
         except ff.ProbeError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)
             return
-        total = sum(p.length for p in pieces)
         if not self.reencode_var.get():
-            problems = concat.copy_compatibility([p.info for p in pieces])
-            container = os.path.splitext(out)[1].lstrip(".").lower()
-            src_ext = os.path.splitext(self.file_paths[0])[1].lstrip(".").lower()
-            if (
-                not problems
-                and container in ("mp4", "mov", "m4v")
-                and src_ext not in ("mp4", "mov", "m4v")
-                and pieces[0].info.audio
-                and not enc.audio_ok_for(
-                    container, enc.audio_key_from_probe(pieces[0].info.require_audio().codec) or "x"
-                )
-            ):
-                problems.append(
-                    f"{pieces[0].info.require_audio().codec} audio can't be stored in .{container}"
-                )
-            if problems:
-                msg = (
-                    _tr(
-                        "batch_joiner.not_copyable",
-                        "These files can't be joined losslessly because they differ:",
-                    )
-                    + "\n\n"
-                    + "\n".join("\u2022 " + p for p in problems[:8])
-                    + "\n\n"
-                    + _tr(
-                        "batch_joiner.offer_reencode",
-                        "Re-encode them so they match? (slower, but the result will play correctly)",
-                    )
-                )
-                if not messagebox.askyesno(
-                    _tr("batch_joiner.files_differ", "Files differ"), msg, parent=self
-                ):
-                    return
-                self.reencode_var.set(True)
-                self._toggle_encode_opts()
-            else:
-                from core.paths import temp_dir
-
-                list_path = os.path.join(temp_dir("join_"), "list.txt")
-                cmd = concat.copy_join_command(self.file_paths, out, list_path)
-                self.log(
-                    self.console,
-                    f"Lossless join of {len(pieces)} files \u2192 {os.path.basename(out)}",
-                )
-                self.run_ffmpeg(
-                    cmd,
-                    self.console,
-                    on_done=lambda rc: self.show_result(rc, out),
-                    btn=self.btn_render,
-                    duration=total,
-                    output=out,
-                    inputs=self.file_paths,
-                    name="Batch Joiner",
-                )
+            problems = concat.copy_problems(pieces, out)
+            if not problems:
+                self._join_copy(pieces, out)
                 return
+            if not self._agree_to_reencode(problems):
+                return
+        self._join_reencode(pieces, out)
+
+    def _agree_to_reencode(self, problems):
+        """Say why the files can't be joined losslessly; offer to re-encode (and switch to it)."""
+        msg = (
+            _tr(
+                "batch_joiner.not_copyable",
+                "These files can't be joined losslessly because they differ:",
+            )
+            + "\n\n"
+            + "\n".join("\u2022 " + p for p in problems[:8])
+            + "\n\n"
+            + _tr(
+                "batch_joiner.offer_reencode",
+                "Re-encode them so they match? (slower, but the result will play correctly)",
+            )
+        )
+        if not messagebox.askyesno(
+            _tr("batch_joiner.files_differ", "Files differ"), msg, parent=self
+        ):
+            return False
+        self.reencode_var.set(True)
+        self._toggle_encode_opts()
+        return True
+
+    def _join_copy(self, pieces, out):
+        """Lossless: the streams copied one after another."""
+        from core.paths import temp_dir
+
+        list_path = os.path.join(temp_dir("join_"), "list.txt")
+        cmd = concat.copy_join_command(self.file_paths, out, list_path)
+        self.log(
+            self.console, f"Lossless join of {len(pieces)} files \u2192 {os.path.basename(out)}"
+        )
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn_render,
+            duration=sum(p.length for p in pieces),
+            output=out,
+            inputs=self.file_paths,
+            name="Batch Joiner",
+        )
+
+    def _join_reencode(self, pieces, out):
+        """Every file made alike (size, rate, sound) and joined in one encode."""
         res_mode = self._choice(self.res_var, self._res_choices)
         fps_mode = self._choice(self.fps_var, self._fps_choices)
         W, H, fps = concat.target_geometry(pieces, res_mode)

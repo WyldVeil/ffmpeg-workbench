@@ -536,7 +536,7 @@ def test_colours_are_picked_with_the_kit():
 
 
 #: a variable holding where an output goes (out_var, _out_var, out_dir_var, out_folder_var, ...)
-OUTPUT_VAR = re.compile(r"(^|_)out(_dir|_folder)?_var$")
+OUTPUT_VAR = re.compile(r"(^|_)(out(_dir|_folder)?|dir|folder)_var$")
 
 
 def test_output_rows_come_from_the_kit():

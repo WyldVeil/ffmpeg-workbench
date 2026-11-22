@@ -47,6 +47,12 @@ class SequencerTab(BaseTab):
         body = scroll_body(self)
         top = tk.Frame(body)
         top.pack(fill="x", padx=px(20), pady=px(10, 4))
+        self._build_clip_list(top)
+        self._build_viewer(top)
+        self._build_join(body)
+
+    def _build_clip_list(self, top):
+        """The clips in order, with their buttons and the total length."""
         left = tk.Frame(top)
         left.pack(side="left", fill="both", expand=True)
         self.tree = ttk.Treeview(
@@ -80,6 +86,8 @@ class SequencerTab(BaseTab):
         self.total_lbl = tk.Label(bt, text="", fg=CLR["accent"])
         self.total_lbl.pack(side="right")
 
+    def _build_viewer(self, top):
+        """The chosen clip's picture and its in/out points."""
         right = tk.Frame(top)
         right.pack(side="left", padx=px(10, 0))
         self.preview = FramePreview(right, 384, 216)
@@ -105,6 +113,8 @@ class SequencerTab(BaseTab):
             side="left", padx=px(6)
         )
 
+    def _build_join(self, body):
+        """How to join, where the result goes, the button and the log."""
         opt = tk.LabelFrame(body, text="  Join  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         r = tk.Frame(opt)

@@ -23,6 +23,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit import dialogs
+from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.system.metadata_cleaner")
 
@@ -144,15 +145,7 @@ class MetadataCleanerTab(BaseTab):
             side="left", padx=px(12, 0)
         )
         self.folder_var = tk.StringVar()
-        tk.Entry(out, textvariable=self.folder_var, width=34).pack(side="left", padx=px(4))
-        tk.Button(
-            out,
-            text="…",
-            relief="flat",
-            command=lambda: self.folder_var.set(
-                dialogs.ask_directory(parent=self) or self.folder_var.get()
-            ),
-        ).pack(side="left")
+        FolderRow(out, "", self.folder_var, width=34, label_width=0).pack(side="left")
         self.btn = self.make_render_btn(self, "🧹  CLEAN FILES", self._clean, width=24)
         self.btn.pack(pady=px(8))
         self.console = self.make_console_block(self, height=5, expand=False)
