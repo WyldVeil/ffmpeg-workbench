@@ -11,7 +11,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import ass
+from core import encoders as enc
 from core.filters import atempo_chain
+from core.ops.shared import graph_encode_cmd
 
 Cell = tuple[int, int, int, int]  # x, y, width, height
 
@@ -190,3 +192,24 @@ def labels_script(
             x, y, an = bx + 24 * u, by + 24 * u, 7
         sc.add(0, total + 1, f"{{\\an{an}\\pos({x:.0f},{y:.0f})}} {ass.escape(text)} ", "Lab")
     return sc
+
+
+def sbs_cmd(
+    clips: Sequence[Clip],
+    graph: str,
+    venc: enc.VideoEncode,
+    container: str,
+    total: float,
+    out: str,
+    *,
+    audio: bool,
+    loop_to: float | None = None,
+) -> list[str]:
+    """The arrangement (*graph*: [v], and [a] with *audio*), *total* seconds;
+    clips shorter than *loop_to* repeat."""
+    inputs: list[str] = []
+    for c in clips:
+        if loop_to is not None and c.duration / c.speed < loop_to - 0.05:
+            inputs += ["-stream_loop", "-1"]
+        inputs += ["-i", c.path]
+    return graph_encode_cmd(inputs, graph, venc, container, out, audio=audio, limit=total)

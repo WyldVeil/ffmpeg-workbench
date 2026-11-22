@@ -21,6 +21,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.ops import scenes
+from core.ops.shared import chapters_cmd
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
@@ -275,7 +276,7 @@ class SceneDetectTab(BaseTab):
             os.path.join(temp_dir("chapters_"), "meta.txt"),
             chapters=[(a, b, f"Scene {i + 1}") for i, (a, b) in enumerate(self.scenes)],
         )
-        cmd = scenes.chapters_cmd(src, meta, out)
+        cmd = chapters_cmd(src, meta, out)
         self.run_ffmpeg(
             cmd,
             self.console,

@@ -256,6 +256,48 @@ def strip_audio_cmd(src: str, out: str) -> list[str]:
     return [ff.ffmpeg_path(), "-y", "-i", src, "-map", "0", "-map", "-0:a", "-c", "copy", out]
 
 
+def chapters_cmd(src: str, metadata: str, out: str) -> list[str]:
+    """A copy of *src* with the chapters from the ffmetadata file *metadata*."""
+    inputs = [ff.ffmpeg_path(), "-y", "-i", src, "-f", "ffmetadata", "-i", metadata]
+    return [*inputs, "-map", "0", "-map_metadata", "0", "-map_chapters", "1", "-c", "copy", out]
+
+
+def graph_encode_cmd(
+    inputs: Sequence[str],
+    graph: str,
+    venc: enc.VideoEncode,
+    container: str,
+    out: str,
+    *,
+    audio: bool,
+    limit: float | None = None,
+) -> list[str]:
+    """*inputs* ("-i" arguments and their options) through *graph* - output [v],
+    and [a] when *audio* - encoded; at most *limit* seconds."""
+    vmap = "[v]"
+    if venc.filter_suffix:
+        graph += f";[v]{venc.filter_suffix}[venc]"
+        vmap = "[venc]"
+    amap = (
+        ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+        if audio
+        else ["-an"]
+    )
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        *venc.pre_input,
+        *inputs,
+        "-filter_complex",
+        graph,
+        "-map",
+        vmap,
+        *amap,
+        *venc.args,
+    ]
+    return [*cmd, *(["-t", f"{limit:.3f}"] if limit is not None else []), out]
+
+
 def preview_audio_cmd(src: str, af: str, start: float, seconds: float, wav: str) -> list[str]:
     """A short stretch of *src*'s sound through filter *af*, as a WAV to listen to."""
     head = [ff.ffmpeg_path(), "-y", "-hide_banner", "-nostdin", "-loglevel", "error"]

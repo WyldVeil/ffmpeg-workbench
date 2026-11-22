@@ -520,6 +520,7 @@ class ChapterMarkersTab(BaseTab):
         """Write the chapters into a copy of the video (lossless remux)."""
         from core import ffmpeg as ff
         from core import filters as fl
+        from core.ops.shared import chapters_cmd
         from core.paths import temp_dir
 
         src = self.src_var.get().strip()
@@ -541,25 +542,7 @@ class ChapterMarkersTab(BaseTab):
             end = self.chapters[i + 1].time if i + 1 < len(self.chapters) else dur
             chaps.append((c.time, max(end, c.time + 0.001), c.title))
         meta = fl.write_ffmetadata(os.path.join(temp_dir("chapters_"), "meta.txt"), chapters=chaps)
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-i",
-            src,
-            "-f",
-            "ffmetadata",
-            "-i",
-            meta,
-            "-map",
-            "0",
-            "-map_metadata",
-            "0",
-            "-map_chapters",
-            "1",
-            "-c",
-            "copy",
-            out,
-        ]
+        cmd = chapters_cmd(src, meta, out)
         self.run_ffmpeg(
             cmd,
             None,

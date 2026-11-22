@@ -15,11 +15,10 @@ import shutil
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.shared import frame_rate
-from core.ops.side_by_side import Arrangement, Clip, build_graph, labels_script
+from core.ops.side_by_side import Arrangement, Clip, build_graph, labels_script, sbs_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -271,31 +270,8 @@ class SideBySideTab(BaseTab):
         graph, total, has_audio = build_graph(clips, arrangement)
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
-        cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
-        for c in clips:
-            if length == "loop" and c.duration / c.speed < longest - 0.05:
-                cmd += ["-stream_loop", "-1"]
-            cmd += ["-i", c.path]
-        vmap = "[v]"
-        if venc.filter_suffix:
-            graph += f";[v]{venc.filter_suffix}[venc]"
-            vmap = "[venc]"
-        amap = (
-            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-            if has_audio
-            else ["-an"]
-        )
-        cmd += [
-            "-filter_complex",
-            graph,
-            "-map",
-            vmap,
-            *amap,
-            *venc.args,
-            "-t",
-            f"{total:.3f}",
-            out,
-        ]
+        loop_to = longest if length == "loop" else None
+        cmd = sbs_cmd(clips, graph, venc, container, total, out, audio=has_audio, loop_to=loop_to)
 
         def done(rc):
             shutil.rmtree(work, ignore_errors=True)

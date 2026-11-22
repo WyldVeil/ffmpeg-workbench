@@ -24,7 +24,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
 from core import encoders as enc
-from core import ffmpeg as ff
+from core.ops.shared import graph_encode_cmd
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
 Size = tuple[int, int]
@@ -423,17 +423,5 @@ def collage_cmd(
 ) -> list[str]:
     """The collage (*graph*: [v], and [a] with *audio*) of *paths*, *total* seconds;
     each input repeated to fill the time when *loop*."""
-    cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
-    for p in paths:
-        cmd += [*(["-stream_loop", "-1"] if loop else []), "-i", p]
-    vmap = "[v]"
-    if venc.filter_suffix:
-        graph += f";[v]{venc.filter_suffix}[venc]"
-        vmap = "[venc]"
-    cmd += ["-filter_complex", graph, "-map", vmap]
-    cmd += (
-        ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-        if audio
-        else ["-an"]
-    )
-    return [*cmd, *venc.args, "-t", f"{total:.3f}", out]
+    inputs = [a for p in paths for a in (*(["-stream_loop", "-1"] if loop else []), "-i", p)]
+    return graph_encode_cmd(inputs, graph, venc, container, out, audio=audio, limit=total)

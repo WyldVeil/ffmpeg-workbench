@@ -98,9 +98,3 @@ def split_encode_cmds(
             [*cut, "-map", "0:v:0", *sound, *venc.vf_args(None), *venc.args, *audio, name % i]
         )
     return cmds
-
-
-def chapters_cmd(src: str, metadata: str, out: str) -> list[str]:
-    """A copy of *src* with the chapters from the ffmetadata file *metadata*."""
-    inputs = [ff.ffmpeg_path(), "-y", "-i", src, "-f", "ffmetadata", "-i", metadata]
-    return [*inputs, "-map", "0", "-map_metadata", "0", "-map_chapters", "1", "-c", "copy", out]
