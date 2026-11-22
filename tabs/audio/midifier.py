@@ -432,11 +432,7 @@ class MIDIfierTab(BaseTab):
         self.log_tagged(self.console, t("midifier.starting"), "info")
         common.queue_job(
             self,
-            name="MIDIfier",
-            out=out,
-            work=work,
+            common.Job(name="MIDIfier", out=out, work=work, duration=length, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=length,
-            inputs=[src],
         )

@@ -22,16 +22,19 @@ import logging
 import os
 import tkinter as tk
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks
+from core.encoders import VideoEncode
 from core.hardware import (
     get_binary_path,
 )
 from core.i18n import t
 from core.scaling import px
+from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
 
@@ -381,41 +384,16 @@ class SpecialEffectsTab(BaseTab):
         return ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"]
 
     def _fx_run(
-        self,
-        src,
-        out,
-        info,
-        graph,
-        crf_var,
-        btn,
-        label,
-        console,
-        *,
-        complex_graph=True,
-        pre_inputs=(),
-        audio=None,
-        duration=None,
-        extra=(),
-    ):
-        """Build and queue the render: [inputs] graph [audio] libx264 out."""
-        cmd = [ff.ffmpeg_path(), "-y", *pre_inputs, "-i", src]
-        if complex_graph:
-            cmd += ["-filter_complex", graph, "-map", "[v]"]
-        else:
-            cmd += ["-vf", graph, "-map", "0:v:0"]
-        cmd += list(audio if audio is not None else self._fx_audio(info))
-        cmd += [*extra, *self._fx_venc(crf_var), out]
-        self.log(console, f"Rendering {os.path.basename(out)}…")
-        self.run_ffmpeg(
-            cmd,
-            console,
-            on_done=lambda rc: self.show_result(rc, out),
-            btn=btn,
-            duration=duration or self._fx_geom(info)[3],
-            output=out,
-            inputs=[src],
-            name="Special Effects",
-        )
+        self, job: common.RenderJob, crf_var: tk.Variable, btn: tk.Button, console: tk.Text
+    ) -> None:
+        """Queue *job* encoded with x264 at the CRF in *crf_var* (the audio is
+        copied when it can be)."""
+        if job.audio is None:
+            job = replace(job, audio=self._fx_audio(job.info))
+        if job.duration is None:
+            job = replace(job, duration=self._fx_geom(job.info)[3])
+        venc = VideoEncode("libx264", "h264", args=self._fx_venc(crf_var))
+        common.render(self, job, encoder=venc, console=console, btn=btn)
 
     def _build_ui(self):
         # ── Header ────────────────────────────────────────────────────────
@@ -535,7 +513,6 @@ class SpecialEffectsTab(BaseTab):
         self._fi_console = _console_block(inner)
 
     def _render_fadein(self):
-        label = "✨  APPLY FADE-IN"
         begun = self._fx_begin(self._fi_src, self._fi_out, "fadein")
         if not begun:
             return
@@ -561,7 +538,12 @@ class SpecialEffectsTab(BaseTab):
             f"format=rgba,fade=t=out:st=0:d={fade:.3f}:alpha=1[ov];"
             f"[m][ov]overlay=eof_action=pass,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._fi_crf, self._fi_btn, label, self._fi_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._fi_crf,
+            self._fi_btn,
+            self._fi_console,
+        )
 
     # ── Intro 2: Zoom Burst ───────────────────────────────────────────────
 
@@ -608,7 +590,6 @@ class SpecialEffectsTab(BaseTab):
         self._zb_console = _console_block(inner)
 
     def _render_zoomburst(self):
-        label = "\U0001f50d  APPLY ZOOM BURST"
         begun = self._fx_begin(self._zb_src, self._zb_out, "zoomburst")
         if not begun:
             return
@@ -626,15 +607,10 @@ class SpecialEffectsTab(BaseTab):
             f"y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps},{self.FX_GUARD}"
         )
         self._fx_run(
-            src,
-            out,
-            info,
-            graph,
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._zb_crf,
             self._zb_btn,
-            label,
             self._zb_console,
-            complex_graph=False,
         )
 
     # ── Intro 3: Slide In ─────────────────────────────────────────────────
@@ -681,7 +657,6 @@ class SpecialEffectsTab(BaseTab):
         self._sl_console = _console_block(inner)
 
     def _render_slidein(self):
-        label = "↔  APPLY SLIDE-IN"
         begun = self._fx_begin(self._sl_src, self._sl_out, "slidein")
         if not begun:
             return
@@ -706,7 +681,12 @@ class SpecialEffectsTab(BaseTab):
             f"[0:v]setpts=PTS-STARTPTS,split[a][b];[a]drawbox=c=black:t=fill[bg];"
             f"[bg][b]overlay=x='{x}':y='{y}':eval=frame,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._sl_crf, self._sl_btn, label, self._sl_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._sl_crf,
+            self._sl_btn,
+            self._sl_console,
+        )
 
     # ── Intro 4: Spin In ──────────────────────────────────────────────────
 
@@ -751,7 +731,6 @@ class SpecialEffectsTab(BaseTab):
         self._sp_console = _console_block(inner)
 
     def _render_spinin(self):
-        label = "\U0001f300  APPLY SPIN-IN"
         begun = self._fx_begin(self._sp_src, self._sp_out, "spinin")
         if not begun:
             return
@@ -769,7 +748,12 @@ class SpecialEffectsTab(BaseTab):
             f"scale=w='max(2,trunc(iw*{k}/2)*2)':h='max(2,trunc(ih*{k}/2)*2)':eval=frame[s];"
             f"[bg][s]overlay=x='(W-w)/2':y='(H-h)/2':eval=frame,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._sp_crf, self._sp_btn, label, self._sp_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._sp_crf,
+            self._sp_btn,
+            self._sp_console,
+        )
 
     # ── Intro 5: Split Open ───────────────────────────────────────────────
 
@@ -822,7 +806,6 @@ class SpecialEffectsTab(BaseTab):
         self._spo_console = _console_block(inner)
 
     def _render_splitopen(self):
-        label = "↕  APPLY SPLIT-OPEN"
         begun = self._fx_begin(self._spo_src, self._spo_out, "splitopen")
         if not begun:
             return
@@ -839,7 +822,12 @@ class SpecialEffectsTab(BaseTab):
             f"[0:v]setpts=PTS-STARTPTS,scale={w}:{h},fps={fps},format=yuv420p,setsar=1,settb=AVTB[vid];"
             f"[blk][vid]xfade=transition={trans}:duration={d:.3f}:offset=0,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._spo_crf, self._spo_btn, label, self._spo_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._spo_crf,
+            self._spo_btn,
+            self._spo_console,
+        )
 
     def _build_outros_tab(self, nb):
         outer = ttk.Frame(nb)
@@ -966,7 +954,6 @@ class SpecialEffectsTab(BaseTab):
         self._fz_console = _console_block(inner)
 
     def _render_freezezoom(self):
-        label = "\U0001f39e  APPLY FREEZE & ZOOM OUT"
         begun = self._fx_begin(self._fz_src, self._fz_out, "freezezoom")
         if not begun:
             return
@@ -993,16 +980,18 @@ class SpecialEffectsTab(BaseTab):
             )
             audio = ["-map", "0:a:0", "-af", af, "-c:a", "aac", "-b:a", "192k"]
         self._fx_run(
-            src,
-            out,
-            info,
-            graph,
+            common.RenderJob(
+                src=src,
+                out=out,
+                info=info,
+                name="Special Effects",
+                graph=graph,
+                audio=audio,
+                duration=dur + extra,
+            ),
             self._fz_crf,
             self._fz_btn,
-            label,
             self._fz_console,
-            audio=audio,
-            duration=dur + extra,
         )
 
     def _build_outro_irisclose(self, nb):
@@ -1041,7 +1030,6 @@ class SpecialEffectsTab(BaseTab):
         self._ir_console = _console_block(inner)
 
     def _render_irisclose(self):
-        label = "⭕  APPLY IRIS CLOSE"
         begun = self._fx_begin(self._ir_src, self._ir_out, "irisclose")
         if not begun:
             return
@@ -1073,7 +1061,12 @@ class SpecialEffectsTab(BaseTab):
                 "192k",
             ]
         self._fx_run(
-            src, out, info, graph, self._ir_crf, self._ir_btn, label, self._ir_console, audio=audio
+            common.RenderJob(
+                src=src, out=out, info=info, name="Special Effects", graph=graph, audio=audio
+            ),
+            self._ir_crf,
+            self._ir_btn,
+            self._ir_console,
         )
 
     def _build_overlays_tab(self, nb):
@@ -1320,7 +1313,6 @@ class SpecialEffectsTab(BaseTab):
         self._lt_console = _console_block(inner)
 
     def _render_lowerthird(self):
-        label = "\U0001f4db  BURN LOWER THIRD"
         begun = self._fx_begin(self._lt_src, self._lt_out, "lowerthird")
         if not begun:
             return
@@ -1363,7 +1355,12 @@ class SpecialEffectsTab(BaseTab):
             f"[0:v][bar]overlay=x=0:y='{slide}':enable='{enable}':shortest=1,"
             f"{title},{sub},{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._lt_crf, self._lt_btn, label, self._lt_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._lt_crf,
+            self._lt_btn,
+            self._lt_console,
+        )
 
     def _build_ov_subscribe(self, nb):
         f = ttk.Frame(nb)
@@ -1669,7 +1666,6 @@ class SpecialEffectsTab(BaseTab):
         self._pb_console = _console_block(inner)
 
     def _render_progressbar(self):
-        label = "▶  BURN PROGRESS BAR"
         begun = self._fx_begin(self._pb_src, self._pb_out, "progress")
         if not begun:
             return
@@ -1686,7 +1682,12 @@ class SpecialEffectsTab(BaseTab):
             f"color=c=0x{colour}:s={w}x{bar_h}:r={fps}[bar];"
             f"[0:v][bar]overlay=x='-w+w*t/{max(dur, 0.1):.3f}':y={y}:shortest=1,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._pb_crf, self._pb_btn, label, self._pb_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._pb_crf,
+            self._pb_btn,
+            self._pb_console,
+        )
 
     def _build_glitch_tab(self, nb):
         outer = ttk.Frame(nb)
@@ -2143,7 +2144,6 @@ class SpecialEffectsTab(BaseTab):
         self._ll_console = _console_block(inner)
 
     def _render_lightleak(self):
-        label = "✨  APPLY LIGHT LEAK"
         begun = self._fx_begin(self._ll_src, self._ll_out, "lightleak")
         if not begun:
             return
@@ -2171,7 +2171,12 @@ class SpecialEffectsTab(BaseTab):
             f"[0:v]setpts=PTS-STARTPTS,scale={w}:{h},format=gbrp[base];"
             f"[base][leak]blend=all_mode=screen:shortest=1,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._ll_crf, self._ll_btn, label, self._ll_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._ll_crf,
+            self._ll_btn,
+            self._ll_console,
+        )
 
     def _build_motion_tab(self, nb):
         outer = ttk.Frame(nb)
@@ -2372,7 +2377,6 @@ class SpecialEffectsTab(BaseTab):
         self._zp_console = _console_block(inner)
 
     def _render_zoompunch(self):
-        label = "\U0001f44a  APPLY ZOOM PUNCH"
         begun = self._fx_begin(self._zp_src, self._zp_out, "zoompunch")
         if not begun:
             return
@@ -2397,15 +2401,10 @@ class SpecialEffectsTab(BaseTab):
             f"s={w}x{h}:fps={fps},{self.FX_GUARD}"
         )
         self._fx_run(
-            src,
-            out,
-            info,
-            graph,
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._zp_crf,
             self._zp_btn,
-            label,
             self._zp_console,
-            complex_graph=False,
         )
 
     def _build_mo_kenburns(self, nb):
@@ -2458,7 +2457,6 @@ class SpecialEffectsTab(BaseTab):
         self._kb_console = _console_block(inner)
 
     def _render_kenburns(self):
-        label = "\U0001f3a5  APPLY KEN BURNS"
         begun = self._fx_begin(self._kb_src, self._kb_out, "kenburns")
         if not begun:
             return
@@ -2486,15 +2484,10 @@ class SpecialEffectsTab(BaseTab):
             f"{self.FX_GUARD}"
         )
         self._fx_run(
-            src,
-            out,
-            info,
-            graph,
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._kb_crf,
             self._kb_btn,
-            label,
             self._kb_console,
-            complex_graph=False,
         )
 
     def _build_mo_whippan(self, nb):
@@ -2544,7 +2537,6 @@ class SpecialEffectsTab(BaseTab):
         self._wp_console = _console_block(inner)
 
     def _render_whippan(self):
-        label = "\U0001f4a8  APPLY WHIP PAN BLUR"
         begun = self._fx_begin(self._wp_src, self._wp_out, "whippan")
         if not begun:
             return
@@ -2565,15 +2557,10 @@ class SpecialEffectsTab(BaseTab):
             f"{self.FX_GUARD}"
         )
         self._fx_run(
-            src,
-            out,
-            info,
-            graph,
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._wp_crf,
             self._wp_btn,
-            label,
             self._wp_console,
-            complex_graph=False,
         )
 
     def _build_branding_tab(self, nb):
@@ -2795,7 +2782,6 @@ class SpecialEffectsTab(BaseTab):
         self._cb_console = _console_block(inner)
 
     def _render_cinebars(self):
-        label = "\U0001f3ac  APPLY CINEMATIC BARS"
         begun = self._fx_begin(self._cb_src, self._cb_out, "cinebars")
         if not begun:
             return
@@ -2826,7 +2812,12 @@ class SpecialEffectsTab(BaseTab):
             f"[base][tb]overlay=x=0:y='{ytop}':shortest=1[o1];"
             f"[o1][bb]overlay=x=0:y='{ybot}':shortest=1,{self.FX_GUARD}[v]"
         )
-        self._fx_run(src, out, info, graph, self._cb_crf, self._cb_btn, label, self._cb_console)
+        self._fx_run(
+            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            self._cb_crf,
+            self._cb_btn,
+            self._cb_console,
+        )
 
     def _build_br_watermark(self, nb):
         f = ttk.Frame(nb)

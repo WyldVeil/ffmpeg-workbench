@@ -29,7 +29,7 @@ from core.ops.shared import frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 METHODS = {
     "chroma": "Chroma key (green / blue screens)",
@@ -302,10 +302,9 @@ class GreenKeyerTab(BaseTab):
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         )
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self._suggest(self.src_row.path),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -585,14 +584,16 @@ class GreenKeyerTab(BaseTab):
         self.log(self.console, f"Keying #{self.key_colour} ({self.method_var.get()})")
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                graph=graph,
+                extra_inputs=extra_inputs,
+                name="Green screen",
+                inputs=[bg] if kind == "file" else [],
+            ),
             encoder=self.encoder,
-            extra_inputs=extra_inputs,
             console=self.console,
             btn=self.btn_render,
-            name="Green screen",
-            inputs=[bg] if kind == "file" else [],
         )

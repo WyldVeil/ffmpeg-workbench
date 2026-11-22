@@ -21,7 +21,7 @@ from core.ops.auto_cropper import detect_bars
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 
 class AutoCropperTab(BaseTab):
@@ -60,10 +60,9 @@ class AutoCropperTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "nobars"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -180,12 +179,14 @@ class AutoCropperTab(BaseTab):
         x, y, w, h = self.box
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=f"crop={w}:{h}:{x}:{y},setsar=1",
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                chain=f"crop={w}:{h}:{x}:{y},setsar=1",
+                name="Auto-Cropper",
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Auto-Cropper",
         )

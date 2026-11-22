@@ -20,7 +20,7 @@ from core.ops.rotate_flip import lossless_args, reencode_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 ROTATIONS = [
     (0, "No rotation"),
@@ -104,10 +104,9 @@ class RotateFlipTab(BaseTab):
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self._suggest(self.src_row.path),
         )
         self.out_row.pack(fill="x")
@@ -198,12 +197,10 @@ class RotateFlipTab(BaseTab):
                 return
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=reencode_chain(rot, hf, vf),
+            common.RenderJob(
+                src=src, info=info, out=out, chain=reencode_chain(rot, hf, vf), name="Rotate & Flip"
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Rotate & Flip",
         )

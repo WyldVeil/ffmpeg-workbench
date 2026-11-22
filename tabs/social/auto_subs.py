@@ -25,7 +25,7 @@ from core.scaling import px
 from core.tools import ToolId
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 FORMATS = {
     "srt": "SubRip (.srt) - works everywhere",
@@ -142,9 +142,7 @@ class AutoSubsTab(BaseTab):
         ttk.Combobox(
             fr, textvariable=self.fmt_var, values=list(FORMATS.values()), state="readonly", width=34
         ).pack(side="left")
-        self.out_row = FileRow(
-            out, "Save as:", save=True, kind="subtitle", ext=".srt", suggest=self._suggest
-        )
+        self.out_row = SaveRow(out, "Save as:", kind="subtitle", ext=".srt", suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(6, 0))
 
         self.btn_render = tk.Button(

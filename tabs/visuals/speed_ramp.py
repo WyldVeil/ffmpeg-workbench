@@ -27,7 +27,7 @@ from core.ops.speed_ramp import atempo_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 MIN_SPEED, MAX_SPEED = 0.1, 16.0
 SLOWMO = {
@@ -313,10 +313,9 @@ class SpeedRamperTab(BaseTab):
             out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
         )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "speed"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -592,11 +591,7 @@ class SpeedRamperTab(BaseTab):
 
         common.queue_job(
             self,
-            name="Speed Ramper",
-            out=out,
-            work=work,
+            common.Job(name="Speed Ramper", out=out, work=work, duration=new_dur, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=new_dur,
-            inputs=[src],
         )

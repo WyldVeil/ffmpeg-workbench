@@ -228,12 +228,14 @@ class FormatConverterTab(BaseTab):
         out_label = jobs[0][1] if len(jobs) == 1 else os.path.dirname(jobs[0][1])
         common.queue_job(
             self,
-            name=f"Convert {len(jobs)} file(s) to {fmt.upper()}",
-            out=out_label,
-            work=work,
+            common.Job(
+                name=f"Convert {len(jobs)} file(s) to {fmt.upper()}",
+                out=out_label,
+                work=work,
+                inputs=paths,
+            ),
             btn=self.btn_render,
             console=self.console,
-            inputs=paths,
         )
 
 

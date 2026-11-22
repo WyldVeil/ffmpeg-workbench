@@ -19,7 +19,7 @@ from core.ops.image_watermark import POSITIONS, Logo, logo_graph
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, here_button, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, here_button, scroll_body
 
 
 class ImageWatermarkTab(BaseTab):
@@ -132,10 +132,9 @@ class ImageWatermarkTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "logo"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -247,14 +246,16 @@ class ImageWatermarkTab(BaseTab):
             logo_in = ["-loop", "1", "-i", logo]
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
-            extra_inputs=logo_in,
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                graph=graph,
+                extra_inputs=logo_in,
+                name="Image Watermark",
+                inputs=[logo],
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Image Watermark",
-            inputs=[logo],
         )

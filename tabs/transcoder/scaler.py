@@ -31,7 +31,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 SIZES = [
     ("8K (7680×4320)", 7680, 4320),
@@ -161,10 +161,9 @@ class ResolutionScalerTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "ffv1"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, self._suffix()),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -277,15 +276,17 @@ class ResolutionScalerTab(BaseTab):
         self.log(self.console, chain)
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=chain,
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                chain=chain,
+                name="Resolution Scaler",
+                pre_input=extra_pre,
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Resolution Scaler",
-            pre_input=extra_pre,
         )
 
 
@@ -392,10 +393,9 @@ class FPSInterpolatorTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "interp"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -599,11 +599,9 @@ class FPSInterpolatorTab(BaseTab):
 
         common.queue_job(
             self,
-            name="Framerate Interpolator",
-            out=out,
-            work=work,
+            common.Job(
+                name="Framerate Interpolator", out=out, work=work, duration=out_dur, inputs=[src]
+            ),
             btn=self.btn_render,
             console=self.console,
-            duration=out_dur,
-            inputs=[src],
         )

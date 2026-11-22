@@ -18,7 +18,7 @@ from core.ops.shortifier import ANCHORS, PLATFORMS, reframe_graph
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 BACKGROUNDS = {
     "crop": "Fill the frame (crop the edges)",
@@ -140,10 +140,9 @@ class ShortifierTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, self._key()),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -234,14 +233,16 @@ class ShortifierTab(BaseTab):
         self.log(self.console, f"{PLATFORMS[self._key()][0]} · {tw}×{th}")
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                graph=graph,
+                name="Shortifier",
+                extra_args=extra,
+                duration=dur,
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Shortifier",
-            extra_args=extra,
-            duration=dur,
         )

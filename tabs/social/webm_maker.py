@@ -22,7 +22,7 @@ from core.i18n import t
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.social.webm_maker")
 
@@ -279,11 +279,10 @@ class WebMTab(BaseTab):
         out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=px(14), pady=px(8))
         out_lf.pack(fill="x", padx=px(18), pady=px(2, 6))
         self.out_var = tk.StringVar()
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("webm_maker.save_as"),
             self.out_var,
-            save=True,
             kind="video",
             ext=".webm",
             suggest=self._suggest_out,

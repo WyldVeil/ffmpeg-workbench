@@ -18,7 +18,7 @@ from core.ops.region_blur import KINDS, Region, blur_graph
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 PRESETS = {  # name: (x, y, w, h) as fractions of the frame
     "Face (centre)": (0.38, 0.18, 0.24, 0.40),
@@ -140,10 +140,9 @@ class RegionBlurTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "blurred"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -336,12 +335,8 @@ class RegionBlurTab(BaseTab):
         graph = blur_graph(self.regions, w, h)
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
+            common.RenderJob(src=src, info=info, out=out, graph=graph, name="Privacy Blur"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Privacy Blur",
         )

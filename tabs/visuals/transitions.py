@@ -24,7 +24,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.cutting import crossfader as xf
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 FAMILIES = {
     "Dissolves": [
@@ -168,10 +168,9 @@ class TransitionStudioTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.a_row.path, "transition"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))

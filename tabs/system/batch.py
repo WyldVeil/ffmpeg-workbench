@@ -372,12 +372,9 @@ class BatchTab(BaseTab):
 
         self._batch_tid = common.queue_job(
             self,
-            name=f"Batch: {len(files)} file(s)",
-            out=out_dir,
-            work=work,
+            common.Job(name=f"Batch: {len(files)} file(s)", out=out_dir, work=work, inputs=files),
             btn=self.btn_render,
             console=self.console,
-            inputs=files,
         )
 
 

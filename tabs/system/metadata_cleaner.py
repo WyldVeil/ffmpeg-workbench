@@ -250,10 +250,12 @@ class MetadataCleanerTab(BaseTab):
         out_label = jobs[0][1] if len(jobs) == 1 else os.path.dirname(jobs[0][1])
         common.queue_job(
             self,
-            name=f"Metadata Cleaner ({len(jobs)} file(s))",
-            out=out_label,
-            work=work,
+            common.Job(
+                name=f"Metadata Cleaner ({len(jobs)} file(s))",
+                out=out_label,
+                work=work,
+                inputs=files,
+            ),
             btn=self.btn,
             console=self.console,
-            inputs=files,
         )

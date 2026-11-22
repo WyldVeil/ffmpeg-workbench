@@ -21,7 +21,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 CONTAINERS = {
     "mkv": "MKV - holds everything",
@@ -148,8 +148,8 @@ class TracksRemuxTab(BaseTab):
             opt, text="", fg=CLR["orange"], justify="left", anchor="w", wraplength=px(900)
         )
         self.notes.pack(fill="x", pady=px(6, 0))
-        self.out_row = FileRow(
-            opt, t("common.output_file"), save=True, ext=".mkv", suggest=lambda: self._suggest()
+        self.out_row = SaveRow(
+            opt, t("common.output_file"), ext=".mkv", suggest=lambda: self._suggest()
         )
         self.out_row.pack(fill="x", pady=px(6, 0))
         self.btn = tk.Button(

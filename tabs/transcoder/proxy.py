@@ -344,12 +344,14 @@ class ProxyGenTab(BaseTab):
 
         common.queue_job(
             self,
-            name=f"Proxies ({len(jobs)} files)",
-            out=os.path.dirname(jobs[0][1]),
-            work=work,
+            common.Job(
+                name=f"Proxies ({len(jobs)} files)",
+                out=os.path.dirname(jobs[0][1]),
+                work=work,
+                inputs=list(self.file_paths),
+            ),
             btn=self.btn_render,
             console=self.console,
-            inputs=list(self.file_paths),
         )
 
 

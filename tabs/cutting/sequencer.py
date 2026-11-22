@@ -19,7 +19,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FramePreview, SaveRow, scroll_body
 
 SIZES = {
     "first": "Same as the first clip",
@@ -126,7 +126,7 @@ class SequencerTab(BaseTab):
         ).pack(side="left", padx=px(10))
         self.encoder = EncoderPanel(opt, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w", pady=px(4))
-        self.out_row = FileRow(opt, t("common.output_file"), save=True, suggest=self._suggest)
+        self.out_row = SaveRow(opt, t("common.output_file"), suggest=self._suggest)
         self.out_row.pack(fill="x")
         self.btn_render = tk.Button(
             body,

@@ -28,6 +28,7 @@ from core import proc as _proc
 from core import tasks
 from core.hardware import get_binary_path
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -1264,21 +1265,17 @@ class AudioExporterTab(BaseTab):
             ctx.span(0.6 if analysed else 0.0, 1.0).run([*cmd, ctx.output(out)], duration=seg_len)
             return 0
 
-        def opened(rc):
+        def opened(_tid: str, rc: int) -> None:
             if rc == 0 and self.open_folder_var.get():
                 self.open_path(os.path.dirname(out))
 
         self.log_tagged(self.console, f"Exporting: {os.path.basename(src)} -> {cfg['fmt']}", "info")
         common.queue_job(
             self,
-            name="Audio Converter",
-            out=out,
-            work=work,
+            common.Job(name="Audio Converter", out=out, work=work, duration=length, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=length,
-            inputs=[src],
-            on_done=opened,
+            hooks=Hooks(on_complete=opened),
         )
 
 

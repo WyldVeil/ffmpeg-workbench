@@ -22,7 +22,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 MODES = [
     ("simple", "Repeat", "Play the section several times in a row."),
@@ -145,10 +145,9 @@ class ClipLooperTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "looped"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -314,11 +313,7 @@ class ClipLooperTab(BaseTab):
         )
         common.queue_job(
             self,
-            name="Clip Looper",
-            out=out,
-            work=work,
+            common.Job(name="Clip Looper", out=out, work=work, duration=total, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=total,
-            inputs=[src],
         )

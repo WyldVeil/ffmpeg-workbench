@@ -21,7 +21,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import SaveRow, scroll_body
 
 PATTERNS = {
     "smpte_hd": "SMPTE HD colour bars",
@@ -253,9 +253,7 @@ class MediaGeneratorTab(BaseTab):
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
-            out_lf, t("common.output_file"), save=True, suggest=self._suggest_name
-        )
+        self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest_name)
         self.out_row.pack(fill="x")
         tk.Label(
             out_lf,

@@ -301,33 +301,30 @@ class CompareView(tk.Frame):
 
 
 class FileRow(tk.Frame):
-    """``Label [entry......] [Browse]`` bound to a StringVar.
+    """``Label [entry......] [Browse]`` bound to a StringVar, for choosing a file.
 
     The entry is the single source of truth: :attr:`path` reads it at the
     moment it is needed, so typed and pasted paths work exactly like
     browsed ones.  *on_change(path)* fires (debounced) when the entry holds
-    an existing file (any text for save rows)."""
+    an existing file."""
 
     def __init__(
         self,
-        parent,
+        parent: tk.Misc,
         label: str,
         var: tk.StringVar | None = None,
         *,
         kind: str = "video",
-        save: bool = False,
-        ext: str = ".mp4",
         width: int = 56,
         label_width: int = 16,
         on_change: Callable[[str], object] | None = None,
-        suggest: Callable[[], str] | None = None,
     ):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self.var = var if var is not None else tk.StringVar()
-        self._kind, self._save, self._ext = kind, save, ext
-        self._on_change, self._suggest = on_change, suggest
-        self._job = None
+        self._kind = kind
+        self._on_change = on_change
+        self._job: str | None = None
         tk.Label(
             self,
             text=label,
@@ -339,10 +336,9 @@ class FileRow(tk.Frame):
         ).pack(side="left")
         self.entry = tk.Entry(self, textvariable=self.var, width=width, relief="flat")
         self.entry.pack(side="left", fill="x", expand=True, padx=px(6))
-        text = _tr("common.save_as", "Save as…") if save else _tr("btn.browse", "Browse…")
-        tk.Button(self, text=text, command=self._browse, cursor="hand2", relief="flat").pack(
-            side="left"
-        )
+        tk.Button(
+            self, text=self._button_text(), command=self._browse, cursor="hand2", relief="flat"
+        ).pack(side="left")
         if on_change is not None:
             self.var.trace_add("write", self._changed)
 
@@ -353,20 +349,23 @@ class FileRow(tk.Frame):
     def set(self, path: str) -> None:
         self.var.set(path)
 
-    def _browse(self) -> None:
+    def _button_text(self) -> str:
+        return _tr("btn.browse", "Browse…")
+
+    def _choose(self) -> str:
         from tabs.kit import dialogs
 
-        if self._save:
-            current = self.path or (self._suggest() if self._suggest else "")
-            chosen = dialogs.ask_save(
-                current, kind=self._kind, defaultextension=self._ext, parent=self
-            )
-        else:
-            chosen = dialogs.ask_open(self._kind, parent=self)
+        return dialogs.ask_open(self._kind, parent=self)
+
+    def _accepts(self, path: str) -> bool:
+        return os.path.isfile(path)
+
+    def _browse(self) -> None:
+        chosen = self._choose()
         if chosen:
             self.var.set(chosen)
 
-    def _changed(self, *_a) -> None:
+    def _changed(self, *_a: object) -> None:
         if self._job is not None:
             with contextlib.suppress(tk.TclError):
                 self.after_cancel(self._job)
@@ -375,8 +374,39 @@ class FileRow(tk.Frame):
     def _fire(self) -> None:
         self._job = None
         path = self.path
-        if self._on_change is not None and path and (self._save or os.path.isfile(path)):
+        if self._on_change is not None and path and self._accepts(path):
             self._on_change(path)
+
+
+class SaveRow(FileRow):
+    """``Label [entry......] [Save as…]``: where an output goes.  *suggest()*
+    proposes a name when the row is empty; the dialog adds *ext* when the
+    name has none."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        label: str,
+        var: tk.StringVar | None = None,
+        *,
+        kind: str = "video",
+        ext: str = ".mp4",
+        suggest: Callable[[], str] | None = None,
+    ):
+        self._ext, self._suggest = ext, suggest
+        super().__init__(parent, label, var, kind=kind)
+
+    def _button_text(self) -> str:
+        return _tr("common.save_as", "Save as…")
+
+    def _choose(self) -> str:
+        from tabs.kit import dialogs
+
+        current = self.path or (self._suggest() if self._suggest else "")
+        return dialogs.ask_save(current, kind=self._kind, defaultextension=self._ext, parent=self)
+
+    def _accepts(self, path: str) -> bool:
+        return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────

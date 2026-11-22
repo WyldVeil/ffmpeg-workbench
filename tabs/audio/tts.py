@@ -998,13 +998,15 @@ class TTSVoiceOverTab(BaseTab):
         self._gen_status.config(text=t("tts.running_tts_engine"), fg=CLR["accent"])
         common.queue_job(
             self,
-            name="TTS Voice-Over",
-            out=out,
-            work=work,
+            common.Job(
+                name="TTS Voice-Over",
+                out=out,
+                work=work,
+                duration=info.duration if info else None,
+                inputs=inputs,
+            ),
             btn=self.btn_render,
             console=self.console,
-            duration=info.duration if info else None,
-            inputs=inputs,
         )
 
     def _build_cmd(self, speech, out, info, cfg):

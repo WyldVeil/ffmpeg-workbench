@@ -328,13 +328,11 @@ class CompareQualityTab(BaseTab):
 
         common.queue_job(
             self,
-            name="Compare & Quality",
-            out="",
-            work=work,
+            common.Job(
+                name="Compare & Quality", out="", work=work, duration=span, inputs=[ref, dist]
+            ),
             btn=self.btn,
             console=self.console,
-            duration=span,
-            inputs=[ref, dist],
         )
 
     def show_result(self, returncode, out_path=""):

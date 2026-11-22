@@ -6,6 +6,7 @@ import subprocess
 import pytest
 
 from core import ffmpeg as ff
+from core import grid
 from tabs.social import chapter_markers, collage
 
 
@@ -23,13 +24,13 @@ def test_chapter_parsing_and_rules():
     )
 
 
-def test_collage_geometry_even():
-    g, has_a = collage.collage_graph(
-        collage.LAYOUTS["3x3"], 9, 1921, 1081, 5, "black", "30", True, "first", [True] * 9
+def test_picture_in_picture_geometry_even():
+    g, has_a = grid.pip_filter(
+        [True] * 3, grid.Canvas(1921, 1081, gap=5), shortest=True, audio="first"
     )
-    assert "pad=1920:1080" in g and has_a
-    g, _ = collage.collage_graph(
-        collage.LAYOUTS["pip"], 3, 1920, 1080, 4, "black", "30", False, "mix", [True, False, True]
+    assert "pad=1920:1080" in g and "scale=480:270" in g and has_a
+    g, _ = grid.pip_filter(
+        [True, False, True], grid.Canvas(1920, 1080, gap=4), shortest=False, audio="mix"
     )
     assert "amix=inputs=2" in g and "overlay" in g
 

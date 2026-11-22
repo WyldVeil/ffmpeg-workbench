@@ -22,7 +22,7 @@ from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 
 class LoudnessNormTab(BaseTab):
@@ -80,10 +80,9 @@ class LoudnessNormTab(BaseTab):
         self.report.pack(anchor="w", padx=px(24), pady=px(4))
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "normalised"),
         )
@@ -214,11 +213,7 @@ class LoudnessNormTab(BaseTab):
 
         common.queue_job(
             self,
-            name="Loudness",
-            out=out,
-            work=work,
+            common.Job(name="Loudness", out=out, work=work, duration=dur, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=dur,
-            inputs=[src],
         )

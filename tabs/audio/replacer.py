@@ -19,7 +19,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 MODES = {
     "replace": "Replace the soundtrack",
@@ -120,10 +120,9 @@ class AudioReplacerTab(BaseTab):
         )
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "new_audio"),
         )
         self.out_row.pack(fill="x")

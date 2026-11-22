@@ -3,6 +3,7 @@
 import pytest
 
 from core import ffmpeg as ff
+from core.ops import side_by_side as side_by_side_ops
 from tabs.cutting import beat_sync, crop, side_by_side, smart_reframe
 
 
@@ -22,7 +23,7 @@ def test_pure_helpers():
             segs, [("a", 1.0), ("b", 10.0)] * 2, strict=False
         )
     )
-    assert side_by_side.cells("grid", 4, 1920, 1080)[3] == (960, 540, 960, 540)
+    assert side_by_side_ops.cells("grid", 4, 1920, 1080)[3] == (960, 540, 960, 540)
 
 
 @pytest.mark.ffmpeg

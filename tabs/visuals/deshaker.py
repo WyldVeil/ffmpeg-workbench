@@ -15,10 +15,11 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.shared import keep_audio_args
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 ZOOM_MODES = {
     "Auto zoom to hide borders (recommended)": 1,
@@ -157,10 +158,9 @@ class DeshakerTab(BaseTab):
             out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
         )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "stabilised"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -282,12 +282,8 @@ class DeshakerTab(BaseTab):
 
         common.queue_job(
             self,
-            name="Deshaker",
-            out=out,
-            work=work,
+            common.Job(name="Deshaker", out=out, work=work, duration=duration, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=duration,
-            inputs=[src],
-            on_start=on_start,
+            hooks=Hooks(on_start=on_start),
         )

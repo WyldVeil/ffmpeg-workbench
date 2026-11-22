@@ -18,7 +18,7 @@ from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 PRESETS = {  # id: (label, semitones, extra filters)
     "chipmunk": ("Chipmunk (high pitch)", 6, ""),
@@ -124,10 +124,9 @@ class VoiceChangerTab(BaseTab):
         ).grid(row=0, column=1, padx=px(12))
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "voice"),
         )

@@ -5,16 +5,16 @@ import os
 import pytest
 
 from core import ffmpeg as ff
-from core.ops import gif_maker, image_watermark
+from core.ops import gif_maker, image_watermark, text_watermark
 from core.ops import shortifier as shortifier_ops
-from tabs.social import shortifier, watermark
+from tabs.social import shortifier
 
 
 def test_pure_helpers():
-    assert watermark.parse_ranges("0-5, 1:00-1:10") == [(0.0, 5.0), (60.0, 70.0)]
+    assert text_watermark.parse_ranges("0-5, 1:00-1:10") == [(0.0, 5.0), (60.0, 70.0)]
     with pytest.raises(ValueError):
-        watermark.parse_ranges("5-2")
-    segs = watermark.bounce_path(10, 1920, 1080, 300, 60, 200)
+        text_watermark.parse_ranges("5-2")
+    segs = text_watermark.bounce_path(10, 1920, 1080, 300, 60, 200)
     assert segs[-1][1] == pytest.approx(10, abs=0.01)
     assert all(-1 <= x <= 1920 - 300 + 1 for s in segs for x in (s[2], s[4]))
     g = shortifier_ops.reframe_graph(1080, 1920, "crop", "left")
@@ -126,7 +126,7 @@ def test_text_watermark(ui, media, outdir, place):
     tab = ui.open("Watermarker")
     _src(ui, tab, media["vertical_noaudio"])
     tab.text_var.set("O'Brien {x} 50% \\o/")
-    tab.place_var.set(watermark.PLACES[place])
+    tab.place_var.set(text_watermark.PLACES[place])
     tab.always_var.set(place != "jump")
     tab.ranges_var.set("0-1.5")
     out = str(outdir / f"wm_{place}.mp4")

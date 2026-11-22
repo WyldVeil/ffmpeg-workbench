@@ -15,7 +15,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 # key: (label, low, high, default, resolution)
 CONTROLS = {
@@ -174,10 +174,9 @@ class ColorCorrectorTab(BaseTab):
             enc_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
         )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             enc_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "graded"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -267,12 +266,8 @@ class ColorCorrectorTab(BaseTab):
             return
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=chain,
+            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Colour Correct"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Colour Correct",
         )

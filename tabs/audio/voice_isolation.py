@@ -27,7 +27,7 @@ from core.ops.voice_isolation import denoise_filter, models_dir
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 MODELS = {  # file: label (signal / noise the model was trained for)
     "sh.rnnn": "Speech, recorded in a room - best for talking",
@@ -128,10 +128,9 @@ class VoiceIsolationTab(BaseTab):
         )
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "clean"),
         )

@@ -25,11 +25,12 @@ from core import ass, concat, tasks
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.intro_card import Background, Card, background_input, card_script
 from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 BACKGROUNDS = {
     "solid": "Solid colour",
@@ -65,133 +66,6 @@ ATTACH = {
     "after": "Put it after the video (outro)",
     "both": "Before and after",
 }
-
-
-def card_script(
-    width,
-    height,
-    duration,
-    *,
-    title,
-    subtitle="",
-    font="Montserrat",
-    scale=1.0,
-    colour="#FFFFFF",
-    accent="#FFB300",
-    animation="fade",
-    position="centre",
-) -> ass.Script:
-    sc = ass.Script(width, height)
-    u = min(width, height) / 1080 * scale
-    s1, s2 = round(96 * u), round(44 * u)
-    sc.style(
-        ass.Style(
-            "Title",
-            font=font,
-            size=s1,
-            bold=True,
-            colour=colour,
-            shadow=3 * u,
-            back_colour="#000000",
-            back_alpha=0.45,
-        )
-    )
-    sc.style(
-        ass.Style(
-            "Sub",
-            font=font,
-            size=s2,
-            colour=colour,
-            shadow=2 * u,
-            back_colour="#000000",
-            back_alpha=0.5,
-        )
-    )
-    if position == "lower":
-        an, x, y1 = 4, width * 0.07, height * 0.70
-    elif position == "top":
-        an, x, y1 = 8, width / 2, height * 0.12
-    else:
-        an, x, y1 = 5, width / 2, height / 2 - (s2 * 0.75 if subtitle else 0)
-    y2 = y1 + s1 * (0.85 if an == 5 or an == 4 else 1.15)
-    end = max(0.2, duration)
-    out_ms = min(600, int(duration * 250))
-
-    def anim(y, delay):
-        if animation == "slide":
-            return (
-                f"\\move({x:.0f},{y + 70 * u:.0f},{x:.0f},{y:.0f},{delay},{delay + 600})"
-                f"\\fad({300 + delay},{out_ms})"
-            )
-        if animation == "zoom":
-            return (
-                f"\\pos({x:.0f},{y:.0f})\\fscx70\\fscy70\\t({delay},{delay + 900},"
-                f"\\fscx100\\fscy100)\\fad({250 + delay},{out_ms})"
-            )
-        if animation == "static":
-            return f"\\pos({x:.0f},{y:.0f})"
-        if animation == "typewriter":
-            return f"\\pos({x:.0f},{y:.0f})\\fad(0,{out_ms})"
-        return f"\\pos({x:.0f},{y:.0f})\\fad({500 + delay},{out_ms})"
-
-    def body(text, start_ms):
-        if animation != "typewriter":
-            return ass.escape(text)
-        step = max(25, min(90, int(duration * 450 / max(1, len(text)))))
-        return "".join(
-            f"{{\\alpha&HFF&\\t({start_ms + i * step},{start_ms + i * step + 1},"
-            f"\\alpha&H00&)}}{ass.escape(ch)}"
-            for i, ch in enumerate(text)
-        )
-
-    if title.strip():
-        sc.add(0, end, f"{{\\an{an}{anim(y1, 0)}}}{body(title, 0)}", "Title", 2)
-    if subtitle.strip():
-        delay = 250 if animation != "typewriter" else int(duration * 450)
-        sc.add(
-            0,
-            end,
-            f"{{\\an{an}{anim(y2, 250)}\\3c{ass.colour(accent)}}}{body(subtitle, delay)}",
-            "Sub",
-            2,
-        )
-    return sc
-
-
-def background_input(
-    kind, w, h, fps, dur, *, colour="#202020", colour2="#7C3AED", direction="horizontal", path=""
-) -> tuple:
-    """(input args, filter applied to input 0) for the card background."""
-    size = f"size={w}x{h}:rate={fps}:duration={dur:.3f}"
-    c1, c2 = colour.lstrip("#"), colour2.lstrip("#")
-    if kind == "gradient":
-        coords = {
-            "horizontal": f"x0=0:y0=0:x1={w}:y1=0",
-            "vertical": f"x0=0:y0=0:x1=0:y1={h}",
-            "diagonal": f"x0=0:y0=0:x1={w}:y1={h}",
-            "radial": f"x0={w // 2}:y0={h // 2}:x1={w}:y1={h}",
-        }[direction]
-        typ = ":type=radial" if direction == "radial" else ""
-        return (
-            [
-                "-f",
-                "lavfi",
-                "-i",
-                f"gradients={size}:c0=0x{c1}:c1=0x{c2}:nb_colors=2:speed=0:{coords}{typ}",
-            ],
-            "format=yuv420p",
-        )
-    if kind == "file" and path:
-        info = ff.try_probe(path)
-        fit = (
-            f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,"
-            f"fps={fps},format=yuv420p"
-        )
-        if info is not None and info.is_image:
-            return ["-loop", "1", "-framerate", str(fps), "-t", f"{dur:.3f}", "-i", path], fit
-        return ["-stream_loop", "-1", "-t", f"{dur:.3f}", "-i", path], fit
-    col = "000000" if kind == "black" else c1
-    return ["-f", "lavfi", "-i", f"color=c=0x{col}:{size}"], "format=yuv420p"
 
 
 class IntroMakerTab(BaseTab):
@@ -407,7 +281,7 @@ class IntroMakerTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, suggest=self._suggest)
+        self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(
             body,
@@ -483,17 +357,14 @@ class IntroMakerTab(BaseTab):
 
     def card_command(self, w, h, fps, dur, ass_path, out, *, venc=None, preview_at=None):
         """FFmpeg command that renders the card (or one preview PNG to stdout)."""
-        args, base = background_input(
+        bg = Background(
             self.bg_kind(),
-            w,
-            h,
-            fps,
-            dur,
-            colour=self.colour,
-            colour2=self.colour2,
-            direction=self._key(GRADIENTS, self.grad_var, "horizontal"),
-            path=self.bg_row.path,
+            self.colour,
+            self.colour2,
+            self._key(GRADIENTS, self.grad_var, "horizontal"),
+            self.bg_row.path,
         )
+        args, base = background_input(bg, w, h, fps, dur)
         chain = f"[0:v]{base},{ass.subtitles_filter(ass_path)}"
         if self.fade_var.get():
             f = min(0.6, dur / 4)
@@ -556,10 +427,7 @@ class IntroMakerTab(BaseTab):
         return dur
 
     def script(self, w, h, dur):
-        return card_script(
-            w,
-            h,
-            dur,
+        card = Card(
             title=self.title_var.get(),
             subtitle=self.sub_var.get(),
             font=self.font_var.get(),
@@ -569,6 +437,7 @@ class IntroMakerTab(BaseTab):
             animation=self._key(ANIMATIONS, self.anim_var, "fade"),
             position=self._key(POSITIONS, self.pos_var, "centre"),
         )
+        return card_script(card, w, h, dur)
 
     # ── preview ──────────────────────────────────────────────────────────────
 
@@ -682,11 +551,13 @@ class IntroMakerTab(BaseTab):
         )
         common.queue_job(
             self,
-            name="Intro/Outro",
-            out=out,
-            work=work,
+            common.Job(
+                name="Intro/Outro",
+                out=out,
+                work=work,
+                duration=total,
+                inputs=[p for p in (main, self.bg_row.path, self.music_row.path) if p],
+            ),
             btn=self.btn_render,
             console=self.console,
-            duration=total,
-            inputs=[p for p in (main, self.bg_row.path, self.music_row.path) if p],
         )

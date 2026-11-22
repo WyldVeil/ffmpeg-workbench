@@ -11,7 +11,6 @@ sizes scale with the video.
 from __future__ import annotations
 
 import os
-import random
 import shutil
 import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
@@ -19,159 +18,11 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.text_watermark import PLACES, TextMark, build_script, parse_ranges
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
-
-PLACES = {
-    "tl": "Top left",
-    "tc": "Top centre",
-    "tr": "Top right",
-    "ml": "Middle left",
-    "center": "Centre",
-    "mr": "Middle right",
-    "bl": "Bottom left",
-    "bc": "Bottom centre",
-    "br": "Bottom right",
-    "custom": "Custom spot (%)",
-    "bounce": "Bouncing (DVD style)",
-    "jump": "Jumping around",
-}
-_ANCHOR = {
-    "tl": (7, 0, 0),
-    "tc": (8, 0.5, 0),
-    "tr": (9, 1, 0),
-    "ml": (4, 0, 0.5),
-    "center": (5, 0.5, 0.5),
-    "mr": (6, 1, 0.5),
-    "bl": (1, 0, 1),
-    "bc": (2, 0.5, 1),
-    "br": (3, 1, 1),
-}
-
-
-def parse_ranges(text: str) -> list:
-    """'0-5, 20-25.5, 1:00-1:10' -> [(0, 5), (20, 25.5), (60, 70)]."""
-    out = []
-    for part in (text or "").replace(";", ",").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        a, sep, b = part.partition("-")
-        if not sep:
-            raise ValueError(f"'{part}' is not a range like 5-10.")
-        start, end = ff.parse_time(a.strip()), ff.parse_time(b.strip())
-        if end <= start:
-            raise ValueError(f"In '{part}' the end must be after the start.")
-        out.append((start, end))
-    return sorted(out)
-
-
-def anchor_xy(key: str, w: int, h: int, margin: float) -> tuple:
-    an, fx, fy = _ANCHOR[key]
-    x = margin + (w - 2 * margin) * fx
-    y = margin + (h - 2 * margin) * fy
-    return an, x, y
-
-
-def bounce_path(duration: float, w: int, h: int, tw: float, th: float, speed: float, seed: int = 3):
-    """[(t0, t1, x0, y0, x1, y1)] straight segments of a box bouncing off the edges (top-left coords)."""
-    rng = random.Random(seed)
-    tw, th = min(tw, w * 0.9), min(th, h * 0.9)
-    x, y = rng.uniform(0, max(w - tw, 1)), rng.uniform(0, max(h - th, 1))
-    vx, vy = speed * 0.8, speed * 0.6
-    tm, segs = 0.0, []
-    while tm < duration and len(segs) < 5000:
-        tx = ((w - tw - x) / vx if vx > 0 else -x / vx) if vx else float("inf")
-        ty = ((h - th - y) / vy if vy > 0 else -y / vy) if vy else float("inf")
-        dt = max(min(tx, ty, duration - tm), 0.001)
-        nx, ny = x + vx * dt, y + vy * dt
-        segs.append((tm, tm + dt, x, y, nx, ny))
-        x, y, tm = nx, ny, tm + dt
-        if abs(dt - tx) < 1e-6:
-            vx = -vx
-        if abs(dt - ty) < 1e-6:
-            vy = -vy
-    return segs
-
-
-def build_script(
-    *,
-    text,
-    w,
-    h,
-    duration,
-    place,
-    font="Montserrat",
-    size=64,
-    colour="#FFFFFF",
-    opacity=1.0,
-    bold=True,
-    italic=False,
-    shadow=True,
-    outline=True,
-    angle=0.0,
-    custom=(50.0, 50.0),
-    every=3.0,
-    random_every=None,
-    ranges=None,
-    fade=True,
-    speed=180.0,
-    seed=7,
-) -> ass.Script:
-    sc = ass.Script(w, h)
-    u = min(w, h) / 1080
-    px = max(8, round(size * u))
-    sc.style(
-        ass.Style(
-            "WM",
-            font=font,
-            size=px,
-            colour=colour,
-            bold=bold,
-            italic=italic,
-            outline=(2.5 * u if outline else 0),
-            shadow=(2 * u if shadow else 0),
-            back_alpha=0.5,
-        )
-    )
-    body = ass.escape(text)
-    alpha = f"\\alpha{ass.alpha_tag(1 - opacity)}"
-    windows = ranges or [(0.0, duration)]
-    fade_tag = "\\fad(300,300)" if fade else ""
-    margin = 30 * u
-    tw, th = ass.text_width(text, px, bold=bold), px * 1.2
-
-    def add(a, b, tags):
-        for ra, rb in windows:
-            s, e = max(a, ra), min(b, rb)
-            if e - s > 0.04:
-                fades = fade_tag if (s == ra or e == rb) and fade else ""
-                sc.add(s, e, f"{{{tags}{alpha}{fades}}}{body}", "WM")
-
-    rot = f"\\frz{-angle:g}" if angle else ""
-    if place == "bounce":
-        for a, b, x0, y0, x1, y1 in bounce_path(duration, w, h, tw, th, speed * u, seed):
-            add(a, b, f"\\an7\\move({x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f})")
-    elif place == "jump":
-        rng = random.Random(seed)
-        spots = [k for k in _ANCHOR if k != "center"]
-        tm, last = 0.0, None
-        while tm < duration:
-            step = rng.uniform(*random_every) if random_every else every
-            key = rng.choice([k for k in spots if k != last])
-            last = key
-            an, x, y = anchor_xy(key, w, h, margin)
-            add(tm, min(tm + step, duration), f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")
-            tm += step
-    elif place == "custom":
-        x, y = w * custom[0] / 100, h * custom[1] / 100
-        add(0, duration, f"\\an5\\pos({x:.0f},{y:.0f}){rot}")
-    else:
-        an, x, y = anchor_xy(place, w, h, margin)
-        add(0, duration, f"\\an{an}\\pos({x:.0f},{y:.0f}){rot}")
-    return sc
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 
 class TextBurnerTab(BaseTab):
@@ -305,10 +156,9 @@ class TextBurnerTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -339,11 +189,8 @@ class TextBurnerTab(BaseTab):
     def script(self, w, h, duration) -> ass.Script:
         place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
         every = common.number(self.every_var.get() or "3", "Jump every", 0.2, 3600)
-        return build_script(
+        mark = TextMark(
             text=self.text_var.get(),
-            w=w,
-            h=h,
-            duration=duration,
             place=place,
             font=self.font_var.get(),
             size=int(self.size_var.get()),
@@ -363,6 +210,7 @@ class TextBurnerTab(BaseTab):
             ranges=None if self.always_var.get() else parse_ranges(self.ranges_var.get()),
             fade=self.fade_var.get(),
         )
+        return build_script(mark, w, h, duration)
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
@@ -422,14 +270,12 @@ class TextBurnerTab(BaseTab):
 
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=ass.subtitles_filter(path),
+            common.RenderJob(
+                src=src, info=info, out=out, chain=ass.subtitles_filter(path), name="Watermarker"
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Watermarker",
             on_done=done,
         )
 

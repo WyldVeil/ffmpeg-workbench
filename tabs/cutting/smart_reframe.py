@@ -29,7 +29,7 @@ from core.ops.shared import frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 RATIOS = {
     "9:16": ("9:16 - Shorts, Reels, TikTok", (9, 16), (1080, 1920)),
@@ -210,10 +210,9 @@ class SmartReframeTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "reframed"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -283,14 +282,10 @@ class SmartReframeTab(BaseTab):
             )
             common.render(
                 self,
-                src=src,
-                info=info,
-                out=out,
-                chain=chain,
+                common.RenderJob(src=src, info=info, out=out, chain=chain, name="Smart Reframe"),
                 encoder=venc,
                 console=self.console,
                 btn=self.btn_render,
-                name="Smart Reframe",
             )
             return
 
@@ -335,13 +330,9 @@ class SmartReframeTab(BaseTab):
         self.log(self.console, f"Reframing {w}×{h} → {cw}×{ch} window → {ow}×{oh}")
         common.queue_job(
             self,
-            name="Smart Reframe",
-            out=out,
-            work=work,
+            common.Job(name="Smart Reframe", out=out, work=work, duration=dur, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=dur,
-            inputs=[src],
         )
 
     @staticmethod

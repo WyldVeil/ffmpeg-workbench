@@ -25,7 +25,7 @@ from core.ops.deinterlace import deinterlace_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 MODES = {
     "smart": "Smart - only frames that are interlaced (recommended)",
@@ -84,10 +84,9 @@ class DeinterlaceTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "progressive"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -155,12 +154,8 @@ class DeinterlaceTab(BaseTab):
         self.log(self.console, self._chain())
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=self._chain(),
+            common.RenderJob(src=src, info=info, out=out, chain=self._chain(), name="Deinterlace"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Deinterlace",
         )

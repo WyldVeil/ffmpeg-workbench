@@ -20,7 +20,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, here_button, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, here_button, scroll_body
 
 POSITIONS = {
     "tl": "Top left",
@@ -277,10 +277,9 @@ class PIPTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.bg_row.path, "pip"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -402,17 +401,19 @@ class PIPTab(BaseTab):
             audio = None  # background sound, kept as is when possible
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
-            extra_inputs=["-i", fg],
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                graph=graph,
+                extra_inputs=["-i", fg],
+                name="Picture-in-Picture",
+                audio=audio,
+                extra_args=["-t", f"{dur:.3f}"],
+                duration=dur,
+                inputs=[fg],
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Picture-in-Picture",
-            audio=audio,
-            extra_args=["-t", f"{dur:.3f}"],
-            duration=dur,
-            inputs=[fg],
         )

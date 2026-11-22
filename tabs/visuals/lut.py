@@ -19,7 +19,7 @@ from core.ops.lut import INTERPOLATIONS, build_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 _CUSTOM = "Use a LUT file…"
 
@@ -209,10 +209,9 @@ class LUTApplicatorTab(BaseTab):
             out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
         )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "graded"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -287,12 +286,8 @@ class LUTApplicatorTab(BaseTab):
         )
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=self.chain(),
+            common.RenderJob(src=src, info=info, out=out, chain=self.chain(), name="LUT"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="LUT",
         )

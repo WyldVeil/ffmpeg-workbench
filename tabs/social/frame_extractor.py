@@ -437,13 +437,11 @@ class FrameExtractorTab(BaseTab):
         self.log(self.console, f"Finding scenes (sensitivity {threshold:.2f}) → {out_dir}")
         common.queue_job(
             self,
-            name="Scene frames",
-            out=out_dir,
-            work=work,
+            common.Job(
+                name="Scene frames", out=out_dir, work=work, duration=dur * 1.3, inputs=[src]
+            ),
             btn=self.btn_render,
             console=self.console,
-            duration=dur * 1.3,
-            inputs=[src],
         )
 
     def _sheet(self, src, info, folder, base, ext, q):

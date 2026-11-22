@@ -28,7 +28,7 @@ from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import FileRow
+from tabs.widgets import FileRow, SaveRow
 
 RAMP = 0.02  # seconds of fade at each region edge
 COLOURS = {"mute": "red", "boost": "green", "duck": "orange"}
@@ -248,8 +248,8 @@ class WaveformEditorTab(BaseTab):
             value="audio",
             command=self._mode_changed,
         ).pack(side="left")
-        self.out_row = FileRow(
-            self, t("common.output_file"), save=True, kind="media", suggest=lambda: self._suggest()
+        self.out_row = SaveRow(
+            self, t("common.output_file"), kind="media", suggest=lambda: self._suggest()
         )
         self.out_row.pack(fill="x", padx=px(20))
         self._out_var = self.out_row.var

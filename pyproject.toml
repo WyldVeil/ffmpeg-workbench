@@ -41,7 +41,6 @@ ignore = [
     "SIM102",   # "if X: if not ask(...): return" reads better than one long condition
     # ── DEBT ──
     "C901",      # 5 functions over the complexity limit (the next to split)
-    "PLR0913",   # 31 long signatures, mostly keyword-only builder options (candidates for spec dataclasses)
 ]
 
 [tool.ruff.format]

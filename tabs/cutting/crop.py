@@ -22,7 +22,7 @@ from core.ops.crop import fit_aspect
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 ASPECTS = [
     ("free", "Free", None),
@@ -150,10 +150,9 @@ class ManualCropTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "cropped"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -447,12 +446,8 @@ class ManualCropTab(BaseTab):
         self.log(self.console, f"Cropping to {w}×{h} at ({x},{y})")
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=chain,
+            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Manual Crop"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Manual Crop",
         )

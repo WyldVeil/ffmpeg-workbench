@@ -13,18 +13,17 @@ from __future__ import annotations
 import os
 import shutil
 import tkinter as tk
-from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
-from core import ass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.shared import frame_rate
+from core.ops.side_by_side import Arrangement, Clip, build_graph, labels_script
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 LAYOUTS = {
     "side": "Side by side",
@@ -50,165 +49,6 @@ LENGTH = {
     "loop": "Run to the longest - loop shorter clips",
     "hold": "Run to the longest - hold shorter clips' last frame",
 }
-
-
-@dataclass
-class Clip:
-    path: str
-    duration: float
-    has_audio: bool
-    label: str = ""
-    speed: float = 1.0
-
-
-def cells(layout: str, n: int, w: int, h: int) -> list:
-    """(x, y, cw, ch) of every cell."""
-    if layout == "side":
-        cw = w // 2 // 2 * 2
-        return [(0, 0, cw, h), (cw, 0, w - cw, h)]
-    if layout == "stack":
-        ch = h // 2 // 2 * 2
-        return [(0, 0, w, ch), (0, ch, w, h - ch)]
-    if layout == "grid":
-        cw, ch = w // 2 // 2 * 2, h // 2 // 2 * 2
-        return [(0, 0, cw, ch), (cw, 0, w - cw, ch), (0, ch, cw, h - ch), (cw, ch, w - cw, h - ch)]
-    return [(0, 0, w, h), (0, 0, w, h)]
-
-
-def build_graph(
-    clips,
-    layout,
-    w,
-    h,
-    fps,
-    *,
-    fill=False,
-    audio="0",
-    length="shortest",
-    wipe_pos=0.5,
-    wipe_period=0.0,
-    divider=True,
-    labels_ass=None,
-) -> tuple:
-    """(filter_complex, total seconds, has_audio_out)."""
-    n = len(clips)
-    durs = [c.duration / c.speed for c in clips]
-    total = min(durs) if length == "shortest" else max(durs)
-    parts = []
-    boxes = cells(layout, n, w, h)
-    for i, c in enumerate(clips):
-        _x, _y, cw, chh = boxes[min(i, len(boxes) - 1)]
-        fit = (
-            f"scale={cw}:{chh}:force_original_aspect_ratio=increase,crop={cw}:{chh}"
-            if fill
-            else f"scale={cw}:{chh}:force_original_aspect_ratio=decrease,"
-            f"pad={cw}:{chh}:(ow-iw)/2:(oh-ih)/2:color=black"
-        )
-        speed = (
-            f"setpts=(PTS-STARTPTS)/{c.speed:.4f}"
-            if abs(c.speed - 1) > 1e-6
-            else "setpts=PTS-STARTPTS"
-        )
-        hold = ",tpad=stop_mode=clone:stop=-1" if length == "hold" else ""
-        parts.append(f"[{i}:v]{speed},{fit},setsar=1,fps={fps},format=yuv420p{hold}[v{i}]")
-    if layout == "wipe":
-        p = min(max(wipe_pos, 0.02), 0.98)
-        line = f",drawbox=x={w - 2}:y=0:w=4:h={h}:color=white@0.9:t=fill" if divider else ""
-        if wipe_period > 0:
-            cx = f"{w}*({p:.3f}+min({p:.3f},{1 - p:.3f})*0.9*sin(2*PI*t/{wipe_period:.3f}))"
-        else:
-            cx = f"{round(w * p)}"
-        parts.append(
-            f"[v1]format=yuva420p,pad={2 * w}:{h}:{w}:0:color=black@0{line},"
-            f"crop={w}:{h}:x='{w}-({cx})':y=0[bw]"
-        )
-        parts.append("[v0][bw]overlay=0:0:shortest=1,format=yuv420p[st]")
-    else:
-        if layout == "grid":
-            ins = [f"[v{i}]" for i in range(n)]
-            while len(ins) < 4:
-                k = len(ins)
-                _x, _y, cw, chh = boxes[k]
-                parts.append(f"color=c=black:s={cw}x{chh}:r={fps}[blank{k}]")
-                ins.append(f"[blank{k}]")
-            parts.append(
-                "".join(ins) + "xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0:shortest=1[st0]"
-            )
-        else:
-            stack = "hstack" if layout == "side" else "vstack"
-            parts.append(f"[v0][v1]{stack}=inputs=2:shortest=1[st0]")
-        chain = []
-        if divider:
-            if layout in ("side", "grid"):
-                chain.append(f"drawbox=x={boxes[0][2] - 2}:y=0:w=4:h={h}:color=white@0.8:t=fill")
-            if layout in ("stack", "grid"):
-                chain.append(f"drawbox=x=0:y={boxes[0][3] - 2}:w={w}:h=4:color=white@0.8:t=fill")
-        parts.append(f"[st0]{','.join(chain) if chain else 'null'}[st]")
-    vlast = "[st]"
-    if labels_ass:
-        parts.append(f"{vlast}{ass.subtitles_filter(labels_ass)}[lab]")
-        vlast = "[lab]"
-    parts.append(f"{vlast}trim=duration={total:.3f}[v]")
-
-    srcs = [i for i, c in enumerate(clips) if c.has_audio]
-    want = (
-        srcs if audio == "mix" else [int(audio)] if audio.isdigit() and int(audio) in srcs else []
-    )
-    for i in want:
-        c = clips[i]
-        tempo = "" if abs(c.speed - 1) < 1e-6 else f",{_atempo(c.speed)}"
-        pad = ",apad" if length != "shortest" else ""
-        parts.append(f"[{i}:a:0]asetpts=PTS-STARTPTS{tempo},aresample=48000{pad}[a{i}]")
-    if len(want) > 1:
-        parts.append(
-            "".join(f"[a{i}]" for i in want)
-            + f"amix=inputs={len(want)}:duration=longest:normalize=0,"
-            f"atrim=duration={total:.3f}[a]"
-        )
-    elif want:
-        parts.append(f"[a{want[0]}]atrim=duration={total:.3f}[a]")
-    return ";".join(parts), total, bool(want)
-
-
-def _atempo(speed: float) -> str:
-    parts, rem = [], speed
-    while rem < 0.5:
-        parts.append("atempo=0.5")
-        rem /= 0.5
-    parts.append(f"atempo={rem:.4f}")
-    return ",".join(parts)
-
-
-def labels_script(layout, labels, w, h, total, font="Montserrat") -> ass.Script:
-    sc = ass.Script(w, h)
-    u = min(w, h) / 1080
-    sc.style(
-        ass.Style(
-            "Lab",
-            font=font,
-            size=round(40 * u),
-            bold=True,
-            outline=0,
-            shadow=0,
-            border_style=3,
-            back_colour="#000000",
-            back_alpha=0.45,
-            alignment=7,
-        )
-    )
-    boxes = cells(layout, len(labels), w, h)
-    for i, text in enumerate(labels):
-        if not text.strip():
-            continue
-        if layout == "wipe":
-            x = 30 * u if i == 0 else w - 30 * u
-            an = 7 if i == 0 else 9
-            y = 30 * u
-        else:
-            bx, by, _cw, _ch = boxes[min(i, len(boxes) - 1)]
-            x, y, an = bx + 24 * u, by + 24 * u, 7
-        sc.add(0, total + 1, f"{{\\an{an}\\pos({x:.0f},{y:.0f})}} {ass.escape(text)} ", "Lab")
-    return sc
 
 
 class SideBySideTab(BaseTab):
@@ -338,10 +178,9 @@ class SideBySideTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.rows[0].path, "side_by_side"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -406,12 +245,11 @@ class SideBySideTab(BaseTab):
             labels_path = labels_script(layout, labels, w, h, longest).write(
                 os.path.join(work, "labels.ass")
             )
-        graph, total, has_audio = build_graph(
-            clips,
-            layout,
-            w,
-            h,
-            fps,
+        arrangement = Arrangement(
+            layout=layout,
+            width=w,
+            height=h,
+            fps=fps,
             fill=self.fill_var.get(),
             audio=self._key(AUDIO, self.audio_var, "0"),
             length=length,
@@ -420,6 +258,7 @@ class SideBySideTab(BaseTab):
             divider=self.divider_var.get(),
             labels_ass=labels_path,
         )
+        graph, total, has_audio = build_graph(clips, arrangement)
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
         cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]

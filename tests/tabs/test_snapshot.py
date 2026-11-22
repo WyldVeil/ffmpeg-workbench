@@ -8,8 +8,9 @@ import subprocess
 import pytest
 
 from core import ffmpeg as ff
+from core.ops import snapshot
 from tabs import framestep
-from tabs.social import snapshot
+from tabs.social.snapshot import SHARPEN, SIZES
 
 
 def _make(src, out, *args):
@@ -56,7 +57,10 @@ def test_chain_defaults(media):
     assert "scale=1280:720" in chain
     assert "bwdif" not in chain and "zscale" not in chain and "cas" not in chain
     plain = snapshot.build_chain(
-        info, accurate=False, size="double", sharpen=0.6, deep=True, brightness=0.1, denoise=4
+        info,
+        snapshot.Picture(
+            accurate=False, size="double", sharpen=0.6, deep=True, brightness=0.1, denoise=4
+        ),
     )
     assert "scale=2560:1440,format=gbrp16le" in plain and "cas=strength=0.6" in plain
     assert "eq=brightness=0.1" in plain and "hqdn3d" in plain and plain.endswith("format=rgb48be")
@@ -81,7 +85,9 @@ def test_chain_handles_interlaced_anamorphic_and_hdr(media, tmp_path):
     chain = snapshot.build_chain(inter)
     assert "bwdif" in chain
     assert "scale=1024:576" in chain  # square pixels
-    assert "scale=720:576" in snapshot.build_chain(inter, square_pixels=False, deinterlace=False)
+    assert "scale=720:576" in snapshot.build_chain(
+        inter, snapshot.Picture(square_pixels=False, deinterlace=False)
+    )
     assert "in_color_matrix=bt601" in chain  # SD, untagged
     pq = _make(
         media["h264"],
@@ -102,7 +108,7 @@ def test_chain_handles_interlaced_anamorphic_and_hdr(media, tmp_path):
     assert pq.is_hdr
     chain = snapshot.build_chain(pq)
     assert "tonemap" in chain and "in_color_matrix=bt709" in chain  # tone-mapped to SDR first
-    assert "tonemap" not in snapshot.build_chain(pq, tonemap=False)
+    assert "tonemap" not in snapshot.build_chain(pq, snapshot.Picture(tonemap=False))
     out = str(tmp_path / "pq.png")
     r = subprocess.run(
         snapshot.save_command(pq.path, 0.2, chain, out), capture_output=True, text=True
@@ -185,8 +191,8 @@ def test_snapshot_options_and_quick_save(ui, media, outdir):
     tab.load_file(media["hevc10"])
     ui.pump(0.3)
     assert tab.deep_var.get()  # 10-bit source -> 16-bit PNG by default
-    tab.size_var.set(snapshot.SIZES["half"])
-    tab.sharpen_var.set(snapshot.SHARPEN[0.3])
+    tab.size_var.set(SIZES["half"])
+    tab.sharpen_var.set(SHARPEN[0.3])
     tab._options_changed()
     ui.pump(0.5)
     assert "cas=strength=0.3" in tab.chain() and "16-bit" in tab.size_lbl.cget("text")

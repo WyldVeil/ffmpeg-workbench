@@ -26,7 +26,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 IMAGE_EXTS = (
     ".jpg",
@@ -320,7 +320,7 @@ class SlideshowMakerTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, suggest=self._suggest)
+        self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = tk.Button(
             body,
@@ -597,11 +597,13 @@ class SlideshowMakerTab(BaseTab):
         )
         common.queue_job(
             self,
-            name="Slideshow",
-            out=out,
-            work=work,
+            common.Job(
+                name="Slideshow",
+                out=out,
+                work=work,
+                duration=total,
+                inputs=[s.path for s in slides] + ([music] if music else []),
+            ),
             btn=self.btn_render,
             console=self.console,
-            duration=total,
-            inputs=[s.path for s in slides] + ([music] if music else []),
         )

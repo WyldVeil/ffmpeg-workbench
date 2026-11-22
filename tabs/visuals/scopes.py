@@ -19,7 +19,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 # key: (label, filter chain, display aspect (w/h) or None = same as video, help)
 SCOPES = {
@@ -185,10 +185,9 @@ class VideoScopesTab(BaseTab):
         ).pack(side="left", padx=px(8))
         self.encoder = EncoderPanel(vid, codecs=("h264", "hevc", "prores"), show_ten_bit=False)
         self.encoder.pack(anchor="w", pady=px(6, 0))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             vid,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "scopes"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -303,12 +302,8 @@ class VideoScopesTab(BaseTab):
         graph = export_graph(self.scope_var.get(), self._layout_key(), w, h)
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
+            common.RenderJob(src=src, info=info, out=out, graph=graph, name="Scope video"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_vid,
-            name="Scope video",
         )

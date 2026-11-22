@@ -20,7 +20,7 @@ from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, FramePreview, scroll_body
+from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
 
 DITHERS = {
     "sierra2_4a": "Sierra (smooth, recommended)",
@@ -164,10 +164,9 @@ class GIFMakerTab(BaseTab):
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             kind="image",
             ext=".gif",
             suggest=self._suggest,
@@ -251,11 +250,7 @@ class GIFMakerTab(BaseTab):
 
         common.queue_job(
             self,
-            name="GIF",
-            out=out,
-            work=work,
+            common.Job(name="GIF", out=out, work=work, duration=dur, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
-            duration=dur,
-            inputs=[src],
         )

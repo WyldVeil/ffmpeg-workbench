@@ -67,77 +67,6 @@ ENDS = {
 MAX_CLIPS = 25
 
 
-def collage_graph(
-    layout: dict,
-    n_inputs: int,
-    total_w: int,
-    total_h: int,
-    pad: int,
-    bg: str,
-    fps: str,
-    shortest: bool,
-    audio: str,
-    has_audio: list,
-) -> tuple:
-    """(filter_complex, audio_out) with exact, even geometry."""
-    total_w, total_h = total_w // 2 * 2, total_h // 2 * 2
-    parts = []
-    if layout.get("custom") == "pip":
-        sw, sh = (total_w // 4) // 2 * 2, (total_h // 4) // 2 * 2
-        m = max(pad, total_h // 30)
-        parts.append(
-            f"[0:v]scale={total_w}:{total_h}:force_original_aspect_ratio=decrease,"
-            f"pad={total_w}:{total_h}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
-            f"format=yuv420p[base]"
-        )
-        last = "[base]"
-        corners = [(f"W-w-{m}", f"H-h-{m}"), (f"W-w-{m}", f"{m}")]
-        for i in range(1, n_inputs):
-            parts.append(
-                f"[{i}:v]scale={sw}:{sh}:force_original_aspect_ratio=decrease,"
-                f"pad={sw}:{sh}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
-                f"format=yuv420p[p{i}]"
-            )
-            x, y = corners[(i - 1) % len(corners)]
-            parts.append(
-                f"{last}[p{i}]overlay=x={x}:y={y}:shortest={1 if shortest else 0}:"
-                f"eof_action=repeat[o{i}]"
-            )
-            last = f"[o{i}]"
-        parts.append(f"{last}null[v]")
-    else:
-        cols, rows = layout["cols"], layout["rows"]
-        cell_w = ((total_w - pad * (cols + 1)) // cols) // 2 * 2
-        cell_h = ((total_h - pad * (rows + 1)) // rows) // 2 * 2
-        spots = []
-        for i in range(n_inputs):
-            r, c = divmod(i, cols)
-            spots.append(f"{pad + c * (cell_w + pad)}_{pad + r * (cell_h + pad)}")
-            parts.append(
-                f"[{i}:v]scale={cell_w}:{cell_h}:force_original_aspect_ratio=decrease,"
-                f"pad={cell_w}:{cell_h}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
-                f"format=yuv420p[c{i}]"
-            )
-        cells = "".join(f"[c{i}]" for i in range(n_inputs))
-        parts.append(
-            f"{cells}xstack=inputs={n_inputs}:layout={'|'.join(spots)}:fill={bg}:"
-            f"shortest={1 if shortest else 0}[grid]"
-        )
-        parts.append(f"[grid]pad={total_w}:{total_h}:0:0:color={bg},setsar=1[v]")
-    srcs = [i for i in range(n_inputs) if has_audio[i]]
-    if audio == "none" or not srcs:
-        return ";".join(parts), False
-    if audio == "first" or len(srcs) == 1:
-        parts.append(f"[{srcs[0]}:a:0]aresample=48000[a]")
-    else:
-        parts.append(
-            "".join(f"[{i}:a:0]" for i in srcs)
-            + f"amix=inputs={len(srcs)}:duration={'shortest' if shortest else 'longest'}:"
-            f"normalize=0,aresample=48000[a]"
-        )
-    return ";".join(parts), True
-
-
 class VideoCollageTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -566,17 +495,12 @@ class VideoCollageTab(BaseTab):
         venc = self.encoder.video_encode(container)
         cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
         if spec.get("custom") == "pip":
-            graph, has_a = collage_graph(
-                spec,
-                len(clips),
-                W,
-                H,
-                self._gap(),
-                bg,
-                fps,
-                length_key == "shortest",
-                audio,
+            canvas = grid.Canvas(W, H, fps=fps, gap=self._gap(), background=bg)
+            graph, has_a = grid.pip_filter(
                 [s["has_audio"] for s in clips],
+                canvas,
+                shortest=length_key == "shortest",
+                audio=audio,
             )
             for p in paths:
                 cmd += ["-i", p]

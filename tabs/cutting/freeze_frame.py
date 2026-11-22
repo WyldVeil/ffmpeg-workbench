@@ -17,10 +17,11 @@ from tkinter import messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.freeze_frame import Freeze, freeze_graph
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 MODES = [
     ("insert", "Insert a freeze", "Pause the picture at the chosen moment, then carry on."),
@@ -32,78 +33,6 @@ AUDIO = {
     "continue": "Sound keeps playing",
     "mute": "No sound",
 }
-
-
-def freeze_graph(
-    mode: str,
-    at: float,
-    hold: float,
-    dur: float,
-    *,
-    has_audio: bool,
-    audio_mode: str = "pause",
-    flash: bool = False,
-    mono: bool = False,
-    caption_ass: str | None = None,
-) -> tuple:
-    """(filter_complex, output seconds, audio_out)."""
-    look = []
-    if mono:
-        look.append("hue=s=0")
-    if mode == "only":
-        v = (
-            f"[0:v]trim=start={at:.4f},setpts=PTS-STARTPTS,trim=end_frame=1,"
-            f"tpad=stop_mode=clone:stop_duration={hold:.4f}"
-        )
-        if look:
-            v += "," + ",".join(look)
-        start, total = 0.0, hold
-        parts = [v + "[fz]"]
-        vlast = "[fz]"
-    elif mode == "end":
-        at = dur
-        parts = [f"[0:v]setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={hold:.4f}[fz]"]
-        vlast, start, total = "[fz]", dur, dur + hold
-        if look:
-            when = ":enable=gte(t\\," + f"{dur:.4f})"
-            parts.append(vlast + ",".join(f + when for f in look) + "[fl]")
-            vlast = "[fl]"
-    else:
-        parts = [
-            "[0:v]setpts=PTS-STARTPTS,split[va][vb]",
-            f"[va]trim=end={at:.4f},setpts=PTS-STARTPTS[v0]",
-            f"[vb]trim=start={at:.4f},setpts=PTS-STARTPTS,"
-            f"tpad=start_mode=clone:start_duration={hold:.4f}[v1]",
-            "[v0][v1]concat=n=2:v=1:a=0[fz]",
-        ]
-        vlast, start, total = "[fz]", at, dur + hold
-        if look:
-            when = ":enable=between(t\\," + f"{at:.4f}" + "\\," + f"{at + hold:.4f})"
-            parts.append(vlast + ",".join(f + when for f in look) + "[fl]")
-            vlast = "[fl]"
-    if flash:
-        parts.append(f"{vlast}fade=t=in:st={start:.4f}:d=0.35:color=white[fx]")
-        vlast = "[fx]"
-    if caption_ass:
-        parts.append(f"{vlast}{ass.subtitles_filter(caption_ass)}[cap]")
-        vlast = "[cap]"
-    parts.append(f"{vlast}null[v]")
-
-    audio_out = has_audio and audio_mode != "mute"
-    if audio_out:
-        if mode == "only":
-            audio_out = False
-        elif mode == "end" or audio_mode == "continue":
-            parts.append(f"[0:a:0]asetpts=PTS-STARTPTS,apad=pad_dur={hold:.4f}[a]")
-        else:
-            ms = round(hold * 1000)
-            parts += [
-                "[0:a:0]asetpts=PTS-STARTPTS,asplit[xa][xb]",
-                f"[xa]atrim=end={at:.4f},asetpts=PTS-STARTPTS[a0]",
-                f"[xb]atrim=start={at:.4f},asetpts=PTS-STARTPTS,adelay=delays={ms}:all=1[a1]",
-                "[a0][a1]concat=n=2:v=0:a=1[a]",
-            ]
-    return ";".join(parts), total, audio_out
 
 
 class FreezeFrameTab(BaseTab):
@@ -183,10 +112,9 @@ class FreezeFrameTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "freeze"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -272,17 +200,16 @@ class FreezeFrameTab(BaseTab):
             )
             caption_ass = sc.write(os.path.join(work_dir, "caption.ass"))
         audio_mode = next((k for k, v in AUDIO.items() if v == self.audio_var.get()), "pause")
-        graph, total, audio_out = freeze_graph(
-            mode,
-            at,
-            hold,
-            dur,
-            has_audio=info.has_audio,
+        freeze = Freeze(
+            mode=mode,
+            at=at,
+            hold=hold,
             audio_mode=audio_mode,
             flash=self.flash_var.get(),
             mono=self.mono_var.get(),
             caption_ass=caption_ass,
         )
+        graph, total, audio_out = freeze_graph(freeze, dur, has_audio=info.has_audio)
         container = common.container_of(out)
         from core import encoders as enc
 
@@ -299,15 +226,17 @@ class FreezeFrameTab(BaseTab):
 
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            graph=graph,
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                graph=graph,
+                name="Freeze Frame",
+                audio=audio,
+                duration=total,
+            ),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Freeze Frame",
-            audio=audio,
-            duration=total,
             on_done=done,
         )

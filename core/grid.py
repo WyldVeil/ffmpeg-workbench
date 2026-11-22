@@ -348,3 +348,47 @@ def collage_filter(
             else f"{labels}anull[a]"
         )
     return ";".join(parts), True
+
+
+def pip_filter(
+    has_audio: Sequence[bool], canvas: Canvas, *, shortest: bool, audio: str
+) -> tuple[str, bool]:
+    """Picture-in-picture: input 0 fills the frame, the others sit in its
+    corners (a quarter of its size) -> (filter_complex, has_audio_out).
+    *audio*: "first", "mix" or "none"; *canvas.gap* is the corner margin."""
+    total_w, total_h = canvas.width // 2 * 2, canvas.height // 2 * 2
+    bg, fps, pad = canvas.background, canvas.fps, canvas.gap
+    sw, sh = (total_w // 4) // 2 * 2, (total_h // 4) // 2 * 2
+    m = max(pad, total_h // 30)
+    parts = [
+        f"[0:v]scale={total_w}:{total_h}:force_original_aspect_ratio=decrease,"
+        f"pad={total_w}:{total_h}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
+        f"format=yuv420p[base]"
+    ]
+    last = "[base]"
+    corners = [(f"W-w-{m}", f"H-h-{m}"), (f"W-w-{m}", f"{m}")]
+    for i in range(1, len(has_audio)):
+        parts.append(
+            f"[{i}:v]scale={sw}:{sh}:force_original_aspect_ratio=decrease,"
+            f"pad={sw}:{sh}:(ow-iw)/2:(oh-ih)/2:color={bg},setsar=1,fps={fps},"
+            f"format=yuv420p[p{i}]"
+        )
+        x, y = corners[(i - 1) % len(corners)]
+        parts.append(
+            f"{last}[p{i}]overlay=x={x}:y={y}:shortest={1 if shortest else 0}:"
+            f"eof_action=repeat[o{i}]"
+        )
+        last = f"[o{i}]"
+    parts.append(f"{last}null[v]")
+    srcs = [i for i, a in enumerate(has_audio) if a]
+    if audio == "none" or not srcs:
+        return ";".join(parts), False
+    if audio == "first" or len(srcs) == 1:
+        parts.append(f"[{srcs[0]}:a:0]aresample=48000[a]")
+    else:
+        parts.append(
+            "".join(f"[{i}:a:0]" for i in srcs)
+            + f"amix=inputs={len(srcs)}:duration={'shortest' if shortest else 'longest'}:"
+            f"normalize=0,aresample=48000[a]"
+        )
+    return ";".join(parts), True

@@ -13,15 +13,18 @@ import contextlib
 import os
 import time
 import tkinter as tk
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from functools import partial
 from tkinter import messagebox
+from typing import Any
 
 from core import ffmpeg as ff
 from core import tasks
+from core.encoders import VideoEncode
 from core.i18n import t
 from core.ops.shared import keep_audio_args
-from core.queue_manager import Hooks
+from core.queue_manager import Hooks, WorkerFn
 
 
 def container_of(path: str) -> str:
@@ -64,62 +67,86 @@ def even_size(info: ff.MediaInfo) -> tuple[int, int]:
     return max(2, w // 2 * 2), max(2, h // 2 * 2)
 
 
-def render(
-    tab,
-    *,
-    src: str,
-    info: ff.MediaInfo,
-    out: str,
-    encoder,
-    console,
-    btn,
-    name: str,
-    chain: str = "",
-    graph: str = "",
-    extra_inputs: Sequence[str] = (),
-    audio: Sequence[str] | None = None,
-    duration: float | None = None,
-    extra_args: Sequence[str] = (),
-    inputs: Sequence[str] = (),
-    on_done=None,
-    pre_input: Sequence[str] = (),
-) -> None:
-    """Queue ``ffmpeg -i src [extra inputs] <chain|graph> <audio> <encoder> out``.
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RenderJob:
+    """One render: ``ffmpeg [pre_input] -i src [extra_inputs] <chain|graph> <audio>
+    <encoder> [extra_args] out``.
 
-    *chain* is a simple ``-vf`` chain; *graph* a ``-filter_complex`` graph
-    whose video output is labelled ``[v]``.  *encoder* is an EncoderPanel or
-    a ready :class:`core.encoders.VideoEncode`."""
-    container = container_of(out)
-    venc = encoder.video_encode(container) if hasattr(encoder, "video_encode") else encoder
-    cmd = [ff.ffmpeg_path(), "-y", *pre_input, *venc.pre_input, "-i", src, *extra_inputs]
-    if graph:
-        if venc.filter_suffix:
-            graph = f"{graph};[v]{venc.filter_suffix}[venc]"
-            cmd += ["-filter_complex", graph, "-map", "[venc]"]
+    *chain* is a simple ``-vf`` chain; *graph* a ``-filter_complex`` graph whose
+    video output is labelled ``[v]``.  *audio* defaults to keeping the source's
+    audio; *inputs* are further files the job reads (guarded against overwriting)."""
+
+    src: str
+    info: ff.MediaInfo
+    out: str
+    name: str
+    chain: str = ""
+    graph: str = ""
+    extra_inputs: Sequence[str] = ()
+    audio: Sequence[str] | None = None
+    duration: float | None = None
+    extra_args: Sequence[str] = ()
+    inputs: Sequence[str] = ()
+    pre_input: Sequence[str] = ()
+
+    def command(self, venc: VideoEncode) -> list[str]:
+        container = container_of(self.out)
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            *self.pre_input,
+            *venc.pre_input,
+            "-i",
+            self.src,
+            *self.extra_inputs,
+        ]
+        if self.graph:
+            if venc.filter_suffix:
+                cmd += [
+                    "-filter_complex",
+                    f"{self.graph};[v]{venc.filter_suffix}[venc]",
+                    "-map",
+                    "[venc]",
+                ]
+            else:
+                cmd += ["-filter_complex", self.graph, "-map", "[v]"]
         else:
-            cmd += ["-filter_complex", graph, "-map", "[v]"]
-    else:
-        cmd += ["-map", "0:v:0"]
-        cmd += venc.vf_args(chain)
-    cmd += list(audio if audio is not None else keep_audio_args(info, container))
-    cmd += [*extra_args, *venc.args, "-map_metadata", "0", out]
-    tab.log(console, f"Rendering {os.path.basename(out)} with {venc.label}…")
+            cmd += ["-map", "0:v:0", *venc.vf_args(self.chain)]
+        cmd += list(self.audio if self.audio is not None else keep_audio_args(self.info, container))
+        return [*cmd, *self.extra_args, *venc.args, "-map_metadata", "0", self.out]
 
-    def _done(rc):
+
+def render(
+    tab: Any,
+    job: RenderJob,
+    *,
+    encoder: Any,
+    console: tk.Text,
+    btn: tk.Button,
+    on_done: Callable[[int], object] | None = None,
+) -> None:
+    """Queue *job*.  *encoder* is an EncoderPanel or a ready
+    :class:`core.encoders.VideoEncode`; afterwards *on_done(rc)* runs, or the
+    result is shown."""
+    container = container_of(job.out)
+    venc = encoder.video_encode(container) if hasattr(encoder, "video_encode") else encoder
+    tab.log(console, f"Rendering {os.path.basename(job.out)} with {venc.label}…")
+
+    def _done(rc: int) -> None:
         if on_done is not None:
             on_done(rc)
         else:
-            tab.show_result(rc, out)
+            tab.show_result(rc, job.out)
 
     tab.run_ffmpeg(
-        cmd,
+        job.command(venc),
         console,
         on_done=_done,
         btn=btn,
-        duration=duration or info.duration or None,
-        output=out,
-        inputs=[src, *inputs],
-        name=name,
+        duration=job.duration or job.info.duration or None,
+        output=job.out,
+        inputs=[job.src, *job.inputs],
+        name=job.name,
     )
 
 
@@ -133,55 +160,58 @@ def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) 
     return out
 
 
+@dataclass(frozen=True, slots=True)
+class Job:
+    """A multi-step job for :func:`queue_job`: *work(progress, cancelled, ctx)*
+    writes *out*, reading *inputs*; *duration* is its expected length."""
+
+    name: str
+    out: str
+    work: WorkerFn
+    duration: float | None = None
+    inputs: Sequence[str] = ()
+
+
 def queue_job(
-    tab,
-    *,
-    name: str,
-    out: str,
-    work,
-    btn,
-    console,
-    duration: float | None = None,
-    inputs: Sequence[str] = (),
-    on_start=None,
-    on_done=None,
+    tab: Any, job: Job, *, btn: tk.Button, console: tk.Text, hooks: Hooks | None = None
 ) -> str:
-    """Queue a multi-step ``work(progress, cancelled, ctx)`` job.  While it
-    runs, *btn* shows the progress and cancels the job when clicked;
-    ``on_done(rc)`` runs on the UI thread afterwards."""
+    """Queue *job*.  While it runs, *btn* shows the progress and cancels the
+    job when clicked; afterwards the result is shown, then *hooks.on_complete*
+    runs (on the UI thread, like *hooks.on_start*)."""
+    hooks = hooks or Hooks()
     orig, label = btn.cget("command"), btn.cget("text")
     queued_at = time.monotonic()
 
-    def cancel():
+    def cancel() -> None:
         if time.monotonic() - queued_at > 0.8:  # ignore a double-click on Render
             tab.cancel_render(state["tid"])
 
-    def on_progress(tid, line):
+    def on_progress(tid: str, line: str) -> None:
         tab.log(console, line)
         task = tab.task(tid)
         if task is not None and task.fraction is not None:
             with contextlib.suppress(tk.TclError):
                 btn.config(text=f"\u2716 {t('btn.cancel')}  {task.fraction * 100:.0f}%")
 
-    def on_complete(tid, rc):
+    def on_complete(tid: str, rc: int) -> None:
         with contextlib.suppress(tk.TclError):
             btn.config(text=label, command=orig, state="normal")
         tab.last_task = tab.task(tid)
-        tab.show_result(rc, out)
-        if on_done is not None:
-            on_done(rc)
+        tab.show_result(rc, job.out)
+        if hooks.on_complete is not None:
+            hooks.on_complete(tid, rc)
 
     state = {"tid": None}
     state["tid"] = tab.enqueue_render(
-        name,
-        out,
-        work=work,
-        expected_duration=duration,
-        inputs=inputs,
-        hooks=Hooks(on_start=on_start, on_progress=on_progress, on_complete=on_complete),
+        job.name,
+        job.out,
+        work=job.work,
+        expected_duration=job.duration,
+        inputs=job.inputs,
+        hooks=Hooks(on_start=hooks.on_start, on_progress=on_progress, on_complete=on_complete),
     )
     btn.config(text=f"\u2716 {t('btn.cancel')}", command=cancel)
-    tab.log(console, f"Queued: {os.path.basename(out)}")
+    tab.log(console, f"Queued: {os.path.basename(job.out)}")
     return state["tid"]
 
 

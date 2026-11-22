@@ -26,7 +26,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, here_button, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, here_button, scroll_body
 
 STYLES = {
     "lower_third": "Lower third (sliding bar)",
@@ -315,10 +315,9 @@ class TitlesGeneratorTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "titled"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -585,14 +584,10 @@ class TitlesGeneratorTab(BaseTab):
 
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=chain,
+            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Animated Titles"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            name="Animated Titles",
             on_done=done,
         )
 

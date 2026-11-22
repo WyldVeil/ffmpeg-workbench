@@ -28,7 +28,7 @@ from core.ops.hdr_args import subtitle_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 ASSUME = {
     "": "From the file",
@@ -148,10 +148,9 @@ class HdrToSdrTab(BaseTab):
             text="Tip: HEVC or AV1 with 10-bit gives the smoothest skies and shadows.",
             fg=CLR["fgdim"],
         ).pack(anchor="w", pady=px(2, 0))
-        self.out_row = FileRow(
+        self.out_row = SaveRow(
             out_lf,
             t("common.output_file"),
-            save=True,
             suggest=lambda: self.suggest_output(self.src_row.path, "sdr", ".mp4"),
         )
         self.out_row.pack(fill="x", pady=px(8, 0))
@@ -302,14 +301,16 @@ class HdrToSdrTab(BaseTab):
         )
         common.render(
             self,
-            src=src,
-            info=info,
-            out=out,
-            chain=chain,
+            common.RenderJob(
+                src=src,
+                info=info,
+                out=out,
+                chain=chain,
+                name="HDR to SDR",
+                extra_args=subtitle_args(info, common.container_of(out)),
+                pre_input=["-init_hw_device", "vulkan"] if self._gpu() else (),
+            ),
             encoder=venc,
             console=self.console,
             btn=self.btn_render,
-            name="HDR to SDR",
-            extra_args=subtitle_args(info, common.container_of(out)),
-            pre_input=["-init_hw_device", "vulkan"] if self._gpu() else (),
         )
