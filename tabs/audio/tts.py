@@ -14,7 +14,6 @@ import os
 import tempfile
 import time
 import tkinter as tk
-from enum import StrEnum
 from functools import partial
 from tkinter import messagebox, ttk
 
@@ -23,7 +22,7 @@ from core import tasks
 from core import tts as tts_core
 from core.hardware import get_binary_path
 from core.i18n import t
-from core.ops.shared import audio_encoder_args
+from core.ops import voiceover as vo
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -112,35 +111,13 @@ STYLE_PRESETS = {
 WORDS_PER_MINUTE_BASE = 150
 
 
-class SpeechFormat(StrEnum):
-    MP3_320 = "mp3_320"
-    MP3_192 = "mp3_192"
-    WAV = "wav"
-    AAC = "aac"
-    FLAC = "flac"
-
-
 SPEECH_FORMATS = {
-    SpeechFormat.MP3_320: "MP3  320k",
-    SpeechFormat.MP3_192: "MP3  192k",
-    SpeechFormat.WAV: "WAV  (lossless)",
-    SpeechFormat.AAC: "AAC  256k",
-    SpeechFormat.FLAC: "FLAC  (lossless)",
+    vo.SpeechFormat.MP3_320: "MP3  320k",
+    vo.SpeechFormat.MP3_192: "MP3  192k",
+    vo.SpeechFormat.WAV: "WAV  (lossless)",
+    vo.SpeechFormat.AAC: "AAC  256k",
+    vo.SpeechFormat.FLAC: "FLAC  (lossless)",
 }
-SPEECH_EXT = {
-    SpeechFormat.MP3_320: ".mp3",
-    SpeechFormat.MP3_192: ".mp3",
-    SpeechFormat.WAV: ".wav",
-    SpeechFormat.AAC: ".m4a",
-    SpeechFormat.FLAC: ".flac",
-}
-MP3_RATES = {SpeechFormat.MP3_320: "320k", SpeechFormat.MP3_192: "192k"}
-
-
-class VideoOut(StrEnum):
-    COPY = "copy"  # keep the video as it is
-    CRF18 = "crf18"
-    CRF23 = "crf23"
 
 
 class TTSVoiceOverTab(BaseTab):
@@ -426,7 +403,7 @@ class TTSVoiceOverTab(BaseTab):
         fmt_row = tk.Frame(lf)
         fmt_row.pack(fill="x", pady=px(4))
         tk.Label(fmt_row, text=t("tts.audio_format_label"), width=16, anchor="e").pack(side="left")
-        self.audio_fmt = ChoiceBox(fmt_row, SPEECH_FORMATS, SpeechFormat.MP3_320, width=18)
+        self.audio_fmt = ChoiceBox(fmt_row, SPEECH_FORMATS, vo.SpeechFormat.MP3_320, width=18)
         self.audio_fmt.pack(side="left", padx=px(8))
 
         # Output path
@@ -509,11 +486,11 @@ class TTSVoiceOverTab(BaseTab):
         vfmt_row.pack(fill="x", pady=px(2))
         tk.Label(vfmt_row, text=t("tts.video_output"), width=16, anchor="e").pack(side="left")
         video_outs = {
-            VideoOut.COPY: "Copy video stream  (fast, no re-encode)",
-            VideoOut.CRF18: t("tts.tts_re_encode_h_264_crf_18_high_quality"),
-            VideoOut.CRF23: t("tts.tts_re_encode_h_264_crf_23_balanced"),
+            vo.VideoOut.COPY: "Copy video stream  (fast, no re-encode)",
+            vo.VideoOut.CRF18: t("tts.tts_re_encode_h_264_crf_18_high_quality"),
+            vo.VideoOut.CRF23: t("tts.tts_re_encode_h_264_crf_23_balanced"),
         }
-        self.vid_fmt = ChoiceBox(vfmt_row, video_outs, VideoOut.COPY, width=38)
+        self.vid_fmt = ChoiceBox(vfmt_row, video_outs, vo.VideoOut.COPY, width=38)
         self.vid_fmt.pack(side="left", padx=px(8))
 
     # ── Extras section ────────────────────────────────────────────────────
@@ -759,7 +736,7 @@ class TTSVoiceOverTab(BaseTab):
             ext = ".mp4"
             ft = [("MP4", "*.mp4"), ("MKV", "*.mkv")]
         else:
-            ext = SPEECH_EXT[self.audio_fmt.value]
+            ext = vo.SPEECH_EXT[self.audio_fmt.value]
             ft = [(ext.upper().strip("."), f"*{ext}")]
         p = dialogs.asksaveasfilename(defaultextension=ext, filetypes=ft)
         if p:
@@ -948,7 +925,7 @@ class TTSVoiceOverTab(BaseTab):
             inputs = [vid]
             default = self.suggest_output(vid, "voiceover")
         else:
-            ext = SPEECH_EXT[self.audio_fmt.value]
+            ext = vo.SPEECH_EXT[self.audio_fmt.value]
             default = os.path.join(os.path.expanduser("~"), "voiceover" + ext)
         try:
             pads = (
@@ -969,17 +946,17 @@ class TTSVoiceOverTab(BaseTab):
         self.out_var.set(out)
         cfg = self._synth_settings()
         with_srt = self.srt_var.get()
-        settings = {
-            "mode": mode,
-            "pads": pads,
-            "offset": offset,
-            "vol": 1.0 + self.vol_var.get() / 100.0,
-            "normalise": self.normalise_var.get(),
-            "fmt": self.audio_fmt.value,
-            "mix": self.mix_mode_var.get(),
-            "orig_vol": float(self.orig_vol_var.get()),
-            "vid_fmt": self.vid_fmt.value,
-        }
+        settings = vo.Placement(
+            video=mode == "video",
+            pads=pads,
+            offset=offset,
+            volume=1.0 + self.vol_var.get() / 100.0,
+            normalise=self.normalise_var.get(),
+            fmt=self.audio_fmt.value,
+            replace=self.mix_mode_var.get() == "replace",
+            original_volume=float(self.orig_vol_var.get()),
+            video_out=self.vid_fmt.value,
+        )
 
         def work(_p, _c, ctx):
             speech = os.path.join(
@@ -991,10 +968,10 @@ class TTSVoiceOverTab(BaseTab):
             )
             ctx.progress(0.3)
             ctx.log("Step 2/2: building the output…")
-            cmd, dur = self._build_cmd(speech, ctx.output(out), info, settings)
+            cmd, dur = vo.voiceover_cmd(speech, ctx.output(out), self._vid_path, info, settings)
             ctx.span(0.3, 1.0).run(cmd, duration=dur)
             if with_srt and srt:
-                shift = settings["pads"][0] + settings["offset"]
+                shift = settings.pads[0] + settings.offset
                 srt_path = os.path.splitext(out)[0] + ".srt"
                 with open(srt_path, "w", encoding="utf-8") as fh:
                     fh.write(_shift_srt(srt, shift) if shift else srt)
@@ -1014,57 +991,6 @@ class TTSVoiceOverTab(BaseTab):
             btn=self.btn_render,
             console=self.console,
         )
-
-    def _build_cmd(self, speech, out, info, cfg):
-        """FFmpeg command for the spoken track -> standalone audio or the video."""
-        from core import ffmpeg as ff
-
-        pad_b, pad_a = cfg["pads"]
-        chain = ["aformat=sample_rates=48000:channel_layouts=stereo", f"volume={cfg['vol']:.3f}"]
-        if cfg["normalise"]:
-            chain += ["loudnorm=I=-16:TP=-1.5:LRA=11", "aresample=48000", "asetnsamples=n=4096:p=0"]
-        delay = pad_b + cfg["offset"]
-        if delay > 0:
-            chain.append(f"adelay=delays={round(delay * 1000)}:all=1")
-        if pad_a > 0:
-            chain.append(f"apad=pad_dur={pad_a:.3f}")
-        if cfg["mode"] != "video":
-            cmd = [ff.ffmpeg_path(), "-y", "-i", speech, "-af", ",".join(chain), "-vn"]
-            fmt = cfg["fmt"]
-            if out.lower().endswith(".mp3"):
-                cmd += ["-c:a", "libmp3lame", "-b:a", MP3_RATES.get(fmt, "320k")]
-            else:
-                cmd += audio_encoder_args(out)
-            return [*cmd, out], None
-        dur = info.duration
-        cmd = [ff.ffmpeg_path(), "-y", "-i", self._vid_path, "-i", speech]
-        tts = "[1:a:0]" + ",".join(chain) + f",apad,atrim=duration={dur:.3f}"
-        if cfg["mix"] == "replace" or not info.has_audio:
-            graph = f"{tts}[aout]"
-        else:
-            graph = (
-                f"[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo,volume={cfg['orig_vol']:.3f},"
-                f"apad,atrim=duration={dur:.3f}[orig];{tts}[tts];"
-                "[orig][tts]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[aout]"
-            )
-        cmd += ["-filter_complex", graph, "-map", "0:v:0", "-map", "[aout]"]
-        if cfg["vid_fmt"] is VideoOut.COPY:
-            cmd += ["-c:v", "copy"]
-        else:
-            cmd += [
-                "-c:v",
-                "libx264",
-                "-crf",
-                "18" if cfg["vid_fmt"] is VideoOut.CRF18 else "23",
-                "-preset",
-                "medium",
-                "-pix_fmt",
-                "yuv420p",
-            ]
-        cmd += ["-c:a", "aac", "-b:a", "256k", "-t", f"{dur:.3f}"]
-        if out.lower().endswith((".mp4", ".mov", ".m4v")):
-            cmd += ["-movflags", "+faststart"]
-        return [*cmd, out], dur
 
 
 def _shift_srt(srt: str, seconds: float) -> str:

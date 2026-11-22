@@ -8,6 +8,7 @@ import pytest
 
 from core import ffmpeg as ff
 from core.ops import audio_export as ae
+from core.ops import voiceover as vo
 from tabs.audio import mixer
 from tabs.kit.widgets import ChoiceBox
 
@@ -169,10 +170,8 @@ def test_laugh_track_ffmpeg_engine(ui, media, outdir):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-def test_tts_build_cmd_video_keeps_length(ui, media, outdir, tmp_path):
+def test_tts_build_cmd_video_keeps_length(media, outdir, tmp_path):
     """The spoken track is placed at the start time and the video keeps its full length."""
-    ui.reset()
-    tab = ui.open("TTS Voice-Over")
     speech = str(tmp_path / "speech.wav")
     subprocess.run(
         [
@@ -190,26 +189,19 @@ def test_tts_build_cmd_video_keeps_length(ui, media, outdir, tmp_path):
         ],
         check=True,
     )
-    tab._vid_path = media["h264"]
     info = ff.probe(media["h264"])
     for mix in ("mix", "replace"):
         out = str(outdir / f"tts_{mix}.mp4")
-        cmd, _dur = tab._build_cmd(
-            speech,
-            out,
-            info,
-            {
-                "mode": "video",
-                "pads": (0.0, 0.3),
-                "offset": 2.0,
-                "vol": 1.0,
-                "normalise": False,
-                "fmt": "",
-                "mix": mix,
-                "orig_vol": 0.5,
-                "vid_fmt": "Copy video stream",
-            },
+        placement = vo.Placement(
+            video=True,
+            pads=(0.0, 0.3),
+            offset=2.0,
+            volume=1.0,
+            normalise=False,
+            replace=mix == "replace",
+            original_volume=0.5,
         )
+        cmd, _dur = vo.voiceover_cmd(speech, out, media["h264"], info, placement)
         subprocess.run(cmd, check=True, capture_output=True)
         res = ff.probe(out, use_cache=False)
         assert res.duration == pytest.approx(info.duration, abs=0.15)
@@ -237,7 +229,7 @@ def test_tts_offline_standalone(ui, outdir):
     tab.text_box.delete("1.0", "end")
     tab.text_box.insert("1.0", "Testing the offline voice. One, two, three.")
     tab.mode_var.set("standalone")
-    tab.audio_fmt.value = tts_tab.SpeechFormat.WAV
+    tab.audio_fmt.value = vo.SpeechFormat.WAV
     out = str(outdir / "speech.wav")
     tab.out_var.set(out)
     tab._render()
