@@ -18,12 +18,59 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import metaclean as mc
+from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.system.metadata_cleaner")
+
+
+def _outputs(files: list[str], folder: str | None) -> list[tuple[str, str]]:
+    """(source, cleaned copy) for every file, no two copies with the same name."""
+    jobs: list[tuple[str, str]] = []
+    taken: set[str] = set()
+    for src in files:
+        out = mc.free_output(src, folder)
+        while out in taken:
+            base, ext = os.path.splitext(out)
+            out = f"{base}_{len(taken)}{ext}"
+        taken.add(out)
+        jobs.append((src, out))
+    return jobs
+
+
+def _clean_one(
+    ctx: TaskContext, src: str, out: str, opts: dict[str, bool], removed: int
+) -> str | None:
+    """Clean *src* into *out*, then check what's left; why it failed, or None."""
+    part = f"{os.path.splitext(out)[0]}.part{os.path.splitext(out)[1]}"
+    try:
+        info = ff.probe(src)
+        argv, notes = mc.clean_command(info, src, part, **opts)
+        for n in notes:
+            ctx.log("  " + n)
+        ctx.run(argv, duration=info.duration or None)
+        os.replace(part, out)
+        after = mc.inspect(ff.probe(out, use_cache=False))
+        after += mc.stream_notes(out) if opts["deep"] else []
+        kept = {k: opts[k] for k in ("keep_chapters", "keep_cover", "keep_subtitles")}
+        for f in mc.leftovers(after, **kept):
+            ctx.log("  still there: " + f.line())
+        ctx.log(f"  ✓ {os.path.basename(out)} - {removed} item(s) removed")
+        return None
+    except ff.CancelledError:
+        if os.path.exists(part):
+            os.remove(part)
+        raise
+    except Exception as exc:
+        logger.debug("work: best-effort step failed", exc_info=True)
+        if os.path.exists(part):
+            os.remove(part)
+        reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
+        ctx.log(f"  ✖ {reason}")
+        return reason
 
 
 class MetadataCleanerTab(BaseTab):
@@ -182,7 +229,7 @@ class MetadataCleanerTab(BaseTab):
                 )
                 return
             os.makedirs(folder, exist_ok=True)
-        opts = dict(
+        opts: dict[str, bool] = dict(
             keep_language=self.keep_lang.get(),
             keep_subtitles=self.keep_subs.get(),
             keep_chapters=self.keep_chapters.get(),
@@ -190,56 +237,17 @@ class MetadataCleanerTab(BaseTab):
             deep=self.deep.get(),
         )
         files = list(self.files)
-        jobs = []
-        taken = set()
-        for src in files:
-            out = mc.free_output(src, folder)
-            while out in taken:
-                base, ext = os.path.splitext(out)
-                out = f"{base}_{len(taken)}{ext}"
-            taken.add(out)
-            jobs.append((src, out))
+        jobs = _outputs(files, folder)
+        removed = {src: len(self.findings.get(src, [])) for src in files}
 
-        def work(_p, _c, ctx):
-            failed, notes_total = [], 0
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
+            failed: list[tuple[str, str]] = []
             for i, (src, out) in enumerate(jobs):
                 ctx.span(i / len(jobs), (i + 1) / len(jobs))
                 ctx.log(f"[{i + 1}/{len(jobs)}] {os.path.basename(src)}")
-                part = f"{os.path.splitext(out)[0]}.part{os.path.splitext(out)[1]}"
-                try:
-                    info = ff.probe(src)
-                    argv, notes = mc.clean_command(info, src, part, **opts)
-                    for n in notes:
-                        ctx.log("  " + n)
-                    ctx.run(argv, duration=info.duration or None)
-                    os.replace(part, out)
-                    after = mc.inspect(ff.probe(out, use_cache=False))
-                    if opts["deep"]:
-                        after += mc.stream_notes(out)
-                    left = mc.leftovers(
-                        after,
-                        keep_chapters=opts["keep_chapters"],
-                        keep_cover=opts["keep_cover"],
-                        keep_subtitles=opts["keep_subtitles"],
-                    )
-                    if left:
-                        notes_total += len(left)
-                        for f in left:
-                            ctx.log("  still there: " + f.line())
-                    ctx.log(
-                        f"  ✓ {os.path.basename(out)} - {len(self.findings.get(src, []))} item(s) removed"
-                    )
-                except ff.CancelledError:
-                    if os.path.exists(part):
-                        os.remove(part)
-                    raise
-                except Exception as exc:
-                    logger.debug("work: best-effort step failed", exc_info=True)
-                    if os.path.exists(part):
-                        os.remove(part)
-                    reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
+                reason = _clean_one(ctx, src, out, opts, removed[src])
+                if reason:
                     failed.append((src, reason))
-                    ctx.log(f"  ✖ {reason}")
             if failed:
                 raise RuntimeError(
                     f"{len(failed)} of {len(jobs)} file(s) failed:\n"
