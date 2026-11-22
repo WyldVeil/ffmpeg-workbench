@@ -10,14 +10,13 @@ checked; failures are reported and never counted as done.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import ffmpeg as ff
 from core.i18n import t
+from core.ops import proxy as px_ops
 from core.outputs import free_name
 from core.scaling import px
 from tabs import common
@@ -26,54 +25,6 @@ from tabs.kit import dialogs
 
 logger = logging.getLogger("crossfader.transcoder.proxy")
 
-PRESETS = {  # key: (label, ext, video args, audio mode)
-    "prores": (
-        "ProRes Proxy (.mov) - Premiere, Resolve, Final Cut",
-        ".mov",
-        ["-c:v", "prores_ks", "-profile:v", "0", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"],
-        "pcm",
-    ),
-    "dnxhr": (
-        "DNxHR LB (.mov) - Avid, Resolve",
-        ".mov",
-        ["-c:v", "dnxhd", "-profile:v", "dnxhr_lb", "-pix_fmt", "yuv422p"],
-        "pcm",
-    ),
-    "h264": (
-        "H.264 short-GOP (.mp4) - small, any editor",
-        ".mp4",
-        [
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-tune",
-            "fastdecode",
-            "-g",
-            "12",
-            "-bf",
-            "0",
-            "-pix_fmt",
-            "yuv420p",
-        ],
-        "aac",
-    ),
-    "mjpeg": (
-        "MJPEG draft (.mov) - very light to decode",
-        ".mov",
-        ["-c:v", "mjpeg", "-q:v", "6", "-pix_fmt", "yuvj422p"],
-        "pcm",
-    ),
-}
-SIZES = {
-    "half": ("Half size", 0.5),
-    "quarter": ("Quarter size", 0.25),
-    "720": ("720p", 720),
-    "540": ("540p", 540),
-    "same": ("Same size", 1.0),
-}
 VIDEO_EXTS = (
     ".mp4",
     ".mov",
@@ -88,39 +39,6 @@ VIDEO_EXTS = (
     ".webm",
     ".m4v",
 )
-
-
-def scale_filter(size_key: str) -> str:
-    val = SIZES[size_key][1]
-    if size_key == "same":
-        return "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1"
-    if isinstance(val, float):
-        return f"scale=trunc(iw*{val}/2)*2:trunc(ih*{val}/2)*2,setsar=1"
-    return f"scale=-2:'min({val},ih)',setsar=1"
-
-
-def proxy_args(info: ff.MediaInfo, preset: str, size_key: str, audio: bool) -> list:
-    _label, _ext, video, amode = PRESETS[preset]
-    args = ["-map", "0:v:0", "-vf", scale_filter(size_key), *video]
-    if audio:
-        for n, a in enumerate(s for s in info.streams if s.type == "audio"):
-            args += ["-map", f"0:{a.index}"]
-            args += (
-                [f"-c:a:{n}", "pcm_s16le"]
-                if amode == "pcm"
-                else [f"-c:a:{n}", "aac", f"-b:a:{n}", "160k"]
-            )
-    else:
-        args += ["-an"]
-    tc = info.tags.get("timecode") or next(
-        (s.tags.get("timecode") for s in info.streams if s.tags.get("timecode")), None
-    )
-    if tc:
-        args += ["-timecode", str(tc)]
-    args += ["-map_metadata", "0"]
-    if preset == "h264":
-        args += ["-movflags", "+faststart"]
-    return args
 
 
 class ProxyGenTab(BaseTab):
@@ -157,22 +75,22 @@ class ProxyGenTab(BaseTab):
         r0 = tk.Frame(opt)
         r0.pack(fill="x", pady=px(3))
         tk.Label(r0, text=t("proxy.preset_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.preset_var = tk.StringVar(value=PRESETS["prores"][0])
+        self.preset_var = tk.StringVar(value=px_ops.PRESETS["prores"][0])
         ttk.Combobox(
             r0,
             textvariable=self.preset_var,
-            values=[v[0] for v in PRESETS.values()],
+            values=[v[0] for v in px_ops.PRESETS.values()],
             state="readonly",
             width=50,
         ).pack(side="left", padx=px(8))
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(3))
         tk.Label(r1, text="Size:").pack(side="left")
-        self.size_var = tk.StringVar(value=SIZES["half"][0])
+        self.size_var = tk.StringVar(value=px_ops.SIZES["half"][0])
         ttk.Combobox(
             r1,
             textvariable=self.size_var,
-            values=[v[0] for v in SIZES.values()],
+            values=[v[0] for v in px_ops.SIZES.values()],
             state="readonly",
             width=12,
         ).pack(side="left", padx=px(8))
@@ -284,9 +202,11 @@ class ProxyGenTab(BaseTab):
         if not self.file_paths:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
-        preset = next((k for k, v in PRESETS.items() if v[0] == self.preset_var.get()), "prores")
-        size_key = next((k for k, v in SIZES.items() if v[0] == self.size_var.get()), "half")
-        ext = PRESETS[preset][1]
+        preset = next(
+            (k for k, v in px_ops.PRESETS.items() if v[0] == self.preset_var.get()), "prores"
+        )
+        size_key = next((k for k, v in px_ops.SIZES.items() if v[0] == self.size_var.get()), "half")
+        ext = px_ops.PRESETS[preset][1]
         sources = {os.path.normcase(os.path.abspath(p)) for p in self.file_paths}
         jobs, taken = [], set()
         try:
@@ -297,64 +217,18 @@ class ProxyGenTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        audio = self.audio_var.get()
-
-        def work(_p, _c, ctx):
-            done, failed = 0, []
-            for i, (src, out) in enumerate(jobs):
-                ctx.span(i / len(jobs), (i + 1) / len(jobs))
-                ctx.log(f"[{i + 1}/{len(jobs)}] {os.path.basename(src)} → {out}")
-                part = f"{os.path.splitext(out)[0]}.part{ext}"
-                try:
-                    info = ff.probe(src)
-                    if not info.has_video:
-                        raise ValueError("no video in this file")
-                    os.makedirs(os.path.dirname(out), exist_ok=True)
-                    ctx.run(
-                        [
-                            ff.ffmpeg_path(),
-                            "-hide_banner",
-                            "-nostdin",
-                            "-y",
-                            "-i",
-                            src,
-                            *proxy_args(info, preset, size_key, audio),
-                            part,
-                        ],
-                        duration=info.duration or None,
-                    )
-                    os.replace(part, out)
-                    done += 1
-                except ff.CancelledError:
-                    _remove(part)
-                    raise
-                except Exception as exc:
-                    logger.debug("work: best-effort step failed", exc_info=True)
-                    _remove(part)
-                    reason = (str(exc).strip().splitlines() or [type(exc).__name__])[-1]
-                    failed.append((src, reason))
-                    ctx.log(f"  ✖ failed: {reason}")
-            ctx.log(f"{done} of {len(jobs)} proxies made.")
-            if failed:
-                raise RuntimeError(
-                    f"{len(failed)} of {len(jobs)} file(s) failed:\n"
-                    + "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed)
-                )
-            return 0
+        batch = px_ops.ProxyBatch(
+            jobs=jobs, preset=preset, size=size_key, audio=self.audio_var.get()
+        )
 
         common.queue_job(
             self,
             common.Job(
                 name=f"Proxies ({len(jobs)} files)",
                 out=os.path.dirname(jobs[0][1]),
-                work=work,
+                work=batch.run,
                 inputs=list(self.file_paths),
             ),
             btn=self.btn_render,
             console=self.console,
         )
-
-
-def _remove(path):
-    with contextlib.suppress(OSError):
-        os.remove(path)
