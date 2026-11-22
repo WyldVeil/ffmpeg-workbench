@@ -22,7 +22,11 @@ from tkinter import messagebox, ttk
 from core import ass
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.encoders import VideoEncode
 from core.i18n import t
+from core.ops import slideshow as ss
+from core.ops.slideshow import timeline
+from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -83,6 +87,62 @@ RESOLUTIONS = {
 CAPTION_POS = {"bottom": "Bottom", "top": "Top", "lower_third": "Lower third (left)"}
 
 
+@dataclass(frozen=True)
+class _Slideshow:
+    """Each photo into a clip, then one pass joining them (transitions,
+    captions, music)."""
+
+    paths: list[str]
+    captions: list[str]  # empty: no captions
+    motions: list[str]
+    xfades: list[str]
+    look: ss.Look
+    timing: tuple[list[float], float, float]  # starts, seconds per photo, transition
+    total: float
+    venc: VideoEncode
+    container: str
+    music: str
+    volume: float
+    caption_style: tuple[str, str]  # font, position
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        tmp = ctx.tempdir()
+        n = len(self.paths)
+        cmd = [ff.ffmpeg_path(), "-y", *self.venc.pre_input]
+        for i, path in enumerate(self.paths):
+            ctx.log(f"Slide {i + 1}/{n}: {os.path.basename(path)}")
+            clip = os.path.join(tmp, f"s{i:04d}.mp4")
+            ctx.span(0.7 * i / n, 0.7 * (i + 1) / n).run(
+                ss.slide_cmd(path, self.motions[i], self.look, clip), duration=self.timing[1]
+            )
+            cmd += ["-i", clip]
+        starts, _dur, td = self.timing
+        parts = ss.join_graph(n, td, self.xfades, starts)
+        vout = "[xf]"
+        if self.captions:
+            font, position = self.caption_style
+            script = ss.caption_script(self.captions, self.look, self.timing, font, position)
+            parts.append(
+                f"[xf]{ass.subtitles_filter(script.write(os.path.join(tmp, 'captions.ass')))}[cv]"
+            )
+            vout = "[cv]"
+        if self.venc.filter_suffix:
+            parts.append(f"{vout}{self.venc.filter_suffix}[venc]")
+            vout = "[venc]"
+        amap: list[str] = []
+        if self.music:
+            cmd += ["-stream_loop", "-1", "-i", self.music]
+            parts.append(ss.music_filter(n, self.total, self.volume))
+            amap = [
+                "-map",
+                "[a]",
+                *enc.audio(enc.default_audio_for(self.container), container=self.container),
+            ]
+        cmd += ["-filter_complex", ";".join(parts), "-map", vout, *amap, *self.venc.args]
+        ctx.span(0.7, 1.0).run([*cmd, "-t", f"{self.total:.3f}", ctx.output()], duration=self.total)
+        return 0
+
+
 @dataclass
 class Slide:
     path: str
@@ -93,52 +153,6 @@ def natural_key(path: str):
     return [
         int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", os.path.basename(path))
     ]
-
-
-def motion_filter(motion: str, w: int, h: int, fps: str, frames: int, zoom: float = 1.2) -> str:
-    """Ken Burns on ONE input frame: expressions use the output frame number."""
-    d = max(frames - 1, 1)
-    p = f"(on/{d})"
-    cx, cy = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-    if motion == "zoom_in":
-        z, x, y = f"1+{zoom - 1:.4f}*{p}", cx, cy
-    elif motion == "zoom_out":
-        z, x, y = f"{zoom:.4f}-{zoom - 1:.4f}*{p}", cx, cy
-    elif motion == "pan_right":
-        z, x, y = f"{zoom:.4f}", f"(iw-iw/zoom)*{p}", cy
-    elif motion == "pan_left":
-        z, x, y = f"{zoom:.4f}", f"(iw-iw/zoom)*(1-{p})", cy
-    elif motion == "pan_down":
-        z, x, y = f"{zoom:.4f}", cx, f"(ih-ih/zoom)*{p}"
-    elif motion == "pan_up":
-        z, x, y = f"{zoom:.4f}", cx, f"(ih-ih/zoom)*(1-{p})"
-    else:
-        z, x, y = "1", "0", "0"
-    return f"zoompan=z='{z}':x='{x}':y='{y}':d={frames}:s={w}x{h}:fps={fps}"
-
-
-def frame_filter(fit: str, w: int, h: int) -> str:
-    """Frame the photo at 2x the output size (smooth zoompan sub-pixel steps)."""
-    W, H = 2 * w, 2 * h
-    if fit == "blur":
-        return (
-            f"split[a][b];[a]scale={W // 8}:{H // 8}:force_original_aspect_ratio=increase,"
-            f"crop={W // 8}:{H // 8},gblur=sigma=6,eq=brightness=-0.08,scale={W}:{H}[bg];"
-            f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1"
-        )
-    if fit == "bars":
-        return (
-            f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-            f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
-        )
-    return f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
-
-
-def timeline(n: int, dur: float, trans: float) -> tuple:
-    """(start time of each slide, total length) with overlapping transitions."""
-    starts = [i * (dur - trans) for i in range(n)]
-    return starts, (starts[-1] + dur) if n else 0.0
 
 
 class SlideshowMakerTab(BaseTab):
@@ -483,114 +497,20 @@ class SlideshowMakerTab(BaseTab):
         cap_font, cap_pos = self.cap_font.get(), self._key(CAPTION_POS, self.cap_pos, "bottom")
         volume = float(self.music_vol.get())
 
-        def work(_p, _c, ctx):
-            tmp = ctx.tempdir()
-            clips = []
-            n = len(slides)
-            for i, s in enumerate(slides):
-                ctx.log(f"Slide {i + 1}/{n}: {os.path.basename(s.path)}")
-                clip = os.path.join(tmp, f"s{i:04d}.mp4")
-                graph = (
-                    f"[0:v]{frame_filter(fit, w, h)},"
-                    f"{motion_filter(motions[i], w, h, fps, frames, zoom)},format=yuv420p[v]"
-                )
-                ctx.span(0.7 * i / n, 0.7 * (i + 1) / n).run(
-                    [
-                        ff.ffmpeg_path(),
-                        "-y",
-                        "-i",
-                        s.path,
-                        "-filter_complex",
-                        graph,
-                        "-map",
-                        "[v]",
-                        "-frames:v",
-                        str(frames),
-                        "-c:v",
-                        "libx264",
-                        "-preset",
-                        "veryfast",
-                        "-crf",
-                        "14",
-                        "-pix_fmt",
-                        "yuv420p",
-                        clip,
-                    ],
-                    duration=dur,
-                )
-                clips.append(clip)
-            cmd = [ff.ffmpeg_path(), "-y", *venc.pre_input]
-            for c in clips:
-                cmd += ["-i", c]
-            parts, last = [], "[0:v]"
-            if n == 1:
-                parts.append("[0:v]null[xf]")
-            elif td <= 0:
-                parts.append("".join(f"[{i}:v]" for i in range(n)) + f"concat=n={n}:v=1:a=0[xf]")
-            else:
-                for i in range(1, n):
-                    label = "[xf]" if i == n - 1 else f"[x{i}]"
-                    parts.append(
-                        f"{last}[{i}:v]xfade=transition={xfades[i - 1]}:duration={td:.3f}:"
-                        f"offset={starts[i]:.3f}{label}"
-                    )
-                    last = label
-            vout = "[xf]"
-            if captions:
-                sc = ass.Script(w, h)
-                u = min(w, h) / 1080
-                sc.style(
-                    ass.Style(
-                        "Cap",
-                        font=cap_font,
-                        size=round(46 * u),
-                        bold=True,
-                        outline=2.5 * u,
-                        shadow=1.5 * u,
-                        back_alpha=0.5,
-                        alignment={"top": 8, "lower_third": 1}.get(cap_pos, 2),
-                        margin_l=round(60 * u),
-                        margin_r=round(60 * u),
-                        margin_v=round((h * 0.12) if cap_pos == "lower_third" else 50 * u),
-                    )
-                )
-                for i, s in enumerate(slides):
-                    if s.caption.strip():
-                        a = starts[i] + (td / 2 if i else 0)
-                        b = starts[i] + dur - (td / 2 if i < n - 1 else 0)
-                        sc.add(a, b, f"{{\\fad(300,300)}}{ass.escape(s.caption)}", "Cap")
-                path = sc.write(os.path.join(tmp, "captions.ass"))
-                parts.append(f"[xf]{ass.subtitles_filter(path)}[cv]")
-                vout = "[cv]"
-            if venc.filter_suffix:
-                parts.append(f"{vout}{venc.filter_suffix}[venc]")
-                vout = "[venc]"
-            amap = []
-            if music and os.path.isfile(music):
-                cmd += ["-stream_loop", "-1", "-i", music]
-                fo = min(3.0, total / 4)
-                parts.append(
-                    f"[{n}:a:0]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,volume={volume:.2f},"
-                    f"afade=t=in:st=0:d=0.5,afade=t=out:st={total - fo:.3f}:d={fo:.2f}[a]"
-                )
-                amap = [
-                    "-map",
-                    "[a]",
-                    *enc.audio(enc.default_audio_for(container), container=container),
-                ]
-            cmd += [
-                "-filter_complex",
-                ";".join(parts),
-                "-map",
-                vout,
-                *amap,
-                *venc.args,
-                "-t",
-                f"{total:.3f}",
-                ctx.output(),
-            ]
-            ctx.span(0.7, 1.0).run(cmd, duration=total)
-            return 0
+        job = _Slideshow(
+            paths=[sl.path for sl in slides],
+            captions=[sl.caption for sl in slides] if captions else [],
+            motions=motions,
+            xfades=xfades,
+            look=ss.Look(w, h, fps, frames, fit, zoom),
+            timing=(starts, dur, td),
+            total=total,
+            venc=venc,
+            container=container,
+            music=music if music and os.path.isfile(music) else "",
+            volume=volume,
+            caption_style=(cap_font, cap_pos),
+        )
 
         self.log(
             self.console, f"{len(slides)} photos · {ff.format_time(total)} · {w}×{h} @ {fps} fps"
@@ -600,7 +520,7 @@ class SlideshowMakerTab(BaseTab):
             common.Job(
                 name="Slideshow",
                 out=out,
-                work=work,
+                work=job.run,
                 duration=total,
                 inputs=[s.path for s in slides] + ([music] if music else []),
             ),
