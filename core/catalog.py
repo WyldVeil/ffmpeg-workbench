@@ -83,7 +83,10 @@ TOOLS: dict = {
     "Slideshow Maker": ToolInfo("🖼", "Photos to video with motion, transitions, captions and music.",
                                 "slideshow photos pictures images ken burns memories"),
     "Frame Extractor": ToolInfo("📸", "Save stills from a video - one frame or many.",
-                                "frame still screenshot image picture png jpg extract snapshot"),
+                                "frames stills many every seconds scenes contact sheet storyboard extract image png jpg"),
+    "Snapshot": ToolInfo("📷", "Save any frame as a full-size, high-quality picture.",
+                         "screenshot screen shot snapshot still frame picture image png capture grab "
+                         "exact frame by frame full resolution"),
     "Thumbnail Maker": ToolInfo("🖼", "Pick the perfect frame and make a thumbnail with text.",
                                 "thumbnail cover youtube image text"),
     "Chapter Markers": ToolInfo("🔖", "Chapter timestamps for YouTube, or chapters inside the file.",
@@ -253,7 +256,7 @@ GOALS = (
     Goal("privacy", "🔒", "Privacy", "Remove location and names, blur faces, bleep words",
          ("Metadata Cleaner", "Privacy Blur", "The Muter", "Voice Changer")),
     Goal("get", "⬇", "Download & record", "From YouTube and 1000+ sites, or your screen",
-         ("Video Downloader", "Screen Recorder", "Frame Extractor")),
+         ("Video Downloader", "Screen Recorder", "Snapshot", "Frame Extractor")),
     Goal("manage", "🧰", "Inspect, batch & automate", "File details, folders of files, job queue",
          ("Media Inspector", "Compare & Quality", "Batch Processor", "Encode Queue", "Preset Manager",
           "Advanced Settings")),
@@ -421,7 +424,7 @@ def suggest(info, limit: int = 8) -> list:
             add("Loudness Normalizer", "Make the volume even and right for YouTube")
         if info.duration <= 30:
             add("Pro GIF Maker", "Make it an animated GIF")
-        add("Frame Extractor", "Save a still picture from it")
+        add("Snapshot", "Save a frame as a full-quality picture")
         add("Format Converter", "Convert it to another format")
     elif info.has_audio:
         if info.duration > 20:

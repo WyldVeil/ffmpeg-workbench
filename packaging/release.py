@@ -46,7 +46,7 @@ PKG = "wyldveils-media-editor"
 APP_ID = "io.github.wyldveil.MediaEditor"
 OUT = os.path.join(ROOT, "dist", "release")
 MAINTAINER = "WyldVeil <50123619+WyldVeil@users.noreply.github.com>"
-SUMMARY = "Video and audio editing suite - 80 tools, all on your computer"
+SUMMARY = "Video and audio editing suite - 81 tools, all on your computer"
 DESCRIPTION = ("A free video and audio toolkit: cut, join, convert, compress, subtitle (offline speech\n"
                "recognition), upscale, colour-grade, stabilise, clean up sound, download, record the\n"
                "screen and much more. Bundles FFmpeg 9, yt-dlp, whisper.cpp and Deno.")

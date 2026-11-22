@@ -16,6 +16,7 @@ from core import concat
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -62,6 +63,7 @@ class SequencerTab(BaseTab):
         self.slider = ttk.Scale(right, from_=0, to=1, variable=self.pos_var,
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
+        framestep.slider(self.slider, self.preview)      # , and . step a frame
         trim = tk.Frame(right)
         trim.pack(fill="x", pady=px(2))
         tk.Label(trim, text="In").pack(side="left")

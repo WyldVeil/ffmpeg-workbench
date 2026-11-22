@@ -25,8 +25,8 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.scaling import px
-from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs import common, framestep
+from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
 FORMATS = {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"}
@@ -96,9 +96,15 @@ class FrameExtractorTab(BaseTab):
         self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=px(400),
                                 command=lambda _v: self._moved())
         self.slider.pack(side="left", fill="x", expand=True)
-        for label, step in (("◀◀", -1.0), ("◀", None), ("▶", None), ("▶▶", 1.0)):
-            tk.Button(bar, text=label, relief="flat", width=3,
-                      command=lambda s=step, lb=label: self._step(s, lb)).pack(side="left")
+        framestep.slider(self.slider, self._fps)
+        for label, frames, seconds, tip in (("◀◀", 0, -1, "One second back (Shift+,)"),
+                                            ("◀", -1, 0, "One frame back (,)"),
+                                            ("▶", 1, 0, "One frame forward (.)"),
+                                            ("▶▶", 0, 1, "One second forward (Shift+.)")):
+            b = tk.Button(bar, text=label, relief="flat", width=3,
+                          command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s))
+            b.pack(side="left")
+            add_tooltip(b, tip)
 
         opts = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
         opts.pack(fill="x", padx=px(20), pady=px(6))
@@ -214,12 +220,6 @@ class FrameExtractorTab(BaseTab):
             return
         self.pos_var.set(pos)
         self.preview.show(pos)
-
-    def _step(self, seconds, label):
-        frame = 1.0 / self._fps()
-        delta = seconds if seconds is not None else (-frame if label == "◀" else frame)
-        self.pos_var.set(max(0.0, float(self.pos_var.get()) + delta))
-        self._moved()
 
     def _pick_dir(self):
         from core import dialogs

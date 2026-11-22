@@ -1,7 +1,7 @@
 # AGENTS.md: WyldVeil's Media Editor
 
 This is a guide for AI assistants and scripts. **WyldVeil's Media Editor** is a
-desktop video and audio editing suite with 80 tools. It ships its own FFmpeg 9,
+desktop video and audio editing suite with 81 tools. It ships its own FFmpeg 9,
 yt-dlp, whisper.cpp (offline speech-to-text) and Deno.
 
 Everything below runs from a terminal **without opening the window**. If a
@@ -130,7 +130,7 @@ files you created. Never delete the person's own files.
 
 ## 5. Things the command line doesn't cover
 
-- The app has 80 tools. If a request needs one that isn't listed above, tell
+- The app has 81 tools. If a request needs one that isn't listed above, tell
   the person which tool to open from the sidebar. Some examples: Beat Sync
   Cutter, Smart Reframe, Green Screen Keyer, Colour Match, Speed Ramper (with
   speed curves), Deshaker, Animated Titles, Slideshow Maker, Karaoke Generator,

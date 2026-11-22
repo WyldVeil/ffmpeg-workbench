@@ -79,6 +79,7 @@ TOOLS = {
         ("Auto-Subtitles",     _lazy("tabs.social.auto_subs", "AutoSubsTab")),
         ("Animated Titles",    _lazy("tabs.social.titles", "TitlesGeneratorTab")),
         ("Frame Extractor",    _lazy("tabs.social.frame_extractor", "FrameExtractorTab")),
+        ("Snapshot",           _lazy("tabs.social.snapshot", "SnapshotTab")),
         ("Intro/Outro Maker",  _lazy("tabs.social.intro_maker", "IntroMakerTab")),
         ("Slideshow Maker",    _lazy("tabs.social.slideshow", "SlideshowMakerTab")),
         ("Chapter Markers",    _lazy("tabs.social.chapter_markers", "ChapterMarkersTab")),

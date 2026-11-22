@@ -18,6 +18,7 @@ from core import dialogs
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FramePreview
 
@@ -147,6 +148,7 @@ class MediaInspectorTab(BaseTab):
         self.scrub = ttk.Scale(scrub_row, from_=0, to=1, orient="horizontal",
                                command=lambda v: self.preview.show(float(v)))
         self.scrub.pack(side="left", fill="x", expand=True, padx=px(6))
+        framestep.slider(self.scrub, self.preview)      # , and . step a frame
 
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=px(20), pady=px(8, 12))

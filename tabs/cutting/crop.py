@@ -18,6 +18,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
@@ -88,6 +89,7 @@ class ManualCropTab(BaseTab):
         self.slider = ttk.Scale(left, from_=0, to=1, variable=self.pos_var,
                                 command=lambda _v: self._schedule_frame())
         self.slider.pack(fill="x", pady=px(4, 0))
+        framestep.slider(self.slider, lambda: framestep.fps_of(self.src_row.path))
 
         ctrl = tk.Frame(main, width=px(290))
         ctrl.pack(side="right", fill="y", padx=px(10, 0))

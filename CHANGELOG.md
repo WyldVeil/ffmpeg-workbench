@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.4
+
+### New
+
+- **Snapshot** (Social & format): save any frame of a video as a full-size
+  PNG. Step to the exact frame, see on the right exactly how the picture will
+  look, and save (Ctrl+S) or Quick save. It makes stills look their best by
+  default: colours converted with the video's own colour standard in full
+  range with full-detail colour edges, the pixel shape corrected for
+  anamorphic video, HDR tone-mapped to normal colours, and interlacing combs
+  removed. Optional: crop black bars, sharpen, reduce noise, brightness /
+  contrast / saturation, half or double size, 16-bit PNG.
+- **, and . step one frame** back and forward (with Shift, one second) in
+  every tool that picks a moment in a video: the Trimmer, the timelines of
+  the Multi-Splitter and Splicer (click the in or out handle first to move
+  it), every before / after preview, and the position sliders of Freeze
+  Frame, Clip Looper, GIF Maker, Frame Extractor, Manual Crop and more. Steps
+  land exactly on frames, so cuts can be frame-accurate. Typing a comma or
+  full stop in a text box still types it.
+
+### Fixed
+
+- **Manual Multi-Splitter**: the timeline did nothing - every new clip was
+  0:00 to 0:10. Add Split Range now takes the range selected on the
+  timeline, each clip has a From timeline button, and a dropped or opened
+  file loads the timeline too (before, only Browse did).
+- The Trimmer and Thumbnail Maker sliders were too coarse to reach every
+  frame.
+- Some tool names in Bengali, Persian and Urdu were wrong (Frame Extractor
+  showed as "Video", "Audio Replacer" and "Slideshow Maker").
+
 ## 1.2.3
 
 ### Fixed

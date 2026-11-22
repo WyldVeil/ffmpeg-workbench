@@ -343,6 +343,8 @@ class VideoTimeline(tk.Frame):
         self._end         = 0.0
         self._playhead    = 0.0
         self._dragging    = None
+        self._last_moved  = "playhead"   # what , and . move: the handle used last
+        self.fps          = 30.0         # set by the tab that loads the video
         self._on_change   = on_change    # callback(start, end, playhead)
         self._show_handles = show_handles
         ch = height or self._HEIGHT
@@ -355,6 +357,10 @@ class VideoTimeline(tk.Frame):
         self._canvas.bind("<ButtonPress-1>",   self._on_press)
         self._canvas.bind("<B1-Motion>",       self._on_drag)
         self._canvas.bind("<ButtonRelease-1>", lambda _: self._on_release())
+        from tabs import framestep
+        framestep.register(self._canvas, self.step_frames, lambda: self.fps)
+        ToolTip(self._canvas, "Drag the handles, or click one and press , and . to move it a frame "
+                              "(with Shift, a second). i / o set in and out at the playhead.")
 
         # Info strip below canvas
         info = tk.Frame(self, bg=CLR["bg"])
@@ -370,7 +376,9 @@ class VideoTimeline(tk.Frame):
 
     # ── Public API ────────────────────────────────────────────────────────
 
-    def set_duration(self, dur):
+    def set_duration(self, dur, fps=None):
+        if fps:
+            self.fps = float(fps)
         self._duration = max(0.0, dur)
         self._end = self._duration
         self._start = 0.0
@@ -525,7 +533,26 @@ class VideoTimeline(tk.Frame):
         self._fire_change()
 
     def _on_release(self):
+        if self._dragging:
+            self._last_moved = self._dragging
         self._dragging = None
+
+    def step_frames(self, n):
+        """Move the handle used last (in, out, or the playhead) *n* frames."""
+        if self._duration <= 0:
+            return
+        from tabs import framestep
+        fps = self.fps or 30.0
+        last = max(0.0, self._duration - 1.0 / fps)
+        which = self._last_moved if self._show_handles else "playhead"
+        if which == "start":
+            self._start = min(max(0.0, framestep.snap(self._start, fps, n)), max(0.0, self._end - 1.0 / fps))
+        elif which == "end":
+            self._end = max(min(self._duration, framestep.snap(self._end, fps, n)), self._start + 1.0 / fps)
+        else:
+            self._playhead = min(last, max(0.0, framestep.snap(self._playhead, fps, n)))
+        self._draw()
+        self._fire_change()
 
     def _fire_change(self):
         if self._on_change:

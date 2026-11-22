@@ -15,6 +15,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
@@ -57,6 +58,7 @@ class GIFMakerTab(BaseTab):
         self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var,
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(side="left", fill="x", expand=True)
+        framestep.slider(self.slider, self.preview)      # , and . step a frame
         tk.Button(bar, text="Start here", relief="flat",
                   command=lambda: self.start_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
 

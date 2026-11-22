@@ -17,6 +17,7 @@ from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
@@ -109,6 +110,7 @@ class FreezeFrameTab(BaseTab):
         self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=px(480),
                                 command=lambda _v: self._moved())
         self.slider.pack(fill="x")
+        framestep.slider(self.slider, self.preview)      # , and . step a frame
 
         opt = tk.LabelFrame(body, text="  Freeze  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))

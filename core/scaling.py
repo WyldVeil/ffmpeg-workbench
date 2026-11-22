@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from typing import overload
 
 _log = logging.getLogger("crossfader.scaling")
 
@@ -47,7 +48,19 @@ def factor() -> float:
     return _factor
 
 
-def px(*values):
+@overload
+def px(value: int, /) -> int: ...
+@overload
+def px(value: float, /) -> float: ...
+@overload
+def px(value: "tuple | list", /) -> "tuple[int, ...]": ...
+@overload
+def px(a: int, b: int, /) -> "tuple[int, int]": ...
+@overload
+def px(a: int, b: int, c: int, d: int, /) -> "tuple[int, int, int, int]": ...
+
+
+def px(*values):  # type: ignore[misc]
     """Design pixels -> screen pixels.
 
     ``px(8)`` -> ``16`` at 200 %; ``px(0, 8)`` or ``px((0, 8))`` -> ``(0, 16)``

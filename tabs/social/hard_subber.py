@@ -24,6 +24,7 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 from core.scaling import px
+from tabs import framestep
 
 POSITIONS = {"bottom": ("Bottom centre", 2), "top": ("Top centre", 8),
              "middle": ("Middle", 5), "bottom_left": ("Bottom left", 1),
@@ -113,6 +114,7 @@ class HardSubberTab(BaseTab):
         self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=px(480),
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(fill="x")
+        framestep.slider(self.slider, self.preview)      # , and . step a frame
 
         st = tk.LabelFrame(body, text="  Style (SRT / VTT, or override ASS)  ", padx=px(10), pady=px(6))
         st.pack(fill="x", padx=px(20), pady=px(4))

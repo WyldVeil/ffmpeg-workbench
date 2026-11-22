@@ -830,6 +830,14 @@ class App(tk.Tk):
         self.bind("<Right>",    self._kb_nudge_right)
         self.bind("<Control-s>", self._kb_render)
         self.bind("<Escape>",   self._kb_stop_preview)
+        # , and . step one frame back / forward on whatever picks a moment in the
+        # open tool (Shift: one second) - see tabs/framestep.py
+        from tabs import framestep
+        for keys, direction, second in ((("<comma>",), -1, False), (("<period>",), 1, False),
+                                        (("<less>", "<semicolon>"), -1, True),
+                                        (("<greater>", "<colon>"), 1, True)):
+            for key in keys:
+                self.bind(key, lambda e, d=direction, s=second: framestep.on_key(self, e, d, s))
 
     # ── Keyboard shortcut handlers ───────────────────────────────────────────
 

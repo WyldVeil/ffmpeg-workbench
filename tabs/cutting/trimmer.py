@@ -18,6 +18,7 @@ from core import ffmpeg as ff
 from core import ui as _ui
 from tabs.widgets import FramePreview
 from core.scaling import px
+from tabs import framestep
 
 def fmt_time(seconds):
     """Seconds -> MM:SS.mmm (or HH:MM:SS.mmm)."""
@@ -158,9 +159,11 @@ class TrimmerTab(BaseTab):
                                     font=(MONO_FONT, 10), width=9)
         self._scrub_lbl.pack(side="right")
         self._scrub_sc = tk.Scale(r3, variable=self._scrub, from_=0, to=100,
-                                   resolution=0.05, orient="horizontal", length=px(200),
+                                   resolution=0.001, orient="horizontal", length=px(200),
                                    command=self._on_scrub, highlightthickness=0)
         self._scrub_sc.pack(side="left", padx=px(6), fill="x", expand=True)
+        # , and . step a frame (then [ Set to Preview Time ] or i / o for frame-exact cuts)
+        framestep.slider(self._scrub_sc, lambda: framestep.fps_of(self.file_path))
 
         # Encode options
         enc = tk.LabelFrame(self, text=t("section.export_options"), padx=px(14), pady=px(6))

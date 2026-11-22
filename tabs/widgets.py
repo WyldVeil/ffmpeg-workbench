@@ -34,6 +34,7 @@ from core import encoders
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from core.skins import MONO_FONT, UI_FONT
 
 
@@ -229,6 +230,7 @@ class CompareView(tk.Frame):
         self._scale = ttk.Scale(bar, from_=0.0, to=1.0, variable=self._pos,
                                 command=lambda _v: self._moved())
         self._scale.pack(side="left", fill="x", expand=True, padx=px(4, 8))
+        framestep.slider(self._scale, self.view_before)          # , and . step a frame
         self._time = tk.Label(bar, text="", width=12, bg=clr["bg"], fg=clr["fgdim"],
                               font=(MONO_FONT, 9))
         self._time.pack(side="right")

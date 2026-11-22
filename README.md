@@ -2,7 +2,7 @@
 
 [![Found it useful? Buy me a coffee](https://img.shields.io/badge/Found_it_useful%3F-Buy_me_a_coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/wyldveil)
 
-**80 video and audio tools in one free app.** Cut, join, convert, compress,
+**81 video and audio tools in one free app.** Cut, join, convert, compress,
 subtitle, upscale, fix the sound, clean up old footage and get videos ready for
 social media. Everything runs on your own computer.
 
@@ -113,7 +113,7 @@ Every tool has a screenshot in [Every tool, up close](#every-tool-up-close).
 | | |
 |---|---|
 | ✂ **Cutting room** | Quick Trimmer · Crossfader · Splicer · Batch Joiner · Multi-Splitter · Multi-Clip Sequencer · Scene Detector · Beat Sync Cutter · Smart Reframe · Side-by-Side · Manual Crop · Rotate & Flip · Video Reverser · Freeze Frame · Clip Looper |
-| 📱 **Social & format** | Shortifier (Shorts / TikTok / Reels) · Auto-Cropper · GIF Maker · WebM Maker · Watermarks · Auto-Subtitles · Hard-Subber · Animated Titles · Intro/Outro Maker · Slideshow Maker · Frame Extractor · Thumbnail Maker · Chapter Markers · Video Collage · Video Downloader |
+| 📱 **Social & format** | Shortifier (Shorts / TikTok / Reels) · Auto-Cropper · GIF Maker · WebM Maker · Watermarks · Auto-Subtitles · Hard-Subber · Animated Titles · Intro/Outro Maker · Slideshow Maker · Frame Extractor · Snapshot · Thumbnail Maker · Chapter Markers · Video Collage · Video Downloader |
 | 🔊 **Audio** | Loudness Normalizer · Voice Isolation · Silence Remover · Audio Mixer · Music Ducker · Audio Replacer · Audio Sync Shifter · The Muter · Audio Dynamics · Voice Changer · TTS Voice-Over · Waveform Editor · Laugh Track Remover · Karaoke Generator · Audio Converter · Audio Extractor · MIDIfier |
 | ⚙ **Transcoder** | Universal Downsizer · Codec Cruncher · HDR to SDR · Tracks & Remux · Compare & Quality · Format Converter · Resolution Scaler (with FSR/NIS/AI upscaling) · Framerate Interpolator · Proxy Generator · Encode Queue · Preset Manager |
 | 🎨 **Colour & visuals** | Basic Color Corrector · LUT Applicator · Colour Match · Video Scopes · Special Effects · Speed Ramper · Deshaker · Green Screen Keyer · Denoise · Sharpen · Deinterlace · Picture-in-Picture · Privacy Blur · Animated Zoom · Transition Studio · Media Generator |

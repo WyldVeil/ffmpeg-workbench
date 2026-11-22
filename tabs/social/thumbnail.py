@@ -21,6 +21,7 @@ from core.hardware import (    launch_preview,
 )
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 
 
 def _fmt(seconds):
@@ -75,10 +76,11 @@ class ThumbnailMakerTab(BaseTab):
                  width=14, anchor="e").pack(side="left")
         self._scrub_var = tk.DoubleVar(value=0.0)
         self._scrub = tk.Scale(fr1, variable=self._scrub_var, from_=0, to=100,
-                               resolution=0.01, orient="horizontal", length=px(420),
+                               resolution=0.001, orient="horizontal", length=px(420),
                                bg=CLR["panel"], fg=CLR["fg"], highlightthickness=0,
                                command=self._on_scrub)
         self._scrub.pack(side="left", padx=px(8))
+        framestep.slider(self._scrub, lambda: framestep.fps_of(self.file_path))
         self._time_lbl = tk.Label(fr1, text="00:00.00", fg=CLR["accent"],
                                   font=(MONO_FONT, 10, "bold"), width=10)
         self._time_lbl.pack(side="left")

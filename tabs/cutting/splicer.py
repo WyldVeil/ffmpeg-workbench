@@ -14,6 +14,7 @@ from core import concat
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.scaling import px
+from tabs import framestep
 
 
 def _tr(key, fallback):
@@ -194,7 +195,7 @@ class SplicerTab(BaseTab):
         """Push the selected segment's duration and range into the timeline."""
         if idx is not None and idx < len(self.segments):
             seg = self.segments[idx]
-            self._timeline.set_duration(seg["dur"])
+            self._timeline.set_duration(seg["dur"], framestep.fps_of(seg["path"]))
             try:
                 s = float(seg["start"].get())
                 e = float(seg["end"].get())

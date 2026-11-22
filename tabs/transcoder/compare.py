@@ -19,6 +19,7 @@ from core import ffmpeg as ff
 from core import quality as q
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
@@ -55,6 +56,7 @@ class ABView(tk.Frame):
         self.pos = tk.DoubleVar(value=0.0)
         self.scale = ttk.Scale(bar, from_=0.0, to=1.0, variable=self.pos, command=lambda _v: self.show(self.pos.get()))
         self.scale.pack(side="left", fill="x", expand=True, padx=px(4, 8))
+        framestep.slider(self.scale, lambda: framestep.fps_of(self.views[0].path))
         self.time_lbl = tk.Label(bar, text="", width=10, bg=CLR["bg"], fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self.time_lbl.pack(side="right")
         self.skip_ref = 0.0

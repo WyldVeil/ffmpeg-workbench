@@ -7,18 +7,27 @@ from tkinter import messagebox
 from core import dialogs
 import os
 
-from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
+from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT, add_tooltip
 from core.hardware import get_video_duration
 from core.i18n import t
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import outputs
 from core.scaling import px
+from tabs import framestep
 
 
 def _tr(key, fallback):
     text = t(key)
     return fallback if text == key else text
+
+
+def _ts(seconds):
+    """HH:MM:SS.mmm - exact enough for any frame."""
+    ms = int(round(max(0.0, seconds) * 1000))
+    h, rest = divmod(ms, 3_600_000)
+    m, rest = divmod(rest, 60_000)
+    return f"{h:02d}:{m:02d}:{rest // 1000:02d}.{rest % 1000:03d}"
 
 
 def _fmt(seconds):
@@ -61,6 +70,9 @@ class MultiSplitterTab(BaseTab):
         self._tl_info = tk.Label(tl_frame, text="No file loaded", bg=CLR["bg"],
                                  fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self._tl_info.pack(anchor="w", padx=px(4))
+        tk.Label(tl_frame, text="Drag the green / red handles to a clip's start and end - or click a handle "
+                                "and press , or . to move it one frame - then Add Split Range.",
+                 bg=CLR["bg"], fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w", padx=px(4))
 
         # Options
         opt_f = tk.Frame(self, bg=CLR["bg"])
@@ -94,13 +106,22 @@ class MultiSplitterTab(BaseTab):
     def _browse_file(self):
         p = dialogs.askopenfilename(filetypes=[(t("silence.video_files"), "*.mp4 *.mov *.mkv *.avi *.webm")])
         if p:
-            self.file_path = p
-            self.src_var.set(p)
-            self.duration = get_video_duration(p)
-            self._timeline.set_duration(self.duration)
-            self._timeline.set_range(0, self.duration)
-            self._tl_info.config(
-                text=f"{os.path.basename(p)}  ·  {_fmt(self.duration)} total")
+            self.load_file(p)
+
+    def on_source_loaded(self, p):
+        """Browse, drag and drop and File > Open all come here."""
+        self.file_path = p
+        self.src_var.set(p)
+        self.duration = get_video_duration(p)
+        self._timeline.set_duration(self.duration, framestep.fps_of(p))
+        self._timeline.set_range(0, self.duration)
+        self._tl_info.config(
+            text=f"{os.path.basename(p)}  ·  {_fmt(self.duration)} total")
+        # A row nobody has edited yet covers the whole new video
+        for r in self.split_rows:
+            if (r["start"].get(), r["end"].get()) == ("00:00:00", "00:00:10"):
+                r["start"].set(_ts(0))
+                r["end"].set(_ts(self.duration))
 
     def _on_timeline_change(self, start, end, playhead):
         self._tl_info.config(
@@ -112,27 +133,40 @@ class MultiSplitterTab(BaseTab):
             return
 
         idx = len(self.split_rows) + 1
+        start, end = self._timeline.get_range() if self.duration > 0 else (0.0, 10.0)
         row = tk.Frame(self.rows_frame, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
 
         tk.Label(row, text=f"Clip {idx}:", bg=CLR["bg"], fg=CLR["accent"], width=6).pack(side="left")
         
         tk.Label(row, text=t("splitter.start_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
-        start_var = tk.StringVar(value="00:00:00")
+        start_var = tk.StringVar(value=_ts(start) if self.duration > 0 else "00:00:00")
         tk.Entry(row, textvariable=start_var, width=10, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
 
         tk.Label(row, text=t("splitter.end_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
-        end_var = tk.StringVar(value="00:00:10")
+        end_var = tk.StringVar(value=_ts(end) if self.duration > 0 else "00:00:10")
         tk.Entry(row, textvariable=end_var, width=10, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
 
         tk.Label(row, text=t("splitter.suffix_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
         suffix_var = tk.StringVar(value=f"_clip{idx}")
         tk.Entry(row, textvariable=suffix_var, width=15, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")
 
+        use = tk.Button(row, text="⤓ From timeline", bg=CLR["panel"], fg=CLR["fg"], relief="flat",
+                        command=lambda a=start_var, b=end_var: self._from_timeline(a, b))
+        use.pack(side="left", padx=px(8, 0))
+        add_tooltip(use, "Set this clip to the range selected on the timeline")
+
         btn_rm = tk.Button(row, text="❌", bg=CLR["bg"], fg=CLR["red"], command=lambda r=row: self._remove_row(r))
         btn_rm.pack(side="left", padx=px(10))
 
         self.split_rows.append({"frame": row, "start": start_var, "end": end_var, "suffix": suffix_var})
+
+    def _from_timeline(self, start_var, end_var):
+        if self.duration <= 0:
+            return
+        a, b = self._timeline.get_range()
+        start_var.set(_ts(a))
+        end_var.set(_ts(b))
 
     def _remove_row(self, row_frame):
         row_frame.destroy()
