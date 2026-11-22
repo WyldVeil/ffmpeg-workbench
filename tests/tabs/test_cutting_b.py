@@ -4,8 +4,9 @@ import pytest
 
 from core import beats as beats_core
 from core import ffmpeg as ff
+from core.ops import reframe as rf
 from core.ops import side_by_side as side_by_side_ops
-from tabs.cutting import beat_sync, crop, side_by_side, smart_reframe
+from tabs.cutting import beat_sync, crop, side_by_side
 
 
 def test_pure_helpers():
@@ -13,7 +14,7 @@ def test_pure_helpers():
     assert crop.parse_cropdetect(
         "x crop=1920:800:0:140 y crop=1920:800:0:140 z crop=1920:804:0:138"
     ) == (0, 140, 1920, 800)
-    assert smart_reframe.crop_box(1920, 1080, 9, 16) == (608, 1080)
+    assert rf.crop_box(1920, 1080, 9, 16) == (608, 1080)
     plan = beat_sync.frame_plan([0.5, 1.0, 1.5], 2.0, 30)
     assert sum(f for _s, f in plan) == 60 and [s for s, _f in plan] == [0.0, 0.5, 1.0, 1.5]
     segs = beat_sync.assign_sources(plan, [("a", 1.0), ("b", 10.0)], "sequential", 30)
