@@ -66,7 +66,11 @@ class StartTab(BaseTab):
         outer = scroll_body(self)
         self._col = tk.Frame(outer, bg=CLR["bg"])
         self._col.pack(fill="x", padx=32, pady=(26, 30))
-        outer.bind("<Configure>", self._on_width, add=True)
+        # Centre on the visible width (the scroll canvas), not the inner frame:
+        # the padding changes the frame's own width, so reacting to that fed
+        # back into itself and grew without end when the content was wider
+        # than MAX_WIDTH (HiDPI screens), until X refused the window.
+        outer.master.bind("<Configure>", self._on_width, add=True)
 
         tk.Label(self._col, text="START", font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["accent"]).pack(anchor="w")
         tk.Label(self._col, text="What do you want to do?", font=(UI_FONT, 24, "bold"), bg=CLR["bg"],
@@ -123,10 +127,16 @@ class StartTab(BaseTab):
         self._render_results()
 
     def _on_width(self, event):
-        pad = max(24, (event.width - MAX_WIDTH) // 2)
+        # Sizes are for normal scaling; HiDPI screens draw everything bigger.
+        try:
+            k = max(1.0, float(self.tk.call("tk", "scaling")) / (96.0 / 72.0))
+        except (tk.TclError, ValueError):
+            k = 1.0
+        max_w, margin = round(MAX_WIDTH * k), round(24 * k)
+        pad = max(margin, (event.width - max_w) // 2)
         self._col.pack_configure(padx=pad)
-        avail = min(event.width, MAX_WIDTH) - 2 * 24
-        cols = max(1, min(4, avail // 250))
+        avail = min(event.width, max_w) - 2 * margin
+        cols = max(1, min(4, avail // round(250 * k)))
         if cols != self._cols:
             self._cols = cols
             if not self._query() and self._goal is None:

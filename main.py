@@ -128,8 +128,7 @@ class App(tk.Tk):
         _encoders.detect_in_background()
 
         self.title(f"{APP_NAME}  \u00b7  {APP_VERSION}")
-        self.geometry("1480x920")
-        self.minsize(1100, 700)
+        self._size_window()
 
         # ── Global state ──────────────────────────────────────────────────────
         self.debug_mode = tk.BooleanVar(value=False)
@@ -464,6 +463,21 @@ class App(tk.Tk):
             self._ui_scale = scale
         else:
             self._ui_scale = 1.0
+
+    def _size_window(self):
+        """Open at 1480x920 at normal scaling and larger on HiDPI screens
+        (Tk draws text bigger there, whether from ``tk scaling`` set above or
+        from the X server's DPI), but never bigger than the screen."""
+        try:
+            scale = float(self.tk.call("tk", "scaling")) / (96.0 / 72.0)
+        except (tk.TclError, ValueError):
+            scale = 1.0
+        scale = min(max(scale, 1.0), 4.0)
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w = min(round(1480 * scale), int(sw * 0.94))
+        h = min(round(920 * scale), int(sh * 0.9))
+        self.geometry(f"{w}x{h}")
+        self.minsize(min(round(1100 * scale), w), min(round(700 * scale), h))
 
     def _check_ffmpeg(self):
         """Background: describe the FFmpeg in use (pinned - no online check)."""

@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **The app closed straight away on HiDPI Linux screens** (display scaling of
+  150% or more, e.g. GNOME at 200%) with "X Error of failed request: BadValue
+  ... X_CreatePixmap". The Start page kept widening itself until the window
+  was too big for the X server. It now fits the window, and on HiDPI screens
+  the window opens larger to match the bigger text (never bigger than the
+  screen).
 - **The preview stayed empty in Image Watermark** whenever a logo was chosen
   ("Could not decode a frame here"). The same happened in the Green Screen
   Keyer with a photo as the background, and in Picture-in-Picture with a photo
