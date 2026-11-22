@@ -15,41 +15,13 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops import sync as sy
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, SaveRow, scroll_body
-
-
-def lossless_cmd(src: str, out: str, offset: float, track: int, n_audio: int) -> list:
-    """Shift audio track *track* by *offset* seconds; other tracks untouched."""
-    cmd = [
-        ff.ffmpeg_path(),
-        "-y",
-        "-i",
-        src,
-        "-itsoffset",
-        f"{offset:.3f}",
-        "-i",
-        src,
-        "-map",
-        "0:v?",
-    ]
-    for i in range(n_audio):
-        cmd += ["-map", f"{1 if i == track else 0}:a:{i}"]
-    cmd += ["-map", "0:s?", "-c", "copy", "-map_metadata", "0"]
-    if out.lower().endswith((".mp4", ".mov", ".m4v")):
-        cmd += ["-movflags", "+faststart"]
-    return [*cmd, out]
-
-
-def reencode_filter(offset: float) -> str:
-    if offset >= 0:
-        return f"adelay=delays={round(offset * 1000)}:all=1"
-    return f"atrim=start={-offset:.3f},asetpts=PTS-STARTPTS"
 
 
 class AudioSyncTab(BaseTab):
@@ -162,27 +134,9 @@ class AudioSyncTab(BaseTab):
         values = list(self.track_box.cget("values"))
         track = values.index(self.track_var.get()) if self.track_var.get() in values else 0
         if self.lossless_var.get():
-            cmd = lossless_cmd(src, out, offset, track, len(info.audio_streams))
+            cmd = sy.lossless_cmd(src, out, offset, track, len(info.audio_streams))
         else:
-            container = common.container_of(out)
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-i",
-                src,
-                "-map",
-                "0:v?",
-                "-c:v",
-                "copy",
-                "-map",
-                f"0:a:{track}",
-                "-af",
-                reencode_filter(offset) + ",apad",
-                "-t",
-                f"{info.duration:.3f}",
-                *enc.audio(enc.default_audio_for(container), container=container),
-                out,
-            ]
+            cmd = sy.reencode_cmd(src, out, offset, track, info.duration)
         self.log(self.console, f"Shifting audio by {offset:+.3f}s")
         self.run_ffmpeg(
             cmd,

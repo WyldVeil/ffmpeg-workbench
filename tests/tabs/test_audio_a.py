@@ -4,7 +4,8 @@ import pytest
 
 from core import ffmpeg as ff
 from core import loudness as ln
-from tabs.audio import extractor, muter, silence, sync
+from core.ops import sync as sy
+from tabs.audio import extractor, muter, silence
 
 
 def test_pure_helpers():
@@ -18,7 +19,7 @@ def test_pure_helpers():
     g = silence.cut_graph(zones, True, True)
     assert "split=3" in g and "concat=n=3:v=1:a=1[v][a]" in g
     assert muter.gain_expr([], 0.1) == "1"
-    assert sync.reencode_filter(-0.25) == "atrim=start=0.250,asetpts=PTS-STARTPTS"
+    assert sy.reencode_filter(-0.25) == "atrim=start=0.250,asetpts=PTS-STARTPTS"
     assert (
         extractor.copy_extension("pcm_s24le") == ".wav"
         and extractor.copy_extension("aac") == ".m4a"
