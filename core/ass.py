@@ -10,6 +10,7 @@ needs no filtergraph escaping because it lives in a file.
 Coordinates are in pixels of the target video: the script's PlayResX/Y is
 set to the video size, so 1 unit = 1 pixel.
 """
+
 from __future__ import annotations
 
 import os
@@ -57,11 +58,14 @@ def rect(w: float, h: float) -> str:
     return f"m 0 0 l {w} 0 {w} {h} 0 {h}"
 
 
-def box(w: float, h: float, *, x: float, y: float, fill: str, alpha: float = 0.0,
-        extra: str = "") -> str:
+def box(
+    w: float, h: float, *, x: float, y: float, fill: str, alpha: float = 0.0, extra: str = ""
+) -> str:
     """Dialogue text for a filled rectangle at (x, y) (top-left)."""
-    return (f"{{\\an7\\pos({round(x)},{round(y)})\\bord0\\shad0\\1c{colour(fill)}"
-            f"\\1a{alpha_tag(alpha)}{extra}\\p1}}{rect(w, h)}{{\\p0}}")
+    return (
+        f"{{\\an7\\pos({round(x)},{round(y)})\\bord0\\shad0\\1c{colour(fill)}"
+        f"\\1a{alpha_tag(alpha)}{extra}\\p1}}{rect(w, h)}{{\\p0}}"
+    )
 
 
 def word_reveal(text: str, start_ms: int, step_ms: int) -> str:
@@ -92,19 +96,41 @@ class Style:
     italic: bool = False
     outline: float = 0.0
     shadow: float = 0.0
-    alignment: int = 7            # numpad layout: 1-3 bottom, 4-6 middle, 7-9 top
+    alignment: int = 7  # numpad layout: 1-3 bottom, 4-6 middle, 7-9 top
     margin_l: int = 0
     margin_r: int = 0
     margin_v: int = 0
-    border_style: int = 1         # 1 = outline + shadow, 3 = opaque box
+    border_style: int = 1  # 1 = outline + shadow, 3 = opaque box
 
     def line(self) -> str:
-        return ",".join(str(x) for x in (
-            self.name, self.font, int(self.size), colour(self.colour), colour(self.colour),
-            colour(self.outline_colour), colour(self.back_colour, self.back_alpha),
-            -1 if self.bold else 0, -1 if self.italic else 0, 0, 0, 100, 100, 0, 0,
-            self.border_style, f"{self.outline:g}", f"{self.shadow:g}", self.alignment,
-            self.margin_l, self.margin_r, self.margin_v, 1))
+        return ",".join(
+            str(x)
+            for x in (
+                self.name,
+                self.font,
+                int(self.size),
+                colour(self.colour),
+                colour(self.colour),
+                colour(self.outline_colour),
+                colour(self.back_colour, self.back_alpha),
+                -1 if self.bold else 0,
+                -1 if self.italic else 0,
+                0,
+                0,
+                100,
+                100,
+                0,
+                0,
+                self.border_style,
+                f"{self.outline:g}",
+                f"{self.shadow:g}",
+                self.alignment,
+                self.margin_l,
+                self.margin_r,
+                self.margin_v,
+                1,
+            )
+        )
 
 
 @dataclass
@@ -118,27 +144,36 @@ class Script:
         self.styles = [s for s in self.styles if s.name != style.name] + [style]
         return style
 
-    def add(self, start: float, end: float, text: str, style: str = "Default",
-            layer: int = 0) -> None:
+    def add(
+        self, start: float, end: float, text: str, style: str = "Default", layer: int = 0
+    ) -> None:
         if end > start:
             self.events.append((layer, start, end, style, text))
 
     def render(self) -> str:
         styles = self.styles or [Style("Default")]
         head = [
-            "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {self.width}",
-            f"PlayResY: {self.height}", "WrapStyle: 2", "ScaledBorderAndShadow: yes",
-            "YCbCr Matrix: None", "",
+            "[Script Info]",
+            "ScriptType: v4.00+",
+            f"PlayResX: {self.width}",
+            f"PlayResY: {self.height}",
+            "WrapStyle: 2",
+            "ScaledBorderAndShadow: yes",
+            "YCbCr Matrix: None",
+            "",
             "[V4+ Styles]",
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
             "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
             "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-            *[f"Style: {s.line()}" for s in styles], "",
+            *[f"Style: {s.line()}" for s in styles],
+            "",
             "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
         ]
-        ev = [f"Dialogue: {layer},{ts(a)},{ts(b)},{st},,0,0,0,,{txt}"
-              for layer, a, b, st, txt in sorted(self.events, key=lambda e: (e[1], e[0]))]
+        ev = [
+            f"Dialogue: {layer},{ts(a)},{ts(b)},{st},,0,0,0,,{txt}"
+            for layer, a, b, st, txt in sorted(self.events, key=lambda e: (e[1], e[0]))
+        ]
         return "\n".join(head + ev) + "\n"
 
     def write(self, path: str) -> str:
@@ -152,16 +187,29 @@ class Script:
 def fonts_dir() -> str | None:
     """Folder of bundled fonts handed to libass (``fontsdir=``)."""
     from core.filters import _bundled_font_dir
+
     d = _bundled_font_dir()
     return d if d and os.path.isdir(d) else None
 
 
-BUNDLED_FAMILIES = ["Montserrat", "Open Sans", "Poppins", "Lato", "Raleway", "Bebas Neue",
-                    "Anton", "Bangers", "Luckiest Guy", "Bungee", "Roboto Black"]
+BUNDLED_FAMILIES = [
+    "Montserrat",
+    "Open Sans",
+    "Poppins",
+    "Lato",
+    "Raleway",
+    "Bebas Neue",
+    "Anton",
+    "Bangers",
+    "Luckiest Guy",
+    "Bungee",
+    "Roboto Black",
+]
 
 
 def subtitles_filter(path: str) -> str:
     from core.filters import subtitles_filter as _sf
+
     return _sf(path, fonts_dir=fonts_dir())
 
 

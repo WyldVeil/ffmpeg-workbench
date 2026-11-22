@@ -17,6 +17,7 @@ BT.709) video:
 Both remove the HDR descriptions from the frames (filters.STRIP_HDR) so the
 SDR file isn't mistaken for HDR by TVs and players.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,13 +40,13 @@ CURVES = {
 
 @dataclass
 class HdrInfo:
-    kind: str = ""                  # "", "HDR10", "HDR10+", "HLG", "Dolby Vision"
+    kind: str = ""  # "", "HDR10", "HDR10+", "HLG", "Dolby Vision"
     transfer: str = ""
     dv_profile: int = 0
-    dv_compat: int = -1             # base layer: 0 none (profile 5), 1 HDR10, 2 SDR, 4 HLG
-    mastering_nits: float = 0.0     # peak of the mastering display
-    max_cll: int = 0                # brightest pixel (nits)
-    max_fall: int = 0               # brightest frame average (nits)
+    dv_compat: int = -1  # base layer: 0 none (profile 5), 1 HDR10, 2 SDR, 4 HLG
+    mastering_nits: float = 0.0  # peak of the mastering display
+    max_cll: int = 0  # brightest pixel (nits)
+    max_fall: int = 0  # brightest frame average (nits)
 
     @property
     def is_hdr(self) -> bool:
@@ -100,8 +101,24 @@ def _read_side_data(entries, out: HdrInfo) -> bool:
 
 def first_frame_side_data(path: str) -> list:
     try:
-        r = ff.capture([ff.ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-read_intervals", "%+#1",
-                        "-show_frames", "-show_entries", "frame=side_data_list", "-of", "json", path], timeout=30)
+        r = ff.capture(
+            [
+                ff.ffprobe_path(),
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-read_intervals",
+                "%+#1",
+                "-show_frames",
+                "-show_entries",
+                "frame=side_data_list",
+                "-of",
+                "json",
+                path,
+            ],
+            timeout=30,
+        )
         frames = json.loads(r.stdout or "{}").get("frames") or []
         return frames[0].get("side_data_list") or [] if frames else []
     except (OSError, ValueError):
@@ -128,12 +145,20 @@ def inspect(info: ff.MediaInfo, path: str | None = None) -> HdrInfo:
     return out
 
 
-def sdr_chain(*, gpu: bool, curve: str = "bt2390", out_fmt: str = "yuv420p", adaptive: bool = True,
-              assume: str = "") -> str:
+def sdr_chain(
+    *,
+    gpu: bool,
+    curve: str = "bt2390",
+    out_fmt: str = "yuv420p",
+    adaptive: bool = True,
+    assume: str = "",
+) -> str:
     """Filter chain HDR -> SDR BT.709 (GPU needs ``-init_hw_device vulkan`` before the input)."""
     _label, pl_curve, cpu_curve = CURVES.get(curve, CURVES["bt2390"])
     if not gpu:
         return fl.hdr_to_sdr_chain(method=cpu_curve, out_fmt=out_fmt, assume=assume)
-    return (f"{fl.HDR_INPUTS.get(assume, '')}libplacebo=tonemapping={pl_curve}:gamut_mode=perceptual:"
-            f"colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv:format={out_fmt}:"
-            f"peak_detect={1 if adaptive else 0}:apply_dolbyvision=1,{fl.STRIP_HDR}")
+    return (
+        f"{fl.HDR_INPUTS.get(assume, '')}libplacebo=tonemapping={pl_curve}:gamut_mode=perceptual:"
+        f"colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv:format={out_fmt}:"
+        f"peak_detect={1 if adaptive else 0}:apply_dolbyvision=1,{fl.STRIP_HDR}"
+    )

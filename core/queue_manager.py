@@ -26,6 +26,7 @@ accepts a third parameter receives a :class:`TaskContext` with ``run()``
 (an FFmpeg runner wired to this task's progress and cancel), ``progress()``,
 ``log()`` and a private ``tempdir()`` that is cleaned up afterwards.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -44,9 +45,11 @@ from core import settings, tasks
 
 logger = logging.getLogger("crossfader.queue")
 
+
 class TaskStatus(StrEnum):
     """Where a job is in its life.  A StrEnum, so it still compares equal to
     the plain strings older code (and the saved queue) use."""
+
     PENDING = "pending"
     ACTIVE = "active"
     DONE = "done"
@@ -58,16 +61,33 @@ class TaskStatus(StrEnum):
         return self in (TaskStatus.DONE, TaskStatus.FAILED, TaskStatus.CANCELLED)
 
 
-PENDING, ACTIVE, DONE, FAILED, CANCELLED = (TaskStatus.PENDING, TaskStatus.ACTIVE, TaskStatus.DONE,
-                                            TaskStatus.FAILED, TaskStatus.CANCELLED)
+PENDING, ACTIVE, DONE, FAILED, CANCELLED = (
+    TaskStatus.PENDING,
+    TaskStatus.ACTIVE,
+    TaskStatus.DONE,
+    TaskStatus.FAILED,
+    TaskStatus.CANCELLED,
+)
 
 
 class RenderTask:
     """One unit of work in the queue (read-only from the UI's point of view)."""
 
-    def __init__(self, *, id, name, output_path="", cmds=None, worker_fn=None,
-                 on_start=None, on_progress=None, on_complete=None,
-                 expected_duration=None, inputs=(), atomic_output=True):
+    def __init__(
+        self,
+        *,
+        id,
+        name,
+        output_path="",
+        cmds=None,
+        worker_fn=None,
+        on_start=None,
+        on_progress=None,
+        on_complete=None,
+        expected_duration=None,
+        inputs=(),
+        atomic_output=True,
+    ):
         self.id = id
         self.name = name
         self.output_path = output_path or ""
@@ -77,7 +97,7 @@ class RenderTask:
         self.expected_duration = expected_duration
         self.atomic_output = atomic_output
         self.status: TaskStatus = TaskStatus.PENDING
-        self.progress = ""            # latest log line
+        self.progress = ""  # latest log line
         self.fraction: float | None = None
         self.eta: float | None = None
         self.speed: float | None = None
@@ -94,7 +114,7 @@ class RenderTask:
         self._proc = None
         self.completed_fired = False
         self.tempdirs: list = []
-        self.parts: list = []          # (part, final) promoted on success
+        self.parts: list = []  # (part, final) promoted on success
 
     @property
     def cancelled(self) -> bool:
@@ -116,8 +136,9 @@ class RenderTask:
 class TaskContext:
     """Helper handed to 3-argument ``worker_fn(progress_cb, cancel_fn, ctx)``."""
 
-    def __init__(self, manager: RenderQueueManager, task: RenderTask,
-                 progress_cb: Callable[[str], None]):
+    def __init__(
+        self, manager: RenderQueueManager, task: RenderTask, progress_cb: Callable[[str], None]
+    ):
         self._m = manager
         self.task = task
         self._progress_cb = progress_cb
@@ -140,6 +161,7 @@ class TaskContext:
 
     def tempdir(self) -> str:
         from core.paths import temp_dir
+
         d = temp_dir(prefix=f"task_{self.task.id}_")
         self.task.tempdirs.append(d)
         return d
@@ -154,8 +176,15 @@ class TaskContext:
         self.task.parts.append((part, final))
         return part
 
-    def run(self, cmd: Sequence[str], *, duration: float | None = None,
-            check: bool = True, cwd: str | None = None, tail: int = 200) -> ff.RunResult:
+    def run(
+        self,
+        cmd: Sequence[str],
+        *,
+        duration: float | None = None,
+        check: bool = True,
+        cwd: str | None = None,
+        tail: int = 200,
+    ) -> ff.RunResult:
         """Run one command for this task.  Raises :class:`ff.CancelledError`
         or :class:`ff.CommandError` (when *check*) so multi-step jobs can
         simply call ``ctx.run`` repeatedly."""
@@ -166,8 +195,15 @@ class TaskContext:
                 self._m.set_fraction(self.task, lo + (hi - lo) * p.fraction, p)
 
         self._progress_cb("$ " + ff.format_cmd(cmd))
-        res = ff.run(cmd, duration=duration, on_line=self._progress_cb,
-                     on_progress=on_prog, cancel=self.cancelled, cwd=cwd, tail=tail)
+        res = ff.run(
+            cmd,
+            duration=duration,
+            on_line=self._progress_cb,
+            on_progress=on_prog,
+            cancel=self.cancelled,
+            cwd=cwd,
+            tail=tail,
+        )
         self.task.log_tail = res.log_tail[-60:]
         self._span = (hi, hi)
         if check:
@@ -209,8 +245,11 @@ class RenderQueueManager:
         with self._lock:
             self._workers = [w for w in self._workers if w.is_alive()]
             while len(self._workers) < self._parallel():
-                self._workers.append(tasks.start_service(
-                    self._run_worker, name=f"RenderQueueWorker-{len(self._workers) + 1}"))
+                self._workers.append(
+                    tasks.start_service(
+                        self._run_worker, name=f"RenderQueueWorker-{len(self._workers) + 1}"
+                    )
+                )
 
     def set_tk_root(self, root) -> None:
         self._tk_root = root
@@ -220,10 +259,21 @@ class RenderQueueManager:
 
     # ── public API ───────────────────────────────────────────────────────────
 
-    def enqueue(self, name: str, output_path: str = "", *, cmd=None, cmds=None,
-                worker_fn=None, on_start=None, on_progress=None, on_complete=None,
-                expected_duration: float | None = None, inputs: Sequence[str] = (),
-                atomic_output: bool = True) -> str:
+    def enqueue(
+        self,
+        name: str,
+        output_path: str = "",
+        *,
+        cmd=None,
+        cmds=None,
+        worker_fn=None,
+        on_start=None,
+        on_progress=None,
+        on_complete=None,
+        expected_duration: float | None = None,
+        inputs: Sequence[str] = (),
+        atomic_output: bool = True,
+    ) -> str:
         if cmd is not None:
             cmds_arg = [[str(c) for c in cmd]]
         elif cmds is not None:
@@ -232,11 +282,19 @@ class RenderQueueManager:
             cmds_arg = None
         if cmds_arg is None and worker_fn is None:
             raise ValueError("enqueue() needs cmd, cmds or worker_fn")
-        task = RenderTask(id=uuid.uuid4().hex[:8], name=name, output_path=output_path,
-                          cmds=cmds_arg, worker_fn=worker_fn, on_start=on_start,
-                          on_progress=on_progress, on_complete=on_complete,
-                          expected_duration=expected_duration, inputs=inputs,
-                          atomic_output=atomic_output)
+        task = RenderTask(
+            id=uuid.uuid4().hex[:8],
+            name=name,
+            output_path=output_path,
+            cmds=cmds_arg,
+            worker_fn=worker_fn,
+            on_start=on_start,
+            on_progress=on_progress,
+            on_complete=on_complete,
+            expected_duration=expected_duration,
+            inputs=inputs,
+            atomic_output=atomic_output,
+        )
         with self._work:
             self._tasks.append(task)
             self._work.notify()
@@ -277,10 +335,18 @@ class RenderQueueManager:
         task = self.get_task(task_id)
         if task is None or task.status not in (FAILED, CANCELLED):
             return None
-        return self.enqueue(task.name, task.output_path, cmds=task.cmds, worker_fn=task.worker_fn,
-                            on_start=task.on_start, on_progress=task.on_progress,
-                            on_complete=task.on_complete, expected_duration=task.expected_duration,
-                            inputs=task.inputs, atomic_output=task.atomic_output)
+        return self.enqueue(
+            task.name,
+            task.output_path,
+            cmds=task.cmds,
+            worker_fn=task.worker_fn,
+            on_start=task.on_start,
+            on_progress=task.on_progress,
+            on_complete=task.on_complete,
+            expected_duration=task.expected_duration,
+            inputs=task.inputs,
+            atomic_output=task.atomic_output,
+        )
 
     def clear_finished(self) -> None:
         with self._lock:
@@ -318,6 +384,7 @@ class RenderQueueManager:
             return
         self._last_ui_update = now
         from core import ui
+
         for cb in list(self._update_callbacks):
             ui.call_soon(_safe_call, cb)
 
@@ -325,10 +392,12 @@ class RenderQueueManager:
         if fn is None:
             return
         from core import ui
+
         ui.call_soon(_safe_call, fn, *args)
 
-    def set_fraction(self, task: RenderTask, fraction: float | None,
-                      prog: ff.Progress | None = None) -> None:
+    def set_fraction(
+        self, task: RenderTask, fraction: float | None, prog: ff.Progress | None = None
+    ) -> None:
         if fraction is not None:
             task.fraction = max(task.fraction or 0.0, min(1.0, fraction))
         if prog is not None:
@@ -346,7 +415,7 @@ class RenderQueueManager:
                     task = next((t for t in self._tasks if t.status == PENDING), None)
                     if task is None:
                         self._work.wait(timeout=1.0)
-                        if threading.current_thread() not in self._workers[:self._parallel()]:
+                        if threading.current_thread() not in self._workers[: self._parallel()]:
                             return
                 task.status = ACTIVE
             try:
@@ -399,8 +468,14 @@ class RenderQueueManager:
             task.status, task.returncode = FAILED, rc
             if not task.error:
                 task.error = ff.summarize_error(task.log_tail, rc)
-        logger.info("%s %s [%s] in %.1fs%s", task.status, task.name, task.id, task.elapsed,
-                  f": {task.error.splitlines()[0]}" if task.status == FAILED and task.error else "")
+        logger.info(
+            "%s %s [%s] in %.1fs%s",
+            task.status,
+            task.name,
+            task.id,
+            task.elapsed,
+            f": {task.error.splitlines()[0]}" if task.status == FAILED and task.error else "",
+        )
         self._complete(task)
 
     @staticmethod
@@ -430,8 +505,11 @@ class RenderQueueManager:
         assert fn is not None, "only called for worker tasks"
         wants_ctx = False
         try:
-            params = [p for p in inspect.signature(fn).parameters.values()
-                      if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+            params = [
+                p
+                for p in inspect.signature(fn).parameters.values()
+                if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            ]
             wants_ctx = len(params) >= 3
         except (TypeError, ValueError):
             pass
@@ -448,8 +526,13 @@ class RenderQueueManager:
                 return -1
             part = None
             argv = list(cmd)
-            if task.atomic_output and task.output_path and argv and argv[-1] == task.output_path \
-                    and ff.is_ffmpeg(argv[0]):
+            if (
+                task.atomic_output
+                and task.output_path
+                and argv
+                and argv[-1] == task.output_path
+                and ff.is_ffmpeg(argv[0])
+            ):
                 base, ext = os.path.splitext(task.output_path)
                 part = f"{base}.part{ext}"
                 argv[-1] = part
@@ -462,8 +545,13 @@ class RenderQueueManager:
                     self.set_fraction(task, lo + (hi - lo) * p.fraction, p)
 
             progress_cb("$ " + ff.format_cmd(cmd))
-            res = ff.run(argv, duration=task.expected_duration, on_line=progress_cb,
-                         on_progress=on_prog, cancel=lambda: task.cancelled)
+            res = ff.run(
+                argv,
+                duration=task.expected_duration,
+                on_line=progress_cb,
+                on_progress=on_prog,
+                cancel=lambda: task.cancelled,
+            )
             task.log_tail = res.log_tail[-60:]
             if res.cancelled or res.returncode != 0:
                 if part and os.path.exists(part):
@@ -489,6 +577,7 @@ class RenderQueueManager:
         self._dispatch(task.on_complete, task.id, task.returncode)
         try:
             from core.notify import job_finished
+
             job_finished(task)
         except Exception:
             logger.debug("_complete: best-effort step failed", exc_info=True)

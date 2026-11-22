@@ -9,6 +9,7 @@ Every invocation gets:
   * the active FFmpeg (``--ffmpeg-location``) for merging/conversion,
   * the app's network settings (proxy, rate limit, timeouts …).
 """
+
 from __future__ import annotations
 
 import os
@@ -32,8 +33,9 @@ def js_runtime_args() -> list:
     return []
 
 
-def base_argv(ytdlp: str | None = None, *, network: bool = True,
-              url: str = "https://www.youtube.com/") -> list:
+def base_argv(
+    ytdlp: str | None = None, *, network: bool = True, url: str = "https://www.youtube.com/"
+) -> list:
     """yt-dlp command prefix.  Raises OSError (offline mode, strict proxy not
     set up...) instead of quietly connecting some other way."""
     exe = ytdlp or ytdlp_path() or "yt-dlp"
@@ -45,6 +47,7 @@ def base_argv(ytdlp: str | None = None, *, network: bool = True,
         return argv
     from core import network as _net
     from core import tails
+
     if tails.direct_enabled():
         # Tails: the user opened the direct route for this session - run yt-dlp
         # outside Tor the way Tails runs its Unsafe Browser.
@@ -55,8 +58,15 @@ def base_argv(ytdlp: str | None = None, *, network: bool = True,
 
 def redact(argv: list) -> list:
     """Copy of *argv* safe to show in logs (credentials replaced)."""
-    secret = {"--password", "--video-password", "--proxy", "--username", "--ap-password",
-              "--cookies", "--client-certificate-password"}
+    secret = {
+        "--password",
+        "--video-password",
+        "--proxy",
+        "--username",
+        "--ap-password",
+        "--cookies",
+        "--client-certificate-password",
+    }
     out, hide = [], False
     for a in argv:
         if hide:

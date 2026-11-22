@@ -14,6 +14,7 @@ Formats: PNG, JPEG and WebP (quality 1-100 means what it says), TIFF.
 Image sets go to a fresh folder per run, so earlier exports are never mixed
 with or overwritten by new ones.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,8 +32,12 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
 FORMATS = {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"}
-MODES = {"single": "This frame", "interval": "Every N seconds", "scenes": "Scene starts",
-         "sheet": "Contact sheet"}
+MODES = {
+    "single": "This frame",
+    "interval": "Every N seconds",
+    "scenes": "Scene starts",
+    "sheet": "Contact sheet",
+}
 
 
 def times_select(times, fps: float) -> str:
@@ -68,12 +73,18 @@ class FrameExtractorTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.frame_extractor"), t("frame_extractor.subtitle")
-                         if t("frame_extractor.subtitle") != "frame_extractor.subtitle"
-                         else "Thumbnails, storyboards and contact sheets.", icon="🖼")
+        self.make_header(
+            self,
+            t("tab.frame_extractor"),
+            t("frame_extractor.subtitle")
+            if t("frame_extractor.subtitle") != "frame_extractor.subtitle"
+            else "Thumbnails, storyboards and contact sheets.",
+            icon="🖼",
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         pv = tk.Frame(body)
@@ -83,16 +94,29 @@ class FrameExtractorTab(BaseTab):
         self.pos_var = tk.DoubleVar(value=0.0)
         bar = tk.Frame(pv)
         bar.pack(fill="x")
-        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var, length=px(400),
-                                command=lambda _v: self._moved())
+        self.slider = ttk.Scale(
+            bar,
+            from_=0,
+            to=1,
+            variable=self.pos_var,
+            length=px(400),
+            command=lambda _v: self._moved(),
+        )
         self.slider.pack(side="left", fill="x", expand=True)
         framestep.slider(self.slider, self._fps)
-        for label, frames, seconds, tip in (("◀◀", 0, -1, "One second back (Shift+,)"),
-                                            ("◀", -1, 0, "One frame back (,)"),
-                                            ("▶", 1, 0, "One frame forward (.)"),
-                                            ("▶▶", 0, 1, "One second forward (Shift+.)")):
-            b = tk.Button(bar, text=label, relief="flat", width=3,
-                          command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s))
+        for label, frames, seconds, tip in (
+            ("◀◀", 0, -1, "One second back (Shift+,)"),
+            ("◀", -1, 0, "One frame back (,)"),
+            ("▶", 1, 0, "One frame forward (.)"),
+            ("▶▶", 0, 1, "One second forward (Shift+.)"),
+        ):
+            b = tk.Button(
+                bar,
+                text=label,
+                relief="flat",
+                width=3,
+                command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s),
+            )
             b.pack(side="left")
             add_tooltip(b, tip)
 
@@ -102,42 +126,59 @@ class FrameExtractorTab(BaseTab):
         mrow = tk.Frame(opts)
         mrow.pack(fill="x")
         for key, label in MODES.items():
-            tk.Radiobutton(mrow, text=label, value=key, variable=self.mode_var,
-                           command=self._mode_changed).pack(side="left", padx=px(6))
+            tk.Radiobutton(
+                mrow, text=label, value=key, variable=self.mode_var, command=self._mode_changed
+            ).pack(side="left", padx=px(6))
 
         self.panels = {}
         p = self.panels["single"] = tk.Frame(opts)
         tk.Label(p, text="Time:").pack(side="left")
         self.time_var = tk.StringVar(value="0")
         tk.Entry(p, textvariable=self.time_var, width=14).pack(side="left", padx=px(6))
-        tk.Label(p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"],
-                 font=(UI_FONT, 8)).pack(side="left")
+        tk.Label(
+            p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"], font=(UI_FONT, 8)
+        ).pack(side="left")
         self.time_var.trace_add("write", lambda *_a: self._time_typed())
 
         p = self.panels["interval"] = tk.Frame(opts)
         self.every_var = tk.StringVar(value="1")
         self.from_var = tk.StringVar(value="0")
         self.to_var = tk.StringVar(value="")
-        for label, var, w in (("Every (s):", self.every_var, 6), ("From:", self.from_var, 10),
-                              ("To (empty = end):", self.to_var, 10)):
+        for label, var, w in (
+            ("Every (s):", self.every_var, 6),
+            ("From:", self.from_var, 10),
+            ("To (empty = end):", self.to_var, 10),
+        ):
             tk.Label(p, text=label).pack(side="left", padx=px(8, 2))
             tk.Entry(p, textvariable=var, width=w).pack(side="left")
 
         p = self.panels["scenes"] = tk.Frame(opts)
         tk.Label(p, text="Sensitivity:").pack(side="left")
         self.scene_var = tk.DoubleVar(value=0.3)
-        tk.Scale(p, variable=self.scene_var, from_=0.05, to=0.8, resolution=0.05,
-                 orient="horizontal", length=px(180)).pack(side="left", padx=px(6))
+        tk.Scale(
+            p,
+            variable=self.scene_var,
+            from_=0.05,
+            to=0.8,
+            resolution=0.05,
+            orient="horizontal",
+            length=px(180),
+        ).pack(side="left", padx=px(6))
         tk.Label(p, text="(lower = more scenes)   Min. scene (s):").pack(side="left")
         self.min_scene_var = tk.StringVar(value="2")
         tk.Entry(p, textvariable=self.min_scene_var, width=5).pack(side="left", padx=px(4))
 
         p = self.panels["sheet"] = tk.Frame(opts)
-        self.cols_var, self.rows_var, self.tile_w_var = (tk.StringVar(value="5"),
-                                                         tk.StringVar(value="4"),
-                                                         tk.StringVar(value="320"))
-        for label, var in (("Columns:", self.cols_var), ("Rows:", self.rows_var),
-                           ("Thumb width:", self.tile_w_var)):
+        self.cols_var, self.rows_var, self.tile_w_var = (
+            tk.StringVar(value="5"),
+            tk.StringVar(value="4"),
+            tk.StringVar(value="320"),
+        )
+        for label, var in (
+            ("Columns:", self.cols_var),
+            ("Rows:", self.rows_var),
+            ("Thumb width:", self.tile_w_var),
+        ):
             tk.Label(p, text=label).pack(side="left", padx=px(8, 2))
             tk.Entry(p, textvariable=var, width=5).pack(side="left")
         self.stamp_var = tk.BooleanVar(value=True)
@@ -147,24 +188,40 @@ class FrameExtractorTab(BaseTab):
         frow.pack(fill="x", pady=px(8, 0))
         tk.Label(frow, text="Format:").pack(side="left")
         self.fmt_var = tk.StringVar(value=FORMATS["png"])
-        ttk.Combobox(frow, textvariable=self.fmt_var, values=list(FORMATS.values()),
-                     state="readonly", width=16).pack(side="left", padx=px(6))
+        ttk.Combobox(
+            frow,
+            textvariable=self.fmt_var,
+            values=list(FORMATS.values()),
+            state="readonly",
+            width=16,
+        ).pack(side="left", padx=px(6))
         tk.Label(frow, text="Quality (1-100):").pack(side="left", padx=px(10, 2))
         self.quality_var = tk.IntVar(value=92)
-        tk.Scale(frow, variable=self.quality_var, from_=1, to=100, orient="horizontal",
-                 length=px(160)).pack(side="left")
+        tk.Scale(
+            frow, variable=self.quality_var, from_=1, to=100, orient="horizontal", length=px(160)
+        ).pack(side="left")
 
         drow = tk.Frame(opts)
         drow.pack(fill="x", pady=px(6, 0))
         tk.Label(drow, text="Save to folder:", width=14, anchor="w").pack(side="left")
         self.dir_var = tk.StringVar()
-        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(side="left", padx=px(6), fill="x",
-                                                                 expand=True)
-        tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(side="left")
+        tk.Entry(drow, textvariable=self.dir_var, width=50).pack(
+            side="left", padx=px(6), fill="x", expand=True
+        )
+        tk.Button(drow, text=t("btn.browse"), relief="flat", command=self._pick_dir).pack(
+            side="left"
+        )
 
-        self.btn_render = tk.Button(body, text=t("frame_extractor.extract_button"),
-                                    font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-                                    width=24, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("frame_extractor.extract_button"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=24,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -189,6 +246,7 @@ class FrameExtractorTab(BaseTab):
         self._moved()
         if not self.dir_var.get().strip():
             from core.outputs import default_output_folder
+
             self.dir_var.set(default_output_folder(path))
 
     def _fps(self) -> float:
@@ -213,6 +271,7 @@ class FrameExtractorTab(BaseTab):
 
     def _pick_dir(self):
         from core import dialogs
+
         d = dialogs.ask_directory(parent=self)
         if d:
             self.dir_var.set(d)
@@ -252,12 +311,34 @@ class FrameExtractorTab(BaseTab):
         at = max(0.0, min(at, max(0.0, info.duration - 1.0 / self._fps())))
         stamp = ff.format_time(at).replace(":", "-")
         from core.outputs import unique_path
+
         out = unique_path(os.path.join(folder, f"{base}_{stamp}.{ext}"))
-        cmd = [ff.ffmpeg_path(), "-y", "-ss", ff.ts(at), "-i", src, "-frames:v", "1", "-an",
-               *q, "-update", "1", out]
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.btn_render, btn_label=t("frame_extractor.extract_button"),
-                        duration=0.1, output=out, inputs=[src], name="Frame Extractor")
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            "-ss",
+            ff.ts(at),
+            "-i",
+            src,
+            "-frames:v",
+            "1",
+            "-an",
+            *q,
+            "-update",
+            "1",
+            out,
+        ]
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn_render,
+            btn_label=t("frame_extractor.extract_button"),
+            duration=0.1,
+            output=out,
+            inputs=[src],
+            name="Frame Extractor",
+        )
 
     def _interval(self, src, info, folder, base, ext, q):
         every = common.number(self.every_var.get(), "Every", 0.01, 3600)
@@ -268,13 +349,35 @@ class FrameExtractorTab(BaseTab):
         out_dir = fresh_folder(folder, f"{base} frames")
         # image2 patterns treat every '%' as a format code - escape real ones
         pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%05d.{ext}"
-        cmd = [ff.ffmpeg_path(), "-y", "-ss", ff.ts(start), "-to", ff.ts(end), "-i", src, "-an",
-               "-vf", f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{every - 0.5 / self._fps():.4f})'",
-               "-fps_mode", "passthrough", *q, pattern]
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            "-ss",
+            ff.ts(start),
+            "-to",
+            ff.ts(end),
+            "-i",
+            src,
+            "-an",
+            "-vf",
+            f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{every - 0.5 / self._fps():.4f})'",
+            "-fps_mode",
+            "passthrough",
+            *q,
+            pattern,
+        ]
         self.log(self.console, f"One frame every {every:g}s → {out_dir}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out_dir),
-                        btn=self.btn_render, btn_label=t("frame_extractor.extract_button"),
-                        duration=end - start, output=out_dir, inputs=[src], name="Frame Extractor")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out_dir),
+            btn=self.btn_render,
+            btn_label=t("frame_extractor.extract_button"),
+            duration=end - start,
+            output=out_dir,
+            inputs=[src],
+            name="Frame Extractor",
+        )
 
     def _scenes(self, src, info, folder, base, ext, q):
         threshold = float(self.scene_var.get())
@@ -286,28 +389,65 @@ class FrameExtractorTab(BaseTab):
         def work(_p, _c, ctx):
             tmp = ctx.tempdir()
             ctx.span(0.0, 0.7).run(
-                [ff.ffmpeg_path(), "-i", src, "-an", "-sn",
-                 "-vf", f"scale=320:-2,select='gt(scene,{threshold:.3f})',metadata=print:file=cuts.txt",
-                 "-fps_mode", "passthrough", "-f", "null", "-"], duration=dur, cwd=tmp)
+                [
+                    ff.ffmpeg_path(),
+                    "-i",
+                    src,
+                    "-an",
+                    "-sn",
+                    "-vf",
+                    f"scale=320:-2,select='gt(scene,{threshold:.3f})',metadata=print:file=cuts.txt",
+                    "-fps_mode",
+                    "passthrough",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                duration=dur,
+                cwd=tmp,
+            )
             try:
                 with open(os.path.join(tmp, "cuts.txt"), encoding="utf-8", errors="replace") as fh:
                     cuts = [float(m) for m in re.findall(r"pts_time:\s*([\d.]+)", fh.read())]
             except OSError:
                 cuts = []
             starts = keep_scenes(set(cuts), min_len)
-            ctx.log(f"{len(starts)} scene(s): " + ", ".join(ff.format_time(s) for s in starts[:20])
-                    + (" …" if len(starts) > 20 else ""))
+            ctx.log(
+                f"{len(starts)} scene(s): "
+                + ", ".join(ff.format_time(s) for s in starts[:20])
+                + (" …" if len(starts) > 20 else "")
+            )
             ctx.span(0.7, 1.0).run(
-                [ff.ffmpeg_path(), "-y", "-i", src, "-an", "-sn",
-                 "-vf", f"select='{times_select(starts, fps)}'", "-fps_mode", "passthrough",
-                 *q, os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%04d.{ext}"],
-                duration=dur)
+                [
+                    ff.ffmpeg_path(),
+                    "-y",
+                    "-i",
+                    src,
+                    "-an",
+                    "-sn",
+                    "-vf",
+                    f"select='{times_select(starts, fps)}'",
+                    "-fps_mode",
+                    "passthrough",
+                    *q,
+                    os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%04d.{ext}",
+                ],
+                duration=dur,
+            )
             return 0
 
         self.log(self.console, f"Finding scenes (sensitivity {threshold:.2f}) → {out_dir}")
-        common.queue_job(self, name="Scene frames", out=out_dir, work=work, btn=self.btn_render,
-                         btn_label=t("frame_extractor.extract_button"), console=self.console,
-                         duration=dur * 1.3, inputs=[src])
+        common.queue_job(
+            self,
+            name="Scene frames",
+            out=out_dir,
+            work=work,
+            btn=self.btn_render,
+            btn_label=t("frame_extractor.extract_button"),
+            console=self.console,
+            duration=dur * 1.3,
+            inputs=[src],
+        )
 
     def _sheet(self, src, info, folder, base, ext, q):
         cols = int(common.number(self.cols_var.get(), "Columns", 1, 20))
@@ -318,34 +458,78 @@ class FrameExtractorTab(BaseTab):
         times = [dur * (i + 0.5) / n for i in range(n)]
         from core.outputs import unique_path
         from core.paths import temp_dir
+
         out = unique_path(os.path.join(folder, f"{base}_contact_sheet.{ext}"))
         work = temp_dir("sheet_")
         chain = [f"select='{times_select(times, self._fps())}'", f"scale={tile_w}:-2"]
         if self.stamp_var.get():
-            chain.append(fl.drawtext_filter(
-                textfile=fl.drawtext_text_file("%{pts:hms}", work), font="mono",
-                fontsize=max(12, tile_w // 18), fontcolor="white", box=True,
-                boxcolor="black@0.55", boxborderw=4, x="w-text_w-6", y="h-text_h-6",
-                expansion="normal"))
+            chain.append(
+                fl.drawtext_filter(
+                    textfile=fl.drawtext_text_file("%{pts:hms}", work),
+                    font="mono",
+                    fontsize=max(12, tile_w // 18),
+                    fontcolor="white",
+                    box=True,
+                    boxcolor="black@0.55",
+                    boxborderw=4,
+                    x="w-text_w-6",
+                    y="h-text_h-6",
+                    expansion="normal",
+                )
+            )
         pad = 6
         chain.append(f"tile={cols}x{rows}:padding={pad}:margin={pad}:color=0x181818")
         head = max(28, tile_w // 9)
         v = info.require_video()
-        title = (f"{os.path.basename(src)}   ·   {ff.format_time(dur)}   ·   "
-                 f"{v.display_size[0]}×{v.display_size[1]}   ·   {v.fps:.3g} fps")
+        title = (
+            f"{os.path.basename(src)}   ·   {ff.format_time(dur)}   ·   "
+            f"{v.display_size[0]}×{v.display_size[1]}   ·   {v.fps:.3g} fps"
+        )
         chain.append(f"pad=iw:ih+{head}:0:{head}:color=0x181818")
-        chain.append(fl.drawtext_filter(textfile=fl.drawtext_text_file(title, work), font="sans",
-                                        fontsize=int(head * 0.5), fontcolor="white",
-                                        x="12", y=f"({head}-text_h)/2"))
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-an", "-sn", "-vf", ",".join(chain),
-               "-fps_mode", "passthrough", "-frames:v", "1", *q, "-update", "1", out]
+        chain.append(
+            fl.drawtext_filter(
+                textfile=fl.drawtext_text_file(title, work),
+                font="sans",
+                fontsize=int(head * 0.5),
+                fontcolor="white",
+                x="12",
+                y=f"({head}-text_h)/2",
+            )
+        )
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            src,
+            "-an",
+            "-sn",
+            "-vf",
+            ",".join(chain),
+            "-fps_mode",
+            "passthrough",
+            "-frames:v",
+            "1",
+            *q,
+            "-update",
+            "1",
+            out,
+        ]
 
         def done(rc):
             import shutil
+
             shutil.rmtree(work, ignore_errors=True)
             self.show_result(rc, out)
 
         self.log(self.console, f"Contact sheet {cols}×{rows} → {out}")
-        self.run_ffmpeg(cmd, self.console, on_done=done, btn=self.btn_render,
-                        btn_label=t("frame_extractor.extract_button"), duration=dur, output=out,
-                        inputs=[src], name="Contact sheet")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=done,
+            btn=self.btn_render,
+            btn_label=t("frame_extractor.extract_button"),
+            duration=dur,
+            output=out,
+            inputs=[src],
+            name="Contact sheet",
+        )

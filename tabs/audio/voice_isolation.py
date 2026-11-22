@@ -12,6 +12,7 @@ Remove background noise from speech.
 
 Optional rumble filter, preview, audio-only or video output.
 """
+
 from __future__ import annotations
 
 import os
@@ -28,7 +29,7 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
 
-MODELS = {   # file: label (signal / noise the model was trained for)
+MODELS = {  # file: label (signal / noise the model was trained for)
     "sh.rnnn": "Speech, recorded in a room - best for talking",
     "bd.rnnn": "Voice incl. laughter, recording noise",
     "lq.rnnn": "Voice, general background noise",
@@ -50,38 +51,67 @@ class VoiceIsolationTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.voice_isolation"), "Remove background noise from speech.", icon="🎤")
+        self.make_header(
+            self, t("tab.voice_isolation"), "Remove background noise from speech.", icon="🎤"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
-                               on_change=lambda p: self.out_row.path or self.out_row.set(
-                                   self.suggest_output(p, "clean")))
+        self.src_row = FileRow(
+            body,
+            t("common.source_video"),
+            self.src_var,
+            kind="media",
+            on_change=lambda p: (
+                self.out_row.path or self.out_row.set(self.suggest_output(p, "clean"))
+            ),
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value="neural")
-        methods = [("neural", "Neural network (RNNoise) - recommended"), ("fft", "Spectral noise reduction (FFT)")]
+        methods = [
+            ("neural", "Neural network (RNNoise) - recommended"),
+            ("fft", "Spectral noise reduction (FFT)"),
+        ]
         methods.append(("nlm", "Non-local means"))
-        radios = {key: tk.Radiobutton(opt, text=label, value=key, variable=self.method_var) for key, label in methods}
+        radios = {
+            key: tk.Radiobutton(opt, text=label, value=key, variable=self.method_var)
+            for key, label in methods
+        }
         for key, radio in radios.items():
             if key != "nlm" or capabilities.peek("anlmdn", False):
                 radio.pack(anchor="w")
-        if capabilities.peek("anlmdn") is None:          # not known yet: offer it once the self-test passes
+        if capabilities.peek("anlmdn") is None:  # not known yet: offer it once the self-test passes
+
             def _offer(ok: bool) -> None:
                 if ok:
                     radios["nlm"].pack(anchor="w", after=radios["fft"])
+
             capabilities.on_ready("anlmdn", _offer)
         mr = tk.Frame(opt)
         mr.pack(fill="x", pady=px(4))
         tk.Label(mr, text="Model:").pack(side="left")
         self.model_var = tk.StringVar(value=MODELS["sh.rnnn"])
-        mb = ttk.Combobox(mr, textvariable=self.model_var, values=[*MODELS.values(), _CUSTOM], state="readonly",
-                          width=46)
+        mb = ttk.Combobox(
+            mr,
+            textvariable=self.model_var,
+            values=[*MODELS.values(), _CUSTOM],
+            state="readonly",
+            width=46,
+        )
         mb.pack(side="left", padx=px(6))
         mb.bind("<<ComboboxSelected>>", lambda _e: self._model_changed())
         self.custom_row = FileRow(opt, "Custom model:", kind="any", label_width=14)
         self.blend_var = tk.DoubleVar(value=0.0)
-        tk.Scale(opt, variable=self.blend_var, from_=0.0, to=0.8, resolution=0.05, orient="horizontal",
-                 length=px(220), label="Keep some original sound (more natural)").pack(anchor="w")
+        tk.Scale(
+            opt,
+            variable=self.blend_var,
+            from_=0.0,
+            to=0.8,
+            resolution=0.05,
+            orient="horizontal",
+            length=px(220),
+            label="Keep some original sound (more natural)",
+        ).pack(anchor="w")
         fr = tk.Frame(opt)
         fr.pack(anchor="w", pady=px(2))
         self.floor_var, self.red_var = tk.StringVar(value="-30"), tk.StringVar(value="12")
@@ -90,15 +120,31 @@ class VoiceIsolationTab(BaseTab):
         tk.Label(fr, text="reduction (dB)").pack(side="left")
         tk.Entry(fr, textvariable=self.red_var, width=5).pack(side="left", padx=px(4))
         self.rumble_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opt, text="Remove low rumble (80 Hz high-pass)", variable=self.rumble_var).pack(anchor="w")
-        tk.Button(opt, text="▶ Preview 12 s", relief="flat", command=self._preview).pack(anchor="w", pady=px(4))
+        tk.Checkbutton(
+            opt, text="Remove low rumble (80 Hz high-pass)", variable=self.rumble_var
+        ).pack(anchor="w")
+        tk.Button(opt, text="▶ Preview 12 s", relief="flat", command=self._preview).pack(
+            anchor="w", pady=px(4)
+        )
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
-                               suggest=lambda: self.suggest_output(self.src_row.path, "clean"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            kind="media",
+            suggest=lambda: self.suggest_output(self.src_row.path, "clean"),
+        )
         self.out_row.pack(fill="x")
-        self.btn_render = tk.Button(body, text="🎤  CLEAN UP", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=20, command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="🎤  CLEAN UP",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=20,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -125,10 +171,14 @@ class VoiceIsolationTab(BaseTab):
                 model = os.path.join(models_dir(), name)
                 if not os.path.isfile(model):
                     raise ValueError(f"The bundled model is missing: {model}")
-        return denoise_filter(method, model=model, blend=float(self.blend_var.get()),
-                              floor_db=common.number(self.floor_var.get(), "Noise floor", -80, -20),
-                              reduction_db=common.number(self.red_var.get(), "Reduction", 0.01, 97),
-                              rumble=self.rumble_var.get())
+        return denoise_filter(
+            method,
+            model=model,
+            blend=float(self.blend_var.get()),
+            floor_db=common.number(self.floor_var.get(), "Noise floor", -80, -20),
+            reduction_db=common.number(self.red_var.get(), "Reduction", 0.01, 97),
+            rumble=self.rumble_var.get(),
+        )
 
     def _preview(self):
         try:
@@ -155,6 +205,14 @@ class VoiceIsolationTab(BaseTab):
         if not out:
             return
         cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
-                        btn_label="🎤  CLEAN UP", duration=info.duration or None, output=out, inputs=[src],
-                        name="Voice Isolation")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn_render,
+            btn_label="🎤  CLEAN UP",
+            duration=info.duration or None,
+            output=out,
+            inputs=[src],
+            name="Voice Isolation",
+        )

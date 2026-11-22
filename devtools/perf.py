@@ -15,6 +15,7 @@ the Tk (main) thread:
 
 All three need no extra packages and no ptrace rights (py-spy may not attach).
 """
+
 from __future__ import annotations
 
 import collections
@@ -57,7 +58,9 @@ class StallWatch:
     thread notices when the stamp is older than *threshold_ms* and samples the
     main thread's stack until the loop runs again."""
 
-    def __init__(self, root, threshold_ms: float = 50, tick_ms: int = 10, sample_ms: float = 5) -> None:
+    def __init__(
+        self, root, threshold_ms: float = 50, tick_ms: int = 10, sample_ms: float = 5
+    ) -> None:
         self.root = root
         self.threshold = threshold_ms / 1000
         self.tick = tick_ms
@@ -96,7 +99,9 @@ class StallWatch:
                     current[2][_app_frames(traceback.extract_stack(frame), 4)] += 1
             elif current is not None:
                 label, start, samples = current
-                self.stalls.append(Stall(label, (self._last - start) * 1000, samples.most_common(2)))
+                self.stalls.append(
+                    Stall(label, (self._last - start) * 1000, samples.most_common(2))
+                )
                 current = None
 
     def worst(self) -> list[Stall]:
@@ -147,6 +152,7 @@ class MainThreadSampler:
     def report(self, top: int = 25) -> str:
         def ms(count: int) -> str:
             return f"{count * self.interval * 1000:7.1f} ms"
+
         lines = [f"{self.samples} samples (~{self.samples * self.interval * 1000:.0f} ms)"]
         for key, count in self.inclusive.most_common(top):
             lines.append(f"  incl {ms(count)}  {key}")

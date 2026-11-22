@@ -7,6 +7,7 @@ Provides:
   • make_header, make_console, make_file_row, make_section,
     make_render_btn, make_labeled_entry - UI factory helpers
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -34,31 +35,41 @@ logger = logging.getLogger("crossfader.base_tab")
 def _load_clr():
     try:
         from core.skins import get_skin, load_skin_name
+
         skin = get_skin(load_skin_name())
         return {
-            "bg":         skin["content"],
-            "panel":      skin["panel"],
-            "accent":     skin["accent"],
-            "fg":         skin["fg"],
-            "fgdim":      skin["fgdim"],
-            "green":      skin["green"],
-            "red":        skin["red"],
-            "orange":     skin["orange"],
-            "pink":       skin["pink"],
+            "bg": skin["content"],
+            "panel": skin["panel"],
+            "accent": skin["accent"],
+            "fg": skin["fg"],
+            "fgdim": skin["fgdim"],
+            "green": skin["green"],
+            "red": skin["red"],
+            "orange": skin["orange"],
+            "pink": skin["pink"],
             "console_bg": skin["console_bg"],
             "console_fg": skin["console_fg"],
-            "border":     skin.get("border", "#2C2C2C"),
-            "input_bg":   skin.get("input_bg", "#1E1E1E"),
-            "input_fg":   skin.get("input_fg", "#E2E2E2"),
+            "border": skin.get("border", "#2C2C2C"),
+            "input_bg": skin.get("input_bg", "#1E1E1E"),
+            "input_fg": skin.get("input_fg", "#E2E2E2"),
         }
     except Exception:
         logger.debug("_load_clr: best-effort step failed", exc_info=True)
         return {
-            "bg": "#1A1A1A", "panel": "#212121", "accent": "#3A8EE6",
-            "fg": "#E2E2E2", "fgdim": "#7A7A7A", "green": "#2ECC71",
-            "red": "#E74C3C", "orange": "#F39C12", "pink": "#C0392B",
-            "console_bg": "#0A0A0A", "console_fg": "#00E676",
-            "border": "#2C2C2C", "input_bg": "#1E1E1E", "input_fg": "#E2E2E2",
+            "bg": "#1A1A1A",
+            "panel": "#212121",
+            "accent": "#3A8EE6",
+            "fg": "#E2E2E2",
+            "fgdim": "#7A7A7A",
+            "green": "#2ECC71",
+            "red": "#E74C3C",
+            "orange": "#F39C12",
+            "pink": "#C0392B",
+            "console_bg": "#0A0A0A",
+            "console_fg": "#00E676",
+            "border": "#2C2C2C",
+            "input_bg": "#1E1E1E",
+            "input_fg": "#E2E2E2",
         }
 
 
@@ -68,6 +79,7 @@ CLR = _load_clr()
 # ─────────────────────────────────────────────────────────────────────────────
 #  UI factory helpers (module-level so tabs can use them directly)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_header(parent, title, subtitle="", icon=""):
     """
@@ -88,16 +100,19 @@ def make_header(parent, title, subtitle="", icon=""):
     left.pack(side="left", fill="both", expand=True)
 
     title_text = f"{icon}  {title}".strip() if icon else title
-    tk.Label(left, text=title_text,
-             font=(UI_FONT, 14, "bold"),
-             bg=CLR["panel"], fg=CLR["accent"],
-             anchor="w").pack(side="top", fill="x")
+    tk.Label(
+        left,
+        text=title_text,
+        font=(UI_FONT, 14, "bold"),
+        bg=CLR["panel"],
+        fg=CLR["accent"],
+        anchor="w",
+    ).pack(side="top", fill="x")
 
     if subtitle:
-        tk.Label(left, text=subtitle,
-                 font=(UI_FONT, 9),
-                 bg=CLR["panel"], fg=CLR["fgdim"],
-                 anchor="w").pack(side="top", fill="x", pady=px(2, 0))
+        tk.Label(
+            left, text=subtitle, font=(UI_FONT, 9), bg=CLR["panel"], fg=CLR["fgdim"], anchor="w"
+        ).pack(side="top", fill="x", pady=px(2, 0))
 
     # Bottom border
     tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x")
@@ -117,7 +132,8 @@ def make_section(parent, title="", padx=20, pady=(8, 4)):
         font=(UI_FONT, 8, "bold"),
         bd=px(1),
         relief="solid",
-        padx=px(14), pady=px(8),
+        padx=px(14),
+        pady=px(8),
         highlightthickness=0,
     )
     # LabelFrame borders are drawn in the widget's fg - set border via relief
@@ -142,15 +158,16 @@ def make_console(parent, height=8):
         insertbackground=CLR["console_fg"],
         selectbackground=CLR["accent"],
         selectforeground="#FFFFFF",
-        padx=px(12), pady=px(8),
+        padx=px(12),
+        pady=px(8),
         highlightthickness=0,
     )
     # Tag for green "Done" lines
     c.tag_configure("success", foreground=CLR["green"])
-    c.tag_configure("error",   foreground=CLR["red"])
-    c.tag_configure("warn",    foreground=CLR["orange"])
-    c.tag_configure("info",    foreground=CLR["accent"])
-    c.tag_configure("dim",     foreground=CLR["fgdim"])
+    c.tag_configure("error", foreground=CLR["red"])
+    c.tag_configure("warn", foreground=CLR["orange"])
+    c.tag_configure("info", foreground=CLR["accent"])
+    c.tag_configure("dim", foreground=CLR["fgdim"])
 
     sb = ttk.Scrollbar(parent, command=c.yview)
     c.configure(yscrollcommand=sb.set)
@@ -163,26 +180,42 @@ def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
     Returns the row Frame.
     """
     f = tk.Frame(parent, bg=CLR["bg"])
-    tk.Label(f, text=label,
-             font=(UI_FONT, 9, "bold"),
-             width=label_width, anchor="e",
-             bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
-    tk.Entry(f, textvariable=var, width=width,
-             relief="flat",
-             bg=CLR["input_bg"], fg=CLR["input_fg"],
-             insertbackground=CLR["accent"],
-             highlightthickness=px(1),
-             highlightbackground=CLR["border"],
-             highlightcolor=CLR["accent"],
-             font=(UI_FONT, 9)).pack(side="left", padx=px(8))
-    btn = tk.Button(f, text=t("btn.browse"),
-                    font=(UI_FONT, 9),
-                    bg=CLR["panel"], fg=CLR["fg"],
-                    activebackground=CLR["accent"],
-                    activeforeground="#FFFFFF",
-                    relief="flat", cursor="hand2",
-                    padx=px(10), pady=px(3),
-                    command=browse_cmd)
+    tk.Label(
+        f,
+        text=label,
+        font=(UI_FONT, 9, "bold"),
+        width=label_width,
+        anchor="e",
+        bg=CLR["bg"],
+        fg=CLR["fgdim"],
+    ).pack(side="left")
+    tk.Entry(
+        f,
+        textvariable=var,
+        width=width,
+        relief="flat",
+        bg=CLR["input_bg"],
+        fg=CLR["input_fg"],
+        insertbackground=CLR["accent"],
+        highlightthickness=px(1),
+        highlightbackground=CLR["border"],
+        highlightcolor=CLR["accent"],
+        font=(UI_FONT, 9),
+    ).pack(side="left", padx=px(8))
+    btn = tk.Button(
+        f,
+        text=t("btn.browse"),
+        font=(UI_FONT, 9),
+        bg=CLR["panel"],
+        fg=CLR["fg"],
+        activebackground=CLR["accent"],
+        activeforeground="#FFFFFF",
+        relief="flat",
+        cursor="hand2",
+        padx=px(10),
+        pady=px(3),
+        command=browse_cmd,
+    )
     btn.pack(side="left")
     return f
 
@@ -190,20 +223,22 @@ def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
 def make_labeled_entry(parent, label, var, width=8, tooltip=""):
     """Inline label + entry, optionally with a dim tooltip/hint."""
     f = tk.Frame(parent, bg=CLR["bg"])
-    tk.Label(f, text=label,
-             font=(UI_FONT, 9),
-             bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-    tk.Entry(f, textvariable=var, width=width,
-             relief="flat",
-             bg=CLR["input_bg"], fg=CLR["input_fg"],
-             insertbackground=CLR["accent"],
-             highlightthickness=0,
-             font=(UI_FONT, 9)).pack(side="left", padx=px(4))
+    tk.Label(f, text=label, font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+    tk.Entry(
+        f,
+        textvariable=var,
+        width=width,
+        relief="flat",
+        bg=CLR["input_bg"],
+        fg=CLR["input_fg"],
+        insertbackground=CLR["accent"],
+        highlightthickness=0,
+        font=(UI_FONT, 9),
+    ).pack(side="left", padx=px(4))
     if tooltip:
-        tk.Label(f, text=tooltip,
-                 fg=CLR["fgdim"],
-                 bg=CLR["bg"],
-                 font=(UI_FONT, 8)).pack(side="left", padx=px(2, 0))
+        tk.Label(f, text=tooltip, fg=CLR["fgdim"], bg=CLR["bg"], font=(UI_FONT, 8)).pack(
+            side="left", padx=px(2, 0)
+        )
     return f
 
 
@@ -237,6 +272,7 @@ def make_render_btn(parent, text, command, color=None, width=24):
 #  ToolTip - hover tooltip for any widget
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ToolTip:
     """
     Hover tooltip that appears after a short delay.
@@ -251,16 +287,16 @@ class ToolTip:
         add_tooltip(btn, "Start rendering the output file")
     """
 
-    _DELAY = 500      # ms before showing
-    _WRAP  = 280      # max tooltip width in pixels
+    _DELAY = 500  # ms before showing
+    _WRAP = 280  # max tooltip width in pixels
 
     def __init__(self, widget, text):
         self._widget = widget
-        self._text   = text
-        self._tip    = None
-        self._after  = None
-        widget.bind("<Enter>",  self._on_enter, add=True)
-        widget.bind("<Leave>",  self._on_leave, add=True)
+        self._text = text
+        self._tip = None
+        self._after = None
+        widget.bind("<Enter>", self._on_enter, add=True)
+        widget.bind("<Leave>", self._on_leave, add=True)
         widget.bind("<Button>", self._on_leave, add=True)
 
     def _on_enter(self, event=None):
@@ -287,13 +323,19 @@ class ToolTip:
         # Attempt to remove from taskbar on Windows
         with contextlib.suppress(tk.TclError):
             tw.wm_attributes("-toolwindow", True)
-        lbl = tk.Label(tw, text=self._text,
-                       bg="#2A2A2A", fg="#E0E0E0",
-                       font=(UI_FONT, 8),
-                       relief="solid", bd=px(1),
-                       wraplength=px(self._WRAP),
-                       justify="left",
-                       padx=px(8), pady=px(5))
+        lbl = tk.Label(
+            tw,
+            text=self._text,
+            bg="#2A2A2A",
+            fg="#E0E0E0",
+            font=(UI_FONT, 8),
+            relief="solid",
+            bd=px(1),
+            wraplength=px(self._WRAP),
+            justify="left",
+            padx=px(8),
+            pady=px(5),
+        )
         lbl.pack()
 
     def _hide(self):
@@ -310,6 +352,7 @@ def add_tooltip(widget, text):
 # ─────────────────────────────────────────────────────────────────────────────
 #  VideoTimeline - reusable canvas timeline with dual handles + playhead
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _fmt_tl(seconds):
     """Format seconds for timeline display."""
@@ -334,46 +377,49 @@ class VideoTimeline(tk.Frame):
         t = tl.get_playhead()             # read playhead position
     """
 
-    _PAD     = 28      # horizontal padding
-    _HR      = 8       # handle radius
-    _HEIGHT  = 100     # default canvas height
+    _PAD = 28  # horizontal padding
+    _HR = 8  # handle radius
+    _HEIGHT = 100  # default canvas height
 
     def __init__(self, parent, on_change=None, height=None, show_handles=True):
         super().__init__(parent, bg=CLR["bg"])
-        self._duration    = 0.0
-        self._start       = 0.0
-        self._end         = 0.0
-        self._playhead    = 0.0
-        self._dragging    = None
-        self._last_moved  = "playhead"   # what , and . move: the handle used last
-        self.fps          = 30.0         # set by the tab that loads the video
-        self._on_change   = on_change    # callback(start, end, playhead)
+        self._duration = 0.0
+        self._start = 0.0
+        self._end = 0.0
+        self._playhead = 0.0
+        self._dragging = None
+        self._last_moved = "playhead"  # what , and . move: the handle used last
+        self.fps = 30.0  # set by the tab that loads the video
+        self._on_change = on_change  # callback(start, end, playhead)
         self._show_handles = show_handles
         ch = height or self._HEIGHT
 
         # Canvas
-        self._canvas = tk.Canvas(self, bg="#0D0D0D", height=px(ch),
-                                  highlightthickness=0, bd=0)
+        self._canvas = tk.Canvas(self, bg="#0D0D0D", height=px(ch), highlightthickness=0, bd=0)
         self._canvas.pack(fill="x", padx=px(4), pady=px(4))
-        self._canvas.bind("<Configure>",      lambda _: self._draw())
-        self._canvas.bind("<ButtonPress-1>",   self._on_press)
-        self._canvas.bind("<B1-Motion>",       self._on_drag)
+        self._canvas.bind("<Configure>", lambda _: self._draw())
+        self._canvas.bind("<ButtonPress-1>", self._on_press)
+        self._canvas.bind("<B1-Motion>", self._on_drag)
         self._canvas.bind("<ButtonRelease-1>", lambda _: self._on_release())
         from tabs import framestep
+
         framestep.register(self._canvas, self.step_frames, lambda: self.fps)
-        ToolTip(self._canvas, "Drag the handles, or click one and press , and . to move it a frame "
-                              "(with Shift, a second). i / o set in and out at the playhead.")
+        ToolTip(
+            self._canvas,
+            "Drag the handles, or click one and press , and . to move it a frame "
+            "(with Shift, a second). i / o set in and out at the playhead.",
+        )
 
         # Info strip below canvas
         info = tk.Frame(self, bg=CLR["bg"])
         info.pack(fill="x", padx=px(8))
-        self._pos_lbl = tk.Label(info, text="00:00.00",
-                                  fg=CLR["accent"], bg=CLR["bg"],
-                                  font=(MONO_FONT, 9, "bold"))
+        self._pos_lbl = tk.Label(
+            info, text="00:00.00", fg=CLR["accent"], bg=CLR["bg"], font=(MONO_FONT, 9, "bold")
+        )
         self._pos_lbl.pack(side="left")
-        self._range_lbl = tk.Label(info, text="",
-                                    fg=CLR["fgdim"], bg=CLR["bg"],
-                                    font=(MONO_FONT, 8))
+        self._range_lbl = tk.Label(
+            info, text="", fg=CLR["fgdim"], bg=CLR["bg"], font=(MONO_FONT, 8)
+        )
         self._range_lbl.pack(side="right")
 
     # ── Public API ────────────────────────────────────────────────────────
@@ -389,7 +435,7 @@ class VideoTimeline(tk.Frame):
 
     def set_range(self, start, end):
         self._start = max(0.0, min(start, self._duration))
-        self._end   = max(self._start, min(end, self._duration))
+        self._end = max(self._start, min(end, self._duration))
         self._draw()
         self._fire_change()
 
@@ -455,23 +501,25 @@ class VideoTimeline(tk.Frame):
         pad, hr = px(self._PAD), px(self._HR)
 
         if self._duration <= 0:
-            c.create_text(w // 2, h // 2,
-                          text="Load a file to see the timeline",
-                          fill=CLR["fgdim"], font=(UI_FONT, 10))
+            c.create_text(
+                w // 2,
+                h // 2,
+                text="Load a file to see the timeline",
+                fill=CLR["fgdim"],
+                font=(UI_FONT, 10),
+            )
             return
 
         cy = h // 2
 
         # Track background
-        c.create_rectangle(pad, cy - px(5), w - pad, cy + px(5),
-                           fill="#222222", outline="")
+        c.create_rectangle(pad, cy - px(5), w - pad, cy + px(5), fill="#222222", outline="")
 
         xs = self._t2x(self._start, w)
         xe = self._t2x(self._end, w)
         if self._show_handles:
             # Selection highlight
-            c.create_rectangle(xs, cy - px(5), xe, cy + px(5),
-                               fill="#1A5A98", outline="")
+            c.create_rectangle(xs, cy - px(5), xe, cy + px(5), fill="#1A5A98", outline="")
 
         # Tick marks + time labels
         num_ticks = min(20, max(5, w // px(80)))
@@ -480,43 +528,65 @@ class VideoTimeline(tk.Frame):
             tx = self._t2x(self._duration * frac, w)
             c.create_line(tx, cy + px(7), tx, cy + px(14), fill="#444444", width=px(1))
             tick_t = self._duration * frac
-            c.create_text(tx, cy + px(23), text=_fmt_tl(tick_t),
-                          fill="#555555", font=(UI_FONT, 7))
+            c.create_text(tx, cy + px(23), text=_fmt_tl(tick_t), fill="#555555", font=(UI_FONT, 7))
 
         # Playhead
         xp = self._t2x(self._playhead, w)
         c.create_line(xp, cy - px(20), xp, cy + px(20), fill="#FFEB3B", width=px(2))
-        c.create_polygon(xp - px(6), cy - px(20), xp + px(6), cy - px(20), xp, cy - px(11),
-                         fill="#FFEB3B", outline="#000000", width=px(1))
+        c.create_polygon(
+            xp - px(6),
+            cy - px(20),
+            xp + px(6),
+            cy - px(20),
+            xp,
+            cy - px(11),
+            fill="#FFEB3B",
+            outline="#000000",
+            width=px(1),
+        )
 
         if self._show_handles:
             # Start handle (green)
-            c.create_oval(xs - hr, cy - hr, xs + hr, cy + hr,
-                          fill="#4CAF50", outline="white", width=px(2))
-            c.create_text(xs, cy - px(20),
-                          text=f"IN {_fmt_tl(self._start)}",
-                          fill="#4CAF50", font=(MONO_FONT, 8, "bold"))
+            c.create_oval(
+                xs - hr, cy - hr, xs + hr, cy + hr, fill="#4CAF50", outline="white", width=px(2)
+            )
+            c.create_text(
+                xs,
+                cy - px(20),
+                text=f"IN {_fmt_tl(self._start)}",
+                fill="#4CAF50",
+                font=(MONO_FONT, 8, "bold"),
+            )
 
             # End handle (red)
-            c.create_oval(xe - hr, cy - hr, xe + hr, cy + hr,
-                          fill="#F44336", outline="white", width=px(2))
-            c.create_text(xe, cy + px(34),
-                          text=f"OUT {_fmt_tl(self._end)}",
-                          fill="#F44336", font=(MONO_FONT, 8, "bold"))
+            c.create_oval(
+                xe - hr, cy - hr, xe + hr, cy + hr, fill="#F44336", outline="white", width=px(2)
+            )
+            c.create_text(
+                xe,
+                cy + px(34),
+                text=f"OUT {_fmt_tl(self._end)}",
+                fill="#F44336",
+                font=(MONO_FONT, 8, "bold"),
+            )
 
             # Selection duration
             sel = max(0.0, self._end - self._start)
-            c.create_text((xs + xe) // 2, px(12),
-                          text=f"Selection: {_fmt_tl(sel)}",
-                          fill="white", font=(UI_FONT, 9, "bold"))
+            c.create_text(
+                (xs + xe) // 2,
+                px(12),
+                text=f"Selection: {_fmt_tl(sel)}",
+                fill="white",
+                font=(UI_FONT, 9, "bold"),
+            )
 
         # Update info labels
         self._pos_lbl.config(text=_fmt_tl(self._playhead))
         if self._show_handles:
             sel = max(0.0, self._end - self._start)
             self._range_lbl.config(
-                text=f"{_fmt_tl(self._start)} \u2192 {_fmt_tl(self._end)}  "
-                     f"({_fmt_tl(sel)})")
+                text=f"{_fmt_tl(self._start)} \u2192 {_fmt_tl(self._end)}  ({_fmt_tl(sel)})"
+            )
 
     # ── Interaction ───────────────────────────────────────────────────────
 
@@ -524,6 +594,7 @@ class VideoTimeline(tk.Frame):
         w = self._canvas.winfo_width()
         if self._duration <= 0:
             return
+
         def near(a, b):
             return abs(a - b) < px(14)
 
@@ -569,13 +640,18 @@ class VideoTimeline(tk.Frame):
         if self._duration <= 0:
             return
         from tabs import framestep
+
         fps = self.fps or 30.0
         last = max(0.0, self._duration - 1.0 / fps)
         which = self._last_moved if self._show_handles else "playhead"
         if which == "start":
-            self._start = min(max(0.0, framestep.snap(self._start, fps, n)), max(0.0, self._end - 1.0 / fps))
+            self._start = min(
+                max(0.0, framestep.snap(self._start, fps, n)), max(0.0, self._end - 1.0 / fps)
+            )
         elif which == "end":
-            self._end = max(min(self._duration, framestep.snap(self._end, fps, n)), self._start + 1.0 / fps)
+            self._end = max(
+                min(self._duration, framestep.snap(self._end, fps, n)), self._start + 1.0 / fps
+            )
         else:
             self._playhead = min(last, max(0.0, framestep.snap(self._playhead, fps, n)))
         self._draw()
@@ -589,6 +665,7 @@ class VideoTimeline(tk.Frame):
 # ─────────────────────────────────────────────────────────────────────────────
 #  BaseTab
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class BaseTab(ttk.Frame):
     """
@@ -611,15 +688,15 @@ class BaseTab(ttk.Frame):
       log(widget, msg) / log_tagged(widget, msg, tag)
     """
 
-    make_header        = staticmethod(make_header)
-    make_section       = staticmethod(make_section)
-    make_console       = staticmethod(make_console)
-    make_file_row      = staticmethod(make_file_row)
+    make_header = staticmethod(make_header)
+    make_section = staticmethod(make_section)
+    make_console = staticmethod(make_console)
+    make_file_row = staticmethod(make_file_row)
     make_labeled_entry = staticmethod(make_labeled_entry)
-    make_render_btn    = staticmethod(make_render_btn)
-    VideoTimeline      = VideoTimeline
-    ToolTip            = ToolTip
-    add_tooltip        = staticmethod(add_tooltip)
+    make_render_btn = staticmethod(make_render_btn)
+    VideoTimeline = VideoTimeline
+    ToolTip = ToolTip
+    add_tooltip = staticmethod(add_tooltip)
 
     #: Maximum lines kept in a console widget (older lines are trimmed).
     CONSOLE_MAX_LINES = 3000
@@ -631,10 +708,12 @@ class BaseTab(ttk.Frame):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self._render_thread = None      # last task id (kept for compatibility)
+        self._render_thread = None  # last task id (kept for compatibility)
         self.preview_proc: proc.Popen[bytes] | None = None
         self._active_tasks: set = set()
-        self.last_task: RenderTask | None = None    # the most recent finished job (its log, its error)
+        self.last_task: RenderTask | None = (
+            None  # the most recent finished job (its log, its error)
+        )
 
     def shell(self) -> Shell | None:
         """The window this page lives in, when it is the app's (not in some tests)."""
@@ -648,7 +727,9 @@ class BaseTab(ttk.Frame):
 
     def render(self) -> None:
         """Ctrl+S: press the main button, when it can be pressed."""
-        btn: tk.Button | None = getattr(self, "btn_render", None)          # pages without one: nothing to press
+        btn: tk.Button | None = getattr(
+            self, "btn_render", None
+        )  # pages without one: nothing to press
         if btn is not None and btn.winfo_exists() and str(btn.cget("state")) != "disabled":
             btn.invoke()
 
@@ -702,8 +783,12 @@ class BaseTab(ttk.Frame):
         """Schedule *fn* on the Tk thread (safe from worker threads)."""
         ui.call_soon(fn, *args, **kwargs)
 
-    def after(self, ms: int | Literal["idle"], func: Callable[..., object] | None = None,  # type: ignore[override]
-              *args: Any) -> str:
+    def after(
+        self,
+        ms: int | Literal["idle"],
+        func: Callable[..., object] | None = None,  # type: ignore[override]
+        *args: Any,
+    ) -> str:
         """Thread-safe ``after``: calls from worker threads (a common pattern in
         older tabs) are handed to the Tk thread instead of touching Tk directly,
         which fails before/around mainloop and can dead-lock."""
@@ -712,7 +797,7 @@ class BaseTab(ttk.Frame):
                 ui.call_soon(func, *args)
             else:
                 ui.call_soon(lambda: tk.Misc.after(self, ms, func, *args))
-            return ""                                  # no id: it was handed to the UI thread
+            return ""  # no id: it was handed to the UI thread
         if func is None:
             return super().after(ms)  # pyright: ignore[reportCallIssue, reportArgumentType] - Tk's "just wait"
         return super().after(ms, func, *args)
@@ -730,8 +815,13 @@ class BaseTab(ttk.Frame):
         return dialogs.ask_open_many(kind, title=title or t("btn.browse"), parent=self)
 
     def pick_output(self, default_name="", kind="video", ext=".mp4", title=None):
-        return dialogs.ask_save(default_name, kind=kind, defaultextension=ext,
-                                title=title or t("common.save_as"), parent=self)
+        return dialogs.ask_save(
+            default_name,
+            kind=kind,
+            defaultextension=ext,
+            title=title or t("common.save_as"),
+            parent=self,
+        )
 
     def suggest_output(self, src, suffix="edited", ext=None):
         return outputs.suggest_output(src, suffix, ext)
@@ -742,8 +832,9 @@ class BaseTab(ttk.Frame):
         which case a message has already been shown."""
         policy = "overwrite" if dialogs.was_confirmed(out) else None
         try:
-            return outputs.resolve_output(out, [i for i in inputs if i], default_ext=default_ext,
-                                          policy=policy, parent=self)
+            return outputs.resolve_output(
+                out, [i for i in inputs if i], default_ext=default_ext, policy=policy, parent=self
+            )
         except outputs.OutputRejected as exc:
             if str(exc):
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
@@ -777,9 +868,21 @@ class BaseTab(ttk.Frame):
 
     # ── Queue bridge ──────────────────────────────────────────────────────────
 
-    def enqueue_render(self, task_name, output_path="", *, cmd=None, cmds=None,
-                       worker_fn=None, on_start=None, on_progress=None, on_complete=None,
-                       expected_duration=None, inputs=(), atomic_output=True):
+    def enqueue_render(
+        self,
+        task_name,
+        output_path="",
+        *,
+        cmd=None,
+        cmds=None,
+        worker_fn=None,
+        on_start=None,
+        on_progress=None,
+        on_complete=None,
+        expected_duration=None,
+        inputs=(),
+        atomic_output=True,
+    ):
         """Submit a job to the global render queue and return its task id.
 
         Provide exactly one of *cmd*, *cmds* (run sequentially) or
@@ -795,10 +898,18 @@ class BaseTab(ttk.Frame):
                 on_complete(task_id, rc)
 
         task_id = RenderQueueManager.get_instance().enqueue(
-            name=task_name, output_path=output_path, cmd=cmd, cmds=cmds,
-            worker_fn=worker_fn, on_start=on_start, on_progress=on_progress,
-            on_complete=_done, expected_duration=expected_duration,
-            inputs=inputs, atomic_output=atomic_output)
+            name=task_name,
+            output_path=output_path,
+            cmd=cmd,
+            cmds=cmds,
+            worker_fn=worker_fn,
+            on_start=on_start,
+            on_progress=on_progress,
+            on_complete=_done,
+            expected_duration=expected_duration,
+            inputs=inputs,
+            atomic_output=atomic_output,
+        )
         self._active_tasks.add(task_id)
         self._render_thread = task_id
         return task_id
@@ -806,18 +917,32 @@ class BaseTab(ttk.Frame):
     def cancel_render(self, task_id=None):
         """Cancel *task_id*, or every job this tab started."""
         from core.queue_manager import RenderQueueManager
+
         q = RenderQueueManager.get_instance()
-        for tid in ([task_id] if task_id else list(self._active_tasks)):
+        for tid in [task_id] if task_id else list(self._active_tasks):
             q.cancel(tid)
 
     def task(self, task_id):
         from core.queue_manager import RenderQueueManager
+
         return RenderQueueManager.get_instance().get_task(task_id)
 
     # ── FFmpeg runner ─────────────────────────────────────────────────────────
 
-    def run_ffmpeg(self, cmd, console=None, on_done=None, btn=None, btn_label="▶  Run",
-                   *, duration=None, output=None, inputs=(), name=None, cmds=None) -> str | None:
+    def run_ffmpeg(
+        self,
+        cmd,
+        console=None,
+        on_done=None,
+        btn=None,
+        btn_label="▶  Run",
+        *,
+        duration=None,
+        output=None,
+        inputs=(),
+        name=None,
+        cmds=None,
+    ) -> str | None:
         """Queue FFmpeg *cmd* (or a list *cmds* run in order).
 
         *duration* is the expected output length in seconds (enables an
@@ -830,7 +955,9 @@ class BaseTab(ttk.Frame):
         cmds = [list(map(str, c)) for c in cmds] if cmds else [list(map(str, cmd))]
         if output is None and cmds and cmds[-1] and ff.is_ffmpeg(cmds[-1][0]):
             last = cmds[-1][-1]
-            output = last if last not in ("-", "pipe:", "pipe:1") and not last.startswith("-") else ""
+            output = (
+                last if last not in ("-", "pipe:", "pipe:1") and not last.startswith("-") else ""
+            )
         self.log_debug("Queuing: " + " | ".join(ff.format_cmd(c) for c in cmds))
         state = {"task": None, "orig_cmd": None, "t0": time.time(), "clicked": time.monotonic()}
 
@@ -844,8 +971,9 @@ class BaseTab(ttk.Frame):
         if btn is not None:
             try:
                 state["orig_cmd"] = btn.cget("command")
-                btn.config(state="normal", text="⏳ " + t("app.status.queued_btn"),
-                           command=_cancel_click)
+                btn.config(
+                    state="normal", text="⏳ " + t("app.status.queued_btn"), command=_cancel_click
+                )
             except tk.TclError:
                 btn = None
         if shell is not None:
@@ -873,8 +1001,9 @@ class BaseTab(ttk.Frame):
 
         def _on_complete(task_id, returncode):
             elapsed = time.time() - state["t0"]
-            elapsed_str = (f"{elapsed:.1f}s" if elapsed < 60
-                           else f"{int(elapsed // 60)}m {int(elapsed % 60)}s")
+            elapsed_str = (
+                f"{elapsed:.1f}s" if elapsed < 60 else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+            )
             if btn is not None:
                 with contextlib.suppress(tk.TclError):
                     btn.config(state="normal", text=btn_label, command=state["orig_cmd"] or "")
@@ -884,7 +1013,11 @@ class BaseTab(ttk.Frame):
                 if status == "done":
                     shell.set_status(t("app.status.done", elapsed=elapsed_str))
                 elif status == "cancelled":
-                    shell.set_status(t("common.cancelled") if t("common.cancelled") != "common.cancelled" else "Cancelled")
+                    shell.set_status(
+                        t("common.cancelled")
+                        if t("common.cancelled") != "common.cancelled"
+                        else "Cancelled"
+                    )
                 else:
                     shell.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
             if console is not None and tk_task is not None and status == "failed" and tk_task.error:
@@ -895,8 +1028,14 @@ class BaseTab(ttk.Frame):
 
         state["task"] = self.enqueue_render(
             name or getattr(self, "TOOL_NAME", "") or "Render",
-            output or "", cmds=cmds, on_start=_on_start, on_progress=_on_progress,
-            on_complete=_on_complete, expected_duration=duration, inputs=inputs)
+            output or "",
+            cmds=cmds,
+            on_start=_on_start,
+            on_progress=_on_progress,
+            on_complete=_on_complete,
+            expected_duration=duration,
+            inputs=inputs,
+        )
         return state["task"]
 
     # ── Result display ────────────────────────────────────────────────────────
@@ -908,13 +1047,20 @@ class BaseTab(ttk.Frame):
         if status == "cancelled":
             return
         if returncode == 0 and status == "done":
-            msg = "{}\n\n{}".format(t("common.complete"), out_path) if out_path else t("common.complete")
+            msg = (
+                "{}\n\n{}".format(t("common.complete"), out_path)
+                if out_path
+                else t("common.complete")
+            )
             messagebox.showinfo(t("common.done"), msg, parent=self)
             if out_path and settings.AUTO_OPEN_OUTPUT.get():
                 reveal_file(out_path)
             return
-        detail = (task.error if task is not None and task.error else
-                  t("common.render_error_msg", code=returncode))
+        detail = (
+            task.error
+            if task is not None and task.error
+            else t("common.render_error_msg", code=returncode)
+        )
         messagebox.showerror(t("common.render_error_title"), detail, parent=self)
 
     # ── Convenience ───────────────────────────────────────────────────────────

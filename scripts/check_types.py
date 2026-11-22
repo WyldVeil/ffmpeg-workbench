@@ -11,6 +11,7 @@ let it slide back.
     python scripts/check_types.py            # check (CI)
     python scripts/check_types.py --update   # after fixing errors
 """
+
 from __future__ import annotations
 
 import collections
@@ -28,13 +29,17 @@ def current_errors() -> dict[str, int]:
     exe = shutil.which("pyright")
     if exe is None:
         sys.exit("pyright is not installed (pip install pyright)")
-    res = subprocess.run([exe, "--outputjson"], cwd=ROOT, capture_output=True, text=True, timeout=900)
+    res = subprocess.run(
+        [exe, "--outputjson"], cwd=ROOT, capture_output=True, text=True, timeout=900
+    )
     data = json.loads(res.stdout)
     counts: collections.Counter[str] = collections.Counter()
     for diag in data["generalDiagnostics"]:
         # missing third-party modules depend on what is installed where pyright runs
-        if diag["severity"] == "error" and diag.get("rule") not in ("reportMissingImports",
-                                                                     "reportMissingModuleSource"):
+        if diag["severity"] == "error" and diag.get("rule") not in (
+            "reportMissingImports",
+            "reportMissingModuleSource",
+        ):
             counts[os.path.relpath(diag["file"], ROOT).replace(os.sep, "/")] += 1
     return dict(sorted(counts.items()))
 
@@ -48,7 +53,9 @@ def main(argv: list[str]) -> int:
             base = json.load(fh)
     worse = {f: (base.get(f, 0), n) for f, n in now.items() if n > base.get(f, 0)}
     better = {f: (n, now.get(f, 0)) for f, n in base.items() if now.get(f, 0) < n}
-    print(f"pyright: {sum(now.values())} errors in {len(now)} files (baseline {sum(base.values())})")
+    print(
+        f"pyright: {sum(now.values())} errors in {len(now)} files (baseline {sum(base.values())})"
+    )
     for f, (was, is_) in sorted(worse.items()):
         print(f"  WORSE   {f}: {was} -> {is_}")
     for f, (was, is_) in sorted(better.items()):

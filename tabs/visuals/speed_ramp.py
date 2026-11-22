@@ -10,6 +10,7 @@ tabs/visuals/speed_ramp.py  -  Speed Ramper
   stay in sync.  Before the first point and after the last one the speed
   holds.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -44,12 +45,18 @@ PRESETS = {
     "Slow-mo in the middle": [(0.0, 1.0), (0.4, 1.0), (0.45, 0.3), (0.6, 0.3), (0.65, 1.0)],
     "Ramp up (1× → 4×)": [(0.0, 1.0), (0.8, 4.0)],
     "Ramp down (4× → 1×)": [(0.0, 4.0), (0.8, 1.0)],
-    "Hit the beat (fast, slow, fast)": [(0.0, 3.0), (0.3, 3.0), (0.35, 0.4), (0.55, 0.4),
-                                        (0.6, 3.0)],
+    "Hit the beat (fast, slow, fast)": [
+        (0.0, 3.0),
+        (0.3, 3.0),
+        (0.35, 0.4),
+        (0.55, 0.4),
+        (0.6, 3.0),
+    ],
 }
 
 
 # ── Speed curve maths (pure, tested) ─────────────────────────────────────────
+
 
 def normalise_points(points, duration):
     """Sorted (time, speed) points clipped to [0, duration], with the speed
@@ -114,7 +121,7 @@ def setpts_expr(points) -> str:
     return expr
 
 
-_ATEMPO_STAGES = ("a", "b", "c", "d")     # 4 chained atempo: 0.0625x - 10^8x
+_ATEMPO_STAGES = ("a", "b", "c", "d")  # 4 chained atempo: 0.0625x - 10^8x
 
 
 def tempo_commands(points, engine: str = "rubberband", step: float = 0.1) -> str:
@@ -123,10 +130,11 @@ def tempo_commands(points, engine: str = "rubberband", step: float = 0.1) -> str
     *engine* ``rubberband`` drives one rubberband filter (0.01x - 100x);
     ``atempo`` drives four named atempo filters with the 4th root of the
     speed each (atempo alone only accepts 0.5x - 100x)."""
+
     def line(at, speed):
         if engine == "rubberband":
             return f"{at:.3f} rubberband tempo {speed:.6f};"
-        r = speed ** 0.25
+        r = speed**0.25
         return f"{at:.3f} " + ", ".join(f"atempo@{n} tempo {r:.6f}" for n in _ATEMPO_STAGES) + ";"
 
     lines = []
@@ -150,7 +158,7 @@ def ramp_audio_chain(points, engine: str = "rubberband") -> str:
     v0 = points[0][1]
     if engine == "rubberband":
         return f"asendcmd=f=tempo.cmd,rubberband=tempo={v0:.6f}"
-    r = v0 ** 0.25
+    r = v0**0.25
     return "asendcmd=f=tempo.cmd," + ",".join(f"atempo@{n}={r:.6f}" for n in _ATEMPO_STAGES)
 
 
@@ -168,6 +176,7 @@ def frame_filter(mode: str, fps: str) -> str:
 
 # ── Tab ──────────────────────────────────────────────────────────────────────
 
+
 class SpeedRamperTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -180,54 +189,96 @@ class SpeedRamperTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.speed_ramper"), t("speed_ramp.subtitle"), icon="⚡")
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        mode_lf = tk.LabelFrame(body, text=f"  {t('speed_ramp.speed_mode_section')}  ", padx=px(12), pady=px(6))
+        mode_lf = tk.LabelFrame(
+            body, text=f"  {t('speed_ramp.speed_mode_section')}  ", padx=px(12), pady=px(6)
+        )
         mode_lf.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="constant")
-        tk.Radiobutton(mode_lf, text=t("speed_ramp.constant_option"), value="constant",
-                       variable=self.mode_var, command=self._on_mode).pack(side="left", padx=px(12))
-        tk.Radiobutton(mode_lf, text="Speed ramp (smooth curve)", value="ramp",
-                       variable=self.mode_var, command=self._on_mode).pack(side="left", padx=px(12))
+        tk.Radiobutton(
+            mode_lf,
+            text=t("speed_ramp.constant_option"),
+            value="constant",
+            variable=self.mode_var,
+            command=self._on_mode,
+        ).pack(side="left", padx=px(12))
+        tk.Radiobutton(
+            mode_lf,
+            text="Speed ramp (smooth curve)",
+            value="ramp",
+            variable=self.mode_var,
+            command=self._on_mode,
+        ).pack(side="left", padx=px(12))
 
         # constant
         self.const_f = tk.Frame(body)
-        tk.Label(self.const_f, text=t("speed_ramp.speed_multiplier_label"),
-                 font=(UI_FONT, 11, "bold")).pack(side="left")
+        tk.Label(
+            self.const_f, text=t("speed_ramp.speed_multiplier_label"), font=(UI_FONT, 11, "bold")
+        ).pack(side="left")
         self.speed_var = tk.DoubleVar(value=2.0)
-        tk.Scale(self.const_f, variable=self.speed_var, from_=MIN_SPEED, to=MAX_SPEED,
-                 resolution=0.05, orient="horizontal", length=px(300),
-                 command=lambda _v: self._schedule()).pack(side="left", padx=px(8))
+        tk.Scale(
+            self.const_f,
+            variable=self.speed_var,
+            from_=MIN_SPEED,
+            to=MAX_SPEED,
+            resolution=0.05,
+            orient="horizontal",
+            length=px(300),
+            command=lambda _v: self._schedule(),
+        ).pack(side="left", padx=px(8))
         quick = tk.Frame(self.const_f)
         quick.pack(side="left", padx=px(10))
-        for val, lbl in [(0.25, "¼×"), (0.5, "½×"), (0.75, "¾×"), (1.5, "1.5×"), (2.0, "2×"),
-                         (4.0, "4×"), (8.0, "8×")]:
-            tk.Button(quick, text=lbl, width=4, relief="flat",
-                      command=lambda v=val: (self.speed_var.set(v), self._schedule())
-                      ).pack(side="left", padx=px(1))
+        for val, lbl in [
+            (0.25, "¼×"),
+            (0.5, "½×"),
+            (0.75, "¾×"),
+            (1.5, "1.5×"),
+            (2.0, "2×"),
+            (4.0, "4×"),
+            (8.0, "8×"),
+        ]:
+            tk.Button(
+                quick,
+                text=lbl,
+                width=4,
+                relief="flat",
+                command=lambda v=val: (self.speed_var.set(v), self._schedule()),
+            ).pack(side="left", padx=px(1))
 
         # ramp
-        self.ramp_f = tk.LabelFrame(body, text=f"  {t('speed_ramp.ramp_points_section')}  ",
-                                    padx=px(10), pady=px(8))
+        self.ramp_f = tk.LabelFrame(
+            body, text=f"  {t('speed_ramp.ramp_points_section')}  ", padx=px(10), pady=px(8)
+        )
         top = tk.Frame(self.ramp_f)
         top.pack(fill="x")
         tk.Label(top, text="Preset:").pack(side="left")
         self.preset_var = tk.StringVar(value="")
-        pb = ttk.Combobox(top, textvariable=self.preset_var, values=list(PRESETS),
-                          state="readonly", width=32)
+        pb = ttk.Combobox(
+            top, textvariable=self.preset_var, values=list(PRESETS), state="readonly", width=32
+        )
         pb.pack(side="left", padx=px(6))
         pb.bind("<<ComboboxSelected>>", lambda _e: self._apply_preset())
-        tk.Button(top, text=t("speed_ramp.add_point_button"), relief="flat",
-                  command=lambda: self._add_point()).pack(side="left", padx=px(8))
-        self.graph = tk.Canvas(self.ramp_f, height=px(130), bg=CLR["console_bg"], highlightthickness=0)
+        tk.Button(
+            top,
+            text=t("speed_ramp.add_point_button"),
+            relief="flat",
+            command=lambda: self._add_point(),
+        ).pack(side="left", padx=px(8))
+        self.graph = tk.Canvas(
+            self.ramp_f, height=px(130), bg=CLR["console_bg"], highlightthickness=0
+        )
         self.graph.pack(fill="x", pady=px(6))
         self.graph.bind("<Configure>", lambda _e: self._draw())
         hdr = tk.Frame(self.ramp_f)
         hdr.pack(fill="x")
         for text, w in (("#", 3), ("Time (s or m:ss)", 16), ("Speed (×)", 10)):
-            tk.Label(hdr, text=text, width=w, anchor="w", font=(UI_FONT, 9, "bold")).pack(side="left", padx=px(2))
+            tk.Label(hdr, text=text, width=w, anchor="w", font=(UI_FONT, 9, "bold")).pack(
+                side="left", padx=px(2)
+            )
         self.rows_f = tk.Frame(self.ramp_f)
         self.rows_f.pack(fill="x")
 
@@ -238,28 +289,47 @@ class SpeedRamperTab(BaseTab):
         r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Slow-motion frames:", width=18, anchor="w").pack(side="left")
         self.slowmo_var = tk.StringVar(value=SLOWMO["dup"])
-        ttk.Combobox(r0, textvariable=self.slowmo_var, values=list(SLOWMO.values()),
-                     state="readonly", width=36).pack(side="left", padx=px(6))
+        ttk.Combobox(
+            r0,
+            textvariable=self.slowmo_var,
+            values=list(SLOWMO.values()),
+            state="readonly",
+            width=36,
+        ).pack(side="left", padx=px(6))
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(2))
         tk.Label(r1, text="Audio:", width=18, anchor="w").pack(side="left")
         self.audio_var = tk.StringVar(value=AUDIO["tempo"])
-        self.audio_box = ttk.Combobox(r1, textvariable=self.audio_var, values=list(AUDIO.values()),
-                                      state="readonly", width=36)
+        self.audio_box = ttk.Combobox(
+            r1, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly", width=36
+        )
         self.audio_box.pack(side="left", padx=px(6))
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"], font=(MONO_FONT, 10))
         self.result_lbl.pack(anchor="w", pady=px(4, 0))
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
+        self.encoder = EncoderPanel(
+            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
+        )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "speed"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "speed"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text=t("speed_ramp.apply_button"), font=(UI_FONT, 12, "bold"),
-                                    bg=CLR["green"], fg="white", width=28, cursor="hand2",
-                                    command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("speed_ramp.apply_button"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=28,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -291,8 +361,14 @@ class SpeedRamperTab(BaseTab):
             e.pack(side="left", padx=px(2))
             var.trace_add("write", lambda *_a: self._schedule())
         point = {"time": tv, "speed": sv, "row": row, "idx": idx}
-        tk.Button(row, text="✕", relief="flat", width=2, cursor="hand2",
-                  command=lambda p=point: self._remove_point(p)).pack(side="left", padx=px(4))
+        tk.Button(
+            row,
+            text="✕",
+            relief="flat",
+            width=2,
+            cursor="hand2",
+            command=lambda p=point: self._remove_point(p),
+        ).pack(side="left", padx=px(4))
         self.ramp_points.append(point)
         self._schedule()
 
@@ -337,7 +413,9 @@ class SpeedRamperTab(BaseTab):
         target = self.const_f if self.mode_var.get() == "constant" else self.ramp_f
         target.pack(fill="x", padx=px(20), pady=px(4), before=self.opt_frame)
         ramp = self.mode_var.get() == "ramp"
-        self.audio_box.config(values=[AUDIO["tempo"], AUDIO["mute"]] if ramp else list(AUDIO.values()))
+        self.audio_box.config(
+            values=[AUDIO["tempo"], AUDIO["mute"]] if ramp else list(AUDIO.values())
+        )
         if ramp and self.audio_var.get() == AUDIO["pitch"]:
             self.audio_var.set(AUDIO["tempo"])
         self._schedule()
@@ -372,7 +450,9 @@ class SpeedRamperTab(BaseTab):
         except ValueError as exc:
             self.result_lbl.config(text=f"⚠ {exc}")
             return
-        self.result_lbl.config(text=f"Result: {ff.format_time(new)}   (source {ff.format_time(dur)})")
+        self.result_lbl.config(
+            text=f"Result: {ff.format_time(new)}   (source {ff.format_time(dur)})"
+        )
 
     def _draw(self):
         c = self.graph
@@ -391,9 +471,18 @@ class SpeedRamperTab(BaseTab):
 
         for ref in (0.25, 0.5, 1, 2, 4, 8):
             y = y_of(ref)
-            c.create_line(left, y, w - right, y, fill="#333333" if ref != 1 else "#555555",
-                          dash=() if ref == 1 else px(2, 3), width=px(1))
-            c.create_text(px(4), y, text=f"{ref:g}×", anchor="w", fill="#777777", font=(MONO_FONT, 7))
+            c.create_line(
+                left,
+                y,
+                w - right,
+                y,
+                fill="#333333" if ref != 1 else "#555555",
+                dash=() if ref == 1 else px(2, 3),
+                width=px(1),
+            )
+            c.create_text(
+                px(4), y, text=f"{ref:g}×", anchor="w", fill="#777777", font=(MONO_FONT, 7)
+            )
         xy = []
         steps = 200
         for i in range(steps + 1):
@@ -455,19 +544,43 @@ class SpeedRamperTab(BaseTab):
         engine = tempo_engine()
         if has_audio:
             graph += f";[0:a:0]asetpts=PTS-STARTPTS,{ramp_audio_chain(points, engine)}[a]"
-        self.log(self.console, f"Speed ramp through {len(points)} points → {ff.format_time(new_dur)}")
-        self._queue(src, info, out, container, graph, has_audio, new_dur,
-                    tempo_commands(points, engine) if has_audio else None)
+        self.log(
+            self.console, f"Speed ramp through {len(points)} points → {ff.format_time(new_dur)}"
+        )
+        self._queue(
+            src,
+            info,
+            out,
+            container,
+            graph,
+            has_audio,
+            new_dur,
+            tempo_commands(points, engine) if has_audio else None,
+        )
 
     def _queue(self, src, info, out, container, graph, has_audio, new_dur, commands):
         venc = self.encoder.video_encode(container)
         if venc.filter_suffix:
             graph += f";[v]{venc.filter_suffix}[venc]"
         vmap = "[venc]" if venc.filter_suffix else "[v]"
-        audio = (["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-                 if has_audio else ["-an"])
-        base = [ff.ffmpeg_path(), "-y", *venc.pre_input, "-i", src, "-filter_complex", graph,
-                "-map", vmap, *audio, *venc.args]
+        audio = (
+            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+            if has_audio
+            else ["-an"]
+        )
+        base = [
+            ff.ffmpeg_path(),
+            "-y",
+            *venc.pre_input,
+            "-i",
+            src,
+            "-filter_complex",
+            graph,
+            "-map",
+            vmap,
+            *audio,
+            *venc.args,
+        ]
 
         def work(_progress, _cancelled, ctx):
             workdir = ctx.tempdir()
@@ -477,6 +590,14 @@ class SpeedRamperTab(BaseTab):
             ctx.run([*base, ctx.output()], duration=new_dur, cwd=workdir)
             return 0
 
-        common.queue_job(self, name="Speed Ramper", out=out, work=work, btn=self.btn_render,
-                         btn_label=t("speed_ramp.apply_button"), console=self.console,
-                         duration=new_dur, inputs=[src])
+        common.queue_job(
+            self,
+            name="Speed Ramper",
+            out=out,
+            work=work,
+            btn=self.btn_render,
+            btn_label=t("speed_ramp.apply_button"),
+            console=self.console,
+            duration=new_dur,
+            inputs=[src],
+        )

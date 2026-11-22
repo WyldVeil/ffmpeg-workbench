@@ -6,6 +6,7 @@ codec in a matching file type), or converted to MP3, AAC, FLAC, WAV, Opus
 or Ogg Vorbis.  Choose the track, optionally trim and normalise loudness
 (two-pass EBU R128).
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -21,7 +22,7 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
 
-FORMATS = {   # id: (label, extension or None = from codec, encoder args)
+FORMATS = {  # id: (label, extension or None = from codec, encoder args)
     "copy": ("Original (no re-encoding)", None, ["-c:a", "copy"]),
     "mp3": ("MP3 (VBR, very high quality)", ".mp3", ["-c:a", "libmp3lame", "-q:a", "0"]),
     "aac": ("AAC in .m4a (256 kbps)", ".m4a", ["-c:a", "aac", "-b:a", "256k"]),
@@ -40,17 +41,28 @@ class AudioExtractorTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.audio_extractor"), "Save a video's soundtrack as its own file.",
-                         icon="🎵")
+        self.make_header(
+            self, t("tab.audio_extractor"), "Save a video's soundtrack as its own file.", icon="🎵"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body,
+            t("common.source_video"),
+            self.src_var,
+            kind="media",
+            on_change=self._source_changed,
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.fmt_var = tk.StringVar(value=FORMATS["copy"][0])
-        fb = ttk.Combobox(opt, textvariable=self.fmt_var, values=[v[0] for v in FORMATS.values()],
-                          state="readonly", width=34)
+        fb = ttk.Combobox(
+            opt,
+            textvariable=self.fmt_var,
+            values=[v[0] for v in FORMATS.values()],
+            state="readonly",
+            width=34,
+        )
         fb.grid(row=0, column=1, sticky="w")
         fb.bind("<<ComboboxSelected>>", lambda _e: self._suggest_name(force=True))
         tk.Label(opt, text="Format:").grid(row=0, column=0, sticky="w")
@@ -65,14 +77,24 @@ class AudioExtractorTab(BaseTab):
         tk.Entry(tr, textvariable=self.from_var, width=10).pack(side="left")
         tk.Entry(tr, textvariable=self.to_var, width=10).pack(side="left", padx=px(6))
         self.norm_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(opt, text="Normalise loudness to -16 LUFS (two-pass, re-encodes)",
-                       variable=self.norm_var).grid(row=3, column=1, sticky="w")
+        tk.Checkbutton(
+            opt,
+            text="Normalise loudness to -16 LUFS (two-pass, re-encodes)",
+            variable=self.norm_var,
+        ).grid(row=3, column=1, sticky="w")
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="audio", ext=".m4a")
         self.out_row.pack(fill="x")
-        self.btn_render = tk.Button(body, text="🎵  EXTRACT", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=20, command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="🎵  EXTRACT",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=20,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -101,9 +123,16 @@ class AudioExtractorTab(BaseTab):
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
-        tracks = [f"Track {i + 1}: {a.codec}, {a.channels} ch" + (f" [{a.language}]" if a.language else "")
-                  + (f" {a.title}" if a.title else "") for i, a in enumerate(self._info.audio_streams)] \
-            if self._info else []
+        tracks = (
+            [
+                f"Track {i + 1}: {a.codec}, {a.channels} ch"
+                + (f" [{a.language}]" if a.language else "")
+                + (f" {a.title}" if a.title else "")
+                for i, a in enumerate(self._info.audio_streams)
+            ]
+            if self._info
+            else []
+        )
         self.track_box.config(values=tracks or ["(no audio)"])
         self.track_var.set(tracks[0] if tracks else "(no audio)")
         self._suggest_name(force=True)
@@ -114,7 +143,9 @@ class AudioExtractorTab(BaseTab):
         if info is None:
             return
         if not info.has_audio:
-            messagebox.showwarning(t("common.warning"), "This file has no audio track.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), "This file has no audio track.", parent=self
+            )
             return
         self._info = info
         try:
@@ -127,6 +158,7 @@ class AudioExtractorTab(BaseTab):
             return
         out = self.out_row.path or self.suggest_output(src, "audio", self._ext())
         import os
+
         if os.path.splitext(out)[1].lower() != self._ext():
             out = os.path.splitext(out)[0] + self._ext()
         out = self.confirm_output(out, [src], default_ext=self._ext())
@@ -148,16 +180,35 @@ class AudioExtractorTab(BaseTab):
         sr = info.audio_streams[stream].sample_rate or 48000
 
         if not self.norm_var.get():
-            self.run_ffmpeg(inp + enc + [out], self.console, on_done=lambda rc: self.show_result(rc, out),
-                            btn=self.btn_render, btn_label="🎵  EXTRACT", duration=dur, output=out, inputs=[src],
-                            name="Audio Extractor")
+            self.run_ffmpeg(
+                inp + enc + [out],
+                self.console,
+                on_done=lambda rc: self.show_result(rc, out),
+                btn=self.btn_render,
+                btn_label="🎵  EXTRACT",
+                duration=dur,
+                output=out,
+                inputs=[src],
+                name="Audio Extractor",
+            )
             return
 
         def work(_p, _c, ctx):
             m = ln.measure(src, -16, -1.5, 11, stream=stream, ctx=ctx.span(0, 0.4))
-            ctx.span(0.4, 1.0).run([*inp, "-af", ln.normalise_filter(-16, -1.5, 11, m, sr), *enc, ctx.output()],
-                                   duration=dur)
+            ctx.span(0.4, 1.0).run(
+                [*inp, "-af", ln.normalise_filter(-16, -1.5, 11, m, sr), *enc, ctx.output()],
+                duration=dur,
+            )
             return 0
 
-        common.queue_job(self, name="Audio Extractor", out=out, work=work, btn=self.btn_render,
-                         btn_label="🎵  EXTRACT", console=self.console, duration=dur, inputs=[src])
+        common.queue_job(
+            self,
+            name="Audio Extractor",
+            out=out,
+            work=work,
+            btn=self.btn_render,
+            btn_label="🎵  EXTRACT",
+            console=self.console,
+            duration=dur,
+            inputs=[src],
+        )

@@ -1,4 +1,5 @@
 """Shortifier, Auto-Cropper, GIF Maker, Watermarker and Image Watermark."""
+
 import os
 
 import pytest
@@ -25,6 +26,7 @@ def test_pure_helpers():
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -59,8 +61,25 @@ def test_shortifier(ui, media, outdir, layout):
 @pytest.mark.ffmpeg
 def test_auto_cropper(ui, media, outdir):
     boxed = str(outdir / "boxed.mp4")
-    ff.check([ff.ffmpeg_path(), "-y", "-i", media["hevc10"], "-vf", "scale=960:540,pad=1280:720:160:90",
-              "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-c:a", "copy", boxed])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            media["hevc10"],
+            "-vf",
+            "scale=960:540,pad=1280:720:160:90",
+            "-c:v",
+            "libx265",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p10le",
+            "-c:a",
+            "copy",
+            boxed,
+        ]
+    )
     ui.reset()
     tab = ui.open("Auto-Cropper")
     _src(ui, tab, boxed)
@@ -120,8 +139,19 @@ def test_text_watermark(ui, media, outdir, place):
 @pytest.mark.ffmpeg
 def test_logo_watermark(ui, media, outdir, tmp_path):
     logo = str(tmp_path / "logo.png")
-    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "color=c=red@0.5:s=300x120,format=rgba",
-              "-frames:v", "1", logo])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red@0.5:s=300x120,format=rgba",
+            "-frames:v",
+            "1",
+            logo,
+        ]
+    )
     ui.reset()
     tab = ui.open("Image Watermark")
     _src(ui, tab, media["h264"])

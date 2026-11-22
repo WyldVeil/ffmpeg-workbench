@@ -6,6 +6,7 @@ timing budgets only as a backstop, because timings vary between machines).
 2. Heavy optional libraries are not imported at start-up.
 3. Start-up stays well inside a generous budget.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,7 +20,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: (page, program) pairs that still start a process on the UI thread
-TK_THREAD_SPAWNS_ALLOWED: set[tuple[str, str]] = set()      # none: probes run in core.tasks workers
+TK_THREAD_SPAWNS_ALLOWED: set[tuple[str, str]] = set()  # none: probes run in core.tasks workers
 
 
 _SPAWN_SCAN = textwrap.dedent("""
@@ -60,8 +61,14 @@ def test_no_process_starts_on_the_ui_thread():
     env = dict(os.environ)
     env.pop("DISPLAY", None)
     env.pop("CROSSFADER_TEST_USE_REAL_DISPLAY", None)
-    res = subprocess.run([sys.executable, "-c", _SPAWN_SCAN.format(root=ROOT)], capture_output=True,
-                         text=True, timeout=600, env=env, cwd=ROOT)
+    res = subprocess.run(
+        [sys.executable, "-c", _SPAWN_SCAN.format(root=ROOT)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        env=env,
+        cwd=ROOT,
+    )
     line = [ln for ln in res.stdout.splitlines() if ln.startswith("RESULT ")]
     assert line, res.stderr[-3000:]
     hits = {tuple(h) for h in json.loads(line[-1][7:])}
@@ -94,8 +101,14 @@ def _startup() -> dict:
     env = dict(os.environ)
     env.pop("DISPLAY", None)
     env.pop("CROSSFADER_TEST_USE_REAL_DISPLAY", None)
-    res = subprocess.run([sys.executable, "-c", _STARTUP.format(root=ROOT)], capture_output=True, text=True,
-                         timeout=120, env=env, cwd=ROOT)
+    res = subprocess.run(
+        [sys.executable, "-c", _STARTUP.format(root=ROOT)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+        cwd=ROOT,
+    )
     line = [ln for ln in res.stdout.splitlines() if ln.startswith("RESULT ")]
     assert line, res.stderr[-2000:]
     return json.loads(line[-1][7:])
@@ -104,6 +117,8 @@ def _startup() -> dict:
 @pytest.mark.gui
 def test_startup_imports_and_budget():
     runs = [_startup() for _ in range(2)]
-    assert not runs[0]["heavy"], f"heavy optional libraries imported at start-up: {runs[0]['heavy']}"
+    assert not runs[0]["heavy"], (
+        f"heavy optional libraries imported at start-up: {runs[0]['heavy']}"
+    )
     scale = float(os.environ.get("PERF_BUDGET_SCALE", "1"))
-    assert min(r["paint"] for r in runs) < 2.0 * scale, runs      # measured ~0.2 s on a desktop
+    assert min(r["paint"] for r in runs) < 2.0 * scale, runs  # measured ~0.2 s on a desktop

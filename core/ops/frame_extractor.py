@@ -3,6 +3,7 @@ core/ops/frame_extractor.py - command builders for tabs/social/frame_extractor.p
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 

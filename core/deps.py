@@ -1,4 +1,3 @@
-
 """
 core/deps.py  ─  Vendored dependency manager
 
@@ -19,6 +18,7 @@ Usage (hard dependency - raises ImportError if it can't be loaded):
     from core.deps import ensure
     ensure("edge-tts", import_name="edge_tts")
 """
+
 import importlib
 import logging
 import os
@@ -31,7 +31,7 @@ from core import proc as _proc
 logger = logging.getLogger("crossfader.deps")
 
 # ── Locate libs/ relative to this file ───────────────────────────────────────
-_HERE     = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.abspath(__file__))
 _LIBS_DIR = os.path.join(os.path.dirname(_HERE), "libs")
 
 
@@ -41,6 +41,7 @@ def _user_libs_dir():
     packages contain compiled code."""
     try:
         from core.paths import _base  # the path only - nothing is created here
+
         base = _base("data")
     except Exception:
         logger.debug("_user_libs_dir: best-effort step failed", exc_info=True)
@@ -83,12 +84,13 @@ def _pip_install(pip_name):
     """
     # CRITICAL FIX: If running as a compiled PyInstaller .exe, sys.executable
     # points to the app itself! Do not attempt to pip install, or it will fork bomb.
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         return False
 
     # Pass user network settings (proxy, etc.) through to pip via env vars.
     try:
         from core import network as _net
+
         env = _net.subprocess_env()
     except Exception:
         logger.debug("_pip_install: best-effort step failed", exc_info=True)
@@ -99,14 +101,22 @@ def _pip_install(pip_name):
     except OSError:
         return False
     try:
-        result = _proc.run([
-                sys.executable, "-m", "pip", "install",
+        result = _proc.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
                 pip_name,
                 f"--target={target}",
                 "--quiet",
                 "--disable-pip-version-check",
                 "--no-warn-script-location",
-            ], timeout=120, text=False, env=env)
+            ],
+            timeout=120,
+            text=False,
+            env=env,
+        )
         if result.returncode == 0:
             ensure_libs_on_path()
         return result.returncode == 0
@@ -115,7 +125,9 @@ def _pip_install(pip_name):
         return False
 
 
-def require(pip_name: str, import_name: str | None = None, auto_install: bool = False) -> ModuleType | None:
+def require(
+    pip_name: str, import_name: str | None = None, auto_install: bool = False
+) -> ModuleType | None:
     """
     Try to import *import_name* (defaults to *pip_name* with hyphens → underscores).
     If missing and *auto_install* is True, install into libs/ and retry.
@@ -199,7 +211,7 @@ def preinstall_all():
     """
     packages = [
         ("edge-tts", "edge_tts"),
-        ("pyttsx3",  "pyttsx3"),
+        ("pyttsx3", "pyttsx3"),
     ]
     results = {}
     for pip_name, imp_name in packages:

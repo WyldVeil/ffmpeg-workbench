@@ -1,4 +1,3 @@
-
 """
 tab_audioexporter.py  ─  Audio Exporter
 
@@ -16,6 +15,7 @@ video-with-audio) file and re-save it with full control over:
   • Max file-size targeting (auto-calculates bitrate)
   • ReplayGain tagging
 """
+
 import json
 import logging
 import math
@@ -44,7 +44,7 @@ FORMAT_DEFS = {
         "bitrates": ["64k", "96k", "128k", "160k", "192k", "224k", "256k", "320k"],
         "default_br": "320k",
         "vbr_flag": "-q:a",
-        "vbr_range": (0, 9),          # 0 = best
+        "vbr_range": (0, 9),  # 0 = best
         "vbr_default": 2,
         "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
     },
@@ -64,7 +64,7 @@ FORMAT_DEFS = {
         "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
         "default_br": "192k",
         "vbr_flag": "-q:a",
-        "vbr_range": (0, 10),         # 10 = best
+        "vbr_range": (0, 10),  # 10 = best
         "vbr_default": 6,
         "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
     },
@@ -72,7 +72,19 @@ FORMAT_DEFS = {
         "ext": ".opus",
         "codec": ["-c:a", "libopus"],
         "lossy": True,
-        "bitrates": ["32k", "48k", "64k", "96k", "128k", "160k", "192k", "256k", "320k", "450k", "510k"],
+        "bitrates": [
+            "32k",
+            "48k",
+            "64k",
+            "96k",
+            "128k",
+            "160k",
+            "192k",
+            "256k",
+            "320k",
+            "450k",
+            "510k",
+        ],
         "default_br": "128k",
         "vbr_flag": None,
         "sample_rates": [8000, 12000, 16000, 24000, 48000],
@@ -81,9 +93,26 @@ FORMAT_DEFS = {
         "ext": ".wav",
         "codec": [],  # set dynamically from bit depth
         "lossy": False,
-        "bit_depths": {"16-bit": "pcm_s16le", "24-bit": "pcm_s24le", "32-bit": "pcm_s32le", "32-bit float": "pcm_f32le"},
+        "bit_depths": {
+            "16-bit": "pcm_s16le",
+            "24-bit": "pcm_s24le",
+            "32-bit": "pcm_s32le",
+            "32-bit float": "pcm_f32le",
+        },
         "default_depth": "16-bit",
-        "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000],
+        "sample_rates": [
+            8000,
+            11025,
+            16000,
+            22050,
+            32000,
+            44100,
+            48000,
+            88200,
+            96000,
+            176400,
+            192000,
+        ],
     },
     "FLAC": {
         "ext": ".flac",
@@ -92,7 +121,7 @@ FORMAT_DEFS = {
         # the FLAC encoder takes s16/s32; 24-bit = s32 marked as 24 significant bits
         "bit_depths": {"16-bit": "s16", "24-bit": "s32:24", "32-bit": "s32"},
         "default_depth": "16-bit",
-        "compression_range": (0, 12),   # 0 = fastest, 12 = smallest
+        "compression_range": (0, 12),  # 0 = fastest, 12 = smallest
         "compression_default": 5,
         "sample_rates": [8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000],
     },
@@ -100,7 +129,7 @@ FORMAT_DEFS = {
         "ext": ".m4a",
         "codec": ["-c:a", "alac"],
         "lossy": False,
-        "bit_depths": {"16-bit": "s16p", "24-bit": "s32p:24"},     # ALAC stores at most 24 bits here
+        "bit_depths": {"16-bit": "s16p", "24-bit": "s32p:24"},  # ALAC stores at most 24 bits here
         "default_depth": "16-bit",
         "sample_rates": [44100, 48000, 88200, 96000, 176400, 192000],
     },
@@ -134,13 +163,13 @@ FORMAT_DEFS = {
 
 CHANNEL_LAYOUTS = [
     ("Auto (keep original)", ""),
-    ("Mono",                 "1"),
-    ("Stereo",               "2"),
-    ("2.1 (3ch)",            "3"),
-    ("4.0 Quad",             "4"),
-    ("5.0 Surround",        "5"),
-    ("5.1 Surround",        "6"),
-    ("7.1 Surround",        "8"),
+    ("Mono", "1"),
+    ("Stereo", "2"),
+    ("2.1 (3ch)", "3"),
+    ("4.0 Quad", "4"),
+    ("5.0 Surround", "5"),
+    ("5.1 Surround", "6"),
+    ("7.1 Surround", "8"),
 ]
 
 NORM_MODES = [
@@ -154,16 +183,16 @@ class AudioExporterTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.file_path = ""
-        self._src_info = {}   # ffprobe metadata cache
+        self._src_info = {}  # ffprobe metadata cache
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
         # -- header --
-        self.make_header(self, t("tab.audio_converter"),
-                         subtitle=t("exporter.subtitle"),
-                         icon="\U0001F4BE")  # floppy disk
+        self.make_header(
+            self, t("tab.audio_converter"), subtitle=t("exporter.subtitle"), icon="\U0001f4be"
+        )  # floppy disk
 
         # Scrollable body
         outer = tk.Frame(self, bg=CLR["bg"])
@@ -172,8 +201,7 @@ class AudioExporterTab(BaseTab):
         canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0, bd=0)
         vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
         self._inner = tk.Frame(canvas, bg=CLR["bg"])
-        self._inner.bind("<Configure>",
-                         lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        self._inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=self._inner, anchor="nw")
         canvas.configure(yscrollcommand=vsb.set)
         canvas.pack(side="left", fill="both", expand=True)
@@ -196,16 +224,20 @@ class AudioExporterTab(BaseTab):
     def _build_source_section(self):
         sec = self.make_section(self._inner, title=t("exporter.section.source"))
         self.src_var = tk.StringVar()
-        row = self.make_file_row(sec, t("exporter.input_file"), self.src_var,
-                                 self._browse_src)
+        row = self.make_file_row(sec, t("exporter.input_file"), self.src_var, self._browse_src)
         row.pack(fill="x", pady=px(4))
 
     def _build_source_info_section(self):
         sec = self.make_section(self._inner, title=t("exporter.section.source_info"))
-        self._info_lbl = tk.Label(sec,
-                                  text="  No file loaded - browse to open a file",
-                                  font=(MONO_FONT, 9), anchor="w", justify="left",
-                                  bg=CLR["bg"], fg=CLR["fgdim"])
+        self._info_lbl = tk.Label(
+            sec,
+            text="  No file loaded - browse to open a file",
+            font=(MONO_FONT, 9),
+            anchor="w",
+            justify="left",
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        )
         self._info_lbl.pack(fill="x", padx=px(4), pady=px(2))
 
     # ── Format ───────────────────────────────────────────────────────────────
@@ -215,18 +247,31 @@ class AudioExporterTab(BaseTab):
         row = tk.Frame(sec, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
 
-        tk.Label(row, text=t("exporter.format_label"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            row,
+            text=t("exporter.format_label"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.fmt_var = tk.StringVar(value="MP3")
-        cb = ttk.Combobox(row, textvariable=self.fmt_var,
-                          values=list(FORMAT_DEFS.keys()),
-                          state="readonly", width=16)
+        cb = ttk.Combobox(
+            row,
+            textvariable=self.fmt_var,
+            values=list(FORMAT_DEFS.keys()),
+            state="readonly",
+            width=16,
+        )
         cb.pack(side="left", padx=px(8))
         cb.bind("<<ComboboxSelected>>", self._on_format_change)
 
-        self._fmt_note = tk.Label(row, text=t("exporter.lossy_note"),
-                                  font=(UI_FONT, 8, "italic"),
-                                  bg=CLR["bg"], fg=CLR["fgdim"])
+        self._fmt_note = tk.Label(
+            row,
+            text=t("exporter.lossy_note"),
+            font=(UI_FONT, 8, "italic"),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        )
         self._fmt_note.pack(side="left", padx=px(8))
 
     # ── Quality / Bitrate ────────────────────────────────────────────────────
@@ -237,73 +282,134 @@ class AudioExporterTab(BaseTab):
         # Bitrate mode row
         r0 = tk.Frame(self._qual_sec, bg=CLR["bg"])
         r0.pack(fill="x", pady=px(4))
-        tk.Label(r0, text=t("exporter.mode_label"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r0, text=t("exporter.mode_label"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self.br_mode_var = tk.StringVar(value="CBR")
-        self._rb_cbr = tk.Radiobutton(r0, text=t("exporter.cbr"),
-                                       variable=self.br_mode_var, value="CBR",
-                                       bg=CLR["bg"], fg=CLR["fg"],
-                                       selectcolor=CLR["input_bg"],
-                                       activebackground=CLR["bg"],
-                                       command=self._toggle_br_mode)
+        self._rb_cbr = tk.Radiobutton(
+            r0,
+            text=t("exporter.cbr"),
+            variable=self.br_mode_var,
+            value="CBR",
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+            command=self._toggle_br_mode,
+        )
         self._rb_cbr.pack(side="left", padx=px(12, 4))
-        self._rb_vbr = tk.Radiobutton(r0, text=t("exporter.vbr"),
-                                       variable=self.br_mode_var, value="VBR",
-                                       bg=CLR["bg"], fg=CLR["fg"],
-                                       selectcolor=CLR["input_bg"],
-                                       activebackground=CLR["bg"],
-                                       command=self._toggle_br_mode)
+        self._rb_vbr = tk.Radiobutton(
+            r0,
+            text=t("exporter.vbr"),
+            variable=self.br_mode_var,
+            value="VBR",
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+            command=self._toggle_br_mode,
+        )
         self._rb_vbr.pack(side="left", padx=px(4))
 
         # CBR bitrate row
         self._cbr_row = tk.Frame(self._qual_sec, bg=CLR["bg"])
         self._cbr_row.pack(fill="x", pady=px(4))
-        tk.Label(self._cbr_row, text=t("exporter.bitrate_label"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            self._cbr_row,
+            text=t("exporter.bitrate_label"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.bitrate_var = tk.StringVar(value="320k")
-        self._br_cb = ttk.Combobox(self._cbr_row, textvariable=self.bitrate_var,
-                                    values=FORMAT_DEFS["MP3"]["bitrates"],
-                                    state="readonly", width=8)
+        self._br_cb = ttk.Combobox(
+            self._cbr_row,
+            textvariable=self.bitrate_var,
+            values=FORMAT_DEFS["MP3"]["bitrates"],
+            state="readonly",
+            width=8,
+        )
         self._br_cb.pack(side="left", padx=px(8))
 
         # VBR quality row
         self._vbr_row = tk.Frame(self._qual_sec, bg=CLR["bg"])
-        tk.Label(self._vbr_row, text=t("exporter.vbr_quality"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            self._vbr_row,
+            text=t("exporter.vbr_quality"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.vbr_var = tk.IntVar(value=2)
-        self._vbr_scale = tk.Scale(self._vbr_row, from_=0, to=9,
-                                    orient="horizontal", variable=self.vbr_var,
-                                    length=px(200),
-                                    bg=CLR["bg"], fg=CLR["fg"],
-                                    highlightthickness=0)
+        self._vbr_scale = tk.Scale(
+            self._vbr_row,
+            from_=0,
+            to=9,
+            orient="horizontal",
+            variable=self.vbr_var,
+            length=px(200),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            highlightthickness=0,
+        )
         self._vbr_scale.pack(side="left", padx=px(8))
-        self._vbr_hint = tk.Label(self._vbr_row, text="0 = best, 9 = smallest",
-                                   font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"])
+        self._vbr_hint = tk.Label(
+            self._vbr_row,
+            text="0 = best, 9 = smallest",
+            font=(UI_FONT, 8),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        )
         self._vbr_hint.pack(side="left", padx=px(4))
 
         # Lossless bit depth row
         self._depth_row = tk.Frame(self._qual_sec, bg=CLR["bg"])
-        tk.Label(self._depth_row, text=t("exporter.bit_depth"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            self._depth_row,
+            text=t("exporter.bit_depth"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.depth_var = tk.StringVar(value="16-bit")
-        self._depth_cb = ttk.Combobox(self._depth_row, textvariable=self.depth_var,
-                                       values=["16-bit", "24-bit", "32-bit"],
-                                       state="readonly", width=12)
+        self._depth_cb = ttk.Combobox(
+            self._depth_row,
+            textvariable=self.depth_var,
+            values=["16-bit", "24-bit", "32-bit"],
+            state="readonly",
+            width=12,
+        )
         self._depth_cb.pack(side="left", padx=px(8))
 
         # FLAC compression row
         self._comp_row = tk.Frame(self._qual_sec, bg=CLR["bg"])
-        tk.Label(self._comp_row, text=t("exporter.compression"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            self._comp_row,
+            text=t("exporter.compression"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.comp_var = tk.IntVar(value=5)
-        self._comp_scale = tk.Scale(self._comp_row, from_=0, to=12,
-                                     orient="horizontal", variable=self.comp_var,
-                                     length=px(200),
-                                     bg=CLR["bg"], fg=CLR["fg"],
-                                     highlightthickness=0)
+        self._comp_scale = tk.Scale(
+            self._comp_row,
+            from_=0,
+            to=12,
+            orient="horizontal",
+            variable=self.comp_var,
+            length=px(200),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            highlightthickness=0,
+        )
         self._comp_scale.pack(side="left", padx=px(8))
-        tk.Label(self._comp_row, text=t("exporter.compression_hint"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(4))
+        tk.Label(
+            self._comp_row,
+            text=t("exporter.compression_hint"),
+            font=(UI_FONT, 8),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(side="left", padx=px(4))
 
         # Initial state
         self._toggle_br_mode()
@@ -315,21 +421,34 @@ class AudioExporterTab(BaseTab):
 
         r0 = tk.Frame(sec, bg=CLR["bg"])
         r0.pack(fill="x", pady=px(4))
-        tk.Label(r0, text=t("exporter.sample_rate"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r0,
+            text=t("exporter.sample_rate"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.sr_var = tk.StringVar(value="Auto")
-        sr_vals = ["Auto"] + [f"{r} Hz" for r in [8000, 11025, 16000, 22050,
-                   32000, 44100, 48000, 88200, 96000, 176400, 192000]]
-        self._sr_cb = ttk.Combobox(r0, textvariable=self.sr_var,
-                                    values=sr_vals, state="readonly", width=14)
+        sr_vals = ["Auto"] + [
+            f"{r} Hz"
+            for r in [8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000]
+        ]
+        self._sr_cb = ttk.Combobox(
+            r0, textvariable=self.sr_var, values=sr_vals, state="readonly", width=14
+        )
         self._sr_cb.pack(side="left", padx=px(8))
 
-        tk.Label(r0, text=t("exporter.channels"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(20, 0))
+        tk.Label(
+            r0, text=t("exporter.channels"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left", padx=px(20, 0))
         self.ch_var = tk.StringVar(value="Auto (keep original)")
-        self._ch_cb = ttk.Combobox(r0, textvariable=self.ch_var,
-                                    values=[c[0] for c in CHANNEL_LAYOUTS],
-                                    state="readonly", width=20)
+        self._ch_cb = ttk.Combobox(
+            r0,
+            textvariable=self.ch_var,
+            values=[c[0] for c in CHANNEL_LAYOUTS],
+            state="readonly",
+            width=20,
+        )
         self._ch_cb.pack(side="left", padx=px(8))
 
     # ── Trim ─────────────────────────────────────────────────────────────────
@@ -339,25 +458,45 @@ class AudioExporterTab(BaseTab):
         row = tk.Frame(sec, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
 
-        tk.Label(row, text=t("exporter.start_label"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            row,
+            text=t("exporter.start_label"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.trim_start = tk.StringVar(value="")
-        tk.Entry(row, textvariable=self.trim_start, width=12,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(row, text=t("exporter.time_hint"), font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(0, 16))
+        tk.Entry(
+            row,
+            textvariable=self.trim_start,
+            width=12,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            row, text=t("exporter.time_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left", padx=px(0, 16))
 
-        tk.Label(row, text=t("exporter.end_label"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            row, text=t("exporter.end_label"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self.trim_end = tk.StringVar(value="")
-        tk.Entry(row, textvariable=self.trim_end, width=12,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(row, text=t("exporter.blank_hint"), font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Entry(
+            row,
+            textvariable=self.trim_end,
+            width=12,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            row, text=t("exporter.blank_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left")
 
     # ── Effects (fade, normalize) ────────────────────────────────────────────
 
@@ -367,83 +506,144 @@ class AudioExporterTab(BaseTab):
         # Fades
         r0 = tk.Frame(sec, bg=CLR["bg"])
         r0.pack(fill="x", pady=px(4))
-        tk.Label(r0, text=t("exporter.fade_in"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r0, text=t("exporter.fade_in"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self.fade_in = tk.StringVar(value="0")
-        tk.Entry(r0, textvariable=self.fade_in, width=6,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(r0, text=t("exporter.sec"), font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(0, 16))
+        tk.Entry(
+            r0,
+            textvariable=self.fade_in,
+            width=6,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(r0, text=t("exporter.sec"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(
+            side="left", padx=px(0, 16)
+        )
 
-        tk.Label(r0, text=t("exporter.fade_out"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r0, text=t("exporter.fade_out"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self.fade_out = tk.StringVar(value="0")
-        tk.Entry(r0, textvariable=self.fade_out, width=6,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(r0, text=t("exporter.sec"), font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Entry(
+            r0,
+            textvariable=self.fade_out,
+            width=6,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(r0, text=t("exporter.sec"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(
+            side="left"
+        )
 
         # Volume
         r1 = tk.Frame(sec, bg=CLR["bg"])
         r1.pack(fill="x", pady=px(4))
-        tk.Label(r1, text=t("exporter.volume_adjust"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r1,
+            text=t("exporter.volume_adjust"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.volume_var = tk.StringVar(value="0")
-        tk.Entry(r1, textvariable=self.volume_var, width=6,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(r1, text=t("exporter.volume_hint"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Entry(
+            r1,
+            textvariable=self.volume_var,
+            width=6,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            r1, text=t("exporter.volume_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left")
 
         # Normalization
         r2 = tk.Frame(sec, bg=CLR["bg"])
         r2.pack(fill="x", pady=px(4))
-        tk.Label(r2, text=t("exporter.normalize"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r2, text=t("exporter.normalize"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self.norm_var = tk.StringVar(value="None")
-        ttk.Combobox(r2, textvariable=self.norm_var, values=NORM_MODES,
-                     state="readonly", width=22).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            r2, textvariable=self.norm_var, values=NORM_MODES, state="readonly", width=22
+        ).pack(side="left", padx=px(8))
 
         self._norm_opts = tk.Frame(sec, bg=CLR["bg"])
         self._norm_opts.pack(fill="x", pady=px(2))
-        tk.Label(self._norm_opts, text="  " + t("exporter.target_lufs"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            self._norm_opts,
+            text="  " + t("exporter.target_lufs"),
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.lufs_var = tk.StringVar(value="-16.0")
-        tk.Entry(self._norm_opts, textvariable=self.lufs_var, width=7,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(self._norm_opts, text=t("exporter.true_peak"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(12, 0))
+        tk.Entry(
+            self._norm_opts,
+            textvariable=self.lufs_var,
+            width=7,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            self._norm_opts,
+            text=t("exporter.true_peak"),
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left", padx=px(12, 0))
         self.tp_var = tk.StringVar(value="-1.5")
-        tk.Entry(self._norm_opts, textvariable=self.tp_var, width=7,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
-        tk.Label(self._norm_opts, text="dBTP", font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Entry(
+            self._norm_opts,
+            textvariable=self.tp_var,
+            width=7,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            self._norm_opts, text="dBTP", font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left")
 
         # Mono mix-down
         r3 = tk.Frame(sec, bg=CLR["bg"])
         r3.pack(fill="x", pady=px(4))
         self.strip_silence_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r3, text=t("exporter.strip_silence"),
-                       variable=self.strip_silence_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left")
+        tk.Checkbutton(
+            r3,
+            text=t("exporter.strip_silence"),
+            variable=self.strip_silence_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left")
 
         self.replay_gain_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r3, text=t("exporter.replay_gain"),
-                       variable=self.replay_gain_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left", padx=px(20, 0))
+        tk.Checkbutton(
+            r3,
+            text=t("exporter.replay_gain"),
+            variable=self.replay_gain_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left", padx=px(20, 0))
 
     # ── Max file size ────────────────────────────────────────────────────────
 
@@ -453,23 +653,34 @@ class AudioExporterTab(BaseTab):
         row.pack(fill="x", pady=px(4))
 
         self.limit_enabled = tk.BooleanVar(value=False)
-        tk.Checkbutton(row, text=t("exporter.target_max_size"),
-                       variable=self.limit_enabled,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left")
+        tk.Checkbutton(
+            row,
+            text=t("exporter.target_max_size"),
+            variable=self.limit_enabled,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left")
         self.max_size_var = tk.StringVar(value="10")
-        tk.Entry(row, textvariable=self.max_size_var, width=8,
-                 relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 font=(UI_FONT, 9)).pack(side="left", padx=px(4))
+        tk.Entry(
+            row,
+            textvariable=self.max_size_var,
+            width=8,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            font=(UI_FONT, 9),
+        ).pack(side="left", padx=px(4))
 
         self.size_unit_var = tk.StringVar(value="MB")
-        ttk.Combobox(row, textvariable=self.size_unit_var,
-                     values=["KB", "MB"], state="readonly",
-                     width=4).pack(side="left", padx=px(4))
-        tk.Label(row, text=t("exporter.auto_calc_hint"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            row, textvariable=self.size_unit_var, values=["KB", "MB"], state="readonly", width=4
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            row, text=t("exporter.auto_calc_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left", padx=px(8))
 
     # ── Metadata ─────────────────────────────────────────────────────────────
 
@@ -478,12 +689,12 @@ class AudioExporterTab(BaseTab):
 
         self.meta_vars = {}
         fields = [
-            ("Title",   "title",   30),
-            ("Artist",  "artist",  30),
-            ("Album",   "album",   30),
-            ("Genre",   "genre",   16),
-            ("Year",    "date",     8),
-            ("Track #", "track",    6),
+            ("Title", "title", 30),
+            ("Artist", "artist", 30),
+            ("Album", "album", 30),
+            ("Genre", "genre", 16),
+            ("Year", "date", 8),
+            ("Track #", "track", 6),
             ("Comment", "comment", 40),
         ]
 
@@ -494,65 +705,91 @@ class AudioExporterTab(BaseTab):
                 row.pack(fill="x", pady=px(2))
             var = tk.StringVar(value="")
             self.meta_vars[key] = var
-            tk.Label(row, text=label, font=(UI_FONT, 9),
-                     bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(8, 0))
-            tk.Entry(row, textvariable=var, width=w,
-                     relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"],
-                     insertbackground=CLR["accent"],
-                     font=(UI_FONT, 9)).pack(side="left", padx=px(4))
+            tk.Label(row, text=label, font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]).pack(
+                side="left", padx=px(8, 0)
+            )
+            tk.Entry(
+                row,
+                textvariable=var,
+                width=w,
+                relief="flat",
+                bg=CLR["input_bg"],
+                fg=CLR["input_fg"],
+                insertbackground=CLR["accent"],
+                font=(UI_FONT, 9),
+            ).pack(side="left", padx=px(4))
 
         opts_row = tk.Frame(sec, bg=CLR["bg"])
         opts_row.pack(fill="x", pady=px(4))
         self.strip_meta_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(opts_row, text=t("exporter.strip_all_meta"),
-                       variable=self.strip_meta_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left", padx=px(8))
+        tk.Checkbutton(
+            opts_row,
+            text=t("exporter.strip_all_meta"),
+            variable=self.strip_meta_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left", padx=px(8))
         self.strip_art_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(opts_row, text=t("exporter.strip_art"),
-                       variable=self.strip_art_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left", padx=px(8))
+        tk.Checkbutton(
+            opts_row,
+            text=t("exporter.strip_art"),
+            variable=self.strip_art_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left", padx=px(8))
         self.copy_meta_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opts_row, text=t("exporter.copy_meta"),
-                       variable=self.copy_meta_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left", padx=px(8))
+        tk.Checkbutton(
+            opts_row,
+            text=t("exporter.copy_meta"),
+            variable=self.copy_meta_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left", padx=px(8))
 
     # ── Output ───────────────────────────────────────────────────────────────
 
     def _build_output_section(self):
         sec = self.make_section(self._inner, title=t("exporter.section.output"))
         self.out_var = tk.StringVar()
-        row = self.make_file_row(sec, t("exporter.save_as"), self.out_var,
-                                 self._browse_out)
+        row = self.make_file_row(sec, t("exporter.save_as"), self.out_var, self._browse_out)
         row.pack(fill="x", pady=px(4))
 
         # Overwrite warning
         opts = tk.Frame(sec, bg=CLR["bg"])
         opts.pack(fill="x", pady=px(2))
         self.overwrite_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opts, text=t("exporter.overwrite"),
-                       variable=self.overwrite_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left", padx=px(8))
+        tk.Checkbutton(
+            opts,
+            text=t("exporter.overwrite"),
+            variable=self.overwrite_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left", padx=px(8))
         self.open_folder_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(opts, text=t("exporter.open_folder"),
-                       variable=self.open_folder_var,
-                       bg=CLR["bg"], fg=CLR["fg"],
-                       selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"]).pack(side="left", padx=px(8))
+        tk.Checkbutton(
+            opts,
+            text=t("exporter.open_folder"),
+            variable=self.open_folder_var,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+        ).pack(side="left", padx=px(8))
 
         # Export button
         btn_row = tk.Frame(self._inner, bg=CLR["bg"])
         btn_row.pack(fill="x", pady=px(12, 6))
-        self.btn_render = self.make_render_btn(btn_row, t("exporter.export_btn"),
-                                                self._export, color=CLR["green"],
-                                                width=30)
+        self.btn_render = self.make_render_btn(
+            btn_row, t("exporter.export_btn"), self._export, color=CLR["green"], width=30
+        )
         self.btn_render.pack(pady=px(4))
 
     # ── Console ──────────────────────────────────────────────────────────────
@@ -570,11 +807,15 @@ class AudioExporterTab(BaseTab):
         p = dialogs.askopenfilename(
             title="Open audio / video file",
             filetypes=[
-                ("Audio files", "*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus "
-                                "*.wma *.aiff *.ac3 *.alac *.ape *.wv"),
+                (
+                    "Audio files",
+                    "*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus "
+                    "*.wma *.aiff *.ac3 *.alac *.ape *.wv",
+                ),
                 ("Video files", "*.mp4 *.mkv *.mov *.avi *.webm *.wmv *.flv *.ts"),
                 ("All files", "*.*"),
-            ])
+            ],
+        )
         if p:
             self.file_path = p
             self.src_var.set(p)
@@ -586,23 +827,35 @@ class AudioExporterTab(BaseTab):
         p = dialogs.asksaveasfilename(
             title="Save audio as",
             defaultextension=ext,
-            filetypes=[(self.fmt_var.get(), f"*{ext}"), ("All files", "*.*")])
+            filetypes=[(self.fmt_var.get(), f"*{ext}"), ("All files", "*.*")],
+        )
         if p:
             self.out_var.set(p)
 
     def _probe_source(self, path):
         """Run ffprobe in background to populate source info."""
+
         def _do():
             ffprobe = get_binary_path("ffprobe.exe")
-            cmd = [ffprobe, "-v", "quiet", "-print_format", "json",
-                   "-show_format", "-show_streams", path]
+            cmd = [
+                ffprobe,
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                path,
+            ]
             try:
                 r = _proc.run(cmd, timeout=60)
                 data = json.loads(r.stdout)
             except Exception:
                 logger.debug("_do: best-effort step failed", exc_info=True)
-                self.after(0, lambda: self._info_lbl.config(
-                    text="  Could not read file info", fg=CLR["red"]))
+                self.after(
+                    0,
+                    lambda: self._info_lbl.config(text="  Could not read file info", fg=CLR["red"]),
+                )
                 return
 
             self._src_info = data
@@ -615,29 +868,33 @@ class AudioExporterTab(BaseTab):
                     break
 
             if not audio_stream:
-                self.after(0, lambda: self._info_lbl.config(
-                    text="  No audio stream found in file", fg=CLR["red"]))
+                self.after(
+                    0,
+                    lambda: self._info_lbl.config(
+                        text="  No audio stream found in file", fg=CLR["red"]
+                    ),
+                )
                 return
 
-            codec = audio_stream.get("codec_long_name",
-                    audio_stream.get("codec_name", "?"))
+            codec = audio_stream.get("codec_long_name", audio_stream.get("codec_name", "?"))
             sr = audio_stream.get("sample_rate", "?")
             ch = audio_stream.get("channels", "?")
             ch_layout = audio_stream.get("channel_layout", "")
-            bits = audio_stream.get("bits_per_raw_sample",
-                   audio_stream.get("bits_per_sample", ""))
+            bits = audio_stream.get("bits_per_raw_sample", audio_stream.get("bits_per_sample", ""))
             duration = fmt_info.get("duration", "?")
             bitrate = fmt_info.get("bit_rate", "?")
             size = fmt_info.get("size", "?")
 
             try:
                 dur_f = float(duration)
-                dur_str = f"{int(dur_f//3600):02d}:{int((dur_f%3600)//60):02d}:{dur_f%60:05.2f}"
+                dur_str = (
+                    f"{int(dur_f // 3600):02d}:{int((dur_f % 3600) // 60):02d}:{dur_f % 60:05.2f}"
+                )
             except (ValueError, TypeError):
                 dur_str = str(duration)
 
             try:
-                br_str = f"{int(bitrate)//1000}k"
+                br_str = f"{int(bitrate) // 1000}k"
             except (ValueError, TypeError):
                 br_str = str(bitrate)
 
@@ -650,22 +907,24 @@ class AudioExporterTab(BaseTab):
             bits_str = f"  |  Depth: {bits}-bit" if bits else ""
             ch_str = f"{ch}ch" + (f" ({ch_layout})" if ch_layout else "")
 
-            info = (f"  Codec: {codec}  |  {sr} Hz  |  {ch_str}{bits_str}\n"
-                    f"  Duration: {dur_str}  |  Bitrate: {br_str}  |  "
-                    f"Size: {sz_str}")
+            info = (
+                f"  Codec: {codec}  |  {sr} Hz  |  {ch_str}{bits_str}\n"
+                f"  Duration: {dur_str}  |  Bitrate: {br_str}  |  "
+                f"Size: {sz_str}"
+            )
 
             # Auto-populate metadata fields from source tags
-            tags = {**fmt_info.get("tags", {}),
-                    **audio_stream.get("tags", {})}
+            tags = {**fmt_info.get("tags", {}), **audio_stream.get("tags", {})}
             for key, var in self.meta_vars.items():
                 val = tags.get(key, tags.get(key.upper(), ""))
                 if val and not var.get():
                     self.after(0, lambda v=var, x=val: v.set(str(x)))
 
-            self.after(0, lambda: self._info_lbl.config(
-                text=info, fg=CLR["accent"]))
-            self.after(0, lambda: self.log_tagged(
-                self.console, f"Loaded: {os.path.basename(path)}", "info"))
+            self.after(0, lambda: self._info_lbl.config(text=info, fg=CLR["accent"]))
+            self.after(
+                0,
+                lambda: self.log_tagged(self.console, f"Loaded: {os.path.basename(path)}", "info"),
+            )
 
         tasks.submit(_do)
 
@@ -678,9 +937,11 @@ class AudioExporterTab(BaseTab):
         if fd["lossy"]:
             self._fmt_note.config(text=t("exporter.lossy_note"))
         else:
-            self._fmt_note.config(text=t("exporter.lossless_uncompressed")
-                                  if fmt in ("WAV", "AIFF")
-                                  else t("exporter.lossless_compressed"))
+            self._fmt_note.config(
+                text=t("exporter.lossless_uncompressed")
+                if fmt in ("WAV", "AIFF")
+                else t("exporter.lossless_compressed")
+            )
 
         self._toggle_br_mode()
 
@@ -719,7 +980,8 @@ class AudioExporterTab(BaseTab):
                 self.vbr_var.set(fd.get("vbr_default", vr[0]))
                 self._vbr_hint.config(
                     text=f"{vr[0]} = {'best' if fd.get('ext') != '.ogg' else 'worst'}, "
-                         f"{vr[1]} = {'smallest' if fd.get('ext') != '.ogg' else 'best'}")
+                    f"{vr[1]} = {'smallest' if fd.get('ext') != '.ogg' else 'best'}"
+                )
         else:
             # Lossless: show bit depth
             self._rb_cbr.pack_forget()
@@ -761,10 +1023,14 @@ class AudioExporterTab(BaseTab):
             return x
 
         cfg = {
-            "fmt": fmt, "start": start, "end": end,
+            "fmt": fmt,
+            "start": start,
+            "end": end,
             "volume": num(self.volume_var, "Volume", -60, 40),
-            "fade_in": num(self.fade_in, "Fade in", 0, 600), "fade_out": num(self.fade_out, "Fade out", 0, 600),
-            "norm": self.norm_var.get(), "strip_silence": self.strip_silence_var.get(),
+            "fade_in": num(self.fade_in, "Fade in", 0, 600),
+            "fade_out": num(self.fade_out, "Fade out", 0, 600),
+            "norm": self.norm_var.get(),
+            "strip_silence": self.strip_silence_var.get(),
             "replay_gain": self.replay_gain_var.get(),
             "strip_meta": self.strip_meta_var.get() or not self.copy_meta_var.get(),
             "strip_art": self.strip_art_var.get(),
@@ -780,7 +1046,8 @@ class AudioExporterTab(BaseTab):
         if fd["lossy"]:
             if self.limit_enabled.get():
                 cfg["size_bytes"] = num(self.max_size_var, "Maximum size", 0.001, 1e6) * (
-                    1024 * 1024 if self.size_unit_var.get() == "MB" else 1024)
+                    1024 * 1024 if self.size_unit_var.get() == "MB" else 1024
+                )
             elif self.br_mode_var.get() == "VBR" and fd.get("vbr_flag"):
                 cfg["vbr"] = str(self.vbr_var.get())
             else:
@@ -801,8 +1068,10 @@ class AudioExporterTab(BaseTab):
                 lo, hi = BITRATE_LIMITS_K.get(fmt, (8, 640))
                 kbps = int(cfg["size_bytes"] * 8 * 0.97 / max(seconds, 0.1) / 1000)
                 if kbps < lo:
-                    raise ValueError(f"{fmt} can't get this short enough for that size "
-                                     f"(it would need {kbps} kbps; the minimum is {lo}).")
+                    raise ValueError(
+                        f"{fmt} can't get this short enough for that size "
+                        f"(it would need {kbps} kbps; the minimum is {lo})."
+                    )
                 args += ["-b:a", f"{min(kbps, hi)}k"]
             elif "vbr" in cfg:
                 args += [fd["vbr_flag"], cfg["vbr"]]
@@ -844,8 +1113,11 @@ class AudioExporterTab(BaseTab):
         src = self.file_path
         info = ff.try_probe(src) if src else None
         if info is None or not info.has_audio:
-            messagebox.showwarning(t("exporter.no_input"),
-                                   t("exporter.no_input") if not src else f"No audio found in:\n{src}", parent=self)
+            messagebox.showwarning(
+                t("exporter.no_input"),
+                t("exporter.no_input") if not src else f"No audio found in:\n{src}",
+                parent=self,
+            )
             return
         try:
             cfg = self._settings()
@@ -860,11 +1132,17 @@ class AudioExporterTab(BaseTab):
         if not out:
             return
         self.out_var.set(out)
-        end = min(cfg["end"], info.duration) if cfg["end"] is not None and info.duration else cfg["end"]
+        end = (
+            min(cfg["end"], info.duration)
+            if cfg["end"] is not None and info.duration
+            else cfg["end"]
+        )
         length = max(0.01, (end if end is not None else info.duration) - cfg["start"])
         cover = None
         if not cfg["strip_art"] and ext in COVER_ART_EXTS:
-            cover = next((s.index for s in info.streams if s.type == "video" and s.attached_pic), None)
+            cover = next(
+                (s.index for s in info.streams if s.type == "video" and s.attached_pic), None
+            )
         try:
             self.codec_args(cfg, length)
         except ValueError as exc:
@@ -873,6 +1151,7 @@ class AudioExporterTab(BaseTab):
 
         def work(_p, _c, ctx):
             from core import loudness
+
             inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
             if cfg["start"] > 0:
                 inp += ["-ss", f"{cfg['start']:.3f}"]
@@ -883,7 +1162,20 @@ class AudioExporterTab(BaseTab):
             seg_len = length
             if cfg["strip_silence"]:
                 ctx.log("Finding leading and trailing silence…")
-                res = ctx.span(0, 0.2).run([*inp, "-map", "0:a:0", "-af", "silencedetect=n=-50dB:d=0.1", "-f", "null", "-"], duration=length, tail=200000)
+                res = ctx.span(0, 0.2).run(
+                    [
+                        *inp,
+                        "-map",
+                        "0:a:0",
+                        "-af",
+                        "silencedetect=n=-50dB:d=0.1",
+                        "-f",
+                        "null",
+                        "-",
+                    ],
+                    duration=length,
+                    tail=200000,
+                )
                 keep = silence_bounds(res.log_tail, length)
                 seg_len = keep[1] - keep[0]
                 ctx.log(f"Keeping {keep[0]:.2f}s → {keep[1]:.2f}s")
@@ -891,22 +1183,62 @@ class AudioExporterTab(BaseTab):
             gain_db = 0.0
             if cfg["replay_gain"]:
                 ctx.log("Measuring ReplayGain…")
-                res = ctx.span(0.2, 0.4).run([*inp, "-map", "0:a:0", "-af", ",".join([*chain, "replaygain"]), "-f", "null", "-"], duration=length, tail=200000)
+                res = ctx.span(0.2, 0.4).run(
+                    [
+                        *inp,
+                        "-map",
+                        "0:a:0",
+                        "-af",
+                        ",".join([*chain, "replaygain"]),
+                        "-f",
+                        "null",
+                        "-",
+                    ],
+                    duration=length,
+                    tail=200000,
+                )
                 gain_db, peak = parse_replaygain(res.log_tail)
-                if peak > 0:   # never push the peak above -1 dBFS
+                if peak > 0:  # never push the peak above -1 dBFS
                     gain_db = min(gain_db, -20 * math.log10(peak) - 1.0)
                 ctx.log(f"ReplayGain: {gain_db:+.2f} dB")
                 chain.append(f"volume={gain_db:.2f}dB")
             rate = cfg["sr"] or str(info.require_audio().sample_rate or 48000)
             if cfg["norm"] == "EBU R128 (loudnorm)":
                 ctx.log("Measuring loudness (pass 1 of 2)…")
-                cmd = [*inp, "-map", "0:a:0", "-af", ",".join([*chain, f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json"]), "-f", "null", "-"]
+                cmd = [
+                    *inp,
+                    "-map",
+                    "0:a:0",
+                    "-af",
+                    ",".join(
+                        [
+                            *chain,
+                            f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json",
+                        ]
+                    ),
+                    "-f",
+                    "null",
+                    "-",
+                ]
                 res = ctx.span(0.4, 0.6).run(cmd, duration=length, tail=200000)
                 meas = loudness.parse_measurement(res.log_tail)
                 chain.append(loudness.normalise_filter(cfg["lufs"], cfg["tp"], 11, meas, int(rate)))
             elif cfg["norm"] == "Peak normalize":
                 ctx.log("Measuring the peak level…")
-                res = ctx.span(0.4, 0.6).run([*inp, "-map", "0:a:0", "-af", ",".join([*chain, "volumedetect"]), "-f", "null", "-"], duration=length, tail=200000)
+                res = ctx.span(0.4, 0.6).run(
+                    [
+                        *inp,
+                        "-map",
+                        "0:a:0",
+                        "-af",
+                        ",".join([*chain, "volumedetect"]),
+                        "-f",
+                        "null",
+                        "-",
+                    ],
+                    duration=length,
+                    tail=200000,
+                )
                 peak = parse_max_volume(res.log_tail)
                 chain.append(f"volume={cfg['tp'] - peak:.2f}dB")
                 ctx.log(f"Peak {peak:.1f} dBFS → {cfg['tp']:.1f} dBFS")
@@ -936,13 +1268,28 @@ class AudioExporterTab(BaseTab):
                 self.open_path(os.path.dirname(out))
 
         self.log_tagged(self.console, f"Exporting: {os.path.basename(src)} -> {cfg['fmt']}", "info")
-        common.queue_job(self, name="Audio Converter", out=out, work=work, btn=self.btn_render,
-                         btn_label=t("exporter.export_btn"), console=self.console, duration=length,
-                         inputs=[src], on_done=opened)
+        common.queue_job(
+            self,
+            name="Audio Converter",
+            out=out,
+            work=work,
+            btn=self.btn_render,
+            btn_label=t("exporter.export_btn"),
+            console=self.console,
+            duration=length,
+            inputs=[src],
+            on_done=opened,
+        )
 
 
-BITRATE_LIMITS_K = {"MP3": (8, 320), "AAC (M4A)": (16, 512), "OGG Vorbis": (45, 500), "Opus": (6, 510),
-                    "WMA": (24, 320), "AC3": (32, 640)}
+BITRATE_LIMITS_K = {
+    "MP3": (8, 320),
+    "AAC (M4A)": (16, 512),
+    "OGG Vorbis": (45, 500),
+    "Opus": (6, 510),
+    "WMA": (24, 320),
+    "AC3": (32, 640),
+}
 COVER_ART_EXTS = (".mp3", ".flac", ".m4a")
 
 
@@ -963,7 +1310,7 @@ def silence_bounds(log, length: float, edge: float = 0.05) -> tuple:
         a = ends[0]
     if starts and (len(ends) < len(starts) or ends[-1] >= length - edge):
         b = starts[-1]
-    if b - a < 0.05:          # all silent: keep everything rather than nothing
+    if b - a < 0.05:  # all silent: keep everything rather than nothing
         return 0.0, length
     return a, b
 

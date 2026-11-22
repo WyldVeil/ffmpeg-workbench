@@ -25,6 +25,7 @@ Environment overrides (used by the test-suite):
 ``CROSSFADER_CONFIG_DIR``, ``CROSSFADER_DATA_DIR``, ``CROSSFADER_CACHE_DIR``,
 ``CROSSFADER_LOG_DIR``.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -49,8 +50,9 @@ def is_frozen() -> bool:
 
 
 def is_portable() -> bool:
-    return os.path.isfile(os.path.join(APP_ROOT, "portable.txt")) or \
-        os.path.isfile(os.path.join(os.path.dirname(sys.executable), "portable.txt"))
+    return os.path.isfile(os.path.join(APP_ROOT, "portable.txt")) or os.path.isfile(
+        os.path.join(os.path.dirname(sys.executable), "portable.txt")
+    )
 
 
 def _portable_root() -> str | None:
@@ -145,8 +147,9 @@ def user_videos_dir() -> str:
     home = os.path.expanduser("~")
     if not _IS_WIN and not _IS_MAC:
         # Honour xdg-user-dirs if configured.
-        cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME") or
-                           os.path.join(home, ".config"), "user-dirs.dirs")
+        cfg = os.path.join(
+            os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"), "user-dirs.dirs"
+        )
         try:
             with open(cfg, encoding="utf-8") as fh:
                 for line in fh:

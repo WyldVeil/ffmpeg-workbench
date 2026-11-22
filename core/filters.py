@@ -20,6 +20,7 @@ Other helpers:
 * :func:`find_font` - a usable font file on Windows, Linux and macOS
   (bundled fonts first, then the system, via fontconfig on Linux).
 """
+
 from __future__ import annotations
 
 import os
@@ -37,11 +38,10 @@ _IS_WIN = sys.platform.startswith("win")
 #  Escaping
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _escape_option_level(value: str) -> str:
     # option parser: backslash, single quote and ':' are special
-    return (value.replace("\\", "\\\\")
-                 .replace("'", "\\'")
-                 .replace(":", "\\:"))
+    return value.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
 
 
 def _escape_graph_level(value: str) -> str:
@@ -70,12 +70,22 @@ def filter_path(path: str) -> str:
     return filter_value(p)
 
 
-def subtitles_filter(path: str, *, force_style: str = "", stream_index: int | None = None,
-                     fonts_dir: str | None = None, charenc: str | None = None) -> str:
+def subtitles_filter(
+    path: str,
+    *,
+    force_style: str = "",
+    stream_index: int | None = None,
+    fonts_dir: str | None = None,
+    charenc: str | None = None,
+) -> str:
     """``subtitles=`` filter for an external subtitle file (SRT/ASS/VTT) or
     for a subtitle stream of a media file (*stream_index*)."""
     ext = os.path.splitext(path)[1].lower()
-    name = "ass" if ext in (".ass", ".ssa") and not force_style and stream_index is None else "subtitles"
+    name = (
+        "ass"
+        if ext in (".ass", ".ssa") and not force_style and stream_index is None
+        else "subtitles"
+    )
     opts = [f"filename={filter_path(path)}"]
     if stream_index is not None and name == "subtitles":
         opts.append(f"si={int(stream_index)}")
@@ -126,16 +136,27 @@ def amovie_source(path: str, *, loop: int = 0) -> str:
     return s
 
 
-def ass_style(*, font: str = "Arial", size: int = 24, primary: str = "&H00FFFFFF",
-              outline_colour: str = "&H00000000", outline: float = 2.0,
-              shadow: float = 0.0, bold: bool = False, alignment: int = 2,
-              margin_v: int = 20, back_colour: str = "&H80000000",
-              border_style: int = 1) -> str:
+def ass_style(
+    *,
+    font: str = "Arial",
+    size: int = 24,
+    primary: str = "&H00FFFFFF",
+    outline_colour: str = "&H00000000",
+    outline: float = 2.0,
+    shadow: float = 0.0,
+    bold: bool = False,
+    alignment: int = 2,
+    margin_v: int = 20,
+    back_colour: str = "&H80000000",
+    border_style: int = 1,
+) -> str:
     """Build a ``force_style`` value for the subtitles filter."""
-    return (f"FontName={font},FontSize={int(size)},PrimaryColour={primary},"
-            f"OutlineColour={outline_colour},BackColour={back_colour},"
-            f"BorderStyle={int(border_style)},Outline={outline:g},Shadow={shadow:g},"
-            f"Bold={-1 if bold else 0},Alignment={int(alignment)},MarginV={int(margin_v)}")
+    return (
+        f"FontName={font},FontSize={int(size)},PrimaryColour={primary},"
+        f"OutlineColour={outline_colour},BackColour={back_colour},"
+        f"BorderStyle={int(border_style)},Outline={outline:g},Shadow={shadow:g},"
+        f"Bold={-1 if bold else 0},Alignment={int(alignment)},MarginV={int(margin_v)}"
+    )
 
 
 def hex_to_ass_colour(hex_colour: str, alpha: int = 0) -> str:
@@ -157,15 +178,29 @@ def drawtext_text_file(text: str, directory: str | None = None) -> str:
     return path
 
 
-def drawtext_filter(*, text: str | None = None, textfile: str | None = None,
-                    fontfile: str | None = None, font: str | None = None,
-                    fontsize: str | int = 48, fontcolor: str = "white",
-                    x: str = "(w-text_w)/2", y: str = "(h-text_h)/2",
-                    box: bool = False, boxcolor: str = "black@0.5", boxborderw: int = 10,
-                    borderw: int = 0, bordercolor: str = "black",
-                    shadowx: int = 0, shadowy: int = 0, shadowcolor: str = "black",
-                    alpha: str | None = None, enable: str | None = None,
-                    expansion: str = "none", extra: Sequence[str] = ()) -> str:
+def drawtext_filter(
+    *,
+    text: str | None = None,
+    textfile: str | None = None,
+    fontfile: str | None = None,
+    font: str | None = None,
+    fontsize: str | int = 48,
+    fontcolor: str = "white",
+    x: str = "(w-text_w)/2",
+    y: str = "(h-text_h)/2",
+    box: bool = False,
+    boxcolor: str = "black@0.5",
+    boxborderw: int = 10,
+    borderw: int = 0,
+    bordercolor: str = "black",
+    shadowx: int = 0,
+    shadowy: int = 0,
+    shadowcolor: str = "black",
+    alpha: str | None = None,
+    enable: str | None = None,
+    expansion: str = "none",
+    extra: Sequence[str] = (),
+) -> str:
     """A fully escaped ``drawtext`` filter.
 
     Prefer *textfile* (see :func:`drawtext_text_file`) for user text; *text*
@@ -185,15 +220,22 @@ def drawtext_filter(*, text: str | None = None, textfile: str | None = None,
     else:
         opts.append(f"text={filter_value(text or '')}")
     opts.append(f"expansion={expansion}")
-    opts += [f"fontsize={_expr(str(fontsize))}", f"fontcolor={filter_value(fontcolor)}",
-             f"x={_expr(x)}", f"y={_expr(y)}"]
+    opts += [
+        f"fontsize={_expr(str(fontsize))}",
+        f"fontcolor={filter_value(fontcolor)}",
+        f"x={_expr(x)}",
+        f"y={_expr(y)}",
+    ]
     if box:
         opts += ["box=1", f"boxcolor={filter_value(boxcolor)}", f"boxborderw={int(boxborderw)}"]
     if borderw:
         opts += [f"borderw={int(borderw)}", f"bordercolor={filter_value(bordercolor)}"]
     if shadowx or shadowy:
-        opts += [f"shadowx={int(shadowx)}", f"shadowy={int(shadowy)}",
-                 f"shadowcolor={filter_value(shadowcolor)}"]
+        opts += [
+            f"shadowx={int(shadowx)}",
+            f"shadowy={int(shadowy)}",
+            f"shadowcolor={filter_value(shadowcolor)}",
+        ]
     if alpha is not None:
         opts.append(f"alpha={_expr(alpha)}")
     if enable is not None:
@@ -217,16 +259,21 @@ def enable_between(start: float, end: float) -> str:
 #  Side files
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def concat_line(path: str) -> str:
     """One ``file '...'`` line for an FFmpeg concat-demuxer list."""
     p = os.path.abspath(path)
     return "file '" + p.replace("'", "'\\''") + "'"
 
 
-def write_concat_list(paths: Iterable[str], list_path: str | None = None, *,
-                      durations: Sequence[float | None] | None = None,
-                      inpoints: Sequence[float | None] | None = None,
-                      outpoints: Sequence[float | None] | None = None) -> str:
+def write_concat_list(
+    paths: Iterable[str],
+    list_path: str | None = None,
+    *,
+    durations: Sequence[float | None] | None = None,
+    inpoints: Sequence[float | None] | None = None,
+    outpoints: Sequence[float | None] | None = None,
+) -> str:
     """Write a concat-demuxer list (use with ``-f concat -safe 0 -i LIST``)."""
     if list_path is None:
         fd, list_path = tempfile.mkstemp(prefix="concat_", suffix=".txt")
@@ -254,8 +301,7 @@ def _meta_escape(value: str) -> str:
     return "".join(out)
 
 
-def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (),
-                     tags: dict | None = None) -> str:
+def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (), tags: dict | None = None) -> str:
     """Write an FFMETADATA1 file.  *chapters* is a sequence of
     ``(start_seconds, end_seconds, title)``; use with
     ``-i META -map_metadata 1 -map_chapters 1``."""
@@ -275,8 +321,10 @@ def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (),
 #  Fonts
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _bundled_font_dir() -> str:
     from core.paths import resource_path
+
     return resource_path("assets", "fonts")
 
 
@@ -295,13 +343,23 @@ def _system_font_dirs() -> list:
     if _IS_WIN:
         windir = os.environ.get("WINDIR", r"C:\Windows")
         local = os.environ.get("LOCALAPPDATA", "")
-        return [os.path.join(windir, "Fonts"),
-                os.path.join(local, "Microsoft", "Windows", "Fonts") if local else ""]
+        return [
+            os.path.join(windir, "Fonts"),
+            os.path.join(local, "Microsoft", "Windows", "Fonts") if local else "",
+        ]
     if sys.platform == "darwin":
-        return ["/System/Library/Fonts", "/System/Library/Fonts/Supplemental",
-                "/Library/Fonts", os.path.expanduser("~/Library/Fonts")]
-    return ["/usr/share/fonts", "/usr/local/share/fonts",
-            os.path.expanduser("~/.local/share/fonts"), os.path.expanduser("~/.fonts")]
+        return [
+            "/System/Library/Fonts",
+            "/System/Library/Fonts/Supplemental",
+            "/Library/Fonts",
+            os.path.expanduser("~/Library/Fonts"),
+        ]
+    return [
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
+        os.path.expanduser("~/.local/share/fonts"),
+        os.path.expanduser("~/.fonts"),
+    ]
 
 
 _FONT_CACHE: dict = {}
@@ -311,12 +369,30 @@ _FONT_CACHE: dict = {}
 # then bundled look-alikes.
 _ALIASES = {
     "arial": ("Arial", "Liberation Sans", "Arimo", "Nimbus Sans", "DejaVu Sans", "Inter"),
-    "arial bold": ("Arial Bold", "Liberation Sans:bold", "Arimo:bold", "DejaVu Sans:bold", "Inter-Bold"),
+    "arial bold": (
+        "Arial Bold",
+        "Liberation Sans:bold",
+        "Arimo:bold",
+        "DejaVu Sans:bold",
+        "Inter-Bold",
+    ),
     "helvetica": ("Helvetica", "Liberation Sans", "Nimbus Sans", "Arimo", "Inter"),
     "verdana": ("Verdana", "DejaVu Sans", "Inter"),
-    "times new roman": ("Times New Roman", "Liberation Serif", "Tinos", "Nimbus Roman", "DejaVu Serif"),
+    "times new roman": (
+        "Times New Roman",
+        "Liberation Serif",
+        "Tinos",
+        "Nimbus Roman",
+        "DejaVu Serif",
+    ),
     "georgia": ("Georgia", "Gelasio", "Liberation Serif", "DejaVu Serif"),
-    "courier new": ("Courier New", "Liberation Mono", "Cousine", "Nimbus Mono PS", "DejaVu Sans Mono"),
+    "courier new": (
+        "Courier New",
+        "Liberation Mono",
+        "Cousine",
+        "Nimbus Mono PS",
+        "DejaVu Sans Mono",
+    ),
     "comic sans ms": ("Comic Sans MS", "Comic Neue", "Bangers"),
     "impact": ("Impact", "Anton", "BebasNeue"),
     # Only scalable outline fonts: bitmap colour-emoji fonts (Noto Color Emoji,
@@ -397,28 +473,42 @@ def find_font(name: str = "sans") -> str | None:
 #: HDR descriptions that ride along with the frames.  An SDR result must not
 #: carry them: encoders write them into the new file (x265/NVENC as SEI, MP4 as
 #: mdcv/clli boxes) and TVs then treat the SDR picture as HDR.
-STRIP_HDR = ",".join(f"sidedata=mode=delete:type={kind}" for kind in (
-    "MASTERING_DISPLAY_METADATA", "CONTENT_LIGHT_LEVEL", "DYNAMIC_HDR_PLUS", "DYNAMIC_HDR_VIVID",
-    "DOVI_METADATA", "DOVI_RPU_BUFFER"))
+STRIP_HDR = ",".join(
+    f"sidedata=mode=delete:type={kind}"
+    for kind in (
+        "MASTERING_DISPLAY_METADATA",
+        "CONTENT_LIGHT_LEVEL",
+        "DYNAMIC_HDR_PLUS",
+        "DYNAMIC_HDR_VIVID",
+        "DOVI_METADATA",
+        "DOVI_RPU_BUFFER",
+    )
+)
 
 #: re-tag frames whose HDR tags were lost (zscale's own *in options can't do it: "no path between colorspaces")
-HDR_INPUTS = {"pq": "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,",
-              "hlg": "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc,"}
+HDR_INPUTS = {
+    "pq": "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,",
+    "hlg": "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc,",
+}
 
 
-def hdr_to_sdr_chain(*, method: str = "hable", peak_nits: float = 100.0, out_fmt: str = "yuv420p",
-                     assume: str = "") -> str:
+def hdr_to_sdr_chain(
+    *, method: str = "hable", peak_nits: float = 100.0, out_fmt: str = "yuv420p", assume: str = ""
+) -> str:
     """CPU tone-mapping of HDR10 / HLG video to SDR BT.709 (zscale + tonemap).
 
     The input transfer/primaries are taken from the frames, so PQ and HLG both
     work; *assume* ("pq" / "hlg") overrides them for files whose HDR tags were
     lost.  *method*: hable (filmic, default), mobius (keeps saturation),
     reinhard, clip."""
-    return (f"{HDR_INPUTS.get(assume, '')}zscale=t=linear:npl={peak_nits:g},format=gbrpf32le,zscale=p=bt709,"
-            f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt},{STRIP_HDR}")
+    return (
+        f"{HDR_INPUTS.get(assume, '')}zscale=t=linear:npl={peak_nits:g},format=gbrpf32le,zscale=p=bt709,"
+        f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt},{STRIP_HDR}"
+    )
 
 
 def vulkan_ok() -> bool:
     """True when FFmpeg's libplacebo filter runs on a Vulkan GPU here (see core.capabilities)."""
     from core import capabilities
+
     return bool(capabilities.get("vulkan"))

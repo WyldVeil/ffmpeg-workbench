@@ -4,6 +4,7 @@ tests/test_registry.py  -  Structural tests for the tab registry.
 These tests verify the registry is internally consistent and complete
 without launching any GUI (no Tk required).
 """
+
 import importlib
 import os
 import sys
@@ -15,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def test_registry_imports():
     """Registry module imports without error."""
     from tabs.registry import HIDDEN, PINNED, TOOLS
+
     assert TOOLS is not None
     assert PINNED is not None
     assert HIDDEN is not None
@@ -23,6 +25,7 @@ def test_registry_imports():
 def test_pinned_structure():
     """PINNED is a (str, class) tuple."""
     from tabs.registry import PINNED
+
     assert isinstance(PINNED, tuple) and len(PINNED) == 2
     name, cls = PINNED
     assert isinstance(name, str) and len(name) > 0
@@ -32,6 +35,7 @@ def test_pinned_structure():
 def test_hidden_structure():
     """HIDDEN is a dict mapping str → class."""
     from tabs.registry import HIDDEN
+
     assert isinstance(HIDDEN, dict)
     for name, cls in HIDDEN.items():
         assert isinstance(name, str)
@@ -41,6 +45,7 @@ def test_hidden_structure():
 def test_tools_structure():
     """TOOLS has 6 categories, each with a non-empty list of (name, class) tuples."""
     from tabs.registry import TOOLS
+
     assert len(TOOLS) == 6, f"Expected 6 categories, got {len(TOOLS)}"
     for category, items in TOOLS.items():
         assert isinstance(items, list) and len(items) > 0, f"Empty category: {category}"
@@ -53,6 +58,7 @@ def test_tools_structure():
 def test_no_duplicate_tool_names():
     """No two tools share the same display name."""
     from tabs.registry import TOOLS
+
     names = [name for items in TOOLS.values() for name, _ in items]
     duplicates = {n for n in names if names.count(n) > 1}
     assert not duplicates, f"Duplicate tool names: {duplicates}"
@@ -61,6 +67,7 @@ def test_no_duplicate_tool_names():
 def test_no_duplicate_tab_classes():
     """No tab class appears more than once across all categories."""
     from tabs.registry import TOOLS
+
     classes = [cls for items in TOOLS.values() for _, cls in items]
     duplicates = {c.__name__ for c in classes if classes.count(c) > 1}
     assert not duplicates, f"Duplicate tab classes: {duplicates}"
@@ -69,6 +76,7 @@ def test_no_duplicate_tab_classes():
 def test_tool_count():
     """Every category has tools and names are unique across the sidebar."""
     from tabs.registry import TOOLS
+
     names = [n for items in TOOLS.values() for n, _ in items]
     assert len(names) >= 70, f"Only {len(names)} tools registered"
     assert all(items for items in TOOLS.values()), "empty category"
@@ -95,16 +103,22 @@ def test_registry_is_lazy():
     import os
     import subprocess
     import sys
+
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    code = (f"import sys; sys.path.insert(0, {root!r}); import tabs.registry as r; "
-            "loaded = [m for m in sys.modules if m.startswith('tabs.') and m.count('.') >= 2]; "
-            "print(loaded)")
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
+    code = (
+        f"import sys; sys.path.insert(0, {root!r}); import tabs.registry as r; "
+        "loaded = [m for m in sys.modules if m.startswith('tabs.') and m.count('.') >= 2]; "
+        "print(loaded)"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    ).stdout.strip()
     assert out == "[]", out
 
 
 def test_every_registered_tool_loads():
     from tabs.registry import HIDDEN, PINNED, TOOLS
+
     specs = [PINNED[1], *HIDDEN.values(), *(c for items in TOOLS.values() for _, c in items)]
     for spec in specs:
         cls = spec.load()

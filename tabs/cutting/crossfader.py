@@ -14,6 +14,7 @@ crossfades (acrossfade) in a single FFmpeg pass.
   AMF/VideoToolbox) via the shared encoder panel; a quick low-resolution
   Preview renders the transitions before committing to the full render.
 """
+
 from __future__ import annotations
 
 import os
@@ -39,25 +40,86 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel
 
 TRANSITIONS = [
-    "fade", "dissolve", "fadeblack", "fadewhite", "fadegrays", "fadefast", "fadeslow",
-    "wipeleft", "wiperight", "wipeup", "wipedown", "wipetl", "wipetr", "wipebl", "wipebr",
-    "slideleft", "slideright", "slideup", "slidedown",
-    "smoothleft", "smoothright", "smoothup", "smoothdown",
-    "coverleft", "coverright", "coverup", "coverdown",
-    "revealleft", "revealright", "revealup", "revealdown",
-    "circlecrop", "rectcrop", "circleopen", "circleclose",
-    "vertopen", "vertclose", "horzopen", "horzclose",
-    "diagtl", "diagtr", "diagbl", "diagbr",
-    "hlslice", "hrslice", "vuslice", "vdslice",
-    "hlwind", "hrwind", "vuwind", "vdwind",
-    "radial", "pixelize", "distance", "hblur", "squeezeh", "squeezev", "zoomin",
+    "fade",
+    "dissolve",
+    "fadeblack",
+    "fadewhite",
+    "fadegrays",
+    "fadefast",
+    "fadeslow",
+    "wipeleft",
+    "wiperight",
+    "wipeup",
+    "wipedown",
+    "wipetl",
+    "wipetr",
+    "wipebl",
+    "wipebr",
+    "slideleft",
+    "slideright",
+    "slideup",
+    "slidedown",
+    "smoothleft",
+    "smoothright",
+    "smoothup",
+    "smoothdown",
+    "coverleft",
+    "coverright",
+    "coverup",
+    "coverdown",
+    "revealleft",
+    "revealright",
+    "revealup",
+    "revealdown",
+    "circlecrop",
+    "rectcrop",
+    "circleopen",
+    "circleclose",
+    "vertopen",
+    "vertclose",
+    "horzopen",
+    "horzclose",
+    "diagtl",
+    "diagtr",
+    "diagbl",
+    "diagbr",
+    "hlslice",
+    "hrslice",
+    "vuslice",
+    "vdslice",
+    "hlwind",
+    "hrwind",
+    "vuwind",
+    "vdwind",
+    "radial",
+    "pixelize",
+    "distance",
+    "hblur",
+    "squeezeh",
+    "squeezev",
+    "zoomin",
 ]
-AUDIO_CURVES = ["tri", "qsin", "hsin", "esin", "log", "ipar", "qua", "cub", "squ", "cbr", "par", "exp"]
+AUDIO_CURVES = [
+    "tri",
+    "qsin",
+    "hsin",
+    "esin",
+    "log",
+    "ipar",
+    "qua",
+    "cub",
+    "squ",
+    "cbr",
+    "par",
+    "exp",
+]
 MAX_CLIPS = 20
 
-AUDIO_MODES = [("none", "crossfader.audio_none", "No Audio"),
-               ("normal", "crossfader.audio_normal", "Normal Audio"),
-               ("hq", "crossfader.audio_hq", "HQ Audio")]
+AUDIO_MODES = [
+    ("none", "crossfader.audio_none", "No Audio"),
+    ("normal", "crossfader.audio_normal", "Normal Audio"),
+    ("hq", "crossfader.audio_hq", "HQ Audio"),
+]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -69,13 +131,14 @@ AUDIO_MODES = [("none", "crossfader.audio_none", "No Audio"),
 #  Tab
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CrossfaderTab(BaseTab):
     TOOL_NAME = "Crossfader"
     accepted_kinds = ("video",)
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.clip_rows: list = []    # dicts: frame, var, lbl, trans_var, trans_cb, num_lbl, clip
+        self.clip_rows: list = []  # dicts: frame, var, lbl, trans_var, trans_cb, num_lbl, clip
         self.audio_var = tk.StringVar()
         self.audio_curve_var = tk.StringVar(value="tri")
         self.trans_dur_var = tk.StringVar(value="1.0")
@@ -93,14 +156,16 @@ class CrossfaderTab(BaseTab):
 
     # ── UI ───────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        self.make_header(self, t("tab.crossfader"),
-                         t("crossfader.join_clips_with_smooth_transitions"), icon="✦")
+        self.make_header(
+            self, t("tab.crossfader"), t("crossfader.join_clips_with_smooth_transitions"), icon="✦"
+        )
         body_canvas = tk.Canvas(self, highlightthickness=0, bg=CLR["bg"])
         body_sb = ttk.Scrollbar(self, orient="vertical", command=body_canvas.yview)
         self._inner = tk.Frame(body_canvas, bg=CLR["bg"])
         win = body_canvas.create_window((0, 0), window=self._inner, anchor="nw")
-        self._inner.bind("<Configure>", lambda e: body_canvas.configure(
-            scrollregion=body_canvas.bbox("all")))
+        self._inner.bind(
+            "<Configure>", lambda e: body_canvas.configure(scrollregion=body_canvas.bbox("all"))
+        )
         body_canvas.bind("<Configure>", lambda e: body_canvas.itemconfigure(win, width=e.width))
         body_canvas.configure(yscrollcommand=body_sb.set)
         body_sb.pack(side="right", fill="y")
@@ -113,105 +178,205 @@ class CrossfaderTab(BaseTab):
         self._build_render_section(self._inner)
 
     def _build_clips_section(self, parent):
-        lf = self.make_section(parent, "\U0001F3AC  " + t("section.clips"), padx=16)
+        lf = self.make_section(parent, "\U0001f3ac  " + t("section.clips"), padx=16)
         self._clips_frame = tk.Frame(lf, bg=CLR["bg"])
         self._clips_frame.pack(fill="x")
         btn_row = tk.Frame(lf, bg=CLR["bg"])
         btn_row.pack(fill="x", pady=px(6, 0))
-        self.btn_add_clip = tk.Button(btn_row, text=t("crossfader.add_clip"), bg=CLR["panel"],
-                                      fg=CLR["fg"], relief="flat", cursor="hand2",
-                                      command=self._add_clip_row)
+        self.btn_add_clip = tk.Button(
+            btn_row,
+            text=t("crossfader.add_clip"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            relief="flat",
+            cursor="hand2",
+            command=self._add_clip_row,
+        )
         self.btn_add_clip.pack(side="left", padx=px(4))
-        tk.Button(btn_row, text=_tr("crossfader.add_many", "➕  Add several…"),
-                  bg=CLR["panel"], fg=CLR["fg"], relief="flat", cursor="hand2",
-                  command=self._add_many).pack(side="left", padx=px(4))
-        tk.Label(btn_row, text=_tr("crossfader.max_clips", "Up to {n} clips").format(n=MAX_CLIPS),
-                 fg=CLR["fgdim"], bg=CLR["bg"], font=(UI_FONT, 8)).pack(side="left", padx=px(8))
+        tk.Button(
+            btn_row,
+            text=_tr("crossfader.add_many", "➕  Add several…"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            relief="flat",
+            cursor="hand2",
+            command=self._add_many,
+        ).pack(side="left", padx=px(4))
+        tk.Label(
+            btn_row,
+            text=_tr("crossfader.max_clips", "Up to {n} clips").format(n=MAX_CLIPS),
+            fg=CLR["fgdim"],
+            bg=CLR["bg"],
+            font=(UI_FONT, 8),
+        ).pack(side="left", padx=px(8))
         self._add_clip_row()
         self._add_clip_row()
 
     def _build_transition_section(self, parent):
-        lf = self.make_section(parent, "\U0001F39E  " + t("section.transition"), padx=16)
+        lf = self.make_section(parent, "\U0001f39e  " + t("section.transition"), padx=16)
         row1 = tk.Frame(lf, bg=CLR["bg"])
         row1.pack(fill="x", pady=px(2))
-        tk.Label(row1, text=t("gif_maker.duration_label"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        tk.Spinbox(row1, from_=0.1, to=10, increment=0.1, format="%.1f",
-                   textvariable=self.trans_dur_var, width=6,
-                   font=(UI_FONT, 11)).pack(side="left", padx=px(8))
-        tk.Label(row1, text=t("crossfader.video_type"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(12, 0))
-        self._global_trans_cb = ttk.Combobox(row1, textvariable=self.trans_type_var,
-                                             values=TRANSITIONS, state="readonly", width=16)
+        tk.Label(
+            row1,
+            text=t("gif_maker.duration_label"),
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
+        tk.Spinbox(
+            row1,
+            from_=0.1,
+            to=10,
+            increment=0.1,
+            format="%.1f",
+            textvariable=self.trans_dur_var,
+            width=6,
+            font=(UI_FONT, 11),
+        ).pack(side="left", padx=px(8))
+        tk.Label(
+            row1,
+            text=t("crossfader.video_type"),
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left", padx=px(12, 0))
+        self._global_trans_cb = ttk.Combobox(
+            row1, textvariable=self.trans_type_var, values=TRANSITIONS, state="readonly", width=16
+        )
         self._global_trans_cb.pack(side="left", padx=px(8))
         self.trans_type_var.trace_add("write", lambda *_: self._apply_global_trans())
-        tk.Label(row1, text=t("crossfader.audio_curve"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(12, 0))
-        ttk.Combobox(row1, textvariable=self.audio_curve_var, values=AUDIO_CURVES,
-                     state="readonly", width=8).pack(side="left", padx=px(8))
+        tk.Label(
+            row1,
+            text=t("crossfader.audio_curve"),
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left", padx=px(12, 0))
+        ttk.Combobox(
+            row1, textvariable=self.audio_curve_var, values=AUDIO_CURVES, state="readonly", width=8
+        ).pack(side="left", padx=px(8))
 
         row2 = tk.Frame(lf, bg=CLR["bg"])
         row2.pack(fill="x", pady=px(4, 0))
-        tk.Checkbutton(row2, text=t("crossfader.use_different_transition_for_each_clip_pair"),
-                       variable=self.per_clip_trans, command=self._toggle_per_clip_trans,
-                       bg=CLR["bg"], fg=CLR["fg"], selectcolor=CLR["input_bg"],
-                       activebackground=CLR["bg"], font=(UI_FONT, 10)).pack(side="left")
+        tk.Checkbutton(
+            row2,
+            text=t("crossfader.use_different_transition_for_each_clip_pair"),
+            variable=self.per_clip_trans,
+            command=self._toggle_per_clip_trans,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["input_bg"],
+            activebackground=CLR["bg"],
+            font=(UI_FONT, 10),
+        ).pack(side="left")
 
         row3 = tk.Frame(lf, bg=CLR["bg"])
         row3.pack(fill="x", pady=px(6, 0))
-        tk.Label(row3, text=t("crossfader.behavior"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        for value, key in (("overlap", "crossfader.overlap_standard_merges_action_consumes_time"),
-                           ("freeze", "crossfader.freeze_frame_preserves_action_freezes_video_at_c")):
-            tk.Radiobutton(row3, text=t(key), variable=self.trans_behavior_var, value=value,
-                           command=self._update_summary, bg=CLR["bg"], fg=CLR["fg"],
-                           selectcolor=CLR["input_bg"], activebackground=CLR["bg"],
-                           font=(UI_FONT, 10)).pack(side="left", padx=px(8))
+        tk.Label(
+            row3,
+            text=t("crossfader.behavior"),
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
+        for value, key in (
+            ("overlap", "crossfader.overlap_standard_merges_action_consumes_time"),
+            ("freeze", "crossfader.freeze_frame_preserves_action_freezes_video_at_c"),
+        ):
+            tk.Radiobutton(
+                row3,
+                text=t(key),
+                variable=self.trans_behavior_var,
+                value=value,
+                command=self._update_summary,
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                selectcolor=CLR["input_bg"],
+                activebackground=CLR["bg"],
+                font=(UI_FONT, 10),
+            ).pack(side="left", padx=px(8))
         self.trans_dur_var.trace_add("write", lambda *_: self._update_summary())
 
     def _build_encoding_section(self, parent):
         lf = self.make_section(parent, "⚙  " + t("section.encoding"), padx=16)
-        self.encoder = EncoderPanel(lf, codecs=("h264", "hevc", "av1", "vp9"), default_quality="high")
+        self.encoder = EncoderPanel(
+            lf, codecs=("h264", "hevc", "av1", "vp9"), default_quality="high"
+        )
         self.encoder.pack(anchor="w")
         a_row = tk.Frame(lf, bg=CLR["bg"])
         a_row.pack(fill="x", pady=px(8, 0))
-        tk.Label(a_row, text=t("crossfader.audio"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            a_row, text=t("crossfader.audio"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         for key, _k, _fb in AUDIO_MODES:
-            tk.Radiobutton(a_row, text=self._audio_labels[key], variable=self.audio_var,
-                           value=self._audio_labels[key], bg=CLR["bg"], fg=CLR["fg"],
-                           selectcolor=CLR["input_bg"], activebackground=CLR["bg"],
-                           font=(UI_FONT, 9)).pack(side="left", padx=px(6))
+            tk.Radiobutton(
+                a_row,
+                text=self._audio_labels[key],
+                variable=self.audio_var,
+                value=self._audio_labels[key],
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                selectcolor=CLR["input_bg"],
+                activebackground=CLR["bg"],
+                font=(UI_FONT, 9),
+            ).pack(side="left", padx=px(6))
 
     def _build_output_section(self, parent):
-        lf = self.make_section(parent, "\U0001F4BE  " + t("section.output"), padx=16)
+        lf = self.make_section(parent, "\U0001f4be  " + t("section.output"), padx=16)
         row = tk.Frame(lf, bg=CLR["bg"])
         row.pack(fill="x")
-        tk.Label(row, text=t("crossfader.output_file"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            row,
+            text=t("crossfader.output_file"),
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(side="left")
         self.out_var = tk.StringVar()
-        self.entry_out = tk.Entry(row, textvariable=self.out_var, width=70, relief="flat",
-                                  bg=CLR["input_bg"], fg=CLR["input_fg"],
-                                  insertbackground=CLR["accent"])
+        self.entry_out = tk.Entry(
+            row,
+            textvariable=self.out_var,
+            width=70,
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+        )
         self.entry_out.pack(side="left", padx=px(8), fill="x", expand=True)
-        tk.Button(row, text=t("common.save_as"), command=self._browse_output,
-                  relief="flat", bg=CLR["panel"], fg=CLR["fg"]).pack(side="left")
+        tk.Button(
+            row,
+            text=t("common.save_as"),
+            command=self._browse_output,
+            relief="flat",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+        ).pack(side="left")
 
     def _build_render_section(self, parent):
         btn_row = tk.Frame(parent, bg=CLR["bg"])
         btn_row.pack(pady=px(10), padx=px(16), fill="x")
         self._render_label = t("crossfader.render_crossfade")
-        self.run_btn = self.make_render_btn(btn_row, self._render_label, self._start_render,
-                                            color=CLR["green"], width=26)
+        self.run_btn = self.make_render_btn(
+            btn_row, self._render_label, self._start_render, color=CLR["green"], width=26
+        )
         self.run_btn.config(state="disabled")
         self.run_btn.pack(side="left", padx=px(6))
-        self._preview_label = _tr("crossfader.preview_button", "\U0001F441  Quick preview")
-        self.preview_btn = tk.Button(btn_row, text=self._preview_label, font=(UI_FONT, 10, "bold"),
-                                     bg=CLR["panel"], fg=CLR["fg"], relief="flat", cursor="hand2",
-                                     state="disabled", command=self._start_preview)
+        self._preview_label = _tr("crossfader.preview_button", "\U0001f441  Quick preview")
+        self.preview_btn = tk.Button(
+            btn_row,
+            text=self._preview_label,
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            relief="flat",
+            cursor="hand2",
+            state="disabled",
+            command=self._start_preview,
+        )
         self.preview_btn.pack(side="left", padx=px(6), ipady=px(8))
-        self._status_lbl = tk.Label(btn_row, text="", fg=CLR["accent"], bg=CLR["bg"],
-                                    font=(UI_FONT, 9), justify="left")
+        self._status_lbl = tk.Label(
+            btn_row, text="", fg=CLR["accent"], bg=CLR["bg"], font=(UI_FONT, 9), justify="left"
+        )
         self._status_lbl.pack(side="left", padx=px(12))
         cf = tk.Frame(parent, bg=CLR["bg"])
         cf.pack(fill="both", expand=True, padx=px(16), pady=px(4))
@@ -229,32 +394,61 @@ class CrossfaderTab(BaseTab):
         frame = tk.Frame(self._clips_frame, relief="groove", bd=px(1), bg=CLR["panel"])
         frame.pack(fill="x", pady=px(2))
         row = {"frame": frame, "clip": None}
-        row["num_lbl"] = tk.Label(frame, text=str(len(self.clip_rows) + 1), width=3,
-                                  font=(UI_FONT, 9, "bold"), fg=CLR["accent"], bg=CLR["panel"])
+        row["num_lbl"] = tk.Label(
+            frame,
+            text=str(len(self.clip_rows) + 1),
+            width=3,
+            font=(UI_FONT, 9, "bold"),
+            fg=CLR["accent"],
+            bg=CLR["panel"],
+        )
         row["num_lbl"].pack(side="left", padx=px(4))
         row["var"] = tk.StringVar(value=path)
-        entry = tk.Entry(frame, textvariable=row["var"], width=48, font=(MONO_FONT, 9),
-                         relief="flat", bg=CLR["input_bg"], fg=CLR["input_fg"])
+        entry = tk.Entry(
+            frame,
+            textvariable=row["var"],
+            width=48,
+            font=(MONO_FONT, 9),
+            relief="flat",
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+        )
         entry.pack(side="left", padx=px(4), pady=px(3))
         entry.bind("<FocusOut>", lambda e, r=row: self._on_entry_update(r))
         entry.bind("<Return>", lambda e, r=row: self._on_entry_update(r))
-        tk.Button(frame, text="…", width=3, relief="flat",
-                  command=lambda r=row: self._browse_clip(r)).pack(side="left")
-        row["lbl"] = tk.Label(frame, text=t("common.no_file_loaded"), fg=CLR["fgdim"],
-                              bg=CLR["panel"], font=(UI_FONT, 8), anchor="w")
+        tk.Button(
+            frame, text="…", width=3, relief="flat", command=lambda r=row: self._browse_clip(r)
+        ).pack(side="left")
+        row["lbl"] = tk.Label(
+            frame,
+            text=t("common.no_file_loaded"),
+            fg=CLR["fgdim"],
+            bg=CLR["panel"],
+            font=(UI_FONT, 8),
+            anchor="w",
+        )
         row["lbl"].pack(side="left", padx=px(6), fill="x", expand=True)
         ctrl = tk.Frame(frame, bg=CLR["panel"])
         ctrl.pack(side="right", padx=px(4))
         row["ctrl"] = ctrl
         row["trans_var"] = tk.StringVar(value=self.trans_type_var.get())
-        row["trans_cb"] = ttk.Combobox(frame, textvariable=row["trans_var"], values=TRANSITIONS,
-                                       state="readonly", width=13)
-        for txt, cmd in (("↑", lambda r=row: self._move_clip(r, -1)),
-                         ("↓", lambda r=row: self._move_clip(r, +1)),
-                         ("✕", lambda r=row: self._remove_clip(r))):
-            tk.Button(ctrl, text=txt, width=2, relief="flat", command=cmd,
-                      fg=CLR["red"] if txt == "✕" else CLR["fg"],
-                      bg=CLR["panel"]).pack(side="left", padx=px(1))
+        row["trans_cb"] = ttk.Combobox(
+            frame, textvariable=row["trans_var"], values=TRANSITIONS, state="readonly", width=13
+        )
+        for txt, cmd in (
+            ("↑", lambda r=row: self._move_clip(r, -1)),
+            ("↓", lambda r=row: self._move_clip(r, +1)),
+            ("✕", lambda r=row: self._remove_clip(r)),
+        ):
+            tk.Button(
+                ctrl,
+                text=txt,
+                width=2,
+                relief="flat",
+                command=cmd,
+                fg=CLR["red"] if txt == "✕" else CLR["fg"],
+                bg=CLR["panel"],
+            ).pack(side="left", padx=px(1))
         self.clip_rows.append(row)
         if len(self.clip_rows) >= MAX_CLIPS:
             self.btn_add_clip.config(state="disabled")
@@ -347,9 +541,13 @@ class CrossfaderTab(BaseTab):
 
     def _browse_output(self):
         current = self.out_var.get().strip()
-        path = dialogs.ask_save(os.path.basename(current) or "crossfaded.mp4", kind="video",
-                                defaultextension=".mp4", parent=self,
-                                initialdir=os.path.dirname(current) or None)
+        path = dialogs.ask_save(
+            os.path.basename(current) or "crossfaded.mp4",
+            kind="video",
+            defaultextension=".mp4",
+            parent=self,
+            initialdir=os.path.dirname(current) or None,
+        )
         if path:
             self.out_var.set(path)
 
@@ -396,9 +594,12 @@ class CrossfaderTab(BaseTab):
         else:
             total = total_duration(clips, T, freeze)
             note = _tr("crossfader.summary", "{n} clips → {d} total").format(
-                n=len(clips), d=ff.format_time(total, ms=False))
+                n=len(clips), d=ff.format_time(total, ms=False)
+            )
             if any(not c.has_audio for c in clips) and any(c.has_audio for c in clips):
-                note += "  ·  " + _tr("crossfader.silence_note", "silence added for clips without audio")
+                note += "  ·  " + _tr(
+                    "crossfader.silence_note", "silence added for clips without audio"
+                )
             self._status_lbl.config(text=note, fg=CLR["accent"])
 
     # ── rendering ────────────────────────────────────────────────────────────
@@ -406,8 +607,11 @@ class CrossfaderTab(BaseTab):
         clips = self._clips()
         T = self._duration()
         if T is None:
-            messagebox.showwarning(t("common.warning"),
-                                   _tr("crossfader.bad_duration", "Enter a valid transition length."), parent=self)
+            messagebox.showwarning(
+                t("common.warning"),
+                _tr("crossfader.bad_duration", "Enter a valid transition length."),
+                parent=self,
+            )
             return None
         freeze = self.trans_behavior_var.get() == "freeze"
         problem = validate(clips, T, freeze)
@@ -422,22 +626,37 @@ class CrossfaderTab(BaseTab):
             size = (_even(w0 * scale), _even(h0 * scale))
         else:
             if not enc.video_ok_for(container, self.encoder.codec):
-                messagebox.showwarning(t("common.warning"), _tr(
-                    "crossfader.codec_container",
-                    "{codec} can't be stored in a .{ext} file. Pick another codec or file type.").format(
-                    codec=self.encoder.codec.upper(), ext=container), parent=self)
+                messagebox.showwarning(
+                    t("common.warning"),
+                    _tr(
+                        "crossfader.codec_container",
+                        "{codec} can't be stored in a .{ext} file. Pick another codec or file type.",
+                    ).format(codec=self.encoder.codec.upper(), ext=container),
+                    parent=self,
+                )
                 return None
             venc = self.encoder.video_encode(container)
             size = None
-        return build_command(clips, out, T=T, transitions=self._transitions(), freeze=freeze,
-                             audio_mode=self._audio_mode(), audio_curve=self.audio_curve_var.get(),
-                             venc=venc, size=size)
+        return build_command(
+            clips,
+            out,
+            T=T,
+            transitions=self._transitions(),
+            freeze=freeze,
+            audio_mode=self._audio_mode(),
+            audio_curve=self.audio_curve_var.get(),
+            venc=venc,
+            size=size,
+        )
 
     def _start_render(self):
         clips = self._clips()
         if len(clips) < 2:
-            messagebox.showwarning(t("common.warning"), _tr("crossfader.need_two", "Add at least two clips."),
-                                   parent=self)
+            messagebox.showwarning(
+                t("common.warning"),
+                _tr("crossfader.need_two", "Add at least two clips."),
+                parent=self,
+            )
             return
         out = self.out_var.get().strip() or self.suggest_output(clips[0].path, "crossfaded", ".mp4")
         out = self.confirm_output(out, [c.path for c in clips])
@@ -448,20 +667,38 @@ class CrossfaderTab(BaseTab):
         if not built:
             return
         cmd, seconds = built
-        self.log(self.console, f"Rendering {len(clips)} clips → {os.path.basename(out)} "
-                               f"({ff.format_time(seconds, ms=False)}, {self.encoder.video_encode().label})")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self.run_btn, btn_label=self._render_label, duration=seconds,
-                        output=out, inputs=[c.path for c in clips], name="Crossfader")
+        self.log(
+            self.console,
+            f"Rendering {len(clips)} clips → {os.path.basename(out)} "
+            f"({ff.format_time(seconds, ms=False)}, {self.encoder.video_encode().label})",
+        )
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.run_btn,
+            btn_label=self._render_label,
+            duration=seconds,
+            output=out,
+            inputs=[c.path for c in clips],
+            name="Crossfader",
+        )
 
     def _start_preview(self):
         from core.paths import temp_dir
+
         out = os.path.join(temp_dir("crossfade_preview_"), "preview.mp4")
         built = self._prepare(out, preview=True)
         if not built:
             return
         cmd, seconds = built
-        self.run_ffmpeg(cmd, self.console,
-                        on_done=lambda rc: launch_preview(out) if rc == 0 else self.show_result(rc, out),
-                        btn=self.preview_btn, btn_label=self._preview_label, duration=seconds,
-                        output=out, name="Crossfader preview")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: launch_preview(out) if rc == 0 else self.show_result(rc, out),
+            btn=self.preview_btn,
+            btn_label=self._preview_label,
+            duration=seconds,
+            output=out,
+            name="Crossfader preview",
+        )

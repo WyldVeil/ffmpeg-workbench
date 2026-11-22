@@ -6,6 +6,7 @@ with short fades so cuts don't click, or mute / remove the whole track.
 The muting is sample-accurate: one aeval expression with a gain envelope
 built from the ranges.  The picture is copied untouched.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -19,9 +20,12 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
-MODES = {"silence": "Silence the chosen moments", "bleep": "Bleep the chosen moments (1 kHz tone)",
-         "silent_track": "Replace all sound with silence (keeps a silent track)",
-         "remove": "Remove the audio track completely"}
+MODES = {
+    "silence": "Silence the chosen moments",
+    "bleep": "Bleep the chosen moments (1 kHz tone)",
+    "silent_track": "Replace all sound with silence (keeps a silent track)",
+    "remove": "Remove the audio track completely",
+}
 
 
 def gain_expr(ranges, fade: float) -> str:
@@ -47,11 +51,17 @@ class MuterTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.the_muter"), "Silence or bleep moments, or remove the sound.",
-                         icon="🔇")
+        self.make_header(
+            self, t("tab.the_muter"), "Silence or bleep moments, or remove the sound.", icon="🔇"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var, kind="media",
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body,
+            t("common.source_video"),
+            self.src_var,
+            kind="media",
+            on_change=self._source_changed,
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         top = tk.Frame(body)
         top.pack(fill="x", padx=px(20), pady=px(4))
@@ -60,10 +70,15 @@ class MuterTab(BaseTab):
         self.preview = FramePreview(pv, 384, 216)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
-        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var,
-                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider = ttk.Scale(
+            pv,
+            from_=0,
+            to=1,
+            variable=self.pos_var,
+            command=lambda _v: self.preview.show(float(self.pos_var.get())),
+        )
         self.slider.pack(fill="x")
-        framestep.slider(self.slider, self.preview)      # , and . step a frame
+        framestep.slider(self.slider, self.preview)  # , and . step a frame
         mark = tk.Frame(pv)
         mark.pack(fill="x")
         self.a_var, self.b_var = tk.StringVar(), tk.StringVar()
@@ -71,12 +86,16 @@ class MuterTab(BaseTab):
         tk.Entry(mark, textvariable=self.a_var, width=11).pack(side="left", padx=px(2))
         tk.Button(mark, text="End here", relief="flat", command=self.mark_out).pack(side="left")
         tk.Entry(mark, textvariable=self.b_var, width=11).pack(side="left", padx=px(2))
-        tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(side="left", padx=px(4))
+        tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(
+            side="left", padx=px(4)
+        )
         right = tk.Frame(top)
         right.pack(side="left", fill="both", expand=True, padx=px(10, 0))
         self.listbox = tk.Listbox(right, height=10)
         self.listbox.pack(fill="both", expand=True)
-        tk.Button(right, text="🗑 Remove selected", relief="flat", command=self._remove).pack(anchor="w")
+        tk.Button(right, text="🗑 Remove selected", relief="flat", command=self._remove).pack(
+            anchor="w"
+        )
 
         opt = tk.LabelFrame(body, text="  What to do  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -91,11 +110,23 @@ class MuterTab(BaseTab):
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="media",
-                               suggest=lambda: self.suggest_output(self.src_row.path, "muted"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            kind="media",
+            suggest=lambda: self.suggest_output(self.src_row.path, "muted"),
+        )
         self.out_row.pack(fill="x")
-        self.btn_render = tk.Button(body, text="🔇  APPLY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=20, command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="🔇  APPLY",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=20,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -118,7 +149,9 @@ class MuterTab(BaseTab):
         self.ranges.sort()
         self.listbox.delete(0, "end")
         for x, y in self.ranges:
-            self.listbox.insert("end", f"{ff.format_time(x)}  →  {ff.format_time(y)}   ({y - x:.2f}s)")
+            self.listbox.insert(
+                "end", f"{ff.format_time(x)}  →  {ff.format_time(y)}   ({y - x:.2f}s)"
+            )
 
     # i / o (and the buttons): the moment starts / ends at the frame shown
     def mark_in(self):
@@ -146,7 +179,9 @@ class MuterTab(BaseTab):
             return
         mode = self.mode_var.get()
         if mode in ("silence", "bleep") and not self.ranges:
-            messagebox.showwarning(t("common.warning"), "Add at least one moment to mute.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), "Add at least one moment to mute.", parent=self
+            )
             return
         try:
             fade = common.number(self.fade_var.get() or "0", "Fade", 0, 5)
@@ -162,7 +197,20 @@ class MuterTab(BaseTab):
         elif mode == "silent_track":
             cmd += ["-af", "volume=0", *audio_job_args(out, info), out]
         else:
-            cmd += ["-af", mute_filter(self.ranges, fade, mode == "bleep"), *audio_job_args(out, info), out]
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
-                        btn_label="🔇  APPLY", duration=info.duration or None, output=out, inputs=[src],
-                        name="Muter")
+            cmd += [
+                "-af",
+                mute_filter(self.ranges, fade, mode == "bleep"),
+                *audio_job_args(out, info),
+                out,
+            ]
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn_render,
+            btn_label="🔇  APPLY",
+            duration=info.duration or None,
+            output=out,
+            inputs=[src],
+            name="Muter",
+        )

@@ -3,6 +3,7 @@
 Needs a speech sample and a model, which are too big for the repo: set
 CROSSFADER_TEST_WHISPER_DIR to a folder holding ``ggml-base-q5_1.bin`` and
 ``jfk.wav`` (whisper.cpp's sample).  Skipped otherwise."""
+
 import os
 import shutil
 
@@ -16,8 +17,16 @@ ASSETS = os.environ.get("CROSSFADER_TEST_WHISPER_DIR", "")
 
 
 def test_commands_and_progress():
-    cmd = whisper.transcribe_cmd("a.wav", "m.bin", "/tmp/out", language="de", translate=True,
-                                 max_len=40, formats=("srt", "vtt"), prompt="WyldVeil")
+    cmd = whisper.transcribe_cmd(
+        "a.wav",
+        "m.bin",
+        "/tmp/out",
+        language="de",
+        translate=True,
+        max_len=40,
+        formats=("srt", "vtt"),
+        prompt="WyldVeil",
+    )
     assert cmd[0].endswith(("whisper-cli", "whisper-cli.exe"))
     for flag in ("-osrt", "-ovtt", "-tr", "-sow", "--prompt"):
         assert flag in cmd
@@ -27,14 +36,19 @@ def test_commands_and_progress():
 
 
 needs_assets = pytest.mark.skipif(
-    not (ASSETS and os.path.isfile(os.path.join(ASSETS, "ggml-base-q5_1.bin"))
-         and os.path.isfile(os.path.join(ASSETS, "jfk.wav"))),
-    reason="set CROSSFADER_TEST_WHISPER_DIR (ggml-base-q5_1.bin + jfk.wav)")
+    not (
+        ASSETS
+        and os.path.isfile(os.path.join(ASSETS, "ggml-base-q5_1.bin"))
+        and os.path.isfile(os.path.join(ASSETS, "jfk.wav"))
+    ),
+    reason="set CROSSFADER_TEST_WHISPER_DIR (ggml-base-q5_1.bin + jfk.wav)",
+)
 
 
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -47,9 +61,26 @@ def test_transcribe_mux_and_burn(ui, outdir, media):
         fh.write("test\n")
     # a video with JFK's speech as its audio track
     video = str(outdir / "jfk talk.mp4")
-    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "color=c=0x334455:s=640x360:d=11",
-              "-i", os.path.join(ASSETS, "jfk.wav"), "-shortest", "-c:v", "libx264",
-              "-pix_fmt", "yuv420p", "-c:a", "aac", video])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x334455:s=640x360:d=11",
+            "-i",
+            os.path.join(ASSETS, "jfk.wav"),
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            video,
+        ]
+    )
     ui.reset()
     tab = ui.open("Auto-Subtitles")
     tab.src_var.set(video)
@@ -85,8 +116,13 @@ def test_karaoke_from_audio(ui, outdir):
     ui.reset()
     tab = ui.open("Karaoke Generator")
     tab._src_var.set(os.path.join(ASSETS, "jfk.wav"))
-    tab._model_var.set(next(k for k, v in __import__("tabs.audio.karaoke", fromlist=["MODELS"]).MODELS.items()
-                            if v == "base"))
+    tab._model_var.set(
+        next(
+            k
+            for k, v in __import__("tabs.audio.karaoke", fromlist=["MODELS"]).MODELS.items()
+            if v == "base"
+        )
+    )
     out = str(outdir / "karaoke.mp4")
     tab._out_var.set(out)
     tab._generate()
@@ -98,12 +134,15 @@ def test_karaoke_from_audio(ui, outdir):
 
 def test_karaoke_word_grouping(tmp_path):
     from tabs.audio.karaoke import segments_from_whispercpp
+
     p = tmp_path / "w.json"
-    p.write_text('{"transcription": [{"offsets": {"from": 0, "to": 2000}, "text": " Hello world", "tokens": ['
-                 '{"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},'
-                 '{"text": " Hel", "offsets": {"from": 100, "to": 300}},'
-                 '{"text": "lo", "offsets": {"from": 300, "to": 500}},'
-                 '{"text": " world", "offsets": {"from": 600, "to": 1200}}]}]}')
+    p.write_text(
+        '{"transcription": [{"offsets": {"from": 0, "to": 2000}, "text": " Hello world", "tokens": ['
+        '{"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}},'
+        '{"text": " Hel", "offsets": {"from": 100, "to": 300}},'
+        '{"text": "lo", "offsets": {"from": 300, "to": 500}},'
+        '{"text": " world", "offsets": {"from": 600, "to": 1200}}]}]}'
+    )
     segs = segments_from_whispercpp(str(p))
     assert [w["word"] for w in segs[0]["words"]] == [" Hello", " world"]
     assert segs[0]["words"][0]["end"] == 0.5

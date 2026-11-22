@@ -7,6 +7,7 @@ as PCM in MOV, timecode and metadata kept, names that relink easily
 (same name + suffix, or the same name in a "Proxy" folder).  Each file is
 checked; failures are reported and never counted as done.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -25,20 +26,68 @@ from tabs.transcoder.converter import free_name
 
 logger = logging.getLogger("crossfader.transcoder.proxy")
 
-PRESETS = {   # key: (label, ext, video args, audio mode)
-    "prores": ("ProRes Proxy (.mov) - Premiere, Resolve, Final Cut", ".mov",
-               ["-c:v", "prores_ks", "-profile:v", "0", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"], "pcm"),
-    "dnxhr": ("DNxHR LB (.mov) - Avid, Resolve", ".mov",
-              ["-c:v", "dnxhd", "-profile:v", "dnxhr_lb", "-pix_fmt", "yuv422p"], "pcm"),
-    "h264": ("H.264 short-GOP (.mp4) - small, any editor", ".mp4",
-             ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-tune", "fastdecode", "-g", "12",
-              "-bf", "0", "-pix_fmt", "yuv420p"], "aac"),
-    "mjpeg": ("MJPEG draft (.mov) - very light to decode", ".mov",
-              ["-c:v", "mjpeg", "-q:v", "6", "-pix_fmt", "yuvj422p"], "pcm"),
+PRESETS = {  # key: (label, ext, video args, audio mode)
+    "prores": (
+        "ProRes Proxy (.mov) - Premiere, Resolve, Final Cut",
+        ".mov",
+        ["-c:v", "prores_ks", "-profile:v", "0", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"],
+        "pcm",
+    ),
+    "dnxhr": (
+        "DNxHR LB (.mov) - Avid, Resolve",
+        ".mov",
+        ["-c:v", "dnxhd", "-profile:v", "dnxhr_lb", "-pix_fmt", "yuv422p"],
+        "pcm",
+    ),
+    "h264": (
+        "H.264 short-GOP (.mp4) - small, any editor",
+        ".mp4",
+        [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-tune",
+            "fastdecode",
+            "-g",
+            "12",
+            "-bf",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+        ],
+        "aac",
+    ),
+    "mjpeg": (
+        "MJPEG draft (.mov) - very light to decode",
+        ".mov",
+        ["-c:v", "mjpeg", "-q:v", "6", "-pix_fmt", "yuvj422p"],
+        "pcm",
+    ),
 }
-SIZES = {"half": ("Half size", 0.5), "quarter": ("Quarter size", 0.25), "720": ("720p", 720),
-         "540": ("540p", 540), "same": ("Same size", 1.0)}
-VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".mxf", ".avi", ".mts", ".m2ts", ".braw", ".r3d", ".mpg", ".webm", ".m4v")
+SIZES = {
+    "half": ("Half size", 0.5),
+    "quarter": ("Quarter size", 0.25),
+    "720": ("720p", 720),
+    "540": ("540p", 540),
+    "same": ("Same size", 1.0),
+}
+VIDEO_EXTS = (
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".mxf",
+    ".avi",
+    ".mts",
+    ".m2ts",
+    ".braw",
+    ".r3d",
+    ".mpg",
+    ".webm",
+    ".m4v",
+)
 
 
 def scale_filter(size_key: str) -> str:
@@ -56,11 +105,16 @@ def proxy_args(info: ff.MediaInfo, preset: str, size_key: str, audio: bool) -> l
     if audio:
         for n, a in enumerate(s for s in info.streams if s.type == "audio"):
             args += ["-map", f"0:{a.index}"]
-            args += [f"-c:a:{n}", "pcm_s16le"] if amode == "pcm" else [f"-c:a:{n}", "aac", f"-b:a:{n}", "160k"]
+            args += (
+                [f"-c:a:{n}", "pcm_s16le"]
+                if amode == "pcm"
+                else [f"-c:a:{n}", "aac", f"-b:a:{n}", "160k"]
+            )
     else:
         args += ["-an"]
-    tc = info.tags.get("timecode") or next((s.tags.get("timecode") for s in info.streams
-                                            if s.tags.get("timecode")), None)
+    tc = info.tags.get("timecode") or next(
+        (s.tags.get("timecode") for s in info.streams if s.tags.get("timecode")), None
+    )
     if tc:
         args += ["-timecode", str(tc)]
     args += ["-map_metadata", "0"]
@@ -86,47 +140,90 @@ class ProxyGenTab(BaseTab):
         sb.pack(side="right", fill="y")
         bf = tk.Frame(self)
         bf.pack(pady=px(4))
-        for label, cmd in ((t("converter.btn_add_files"), self._add), ("Add a folder…", self._add_folder),
-                           (t("converter.btn_remove"), self._remove), (t("converter.btn_clear"), self._clear)):
-            tk.Button(bf, text=label, command=cmd, relief="flat", cursor="hand2").pack(side="left", padx=px(4))
+        for label, cmd in (
+            (t("converter.btn_add_files"), self._add),
+            ("Add a folder…", self._add_folder),
+            (t("converter.btn_remove"), self._remove),
+            (t("converter.btn_clear"), self._clear),
+        ):
+            tk.Button(bf, text=label, command=cmd, relief="flat", cursor="hand2").pack(
+                side="left", padx=px(4)
+            )
 
-        opt = tk.LabelFrame(self, text=f"  {t('proxy.proxy_options_section')}  ", padx=px(15), pady=px(8))
+        opt = tk.LabelFrame(
+            self, text=f"  {t('proxy.proxy_options_section')}  ", padx=px(15), pady=px(8)
+        )
         opt.pack(fill="x", padx=px(20), pady=px(5))
         r0 = tk.Frame(opt)
         r0.pack(fill="x", pady=px(3))
         tk.Label(r0, text=t("proxy.preset_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.preset_var = tk.StringVar(value=PRESETS["prores"][0])
-        ttk.Combobox(r0, textvariable=self.preset_var, values=[v[0] for v in PRESETS.values()], state="readonly",
-                     width=50).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            r0,
+            textvariable=self.preset_var,
+            values=[v[0] for v in PRESETS.values()],
+            state="readonly",
+            width=50,
+        ).pack(side="left", padx=px(8))
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(3))
         tk.Label(r1, text="Size:").pack(side="left")
         self.size_var = tk.StringVar(value=SIZES["half"][0])
-        ttk.Combobox(r1, textvariable=self.size_var, values=[v[0] for v in SIZES.values()], state="readonly",
-                     width=12).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            r1,
+            textvariable=self.size_var,
+            values=[v[0] for v in SIZES.values()],
+            state="readonly",
+            width=12,
+        ).pack(side="left", padx=px(8))
         self.audio_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Include every audio track", variable=self.audio_var).pack(side="left", padx=px(12))
+        tk.Checkbutton(r1, text="Include every audio track", variable=self.audio_var).pack(
+            side="left", padx=px(12)
+        )
         r2 = tk.Frame(opt)
         r2.pack(fill="x", pady=px(3))
         self.place_var = tk.StringVar(value="folder")
-        tk.Radiobutton(r2, text="Same name in a “Proxy” folder next to each file (easy relinking)",
-                       variable=self.place_var, value="folder").pack(anchor="w")
+        tk.Radiobutton(
+            r2,
+            text="Same name in a “Proxy” folder next to each file (easy relinking)",
+            variable=self.place_var,
+            value="folder",
+        ).pack(anchor="w")
         r3 = tk.Frame(r2)
         r3.pack(anchor="w")
-        tk.Radiobutton(r3, text="Next to the originals, with the suffix", variable=self.place_var,
-                       value="suffix").pack(side="left")
+        tk.Radiobutton(
+            r3,
+            text="Next to the originals, with the suffix",
+            variable=self.place_var,
+            value="suffix",
+        ).pack(side="left")
         self.suffix_var = tk.StringVar(value="_proxy")
         tk.Entry(r3, textvariable=self.suffix_var, width=12).pack(side="left", padx=px(4))
         r4 = tk.Frame(r2)
         r4.pack(anchor="w")
-        tk.Radiobutton(r4, text="In this folder:", variable=self.place_var, value="dir").pack(side="left")
+        tk.Radiobutton(r4, text="In this folder:", variable=self.place_var, value="dir").pack(
+            side="left"
+        )
         self.out_dir_var = tk.StringVar()
         tk.Entry(r4, textvariable=self.out_dir_var, width=44).pack(side="left", padx=px(4))
-        tk.Button(r4, text=t("btn.browse"), relief="flat",
-                  command=lambda: self.out_dir_var.set(dialogs.ask_directory(parent=self) or
-                                                       self.out_dir_var.get())).pack(side="left")
-        self.btn_render = tk.Button(self, text=t("proxy.render_button"), font=(UI_FONT, 12, "bold"),
-                                    bg=CLR["green"], fg="white", height=2, width=28, command=self._render)
+        tk.Button(
+            r4,
+            text=t("btn.browse"),
+            relief="flat",
+            command=lambda: self.out_dir_var.set(
+                dialogs.ask_directory(parent=self) or self.out_dir_var.get()
+            ),
+        ).pack(side="left")
+        self.btn_render = tk.Button(
+            self,
+            text=t("proxy.render_button"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            height=2,
+            width=28,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(10))
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
@@ -150,7 +247,11 @@ class ProxyGenTab(BaseTab):
             return
         for name in sorted(os.listdir(folder)):
             path = os.path.join(folder, name)
-            if name.lower().endswith(VIDEO_EXTS) and not name.lower().startswith(".") and os.path.isfile(path):
+            if (
+                name.lower().endswith(VIDEO_EXTS)
+                and not name.lower().startswith(".")
+                and os.path.isfile(path)
+            ):
                 self.load_file(path)
 
     def _remove(self):
@@ -174,7 +275,9 @@ class ProxyGenTab(BaseTab):
             return os.path.join(folder, base + ext)
         suffix = self.suffix_var.get().strip()
         if not suffix:
-            raise ValueError("Enter a suffix (or choose another place) so the originals are never replaced.")
+            raise ValueError(
+                "Enter a suffix (or choose another place) so the originals are never replaced."
+            )
         return os.path.join(os.path.dirname(src), base + suffix + ext)
 
     def _render(self):
@@ -207,8 +310,19 @@ class ProxyGenTab(BaseTab):
                     if not info.has_video:
                         raise ValueError("no video in this file")
                     os.makedirs(os.path.dirname(out), exist_ok=True)
-                    ctx.run([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", src,
-                             *proxy_args(info, preset, size_key, audio), part], duration=info.duration or None)
+                    ctx.run(
+                        [
+                            ff.ffmpeg_path(),
+                            "-hide_banner",
+                            "-nostdin",
+                            "-y",
+                            "-i",
+                            src,
+                            *proxy_args(info, preset, size_key, audio),
+                            part,
+                        ],
+                        duration=info.duration or None,
+                    )
                     os.replace(part, out)
                     done += 1
                 except ff.CancelledError:
@@ -222,13 +336,22 @@ class ProxyGenTab(BaseTab):
                     ctx.log(f"  ✖ failed: {reason}")
             ctx.log(f"{done} of {len(jobs)} proxies made.")
             if failed:
-                raise RuntimeError(f"{len(failed)} of {len(jobs)} file(s) failed:\n" +
-                                   "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed))
+                raise RuntimeError(
+                    f"{len(failed)} of {len(jobs)} file(s) failed:\n"
+                    + "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed)
+                )
             return 0
 
-        common.queue_job(self, name=f"Proxies ({len(jobs)} files)", out=os.path.dirname(jobs[0][1]), work=work,
-                         btn=self.btn_render, btn_label=t("proxy.render_button"), console=self.console,
-                         inputs=list(self.file_paths))
+        common.queue_job(
+            self,
+            name=f"Proxies ({len(jobs)} files)",
+            out=os.path.dirname(jobs[0][1]),
+            work=work,
+            btn=self.btn_render,
+            btn_label=t("proxy.render_button"),
+            console=self.console,
+            inputs=list(self.file_paths),
+        )
 
 
 def _remove(path):

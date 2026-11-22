@@ -31,7 +31,7 @@ def test_overlap_mixed_inputs_with_silent_clip(media, outdir):
     v, a = info.require_video(), info.require_audio()
     assert (v.width, v.height) == (1280, 720) and v.pix_fmt == "yuv420p"
     assert a is not None and a.channels == 2 and a.sample_rate == 48000
-    assert abs(v.duration - a.duration) < 0.1          # no A/V drift
+    assert abs(v.duration - a.duration) < 0.1  # no A/V drift
     assert abs(v.start_time - a.start_time) < 0.05
 
 
@@ -71,9 +71,9 @@ def test_validation_messages(media):
     b = cf.Clip("b", 1.5, 1280, 720, 30, "30/1", True)
     c = cf.Clip("c", 3.0, 1280, 720, 30, "30/1", True)
     assert cf.validate([a], 1.0, False)
-    assert cf.validate([a, b, c], 1.0, False)           # middle clip needs 2 s
+    assert cf.validate([a, b, c], 1.0, False)  # middle clip needs 2 s
     assert cf.validate([a, b, c], 0.7, False) is None
-    assert cf.validate([a, b, c], 1.0, True) is None    # freeze pads the clips
+    assert cf.validate([a, b, c], 1.0, True) is None  # freeze pads the clips
     assert cf.validate([a, c], 0.0, False)
 
 

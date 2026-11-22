@@ -1,4 +1,5 @@
 """All-in-One Builder: combined sections produce one correct command."""
+
 import pytest
 
 from core import ffmpeg as ff
@@ -16,6 +17,7 @@ def test_codec_args_per_family():
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 

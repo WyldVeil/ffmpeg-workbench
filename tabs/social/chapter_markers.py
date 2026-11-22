@@ -15,6 +15,7 @@ Features:
   • Import from existing SRT or plain-text chapter files
   • Validates YouTube's requirements (≥3 chapters, first at 0:00)
 """
+
 import json
 import os
 import re
@@ -51,9 +52,9 @@ def _fmt_srt_tc(secs: float) -> str:
 
 class Chapter:
     def __init__(self, time_secs: float, title: str, auto: bool = False):
-        self.time  = time_secs
+        self.time = time_secs
         self.title = title
-        self.auto  = auto          # auto-numbered: renumbered after every change
+        self.auto = auto  # auto-numbered: renumbered after every change
 
 
 def parse_chapter_text(content: str) -> list:
@@ -75,6 +76,7 @@ def parse_chapter_text(content: str) -> list:
 
 def _parse_tc(tc: str) -> float:
     from core import ffmpeg as ff
+
     return ff.parse_time(tc.replace(",", "."))
 
 
@@ -107,40 +109,58 @@ class ChapterMarkersTab(BaseTab):
     def _build_ui(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
-        tk.Label(hdr, text="📑  " + t("tab.chapter_markers"),
-                 font=(UI_FONT, 16, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left", padx=px(20), pady=px(12))
-        tk.Label(hdr,
-                 text=t("chapter_markers.subtitle"),
-                 bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            hdr,
+            text="📑  " + t("tab.chapter_markers"),
+            font=(UI_FONT, 16, "bold"),
+            bg=CLR["panel"],
+            fg=CLR["accent"],
+        ).pack(side="left", padx=px(20), pady=px(12))
+        tk.Label(hdr, text=t("chapter_markers.subtitle"), bg=CLR["panel"], fg=CLR["fgdim"]).pack(
+            side="left"
+        )
 
         body = scroll_body(self)
 
         # ── Source video ──────────────────────────────────────────────────
-        sf = tk.Frame(body); sf.pack(pady=px(10))
+        sf = tk.Frame(body)
+        sf.pack(pady=px(10))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=px(8))
+        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(
+            side="left", padx=px(8)
+        )
         self.src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
+        tk.Button(
+            sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat"
+        ).pack(side="left")
         self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
         self.dur_lbl.pack(side="left", padx=px(8))
 
         # ── Timeline scrubber ─────────────────────────────────────────────
-        scrub_lf = tk.LabelFrame(body, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10))
+        scrub_lf = tk.LabelFrame(
+            body, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10)
+        )
         scrub_lf.pack(fill="x", padx=px(16), pady=px(6))
 
-        self.timeline = tk.Scale(scrub_lf, from_=0, to=100,
-                                  orient="horizontal", length=px(700),
-                                  resolution=0.001,
-                                  command=self._on_scrub)
+        self.timeline = tk.Scale(
+            scrub_lf,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            length=px(700),
+            resolution=0.001,
+            command=self._on_scrub,
+        )
         self.timeline.pack(fill="x")
         framestep.slider(self.timeline, lambda: framestep.fps_of(self.file_path))
 
-        ts_row = tk.Frame(scrub_lf); ts_row.pack(fill="x", pady=px(4))
+        ts_row = tk.Frame(scrub_lf)
+        ts_row.pack(fill="x", pady=px(4))
         tk.Label(ts_row, text=t("chapter_markers.current_position_label")).pack(side="left")
-        self.pos_lbl = tk.Label(ts_row, text="0:00", fg=CLR["accent"],
-                                 font=(UI_FONT, 14, "bold"), width=10)
+        self.pos_lbl = tk.Label(
+            ts_row, text="0:00", fg=CLR["accent"], font=(UI_FONT, 14, "bold"), width=10
+        )
         self.pos_lbl.pack(side="left", padx=px(8))
 
         tk.Label(ts_row, text=f"  {t('chapter_markers.jump_to_label')}").pack(side="left")
@@ -148,45 +168,72 @@ class ChapterMarkersTab(BaseTab):
         jump_e = tk.Entry(ts_row, textvariable=self.jump_var, width=7, relief="flat")
         jump_e.pack(side="left", padx=px(4))
         jump_e.bind("<Return>", lambda e: self._jump())
-        tk.Button(ts_row, text="Go", command=self._jump, width=4, cursor="hand2", relief="flat").pack(side="left", padx=px(2))
+        tk.Button(
+            ts_row, text="Go", command=self._jump, width=4, cursor="hand2", relief="flat"
+        ).pack(side="left", padx=px(2))
 
         # Quick jump %
         for pct in [0, 10, 25, 50, 75, 90, 100]:
-            tk.Button(ts_row, text=f"{pct}%", width=4, bg="#333",
-                      fg=CLR["fg"], font=(UI_FONT, 8),
-                      command=lambda p=pct: self._jump_pct(p)).pack(side="left", padx=px(1))
+            tk.Button(
+                ts_row,
+                text=f"{pct}%",
+                width=4,
+                bg="#333",
+                fg=CLR["fg"],
+                font=(UI_FONT, 8),
+                command=lambda p=pct: self._jump_pct(p),
+            ).pack(side="left", padx=px(1))
 
         # ── Mark + name ───────────────────────────────────────────────────
-        mark_row = tk.Frame(body); mark_row.pack(fill="x", padx=px(16), pady=px(4))
+        mark_row = tk.Frame(body)
+        mark_row.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mark_row, text=t("chapter_markers.chapter_title_label")).pack(side="left")
         self.new_title_var = tk.StringVar(value="Chapter")
         title_entry = tk.Entry(mark_row, textvariable=self.new_title_var, width=30, relief="flat")
         title_entry.pack(side="left", padx=px(8))
 
-        self.btn_mark = tk.Button(mark_row, text=f"📌  {t('chapter_markers.mark_here_button')}",
-                                   bg=CLR["green"], fg="white",
-                                   font=(UI_FONT, 11, "bold"),
-                                   width=14, command=self._mark_here)
+        self.btn_mark = tk.Button(
+            mark_row,
+            text=f"📌  {t('chapter_markers.mark_here_button')}",
+            bg=CLR["green"],
+            fg="white",
+            font=(UI_FONT, 11, "bold"),
+            width=14,
+            command=self._mark_here,
+        )
         self.btn_mark.pack(side="left", padx=px(8))
-        tk.Button(mark_row, text=f"➕ {t('chapter_markers.add_at_zero_button')}",
-                  bg=CLR["panel"], fg=CLR["fg"],
-                  command=lambda: self._add_chapter(0.0, "Intro")).pack(side="left", padx=px(4))
+        tk.Button(
+            mark_row,
+            text=f"➕ {t('chapter_markers.add_at_zero_button')}",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            command=lambda: self._add_chapter(0.0, "Intro"),
+        ).pack(side="left", padx=px(4))
 
         # Auto-number
-        auto_row = tk.Frame(body); auto_row.pack(anchor="w", padx=px(16), pady=px(2))
+        auto_row = tk.Frame(body)
+        auto_row.pack(anchor="w", padx=px(16), pady=px(2))
         self.autonumber_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(auto_row,
-                       text=t("chapter_markers.auto_number_checkbox"),
-                       variable=self.autonumber_var).pack(side="left")
+        tk.Checkbutton(
+            auto_row, text=t("chapter_markers.auto_number_checkbox"), variable=self.autonumber_var
+        ).pack(side="left")
         self.prefix_var = tk.StringVar(value="Chapter")
-        tk.Entry(auto_row, textvariable=self.prefix_var, width=12, relief="flat").pack(side="left", padx=px(6))
+        tk.Entry(auto_row, textvariable=self.prefix_var, width=12, relief="flat").pack(
+            side="left", padx=px(6)
+        )
 
         # ── Chapter list ──────────────────────────────────────────────────
-        list_hdr = tk.Frame(body); list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
-        tk.Label(list_hdr, text=t("chapter_markers.chapter_list"), font=(UI_FONT, 9, "bold"),
-                 fg=CLR["fgdim"]).pack(side="left")
-        self.count_lbl = tk.Label(list_hdr, text=t("chapter_markers.0_chapters"),
-                                   fg=CLR["fgdim"], font=(UI_FONT, 9))
+        list_hdr = tk.Frame(body)
+        list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
+        tk.Label(
+            list_hdr,
+            text=t("chapter_markers.chapter_list"),
+            font=(UI_FONT, 9, "bold"),
+            fg=CLR["fgdim"],
+        ).pack(side="left")
+        self.count_lbl = tk.Label(
+            list_hdr, text=t("chapter_markers.0_chapters"), fg=CLR["fgdim"], font=(UI_FONT, 9)
+        )
         self.count_lbl.pack(side="left", padx=px(10))
 
         # The list with its scrollbar and buttons is one row; everything else
@@ -194,16 +241,16 @@ class ChapterMarkersTab(BaseTab):
         list_row = tk.Frame(body)
         list_row.pack(fill="x")
         cols = ("timestamp", "title")
-        self.tree = ttk.Treeview(list_row, columns=cols, show="headings",
-                                  selectmode="browse", height=8)
+        self.tree = ttk.Treeview(
+            list_row, columns=cols, show="headings", selectmode="browse", height=8
+        )
         self.tree.heading("timestamp", text=t("chapter_markers.timestamp_col"))
-        self.tree.heading("title",     text=t("chapter_markers.title_col"))
+        self.tree.heading("title", text=t("chapter_markers.title_col"))
         self.tree.column("timestamp", width=px(120), anchor="center")
-        self.tree.column("title",     width=px(500))
+        self.tree.column("title", width=px(500))
         tree_sb = ttk.Scrollbar(list_row, command=self.tree.yview)
         self.tree.config(yscrollcommand=tree_sb.set)
-        self.tree.pack(side="left", fill="both", expand=False,
-                       padx=px(16, 0), pady=px(4))
+        self.tree.pack(side="left", fill="both", expand=False, padx=px(16, 0), pady=px(4))
         tree_sb.pack(side="left", fill="y", pady=px(4))
         self.tree.bind("<Double-Button-1>", self._edit_selected)
         self.tree.bind("<Delete>", lambda e: self._remove_selected())
@@ -212,48 +259,60 @@ class ChapterMarkersTab(BaseTab):
         list_btns = tk.Frame(list_row)
         list_btns.pack(side="left", padx=px(8), anchor="n", pady=px(4))
         for txt, cmd, bg in [
-            ("✏  Edit Title",                            self._edit_selected,  "#3A3A3A"),
-            (f"🗑  {t('chapter_markers.remove_button')}",  self._remove_selected,"#3A3A3A"),
-            (f"⬆  {t('chapter_markers.move_up_button')}",  self._move_up,        "#3A3A3A"),
-            (f"⬇  {t('chapter_markers.move_down_button')}",self._move_down,      "#3A3A3A"),
-            (f"🧹  {t('chapter_markers.clear_all_button')}",self._clear_all,      "#3A3A3A"),
-            ("📂  Import .srt",                           self._import_srt,     "#3A3A3A"),
+            ("✏  Edit Title", self._edit_selected, "#3A3A3A"),
+            (f"🗑  {t('chapter_markers.remove_button')}", self._remove_selected, "#3A3A3A"),
+            (f"⬆  {t('chapter_markers.move_up_button')}", self._move_up, "#3A3A3A"),
+            (f"⬇  {t('chapter_markers.move_down_button')}", self._move_down, "#3A3A3A"),
+            (f"🧹  {t('chapter_markers.clear_all_button')}", self._clear_all, "#3A3A3A"),
+            ("📂  Import .srt", self._import_srt, "#3A3A3A"),
         ]:
-            tk.Button(list_btns, text=txt, bg=bg, fg=CLR["fg"],
-                      width=16, command=cmd).pack(pady=px(2))
+            tk.Button(list_btns, text=txt, bg=bg, fg=CLR["fg"], width=16, command=cmd).pack(
+                pady=px(2)
+            )
 
         # ── Preview pane ──────────────────────────────────────────────────
         # (rest of the UI continues below the side-by-side)
 
         # ── Validation ────────────────────────────────────────────────────
-        self.valid_lbl = tk.Label(body, text="", font=(UI_FONT, 9),
-                                   fg=CLR["fgdim"], justify="left", anchor="w")
+        self.valid_lbl = tk.Label(
+            body, text="", font=(UI_FONT, 9), fg=CLR["fgdim"], justify="left", anchor="w"
+        )
         self.valid_lbl.pack(anchor="w", padx=px(16))
 
         # ── Export ────────────────────────────────────────────────────────
-        export_lf = tk.LabelFrame(body, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8))
+        export_lf = tk.LabelFrame(
+            body, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8)
+        )
         export_lf.pack(fill="x", padx=px(16), pady=px(6))
 
-        exp_row = tk.Frame(export_lf); exp_row.pack(fill="x")
+        exp_row = tk.Frame(export_lf)
+        exp_row.pack(fill="x")
         for fmt, cmd in [
             (f"📋  {t('chapter_markers.copy_youtube_button')}", self._copy_youtube),
-            (f"📄  {t('chapter_markers.save_txt_button')}",     self._save_txt),
-            (f"📄  {t('chapter_markers.save_srt_button')}",     self._save_srt),
-            ("📄  Save .vtt",                                    self._save_vtt),
-            ("📄  Save .json",                                   self._save_json),
-            ("🎞  Embed into video…",                            self._embed),
+            (f"📄  {t('chapter_markers.save_txt_button')}", self._save_txt),
+            (f"📄  {t('chapter_markers.save_srt_button')}", self._save_srt),
+            ("📄  Save .vtt", self._save_vtt),
+            ("📄  Save .json", self._save_json),
+            ("🎞  Embed into video…", self._embed),
         ]:
-            tk.Button(exp_row, text=fmt, bg=CLR["accent"], fg="black",
-                      font=(UI_FONT, 9, "bold"), width=18,
-                      command=cmd).pack(side="left", padx=px(4))
+            tk.Button(
+                exp_row,
+                text=fmt,
+                bg=CLR["accent"],
+                fg="black",
+                font=(UI_FONT, 9, "bold"),
+                width=18,
+                command=cmd,
+            ).pack(side="left", padx=px(4))
 
         # Output preview
-        preview_lf = tk.LabelFrame(body, text=f"  {t('chapter_markers.preview_section')}  ",
-                                    padx=px(10), pady=px(6))
+        preview_lf = tk.LabelFrame(
+            body, text=f"  {t('chapter_markers.preview_section')}  ", padx=px(10), pady=px(6)
+        )
         preview_lf.pack(fill="x", padx=px(16), pady=px(4))
-        self.preview_text = tk.Text(preview_lf, height=8,
-                                     bg=CLR["bg"], fg="#EEEEEE",
-                                     font=(MONO_FONT, 10))
+        self.preview_text = tk.Text(
+            preview_lf, height=8, bg=CLR["bg"], fg="#EEEEEE", font=(MONO_FONT, 10)
+        )
         self.preview_text.pack(fill="x")
 
     # ─────────────────────────────────────────────────────────────────────
@@ -272,6 +331,7 @@ class ChapterMarkersTab(BaseTab):
         p = self.src_var.get().strip()
         if p and os.path.isfile(p) and (force or p != getattr(self, "file_path", "")):
             from core import ffmpeg as ff
+
             self.file_path = p
             self._duration = ff.duration_of(p)
             m, sec = divmod(int(self._duration), 60)
@@ -284,6 +344,7 @@ class ChapterMarkersTab(BaseTab):
 
     def _jump(self):
         from core import ffmpeg as ff
+
         try:
             secs = ff.parse_time(self.jump_var.get())
             self.timeline.set(min(secs, self._duration))
@@ -307,8 +368,9 @@ class ChapterMarkersTab(BaseTab):
     def _add_chapter(self, ts: float, title: str, auto: bool = False):
         # Prevent duplicate timestamps
         if any(abs(c.time - ts) < 0.5 for c in self.chapters):
-            messagebox.showwarning(t("common.warning"),
-                                   f"A chapter already exists near {_fmt_yt(ts)}.")
+            messagebox.showwarning(
+                t("common.warning"), f"A chapter already exists near {_fmt_yt(ts)}."
+            )
             return
         c = Chapter(ts, title, auto)
         self.chapters.append(c)
@@ -322,17 +384,18 @@ class ChapterMarkersTab(BaseTab):
                 c.title = f"{prefix} {i}"
         self.tree.delete(*self.tree.get_children())
         for i, c in enumerate(self.chapters):
-            self.tree.insert("", tk.END, iid=str(i),
-                             values=(_fmt_yt(c.time), c.title))
+            self.tree.insert("", tk.END, iid=str(i), values=(_fmt_yt(c.time), c.title))
         n = len(self.chapters)
-        self.count_lbl.config(text=f"{n} chapter{'s' if n!=1 else ''}")
+        self.count_lbl.config(text=f"{n} chapter{'s' if n != 1 else ''}")
         self._validate()
         self._update_preview()
 
     def _validate(self):
         issues = youtube_issues(self.chapters, self._duration)
         if not issues:
-            self.valid_lbl.config(text=t("chapter_markers.valid_for_youtube_chapters"), fg=CLR["green"])
+            self.valid_lbl.config(
+                text=t("chapter_markers.valid_for_youtube_chapters"), fg=CLR["green"]
+            )
         else:
             self.valid_lbl.config(text="\n".join("⚠  " + i for i in issues), fg=CLR["orange"])
 
@@ -345,9 +408,10 @@ class ChapterMarkersTab(BaseTab):
 
     def _edit_selected(self, _=None):
         sel = self.tree.selection()
-        if not sel: return
+        if not sel:
+            return
         idx = int(sel[0])
-        c   = self.chapters[idx]
+        c = self.chapters[idx]
         dlg = tk.Toplevel(self)
         dlg.title("Edit Chapter")
         dlg.geometry(f"{px(400)}x{px(150)}")
@@ -361,16 +425,26 @@ class ChapterMarkersTab(BaseTab):
 
         def _save():
             from core import ffmpeg as ff
+
             try:
-                c.time  = ff.parse_time(ts_var.get())
-                c.auto  = False
+                c.time = ff.parse_time(ts_var.get())
+                c.auto = False
                 c.title = ti_var.get().strip()
                 self.chapters.sort(key=lambda x: x.time)
                 self._refresh_tree()
                 dlg.destroy()
             except ValueError:
                 messagebox.showerror(t("common.error"), "Enter a valid number for timestamp.")
-        tk.Button(dlg, text="Save", command=_save, bg=CLR["green"], fg="white", cursor="hand2", relief="flat").pack(pady=px(10))
+
+        tk.Button(
+            dlg,
+            text="Save",
+            command=_save,
+            bg=CLR["green"],
+            fg="white",
+            cursor="hand2",
+            relief="flat",
+        ).pack(pady=px(10))
 
     def _remove_selected(self):
         sel = self.tree.selection()
@@ -380,19 +454,21 @@ class ChapterMarkersTab(BaseTab):
 
     def _move_up(self):
         sel = self.tree.selection()
-        if not sel or int(sel[0]) == 0: return
+        if not sel or int(sel[0]) == 0:
+            return
         i = int(sel[0])
-        self.chapters[i], self.chapters[i-1] = self.chapters[i-1], self.chapters[i]
+        self.chapters[i], self.chapters[i - 1] = self.chapters[i - 1], self.chapters[i]
         self._refresh_tree()
-        self.tree.selection_set(str(i-1))
+        self.tree.selection_set(str(i - 1))
 
     def _move_down(self):
         sel = self.tree.selection()
-        if not sel or int(sel[0]) >= len(self.chapters)-1: return
+        if not sel or int(sel[0]) >= len(self.chapters) - 1:
+            return
         i = int(sel[0])
-        self.chapters[i], self.chapters[i+1] = self.chapters[i+1], self.chapters[i]
+        self.chapters[i], self.chapters[i + 1] = self.chapters[i + 1], self.chapters[i]
         self._refresh_tree()
-        self.tree.selection_set(str(i+1))
+        self.tree.selection_set(str(i + 1))
 
     def _clear_all(self):
         if messagebox.askyesno(t("msg.clear_title"), t("msg.remove_all_chapters")):
@@ -411,8 +487,9 @@ class ChapterMarkersTab(BaseTab):
             return
         found = parse_chapter_text(content)
         if not found:
-            messagebox.showwarning(t("common.warning"), "No chapter times found in that file.",
-                                   parent=self)
+            messagebox.showwarning(
+                t("common.warning"), "No chapter times found in that file.", parent=self
+            )
             return
         for secs, title in found:
             if not any(abs(c.time - secs) < 0.5 for c in self.chapters):
@@ -425,6 +502,7 @@ class ChapterMarkersTab(BaseTab):
         from core import ffmpeg as ff
         from core import filters as fl
         from core.paths import temp_dir
+
         src = self.src_var.get().strip()
         if not src or not os.path.isfile(src):
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
@@ -444,10 +522,34 @@ class ChapterMarkersTab(BaseTab):
             end = self.chapters[i + 1].time if i + 1 < len(self.chapters) else dur
             chaps.append((c.time, max(end, c.time + 0.001), c.title))
         meta = fl.write_ffmetadata(os.path.join(temp_dir("chapters_"), "meta.txt"), chapters=chaps)
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-f", "ffmetadata", "-i", meta, "-map", "0",
-               "-map_metadata", "0", "-map_chapters", "1", "-c", "copy", out]
-        self.run_ffmpeg(cmd, None, on_done=lambda rc: self.show_result(rc, out), duration=dur,
-                        output=out, inputs=[src], name="Embed chapters")
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            src,
+            "-f",
+            "ffmetadata",
+            "-i",
+            meta,
+            "-map",
+            "0",
+            "-map_metadata",
+            "0",
+            "-map_chapters",
+            "1",
+            "-c",
+            "copy",
+            out,
+        ]
+        self.run_ffmpeg(
+            cmd,
+            None,
+            on_done=lambda rc: self.show_result(rc, out),
+            duration=dur,
+            output=out,
+            inputs=[src],
+            name="Embed chapters",
+        )
 
     # ── Export methods ────────────────────────────────────────────────────
     def _yt_text(self):
@@ -460,23 +562,24 @@ class ChapterMarkersTab(BaseTab):
         messagebox.showinfo(t("msg.copied_title"), t("msg.chapters_copied"))
 
     def _save_txt(self):
-        p = dialogs.asksaveasfilename(defaultextension=".txt",
-                                          filetypes=[("Text", "*.txt")])
+        p = dialogs.asksaveasfilename(defaultextension=".txt", filetypes=[("Text", "*.txt")])
         if p:
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(self._yt_text() + "\n")
             messagebox.showinfo("Saved", f"Saved to {os.path.basename(p)}")
 
     def _save_srt(self):
-        p = dialogs.asksaveasfilename(defaultextension=".srt",
-                                          filetypes=[("SRT", "*.srt")])
-        if not p: return
+        p = dialogs.asksaveasfilename(defaultextension=".srt", filetypes=[("SRT", "*.srt")])
+        if not p:
+            return
         lines = []
         for i, c in enumerate(self.chapters):
-            end_t = (self.chapters[i+1].time - 0.001
-                     if i+1 < len(self.chapters)
-                     else self._duration or c.time + 10)
-            lines.append(str(i+1))
+            end_t = (
+                self.chapters[i + 1].time - 0.001
+                if i + 1 < len(self.chapters)
+                else self._duration or c.time + 10
+            )
+            lines.append(str(i + 1))
             lines.append(f"{_fmt_srt_tc(c.time)} --> {_fmt_srt_tc(end_t)}")
             lines.append(c.title)
             lines.append("")
@@ -485,18 +588,24 @@ class ChapterMarkersTab(BaseTab):
         messagebox.showinfo("Saved", f"SRT saved to {os.path.basename(p)}", parent=self)
 
     def _save_vtt(self):
-        p = dialogs.asksaveasfilename(defaultextension=".vtt",
-                                          filetypes=[("WebVTT", "*.vtt")])
-        if not p: return
+        p = dialogs.asksaveasfilename(defaultextension=".vtt", filetypes=[("WebVTT", "*.vtt")])
+        if not p:
+            return
         lines = ["WEBVTT", ""]
         for i, c in enumerate(self.chapters):
-            end_t = (self.chapters[i+1].time - 0.001
-                     if i+1 < len(self.chapters)
-                     else self._duration or c.time + 10)
+            end_t = (
+                self.chapters[i + 1].time - 0.001
+                if i + 1 < len(self.chapters)
+                else self._duration or c.time + 10
+            )
+
             def vtt_tc(s):
-                h = int(s)//3600; m=(int(s)%3600)//60; sec=int(s)%60
-                ms=int((s-int(s))*1000)
+                h = int(s) // 3600
+                m = (int(s) % 3600) // 60
+                sec = int(s) % 60
+                ms = int((s - int(s)) * 1000)
                 return f"{h:02d}:{m:02d}:{sec:02d}.{ms:03d}"
+
             lines.append(f"{vtt_tc(c.time)} --> {vtt_tc(end_t)}")
             lines.append(c.title)
             lines.append("")
@@ -505,11 +614,14 @@ class ChapterMarkersTab(BaseTab):
         messagebox.showinfo("Saved", f"VTT saved to {os.path.basename(p)}", parent=self)
 
     def _save_json(self):
-        p = dialogs.asksaveasfilename(defaultextension=".json",
-                                          filetypes=[("JSON", t("chapter_markers.json"))])
-        if not p: return
-        data = [{"time": c.time, "timestamp": _fmt_yt(c.time),
-                 "title": c.title} for c in self.chapters]
+        p = dialogs.asksaveasfilename(
+            defaultextension=".json", filetypes=[("JSON", t("chapter_markers.json"))]
+        )
+        if not p:
+            return
+        data = [
+            {"time": c.time, "timestamp": _fmt_yt(c.time), "title": c.title} for c in self.chapters
+        ]
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         messagebox.showinfo("Saved", f"JSON saved to {os.path.basename(p)}")

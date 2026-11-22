@@ -3,6 +3,7 @@ core/ops/region_blur.py - command builders for tabs/visuals/region_blur.py (also
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,12 +32,18 @@ class Region:
         return x, y, w, h
 
     def enable(self) -> str:
-        return f"between(t,{self.start:.3f},{self.end:.3f})" if self.end is not None else f"gte(t,{self.start:.3f})"
+        return (
+            f"between(t,{self.start:.3f},{self.end:.3f})"
+            if self.end is not None
+            else f"gte(t,{self.start:.3f})"
+        )
 
     def label(self) -> str:
         span = f"{ff.format_time(self.start)} → {ff.format_time(self.end) if self.end is not None else 'end'}"
-        return f"{KINDS[self.kind]:<16} {span}   at {self.x * 100:.0f}%,{self.y * 100:.0f}%  " \
-               f"{self.w * 100:.0f}×{self.h * 100:.0f}%"
+        return (
+            f"{KINDS[self.kind]:<16} {span}   at {self.x * 100:.0f}%,{self.y * 100:.0f}%  "
+            f"{self.w * 100:.0f}×{self.h * 100:.0f}%"
+        )
 
 
 def blur_graph(regions, width: int, height: int, src: str = "[0:v]", out: str = "[v]") -> str:
@@ -45,7 +52,9 @@ def blur_graph(regions, width: int, height: int, src: str = "[0:v]", out: str = 
     parts = []
     cur = src
     if soft:
-        parts.append(f"{src}split={len(soft) + 1}[base]" + "".join(f"[c{i}]" for i in range(len(soft))))
+        parts.append(
+            f"{src}split={len(soft) + 1}[base]" + "".join(f"[c{i}]" for i in range(len(soft)))
+        )
         cur = "[base]"
     for i, r in enumerate(soft):
         x, y, w, h = r.pixels(width, height)
@@ -59,7 +68,9 @@ def blur_graph(regions, width: int, height: int, src: str = "[0:v]", out: str = 
         cur = f"[o{i}]"
     for j, r in enumerate(x for x in regions if x.kind == "box"):
         x, y, w, h = r.pixels(width, height)
-        parts.append(f"{cur}drawbox=x={x}:y={y}:w={w}:h={h}:color=black@1:t=fill:enable='{r.enable()}'[d{j}]")
+        parts.append(
+            f"{cur}drawbox=x={x}:y={y}:w={w}:h={h}:color=black@1:t=fill:enable='{r.enable()}'[d{j}]"
+        )
         cur = f"[d{j}]"
     parts.append(f"{cur}null{out}")
     return ";".join(parts)

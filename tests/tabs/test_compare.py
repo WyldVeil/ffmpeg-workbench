@@ -1,4 +1,5 @@
 """Compare & Quality: VMAF/SSIM/PSNR measurement, alignment, the page and the command line."""
+
 import itertools
 import json
 import math
@@ -24,9 +25,21 @@ def copies(media, tmp_path_factory):
     return {
         "bad": _encode(src, str(d / "bad.mp4"), "-v", "error", "-c:v", "libx264", "-crf", "40"),
         "good": _encode(src, str(d / "good.mp4"), "-v", "error", "-c:v", "libx264", "-crf", "16"),
-        "small": _encode(src, str(d / "small.mkv"), "-v", "error", "-vf", "scale=640:360", "-c:v", "libx264",
-                         "-crf", "20"),
-        "trimmed": _encode(src, str(d / "trimmed.mp4"), "-ss", "1", "-c:v", "libx264", "-crf", "16"),
+        "small": _encode(
+            src,
+            str(d / "small.mkv"),
+            "-v",
+            "error",
+            "-vf",
+            "scale=640:360",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "20",
+        ),
+        "trimmed": _encode(
+            src, str(d / "trimmed.mp4"), "-ss", "1", "-c:v", "libx264", "-crf", "16"
+        ),
     }
 
 
@@ -41,12 +54,16 @@ def measure(ref, dist, **kw):
 def test_scores_rank_the_copies(media, copies):
     src = media["h264"]
     same = measure(src, src).summary()
-    assert same["vmaf"]["mean"] > 97 and same["ssim"]["mean"] == pytest.approx(1.0) and same["psnr"]["mean"] == "inf"
+    assert (
+        same["vmaf"]["mean"] > 97
+        and same["ssim"]["mean"] == pytest.approx(1.0)
+        and same["psnr"]["mean"] == "inf"
+    )
     good, bad = measure(src, copies["good"]).summary(), measure(src, copies["bad"]).summary()
     assert good["vmaf"]["mean"] > 90 > bad["vmaf"]["mean"]
     assert good["ssim"]["mean"] > bad["ssim"]["mean"] and good["psnr"]["mean"] > bad["psnr"]["mean"]
     assert q.verdict(good["vmaf"]["mean"]).startswith(("Excellent", "Visually"))
-    small = measure(src, copies["small"]).summary()           # a smaller copy is scaled to compare
+    small = measure(src, copies["small"]).summary()  # a smaller copy is scaled to compare
     assert 60 < small["vmaf"]["mean"] < good["vmaf"]["mean"] and small["vmaf"]["frames"] == 180
 
 
@@ -56,7 +73,7 @@ def test_lines_up_a_trimmed_copy(media, copies):
     off = measure(src, copies["trimmed"]).summary()["vmaf"]["mean"]
     aligned = measure(src, copies["trimmed"], skip_ref=1.0)
     assert aligned.summary()["vmaf"]["mean"] > 90 > off
-    assert aligned.vmaf.times[0] == pytest.approx(1.0)       # times stay in the original's timeline
+    assert aligned.vmaf.times[0] == pytest.approx(1.0)  # times stay in the original's timeline
 
 
 @pytest.mark.ffmpeg
@@ -71,7 +88,7 @@ def test_faster_settings(media, copies):
 def test_build_validates():
     with pytest.raises(ValueError):
         q.build("a", "b", ff.MediaInfo("a"), ff.MediaInfo("b"), metrics=())
-    assert q.verdict(96) .startswith("Visually") and q.verdict(65).startswith("Poor")
+    assert q.verdict(96).startswith("Visually") and q.verdict(65).startswith("Poor")
     assert math.isinf(q.ssim_db(1.0)) and q.ssim_db(0.99) == pytest.approx(20.0)
 
 
@@ -82,14 +99,17 @@ def test_page(ui, media, copies, tmp_path):
     tab = ui.open("Compare & Quality")
     tab.ref_row.set("")
     tab.dist_row.set("")
-    tab.load_file(media["h264"])                              # dropped files: original first...
-    tab.load_file(copies["bad"])                              # ...then the copy
+    tab.load_file(media["h264"])  # dropped files: original first...
+    tab.load_file(copies["bad"])  # ...then the copy
     assert tab.ref_row.path == media["h264"] and tab.dist_row.path == copies["bad"]
     assert "of the original's size" in tab.info_lbl.cget("text")
     tab._run()
     ui.wait_idle(240)
     infos = [d for d in ui.dialogs.log if d[0] == "showinfo"]
-    assert not ui.dialogs.errors() and not infos, (ui.dialogs.errors(), infos)   # results show in the page
+    assert not ui.dialogs.errors() and not infos, (
+        ui.dialogs.errors(),
+        infos,
+    )  # results show in the page
     assert tab.result is not None
     assert float(tab.score_lbls["vmaf"][0].cget("text")) < 90
     assert "VMAF" in tab.verdict_lbl.cget("text")
@@ -105,7 +125,18 @@ def test_page(ui, media, copies, tmp_path):
 @pytest.mark.ffmpeg
 def test_cli(capsys, media, copies, tmp_path):
     from core import cli
-    assert cli.main(["compare", media["h264"], copies["good"], "--csv", str(tmp_path / "s.csv"), "--json"]) == 0
+
+    assert (
+        cli.main(
+            ["compare", media["h264"], copies["good"], "--csv", str(tmp_path / "s.csv"), "--json"]
+        )
+        == 0
+    )
     res = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert res["ok"] and res["vmaf"]["mean"] > 90 and res["verdict"] and 1 <= len(res["worst_moments"]) <= 5
+    assert (
+        res["ok"]
+        and res["vmaf"]["mean"] > 90
+        and res["verdict"]
+        and 1 <= len(res["worst_moments"]) <= 5
+    )
     assert os.path.isfile(res["csv"])

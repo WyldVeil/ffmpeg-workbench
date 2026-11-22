@@ -1,4 +1,5 @@
 """HDR to SDR: detection, both engines, and no HDR metadata left in the result."""
+
 import json
 import subprocess
 
@@ -8,17 +9,47 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import hdr
 
-X265_HDR10 = ("log-level=error:hdr10=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:"
-              "master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400")
+X265_HDR10 = (
+    "log-level=error:hdr10=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:"
+    "master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400"
+)
 
 
 def _make(path, transfer, x265, seconds=1.5):
-    ff.check([ff.ffmpeg_path(), "-y", "-v", "error", "-f", "lavfi", "-i",
-              "testsrc2=size=640x360:rate=24,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:"
-              "range=tv", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", str(seconds),
-              "-vf", f"zscale=t={transfer}:p=bt2020:m=bt2020nc:r=tv:npl=1000,format=yuv420p10le",
-              "-c:v", "libx265", "-x265-params", x265, "-color_primaries", "bt2020", "-color_trc", transfer,
-              "-colorspace", "bt2020nc", "-c:a", "aac", path])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x360:rate=24,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:"
+            "range=tv",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000",
+            "-t",
+            str(seconds),
+            "-vf",
+            f"zscale=t={transfer}:p=bt2020:m=bt2020nc:r=tv:npl=1000,format=yuv420p10le",
+            "-c:v",
+            "libx265",
+            "-x265-params",
+            x265,
+            "-color_primaries",
+            "bt2020",
+            "-color_trc",
+            transfer,
+            "-colorspace",
+            "bt2020nc",
+            "-c:a",
+            "aac",
+            path,
+        ]
+    )
     return path
 
 
@@ -34,14 +65,39 @@ def hlg(tmp_path_factory):
 
 def _hdr_leftovers(path):
     """HDR descriptions still in the file (first frame side data + container)."""
-    r = subprocess.run([ff.ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-read_intervals", "%+#1",
-                        "-show_frames", "-show_streams", "-show_entries",
-                        "frame=side_data_list:stream=side_data_list,color_transfer", "-of", "json", path],
-                       capture_output=True, text=True, check=True)
+    r = subprocess.run(
+        [
+            ff.ffprobe_path(),
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-read_intervals",
+            "%+#1",
+            "-show_frames",
+            "-show_streams",
+            "-show_entries",
+            "frame=side_data_list:stream=side_data_list,color_transfer",
+            "-of",
+            "json",
+            path,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     data = json.loads(r.stdout)
-    kinds = [sd.get("side_data_type", "") for part in ("frames", "streams") for item in data.get(part, [])
-             for sd in item.get("side_data_list") or []]
-    return [k for k in kinds if k.startswith(("Mastering", "Content light", "HDR Dynamic", "DOVI", "Dolby"))]
+    kinds = [
+        sd.get("side_data_type", "")
+        for part in ("frames", "streams")
+        for item in data.get(part, [])
+        for sd in item.get("side_data_list") or []
+    ]
+    return [
+        k
+        for k in kinds
+        if k.startswith(("Mastering", "Content light", "HDR Dynamic", "DOVI", "Dolby"))
+    ]
 
 
 @pytest.mark.ffmpeg
@@ -58,7 +114,9 @@ def test_chains_strip_hdr_descriptions():
         chain = hdr.sdr_chain(gpu=gpu)
         assert chain.endswith(fl.STRIP_HDR)
     assert "libplacebo=tonemapping=bt.2390" in hdr.sdr_chain(gpu=True)
-    assert hdr.sdr_chain(gpu=False, assume="hlg").startswith("setparams=color_primaries=bt2020:color_trc=arib-std-b67")
+    assert hdr.sdr_chain(gpu=False, assume="hlg").startswith(
+        "setparams=color_primaries=bt2020:color_trc=arib-std-b67"
+    )
     # the Downsizer and Codec Cruncher use the same CPU chain
     assert fl.hdr_to_sdr_chain().endswith(fl.STRIP_HDR)
 
@@ -87,9 +145,26 @@ def test_converts_and_leaves_no_hdr_metadata(ui, hdr10, outdir, engine, containe
     assert info.has_audio and info.duration == pytest.approx(1.5, abs=0.1)
     assert _hdr_leftovers(out) == []
     # the picture is SDR-bright, not the dim/grey look of untouched PQ values
-    rgb = subprocess.run([ff.ffmpeg_path(), "-v", "error", "-ss", "0.5", "-i", out, "-frames:v", "1", "-vf",
-                          "scale=1:1:flags=area,format=rgb24", "-f", "rawvideo", "-"], capture_output=True,
-                         check=True).stdout
+    rgb = subprocess.run(
+        [
+            ff.ffmpeg_path(),
+            "-v",
+            "error",
+            "-ss",
+            "0.5",
+            "-i",
+            out,
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=1:1:flags=area,format=rgb24",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
     assert sum(rgb[:3]) / 3 > 60
 
 
@@ -121,7 +196,10 @@ def test_cli_uses_the_same_conversion(capsys, hdr10, outdir):
     import json as _json
 
     from core import cli
-    assert cli.main(["hdr-to-sdr", hdr10, "--gpu", "off", "-o", str(outdir / "c.mkv"), "--json"]) == 0
+
+    assert (
+        cli.main(["hdr-to-sdr", hdr10, "--gpu", "off", "-o", str(outdir / "c.mkv"), "--json"]) == 0
+    )
     res = _json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert res["ok"] and res["engine"] == "CPU" and res["source"].startswith("HDR10")
     assert _hdr_leftovers(res["output"]) == []

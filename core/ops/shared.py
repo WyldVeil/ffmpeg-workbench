@@ -3,6 +3,7 @@ core/ops/shared.py - argument builders many tools share (audio encoding, frame r
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 import os
@@ -11,8 +12,9 @@ from core import encoders as enc
 from core import ffmpeg as ff
 
 
-def keep_audio_args(info: ff.MediaInfo | None, container: str, *, index: int = 0,
-                    filters: str = "") -> list:
+def keep_audio_args(
+    info: ff.MediaInfo | None, container: str, *, index: int = 0, filters: str = ""
+) -> list:
     """Map all audio of input *index*: stream-copied when the container accepts
     the codec and no *filters* are applied, otherwise re-encoded."""
     audio = info.audio if info is not None else None
@@ -20,7 +22,12 @@ def keep_audio_args(info: ff.MediaInfo | None, container: str, *, index: int = 0
         return ["-an"]
     args = ["-map", f"{index}:a?"]
     if filters:
-        return [*args, "-af", filters, *enc.audio(enc.default_audio_for(container), container=container)]
+        return [
+            *args,
+            "-af",
+            filters,
+            *enc.audio(enc.default_audio_for(container), container=container),
+        ]
     key = enc.audio_key_from_probe(audio.codec)
     if key and enc.audio_ok_for(container, key):
         return [*args, "-c:a", "copy"]
@@ -39,7 +46,18 @@ def frame_rate(info: ff.MediaInfo) -> str:
     return f"{v.fps:g}"
 
 
-AUDIO_ONLY_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".mka", ".aiff", ".aif")
+AUDIO_ONLY_EXTS = (
+    ".mp3",
+    ".wav",
+    ".flac",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".opus",
+    ".mka",
+    ".aiff",
+    ".aif",
+)
 
 
 def audio_encoder_args(out: str) -> list:
@@ -48,9 +66,11 @@ def audio_encoder_args(out: str) -> list:
     return {
         ".mp3": ["-c:a", "libmp3lame", "-q:a", "2"],
         ".wav": ["-c:a", "pcm_s16le"],
-        ".aiff": ["-c:a", "pcm_s16be"], ".aif": ["-c:a", "pcm_s16be"],
+        ".aiff": ["-c:a", "pcm_s16be"],
+        ".aif": ["-c:a", "pcm_s16be"],
         ".flac": ["-c:a", "flac", "-compression_level", "8"],
-        ".m4a": ["-c:a", "aac", "-b:a", "256k"], ".aac": ["-c:a", "aac", "-b:a", "256k"],
+        ".m4a": ["-c:a", "aac", "-b:a", "256k"],
+        ".aac": ["-c:a", "aac", "-b:a", "256k"],
         ".ogg": ["-c:a", "libvorbis", "-q:a", "6"],
         ".opus": ["-c:a", "libopus", "-b:a", "160k"],
         ".mka": ["-c:a", "flac"],

@@ -6,6 +6,7 @@ preferences without navigating to Advanced Settings.
 Reads and writes the same settings.json as AdvancedSettingsTab via the
 centralised core.settings module (no duplicated load/save logic).
 """
+
 import tkinter as tk
 from tkinter import ttk
 
@@ -22,6 +23,7 @@ START_CHOICES: dict[StartPage, str] = {
     StartPage.LAST: "The last tool I used",
 }
 
+
 class SettingsTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
@@ -33,58 +35,86 @@ class SettingsTab(BaseTab):
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
         hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(hdr_inner, text="⚙  " + t("tab.settings"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("settings.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"], anchor="w").pack(side="left", fill="x", expand=True, padx=px(16, 0))
+        tk.Label(
+            hdr_inner,
+            text="⚙  " + t("tab.settings"),
+            font=(UI_FONT, 15, "bold"),
+            bg=CLR["panel"],
+            fg=CLR["accent"],
+        ).pack(side="left")
+        tk.Label(
+            hdr_inner,
+            text=t("settings.subtitle"),
+            font=(UI_FONT, 10),
+            bg=CLR["panel"],
+            fg=CLR["fgdim"],
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
-        lf = tk.LabelFrame(self, text=f"  {t('settings.encoding_defaults_section')}  ", padx=px(20), pady=px(14))
+        lf = tk.LabelFrame(
+            self, text=f"  {t('settings.encoding_defaults_section')}  ", padx=px(20), pady=px(14)
+        )
         lf.pack(fill="x", padx=px(24), pady=px(14))
 
         rows = [
             (t("settings.settings_default_crf_label"), "default_crf", "18", None),
-            (t("settings.settings_default_preset_label"), "default_preset", "fast",
-             ["ultrafast", "superfast", "veryfast", "faster", "fast",
-              "medium", "slow", "slower", "veryslow"]),
-            (t("settings.default_audio_label"), "default_audio_bitrate", "192k",
-             ["96k", "128k", "192k", "256k", "320k"]),
+            (
+                t("settings.settings_default_preset_label"),
+                "default_preset",
+                "fast",
+                [
+                    "ultrafast",
+                    "superfast",
+                    "veryfast",
+                    "faster",
+                    "fast",
+                    "medium",
+                    "slow",
+                    "slower",
+                    "veryslow",
+                ],
+            ),
+            (
+                t("settings.default_audio_label"),
+                "default_audio_bitrate",
+                "192k",
+                ["96k", "128k", "192k", "256k", "320k"],
+            ),
         ]
 
         self._vars = {}
         for i, (label, key, default, choices) in enumerate(rows):
-            tk.Label(lf, text=label, width=24, anchor="e").grid(
-                row=i, column=0, pady=px(8))
+            tk.Label(lf, text=label, width=24, anchor="e").grid(row=i, column=0, pady=px(8))
             var = tk.StringVar(value=self.settings.get(key, default))
             self._vars[key] = var
             if choices:
-                ttk.Combobox(lf, textvariable=var, values=choices,
-                             state="readonly", width=16).grid(
-                    row=i, column=1, sticky="w", padx=px(10))
+                ttk.Combobox(lf, textvariable=var, values=choices, state="readonly", width=16).grid(
+                    row=i, column=1, sticky="w", padx=px(10)
+                )
             else:
                 tk.Entry(lf, textvariable=var, width=8, relief="flat").grid(
-                    row=i, column=1, sticky="w", padx=px(10))
+                    row=i, column=1, sticky="w", padx=px(10)
+                )
 
         # Output folder
         of_row = tk.Frame(lf)
         of_row.grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(8))
-        tk.Label(of_row, text=t("settings.output_folder_label"),
-                 width=24, anchor="e").pack(side="left")
-        self._out_var = tk.StringVar(
-            value=self.settings.get("default_output_folder", ""))
+        tk.Label(of_row, text=t("settings.output_folder_label"), width=24, anchor="e").pack(
+            side="left"
+        )
+        self._out_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
         tk.Entry(of_row, textvariable=self._out_var, width=44, relief="flat").pack(
-            side="left", padx=px(8))
+            side="left", padx=px(8)
+        )
         tk.Button(
-            of_row, text=t("btn.browse"),
-            command=lambda: self._out_var.set(
-                dialogs.askdirectory() or self._out_var.get()
-            )
+            of_row,
+            text=t("btn.browse"),
+            command=lambda: self._out_var.set(dialogs.askdirectory() or self._out_var.get()),
         ).pack(side="left")
 
         # Auto-open
-        self._auto_open = tk.BooleanVar(
-            value=self.settings.get("auto_open_output", False))
+        self._auto_open = tk.BooleanVar(value=self.settings.get("auto_open_output", False))
         tk.Checkbutton(
             lf,
             text=t("settings.auto_open_checkbox"),
@@ -92,7 +122,9 @@ class SettingsTab(BaseTab):
         ).grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4))
 
         # Startup page
-        tk.Label(lf, text="Start the app on:", width=24, anchor="e").grid(row=len(rows) + 2, column=0, pady=px(8))
+        tk.Label(lf, text="Start the app on:", width=24, anchor="e").grid(
+            row=len(rows) + 2, column=0, pady=px(8)
+        )
         self.start_box = ChoiceBox(lf, START_CHOICES, settings.START_PAGE.get())
         self.start_box.grid(row=len(rows) + 2, column=1, sticky="w", padx=px(10))
 
@@ -100,8 +132,10 @@ class SettingsTab(BaseTab):
         btn_f = tk.Frame(self)
         btn_f.pack(pady=px(16))
         tk.Button(
-            btn_f, text=t("settings.save_settings_button"),
-            bg=CLR["green"], fg="white",
+            btn_f,
+            text=t("settings.save_settings_button"),
+            bg=CLR["green"],
+            fg="white",
             font=(UI_FONT, 11, "bold"),
             command=self._save,
         ).pack(side="left", padx=px(8))
@@ -111,7 +145,8 @@ class SettingsTab(BaseTab):
         tk.Label(
             self,
             text=t("settings.subtitle"),
-            fg=CLR["fgdim"], font=(UI_FONT, 9),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 9),
         ).pack(pady=px(8))
 
     def _save(self):

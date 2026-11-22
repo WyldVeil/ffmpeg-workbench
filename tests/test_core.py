@@ -1,6 +1,7 @@
 """
 tests/test_core.py  -  Tests for core utilities (no GUI required).
 """
+
 import os
 import sys
 
@@ -12,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def test_app_version_format():
     """APP_VERSION is a semantic version string."""
     from core import APP_VERSION
+
     parts = APP_VERSION.split(".")
     assert len(parts) == 3, f"Expected major.minor.patch, got: {APP_VERSION}"
     assert all(p.isdigit() for p in parts), f"Non-numeric version parts: {APP_VERSION}"
@@ -25,6 +27,7 @@ def test_core_imports():
 def test_settings_roundtrip(tmp_path, monkeypatch):
     """load_settings returns defaults when no file exists; save_settings is idempotent."""
     from core import settings as s
+
     fake_path = str(tmp_path / "settings.json")
     monkeypatch.setattr(s, "SETTINGS_FILE", fake_path)
 
@@ -47,13 +50,14 @@ def test_settings_roundtrip(tmp_path, monkeypatch):
 def test_mystical_star_canvas_stays_behind_the_ui():
     from tabs.kit import theme
     from tests.gui_harness import Harness
+
     app = Harness.instance().app
     theme.start_stars(app, {"sb_bg": "#101018"})
     try:
         canvas = theme._star_canvas
         if canvas is not None and canvas.master is app:
             stack = app.tk.splitlist(app.tk.call("winfo", "children", str(app)))
-            assert stack[0] == str(canvas)            # lowest in stacking order, under every panel
+            assert stack[0] == str(canvas)  # lowest in stacking order, under every panel
     finally:
         theme.stop_stars()
 
@@ -63,8 +67,9 @@ def test_deps_import_has_no_side_effects(tmp_path, monkeypatch):
     import sys
 
     import core.deps as deps
+
     made = []
     monkeypatch.setattr("os.makedirs", lambda *a, **k: made.append(a))
     importlib.reload(deps)
     assert not made
-    assert deps._LIBS_DIR not in sys.path[:1]          # never ahead of the interpreter's packages
+    assert deps._LIBS_DIR not in sys.path[:1]  # never ahead of the interpreter's packages

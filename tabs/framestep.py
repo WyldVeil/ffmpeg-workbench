@@ -17,6 +17,7 @@ video, so stepping always lands exactly on a frame.
     framestep.slider(self.pos_scale, self.preview)          # fps from the preview's file
     framestep.register(timeline, timeline.step_frames, lambda: timeline.fps)   # its own logic
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,7 @@ HINT = "Drag, or press , and . to step one frame (with Shift, one second)"
 TYPING_CLASSES = {"Entry", "TEntry", "Text", "Spinbox", "TSpinbox", "TCombobox", "Listbox"}
 
 _steppers: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
-_order: list = []                      # weakrefs, in registration order
+_order: list = []  # weakrefs, in registration order
 _last: weakref.ref | None = None
 
 
@@ -78,8 +79,8 @@ def _fps_getter(source: FpsSource) -> Callable[[], float]:
     if isinstance(source, (int, float)):
         return lambda: float(source)
     if callable(source):
-        return source                                   # type: ignore[return-value]
-    return lambda: fps_of(getattr(source, "path", None))   # a FramePreview / CompareView
+        return source  # type: ignore[return-value]
+    return lambda: fps_of(getattr(source, "path", None))  # a FramePreview / CompareView
 
 
 def slider(scale, fps: FpsSource) -> None:
@@ -91,11 +92,12 @@ def slider(scale, fps: FpsSource) -> None:
     def step(n: int) -> None:
         rate = get_fps()
         lo, hi = sorted((float(scale.cget("from")), float(scale.cget("to"))))
-        last = max(lo, hi - 1.0 / rate)                 # the last frame, not the end of the video
+        last = max(lo, hi - 1.0 / rate)  # the last frame, not the end of the video
         scale.set(min(last, max(lo, snap(float(scale.get()), rate, n))))
 
     register(scale, step, get_fps)
     from tabs.base_tab import add_tooltip
+
     add_tooltip(scale, HINT)
 
 
@@ -141,7 +143,7 @@ def on_key(app: tk.Misc, event: object, direction: int, second: bool = False) ->
     if focus is not None and focus.winfo_class() in TYPING_CLASSES:
         return None
     if focus is not None and focus.winfo_toplevel() is not app:
-        return None                                     # a dialog has the keyboard
+        return None  # a dialog has the keyboard
     page = app.current() if isinstance(app, Shell) else None
     widget = target(page) if page is not None else None
     if widget is None:

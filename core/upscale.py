@@ -17,6 +17,7 @@ range in and out, so its values are left alone - while the colour planes
 are scaled by FFmpeg and the frame's colour tags are put back afterwards.
 FSRCNNX was left out: it is GPL-3.0 licensed.
 """
+
 from __future__ import annotations
 
 import os
@@ -27,8 +28,16 @@ from core import filters as fl
 SHADERS = {
     "fsr": ("FSR 1.0 (AMD) - sharp, any video", "FSR.glsl", "AMD FidelityFX Super Resolution 1.0"),
     "nis": ("NIS (NVIDIA) - sharp, any video", "NVScaler.glsl", "NVIDIA Image Scaling 1.0.3"),
-    "artcnn": ("ArtCNN - AI, animation & artwork", "ArtCNN_C4F16.glsl", "ArtCNN C4F16 luma doubler"),
-    "artcnn_best": ("ArtCNN best - AI, animation (slower)", "ArtCNN_C4F32.glsl", "ArtCNN C4F32 luma doubler"),
+    "artcnn": (
+        "ArtCNN - AI, animation & artwork",
+        "ArtCNN_C4F16.glsl",
+        "ArtCNN C4F16 luma doubler",
+    ),
+    "artcnn_best": (
+        "ArtCNN best - AI, animation (slower)",
+        "ArtCNN_C4F32.glsl",
+        "ArtCNN C4F32 luma doubler",
+    ),
     "anime4k": ("Anime4K - AI, anime", "Anime4K_Upscale_CNN_x2_M.glsl", "Anime4K Upscale CNN x2 M"),
 }
 
@@ -36,7 +45,10 @@ SHADERS = {
 def shader_dirs() -> list:
     """Bundled shaders (bin/<platform>/shaders, installed by scripts/fetch_binaries.py)."""
     from core.hardware import APP_ROOT, bundled_bin_dirs
-    return [os.path.join(d, "shaders") for d in bundled_bin_dirs()] + [os.path.join(APP_ROOT, "shaders")]
+
+    return [os.path.join(d, "shaders") for d in bundled_bin_dirs()] + [
+        os.path.join(APP_ROOT, "shaders")
+    ]
 
 
 def shader_path(key: str) -> str | None:
@@ -59,8 +71,9 @@ def _tag(value: str, default: str = "unknown") -> str:
     return value if value and value not in ("unknown", "reserved") else default
 
 
-def plane_graph(size: tuple, *, shader: str | None = None, deep: bool = False,
-                tags: dict | None = None) -> str:
+def plane_graph(
+    size: tuple, *, shader: str | None = None, deep: bool = False, tags: dict | None = None
+) -> str:
     """A single-input/single-output filter graph (usable as -vf) scaling to
     *size*: brightness through libplacebo (with *shader*), colour through
     FFmpeg, then the source's colour *tags* (range, primaries, trc, space)
@@ -72,17 +85,25 @@ def plane_graph(size: tuple, *, shader: str | None = None, deep: bool = False,
         raise ValueError(f"The {SHADERS[shader][2]} shader isn't installed.")
     sh = f":custom_shader_path={fl.filter_path(path)}" if path else ""
     tags = tags or {}
-    restore = (f"setparams=range={_tag(tags.get('range', ''))}:"
-               f"color_primaries={_tag(tags.get('primaries', ''))}:color_trc={_tag(tags.get('trc', ''))}:"
-               f"colorspace={_tag(tags.get('space', ''))}")
-    return (f"format={fmt},extractplanes=y+u+v[y][u][v];"
-            f"[y]setparams=range=pc,libplacebo=w={w}:h={h}:upscaler=ewa_lanczossharp:downscaler=ewa_lanczos"
-            f"{sh}:range=pc:format={gray}[Y];"
-            f"[u]scale={w // 2}:{h // 2}:flags=lanczos[U];[v]scale={w // 2}:{h // 2}:flags=lanczos[V];"
-            f"[Y][U][V]mergeplanes=0x001020:{fmt},{restore}")
+    restore = (
+        f"setparams=range={_tag(tags.get('range', ''))}:"
+        f"color_primaries={_tag(tags.get('primaries', ''))}:color_trc={_tag(tags.get('trc', ''))}:"
+        f"colorspace={_tag(tags.get('space', ''))}"
+    )
+    return (
+        f"format={fmt},extractplanes=y+u+v[y][u][v];"
+        f"[y]setparams=range=pc,libplacebo=w={w}:h={h}:upscaler=ewa_lanczossharp:downscaler=ewa_lanczos"
+        f"{sh}:range=pc:format={gray}[Y];"
+        f"[u]scale={w // 2}:{h // 2}:flags=lanczos[U];[v]scale={w // 2}:{h // 2}:flags=lanczos[V];"
+        f"[Y][U][V]mergeplanes=0x001020:{fmt},{restore}"
+    )
 
 
 def tags_of(video) -> dict:
     """Colour tags of a probed video stream, for :func:`plane_graph`."""
-    return {"range": video.color_range or "", "primaries": video.color_primaries or "",
-            "trc": video.color_transfer or "", "space": video.color_space or ""}
+    return {
+        "range": video.color_range or "",
+        "primaries": video.color_primaries or "",
+        "trc": video.color_transfer or "",
+        "space": video.color_space or "",
+    }

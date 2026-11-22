@@ -3,12 +3,13 @@ fix_broken_concat.py  --  Fix implicit string concatenations broken by
 i18n_audit_fix.py.  Pattern:   t("key")   "remaining tail"
 becomes a single t() call with the full combined string as the value.
 """
+
 import json
 import re
 from pathlib import Path
 
-ROOT       = Path(__file__).parent.parent
-TABS_DIR   = ROOT / "tabs"
+ROOT = Path(__file__).parent.parent
+TABS_DIR = ROOT / "tabs"
 LOCALE_DIR = ROOT / "locale"
 
 # Pattern:  t("some.key")   <whitespace/newline>   "tail string"
@@ -16,9 +17,9 @@ LOCALE_DIR = ROOT / "locale"
 #   text=t("key")\n         "tail",
 #   text=t("key") "tail",
 BROKEN = re.compile(
-    r't\("([^"]+)"\)'          # t("key")
-    r'(\s*\n?\s*)'             # optional whitespace / newline
-    r'"((?:[^"\\]|\\.)*)"'     # "tail string"
+    r't\("([^"]+)"\)'  # t("key")
+    r"(\s*\n?\s*)"  # optional whitespace / newline
+    r'"((?:[^"\\]|\\.)*)"'  # "tail string"
 )
 
 
@@ -53,8 +54,8 @@ def main():
         original = src
 
         def fix_match(m):
-            key      = m.group(1)
-            tail     = m.group(3)
+            key = m.group(1)
+            tail = m.group(3)
 
             # Reconstruct the full English string
             head_val = en.get(key, key)

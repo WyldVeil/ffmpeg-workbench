@@ -3,6 +3,7 @@ core/ops/crossfader.py - command builders for tabs/cutting/crossfader.py (also u
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,11 +24,11 @@ def _tr(key: str, fallback: str) -> str:
 @dataclass
 class Clip:
     path: str
-    duration: float          # video length in seconds
+    duration: float  # video length in seconds
     width: int
     height: int
     fps: float
-    fps_str: str             # exact rational, e.g. "30000/1001"
+    fps_str: str  # exact rational, e.g. "30000/1001"
     has_audio: bool
     summary: str = ""
 
@@ -41,9 +42,16 @@ class Clip:
         if not v.fps or v.fps > 240 or rate in ("0/0", ""):
             rate = "30/1"
         w, h = v.display_size
-        return cls(path=info.path, duration=float(dur), width=w, height=h,
-                   fps=v.fps or 30.0, fps_str=rate, has_audio=info.has_audio,
-                   summary=info.summary())
+        return cls(
+            path=info.path,
+            duration=float(dur),
+            width=w,
+            height=h,
+            fps=v.fps or 30.0,
+            fps_str=rate,
+            has_audio=info.has_audio,
+            summary=info.summary(),
+        )
 
 
 def _even(n: float) -> int:
@@ -67,17 +75,20 @@ def validate(clips: list, T: float, freeze: bool) -> str | None:
     if len(clips) < 2:
         return _tr("crossfader.need_two", "Add at least two clips.")
     if not (0.04 <= T <= 30):
-        return _tr("crossfader.bad_duration", "The transition must last between 0.04 and 30 seconds.")
+        return _tr(
+            "crossfader.bad_duration", "The transition must last between 0.04 and 30 seconds."
+        )
     if freeze:
         return None
     n = len(clips)
     for i, c in enumerate(clips):
         need = T if i in (0, n - 1) else 2 * T
         if c.duration + 1e-3 < need:
-            return _tr("crossfader.clip_too_short",
-                       "Clip {n} is {d:.2f} s long but needs at least {need:.2f} s for "
-                       "{t:.2f} s transitions. Shorten the transition or use Freeze mode."
-                       ).format(n=i + 1, d=c.duration, need=need, t=T)
+            return _tr(
+                "crossfader.clip_too_short",
+                "Clip {n} is {d:.2f} s long but needs at least {need:.2f} s for "
+                "{t:.2f} s transitions. Shorten the transition or use Freeze mode.",
+            ).format(n=i + 1, d=c.duration, need=need, t=T)
     return None
 
 
@@ -86,11 +97,19 @@ def total_duration(clips: list, T: float, freeze: bool) -> float:
     return max(0.0, sum(lengths) - T * (len(clips) - 1))
 
 
-def build_command(clips: list, out: str, *, T: float, transitions: list,
-                  freeze: bool = False, audio_mode: str = "normal",
-                  audio_curve: str = "tri", venc: enc.VideoEncode | None = None,
-                  size: tuple | None = None, extra_output_args: list | None = None
-                  ) -> tuple[list, float]:
+def build_command(
+    clips: list,
+    out: str,
+    *,
+    T: float,
+    transitions: list,
+    freeze: bool = False,
+    audio_mode: str = "normal",
+    audio_curve: str = "tri",
+    venc: enc.VideoEncode | None = None,
+    size: tuple | None = None,
+    extra_output_args: list | None = None,
+) -> tuple[list, float]:
     """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
     n = len(clips)
     if venc is None:
@@ -109,15 +128,23 @@ def build_command(clips: list, out: str, *, T: float, transitions: list,
         for i, c in enumerate(clips):
             if not c.has_audio:
                 silent_index[i] = n + len(silent_index)
-                argv += ["-f", "lavfi", "-t", ff.ts(c.duration),
-                         "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+                argv += [
+                    "-f",
+                    "lavfi",
+                    "-t",
+                    ff.ts(c.duration),
+                    "-i",
+                    "anullsrc=channel_layout=stereo:sample_rate=48000",
+                ]
 
     graph = []
     for i, c in enumerate(clips):
-        chain = (f"[{i}:v]setpts=PTS-STARTPTS,"
-                 f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-                 f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},"
-                 f"trim=duration={c.duration:.6f},setpts=PTS-STARTPTS,format={pix}")
+        chain = (
+            f"[{i}:v]setpts=PTS-STARTPTS,"
+            f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+            f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},"
+            f"trim=duration={c.duration:.6f},setpts=PTS-STARTPTS,format={pix}"
+        )
         if freeze:
             pads = []
             if i > 0:
@@ -133,8 +160,9 @@ def build_command(clips: list, out: str, *, T: float, transitions: list,
         offset += lengths[i - 1] - T
         trans = transitions[i - 1] if i - 1 < len(transitions) else TRANS_DEFAULT
         label = f"[x{i}]"
-        graph.append(f"{last}[v{i}]xfade=transition={trans}:duration={T:.6f}:"
-                     f"offset={offset:.6f}{label}")
+        graph.append(
+            f"{last}[v{i}]xfade=transition={trans}:duration={T:.6f}:offset={offset:.6f}{label}"
+        )
         last = label
     if venc.filter_suffix:
         graph.append(f"{last}{venc.filter_suffix}[vout]")
@@ -144,8 +172,10 @@ def build_command(clips: list, out: str, *, T: float, transitions: list,
     if use_audio:
         for i, c in enumerate(clips):
             src = f"[{silent_index[i]}:a]" if i in silent_index else f"[{i}:a]"
-            chain = (f"{src}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                     f"asetpts=PTS-STARTPTS,apad,atrim=duration={c.duration:.6f}")
+            chain = (
+                f"{src}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                f"asetpts=PTS-STARTPTS,apad,atrim=duration={c.duration:.6f}"
+            )
             if freeze:
                 if i > 0:
                     chain += f",adelay=delays={round(T * 1000)}:all=1"
@@ -156,17 +186,24 @@ def build_command(clips: list, out: str, *, T: float, transitions: list,
         last = "[a0]"
         for i in range(1, n):
             label = f"[ax{i}]" if i < n - 1 else "[aout]"
-            graph.append(f"{last}[a{i}]acrossfade=d={T:.6f}:c1={audio_curve}:c2={audio_curve}{label}")
+            graph.append(
+                f"{last}[a{i}]acrossfade=d={T:.6f}:c1={audio_curve}:c2={audio_curve}{label}"
+            )
             last = label
 
     argv += ["-filter_complex", ";".join(graph), "-map", "[vout]"]
     if use_audio:
         container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
         bitrate = "320k" if audio_mode == "hq" else "192k"
-        argv += ["-map", "[aout]",
-                 *enc.audio("opus" if container == "webm" else "aac",
-                            "256k" if (container == "webm" and audio_mode == "hq") else bitrate,
-                            container=container)]
+        argv += [
+            "-map",
+            "[aout]",
+            *enc.audio(
+                "opus" if container == "webm" else "aac",
+                "256k" if (container == "webm" and audio_mode == "hq") else bitrate,
+                container=container,
+            ),
+        ]
     else:
         argv += ["-an"]
     argv += [*venc.args, *(extra_output_args or []), "-map_metadata", "-1", "-sn", out]

@@ -15,6 +15,7 @@ possible:
 
 Clips stay in their order (left to right, top to bottom).
 """
+
 from __future__ import annotations
 
 import itertools
@@ -24,11 +25,11 @@ from dataclasses import dataclass
 
 @dataclass
 class Layout:
-    rects: list             # [(x, y, w, h)] per clip, in clip order
-    kind: str               # "grid CxR", "rows a-b-c", "columns a-b"
-    coverage: float         # share of the canvas showing picture (0..1)
-    crop: list | None = None   # per clip: (cw, ch) to crop to after scaling (fill mode), else None
-    balance: float = 0.0    # log of the geometric mean of the visible clip areas
+    rects: list  # [(x, y, w, h)] per clip, in clip order
+    kind: str  # "grid CxR", "rows a-b-c", "columns a-b"
+    coverage: float  # share of the canvas showing picture (0..1)
+    crop: list | None = None  # per clip: (cw, ch) to crop to after scaling (fill mode), else None
+    balance: float = 0.0  # log of the geometric mean of the visible clip areas
     rows: int = 1
     cols: int = 1
 
@@ -61,12 +62,14 @@ def uniform(aspects: list, W: int, H: int, cols: int, gap: int = 0, fill: bool =
     for i, a in enumerate(aspects):
         r, c = divmod(i, cols)
         in_row = min(cols, n - r * cols)
-        x0 = (W - (in_row * cw + (in_row - 1) * gap)) / 2 + c * (cw + gap)    # centre a short last row
+        x0 = (W - (in_row * cw + (in_row - 1) * gap)) / 2 + c * (
+            cw + gap
+        )  # centre a short last row
         y0 = gap + r * (ch + gap)
         if fill:
             rects.append((_even(x0), _even(y0), _even(cw), _even(ch)))
             crops.append((_even(cw), _even(ch)))
-            visible = cw * ch * min(cw / ch / a, a / (cw / ch))                  # share of the clip still shown
+            visible = cw * ch * min(cw / ch / a, a / (cw / ch))  # share of the clip still shown
             area += visible
             logs += math.log(max(visible, 1.0))
         else:
@@ -75,19 +78,28 @@ def uniform(aspects: list, W: int, H: int, cols: int, gap: int = 0, fill: bool =
             crops.append(None)
             area += w * h
             logs += math.log(max(w * h, 1.0))
-    return Layout(rects, f"grid {cols}×{rows}", area / (W * H), crops if fill else None, logs / n, rows, cols)
+    return Layout(
+        rects, f"grid {cols}×{rows}", area / (W * H), crops if fill else None, logs / n, rows, cols
+    )
 
 
 def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: bool) -> Layout:
     """Rows (or columns) of clips that exactly fill the width (height)."""
-    if columns:                                   # transpose: work on the rotated problem
+    if columns:  # transpose: work on the rotated problem
         lay = _justified([1 / a for a in aspects], H, W, groups, gap, False)
         rects = [(y, x, h, w) for (x, y, w, h) in lay.rects]
-        return Layout(rects, lay.kind.replace("rows", "columns"), lay.coverage, None, lay.balance,
-                      lay.cols, lay.rows)
+        return Layout(
+            rects,
+            lay.kind.replace("rows", "columns"),
+            lay.coverage,
+            None,
+            lay.balance,
+            lay.cols,
+            lay.rows,
+        )
     heights, idx = [], 0
     for size in groups:
-        sum_a = sum(aspects[idx:idx + size])
+        sum_a = sum(aspects[idx : idx + size])
         heights.append((W - gap * (size + 1)) / sum_a)
         idx += size
     total = sum(heights)
@@ -108,8 +120,15 @@ def _justified(aspects: list, W: int, H: int, groups: list, gap: int, columns: b
             x += w + gap
         y += h + gap
         idx += size
-    return Layout(rects, "rows " + "-".join(str(g) for g in groups), area / (W * H), None,
-                  logs / len(aspects), len(groups), max(groups))
+    return Layout(
+        rects,
+        "rows " + "-".join(str(g) for g in groups),
+        area / (W * H),
+        None,
+        logs / len(aspects),
+        len(groups),
+        max(groups),
+    )
 
 
 def _partitions(n: int, limit_exhaustive: int = 14):
@@ -126,7 +145,7 @@ def _partitions(n: int, limit_exhaustive: int = 14):
             groups.append(size)
             yield groups
         return
-    for rows in range(1, n + 1):                  # big counts: balanced rows only
+    for rows in range(1, n + 1):  # big counts: balanced rows only
         base, extra = divmod(n, rows)
         for where in ("front", "back", "middle"):
             sizes = [base] * rows
@@ -175,11 +194,12 @@ def best_layout(aspects: list, W: int, H: int, *, gap: int = 0, mode: str = "fit
 
 # ── Rendering: one FFmpeg graph for a whole collage ──────────────────────────
 
+
 @dataclass
 class Clip:
-    index: int              # FFmpeg input number
-    aspect: float           # display aspect ratio
-    duration: float         # seconds of video
+    index: int  # FFmpeg input number
+    aspect: float  # display aspect ratio
+    duration: float  # seconds of video
     has_audio: bool = False
 
 
@@ -188,14 +208,28 @@ def _place(label: str, rect: tuple, crop: tuple | None, fps: str) -> str:
     _x, _y, w, h = rect
     if crop:
         cw, ch = crop
-        return (f"{label}scale={cw}:{ch}:force_original_aspect_ratio=increase:force_divisible_by=2,"
-                f"crop={cw}:{ch},setsar=1,fps={fps},format=yuv420p")
+        return (
+            f"{label}scale={cw}:{ch}:force_original_aspect_ratio=increase:force_divisible_by=2,"
+            f"crop={cw}:{ch},setsar=1,fps={fps},format=yuv420p"
+        )
     return f"{label}scale={w}:{h},setsar=1,fps={fps},format=yuv420p"
 
 
-def collage_filter(clips: list, W: int, H: int, *, fps: str = "30", gap: int = 0, mode: str = "fit",
-                   bg: str = "black", total: float, loop: bool = True, end: str = "hold",
-                   audio: str = "first", layouts: dict | None = None) -> tuple:
+def collage_filter(
+    clips: list,
+    W: int,
+    H: int,
+    *,
+    fps: str = "30",
+    gap: int = 0,
+    mode: str = "fit",
+    bg: str = "black",
+    total: float,
+    loop: bool = True,
+    end: str = "hold",
+    audio: str = "first",
+    layouts: dict | None = None,
+) -> tuple:
     """filter_complex for the collage -> (graph, has_audio).
 
     *end* (when not looping): 'hold' (last frame stays), 'background', or
@@ -212,35 +246,51 @@ def collage_filter(clips: list, W: int, H: int, *, fps: str = "30", gap: int = 0
             if n == 0:
                 continue
             labels = [f"[s{c.index}_{k}]" for k in range(n)]
-            parts.append(f"[{c.index}:v]setpts=PTS-STARTPTS" + (f",split={n}{''.join(labels)}" if n > 1 else
-                                                                labels[0]))
+            parts.append(
+                f"[{c.index}:v]setpts=PTS-STARTPTS"
+                + (f",split={n}{''.join(labels)}" if n > 1 else labels[0])
+            )
             branch[c.index] = labels
         seg_labels = []
         for k, ((a, b), group) in enumerate(zip(segments, active, strict=False)):
             parts.append(f"color=c={bg}:s={W}x{H}:r={fps}:d={b - a:.3f},format=yuv420p[bg{k}]")
             cur = f"[bg{k}]"
             if group:
-                lay = (layouts or {}).get(tuple(c.index for c in group)) or \
-                    best_layout([c.aspect for c in group], W, H, gap=gap, mode=mode)
+                lay = (layouts or {}).get(tuple(c.index for c in group)) or best_layout(
+                    [c.aspect for c in group], W, H, gap=gap, mode=mode
+                )
                 for j, c in enumerate(group):
                     src = branch[c.index].pop(0)
                     rect = lay.rects[j]
                     crop = lay.crop[j] if lay.crop else None
-                    parts.append(_place(f"{src}trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,", rect, crop, fps)
-                                 + f"[p{k}_{j}]")
-                    parts.append(f"{cur}[p{k}_{j}]overlay={rect[0]}:{rect[1]}:eof_action=pass[o{k}_{j}]")
+                    parts.append(
+                        _place(
+                            f"{src}trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,",
+                            rect,
+                            crop,
+                            fps,
+                        )
+                        + f"[p{k}_{j}]"
+                    )
+                    parts.append(
+                        f"{cur}[p{k}_{j}]overlay={rect[0]}:{rect[1]}:eof_action=pass[o{k}_{j}]"
+                    )
                     cur = f"[o{k}_{j}]"
             parts.append(f"{cur}null[seg{k}]")
             seg_labels.append(f"[seg{k}]")
         parts.append("".join(seg_labels) + f"concat=n={len(seg_labels)}:v=1:a=0,format=yuv420p[v]")
     else:
-        lay = (layouts or {}).get("all") or best_layout([c.aspect for c in clips], W, H, gap=gap, mode=mode)
+        lay = (layouts or {}).get("all") or best_layout(
+            [c.aspect for c in clips], W, H, gap=gap, mode=mode
+        )
         parts.append(f"color=c={bg}:s={W}x{H}:r={fps}:d={total:.3f},format=yuv420p[bg]")
         cur = "[bg]"
         eof = "pass" if (not loop and end == "background") else "repeat"
         for j, c in enumerate(clips):
             crop = lay.crop[j] if lay.crop else None
-            parts.append(_place(f"[{c.index}:v]setpts=PTS-STARTPTS,", lay.rects[j], crop, fps) + f"[p{j}]")
+            parts.append(
+                _place(f"[{c.index}:v]setpts=PTS-STARTPTS,", lay.rects[j], crop, fps) + f"[p{j}]"
+            )
             x, y = lay.rects[j][0], lay.rects[j][1]
             parts.append(f"{cur}[p{j}]overlay={x}:{y}:eof_action={eof}[o{j}]")
             cur = f"[o{j}]"
@@ -254,8 +304,14 @@ def collage_filter(clips: list, W: int, H: int, *, fps: str = "30", gap: int = 0
         parts.append(f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a]")
     else:
         for c in with_audio:
-            parts.append(f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a{c.index}]")
+            parts.append(
+                f"[{c.index}:a:0]{st},asetpts=PTS-STARTPTS,apad,atrim=duration={total:.3f}[a{c.index}]"
+            )
         labels = "".join(f"[a{c.index}]" for c in with_audio)
-        parts.append(f"{labels}amix=inputs={len(with_audio)}:duration=longest:normalize=0,"
-                     f"alimiter=limit=0.95[a]" if len(with_audio) > 1 else f"{labels}anull[a]")
+        parts.append(
+            f"{labels}amix=inputs={len(with_audio)}:duration=longest:normalize=0,"
+            f"alimiter=limit=0.95[a]"
+            if len(with_audio) > 1
+            else f"{labels}anull[a]"
+        )
     return ";".join(parts), True

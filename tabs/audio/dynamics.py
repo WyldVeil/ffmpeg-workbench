@@ -13,6 +13,7 @@ Chain (applied in order):
 Each stage can be bypassed independently.
 Preview by exporting a short clip with the chain applied.
 """
+
 import os
 import tkinter as tk
 from tkinter import ttk
@@ -25,36 +26,52 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
 EQ_BANDS = [
-    ("Low-shelf",  "lowshelf",  80,    t("dynamics.low_end_boost_for_warmth_cut_for_thinness")),
-    ("Low-mid",    "peaking",   300,   t("dynamics.mud_zone_cut_to_clean_up_muddy_speech")),
-    ("Presence",   "peaking",   2500,  t("dynamics.voice_presence_boost_for_clarity")),
-    ("High-mid",   "peaking",   5000,  t("dynamics.air_brightness_boost_for_sparkle")),
+    ("Low-shelf", "lowshelf", 80, t("dynamics.low_end_boost_for_warmth_cut_for_thinness")),
+    ("Low-mid", "peaking", 300, t("dynamics.mud_zone_cut_to_clean_up_muddy_speech")),
+    ("Presence", "peaking", 2500, t("dynamics.voice_presence_boost_for_clarity")),
+    ("High-mid", "peaking", 5000, t("dynamics.air_brightness_boost_for_sparkle")),
     ("High-shelf", "highshelf", 10000, t("dynamics.top_end_air")),
 ]
 
 VOICE_PRESETS = {
     t("dynamics.flat_bypass_all"): None,
     t("dynamics.podcast_voice_warm_clear"): {
-        "gate_thresh": -40, "gate_ratio": 4,
-        "comp_thresh": -18, "comp_ratio": 3, "comp_attack": 5, "comp_release": 80,
+        "gate_thresh": -40,
+        "gate_ratio": 4,
+        "comp_thresh": -18,
+        "comp_ratio": 3,
+        "comp_attack": 5,
+        "comp_release": 80,
         "eq": [(80, -2), (300, -3), (2500, 3), (5000, 1), (10000, 0)],
         "limit_thresh": -1,
     },
     "YouTube voiceover: punchy": {
-        "gate_thresh": -45, "gate_ratio": 6,
-        "comp_thresh": -15, "comp_ratio": 4, "comp_attack": 3, "comp_release": 60,
+        "gate_thresh": -45,
+        "gate_ratio": 6,
+        "comp_thresh": -15,
+        "comp_ratio": 4,
+        "comp_attack": 3,
+        "comp_release": 60,
         "eq": [(80, 2), (300, -4), (2500, 4), (5000, 2), (10000, 1)],
         "limit_thresh": -0.5,
     },
     "Music mastering: balanced": {
-        "gate_thresh": -60, "gate_ratio": 2,
-        "comp_thresh": -12, "comp_ratio": 2, "comp_attack": 20, "comp_release": 200,
+        "gate_thresh": -60,
+        "gate_ratio": 2,
+        "comp_thresh": -12,
+        "comp_ratio": 2,
+        "comp_attack": 20,
+        "comp_release": 200,
         "eq": [(80, 0), (300, -1), (2500, 0), (5000, 1), (10000, 2)],
         "limit_thresh": -0.1,
     },
     "De-harsh: reduce harshness": {
-        "gate_thresh": -50, "gate_ratio": 2,
-        "comp_thresh": -20, "comp_ratio": 3, "comp_attack": 10, "comp_release": 100,
+        "gate_thresh": -50,
+        "gate_ratio": 2,
+        "comp_thresh": -20,
+        "comp_ratio": 3,
+        "comp_attack": 10,
+        "comp_release": 100,
         "eq": [(80, 0), (300, -2), (2500, -3), (5000, -2), (10000, 0)],
         "limit_thresh": -1,
     },
@@ -64,7 +81,7 @@ VOICE_PRESETS = {
 class AudioDynamicsTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.controls: dict[str, tk.Variable] = {}         # every knob, by name (gate_thresh...)
+        self.controls: dict[str, tk.Variable] = {}  # every knob, by name (gate_thresh...)
         self.file_path = ""
         self._build_ui()
 
@@ -73,37 +90,58 @@ class AudioDynamicsTab(BaseTab):
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
         hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(hdr_inner, text="🎛  " + t("tab.audio_dynamics"), font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner, text=t("dynamics.desc_header"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"], anchor="w").pack(side="left", fill="x", expand=True, padx=px(16, 0))
+        tk.Label(
+            hdr_inner,
+            text="🎛  " + t("tab.audio_dynamics"),
+            font=(UI_FONT, 15, "bold"),
+            bg=CLR["panel"],
+            fg=CLR["accent"],
+        ).pack(side="left")
+        tk.Label(
+            hdr_inner,
+            text=t("dynamics.desc_header"),
+            font=(UI_FONT, 10),
+            bg=CLR["panel"],
+            fg=CLR["fgdim"],
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Source
-        sf = tk.Frame(self); sf.pack(pady=px(8))
+        sf = tk.Frame(self)
+        sf.pack(pady=px(8))
         tk.Label(sf, text=t("common.source_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
-        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=px(8))
-        tk.Button(sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat").pack(side="left")
+        tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(
+            side="left", padx=px(8)
+        )
+        tk.Button(
+            sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat"
+        ).pack(side="left")
 
         # Preset
-        pre_f = tk.Frame(self); pre_f.pack(fill="x", padx=px(16), pady=px(4))
-        tk.Label(pre_f, text=t("dynamics.lbl_quick_preset"), font=(UI_FONT, 10, "bold")).pack(side="left")
+        pre_f = tk.Frame(self)
+        pre_f.pack(fill="x", padx=px(16), pady=px(4))
+        tk.Label(pre_f, text=t("dynamics.lbl_quick_preset"), font=(UI_FONT, 10, "bold")).pack(
+            side="left"
+        )
         self.preset_var = tk.StringVar(value=next(iter(VOICE_PRESETS.keys())))
-        preset_cb = ttk.Combobox(pre_f, textvariable=self.preset_var,
-                                  values=list(VOICE_PRESETS.keys()),
-                                  state="readonly", width=34)
+        preset_cb = ttk.Combobox(
+            pre_f,
+            textvariable=self.preset_var,
+            values=list(VOICE_PRESETS.keys()),
+            state="readonly",
+            width=34,
+        )
         preset_cb.pack(side="left", padx=px(8))
         preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
 
         # ── Scrollable chain ─────────────────────────────────────────────
         canvas = tk.Canvas(self, highlightthickness=0)
-        sb     = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        inner  = tk.Frame(canvas)
+        sb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas)
         canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>",
-                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.configure(yscrollcommand=sb.set)
 
         # No mousewheel binding here - main.py's _global_mousewheel handles it.
@@ -126,31 +164,48 @@ class AudioDynamicsTab(BaseTab):
         self._build_limiter(inner)
 
         # ── Filter preview ────────────────────────────────────────────────
-        self.filter_preview = tk.Label(inner, text="", fg=CLR["fgdim"],
-                                        font=(MONO_FONT, 8),
-                                        wraplength=px(860), justify="left")
+        self.filter_preview = tk.Label(
+            inner, text="", fg=CLR["fgdim"], font=(MONO_FONT, 8), wraplength=px(860), justify="left"
+        )
         self.filter_preview.pack(anchor="w", padx=px(16), pady=px(4))
 
         # ── Output & render ───────────────────────────────────────────────
-        of = tk.Frame(inner); of.pack(pady=px(6), padx=px(16), fill="x")
+        of = tk.Frame(inner)
+        of.pack(pady=px(6), padx=px(16), fill="x")
         tk.Label(of, text=t("common.output_file"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.out_var = tk.StringVar()
-        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(side="left", padx=px(8))
-        tk.Button(of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat").pack(side="left")
+        tk.Entry(of, textvariable=self.out_var, width=60, relief="flat").pack(
+            side="left", padx=px(8)
+        )
+        tk.Button(
+            of, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
+        ).pack(side="left")
 
-        btn_row = tk.Frame(inner); btn_row.pack(pady=px(8), padx=px(16))
-        tk.Button(btn_row, text=t("dynamics.btn_preview_10s"),
-                  bg=CLR["accent"], fg="white", width=16, font=(UI_FONT, 10),
-                  command=self._preview).pack(side="left", padx=px(8))
+        btn_row = tk.Frame(inner)
+        btn_row.pack(pady=px(8), padx=px(16))
+        tk.Button(
+            btn_row,
+            text=t("dynamics.btn_preview_10s"),
+            bg=CLR["accent"],
+            fg="white",
+            width=16,
+            font=(UI_FONT, 10),
+            command=self._preview,
+        ).pack(side="left", padx=px(8))
         self.btn_render = tk.Button(
-            btn_row, text=t("dynamics.btn_apply_dynamics"),
+            btn_row,
+            text=t("dynamics.btn_apply_dynamics"),
             font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white",
-            height=2, width=24,
-            command=self._render)
+            bg=CLR["green"],
+            fg="white",
+            height=2,
+            width=24,
+            command=self._render,
+        )
         self.btn_render.pack(side="left", padx=px(8))
 
-        cf = tk.Frame(inner); cf.pack(fill="both", padx=px(16), pady=px(4))
+        cf = tk.Frame(inner)
+        cf.pack(fill="both", padx=px(16), pady=px(4))
         self.console, csb = self.make_console(cf, height=5)
         self.console.pack(side="left", fill="both", expand=True)
         csb.pack(side="right", fill="y")
@@ -161,84 +216,116 @@ class AudioDynamicsTab(BaseTab):
         lf.pack(fill="x", padx=px(16), pady=px(4))
         var = tk.BooleanVar(value=True)
         self.controls[bypass_attr] = var
-        tk.Checkbutton(lf, text=t("common.enable"),
-                       variable=var,
-                       command=self._update_filter_preview).pack(anchor="e")
+        tk.Checkbutton(
+            lf, text=t("common.enable"), variable=var, command=self._update_filter_preview
+        ).pack(anchor="e")
         return lf
 
     def _slider_row(self, parent, label, attr, lo, hi, default, res, unit=""):
-        row = tk.Frame(parent); row.pack(fill="x", pady=px(2))
+        row = tk.Frame(parent)
+        row.pack(fill="x", pady=px(2))
         tk.Label(row, text=label, width=22, anchor="e").pack(side="left")
         var = tk.DoubleVar(value=default)
         self.controls[attr] = var
-        sl = tk.Scale(row, variable=var, from_=lo, to=hi,
-                      resolution=res, orient="horizontal", length=px(240),
-                      command=lambda v: self._update_filter_preview())
+        sl = tk.Scale(
+            row,
+            variable=var,
+            from_=lo,
+            to=hi,
+            resolution=res,
+            orient="horizontal",
+            length=px(240),
+            command=lambda v: self._update_filter_preview(),
+        )
         sl.pack(side="left", padx=px(6))
         lbl = tk.Label(row, text=f"{default}{unit}", width=8, fg=CLR["accent"])
         lbl.pack(side="left")
-        var.trace_add("write", lambda *_, label=lbl, v=var, u=unit:
-                      label.config(text=f"{v.get():.2f}{u}"))
+        var.trace_add(
+            "write", lambda *_, label=lbl, v=var, u=unit: label.config(text=f"{v.get():.2f}{u}")
+        )
 
     def _build_gate(self, parent):
         lf = self._stage_frame(parent, "🚪  1. Noise Gate", "gate_on")
         self._slider_row(lf, "Threshold (dB):", "gate_thresh", -80, 0, -40, 0.5, " dB")
-        self._slider_row(lf, "Ratio:",           "gate_ratio",   1, 10,   4, 0.5, ":1")
-        self._slider_row(lf, "Attack (ms):",     "gate_attack",  1, 200,  5, 1, " ms")
-        self._slider_row(lf, "Release (ms):",    "gate_release",10,2000, 80,10, " ms")
-        tk.Label(lf,
-                 text=t("dynamics.cuts_everything_below_the_threshold_silences_roo"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
+        self._slider_row(lf, "Ratio:", "gate_ratio", 1, 10, 4, 0.5, ":1")
+        self._slider_row(lf, "Attack (ms):", "gate_attack", 1, 200, 5, 1, " ms")
+        self._slider_row(lf, "Release (ms):", "gate_release", 10, 2000, 80, 10, " ms")
+        tk.Label(
+            lf,
+            text=t("dynamics.cuts_everything_below_the_threshold_silences_roo"),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(anchor="w")
 
     def _build_eq(self, parent):
         lf = self._stage_frame(parent, "🎚  2. Parametric EQ  (5 bands)", "eq_on")
         self._eq_vars = {}
         for i, (name, ftype, freq, tip) in enumerate(EQ_BANDS):
-            row = tk.Frame(lf); row.pack(fill="x", pady=px(2))
+            row = tk.Frame(lf)
+            row.pack(fill="x", pady=px(2))
             tk.Label(row, text=f"{name} ({freq} Hz):", width=22, anchor="e").pack(side="left")
             var = tk.DoubleVar(value=0.0)
             self._eq_vars[i] = (var, ftype, freq)
-            sl = tk.Scale(row, variable=var, from_=-12, to=12,
-                          resolution=0.5, orient="horizontal", length=px(240),
-                          command=lambda v: self._update_filter_preview())
+            sl = tk.Scale(
+                row,
+                variable=var,
+                from_=-12,
+                to=12,
+                resolution=0.5,
+                orient="horizontal",
+                length=px(240),
+                command=lambda v: self._update_filter_preview(),
+            )
             sl.pack(side="left", padx=px(6))
             lbl = tk.Label(row, text=t("dynamics.0_0_db"), width=8, fg=CLR["accent"])
             lbl.pack(side="left")
-            var.trace_add("write", lambda *_, label=lbl, v=var:
-                          label.config(text=f"{v.get():.1f} dB"))
-            tk.Label(row, text=tip, fg=CLR["fgdim"],
-                     font=(UI_FONT, 7)).pack(side="left", padx=px(6))
+            var.trace_add(
+                "write", lambda *_, label=lbl, v=var: label.config(text=f"{v.get():.1f} dB")
+            )
+            tk.Label(row, text=tip, fg=CLR["fgdim"], font=(UI_FONT, 7)).pack(
+                side="left", padx=px(6)
+            )
 
     def _build_compressor(self, parent):
         lf = self._stage_frame(parent, "🗜  3. Compressor", "comp_on")
-        self._slider_row(lf, "Threshold (dB):", "comp_thresh",  -60, 0, -18, 0.5, " dB")
-        self._slider_row(lf, "Ratio:",           "comp_ratio",  1, 20,   3, 0.5, ":1")
-        self._slider_row(lf, "Attack (ms):",     "comp_attack",  0.1, 200,  5, 0.1, " ms")
-        self._slider_row(lf, "Release (ms):",    "comp_release",10, 2000, 80,10, " ms")
-        self._slider_row(lf, "Makeup gain (dB):","comp_makeup",   0, 24,   0, 0.5, " dB")
-        tk.Label(lf,
-                 text=t("dynamics.raises_quiet_parts_and_lowers_loud_peaks_makes_s"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
+        self._slider_row(lf, "Threshold (dB):", "comp_thresh", -60, 0, -18, 0.5, " dB")
+        self._slider_row(lf, "Ratio:", "comp_ratio", 1, 20, 3, 0.5, ":1")
+        self._slider_row(lf, "Attack (ms):", "comp_attack", 0.1, 200, 5, 0.1, " ms")
+        self._slider_row(lf, "Release (ms):", "comp_release", 10, 2000, 80, 10, " ms")
+        self._slider_row(lf, "Makeup gain (dB):", "comp_makeup", 0, 24, 0, 0.5, " dB")
+        tk.Label(
+            lf,
+            text=t("dynamics.raises_quiet_parts_and_lowers_loud_peaks_makes_s"),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(anchor="w")
 
     def _build_deesser(self, parent):
         lf = self._stage_frame(parent, "🐍  4. De-esser", "deess_on")
         self._slider_row(lf, "Frequency (Hz):", "deess_freq", 2000, 16000, 6000, 100, " Hz")
-        self._slider_row(lf, "Threshold:",      "deess_thresh",  0, 1, 0.1, 0.01, "")
-        tk.Label(lf,
-                 text=t("dynamics.targets_harsh_s_sh_sibilance_at_the_chosen_frequ"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
+        self._slider_row(lf, "Threshold:", "deess_thresh", 0, 1, 0.1, 0.01, "")
+        tk.Label(
+            lf,
+            text=t("dynamics.targets_harsh_s_sh_sibilance_at_the_chosen_frequ"),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(anchor="w")
 
     def _build_limiter(self, parent):
         lf = self._stage_frame(parent, "🔔  5. Limiter", "limit_on")
         self._slider_row(lf, "Ceiling (dBFS):", "limit_thresh", -12, 0, -1, 0.1, " dBFS")
-        tk.Label(lf,
-                 text=t("dynamics.hard_ceiling_prevents_any_peak_from_exceeding_th"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(anchor="w")
+        tk.Label(
+            lf,
+            text=t("dynamics.hard_ceiling_prevents_any_peak_from_exceeding_th"),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(anchor="w")
 
     # ── Preset ────────────────────────────────────────────────────────────
     def _apply_preset(self, *_):
         p = VOICE_PRESETS.get(self.preset_var.get())
-        if not p: return
+        if not p:
+            return
         self.controls["gate_thresh"].set(p["gate_thresh"])
         self.controls["gate_ratio"].set(p["gate_ratio"])
         self.controls["comp_thresh"].set(p["comp_thresh"])
@@ -261,8 +348,10 @@ class AudioDynamicsTab(BaseTab):
             gr = self.controls["gate_ratio"].get()
             ga = self.controls["gate_attack"].get()
             grel = self.controls["gate_release"].get()
-            parts.append(f"agate=threshold={10**(gt/20):.6f}:ratio={gr:.1f}"
-                         f":attack={ga:.1f}:release={grel:.1f}")
+            parts.append(
+                f"agate=threshold={10 ** (gt / 20):.6f}:ratio={gr:.1f}"
+                f":attack={ga:.1f}:release={grel:.1f}"
+            )
 
         # EQ: real shelving filters at the ends, peaking bands in between
         if self.controls["eq_on"].get():
@@ -284,8 +373,10 @@ class AudioDynamicsTab(BaseTab):
             ca = self.controls["comp_attack"].get()
             crel = self.controls["comp_release"].get()
             mk = self.controls["comp_makeup"].get()
-            parts.append(f"acompressor=threshold={10**(ct/20):.6f}:ratio={cr:.1f}"
-                         f":attack={ca:.1f}:release={crel:.1f}:makeup={10**(mk/20):.4f}")
+            parts.append(
+                f"acompressor=threshold={10 ** (ct / 20):.6f}:ratio={cr:.1f}"
+                f":attack={ca:.1f}:release={crel:.1f}:makeup={10 ** (mk / 20):.4f}"
+            )
 
         # De-esser (high-pass shelving compressor on the sibilant range)
         if self.controls["deess_on"].get():
@@ -299,7 +390,9 @@ class AudioDynamicsTab(BaseTab):
         # Limiter
         if self.controls["limit_on"].get():
             lt = self.controls["limit_thresh"].get()
-            parts.append(f"alimiter=level_in=1:level_out={10**(lt/20):.6f}:limit=1:attack=5:release=50")
+            parts.append(
+                f"alimiter=level_in=1:level_out={10 ** (lt / 20):.6f}:limit=1:attack=5:release=50"
+            )
 
         return ",".join(parts) if parts else "anull"
 
@@ -311,8 +404,11 @@ class AudioDynamicsTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     def _browse(self):
         p = dialogs.askopenfilename(
-            filetypes=[("Media", "*.mp4 *.mov *.mkv *.avi *.mp3 *.wav *.aac *.flac"),
-                       ("All", t("ducker.item_2"))])
+            filetypes=[
+                ("Media", "*.mp4 *.mov *.mkv *.avi *.mp3 *.wav *.aac *.flac"),
+                ("All", t("ducker.item_2")),
+            ]
+        )
         if p:
             self.file_path = p
             self.src_var.set(p)
@@ -321,28 +417,34 @@ class AudioDynamicsTab(BaseTab):
         self._update_filter_preview()
 
     def _browse_out(self):
-        p = dialogs.asksaveasfilename(defaultextension=".mp4",
-                                          filetypes=[("MP4","*.mp4"),
-                                                     ("MP3","*.mp3"),
-                                                     ("WAV","*.wav")])
-        if p: self.out_var.set(p)
+        p = dialogs.asksaveasfilename(
+            defaultextension=".mp4",
+            filetypes=[("MP4", "*.mp4"), ("MP3", "*.mp3"), ("WAV", "*.wav")],
+        )
+        if p:
+            self.out_var.set(p)
 
     def _preview(self):
         """Listen to 12 seconds with the chain applied (in-app, no files left behind)."""
         from tabs import common
+
         src = self.src_var.get().strip()
         self._probe_rate(src)
         common.preview_audio(self, src, self._build_filter())
 
     def _probe_rate(self, src):
         from core import ffmpeg as ff
+
         info = ff.try_probe(src) if src else None
-        self._sample_rate = info.require_audio().sample_rate if info is not None and info.audio else 48000
+        self._sample_rate = (
+            info.require_audio().sample_rate if info is not None and info.audio else 48000
+        )
         return info
 
     def _render(self):
         from core import ffmpeg as ff
         from tabs import common
+
         src = self.src_var.get().strip()
         info = common.check_source(self, src, need_video=False)
         if info is None:
@@ -353,9 +455,25 @@ class AudioDynamicsTab(BaseTab):
         if not out:
             return
         self.out_var.set(out)
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-af", self._build_filter(),
-               *audio_job_args(out, info), out]
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            src,
+            "-af",
+            self._build_filter(),
+            *audio_job_args(out, info),
+            out,
+        ]
         self.log(self.console, t("log.dynamics.applying_audio_dynamics_chain"))
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
-                        btn_label=t("dynamics.btn_apply_dynamics"), duration=info.duration or None, output=out,
-                        inputs=[src], name="Audio Dynamics")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn_render,
+            btn_label=t("dynamics.btn_apply_dynamics"),
+            duration=info.duration or None,
+            output=out,
+            inputs=[src],
+            name="Audio Dynamics",
+        )

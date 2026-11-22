@@ -8,6 +8,7 @@ Nothing is re-encoded - the picture and sound are copied as they are - and
 rotation, HDR information and (optionally) track languages are kept.  Each
 result is checked again afterwards.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,12 +34,22 @@ class MetadataCleanerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, "Metadata Cleaner", "Remove location, device, dates and names from files - "
-                         "without re-encoding.", icon="🧹")
+        self.make_header(
+            self,
+            "Metadata Cleaner",
+            "Remove location, device, dates and names from files - without re-encoding.",
+            icon="🧹",
+        )
         top = tk.Frame(self)
         top.pack(fill="x", padx=px(20), pady=px(10, 4))
-        for label, cmd in (("Add files…", self._add), ("Remove", self._remove), ("Clear", self._clear)):
-            tk.Button(top, text=label, command=cmd, relief="flat", cursor="hand2").pack(side="left", padx=px(0, 6))
+        for label, cmd in (
+            ("Add files…", self._add),
+            ("Remove", self._remove),
+            ("Clear", self._clear),
+        ):
+            tk.Button(top, text=label, command=cmd, relief="flat", cursor="hand2").pack(
+                side="left", padx=px(0, 6)
+            )
         tk.Label(top, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=px(6))
 
         mid = tk.Frame(self)
@@ -60,24 +71,51 @@ class MetadataCleanerTab(BaseTab):
         self.keep_chapters = tk.BooleanVar(value=False)
         self.keep_cover = tk.BooleanVar(value=False)
         self.deep = tk.BooleanVar(value=False)
-        for text, var in (("Track languages (which audio is English…)", self.keep_lang),
-                          ("Subtitles", self.keep_subs), ("Chapters and their titles", self.keep_chapters),
-                          ("Cover picture", self.keep_cover)):
+        for text, var in (
+            ("Track languages (which audio is English…)", self.keep_lang),
+            ("Subtitles", self.keep_subs),
+            ("Chapters and their titles", self.keep_chapters),
+            ("Cover picture", self.keep_cover),
+        ):
             tk.Checkbutton(opt, text=text, variable=var).pack(side="left", padx=px(0, 12))
-        tk.Checkbutton(self, text="Deep clean: also remove encoder notes inside the video stream (not for HDR "
-                                  "video, which needs them)", variable=self.deep).pack(anchor="w", padx=px(20))
+        tk.Checkbutton(
+            self,
+            text="Deep clean: also remove encoder notes inside the video stream (not for HDR "
+            "video, which needs them)",
+            variable=self.deep,
+        ).pack(anchor="w", padx=px(20))
         out = tk.Frame(self)
         out.pack(fill="x", padx=px(20), pady=px(4))
         self.where_var = tk.StringVar(value="next")
-        tk.Radiobutton(out, text="Save next to each original as “name (clean)”", variable=self.where_var,
-                       value="next").pack(side="left")
-        tk.Radiobutton(out, text="Into folder:", variable=self.where_var, value="folder").pack(side="left", padx=px(12, 0))
+        tk.Radiobutton(
+            out,
+            text="Save next to each original as “name (clean)”",
+            variable=self.where_var,
+            value="next",
+        ).pack(side="left")
+        tk.Radiobutton(out, text="Into folder:", variable=self.where_var, value="folder").pack(
+            side="left", padx=px(12, 0)
+        )
         self.folder_var = tk.StringVar()
         tk.Entry(out, textvariable=self.folder_var, width=34).pack(side="left", padx=px(4))
-        tk.Button(out, text="…", relief="flat", command=lambda: self.folder_var.set(
-            dialogs.ask_directory(parent=self) or self.folder_var.get())).pack(side="left")
-        self.btn = tk.Button(self, text="🧹  CLEAN FILES", font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-                             width=24, cursor="hand2", command=self._clean)
+        tk.Button(
+            out,
+            text="…",
+            relief="flat",
+            command=lambda: self.folder_var.set(
+                dialogs.ask_directory(parent=self) or self.folder_var.get()
+            ),
+        ).pack(side="left")
+        self.btn = tk.Button(
+            self,
+            text="🧹  CLEAN FILES",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=24,
+            cursor="hand2",
+            command=self._clean,
+        )
         self.btn.pack(pady=px(8))
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=False, padx=px(20), pady=px(0, 10))
@@ -96,12 +134,21 @@ class MetadataCleanerTab(BaseTab):
         self.files.append(path)
         found = mc.inspect(info) + mc.stream_notes(path)
         self.findings[path] = found
-        node = self.tree.insert("", "end", iid=path, text=os.path.basename(path),
-                                values=(f"{len(found)} item(s) found" if found else "nothing personal found",),
-                                open=True)
+        node = self.tree.insert(
+            "",
+            "end",
+            iid=path,
+            text=os.path.basename(path),
+            values=(f"{len(found)} item(s) found" if found else "nothing personal found",),
+            open=True,
+        )
         for f in found:
-            self.tree.insert(node, "end", text=f"{mc.CATEGORY_TITLES.get(f.category, f.category)} · {f.name}",
-                             values=(f.value[:120],))
+            self.tree.insert(
+                node,
+                "end",
+                text=f"{mc.CATEGORY_TITLES.get(f.category, f.category)} · {f.name}",
+                values=(f.value[:120],),
+            )
         return True
 
     def _add(self):
@@ -130,11 +177,18 @@ class MetadataCleanerTab(BaseTab):
         if self.where_var.get() == "folder":
             folder = self.folder_var.get().strip()
             if not folder:
-                messagebox.showwarning("Folder", "Choose the folder for the cleaned files.", parent=self)
+                messagebox.showwarning(
+                    "Folder", "Choose the folder for the cleaned files.", parent=self
+                )
                 return
             os.makedirs(folder, exist_ok=True)
-        opts = dict(keep_language=self.keep_lang.get(), keep_subtitles=self.keep_subs.get(),
-                    keep_chapters=self.keep_chapters.get(), keep_cover=self.keep_cover.get(), deep=self.deep.get())
+        opts = dict(
+            keep_language=self.keep_lang.get(),
+            keep_subtitles=self.keep_subs.get(),
+            keep_chapters=self.keep_chapters.get(),
+            keep_cover=self.keep_cover.get(),
+            deep=self.deep.get(),
+        )
         files = list(self.files)
         jobs = []
         taken = set()
@@ -162,13 +216,19 @@ class MetadataCleanerTab(BaseTab):
                     after = mc.inspect(ff.probe(out, use_cache=False))
                     if opts["deep"]:
                         after += mc.stream_notes(out)
-                    left = mc.leftovers(after, keep_chapters=opts["keep_chapters"], keep_cover=opts["keep_cover"],
-                                        keep_subtitles=opts["keep_subtitles"])
+                    left = mc.leftovers(
+                        after,
+                        keep_chapters=opts["keep_chapters"],
+                        keep_cover=opts["keep_cover"],
+                        keep_subtitles=opts["keep_subtitles"],
+                    )
                     if left:
                         notes_total += len(left)
                         for f in left:
                             ctx.log("  still there: " + f.line())
-                    ctx.log(f"  ✓ {os.path.basename(out)} - {len(self.findings.get(src, []))} item(s) removed")
+                    ctx.log(
+                        f"  ✓ {os.path.basename(out)} - {len(self.findings.get(src, []))} item(s) removed"
+                    )
                 except ff.CancelledError:
                     if os.path.exists(part):
                         os.remove(part)
@@ -181,10 +241,20 @@ class MetadataCleanerTab(BaseTab):
                     failed.append((src, reason))
                     ctx.log(f"  ✖ {reason}")
             if failed:
-                raise RuntimeError(f"{len(failed)} of {len(jobs)} file(s) failed:\n" +
-                                   "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed))
+                raise RuntimeError(
+                    f"{len(failed)} of {len(jobs)} file(s) failed:\n"
+                    + "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed)
+                )
             return 0
 
         out_label = jobs[0][1] if len(jobs) == 1 else os.path.dirname(jobs[0][1])
-        common.queue_job(self, name=f"Metadata Cleaner ({len(jobs)} file(s))", out=out_label, work=work,
-                         btn=self.btn, btn_label="🧹  CLEAN FILES", console=self.console, inputs=files)
+        common.queue_job(
+            self,
+            name=f"Metadata Cleaner ({len(jobs)} file(s))",
+            out=out_label,
+            work=work,
+            btn=self.btn,
+            btn_label="🧹  CLEAN FILES",
+            console=self.console,
+            inputs=files,
+        )

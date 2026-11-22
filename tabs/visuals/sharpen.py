@@ -8,6 +8,7 @@ Bring back detail with a before/after view:
 * Unsharp mask - the classic, with radius and amount.
 * Clarity - large-radius local contrast ("pop") without sharpening noise.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -20,8 +21,11 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
-METHODS = {"cas": "Smart sharpen (CAS) - recommended", "unsharp": "Unsharp mask (classic)",
-           "clarity": "Clarity (local contrast)"}
+METHODS = {
+    "cas": "Smart sharpen (CAS) - recommended",
+    "unsharp": "Unsharp mask (classic)",
+    "clarity": "Clarity (local contrast)",
+}
 PRESETS = {"Subtle": 0.25, "Light": 0.45, "Medium": 0.65, "Strong": 0.85}
 
 
@@ -33,41 +37,83 @@ class SharpenTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.sharpen"), "Bring back detail in soft or upscaled video.", icon="🔪")
+        self.make_header(
+            self, t("tab.sharpen"), "Bring back detail in soft or upscaled video.", icon="🔪"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="Sharpened")
         self.compare.pack(pady=px(4))
         opt = tk.LabelFrame(body, text="  Sharpen  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value=METHODS["cas"])
-        mb = ttk.Combobox(opt, textvariable=self.method_var, values=list(METHODS.values()), state="readonly",
-                          width=36)
+        mb = ttk.Combobox(
+            opt,
+            textvariable=self.method_var,
+            values=list(METHODS.values()),
+            state="readonly",
+            width=36,
+        )
         mb.grid(row=0, column=0, columnspan=3, sticky="w")
         mb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.amount_var = tk.DoubleVar(value=PRESETS["Light"])
-        tk.Scale(opt, variable=self.amount_var, from_=0.05, to=1.0, resolution=0.05, orient="horizontal",
-                 length=px(240), label="Amount", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w")
+        tk.Scale(
+            opt,
+            variable=self.amount_var,
+            from_=0.05,
+            to=1.0,
+            resolution=0.05,
+            orient="horizontal",
+            length=px(240),
+            label="Amount",
+            command=lambda _v: self._changed(),
+        ).grid(row=1, column=0, sticky="w")
         self.radius_var = tk.IntVar(value=5)
-        self.radius_scale = tk.Scale(opt, variable=self.radius_var, from_=3, to=13, resolution=2,
-                                     orient="horizontal", length=px(160), label="Radius (unsharp)",
-                                     command=lambda _v: self._changed())
+        self.radius_scale = tk.Scale(
+            opt,
+            variable=self.radius_var,
+            from_=3,
+            to=13,
+            resolution=2,
+            orient="horizontal",
+            length=px(160),
+            label="Radius (unsharp)",
+            command=lambda _v: self._changed(),
+        )
         self.radius_scale.grid(row=1, column=1, sticky="w", padx=px(10))
         pf = tk.Frame(opt)
         pf.grid(row=2, column=0, columnspan=3, sticky="w", pady=px(4))
         for name, val in PRESETS.items():
-            tk.Button(pf, text=name, relief="flat",
-                      command=lambda v=val: (self.amount_var.set(v), self._changed())).pack(side="left", padx=px(2))
+            tk.Button(
+                pf,
+                text=name,
+                relief="flat",
+                command=lambda v=val: (self.amount_var.set(v), self._changed()),
+            ).pack(side="left", padx=px(2))
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "sharp"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "sharp"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text="🔪  SHARPEN", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="🔪  SHARPEN",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=22,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -80,7 +126,9 @@ class SharpenTab(BaseTab):
         return next((k for k, v in METHODS.items() if v == self.method_var.get()), "cas")
 
     def _chain(self):
-        return sharpen_chain(self._method(), float(self.amount_var.get()), int(self.radius_var.get()))
+        return sharpen_chain(
+            self._method(), float(self.amount_var.get()), int(self.radius_var.get())
+        )
 
     def _source_changed(self, path):
         self.compare.load(path)
@@ -92,7 +140,9 @@ class SharpenTab(BaseTab):
         self.radius_scale.config(state="normal" if self._method() == "unsharp" else "disabled")
         if self._job is not None:
             self.after_cancel(self._job)
-        self._job = self.after(250, lambda: (setattr(self, "_job", None), self.compare.set_filter(self._chain())))
+        self._job = self.after(
+            250, lambda: (setattr(self, "_job", None), self.compare.set_filter(self._chain()))
+        )
 
     def _render(self):
         src = self.src_row.path
@@ -102,5 +152,15 @@ class SharpenTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "sharp")
         if not out:
             return
-        common.render(self, src=src, info=info, out=out, chain=self._chain(), encoder=self.encoder,
-                      console=self.console, btn=self.btn_render, btn_label="🔪  SHARPEN", name="Sharpen")
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=self._chain(),
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="🔪  SHARPEN",
+            name="Sharpen",
+        )

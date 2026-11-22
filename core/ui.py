@@ -14,6 +14,7 @@ main thread drains every few milliseconds.
 Background work itself goes through core.tasks.submit, which delivers its
 result here.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -53,7 +54,9 @@ def tk_error() -> type[Exception]:
 def tk_default_root() -> Any:
     """Tk's default root window, if Tk is loaded and has one (without loading Tk)."""
     tkinter = sys.modules.get("tkinter")
-    return getattr(tkinter, "_default_root", None)      # Tk keeps it private; this is the one place we read it
+    return getattr(
+        tkinter, "_default_root", None
+    )  # Tk keeps it private; this is the one place we read it
 
 
 def installed() -> bool:
@@ -72,7 +75,7 @@ def hosted_by(root: Any, poll_ms: int = 15) -> Iterator[None]:
     finally:
         _root, _main_ident, _POLL_MS = previous
         if _root is not None:
-            _root.after(_POLL_MS, _drain)            # its drain loop moved to *root*: restart it
+            _root.after(_POLL_MS, _drain)  # its drain loop moved to *root*: restart it
 
 
 def on_main_thread() -> bool:

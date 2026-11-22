@@ -1,4 +1,5 @@
 """Video Downloader: cancel must kill only the download, never the app."""
+
 import os
 import sys
 import threading
@@ -21,15 +22,18 @@ def test_cancel_kills_child_not_app(ui):
     tab = ui.open("Video Downloader")
     script = "import time\nwhile True: time.sleep(0.1)"
     done = []
-    t = threading.Thread(target=tab._stream_ytdlp,
-                         args=([sys.executable, "-c", script],),
-                         kwargs={"on_done": done.append}, daemon=True)
+    t = threading.Thread(
+        target=tab._stream_ytdlp,
+        args=([sys.executable, "-c", script],),
+        kwargs={"on_done": done.append},
+        daemon=True,
+    )
     t.start()
     ui.wait_for(lambda: tab._active_proc is not None, 10)
     child = tab._active_proc
     tab._cancel_download()
     t.join(10)
-    assert child.poll() is not None              # the download is gone
-    assert os.getpid()                           # ...and we are still alive
+    assert child.poll() is not None  # the download is gone
+    assert os.getpid()  # ...and we are still alive
     ui.pump(0.3)
     assert done and done[0] != 0

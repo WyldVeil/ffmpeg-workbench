@@ -1,4 +1,5 @@
 """Tests for core/dialogs.py (native Linux dialogs are exercised with fake tools)."""
+
 import os
 import stat
 import sys
@@ -28,6 +29,7 @@ def _fake_tool(tmp_path, name, script):
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("CROSSFADER_CONFIG_DIR", str(tmp_path / "cfg"))
     import core.settings as cs
+
     monkeypatch.setattr(cs, "SETTINGS_FILE", str(tmp_path / "cfg" / "settings.json"), raising=False)
     return tmp_path
 
@@ -37,8 +39,10 @@ def isolated(tmp_path, monkeypatch):
 @pytest.mark.parametrize("tool,desktop", [("kdialog", "KDE"), ("zenity", "GNOME")])
 def test_native_open_save_and_cancel(tool, desktop, isolated, monkeypatch):
     from tests.gui_harness import ensure_display
+
     ensure_display()
     import tkinter as tk
+
     tmp = isolated
     bindir = tmp / "bin"
     bindir.mkdir()
@@ -46,9 +50,13 @@ def test_native_open_save_and_cancel(tool, desktop, isolated, monkeypatch):
     picked.parent.mkdir()
     picked.write_bytes(b"x")
     log = tmp / "args.txt"
-    _fake_tool(bindir, tool, f'printf "%s\\n" "$@" > "{log}"\n'
-                             f'case "$*" in *save*) echo "{tmp}/out/new";; '
-                             f'*directory*) echo "{tmp}/videos";; *) echo "{picked}";; esac\n')
+    _fake_tool(
+        bindir,
+        tool,
+        f'printf "%s\\n" "$@" > "{log}"\n'
+        f'case "$*" in *save*) echo "{tmp}/out/new";; '
+        f'*directory*) echo "{tmp}/videos";; *) echo "{picked}";; esac\n',
+    )
     monkeypatch.setenv("PATH", f"{bindir}:/usr/bin:/bin")
     monkeypatch.setenv("CROSSFADER_NATIVE_DIALOGS", "1")
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
@@ -59,7 +67,7 @@ def test_native_open_save_and_cancel(tool, desktop, isolated, monkeypatch):
         assert dialogs._native_tool() == tool
         assert dialogs.ask_open("video", parent=root) == str(picked)
         args = log.read_text()
-        assert "*.MP4" in args                     # case-insensitive filter passed through
+        assert "*.MP4" in args  # case-insensitive filter passed through
         saved = dialogs.ask_save("x.mp4", kind="video", parent=root)
         assert saved == f"{tmp}/out/new.mp4" and dialogs.was_confirmed(saved)
         assert dialogs.ask_directory(parent=root) == f"{tmp}/videos"
@@ -73,11 +81,13 @@ def test_native_open_save_and_cancel(tool, desktop, isolated, monkeypatch):
 def test_falls_back_to_tk(isolated, monkeypatch):
     monkeypatch.setenv("CROSSFADER_NATIVE_DIALOGS", "0")
     from tkinter import filedialog
+
     seen = {}
 
     def fake(**kw):
         seen.update(kw)
         return "/some/where/file.mkv"
+
     monkeypatch.setattr(filedialog, "askopenfilename", fake)
     assert dialogs.ask_open("video", title="Pick") == "/some/where/file.mkv"
     assert seen["title"] == "Pick" and seen["filetypes"][0][0] == "Video files"

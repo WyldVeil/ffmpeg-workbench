@@ -1,5 +1,6 @@
 """The engine's foundations: errors, the process gateway, the task service,
 capabilities and Timecode."""
+
 from __future__ import annotations
 
 import sys
@@ -16,10 +17,20 @@ PY = sys.executable
 
 # ── errors ────────────────────────────────────────────────────────────────────
 
+
 def test_every_app_error_shares_one_root_and_keeps_its_old_bases():
     from core import cli, ffmpeg, network, outputs, tts
-    for cls in (ffmpeg.ProbeError, ffmpeg.CancelledError, ffmpeg.CommandError, outputs.OutputRejected,
-                tts.TTSError, cli.CliError, network.OfflineError, network.SocksUnavailable):
+
+    for cls in (
+        ffmpeg.ProbeError,
+        ffmpeg.CancelledError,
+        ffmpeg.CommandError,
+        outputs.OutputRejected,
+        tts.TTSError,
+        cli.CliError,
+        network.OfflineError,
+        network.SocksUnavailable,
+    ):
         assert issubclass(cls, errors.AppError), cls
     # handlers written for the old bases still catch them
     assert issubclass(ffmpeg.ProbeError, RuntimeError)
@@ -33,9 +44,12 @@ def test_every_app_error_shares_one_root_and_keeps_its_old_bases():
 
 # ── core.proc ─────────────────────────────────────────────────────────────────
 
+
 def test_run_collects_output_and_does_not_raise_for_an_exit_code():
-    res = proc.run([PY, "-c", "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)"],
-                   timeout=30)
+    res = proc.run(
+        [PY, "-c", "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)"],
+        timeout=30,
+    )
     assert (res.returncode, res.ok) == (3, False)
     assert res.stdout.strip() == "out"
     assert res.last_error_line() == "err"
@@ -43,8 +57,12 @@ def test_run_collects_output_and_does_not_raise_for_an_exit_code():
 
 
 def test_run_bytes_and_input():
-    res = proc.run([PY, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read()[::-1])"],
-                   timeout=30, text=False, input=b"abc")
+    res = proc.run(
+        [PY, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read()[::-1])"],
+        timeout=30,
+        text=False,
+        input=b"abc",
+    )
     assert res.stdout == b"cba"
 
 
@@ -79,8 +97,11 @@ def test_kill_all_stops_spawned_programs():
 
 # ── core.tasks ────────────────────────────────────────────────────────────────
 
+
 def test_submit_delivers_the_result_or_the_error(monkeypatch):
-    monkeypatch.setattr(tasks, "_post", lambda fn, arg: fn(arg))     # no event loop here: deliver at once
+    monkeypatch.setattr(
+        tasks, "_post", lambda fn, arg: fn(arg)
+    )  # no event loop here: deliver at once
     got: list[object] = []
     done = threading.Event()
 
@@ -98,7 +119,7 @@ def test_submit_delivers_the_result_or_the_error(monkeypatch):
 def test_submit_returns_a_future_and_bounds_the_threads():
     futures = [tasks.submit(lambda: threading.current_thread().name) for _ in range(40)]
     names = {f.result(timeout=10) for f in futures}
-    assert len(names) <= 8                      # the background pool's size
+    assert len(names) <= 8  # the background pool's size
     assert all(n.startswith("background") for n in names)
 
 
@@ -118,9 +139,11 @@ def test_a_crashing_service_is_logged(caplog):
 
 # ── core.capabilities ─────────────────────────────────────────────────────────
 
+
 @pytest.mark.ffmpeg
 def test_capabilities_are_learned_once_and_remembered(monkeypatch, tmp_path):
     from core import paths
+
     monkeypatch.setattr(paths, "cache_dir", lambda: str(tmp_path))
     capabilities.forget()
     filters = capabilities.get("filters")
@@ -128,7 +151,7 @@ def test_capabilities_are_learned_once_and_remembered(monkeypatch, tmp_path):
     assert (tmp_path / "capabilities.json").is_file()
     capabilities.forget()
     calls = []
-    monkeypatch.setattr(proc, "run", lambda *a, **k: calls.append(a))       # the disk answers now
+    monkeypatch.setattr(proc, "run", lambda *a, **k: calls.append(a))  # the disk answers now
     assert capabilities.peek("filters") == filters
     assert capabilities.get("filters") == filters
     assert calls == []
@@ -137,6 +160,7 @@ def test_capabilities_are_learned_once_and_remembered(monkeypatch, tmp_path):
 
 def test_capabilities_peek_never_runs_a_program(monkeypatch, tmp_path):
     from core import paths
+
     monkeypatch.setattr(paths, "cache_dir", lambda: str(tmp_path))
     capabilities.forget()
     monkeypatch.setattr(proc, "run", lambda *a, **k: pytest.fail("peek ran a program"))
@@ -146,21 +170,27 @@ def test_capabilities_peek_never_runs_a_program(monkeypatch, tmp_path):
 
 # ── core.timecode ─────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize(("seconds", "spec", "text"), [
-    (83.25, "", "01:23.250"),
-    (3723.5, "", "01:02:03.500"),
-    (5, ".0", "00:05"),
-    (5, "H", "00:00:05.000"),
-    (59.999, ".2", "01:00.00"),          # carried, never "00:60.00"
-    (3725.456, "ass", "1:02:05.46"),
-    (3723.5, "m.1", "62:03.5"),
-    (12.3456, "ff", "12.346"),
-])
+
+@pytest.mark.parametrize(
+    ("seconds", "spec", "text"),
+    [
+        (83.25, "", "01:23.250"),
+        (3723.5, "", "01:02:03.500"),
+        (5, ".0", "00:05"),
+        (5, "H", "00:00:05.000"),
+        (59.999, ".2", "01:00.00"),  # carried, never "00:60.00"
+        (3725.456, "ass", "1:02:05.46"),
+        (3723.5, "m.1", "62:03.5"),
+        (12.3456, "ff", "12.346"),
+    ],
+)
 def test_timecode_formats(seconds, spec, text):
     assert format(Timecode.of(seconds), spec) == text
 
 
-@pytest.mark.parametrize(("text", "seconds"), [("1:02:03.5", 3723.5), ("02:03", 123), ("75,5", 75.5), (7, 7)])
+@pytest.mark.parametrize(
+    ("text", "seconds"), [("1:02:03.5", 3723.5), ("02:03", 123), ("75,5", 75.5), (7, 7)]
+)
 def test_timecode_parses(text, seconds):
     assert Timecode.parse(text).seconds == seconds
 

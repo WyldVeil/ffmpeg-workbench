@@ -6,6 +6,7 @@ queue.  Right: the FFmpeg in use and (on the Video Downloader) yt-dlp.  The
 queue part reads the render queue (core/queue_manager.py) a few times a
 second while jobs run.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -26,8 +27,15 @@ _BUSY_WORDS = ("Processing", "Rendering", "Encoding", "Updating", "Downloading")
 
 
 class StatusBar(tk.Frame):
-    def __init__(self, master: tk.Misc, skin: dict[str, Any], *, on_queue_click: Callable[[], object],
-                 on_ffmpeg_click: Callable[[], object], on_ytdlp_click: Callable[[], object]) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        skin: dict[str, Any],
+        *,
+        on_queue_click: Callable[[], object],
+        on_ffmpeg_click: Callable[[], object],
+        on_ytdlp_click: Callable[[], object],
+    ) -> None:
         super().__init__(master, bg=skin["sb_bg"], height=px(26))
         self.skin = skin
         self.pack_propagate(False)
@@ -37,36 +45,56 @@ class StatusBar(tk.Frame):
         inner.pack(fill="both", expand=True, padx=px(12))
 
         def divider(side: Literal["left", "right"]) -> None:
-            tk.Frame(inner, bg=border, width=px(1)).pack(side=side, fill="y", pady=px(5), padx=px(10))
+            tk.Frame(inner, bg=border, width=px(1)).pack(
+                side=side, fill="y", pady=px(5), padx=px(10)
+            )
 
         self._dot = tk.Label(inner, text="●", bg=sb, fg=skin["green"], font=(UI_FONT, 7))
         self._dot.pack(side="left", pady=px(5))
-        self._message = tk.Label(inner, text="  " + t("app.status.ready"), bg=sb, fg=dim, font=(UI_FONT, 8))
+        self._message = tk.Label(
+            inner, text="  " + t("app.status.ready"), bg=sb, fg=dim, font=(UI_FONT, 8)
+        )
         self._message.pack(side="left")
         divider("left")
         self._tool = tk.Label(inner, text="", bg=sb, fg=dim, font=(UI_FONT, 8))
         self._tool.pack(side="left")
 
         divider("right")
-        self.ffmpeg = tk.Label(inner, text=t("app.status.ffmpeg_checking"), bg=sb, fg=dim,
-                               font=(UI_FONT, 8, "bold"), cursor="hand2")
+        self.ffmpeg = tk.Label(
+            inner,
+            text=t("app.status.ffmpeg_checking"),
+            bg=sb,
+            fg=dim,
+            font=(UI_FONT, 8, "bold"),
+            cursor="hand2",
+        )
         self.ffmpeg.pack(side="right", padx=px(6))
         self.ffmpeg.bind("<Button-1>", lambda _e: on_ffmpeg_click())
         divider("right")
-        self.ytdlp = tk.Label(inner, text="", bg=sb, fg=skin["accent"], font=(UI_FONT, 8, "bold"), cursor="hand2")
-        self.ytdlp.bind("<Button-1>", lambda _e: on_ytdlp_click())          # shown on the Video Downloader
+        self.ytdlp = tk.Label(
+            inner, text="", bg=sb, fg=skin["accent"], font=(UI_FONT, 8, "bold"), cursor="hand2"
+        )
+        self.ytdlp.bind("<Button-1>", lambda _e: on_ytdlp_click())  # shown on the Video Downloader
 
         divider("left")
-        self._progress = tk.Frame(inner, bg=sb)                              # shown while jobs run
+        self._progress = tk.Frame(inner, bg=sb)  # shown while jobs run
         self._bar = ttk.Progressbar(self._progress, mode="determinate", length=px(140), maximum=100)
         self._bar.pack(side="left", pady=px(6))
-        self._pct = tk.Label(self._progress, text="", bg=sb, fg=skin["accent"], font=(MONO_FONT, 8, "bold"))
+        self._pct = tk.Label(
+            self._progress, text="", bg=sb, fg=skin["accent"], font=(MONO_FONT, 8, "bold")
+        )
         self._pct.pack(side="left", padx=px(4, 0))
         self._spinning = False
 
         divider("left")
-        self._queue = tk.Label(inner, text=t("app.queue.idle"), bg=sb, fg=dim, font=(UI_FONT, 8, "bold"),
-                               cursor="hand2")
+        self._queue = tk.Label(
+            inner,
+            text=t("app.queue.idle"),
+            bg=sb,
+            fg=dim,
+            font=(UI_FONT, 8, "bold"),
+            cursor="hand2",
+        )
         self._queue.pack(side="left", padx=px(4))
         self._queue.bind("<Button-1>", lambda _e: on_queue_click())
         self._refresh_pending = False
@@ -98,7 +126,7 @@ class StatusBar(tk.Frame):
         bg = skin["sb_bg"]
         for frame in (self, *self.winfo_children()):
             for widget in (frame, *frame.winfo_children()):
-                with contextlib.suppress(tk.TclError):     # ttk widgets have no background option
+                with contextlib.suppress(tk.TclError):  # ttk widgets have no background option
                     widget["background"] = bg
 
     # ── The render queue ──────────────────────────────────────────────────────
@@ -110,21 +138,35 @@ class StatusBar(tk.Frame):
         active = [j for j in jobs if j.status is TaskStatus.ACTIVE]
         pending = [j for j in jobs if j.status is TaskStatus.PENDING]
         if active or pending:
-            parts = ([f"{len(active)} active"] if active else []) + ([f"{len(pending)} pending"] if pending else [])
+            parts = ([f"{len(active)} active"] if active else []) + (
+                [f"{len(pending)} pending"] if pending else []
+            )
             self._queue.config(text=t("app.queue.busy", n=" | ".join(parts)), fg=skin["orange"])
             self._progress.pack(side="left", padx=px(4, 0))
-            self._show_fraction(q.overall_progress(), max((j.eta or 0) for j in active) if active else 0)
+            self._show_fraction(
+                q.overall_progress(), max((j.eta or 0) for j in active) if active else 0
+            )
             self._refresh_soon()
             return
         self._hide_progress()
-        counts = {s: sum(1 for j in jobs if j.status is s) for s in (TaskStatus.DONE, TaskStatus.FAILED,
-                                                                     TaskStatus.CANCELLED)}
-        bits = [f"{n} {label}" for n, label in ((counts[TaskStatus.DONE], "done ✓"),
-                                                 (counts[TaskStatus.FAILED], "failed"),
-                                                 (counts[TaskStatus.CANCELLED], "cancelled")) if n]
+        counts = {
+            s: sum(1 for j in jobs if j.status is s)
+            for s in (TaskStatus.DONE, TaskStatus.FAILED, TaskStatus.CANCELLED)
+        }
+        bits = [
+            f"{n} {label}"
+            for n, label in (
+                (counts[TaskStatus.DONE], "done ✓"),
+                (counts[TaskStatus.FAILED], "failed"),
+                (counts[TaskStatus.CANCELLED], "cancelled"),
+            )
+            if n
+        ]
         if bits:
-            self._queue.config(text="Queue: " + " | ".join(bits),
-                               fg=skin["red"] if counts[TaskStatus.FAILED] else skin["green"])
+            self._queue.config(
+                text="Queue: " + " | ".join(bits),
+                fg=skin["red"] if counts[TaskStatus.FAILED] else skin["green"],
+            )
         else:
             self._queue.config(text=t("app.queue.idle"), fg=skin["fgdim"])
 
@@ -156,6 +198,7 @@ class StatusBar(tk.Frame):
         def tick() -> None:
             self._refresh_pending = False
             self.queue_changed()
+
         self.after(400, tick)
 
     def _hide_progress(self) -> None:

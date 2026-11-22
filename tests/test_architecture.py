@@ -11,6 +11,7 @@ has been fixed but is still listed - remove it, so it can't come back.
 4. LAYERS: core <- tabs <- shell.  Tool pages (tabs/) never import the window
    (shell/, main): they reach it through the Shell protocol in tabs/kit.
 """
+
 from __future__ import annotations
 
 import ast
@@ -53,12 +54,12 @@ def _top(module: str) -> str:
 # ── the exceptions still to fix (may only shrink) ────────────────────────────
 
 ENGINE_EXCEPTIONS: dict[str, set[str]] = {
-    "core/dialogs.py": {'tkinter'},
-    "core/logs.py": {'tkinter'},
-    "core/outputs.py": {'tkinter'},
+    "core/dialogs.py": {"tkinter"},
+    "core/logs.py": {"tkinter"},
+    "core/outputs.py": {"tkinter"},
 }
-PROCESS_EXCEPTIONS: set[str] = set()                     # every program starts through core.proc
-THREAD_EXCEPTIONS: set[str] = set()                      # every thread starts through core.tasks
+PROCESS_EXCEPTIONS: set[str] = set()  # every program starts through core.proc
+THREAD_EXCEPTIONS: set[str] = set()  # every thread starts through core.tasks
 
 
 def _engine_breaks() -> dict[str, set[str]]:
@@ -81,11 +82,20 @@ def _users(module_attr: tuple[str, str], *, allowed: tuple[str, ...]) -> set[str
         for node in ast.walk(tree):
             hit = False
             if attr == "*":
-                if (isinstance(node, ast.Import) and any(a.name == mod for a in node.names)) or (isinstance(node, ast.ImportFrom) and node.module == mod):
+                if (isinstance(node, ast.Import) and any(a.name == mod for a in node.names)) or (
+                    isinstance(node, ast.ImportFrom) and node.module == mod
+                ):
                     hit = True
-            elif (isinstance(node, ast.Attribute) and node.attr == attr and \
-                    isinstance(node.value, ast.Name) and node.value.id == mod) or (isinstance(node, ast.ImportFrom) and node.module == mod and \
-                    any(a.name == attr for a in node.names)):
+            elif (
+                isinstance(node, ast.Attribute)
+                and node.attr == attr
+                and isinstance(node.value, ast.Name)
+                and node.value.id == mod
+            ) or (
+                isinstance(node, ast.ImportFrom)
+                and node.module == mod
+                and any(a.name == attr for a in node.names)
+            ):
                 hit = True
             if hit:
                 users.add(rel)
@@ -103,27 +113,39 @@ def test_engine_does_not_import_the_gui():
 
 def test_processes_start_only_in_core_proc():
     users = _users(("subprocess", "*"), allowed=("core/proc.py",))
-    assert users <= PROCESS_EXCEPTIONS, f"use core.proc, not subprocess: {sorted(users - PROCESS_EXCEPTIONS)}"
+    assert users <= PROCESS_EXCEPTIONS, (
+        f"use core.proc, not subprocess: {sorted(users - PROCESS_EXCEPTIONS)}"
+    )
     fixed = PROCESS_EXCEPTIONS - users
     assert not fixed, f"fixed - remove from PROCESS_EXCEPTIONS: {sorted(fixed)}"
 
 
 def test_threads_start_only_in_core_tasks():
     users = _users(("threading", "Thread"), allowed=("core/tasks.py",))
-    assert users <= THREAD_EXCEPTIONS, f"use core.tasks, not threading.Thread: {sorted(users - THREAD_EXCEPTIONS)}"
+    assert users <= THREAD_EXCEPTIONS, (
+        f"use core.tasks, not threading.Thread: {sorted(users - THREAD_EXCEPTIONS)}"
+    )
     fixed = THREAD_EXCEPTIONS - users
     assert not fixed, f"fixed - remove from THREAD_EXCEPTIONS: {sorted(fixed)}"
 
 
 def test_tool_pages_never_import_the_window():
-    breaks = {rel: bad for rel, path in _py_files("tabs")
-              if (bad := {_top(m) for m in _imports(path) if _top(m) in ("shell", "main")})}
+    breaks = {
+        rel: bad
+        for rel, path in _py_files("tabs")
+        if (bad := {_top(m) for m in _imports(path) if _top(m) in ("shell", "main")})
+    }
     assert not breaks, f"tabs/ must not import the window (use tabs.kit.contracts.Shell): {breaks}"
 
 
 def test_no_hidden_imports():
     """``__import__("subprocess")`` would slip past every rule above."""
-    hits = [f"{rel}:{node.lineno}" for rel, path in _py_files("main.py", "core", "tabs", "shell")
-            for node in ast.walk(ast.parse(open(path, encoding="utf-8").read(), path))
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__"]
+    hits = [
+        f"{rel}:{node.lineno}"
+        for rel, path in _py_files("main.py", "core", "tabs", "shell")
+        for node in ast.walk(ast.parse(open(path, encoding="utf-8").read(), path))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "__import__"
+    ]
     assert not hits, f"import modules normally (or with importlib, for lazy tool pages): {hits}"

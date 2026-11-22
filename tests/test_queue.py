@@ -1,4 +1,5 @@
 """Render queue v2: progress, atomic outputs, cancellation, failure summaries."""
+
 import os
 import time
 
@@ -10,14 +11,16 @@ from core import ffmpeg as ff
 @pytest.fixture
 def q():
     from tests.gui_harness import ensure_display
+
     ensure_display()
     import tkinter as tk
 
     from core import ui
     from core.queue_manager import RenderQueueManager
+
     root = tk.Tk()
     hosting = ui.hosted_by(root, poll_ms=5)
-    hosting.__enter__()                # left in pump_until's teardown below
+    hosting.__enter__()  # left in pump_until's teardown below
     mgr = RenderQueueManager.get_instance()
     mgr.cancel_all()
     mgr.clear_finished()
@@ -40,8 +43,19 @@ def q():
 
 
 def _lavfi(seconds, out, preset="ultrafast"):
-    return [ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=30:d={seconds}",
-            "-c:v", "libx264", "-preset", preset, out]
+    return [
+        ff.ffmpeg_path(),
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        f"testsrc2=size=1280x720:rate=30:d={seconds}",
+        "-c:v",
+        "libx264",
+        "-preset",
+        preset,
+        out,
+    ]
 
 
 @pytest.mark.gui
@@ -49,8 +63,13 @@ def _lavfi(seconds, out, preset="ultrafast"):
 def test_success_promotes_part_file(q, outdir):
     out = str(outdir / "ok.mp4")
     events = []
-    tid = q.enqueue("ok", out, cmd=_lavfi(2, out), expected_duration=2.0,
-                    on_complete=lambda t, rc: events.append(rc))
+    tid = q.enqueue(
+        "ok",
+        out,
+        cmd=_lavfi(2, out),
+        expected_duration=2.0,
+        on_complete=lambda t, rc: events.append(rc),
+    )
     assert q.pump_until(lambda: events)
     task = q.get_task(tid)
     assert events == [0] and task.status == "done" and task.fraction == 1.0
@@ -63,14 +82,19 @@ def test_success_promotes_part_file(q, outdir):
 def test_cancel_running_kills_and_cleans(q, outdir):
     out = str(outdir / "long.mp4")
     events = []
-    tid = q.enqueue("long", out, cmd=_lavfi(600, out, "veryslow"), expected_duration=600,
-                    on_complete=lambda t, rc: events.append(rc))
+    tid = q.enqueue(
+        "long",
+        out,
+        cmd=_lavfi(600, out, "veryslow"),
+        expected_duration=600,
+        on_complete=lambda t, rc: events.append(rc),
+    )
     assert q.pump_until(lambda: q.get_task(tid).status == "active" and q.get_task(tid).fraction)
     q.cancel(tid)
     assert q.pump_until(lambda: events, 15)
     assert events == [-1] and q.get_task(tid).status == "cancelled"
     assert ff.active_count() == 0
-    assert os.listdir(outdir) == []          # neither final nor .part file
+    assert os.listdir(outdir) == []  # neither final nor .part file
 
 
 @pytest.mark.gui
@@ -94,9 +118,12 @@ def test_failure_keeps_existing_file_and_reports_error(q, media, outdir):
     out = outdir / "keep.mp4"
     out.write_bytes(b"precious")
     events = []
-    tid = q.enqueue("bad", str(out), cmd=[ff.ffmpeg_path(), "-y", "-i", media["h264"],
-                                          "-vf", "nosuchfilter", str(out)],
-                    on_complete=lambda t, rc: events.append(rc))
+    tid = q.enqueue(
+        "bad",
+        str(out),
+        cmd=[ff.ffmpeg_path(), "-y", "-i", media["h264"], "-vf", "nosuchfilter", str(out)],
+        on_complete=lambda t, rc: events.append(rc),
+    )
     assert q.pump_until(lambda: events)
     task = q.get_task(tid)
     assert task.status == "failed" and events[0] != 0
@@ -114,13 +141,19 @@ def test_worker_fn_with_context(q, outdir):
         seen["tmp"] = tmp
         mid = os.path.join(tmp, "mid.mp4")
         ctx.span(0.0, 0.5).run(_lavfi(1, mid), duration=1.0)
-        ctx.span(0.5, 1.0).run([ff.ffmpeg_path(), "-y", "-i", mid, "-c", "copy",
-                                str(outdir / "final.mp4")], duration=1.0)
+        ctx.span(0.5, 1.0).run(
+            [ff.ffmpeg_path(), "-y", "-i", mid, "-c", "copy", str(outdir / "final.mp4")],
+            duration=1.0,
+        )
         return 0
 
     events = []
-    tid = q.enqueue("multi", str(outdir / "final.mp4"), worker_fn=job,
-                    on_complete=lambda t, rc: events.append(rc))
+    tid = q.enqueue(
+        "multi",
+        str(outdir / "final.mp4"),
+        worker_fn=job,
+        on_complete=lambda t, rc: events.append(rc),
+    )
     assert q.pump_until(lambda: events)
     assert events == [0] and q.get_task(tid).fraction == 1.0
     assert (outdir / "final.mp4").exists() and not os.path.exists(seen["tmp"])
@@ -130,8 +163,21 @@ def test_worker_fn_with_context(q, outdir):
 @pytest.mark.ffmpeg
 def test_worker_fn_failure_reports_summary(q, outdir):
     def job(progress_cb, cancel_fn, ctx):
-        ctx.run([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "nullsrc", "-vf", "bogus=1",
-                 "-t", "1", str(outdir / "x.mp4")])
+        ctx.run(
+            [
+                ff.ffmpeg_path(),
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "nullsrc",
+                "-vf",
+                "bogus=1",
+                "-t",
+                "1",
+                str(outdir / "x.mp4"),
+            ]
+        )
         return 0
 
     events = []

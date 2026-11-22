@@ -1,5 +1,6 @@
 """Tests for core/filters.py - escaping verified by real FFmpeg runs on a
 file name full of filtergraph metacharacters."""
+
 import os
 import shutil
 
@@ -23,16 +24,18 @@ def test_hex_to_ass_colour():
 
 
 def test_concat_line_quotes():
-    path = os.path.abspath("/tmp/it's here.mp4")          # a drive letter and backslashes on Windows
+    path = os.path.abspath("/tmp/it's here.mp4")  # a drive letter and backslashes on Windows
     line = fl.concat_line(path)
     assert line == "file '" + path.replace("'", "'\\''") + "'"
     assert line.endswith("it'\\''s here.mp4'")
 
 
 def test_write_ffmetadata(tmp_path):
-    p = fl.write_ffmetadata(str(tmp_path / "m.txt"),
-                            chapters=[(0, 1.5, "Intro; part=1 #a"), (1.5, 3, "B\\C")],
-                            tags={"title": "T=1"})
+    p = fl.write_ffmetadata(
+        str(tmp_path / "m.txt"),
+        chapters=[(0, 1.5, "Intro; part=1 #a"), (1.5, 3, "B\\C")],
+        tags={"title": "T=1"},
+    )
     with open(p, encoding="utf-8") as fh:
         text = fh.read()
     assert text.startswith(";FFMETADATA1\n")
@@ -53,8 +56,24 @@ def test_subtitles_filter_with_hostile_path(media, nasty_dir, outdir):
     shutil.copy(media["srt"], srt)
     vf = fl.subtitles_filter(str(srt), force_style=fl.ass_style(font="Inter", size=28))
     out = str(outdir / "subbed.mp4")
-    res = ff.run([ff.ffmpeg_path(), "-y", "-i", media["h264"], "-t", "3", "-vf", vf,
-                  "-c:v", "libx264", "-preset", "ultrafast", "-an", out])
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            media["h264"],
+            "-t",
+            "3",
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-an",
+            out,
+        ]
+    )
     assert res.ok, res.error_summary
 
 
@@ -64,12 +83,30 @@ def test_lut3d_and_movie_with_hostile_path(media, nasty_dir, outdir):
     shutil.copy(media["cube"], cube)
     logo = nasty_dir / "logo 'a' [b], c.png"
     shutil.copy(media["png"], logo)
-    fc = (f"{fl.movie_source(str(logo))},scale=160:-2[lg];"
-          f"[0:v]{fl.lut3d_filter(str(cube))}[g];[g][lg]overlay=10:10[v]")
+    fc = (
+        f"{fl.movie_source(str(logo))},scale=160:-2[lg];"
+        f"[0:v]{fl.lut3d_filter(str(cube))}[g];[g][lg]overlay=10:10[v]"
+    )
     out = str(outdir / "lut.mp4")
-    res = ff.run([ff.ffmpeg_path(), "-y", "-i", media["h264"], "-t", "2",
-                  "-filter_complex", fc, "-map", "[v]", "-c:v", "libx264",
-                  "-preset", "ultrafast", out])
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            media["h264"],
+            "-t",
+            "2",
+            "-filter_complex",
+            fc,
+            "-map",
+            "[v]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            out,
+        ]
+    )
     assert res.ok, res.error_summary
 
 
@@ -80,23 +117,43 @@ def test_preview_with_a_still_image_later_in_the_video(media, nasty_dir, at):
     first frame (previews keep the source timestamps)."""
     logo = nasty_dir / "logo 'a' [b], c.png"
     shutil.copy(media["png"], logo)
-    vf = (f"{fl.preview_movie(str(logo))}scale=160:-2[lg];"
-          f"[in][lg]overlay=10:10:shortest=1")
+    vf = f"{fl.preview_movie(str(logo))}scale=160:-2[lg];[in][lg]overlay=10:10:shortest=1"
     assert ff.grab_frame_png(media["h264"], at, width=320, height=180, vf=vf, keep_time=True)
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("text", ["Hello: it's 50% off, [now]; ok?", "Ünïcödé — 日本語 \\ back",
-                                  "two\nlines"])
+@pytest.mark.parametrize(
+    "text", ["Hello: it's 50% off, [now]; ok?", "Ünïcödé — 日本語 \\ back", "two\nlines"]
+)
 def test_drawtext_textfile_and_inline(text, media, outdir, tmp_path):
     tf = fl.drawtext_text_file(text, directory=str(tmp_path))
-    for vf in (fl.drawtext_filter(textfile=tf, font="sans", fontsize=36, box=True,
-                                  enable=fl.enable_between(0.5, 1.5)),
-               fl.drawtext_filter(text=text, font="sans bold", fontsize="h/12",
-                                  borderw=2, alpha="if(lt(t,1),t,1)")):
+    for vf in (
+        fl.drawtext_filter(
+            textfile=tf, font="sans", fontsize=36, box=True, enable=fl.enable_between(0.5, 1.5)
+        ),
+        fl.drawtext_filter(
+            text=text, font="sans bold", fontsize="h/12", borderw=2, alpha="if(lt(t,1),t,1)"
+        ),
+    ):
         out = str(outdir / "dt.mp4")
-        res = ff.run([ff.ffmpeg_path(), "-y", "-i", media["h264"], "-t", "2", "-vf", vf,
-                      "-c:v", "libx264", "-preset", "ultrafast", "-an", out])
+        res = ff.run(
+            [
+                ff.ffmpeg_path(),
+                "-y",
+                "-i",
+                media["h264"],
+                "-t",
+                "2",
+                "-vf",
+                vf,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-an",
+                out,
+            ]
+        )
         assert res.ok, f"{vf}\n{res.error_summary}"
 
 
@@ -108,8 +165,9 @@ def test_concat_list_with_hostile_names(media, nasty_dir, outdir):
     shutil.copy(media["h264_b"], b)
     lst = fl.write_concat_list([str(a), str(b)], str(outdir / "list.txt"))
     out = str(outdir / "joined.mp4")
-    res = ff.run([ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", lst,
-                  "-c", "copy", out])
+    res = ff.run(
+        [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", out]
+    )
     assert res.ok, res.error_summary
     assert ff.probe(out, use_cache=False).duration == pytest.approx(10.0, abs=0.3)
 

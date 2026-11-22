@@ -17,6 +17,7 @@ switched off or tuned:
 * optional: black bars cropped, a little sharpening or noise reduction,
   brightness / contrast / saturation, half or double size, 16-bit PNG.
 """
+
 from __future__ import annotations
 
 import os
@@ -92,10 +93,23 @@ def out_size(info: ff.MediaInfo, size: str = "own", square_pixels: bool = True, 
     return max(2, round(w * k / 2) * 2), max(2, round(h * k / 2) * 2)
 
 
-def build_chain(info: ff.MediaInfo, *, accurate: bool = True, square_pixels: bool = True,
-                tonemap: bool = True, deinterlace: bool = True, crop=None, size: str = "own",
-                sharpen: float = 0.0, denoise: int = 0, brightness: float = 0.0, contrast: float = 1.0,
-                saturation: float = 1.0, deep: bool = False, gpu: bool = False) -> str:
+def build_chain(
+    info: ff.MediaInfo,
+    *,
+    accurate: bool = True,
+    square_pixels: bool = True,
+    tonemap: bool = True,
+    deinterlace: bool = True,
+    crop=None,
+    size: str = "own",
+    sharpen: float = 0.0,
+    denoise: int = 0,
+    brightness: float = 0.0,
+    contrast: float = 1.0,
+    saturation: float = 1.0,
+    deep: bool = False,
+    gpu: bool = False,
+) -> str:
     """The FFmpeg filter chain that turns the frame into the picture."""
     v = info.require_video()
     steps = []
@@ -109,16 +123,22 @@ def build_chain(info: ff.MediaInfo, *, accurate: bool = True, square_pixels: boo
         x, y, w, h = crop
         steps.append(f"crop={w}:{h}:{x}:{y}")
     if denoise:
-        steps.append(f"hqdn3d=luma_spatial={denoise}:chroma_spatial={denoise * 0.75:g}:luma_tmp=0:chroma_tmp=0")
+        steps.append(
+            f"hqdn3d=luma_spatial={denoise}:chroma_spatial={denoise * 0.75:g}:luma_tmp=0:chroma_tmp=0"
+        )
     if (brightness, contrast, saturation) != (0.0, 1.0, 1.0):
-        steps.append(f"eq=brightness={brightness:g}:contrast={contrast:g}:saturation={saturation:g}")
+        steps.append(
+            f"eq=brightness={brightness:g}:contrast={contrast:g}:saturation={saturation:g}"
+        )
     w, h = out_size(info, size, square_pixels, crop)
     rgb = "gbrp16le" if deep else "gbrp"
     if accurate:
         matrix = "bt709" if hdr_done else colour_matrix(info)
         rng = "pc" if (v and (v.color_range or "").lower() in ("pc", "jpeg")) else "tv"
-        steps.append(f"scale={w}:{h}:flags=lanczos+accurate_rnd+full_chroma_int+full_chroma_inp:"
-                     f"in_color_matrix={matrix}:in_range={rng}:out_range=pc,format={rgb}")
+        steps.append(
+            f"scale={w}:{h}:flags=lanczos+accurate_rnd+full_chroma_int+full_chroma_inp:"
+            f"in_color_matrix={matrix}:in_range={rng}:out_range=pc,format={rgb}"
+        )
     else:
         steps.append(f"scale={w}:{h},format={rgb}")
     if sharpen:
@@ -138,10 +158,31 @@ def frame_name(path: str, at: float) -> str:
 
 def save_command(path: str, at: float, chain: str, out: str) -> list:
     gpu = "libplacebo" in chain
-    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
-            *(["-init_hw_device", "vulkan"] if gpu else []),
-            "-ss", ff.ts(at), "-i", path, "-frames:v", "1", "-an", "-sn", "-dn",
-            "-vf", chain, "-c:v", "png", "-pred", "mixed", out]
+    return [
+        ff.ffmpeg_path(),
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        *(["-init_hw_device", "vulkan"] if gpu else []),
+        "-ss",
+        ff.ts(at),
+        "-i",
+        path,
+        "-frames:v",
+        "1",
+        "-an",
+        "-sn",
+        "-dn",
+        "-vf",
+        chain,
+        "-c:v",
+        "png",
+        "-pred",
+        "mixed",
+        out,
+    ]
 
 
 class SnapshotTab(BaseTab):
@@ -157,11 +198,16 @@ class SnapshotTab(BaseTab):
 
     # ── UI ────────────────────────────────────────────────────────────
     def _build_ui(self):
-        self.make_header(self, t("tab.snapshot"), "Save any frame as a full-size, high-quality picture.",
-                         icon="📷")
+        self.make_header(
+            self,
+            t("tab.snapshot"),
+            "Save any frame as a full-size, high-quality picture.",
+            icon="📷",
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), kind="video",
-                               on_change=self._loaded_from_row)
+        self.src_row = FileRow(
+            body, t("common.source_video"), kind="video", on_change=self._loaded_from_row
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self.info_lbl.pack(anchor="w", padx=px(24))
@@ -187,17 +233,26 @@ class SnapshotTab(BaseTab):
         nav = tk.Frame(body)
         nav.pack(fill="x", padx=px(20), pady=px(6, 0))
         self.pos_var = tk.DoubleVar(value=0.0)
-        self.slider = ttk.Scale(nav, from_=0.0, to=1.0, variable=self.pos_var, command=lambda _v: self._moved())
+        self.slider = ttk.Scale(
+            nav, from_=0.0, to=1.0, variable=self.pos_var, command=lambda _v: self._moved()
+        )
         self.slider.pack(fill="x")
         framestep.slider(self.slider, lambda: self._fps)
         row = tk.Frame(nav)
         row.pack(fill="x", pady=px(4, 0))
-        for label, frames, seconds, tip in (("◀◀", 0, -1, "One second back (Shift+,)"),
-                                            ("◀", -1, 0, "One frame back (,)"),
-                                            ("▶", 1, 0, "One frame forward (.)"),
-                                            ("▶▶", 0, 1, "One second forward (Shift+.)")):
-            b = tk.Button(row, text=label, relief="flat", width=4,
-                          command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s))
+        for label, frames, seconds, tip in (
+            ("◀◀", 0, -1, "One second back (Shift+,)"),
+            ("◀", -1, 0, "One frame back (,)"),
+            ("▶", 1, 0, "One frame forward (.)"),
+            ("▶▶", 0, 1, "One second forward (Shift+.)"),
+        ):
+            b = tk.Button(
+                row,
+                text=label,
+                relief="flat",
+                width=4,
+                command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s),
+            )
             b.pack(side="left", padx=px(0, 2))
             add_tooltip(b, tip)
         self.pos_lbl = tk.Label(row, text="", fg=CLR["accent"], font=(MONO_FONT, 10, "bold"))
@@ -208,8 +263,12 @@ class SnapshotTab(BaseTab):
         goto.pack(side="left")
         goto.bind("<Return>", lambda _e: self._goto())
         add_tooltip(goto, "A time (1:02.5) or a frame number (#1500), then Enter")
-        tk.Label(row, text="Keys:  ,  and  .  one frame   ·   with Shift, one second", fg=CLR["fgdim"],
-                 font=(UI_FONT, 8)).pack(side="right")
+        tk.Label(
+            row,
+            text="Keys:  ,  and  .  one frame   ·   with Shift, one second",
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(side="right")
 
         pic = tk.LabelFrame(body, text="  Picture  ", padx=px(12), pady=px(8))
         pic.pack(fill="x", padx=px(20), pady=px(8, 4))
@@ -220,14 +279,34 @@ class SnapshotTab(BaseTab):
         self.crop_var = tk.BooleanVar(value=False)
         self.deep_var = tk.BooleanVar(value=False)
         checks = (
-            (self.accurate_var, "Accurate colours", "Converts with the video's own colour standard and full-range "
-                                                    "RGB, with full-detail colour edges"),
-            (self.square_var, "Correct the pixel shape", "For anamorphic video, so circles stay round"),
-            (self.tonemap_var, "HDR to normal colours", "Tone-maps HDR video the way the HDR to SDR tool does "
-                                                        "(otherwise HDR stills look grey and flat)"),
+            (
+                self.accurate_var,
+                "Accurate colours",
+                "Converts with the video's own colour standard and full-range "
+                "RGB, with full-detail colour edges",
+            ),
+            (
+                self.square_var,
+                "Correct the pixel shape",
+                "For anamorphic video, so circles stay round",
+            ),
+            (
+                self.tonemap_var,
+                "HDR to normal colours",
+                "Tone-maps HDR video the way the HDR to SDR tool does "
+                "(otherwise HDR stills look grey and flat)",
+            ),
             (self.deint_var, "Remove interlacing combs", "Only does anything on interlaced video"),
-            (self.crop_var, "Crop black bars", "Finds letterbox / pillarbox bars and leaves them out"),
-            (self.deep_var, "16-bit PNG", "Keeps every shade of 10-bit and HDR video (bigger file)"),
+            (
+                self.crop_var,
+                "Crop black bars",
+                "Finds letterbox / pillarbox bars and leaves them out",
+            ),
+            (
+                self.deep_var,
+                "16-bit PNG",
+                "Keeps every shade of 10-bit and HDR video (bigger file)",
+            ),
         )
         self._checks = {}
         grid = tk.Frame(pic)
@@ -243,9 +322,11 @@ class SnapshotTab(BaseTab):
         self.size_var = tk.StringVar(value=SIZES["own"])
         self.sharpen_var = tk.StringVar(value=SHARPEN[0.0])
         self.denoise_var = tk.StringVar(value=DENOISE[0])
-        for label, var, values, width in (("Size:", self.size_var, list(SIZES.values()), 26),
-                                          ("Sharpen:", self.sharpen_var, list(SHARPEN.values()), 9),
-                                          ("Noise reduction:", self.denoise_var, list(DENOISE.values()), 9)):
+        for label, var, values, width in (
+            ("Size:", self.size_var, list(SIZES.values()), 26),
+            ("Sharpen:", self.sharpen_var, list(SHARPEN.values()), 9),
+            ("Noise reduction:", self.denoise_var, list(DENOISE.values()), 9),
+        ):
             tk.Label(adj, text=label).pack(side="left", padx=px(0, 4))
             cb = ttk.Combobox(adj, textvariable=var, values=values, state="readonly", width=width)
             cb.pack(side="left", padx=px(0, 16))
@@ -256,24 +337,44 @@ class SnapshotTab(BaseTab):
         self.brightness_var = tk.DoubleVar(value=0.0)
         self.contrast_var = tk.DoubleVar(value=1.0)
         self.saturation_var = tk.DoubleVar(value=1.0)
-        for label, var, lo, hi in (("Brightness", self.brightness_var, -0.3, 0.3),
-                                   ("Contrast", self.contrast_var, 0.5, 1.5),
-                                   ("Saturation", self.saturation_var, 0.0, 2.0)):
+        for label, var, lo, hi in (
+            ("Brightness", self.brightness_var, -0.3, 0.3),
+            ("Contrast", self.contrast_var, 0.5, 1.5),
+            ("Saturation", self.saturation_var, 0.0, 2.0),
+        ):
             tk.Label(sliders, text=label).pack(side="left")
-            tk.Scale(sliders, variable=var, from_=lo, to=hi, resolution=0.01, orient="horizontal",
-                     length=px(130), command=lambda _v: self._options_changed()).pack(side="left", padx=px(4, 14))
+            tk.Scale(
+                sliders,
+                variable=var,
+                from_=lo,
+                to=hi,
+                resolution=0.01,
+                orient="horizontal",
+                length=px(130),
+                command=lambda _v: self._options_changed(),
+            ).pack(side="left", padx=px(4, 14))
         tk.Button(sliders, text="Reset", relief="flat", command=self._reset_look).pack(side="left")
 
         out = tk.Frame(body)
         out.pack(fill="x", padx=px(20), pady=px(8, 4))
-        self.btn_render = tk.Button(out, text="📷  SAVE SCREENSHOT…", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", cursor="hand2", command=self._save_as)
+        self.btn_render = tk.Button(
+            out,
+            text="📷  SAVE SCREENSHOT…",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            cursor="hand2",
+            command=self._save_as,
+        )
         self.btn_render.pack(side="left")
         add_tooltip(self.btn_render, "Save this frame as a PNG (Ctrl+S)")
         self.btn_quick = tk.Button(out, text="Quick save", relief="flat", command=self._quick_save)
         self.btn_quick.pack(side="left", padx=px(10))
-        add_tooltip(self.btn_quick, "Save straight into the last folder you used (or next to the video), "
-                                    "named after the video and the frame's time")
+        add_tooltip(
+            self.btn_quick,
+            "Save straight into the last folder you used (or next to the video), "
+            "named after the video and the frame's time",
+        )
         self.size_lbl = tk.Label(out, text="", fg=CLR["fgdim"])
         self.size_lbl.pack(side="left", padx=px(10))
         self.result_lbl = tk.Label(body, text="", fg=CLR["green"], cursor="hand2", anchor="w")
@@ -297,13 +398,17 @@ class SnapshotTab(BaseTab):
         self._info = info
         self._fps = framestep.fps_of(path)
         self._bars = None
-        v = info.require_video()                              # has_video was checked above
+        v = info.require_video()  # has_video was checked above
         frames = max(1, round(info.duration * self._fps))
         self.info_lbl.config(text=f"{info.summary()}  ·  {frames:,} frames", fg=CLR["fgdim"])
         self._checks["HDR to normal colours"].config(state="normal" if info.is_hdr else "disabled")
         interlaced = v.field_order not in ("", "progressive", "unknown")
-        self._checks["Remove interlacing combs"].config(state="normal" if interlaced else "disabled")
-        self._checks["Correct the pixel shape"].config(state="normal" if _sar(v) != 1.0 else "disabled")
+        self._checks["Remove interlacing combs"].config(
+            state="normal" if interlaced else "disabled"
+        )
+        self._checks["Correct the pixel shape"].config(
+            state="normal" if _sar(v) != 1.0 else "disabled"
+        )
         self.deep_var.set(v.bit_depth > 8 or info.is_hdr)
         if self.crop_var.get():
             self._detect_bars()
@@ -352,7 +457,11 @@ class SnapshotTab(BaseTab):
         if not text or self._info is None:
             return
         try:
-            at = (int(text.lstrip("#")) - 1) / self._fps if text.startswith("#") else ff.parse_time(text)
+            at = (
+                (int(text.lstrip("#")) - 1) / self._fps
+                if text.startswith("#")
+                else ff.parse_time(text)
+            )
         except ValueError:
             self.goto_var.set("")
             return
@@ -375,16 +484,22 @@ class SnapshotTab(BaseTab):
         info = self._info
         if info is None:
             return ""
-        return build_chain(info, accurate=self.accurate_var.get(), square_pixels=self.square_var.get(),
-                           tonemap=self.tonemap_var.get(), deinterlace=self.deint_var.get(),
-                           crop=self._bars if self.crop_var.get() else None,
-                           size=self._key(SIZES, self.size_var), sharpen=self._key(SHARPEN, self.sharpen_var),
-                           denoise=self._key(DENOISE, self.denoise_var),
-                           brightness=round(self.brightness_var.get(), 2),
-                           contrast=round(self.contrast_var.get(), 2),
-                           saturation=round(self.saturation_var.get(), 2),
-                           deep=self.deep_var.get(), gpu=self.tonemap_var.get() and info.is_hdr
-                           and fl.vulkan_ok())
+        return build_chain(
+            info,
+            accurate=self.accurate_var.get(),
+            square_pixels=self.square_var.get(),
+            tonemap=self.tonemap_var.get(),
+            deinterlace=self.deint_var.get(),
+            crop=self._bars if self.crop_var.get() else None,
+            size=self._key(SIZES, self.size_var),
+            sharpen=self._key(SHARPEN, self.sharpen_var),
+            denoise=self._key(DENOISE, self.denoise_var),
+            brightness=round(self.brightness_var.get(), 2),
+            contrast=round(self.contrast_var.get(), 2),
+            saturation=round(self.saturation_var.get(), 2),
+            deep=self.deep_var.get(),
+            gpu=self.tonemap_var.get() and info.is_hdr and fl.vulkan_ok(),
+        )
 
     def _options_changed(self):
         if self._info is None:
@@ -401,13 +516,18 @@ class SnapshotTab(BaseTab):
         if self._info is None:
             return
         self.view_shot.set_filter(self.chain())
-        w, h = out_size(self._info, self._key(SIZES, self.size_var), self.square_var.get(),
-                        self._bars if self.crop_var.get() and self._bars else None)
+        w, h = out_size(
+            self._info,
+            self._key(SIZES, self.size_var),
+            self.square_var.get(),
+            self._bars if self.crop_var.get() and self._bars else None,
+        )
         bits = "16-bit" if self.deep_var.get() else "8-bit"
         self.size_lbl.config(text=f"{w}×{h} PNG, {bits}")
 
     def _detect_bars(self):
         from tabs.social.auto_cropper import detect_bars
+
         path, info = self.file_path, self._info
         if info is None or info.video is None:
             return
@@ -420,7 +540,12 @@ class SnapshotTab(BaseTab):
             self._options_changed()
 
         self.size_lbl.config(text="Looking for black bars…")
-        tasks.submit(partial(detect_bars, path, info.duration), on_done=done, on_error=lambda _e: done(None), name="SnapshotBars")
+        tasks.submit(
+            partial(detect_bars, path, info.duration),
+            on_done=done,
+            on_error=lambda _e: done(None),
+            name="SnapshotBars",
+        )
 
     # ── Saving ────────────────────────────────────────────────────────
     def _save_as(self):
@@ -428,10 +553,16 @@ class SnapshotTab(BaseTab):
             self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
             return
         from core import dialogs
+
         at = self._frame() / self._fps
         start = self._last_dir or os.path.dirname(self.file_path)
-        out = dialogs.ask_save(os.path.join(start, frame_name(self.file_path, at)), kind="image",
-                               defaultextension=".png", title="Save screenshot", parent=self)
+        out = dialogs.ask_save(
+            os.path.join(start, frame_name(self.file_path, at)),
+            kind="image",
+            defaultextension=".png",
+            title="Save screenshot",
+            parent=self,
+        )
         if out:
             self._save(out)
 
@@ -439,7 +570,9 @@ class SnapshotTab(BaseTab):
         if self._info is None:
             self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
             return
-        folder = self._last_dir if os.path.isdir(self._last_dir) else os.path.dirname(self.file_path)
+        folder = (
+            self._last_dir if os.path.isdir(self._last_dir) else os.path.dirname(self.file_path)
+        )
         out = os.path.join(folder, frame_name(self.file_path, self._frame() / self._fps))
         base, n = out[:-4], 2
         while os.path.exists(out):
@@ -466,8 +599,10 @@ class SnapshotTab(BaseTab):
             self._last_dir = os.path.dirname(path)
             self._saved = path
             mb = os.path.getsize(path) / 1e6
-            self.result_lbl.config(text=f"✓  Saved {os.path.basename(path)}  ({mb:.1f} MB)  -  click to show it",
-                                   fg=CLR["green"])
+            self.result_lbl.config(
+                text=f"✓  Saved {os.path.basename(path)}  ({mb:.1f} MB)  -  click to show it",
+                fg=CLR["green"],
+            )
 
         def failed(exc):
             self.btn_render.config(state="normal")

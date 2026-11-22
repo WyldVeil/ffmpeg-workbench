@@ -8,15 +8,26 @@ kdialog, zenity, notify-send, a system FFmpeg - would then load the bundle's
 libraries instead of their own and can crash.  :func:`child_env` returns an
 environment with the user's original values restored.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from collections.abc import Mapping
 
-_RESTORE = ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH", "PYTHONHOME",
-            "GST_PLUGIN_PATH", "GIO_MODULE_DIR", "GDK_PIXBUF_MODULE_FILE",
-            "QT_PLUGIN_PATH", "TCL_LIBRARY", "TK_LIBRARY", "SSL_CERT_FILE")
+_RESTORE = (
+    "LD_LIBRARY_PATH",
+    "LD_PRELOAD",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "GST_PLUGIN_PATH",
+    "GIO_MODULE_DIR",
+    "GDK_PIXBUF_MODULE_FILE",
+    "QT_PLUGIN_PATH",
+    "TCL_LIBRARY",
+    "TK_LIBRARY",
+    "SSL_CERT_FILE",
+)
 
 
 def child_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -26,7 +37,13 @@ def child_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
             orig = env.pop(key + "_ORIG", None)
             if orig is not None:
                 env[key] = orig
-            elif key in ("LD_LIBRARY_PATH", "TCL_LIBRARY", "TK_LIBRARY", "PYTHONPATH", "PYTHONHOME"):
+            elif key in (
+                "LD_LIBRARY_PATH",
+                "TCL_LIBRARY",
+                "TK_LIBRARY",
+                "PYTHONPATH",
+                "PYTHONHOME",
+            ):
                 env.pop(key, None)
     env.setdefault("PYTHONIOENCODING", "utf-8")
     if extra:

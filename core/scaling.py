@@ -25,6 +25,7 @@ The ``ui_scale`` setting (or ``GDK_SCALE`` / ``QT_SCALE_FACTOR`` when the
 desktop sets no DPI) overrides detection.  On Linux the fonts can only be made
 bigger through ``Xft.dpi``, so :func:`prepare` arranges that before Tk starts.
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,8 +41,8 @@ BASE_DPI = 96.0
 MIN_FACTOR, MAX_FACTOR = 0.75, 4.0
 
 _factor = 1.0
-_override: float | None = None      # set by prepare()
-_saved_xenv: str | None = None      # XENVIRONMENT before prepare() changed it
+_override: float | None = None  # set by prepare()
+_saved_xenv: str | None = None  # XENVIRONMENT before prepare() changed it
 _changed_xenv = False
 
 
@@ -109,6 +110,7 @@ def set_factor(value: float) -> None:
 #  Detection
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _is_x11() -> bool:
     return not sys.platform.startswith(("win", "darwin"))
 
@@ -116,9 +118,10 @@ def _is_x11() -> bool:
 def _requested_scale() -> float | None:
     """The ``ui_scale`` setting, when it is a number rather than "auto"."""
     from core import settings
+
     try:
         value = float(settings.UI_SCALE.get())
-    except ValueError:                       # "auto"
+    except ValueError:  # "auto"
         return None
     return value if MIN_FACTOR <= value <= MAX_FACTOR else None
 
@@ -146,17 +149,21 @@ def window_scale() -> int:
     """The desktop's whole-window scale (2 = everything twice the size) on
     desktops that scale windows rather than the font DPI: Xfce and MATE keep
     ``Xft.dpi`` at 96 and draw GTK apps twice as big.  1 if there is none."""
-    desktop = (os.environ.get("XDG_CURRENT_DESKTOP", "") + ":" +
-               os.environ.get("DESKTOP_SESSION", "")).upper()
+    desktop = (
+        os.environ.get("XDG_CURRENT_DESKTOP", "") + ":" + os.environ.get("DESKTOP_SESSION", "")
+    ).upper()
     out = ""
     if "XFCE" in desktop:
         out = _run_quiet(["xfconf-query", "-c", "xsettings", "-p", "/Gdk/WindowScalingFactor"])
     elif "MATE" in desktop:
         out = _run_quiet(["gsettings", "get", "org.mate.interface", "window-scaling-factor"])
-        out = out.split()[-1] if out else ""          # "uint32 2" -> "2"; 0 means "auto"
+        out = out.split()[-1] if out else ""  # "uint32 2" -> "2"; 0 means "auto"
     elif "GNOME" in desktop or "CINNAMON" in desktop or "UNITY" in desktop:
         import re
-        text = _run_quiet(["gsettings", "get", "org.gnome.settings-daemon.plugins.xsettings", "overrides"])
+
+        text = _run_quiet(
+            ["gsettings", "get", "org.gnome.settings-daemon.plugins.xsettings", "overrides"]
+        )
         m = re.search(r"'Gdk/WindowScalingFactor':\s*<(\d+)>", text)
         out = m.group(1) if m else ""
     try:
@@ -175,6 +182,7 @@ def xft_dpi() -> float | None:
     try:
         import ctypes
         import ctypes.util
+
         lib = None
         for name in ("libX11.so.6", ctypes.util.find_library("X11")):
             if not name:
@@ -208,6 +216,7 @@ def xft_dpi() -> float | None:
 def _user_resource_file() -> str | None:
     """The per-user resource file Xlib merges when XENVIRONMENT is unset."""
     import socket
+
     path = os.path.expanduser(f"~/.Xdefaults-{socket.gethostname()}")
     return path if os.path.isfile(path) else None
 
@@ -218,9 +227,13 @@ def _set_xft_dpi(dpi: float) -> None:
     would otherwise have been is copied in first, so nothing else changes."""
     global _saved_xenv, _changed_xenv
     from core.paths import cache_dir
+
     original = os.environ.get("XENVIRONMENT")
-    source = original if original and os.path.isfile(original) else (
-        None if original else _user_resource_file())
+    source = (
+        original
+        if original and os.path.isfile(original)
+        else (None if original else _user_resource_file())
+    )
     text = ""
     if source:
         try:
@@ -274,7 +287,7 @@ def apply(root) -> float:
     else:
         dpi = xft_dpi() if not _override else BASE_DPI * _override
         if not dpi:
-            dpi = float(tk_call("tk", "scaling")) * 72.0     # Xft's own fallback: the screen DPI
+            dpi = float(tk_call("tk", "scaling")) * 72.0  # Xft's own fallback: the screen DPI
         tk_call("tk", "scaling", dpi / 72.0)
         value = dpi / BASE_DPI
         _undo_tk_font_doubling(tk_call)

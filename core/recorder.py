@@ -15,6 +15,7 @@ core/recorder.py  -  Screen-recording back end
   file is finalised; MP4 is written fragmented, so even a crash leaves a
   playable file.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -42,7 +43,10 @@ def session() -> str:
         return "windows"
     if IS_MAC:
         return "mac"
-    if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+    if (
+        os.environ.get("WAYLAND_DISPLAY")
+        or os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+    ):
         return "wayland"
     return "x11"
 
@@ -60,11 +64,17 @@ def x11_display() -> str:
     return os.environ.get("DISPLAY") or ":0"
 
 
-def recording_name(folder: str, template: str = "Recording {date} {time}", ext: str = ".mp4") -> str:
+def recording_name(
+    folder: str, template: str = "Recording {date} {time}", ext: str = ".mp4"
+) -> str:
     """Timestamped file name that never replaces an existing file."""
     now = datetime.now()
-    name = (template or "Recording {date} {time}").replace("{date}", now.strftime("%Y-%m-%d")) \
-        .replace("{time}", now.strftime("%H-%M-%S")).replace("{counter}", "")
+    name = (
+        (template or "Recording {date} {time}")
+        .replace("{date}", now.strftime("%Y-%m-%d"))
+        .replace("{time}", now.strftime("%H-%M-%S"))
+        .replace("{counter}", "")
+    )
     name = re.sub(r'[<>:"/\\|?*]+', "_", name).strip() or "Recording"
     base = os.path.join(folder, name)
     path, n = base + ext, 2
@@ -75,8 +85,11 @@ def recording_name(folder: str, template: str = "Recording {date} {time}", ext: 
 
 
 def default_folder() -> str:
-    for cand in (os.path.join(os.path.expanduser("~"), "Videos"),
-                 os.path.join(os.path.expanduser("~"), "Movies"), os.path.expanduser("~")):
+    for cand in (
+        os.path.join(os.path.expanduser("~"), "Videos"),
+        os.path.join(os.path.expanduser("~"), "Movies"),
+        os.path.expanduser("~"),
+    ):
         if os.path.isdir(cand):
             return cand
     return os.path.expanduser("~")
@@ -84,20 +97,43 @@ def default_folder() -> str:
 
 # ── Audio sources ─────────────────────────────────────────────────────────────
 
+
 def audio_sources() -> list:
     """[(id, label)] - id is what the capture input needs."""
     out = []
     try:
         if IS_WIN:
-            r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-list_devices", "true", "-f", "dshow",
-                            "-i", "dummy"], timeout=15)
+            r = ff.capture(
+                [
+                    ff.ffmpeg_path(),
+                    "-hide_banner",
+                    "-list_devices",
+                    "true",
+                    "-f",
+                    "dshow",
+                    "-i",
+                    "dummy",
+                ],
+                timeout=15,
+            )
             for line in (r.stderr or "").splitlines():
-                m = re.search(r'"([^"]+)"\s*\(audio\)', line)          # FFmpeg 5+ format
+                m = re.search(r'"([^"]+)"\s*\(audio\)', line)  # FFmpeg 5+ format
                 if m and m.group(1) not in [x[0] for x in out]:
                     out.append((m.group(1), m.group(1)))
         elif IS_MAC:
-            r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-f", "avfoundation", "-list_devices", "true",
-                            "-i", ""], timeout=15)
+            r = ff.capture(
+                [
+                    ff.ffmpeg_path(),
+                    "-hide_banner",
+                    "-f",
+                    "avfoundation",
+                    "-list_devices",
+                    "true",
+                    "-i",
+                    "",
+                ],
+                timeout=15,
+            )
             audio = False
             for line in (r.stderr or "").splitlines():
                 if "audio devices" in line.lower():
@@ -129,9 +165,18 @@ def system_sound_source(sources: list) -> str | None:
     """Best guess at 'the computer's own sound' among *sources*."""
     for sid, label in sources:
         low = (sid + " " + label).lower()
-        if sid.endswith(".monitor") or any(k in low for k in ("stereo mix", "what u hear", "loopback",
-                                                            "wave out", "mezcla", "stereomix",
-                                                            "virtual-audio-capturer")):
+        if sid.endswith(".monitor") or any(
+            k in low
+            for k in (
+                "stereo mix",
+                "what u hear",
+                "loopback",
+                "wave out",
+                "mezcla",
+                "stereomix",
+                "virtual-audio-capturer",
+            )
+        ):
             return sid
     return None
 
@@ -146,8 +191,10 @@ def audio_input(source: str) -> list:
 
 # ── Capture commands ──────────────────────────────────────────────────────────
 
-def screen_input(fps: str = "30", *, region: tuple | None = None, cursor: bool = True,
-                 window_title: str = "") -> list:
+
+def screen_input(
+    fps: str = "30", *, region: tuple | None = None, cursor: bool = True, window_title: str = ""
+) -> list:
     """FFmpeg input arguments for the screen (Windows / macOS / X11)."""
     if IS_WIN:
         args = ["-thread_queue_size", "1024", "-f", "gdigrab", "-framerate", str(fps)]
@@ -157,37 +204,80 @@ def screen_input(fps: str = "30", *, region: tuple | None = None, cursor: bool =
             return [*args, "-i", f"title={window_title}"]
         if region:
             x, y, w, h = region
-            args += ["-offset_x", str(x), "-offset_y", str(y), "-video_size", f"{w // 2 * 2}x{h // 2 * 2}"]
+            args += [
+                "-offset_x",
+                str(x),
+                "-offset_y",
+                str(y),
+                "-video_size",
+                f"{w // 2 * 2}x{h // 2 * 2}",
+            ]
         return [*args, "-i", "desktop"]
     if IS_MAC:
-        return ["-f", "avfoundation", "-capture_cursor", "1" if cursor else "0", "-framerate", str(fps),
-                "-i", "1:none"]
-    args = ["-thread_queue_size", "1024", "-f", "x11grab", "-framerate", str(fps),
-            "-draw_mouse", "1" if cursor else "0"]
+        return [
+            "-f",
+            "avfoundation",
+            "-capture_cursor",
+            "1" if cursor else "0",
+            "-framerate",
+            str(fps),
+            "-i",
+            "1:none",
+        ]
+    args = [
+        "-thread_queue_size",
+        "1024",
+        "-f",
+        "x11grab",
+        "-framerate",
+        str(fps),
+        "-draw_mouse",
+        "1" if cursor else "0",
+    ]
     if region:
         x, y, w, h = region
-        return [*args, "-video_size", f"{w // 2 * 2}x{h // 2 * 2}", "-i", f"{x11_display()}+{x},{y}"]
+        return [
+            *args,
+            "-video_size",
+            f"{w // 2 * 2}x{h // 2 * 2}",
+            "-i",
+            f"{x11_display()}+{x},{y}",
+        ]
     return [*args, "-i", x11_display()]
 
 
-def ffmpeg_command(video_in: list, audio_sources_: list, out: str, video_args: list, *,
-                   audio_codec: str = "aac", region_crop: tuple | None = None,
-                   seconds: int | None = None, pre_input: list | None = None,
-                   vf_suffix: str = "") -> list:
+def ffmpeg_command(
+    video_in: list,
+    audio_sources_: list,
+    out: str,
+    video_args: list,
+    *,
+    audio_codec: str = "aac",
+    region_crop: tuple | None = None,
+    seconds: int | None = None,
+    pre_input: list | None = None,
+    vf_suffix: str = "",
+) -> list:
     cmd = [ff.ffmpeg_path(), "-hide_banner", "-y", *(pre_input or []), *video_in]
     for src in audio_sources_:
         cmd += audio_input(src)
-    vf = "crop=trunc(iw/2)*2:trunc(ih/2)*2"                   # encoders need even sizes
+    vf = "crop=trunc(iw/2)*2:trunc(ih/2)*2"  # encoders need even sizes
     if region_crop and IS_MAC:
         x, y, w, h = region_crop
         vf = f"crop={w // 2 * 2}:{h // 2 * 2}:{x}:{y}"
-    if vf_suffix:                                            # e.g. VAAPI upload
+    if vf_suffix:  # e.g. VAAPI upload
         vf += "," + vf_suffix
     n = len(audio_sources_)
     if n >= 2:
         mix = "".join(f"[{i + 1}:a]" for i in range(n))
-        cmd += ["-filter_complex", f"[0:v]{vf}[v];{mix}amix=inputs={n}:duration=longest:normalize=0[a]",
-                "-map", "[v]", "-map", "[a]"]
+        cmd += [
+            "-filter_complex",
+            f"[0:v]{vf}[v];{mix}amix=inputs={n}:duration=longest:normalize=0[a]",
+            "-map",
+            "[v]",
+            "-map",
+            "[a]",
+        ]
     else:
         cmd += ["-map", "0:v", "-vf", vf]
         if n == 1:
@@ -202,14 +292,18 @@ def ffmpeg_command(video_in: list, audio_sources_: list, out: str, video_args: l
             codec = "aac"
         cmd += ["-c:a", codec] + (["-b:a", "192k"] if codec in ("aac", "libopus") else [])
     if seconds:
-        cmd += ["-t", str(int(seconds))]                    # output option: stops every input
+        cmd += ["-t", str(int(seconds))]  # output option: stops every input
     if out.lower().endswith((".mp4", ".mov")):
-        cmd += ["-movflags", "+frag_keyframe+empty_moov+default_base_moof"]   # playable after a crash
+        cmd += [
+            "-movflags",
+            "+frag_keyframe+empty_moov+default_base_moof",
+        ]  # playable after a crash
     return [*cmd, out]
 
 
-def wayland_command(tool: str, out: str, *, fps: str = "60", audio: tuple = ("output",),
-                    seconds: int | None = None) -> list:
+def wayland_command(
+    tool: str, out: str, *, fps: str = "60", audio: tuple = ("output",), seconds: int | None = None
+) -> list:
     """Command for gpu-screen-recorder / wf-recorder (audio: 'output' and/or 'input')."""
     name = os.path.basename(tool)
     if name.startswith("gpu-screen-recorder"):
@@ -236,7 +330,9 @@ class Recording:
         self.stopping = False
         self.seconds = seconds
         self.is_ffmpeg = os.path.basename(cmd[0]).lower().startswith("ffmpeg")
-        self.proc = _proc.spawn(cmd, stdin=_proc.PIPE, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True)
+        self.proc = _proc.spawn(
+            cmd, stdin=_proc.PIPE, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True
+        )
         tasks.start_service(self._pump, name="RecorderLog")
         if seconds and not self.is_ffmpeg:
             tasks.start_service(partial(self._stop_after, seconds), name="RecorderTimer")

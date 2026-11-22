@@ -1,4 +1,3 @@
-
 """
 core/hardware.py  ─  Platform-safe hardware and binary utilities
 
@@ -21,6 +20,7 @@ Platform notes
 
 Programs are started through core.proc, which owns the Windows process flags.
 """
+
 import logging
 import os
 import platform
@@ -51,11 +51,13 @@ _CACHED_GPU: str | None = None
 
 # ── Binary path resolution ────────────────────────────────────────────────────
 
+
 def platform_tag() -> str:
     """Return the bundle sub-folder name for this OS/CPU, e.g. ``linux-x64``."""
     machine = platform.machine().lower()
-    arch = {"amd64": "x64", "x86_64": "x64", "aarch64": "arm64",
-            "arm64": "arm64"}.get(machine, machine or "x64")
+    arch = {"amd64": "x64", "x86_64": "x64", "aarch64": "arm64", "arm64": "arm64"}.get(
+        machine, machine or "x64"
+    )
     if _IS_WIN:
         osname = "windows"
     elif _IS_MAC:
@@ -69,6 +71,7 @@ def user_tools_dir() -> str | None:
     """Per-user folder for tools the app downloads or updates itself."""
     try:
         from core.paths import data_dir
+
         return os.path.join(data_dir(), "bin", platform_tag())
     except Exception:
         logger.debug("user_tools_dir: best-effort step failed", exc_info=True)
@@ -90,14 +93,14 @@ def bundled_bin_dirs() -> list:
     # Tools installed or updated by the app itself (always user-writable).
     user_bin = user_tools_dir()
     if user_bin:
-        dirs += [user_bin, os.path.join(user_bin, "whisper")]     # yt-dlp updates, models' tools
+        dirs += [user_bin, os.path.join(user_bin, "whisper")]  # yt-dlp updates, models' tools
     for root in roots:
         tag_dir = os.path.join(root, "bin", platform_tag())
         # FFmpeg's own tree (shared build: executables + DLLs, or bin/ + lib/).
         dirs.append(os.path.join(tag_dir, "ffmpeg", "bin"))
         dirs.append(tag_dir)
-        dirs.append(os.path.join(tag_dir, "whisper"))        # whisper.cpp speech-to-text
-        dirs.append(os.path.join(tag_dir, "fluidsynth"))     # FluidSynth (Windows build)
+        dirs.append(os.path.join(tag_dir, "whisper"))  # whisper.cpp speech-to-text
+        dirs.append(os.path.join(tag_dir, "fluidsynth"))  # FluidSynth (Windows build)
         dirs.append(os.path.join(root, "bin"))
     return dirs
 
@@ -121,6 +124,7 @@ def _check_settings_override(name: str) -> str | None:
     next to it.
     """
     from core import settings
+
     override = settings.FFMPEG_PATH_OVERRIDE.get().strip()
     if not override:
         return None
@@ -132,6 +136,7 @@ def _check_settings_override(name: str) -> str | None:
 def _binary_source_pref() -> str:
     """'auto' (bundled, then system), 'bundled' or 'system'."""
     from core import settings
+
     return settings.BINARY_SOURCE.get()
 
 
@@ -152,7 +157,7 @@ def find_binary(name: str) -> str | None:
     user_root = os.path.abspath(user_tools_dir() or "\0")
     for folder in bundled_bin_dirs():
         if pinned and os.path.abspath(folder).startswith(user_root):
-            continue        # FFmpeg is pinned to the build shipped with the app (old updater copies ignored)
+            continue  # FFmpeg is pinned to the build shipped with the app (old updater copies ignored)
         candidate = os.path.join(folder, exe)
         if _is_executable(candidate):
             bundled = candidate
@@ -186,6 +191,7 @@ def _resolve(name: str) -> str:
 
 # ── GPU detection ─────────────────────────────────────────────────────────────
 
+
 def detect_gpu() -> str:
     """Best working hardware-encoder family, as a coarse vendor name:
     ``"nvidia"`` | ``"amd"`` | ``"intel"`` | ``"apple"`` | ``"vaapi"`` | ``"cpu"``.
@@ -198,28 +204,37 @@ def detect_gpu() -> str:
         return _CACHED_GPU
     try:
         from core.encoders import preferred_hw
+
         kind = preferred_hw()
     except Exception:
         logger.debug("detect_gpu: best-effort step failed", exc_info=True)
         kind = None
-    _CACHED_GPU = {"nvenc": "nvidia", "amf": "amd", "qsv": "intel",
-                   "videotoolbox": "apple", "vaapi": "vaapi"}.get(kind or "", "cpu")
+    _CACHED_GPU = {
+        "nvenc": "nvidia",
+        "amf": "amd",
+        "qsv": "intel",
+        "videotoolbox": "apple",
+        "vaapi": "vaapi",
+    }.get(kind or "", "cpu")
     return _CACHED_GPU
 
 
 # ── Metadata helpers (thin wrappers over core.ffmpeg) ─────────────────────────
+
 
 def get_video_duration(file_path: str) -> float:
     """Duration of *file_path* in seconds (0.0 on any error)."""
     if not file_path:
         return 0.0
     from core.ffmpeg import duration_of
+
     return duration_of(file_path)
 
 
 def get_audio_bitrate_kbps(file_path: str) -> float:
     """Bit rate of the first audio stream in kb/s (0.0 if unknown)."""
     from core.ffmpeg import try_probe
+
     info = try_probe(file_path) if file_path else None
     if info and info.audio and info.audio.bit_rate:
         return info.audio.bit_rate / 1000.0
@@ -234,9 +249,23 @@ def launch_preview(file_path: str, start_time: float = 0) -> _proc.Popen[bytes] 
     if not os.path.isfile(ffplay):
         return None
     from core.ffmpeg import ts
-    cmd = [ffplay, "-hide_banner", "-loglevel", "error", "-ss", ts(start_time),
-           "-window_title", f"Preview — {os.path.basename(file_path)}  (Space: pause, Q: close)",
-           "-x", "960", "-y", "540", "-autoexit", file_path]
+
+    cmd = [
+        ffplay,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        ts(start_time),
+        "-window_title",
+        f"Preview — {os.path.basename(file_path)}  (Space: pause, Q: close)",
+        "-x",
+        "960",
+        "-y",
+        "540",
+        "-autoexit",
+        file_path,
+    ]
     try:
         return _proc.spawn(cmd, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL)
     except _proc.ProcessError:
@@ -245,20 +274,26 @@ def launch_preview(file_path: str, start_time: float = 0) -> _proc.Popen[bytes] 
 
 # ── Version management ────────────────────────────────────────────────────────
 
+
 def get_local_version() -> str:
     """Version of the active FFmpeg (``"9.0.2"``), ``"Missing"`` or ``"Unknown"``."""
     if not find_binary("ffmpeg"):
         return "Missing"
     from core.ffmpeg import version_of
+
     return version_of(get_binary_path("ffmpeg"))
 
 
 # ── Opening files and folders ─────────────────────────────────────────────────
 
+
 def _spawn(cmd: list) -> bool:
     try:
         from core.procenv import child_env
-        _proc.spawn(cmd, stdin=_proc.DEVNULL, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL, env=child_env())
+
+        _proc.spawn(
+            cmd, stdin=_proc.DEVNULL, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL, env=child_env()
+        )
         return True
     except OSError:
         return False
@@ -294,9 +329,22 @@ def reveal_file(path: str) -> bool:
         return _spawn(["open", "-R", path])
     if shutil.which("gdbus"):
         from urllib.parse import quote
+
         uri = "file://" + quote(path)
-        if _spawn(["gdbus", "call", "--session", "--dest", "org.freedesktop.FileManager1",
-                   "--object-path", "/org/freedesktop/FileManager1",
-                   "--method", "org.freedesktop.FileManager1.ShowItems", f"['{uri}']", ""]):
+        if _spawn(
+            [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.freedesktop.FileManager1",
+                "--object-path",
+                "/org/freedesktop/FileManager1",
+                "--method",
+                "org.freedesktop.FileManager1.ShowItems",
+                f"['{uri}']",
+                "",
+            ]
+        ):
             return True
     return open_in_explorer(os.path.dirname(path))

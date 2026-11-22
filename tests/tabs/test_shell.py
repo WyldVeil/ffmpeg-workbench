@@ -1,4 +1,5 @@
 """Application shell: file routing, drag-and-drop, search, closing with jobs."""
+
 import sys
 import time
 import tkinter as tk
@@ -55,6 +56,7 @@ def test_sidebar_search_matches_translated_and_english(ui):
 def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
     from core import ffmpeg as ff
     from core.queue_manager import RenderQueueManager
+
     q = RenderQueueManager.get_instance()
 
     def status(task_id: str) -> str:
@@ -63,14 +65,29 @@ def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
         return task.status
 
     out = str(outdir / "long.mp4")
-    tid = q.enqueue("long", out, cmd=[ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i",
-                                       "testsrc2=size=1280x720:rate=30:d=600", "-c:v", "libx264",
-                                       "-preset", "veryslow", out], expected_duration=600)
+    tid = q.enqueue(
+        "long",
+        out,
+        cmd=[
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=1280x720:rate=30:d=600",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryslow",
+            out,
+        ],
+        expected_duration=600,
+    )
     ui.wait_for(lambda: status(tid) == "active", 30)
     destroyed = []
     monkeypatch.setattr(ui.app, "destroy", lambda: destroyed.append(True))
     ui.dialogs.default_yes = False
-    ui.app.quit_app()                     # user says "no" -> nothing happens
+    ui.app.quit_app()  # user says "no" -> nothing happens
     assert not destroyed and status(tid) == "active"
     ui.dialogs.default_yes = True
     ui.app.quit_app()
@@ -89,7 +106,7 @@ def test_every_tool_opens(ui):
         name = tool.value
         try:
             ui.open(tool)
-        except Exception as exc:                       # PlaceholderTab -> RuntimeError
+        except Exception as exc:  # PlaceholderTab -> RuntimeError
             failed.append(f"{name}: {exc}")
         ui.pump(0.05)
     assert not failed, failed
@@ -106,9 +123,12 @@ def test_preview_serves_a_reload_that_arrives_mid_grab(ui, monkeypatch):
 
     from core import ffmpeg as ff
     from tabs.widgets import FramePreview
-    tiny = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
-            b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\xc9\xfe\x92\xef\x00\x00\x00\x00IEND"
-            b"\xaeB`\x82")
+
+    tiny = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\xc9\xfe\x92\xef\x00\x00\x00\x00IEND"
+        b"\xaeB`\x82"
+    )
     grabbed = []
 
     def slow_grab(path, at, **kw):
@@ -122,7 +142,7 @@ def test_preview_serves_a_reload_that_arrives_mid_grab(ui, monkeypatch):
         view = FramePreview(top, 64, 36)
         view.pack()
         view.load("first.mp4", duration=10.0)
-        ui.pump(0.1)                                   # the first grab is now running
+        ui.pump(0.1)  # the first grab is now running
         view.load("second.mp4", duration=10.0)
         deadline = time.time() + 5
         while time.time() < deadline and grabbed[-1:] != ["second.mp4"]:
@@ -139,10 +159,16 @@ def test_skin_options_reach_new_widgets(ui):
     """Tk option names are case-sensitive: misspelt entries (TroughColor, SelectBackground...) were
     silently ignored, leaving sliders without a visible trough and hover colours wrong."""
     import tkinter as tk
+
     skin = ui.app.skin
     top = tk.Toplevel(ui.app)
     try:
-        entry, scale, button, radio = tk.Entry(top), tk.Scale(top), tk.Button(top), tk.Radiobutton(top)
+        entry, scale, button, radio = (
+            tk.Entry(top),
+            tk.Scale(top),
+            tk.Button(top),
+            tk.Radiobutton(top),
+        )
         assert entry.cget("selectbackground").lower() == skin["accent"].lower()
         assert scale.cget("troughcolor").lower() != scale.cget("background").lower()
         assert button.cget("activebackground").lower() == skin["sb_hover"].lower()
@@ -157,6 +183,7 @@ def test_every_tool_takes_a_file_without_errors(ui, media):
     """Load a file into every tool that accepts one: no callback may fail afterwards
     (the Waveform Editor and Downsizer once crashed half-way through loading)."""
     from tabs.registry import TOOLS
+
     audio_tools = {name for name, _c in TOOLS.get(next(k for k in TOOLS if "AUDIO" in k), [])}
     failed = []
     for name in [n for items in TOOLS.values() for n, _c in items]:
@@ -181,10 +208,12 @@ def test_every_tool_takes_a_file_without_errors(ui, media):
 #  Mouse wheel
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _x11_buttons():
     """True when the wheel arrives as buttons 4/5 (X11 with Tk 8.6).  Tk 9 sends
     <MouseWheel> everywhere and uses buttons 4/5 for the back/forward buttons."""
     import tkinter as tk
+
     return tk.TkVersion < 9 and not sys.platform.startswith(("win", "darwin"))
 
 
@@ -230,6 +259,7 @@ def test_wheel_units_follow_the_wheel():
     """Down is positive (scrolls down), on X11 buttons and on <MouseWheel> deltas alike;
     small touchpad steps add up to whole notches."""
     from shell import wheel
+
     carry = [0]
 
     def units(num=0, delta=0):
@@ -240,7 +270,7 @@ def test_wheel_units_follow_the_wheel():
     assert units(num=4) == -n and units(num=5) == n
     assert units(delta=120) == -n and units(delta=-240) == 2 * n
     assert [units(delta=-40) for _ in range(3)] == [0, 0, n]
-    assert units(delta=60) == 0 and units(delta=-120) == n   # a turn back starts afresh
+    assert units(delta=60) == 0 and units(delta=-120) == n  # a turn back starts afresh
 
 
 @pytest.mark.gui
@@ -248,7 +278,7 @@ def test_wheel_units_follow_the_wheel():
 def test_wheel_scrolls_sidebar_and_pages_the_way_it_turns(ui):
     """Wheel down scrolls down.  On Linux (Tk 8.6 reports the wheel as buttons 4/5)
     the sidebar and every page used to scroll the opposite way."""
-    page = _page_canvas(ui, "Universal Downsizer")        # also makes the window short
+    page = _page_canvas(ui, "Universal Downsizer")  # also makes the window short
     styles = [(dict(delta=-120), dict(delta=120))]
     if _x11_buttons():
         styles.append((dict(button=5), dict(button=4)))
@@ -267,6 +297,7 @@ def test_wheel_scrolls_sidebar_and_pages_the_way_it_turns(ui):
 def test_wheel_over_a_drop_down_scrolls_the_page_unless_it_has_focus(ui):
     """Passing over a drop-down while scrolling a page must not change the setting."""
     from tkinter import ttk
+
     page = _page_canvas(ui, "Universal Downsizer")
     stack: list[tk.Misc] = [page]
     boxes = []
@@ -294,6 +325,7 @@ def test_wheel_over_a_drop_down_scrolls_the_page_unless_it_has_focus(ui):
 @pytest.mark.ffmpeg
 def test_wheel_lets_a_long_text_box_scroll_itself(ui):
     import tkinter as tk
+
     page = _page_canvas(ui, "Universal Downsizer")
     stack: list[tk.Misc] = [page]
     texts = []
@@ -322,6 +354,7 @@ def test_wheel_in_a_window_over_the_sidebar_scrolls_that_window(ui):
     import tkinter as tk
 
     from tabs.widgets import scroll_body
+
     sidebar = ui.app.sidebar.canvas
     sidebar.yview_moveto(0)
     sx, sy = sidebar.winfo_rootx(), sidebar.winfo_rooty()
@@ -345,6 +378,7 @@ def test_wheel_in_a_window_over_the_sidebar_scrolls_that_window(ui):
 def test_mouse_side_buttons_do_not_scroll_on_tk9(ui):
     """Tk 9 reports the back/forward side buttons as buttons 4 and 5."""
     import tkinter as tk
+
     if tk.TkVersion < 9:
         pytest.skip("Tk 8.6 uses buttons 4/5 for the wheel")
     page = _page_canvas(ui, "Universal Downsizer")

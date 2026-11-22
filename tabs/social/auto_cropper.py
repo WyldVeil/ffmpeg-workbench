@@ -7,6 +7,7 @@ relative to the bit depth, so 10-bit HDR works too); the largest picture
 area seen is kept so bright scenes never get over-cropped.  Before/after
 preview, then render.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -28,15 +29,17 @@ class AutoCropperTab(BaseTab):
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._info: ff.MediaInfo | None = None
-        self.box: tuple[int, int, int, int] | None = None      # the picture inside the bars: x, y, w, h
+        self.box: tuple[int, int, int, int] | None = None  # the picture inside the bars: x, y, w, h
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.auto_cropper"), "Find and remove black bars automatically.",
-                         icon="✂")
+        self.make_header(
+            self, t("tab.auto_cropper"), "Find and remove black bars automatically.", icon="✂"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.result_lbl = tk.Label(body, text="", fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
         self.result_lbl.pack(anchor="w", padx=px(24))
@@ -48,18 +51,32 @@ class AutoCropperTab(BaseTab):
         self.compare.view_before.after_draw = self._draw_bars
         self.compare.view_after.after_draw = self._outline_result
         self.compare.view_after.canvas.configure(bg=CLR["bg"])
-        self.btn_detect = tk.Button(body, text="🔍 Detect again", relief="flat", command=self._detect)
+        self.btn_detect = tk.Button(
+            body, text="🔍 Detect again", relief="flat", command=self._detect
+        )
         self.btn_detect.pack()
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "nobars"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "nobars"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text="✂  REMOVE BARS", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="✂  REMOVE BARS",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=22,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -97,7 +114,12 @@ class AutoCropperTab(BaseTab):
             self.compare.set_filter(f"crop={bw}:{bh}:{x}:{y}")
             self._draw_bars()
 
-        tasks.submit(partial(detect_bars, path, info.duration), on_done=done, on_error=lambda _e: done(None), name="AutoCrop")
+        tasks.submit(
+            partial(detect_bars, path, info.duration),
+            on_done=done,
+            on_error=lambda _e: done(None),
+            name="AutoCrop",
+        )
 
     def _draw_bars(self):
         view = self.compare.view_before
@@ -111,15 +133,26 @@ class AutoCropperTab(BaseTab):
         sx, sy = iw / max(1, vw), ih / max(1, vh)
         x, y, bw, bh = self.box
         kx0, ky0, kx1, ky1 = ix + x * sx, iy + y * sy, ix + (x + bw) * sx, iy + (y + bh) * sy
-        for box in ((ix, iy, ix + iw, ky0), (ix, ky1, ix + iw, iy + ih),
-                    (ix, ky0, kx0, ky1), (kx1, ky0, ix + iw, ky1)):
+        for box in (
+            (ix, iy, ix + iw, ky0),
+            (ix, ky1, ix + iw, iy + ih),
+            (ix, ky0, kx0, ky1),
+            (kx1, ky0, ix + iw, ky1),
+        ):
             if box[2] - box[0] >= 2 and box[3] - box[1] >= 2:
                 c.create_rectangle(*box, fill=CLR["red"], stipple="gray25", outline="", tags="bars")
                 if box[3] - box[1] >= px(14) and box[2] - box[0] >= px(90):
-                    c.create_text((box[0] + box[2]) / 2, (box[1] + box[3]) / 2, text="removed",
-                                  fill="#FFFFFF", font=(UI_FONT, 8, "bold"), tags="bars")
-        c.create_rectangle(kx0, ky0, kx1, ky1, outline=CLR["accent"], width=px(2), dash=px(4, 3),
-                           tags="bars")
+                    c.create_text(
+                        (box[0] + box[2]) / 2,
+                        (box[1] + box[3]) / 2,
+                        text="removed",
+                        fill="#FFFFFF",
+                        font=(UI_FONT, 8, "bold"),
+                        tags="bars",
+                    )
+        c.create_rectangle(
+            kx0, ky0, kx1, ky1, outline=CLR["accent"], width=px(2), dash=px(4, 3), tags="bars"
+        )
 
     def _outline_result(self):
         view = self.compare.view_after
@@ -127,8 +160,9 @@ class AutoCropperTab(BaseTab):
         shown = view.image_box()
         if shown is not None:
             x, y, w, h = shown
-            view.canvas.create_rectangle(x, y, x + w, y + h, outline=CLR["accent"], width=px(1),
-                                         tags="edge")
+            view.canvas.create_rectangle(
+                x, y, x + w, y + h, outline=CLR["accent"], width=px(1), tags="edge"
+            )
 
     def _render(self):
         src = self.src_row.path
@@ -136,12 +170,23 @@ class AutoCropperTab(BaseTab):
         if info is None:
             return
         if not self.box:
-            messagebox.showinfo(t("common.warning"), "No black bars were found in this video.", parent=self)
+            messagebox.showinfo(
+                t("common.warning"), "No black bars were found in this video.", parent=self
+            )
             return
         out = common.output_for(self, self.out_row, src, "nobars")
         if not out:
             return
         x, y, w, h = self.box
-        common.render(self, src=src, info=info, out=out, chain=f"crop={w}:{h}:{x}:{y},setsar=1",
-                      encoder=self.encoder, console=self.console, btn=self.btn_render,
-                      btn_label="✂  REMOVE BARS", name="Auto-Cropper")
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=f"crop={w}:{h}:{x}:{y},setsar=1",
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="✂  REMOVE BARS",
+            name="Auto-Cropper",
+        )

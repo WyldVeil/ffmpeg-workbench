@@ -1,4 +1,5 @@
 """Tests for core/paths.py, core/outputs.py, core/ui.py and core/logs.py."""
+
 import os
 import threading
 import time
@@ -8,6 +9,7 @@ import pytest
 from core import outputs, paths
 
 # ── paths ────────────────────────────────────────────────────────────────────
+
 
 def test_env_overrides_dirs(tmp_path, monkeypatch):
     for kind in ("CONFIG", "DATA", "CACHE", "LOG"):
@@ -68,6 +70,7 @@ def test_is_writable_dir(tmp_path):
 
 # ── outputs ──────────────────────────────────────────────────────────────────
 
+
 def test_unique_path(tmp_path):
     p = tmp_path / "clip.mp4"
     assert outputs.unique_path(str(p)) == str(p)
@@ -80,7 +83,10 @@ def test_unique_path(tmp_path):
 
 def test_suggest_output(tmp_path, monkeypatch):
     from core import settings
-    monkeypatch.setattr(settings, "_current", lambda: dict(settings._DEFAULTS))   # the defaults, not this computer's
+
+    monkeypatch.setattr(
+        settings, "_current", lambda: dict(settings._DEFAULTS)
+    )  # the defaults, not this computer's
     src = tmp_path / "holiday video.mov"
     src.write_bytes(b"x")
     s = outputs.suggest_output(str(src), "trimmed", "mp4")
@@ -111,13 +117,16 @@ def test_resolve_output_policies(tmp_path):
 
 # ── ui dispatcher ────────────────────────────────────────────────────────────
 
+
 @pytest.mark.gui
 def test_call_soon_from_threads_runs_on_main_thread():
     from tests.gui_harness import ensure_display
+
     ensure_display()
     import tkinter as tk
 
     from core import ui
+
     root = tk.Tk()
     try:
         with ui.hosted_by(root, poll_ms=5):
@@ -140,6 +149,7 @@ def test_call_soon_from_threads_runs_on_main_thread():
 
             results = []
             from core import tasks
+
             tasks.submit(lambda: 6 * 7, on_done=results.append)
             tasks.submit(lambda: 1 / 0, on_error=lambda e: results.append(type(e).__name__))
             deadline = time.monotonic() + 3
@@ -153,11 +163,14 @@ def test_call_soon_from_threads_runs_on_main_thread():
 
 # ── logging ──────────────────────────────────────────────────────────────────
 
+
 def test_logging_writes_file(tmp_path, monkeypatch):
     monkeypatch.setenv("CROSSFADER_LOG_DIR", str(tmp_path / "logs"))
     from core import logs
+
     monkeypatch.setattr(logs, "_configured", False)
     import logging
+
     logger = logging.getLogger(logs.LOGGER_NAME)
     old = list(logger.handlers)
     logger.handlers = []

@@ -12,6 +12,7 @@ All audio tracks, subtitles, chapters and metadata are kept when the format
 allows; outputs never overwrite anything (a free name is chosen) and each
 file's result is checked - failures are reported, not counted as done.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -57,31 +58,61 @@ class FormatConverterTab(BaseTab):
         sb.pack(side="right", fill="y")
         btn_f = tk.Frame(self)
         btn_f.pack(pady=px(4))
-        for label, cmd in ((t("converter.btn_add_files"), self._add), (t("converter.btn_remove"), self._remove),
-                           (t("converter.btn_clear"), self._clear)):
-            tk.Button(btn_f, text=label, command=cmd, cursor="hand2", relief="flat").pack(side="left", padx=px(4))
+        for label, cmd in (
+            (t("converter.btn_add_files"), self._add),
+            (t("converter.btn_remove"), self._remove),
+            (t("converter.btn_clear"), self._clear),
+        ):
+            tk.Button(btn_f, text=label, command=cmd, cursor="hand2", relief="flat").pack(
+                side="left", padx=px(4)
+            )
         tk.Label(btn_f, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=px(6))
 
-        opts = tk.LabelFrame(self, text=t("converter.sect_conversion_options"), padx=px(15), pady=px(8))
+        opts = tk.LabelFrame(
+            self, text=t("converter.sect_conversion_options"), padx=px(15), pady=px(8)
+        )
         opts.pack(fill="x", padx=px(20), pady=px(5))
         r0 = tk.Frame(opts)
         r0.pack(fill="x", pady=px(4))
-        tk.Label(r0, text=t("converter.lbl_output_format"), font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(r0, text=t("converter.lbl_output_format"), font=(UI_FONT, 10, "bold")).pack(
+            side="left"
+        )
         self.fmt_var = tk.StringVar(value=FORMATS["mp4"][0])
-        ttk.Combobox(r0, textvariable=self.fmt_var, values=[v[0] for v in FORMATS.values()], state="readonly",
-                     width=30).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            r0,
+            textvariable=self.fmt_var,
+            values=[v[0] for v in FORMATS.values()],
+            state="readonly",
+            width=30,
+        ).pack(side="left", padx=px(8))
         self.copy_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opts, text="Smart: keep streams the new format can hold as they are (fast, no quality "
-                                  "loss) and convert only the rest", variable=self.copy_var).pack(anchor="w")
+        tk.Checkbutton(
+            opts,
+            text="Smart: keep streams the new format can hold as they are (fast, no quality "
+            "loss) and convert only the rest",
+            variable=self.copy_var,
+        ).pack(anchor="w")
         r2 = tk.Frame(opts)
         r2.pack(fill="x", pady=px(4))
         tk.Label(r2, text=t("common.output_folder")).pack(side="left")
         self.out_dir_var = tk.StringVar()
         tk.Entry(r2, textvariable=self.out_dir_var, width=50).pack(side="left", padx=px(6))
-        tk.Button(r2, text=t("btn.browse"), command=self._browse_dir, relief="flat").pack(side="left")
-        tk.Label(r2, text=t("converter.lbl_blank_hint"), fg=CLR["fgdim"]).pack(side="left", padx=px(6))
-        self.btn_render = tk.Button(self, text=t("converter.btn_convert_all"), font=(UI_FONT, 12, "bold"),
-                                    bg=CLR["green"], fg="white", height=2, width=28, command=self._render)
+        tk.Button(r2, text=t("btn.browse"), command=self._browse_dir, relief="flat").pack(
+            side="left"
+        )
+        tk.Label(r2, text=t("converter.lbl_blank_hint"), fg=CLR["fgdim"]).pack(
+            side="left", padx=px(6)
+        )
+        self.btn_render = tk.Button(
+            self,
+            text=t("converter.btn_convert_all"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            height=2,
+            width=28,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(10))
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
@@ -126,7 +157,9 @@ class FormatConverterTab(BaseTab):
             try:
                 os.makedirs(out_dir, exist_ok=True)
             except OSError as exc:
-                messagebox.showwarning(t("common.warning"), f"Can't use that folder:\n{exc}", parent=self)
+                messagebox.showwarning(
+                    t("common.warning"), f"Can't use that folder:\n{exc}", parent=self
+                )
                 return
         smart = self.copy_var.get()
         paths = self.file_paths[:]
@@ -134,8 +167,10 @@ class FormatConverterTab(BaseTab):
         jobs = []
         for src in paths:
             base = os.path.splitext(os.path.basename(src))[0]
-            out = free_name(os.path.join(out_dir or os.path.dirname(src), f"{base}.{fmt}"),
-                            taken | {os.path.normcase(os.path.abspath(p)) for p in paths})
+            out = free_name(
+                os.path.join(out_dir or os.path.dirname(src), f"{base}.{fmt}"),
+                taken | {os.path.normcase(os.path.abspath(p)) for p in paths},
+            )
             taken.add(os.path.normcase(out))
             jobs.append((src, out))
 
@@ -151,31 +186,56 @@ class FormatConverterTab(BaseTab):
                     for note in notes:
                         ctx.log("  " + note)
                     ctx.log(f"  {summary}")
-                    ctx.run([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *pre, "-i", src, *args, part],
-                            duration=info.duration or None)
+                    ctx.run(
+                        [
+                            ff.ffmpeg_path(),
+                            "-hide_banner",
+                            "-nostdin",
+                            "-y",
+                            *pre,
+                            "-i",
+                            src,
+                            *args,
+                            part,
+                        ],
+                        duration=info.duration or None,
+                    )
                     os.replace(part, out)
                     done.append(out)
                 except ff.CancelledError:
                     _remove(part)
                     raise
-                except Exception as exc:          # one bad file must not stop the batch
+                except Exception as exc:  # one bad file must not stop the batch
                     logger.debug("work: best-effort step failed", exc_info=True)
                     _remove(part)
-                    reason = str(exc).strip().splitlines()[-1] if str(exc).strip() else type(exc).__name__
+                    reason = (
+                        str(exc).strip().splitlines()[-1]
+                        if str(exc).strip()
+                        else type(exc).__name__
+                    )
                     if reason == "no audio":
                         reason = "it has no audio"
                     failed.append((src, reason))
                     ctx.log(f"  ✖ failed: {reason}")
             ctx.log(f"Converted {len(done)} of {len(jobs)} file(s).")
             if failed:
-                raise RuntimeError(f"{len(failed)} of {len(jobs)} file(s) failed:\n" +
-                                   "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed))
+                raise RuntimeError(
+                    f"{len(failed)} of {len(jobs)} file(s) failed:\n"
+                    + "\n".join(f"• {os.path.basename(s)}: {r}" for s, r in failed)
+                )
             return 0
 
         out_label = jobs[0][1] if len(jobs) == 1 else os.path.dirname(jobs[0][1])
-        common.queue_job(self, name=f"Convert {len(jobs)} file(s) to {fmt.upper()}", out=out_label, work=work,
-                         btn=self.btn_render, btn_label=t("converter.btn_convert_all"), console=self.console,
-                         inputs=paths)
+        common.queue_job(
+            self,
+            name=f"Convert {len(jobs)} file(s) to {fmt.upper()}",
+            out=out_label,
+            work=work,
+            btn=self.btn_render,
+            btn_label=t("converter.btn_convert_all"),
+            console=self.console,
+            inputs=paths,
+        )
 
 
 def _remove(path):

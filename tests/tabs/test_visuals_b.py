@@ -1,5 +1,6 @@
 """Colour Correct, Colour Match, LUT, Scopes, Deshaker, Green Screen, Speed
 Ramper and Media Generator: pure helpers plus real renders through the GUI."""
+
 import os
 import shutil
 
@@ -10,6 +11,7 @@ from core.ops import lut as lut_ops
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
 
 # ── pure helpers ─────────────────────────────────────────────────────────────
+
 
 def test_colour_chain_neutral_and_curves():
     assert color_correct.build_chain(color_correct.DEFAULTS) == ""
@@ -37,7 +39,9 @@ def test_lut_kinds(tmp_path, media):
     assert lut_ops.lut_kind(str(one_d)) == "1d"
     assert lut_ops.lut_kind(media["cube"]) == "3d"
     assert lut_ops.lut_kind(str(tmp_path / "h.png")) == "hald"
-    assert "blend=all_mode=normal:all_opacity=0.500" in lut_ops.build_chain(media["cube"], intensity=0.5)
+    assert "blend=all_mode=normal:all_opacity=0.500" in lut_ops.build_chain(
+        media["cube"], intensity=0.5
+    )
 
 
 def test_scope_layout_sizes():
@@ -54,9 +58,11 @@ def test_green_key_chains():
 
 # ── renders through the GUI ──────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -71,7 +77,7 @@ def _no_errors(ui):
 
 def _set_source(ui, tab, path):
     tab.src_var.set(path)
-    ui.pump(0.6)              # FileRow on_change is debounced
+    ui.pump(0.6)  # FileRow on_change is debounced
 
 
 @pytest.mark.gui
@@ -129,8 +135,21 @@ def test_lut_render(ui, media, outdir, tmp_path, which):
             shutil.copyfile(media["cube"], path)
         else:
             path = folder / "hald.png"
-            ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "haldclutsrc=8", "-vf", "hue=h=40",
-                      "-frames:v", "1", str(path)])
+            ff.check(
+                [
+                    ff.ffmpeg_path(),
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "haldclutsrc=8",
+                    "-vf",
+                    "hue=h=40",
+                    "-frames:v",
+                    "1",
+                    str(path),
+                ]
+            )
         tab.look_var.set(lut._CUSTOM)
         tab.lut_row.set(str(path))
     out = str(outdir / f"lut_{which}.mp4")
@@ -172,7 +191,7 @@ def test_deshaker_two_pass_with_comparison(ui, media, outdir):
     ui.wait_idle(300)
     _no_errors(ui)
     v = _video(ui.assert_media(out, video=True, audio=True, min_duration=3.5))
-    assert v["width"] == 2560          # original | stabilised
+    assert v["width"] == 2560  # original | stabilised
     assert not [f for f in os.listdir(outdir) if ".part" in f]
 
 
@@ -185,7 +204,9 @@ def test_green_key(ui, media, outdir, bg):
     _set_source(ui, tab, media["greenscreen"])
     # auto-sampled from the edges: the plate's green (exact value depends on the FFmpeg that made it)
     plate = green_key.sample_border_colour(media["greenscreen"], tab._info.duration * 0.1)
-    assert plate and green_key.spill_type(plate) == "green" and plate != "00B140"   # not the start colour
+    assert (
+        plate and green_key.spill_type(plate) == "green" and plate != "00B140"
+    )  # not the start colour
     ui.wait_for(lambda: tab.key_colour == plate, 30)
     ext = ".mp4"
     if bg == "image":
@@ -224,7 +245,9 @@ def test_speed(ui, media, outdir, mode):
         tab.preset_var.set("Speed up in the middle")
         tab._apply_preset()
         ui.pump(0.3)
-        expected = speed_ramp.output_duration(speed_ramp.normalise_points(tab.parsed_points(), src_dur))
+        expected = speed_ramp.output_duration(
+            speed_ramp.normalise_points(tab.parsed_points(), src_dur)
+        )
     else:
         tab.mode_var.set("constant")
         tab._on_mode()
@@ -245,9 +268,10 @@ def test_speed(ui, media, outdir, mode):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("pattern,audio,ext", [("smpte_hd", "tone18", ".mp4"),
-                                              ("countdown", "pop", ".mov"),
-                                              ("none", "pink", ".wav")])
+@pytest.mark.parametrize(
+    "pattern,audio,ext",
+    [("smpte_hd", "tone18", ".mp4"), ("countdown", "pop", ".mov"), ("none", "pink", ".wav")],
+)
 def test_media_generator(ui, outdir, pattern, audio, ext):
     ui.reset()
     tab = ui.open("Media Generator")
@@ -261,7 +285,8 @@ def test_media_generator(ui, outdir, pattern, audio, ext):
     tab._render()
     ui.wait_idle(240)
     _no_errors(ui)
-    info = ui.assert_media(out, video=pattern != "none", audio=True, min_duration=3.9,
-                           max_duration=4.1)
+    info = ui.assert_media(
+        out, video=pattern != "none", audio=True, min_duration=3.9, max_duration=4.1
+    )
     a = next(s for s in info["streams"] if s["codec_type"] == "audio")
     assert int(a["channels"]) == 2

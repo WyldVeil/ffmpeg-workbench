@@ -1,4 +1,5 @@
 """Media Inspector + FramePreview/EncoderPanel widgets, driven headlessly."""
+
 import pytest
 
 
@@ -10,29 +11,33 @@ def _pump(root, seconds):
 @pytest.fixture
 def tkroot():
     from tests.gui_harness import ensure_display
+
     ensure_display()
     import tkinter as tk
 
     from core import ui
+
     root = tk.Tk()
     with ui.hosted_by(root, poll_ms=5):
         yield root
     root.destroy()
 
 
-
 def _wait(root, ready, seconds: float = 10.0) -> None:
     """Pump the event loop until *ready()* (the probe answers in the background)."""
     import time
+
     deadline = time.monotonic() + seconds
     while not ready():
         assert time.monotonic() < deadline, "timed out waiting for the page"
         _pump(root, 0.05)
 
+
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 def test_inspector_shows_streams_and_preview(tkroot, media):
     from tabs.system.media_inspector import MediaInspectorTab
+
     tab = MediaInspectorTab(tkroot)
     tab.pack(fill="both", expand=True)
     assert tab.load_file(media["hevc10"])
@@ -55,6 +60,7 @@ def test_inspector_shows_streams_and_preview(tkroot, media):
 def test_inspector_diagnostics(tkroot, media, tmp_path):
     from core import ffmpeg as ff
     from tabs.system.media_inspector import MediaInspectorTab, diagnose
+
     notes = dict((m, lvl) for lvl, m in diagnose(ff.probe(media["vertical_noaudio"])))
     assert any("No audio" in m for m in notes)
     tab = MediaInspectorTab(tkroot)
@@ -63,7 +69,7 @@ def test_inspector_diagnostics(tkroot, media, tmp_path):
     tab.load_file(str(junk))
     _wait(tkroot, lambda: "Not a readable" in tab.summary_lbl.cget("text"))
     assert tab.info is None
-    assert tab.load_file(media["mp3"])            # audio-only: no crash, no picture
+    assert tab.load_file(media["mp3"])  # audio-only: no crash, no picture
     _wait(tkroot, lambda: tab.info is not None)
     _pump(tkroot, 0.3)
 
@@ -72,10 +78,11 @@ def test_inspector_diagnostics(tkroot, media, tmp_path):
 @pytest.mark.ffmpeg
 def test_frame_preview_coalesces_requests(tkroot, media):
     from tabs.widgets import FramePreview
+
     fp = FramePreview(tkroot, width=320, height=180)
     fp.pack()
     fp.load(media["h264"], duration=6.0, at=0.0)
-    for i in range(30):                 # simulate a fast scrub
+    for i in range(30):  # simulate a fast scrub
         fp.show(i * 0.2)
     for _ in range(60):
         _pump(tkroot, 0.1)
@@ -89,6 +96,7 @@ def test_frame_preview_coalesces_requests(tkroot, media):
 def test_encoder_panel_builds_working_args(tkroot, outdir):
     from core import ffmpeg as ff
     from tabs.widgets import EncoderPanel
+
     panel = EncoderPanel(tkroot)
     panel.pack()
     _pump(tkroot, 0.5)
@@ -96,6 +104,20 @@ def test_encoder_panel_builds_working_args(tkroot, outdir):
     ve = panel.video_encode("mp4")
     assert ve.codec == "hevc" and "-c:v" in ve.args
     out = str(outdir / "p.mp4")
-    res = ff.run([ff.ffmpeg_path(), "-y", *ve.pre_input, "-f", "lavfi", "-i",
-                  "testsrc2=size=640x360:rate=30", "-t", "1", *ve.vf_args(), *ve.args, out])
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            *ve.pre_input,
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x360:rate=30",
+            "-t",
+            "1",
+            *ve.vf_args(),
+            *ve.args,
+            out,
+        ]
+    )
     assert res.ok, res.error_summary

@@ -44,12 +44,12 @@ class HomeTab(BaseTab):
     """Launch / overview screen with category grids and favourites."""
 
     # Card layout constants
-    _CARD_WIDTH    = 200
-    _CARD_HEIGHT   = 56
-    _GRID_PAD_X    = 8
-    _GRID_PAD_Y    = 8
-    _MIN_COLS      = 2
-    _MAX_COLS      = 6
+    _CARD_WIDTH = 200
+    _CARD_HEIGHT = 56
+    _GRID_PAD_X = 8
+    _GRID_PAD_Y = 8
+    _MIN_COLS = 2
+    _MAX_COLS = 6
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -90,20 +90,30 @@ class HomeTab(BaseTab):
         inner = tk.Frame(hdr, bg=CLR["panel"])
         inner.pack(fill="x", padx=px(22), pady=px(16, 14))
         tk.Label(
-            inner, text="🏠  Home",
+            inner,
+            text="🏠  Home",
             font=(UI_FONT, 16, "bold"),
-            bg=CLR["panel"], fg=CLR["accent"], anchor="w",
+            bg=CLR["panel"],
+            fg=CLR["accent"],
+            anchor="w",
         ).pack(side="top", anchor="w")
         tk.Label(
-            inner, text="Pick a tool to get started. Star the ones you "
-                       "use most to pin them to your Favourites.",
+            inner,
+            text="Pick a tool to get started. Star the ones you "
+            "use most to pin them to your Favourites.",
             font=(UI_FONT, 9),
-            bg=CLR["panel"], fg=CLR["fgdim"], anchor="w",
+            bg=CLR["panel"],
+            fg=CLR["fgdim"],
+            anchor="w",
         ).pack(side="top", anchor="w", pady=px(2, 0))
         back = tk.Label(
-            inner, text="🧭  Not sure which tool? Start: What do you want to do?  ›",
+            inner,
+            text="🧭  Not sure which tool? Start: What do you want to do?  ›",
             font=(UI_FONT, 10, "bold"),
-            bg=CLR["panel"], fg=CLR["accent"], anchor="w", cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["accent"],
+            anchor="w",
+            cursor="hand2",
         )
         back.pack(side="top", anchor="w", pady=px(8, 0))
         back.bind("<Button-1>", lambda _e: self._go(ToolId.START))
@@ -115,6 +125,7 @@ class HomeTab(BaseTab):
 
         canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0)
         from tkinter import ttk
+
         vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vsb.set)
         vsb.pack(side="right", fill="y")
@@ -127,11 +138,13 @@ class HomeTab(BaseTab):
 
         def _on_body_configure(_e):
             canvas.configure(scrollregion=canvas.bbox("all"))
+
         body.bind("<Configure>", _on_body_configure)
 
         def _on_canvas_configure(e):
             canvas.itemconfig(body_win, width=e.width)
             self._render_sections()
+
         canvas.bind("<Configure>", _on_canvas_configure)
 
         self._sections_frame = body
@@ -184,9 +197,12 @@ class HomeTab(BaseTab):
         row = tk.Frame(parent, bg=CLR["bg"])
         row.pack(fill="x", padx=px(20), pady=px(14, 6))
         tk.Label(
-            row, text=label,
+            row,
+            text=label,
             font=(UI_FONT, 11, "bold"),
-            bg=CLR["bg"], fg=accent, anchor="w",
+            bg=CLR["bg"],
+            fg=accent,
+            anchor="w",
         ).pack(side="left", anchor="w")
         # Thin horizontal rule under header
         rule = tk.Frame(parent, bg=CLR["border"], height=px(1))
@@ -212,8 +228,10 @@ class HomeTab(BaseTab):
             tool, display = item if isinstance(item, tuple) else (item, labels.tool(item))
             r, c = divmod(i, cols)
             self._build_card(grid, tool, display).grid(
-                row=r, column=c,
-                padx=px(self._GRID_PAD_X), pady=px(self._GRID_PAD_Y),
+                row=r,
+                column=c,
+                padx=px(self._GRID_PAD_X),
+                pady=px(self._GRID_PAD_Y),
                 sticky="nsew",
             )
         for c in range(cols):
@@ -223,7 +241,8 @@ class HomeTab(BaseTab):
         """A single tool card: clickable body + star toggle on the right."""
         is_fav = self._is_fav(tool)
         card = tk.Frame(
-            parent, bg=CLR["panel"],
+            parent,
+            bg=CLR["panel"],
             highlightthickness=px(1),
             highlightbackground=CLR["border"],
             cursor="hand2",
@@ -233,10 +252,13 @@ class HomeTab(BaseTab):
 
         # Tab name (left, fills space)
         name_lbl = tk.Label(
-            card, text=display,
+            card,
+            text=display,
             font=(UI_FONT, 10, "bold"),
-            bg=CLR["panel"], fg=CLR["fg"],
-            anchor="w", padx=px(12),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            anchor="w",
+            padx=px(12),
             cursor="hand2",
         )
         name_lbl.pack(side="left", fill="both", expand=True)
@@ -245,10 +267,13 @@ class HomeTab(BaseTab):
         star_text = "★" if is_fav else "☆"
         star_color = CLR["orange"] if is_fav else CLR["fgdim"]
         star_lbl = tk.Label(
-            card, text=star_text,
+            card,
+            text=star_text,
             font=(UI_FONT, 14),
-            bg=CLR["panel"], fg=star_color,
-            padx=px(12), cursor="hand2",
+            bg=CLR["panel"],
+            fg=star_color,
+            padx=px(12),
+            cursor="hand2",
         )
         star_lbl.pack(side="right", fill="y")
 

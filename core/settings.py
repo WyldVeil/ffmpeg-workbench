@@ -17,6 +17,7 @@ read and write it through that declaration::
 
 ``load_settings()`` / ``save_settings(dict)`` remain for older callers.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -111,7 +112,7 @@ def _write(data: dict) -> bool:
             json.dump(data, fh, indent=2, ensure_ascii=False)
             fh.flush()
             os.fsync(fh.fileno())
-        if _readable(SETTINGS_FILE):                          # never let a broken file replace a good backup
+        if _readable(SETTINGS_FILE):  # never let a broken file replace a good backup
             with contextlib.suppress(OSError):
                 shutil.copy2(SETTINGS_FILE, SETTINGS_FILE + ".bak")
         os.replace(tmp, SETTINGS_FILE)
@@ -202,8 +203,8 @@ def delete(key: str) -> bool:
 def transaction() -> Iterator[dict]:
     """Read-modify-write under the lock::
 
-        with settings.transaction() as s:
-            s["recent_files"] = [p] + s.get("recent_files", [])
+    with settings.transaction() as s:
+        s["recent_files"] = [p] + s.get("recent_files", [])
     """
     with _lock:
         stored = _read_file()
@@ -253,6 +254,7 @@ def _as_bool(raw: object) -> bool:
 @dataclass(frozen=True, slots=True)
 class Setting(Generic[T]):
     """One setting.  ``default`` also fixes the type every read returns."""
+
     key: str
     default: T
     choices: tuple[T, ...] = ()
@@ -261,18 +263,20 @@ class Setting(Generic[T]):
         """*raw* as this setting's type; raises ValueError when it can't be."""
         d: object = self.default
         value: object
-        if isinstance(d, StrEnum):                        # before str: a StrEnum is a str
+        if isinstance(d, StrEnum):  # before str: a StrEnum is a str
             try:
                 value = type(d)(str(raw))
             except ValueError:
-                raise ValueError(f"{self.key}: {raw!r} is not one of {[m.value for m in type(d)]}") from None
+                raise ValueError(
+                    f"{self.key}: {raw!r} is not one of {[m.value for m in type(d)]}"
+                ) from None
         elif isinstance(d, bool):
             value = _as_bool(raw)
         elif isinstance(d, (int, float)):
             try:
                 if isinstance(raw, bool):
                     raise TypeError
-                number = float(raw)                      # type: ignore[arg-type]
+                number = float(raw)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 raise ValueError(f"{self.key}: expected a number, got {raw!r}") from None
             value = int(number) if isinstance(d, int) else number
@@ -281,7 +285,7 @@ class Setting(Generic[T]):
                 raise ValueError(f"{self.key}: expected text, got {raw!r}")
             value = str(raw)
         elif isinstance(raw, list):
-            value = json.loads(json.dumps(raw))          # a private copy
+            value = json.loads(json.dumps(raw))  # a private copy
         else:
             raise ValueError(f"{self.key}: expected a list, got {raw!r}")
         if self.choices and value not in self.choices:
@@ -312,13 +316,15 @@ class Setting(Generic[T]):
         return update({self.key: checked})
 
 
-_complained: dict[str, None] = {}               # keys already warned about (``set`` is taken here)
+_complained: dict[str, None] = {}  # keys already warned about (``set`` is taken here)
 
 # rendering
 DEFAULT_CRF: Final = Setting("default_crf", "18")
 DEFAULT_PRESET: Final = Setting("default_preset", "fast")
 DEFAULT_AUDIO_BITRATE: Final = Setting("default_audio_bitrate", "192k")
-HW_ENCODE: Final = Setting("hw_encode", "auto", ("auto", "off", "nvenc", "qsv", "vaapi", "amf", "videotoolbox"))
+HW_ENCODE: Final = Setting(
+    "hw_encode", "auto", ("auto", "off", "nvenc", "qsv", "vaapi", "amf", "videotoolbox")
+)
 OVERWRITE_POLICY: Final = Setting("overwrite_policy", "ask", ("ask", "rename", "overwrite"))
 DEFAULT_OUTPUT_FOLDER: Final = Setting("default_output_folder", "")
 AUTO_OPEN_OUTPUT: Final = Setting("auto_open_output", False)
@@ -330,7 +336,7 @@ BINARY_SOURCE: Final = Setting("binary_source", "auto", ("auto", "bundled", "sys
 CHECK_UPDATES: Final = Setting("check_updates", True)
 # interface
 THEME: Final = Setting("theme", "Classic")
-UI_SCALE: Final = Setting("ui_scale", "auto")          # "auto" or a factor such as "1.5"
+UI_SCALE: Final = Setting("ui_scale", "auto")  # "auto" or a factor such as "1.5"
 NATIVE_DIALOGS: Final = Setting("native_dialogs", True)
 PLAY_STARTUP_SOUND: Final = Setting("play_startup_sound", True)
 STAR_SPEED: Final = Setting("star_speed", 1.0)
@@ -339,11 +345,14 @@ LANGUAGE: Final = Setting("language", "")
 FAVOURITE_TABS: Final = Setting[list]("favourite_tabs", [])
 RECENT_FILES: Final = Setting[list]("recent_files", [])
 RECENT_TOOLS: Final = Setting[list]("recent_tools", [])
+
+
 class StartPage(StrEnum):
     """What the app opens on."""
-    START = "start"           # "What do you want to do?"
-    HOME = "home"             # every tool
-    LAST = "last"             # the tool used last
+
+    START = "start"  # "What do you want to do?"
+    HOME = "home"  # every tool
+    LAST = "last"  # the tool used last
 
 
 START_PAGE: Final = Setting("start_page", StartPage.START)
@@ -353,7 +362,9 @@ NETWORK: Final[tuple[Setting[Any], ...]] = (
     Setting("network.mode", "auto", ("auto", "direct", "manual", "offline")),
     Setting("network.strict", False),
     Setting("network.proxy_enabled", False),
-    Setting("network.proxy_scheme", "http", ("http", "https", "socks4", "socks4a", "socks5", "socks5h")),
+    Setting(
+        "network.proxy_scheme", "http", ("http", "https", "socks4", "socks4a", "socks5", "socks5h")
+    ),
     Setting("network.proxy_host", "127.0.0.1"),
     Setting("network.proxy_port", ""),
     Setting("network.proxy_user", ""),
@@ -379,11 +390,32 @@ NETWORK: Final[tuple[Setting[Any], ...]] = (
 FAMILIES: Final[tuple[str, ...]] = ("last_dir.", "custom_color_")
 
 REGISTRY: Final[Mapping[str, Setting[Any]]] = {
-    s.key: s for s in (
-        DEFAULT_CRF, DEFAULT_PRESET, DEFAULT_AUDIO_BITRATE, HW_ENCODE, OVERWRITE_POLICY, DEFAULT_OUTPUT_FOLDER,
-        AUTO_OPEN_OUTPUT, NOTIFY_ON_COMPLETE, MAX_PARALLEL_JOBS, FFMPEG_PATH_OVERRIDE, BINARY_SOURCE,
-        CHECK_UPDATES, THEME, UI_SCALE, NATIVE_DIALOGS, PLAY_STARTUP_SOUND, STAR_SPEED, STAR_COUNT, LANGUAGE,
-        FAVOURITE_TABS, RECENT_FILES, RECENT_TOOLS, START_PAGE, *NETWORK,
+    s.key: s
+    for s in (
+        DEFAULT_CRF,
+        DEFAULT_PRESET,
+        DEFAULT_AUDIO_BITRATE,
+        HW_ENCODE,
+        OVERWRITE_POLICY,
+        DEFAULT_OUTPUT_FOLDER,
+        AUTO_OPEN_OUTPUT,
+        NOTIFY_ON_COMPLETE,
+        MAX_PARALLEL_JOBS,
+        FFMPEG_PATH_OVERRIDE,
+        BINARY_SOURCE,
+        CHECK_UPDATES,
+        THEME,
+        UI_SCALE,
+        NATIVE_DIALOGS,
+        PLAY_STARTUP_SOUND,
+        STAR_SPEED,
+        STAR_COUNT,
+        LANGUAGE,
+        FAVOURITE_TABS,
+        RECENT_FILES,
+        RECENT_TOOLS,
+        START_PAGE,
+        *NETWORK,
     )
 }
 
@@ -393,4 +425,6 @@ def is_declared(key: str) -> bool:
 
 
 #: Defaults of the settings that live at the top level (network.* has its own merge rules).
-_DEFAULTS: Final[dict[str, Any]] = {k: v.default for k, v in REGISTRY.items() if not k.startswith("network.")}
+_DEFAULTS: Final[dict[str, Any]] = {
+    k: v.default for k, v in REGISTRY.items() if not k.startswith("network.")
+}

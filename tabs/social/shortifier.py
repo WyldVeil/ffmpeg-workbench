@@ -6,6 +6,7 @@ Reels, square posts, widescreen... Fill the frame by cropping (choose which
 part to keep), or fit the whole picture over a blurred, mirrored or solid
 background.  Optional trim to the platform's length limit.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -19,9 +20,14 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
-BACKGROUNDS = {"crop": "Fill the frame (crop the edges)", "blur": "Fit + blurred background",
-               "mirror": "Fit + mirrored background", "black": "Fit + black bars",
-               "white": "Fit + white bars", "colour": "Fit + colour of your choice"}
+BACKGROUNDS = {
+    "crop": "Fill the frame (crop the edges)",
+    "blur": "Fit + blurred background",
+    "mirror": "Fit + mirrored background",
+    "black": "Fit + black bars",
+    "white": "Fit + white bars",
+    "colour": "Fit + colour of your choice",
+}
 
 
 def platform_label(key: str) -> str:
@@ -42,11 +48,16 @@ class ShortifierTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.the_shortifier"), "Reformat any video for Shorts, TikTok, Reels, "
-                         "square posts and more.", icon="📱")
+        self.make_header(
+            self,
+            t("tab.the_shortifier"),
+            "Reformat any video for Shorts, TikTok, Reels, square posts and more.",
+            icon="📱",
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 300, 300, after_label="Result")
         self.compare.pack(pady=px(4))
@@ -55,33 +66,73 @@ class ShortifierTab(BaseTab):
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=px(2))
+            tk.Label(opt, text=label, width=12, anchor="w").grid(
+                row=r, column=0, sticky="w", pady=px(2)
+            )
             for i, w in enumerate(widgets):
                 w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
 
         self.platform_var = tk.StringVar(value=platform_label("shorts"))
-        pb = ttk.Combobox(opt, textvariable=self.platform_var, values=[platform_label(k) for k in PLATFORMS],
-                          state="readonly", width=40)
+        pb = ttk.Combobox(
+            opt,
+            textvariable=self.platform_var,
+            values=[platform_label(k) for k in PLATFORMS],
+            state="readonly",
+            width=40,
+        )
         pb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.cw_var, self.ch_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
-        row(0, "Platform:", pb, tk.Label(opt, text="Custom:"),
-            tk.Entry(opt, textvariable=self.cw_var, width=6), tk.Entry(opt, textvariable=self.ch_var, width=6))
+        row(
+            0,
+            "Platform:",
+            pb,
+            tk.Label(opt, text="Custom:"),
+            tk.Entry(opt, textvariable=self.cw_var, width=6),
+            tk.Entry(opt, textvariable=self.ch_var, width=6),
+        )
         self.bg_var = tk.StringVar(value=BACKGROUNDS["blur"])
-        bb = ttk.Combobox(opt, textvariable=self.bg_var, values=list(BACKGROUNDS.values()), state="readonly",
-                          width=30)
+        bb = ttk.Combobox(
+            opt,
+            textvariable=self.bg_var,
+            values=list(BACKGROUNDS.values()),
+            state="readonly",
+            width=30,
+        )
         bb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        self.colour_btn = tk.Button(opt, text="Colour…", relief="flat", bg=f"#{self.colour}", fg="white",
-                                    command=self._pick_colour)
+        self.colour_btn = tk.Button(
+            opt,
+            text="Colour…",
+            relief="flat",
+            bg=f"#{self.colour}",
+            fg="white",
+            command=self._pick_colour,
+        )
         row(1, "Layout:", bb, self.colour_btn)
         self.anchor_var = tk.StringVar(value="Centre")
-        ab = ttk.Combobox(opt, textvariable=self.anchor_var, values=[v[0] for v in ANCHORS.values()],
-                          state="readonly", width=12)
+        ab = ttk.Combobox(
+            opt,
+            textvariable=self.anchor_var,
+            values=[v[0] for v in ANCHORS.values()],
+            state="readonly",
+            width=12,
+        )
         ab.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        row(2, "Keep:", ab, tk.Label(opt, text="(which part to keep when cropping)", fg=CLR["fgdim"],
-                                     font=(UI_FONT, 8)))
+        row(
+            2,
+            "Keep:",
+            ab,
+            tk.Label(
+                opt, text="(which part to keep when cropping)", fg=CLR["fgdim"], font=(UI_FONT, 8)
+            ),
+        )
         self.trim_var = tk.BooleanVar(value=True)
-        row(3, "Length:", tk.Checkbutton(opt, text="Trim to the platform's maximum length",
-                                         variable=self.trim_var))
+        row(
+            3,
+            "Length:",
+            tk.Checkbutton(
+                opt, text="Trim to the platform's maximum length", variable=self.trim_var
+            ),
+        )
         for var in (self.cw_var, self.ch_var):
             var.trace_add("write", lambda *_a: self._changed())
 
@@ -89,11 +140,23 @@ class ShortifierTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, self._key()))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, self._key()),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text="📱  SHORTIFY", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="📱  SHORTIFY",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=22,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -102,7 +165,9 @@ class ShortifierTab(BaseTab):
         csb.pack(side="right", fill="y")
 
     def _key(self):
-        return next((k for k in PLATFORMS if platform_label(k) == self.platform_var.get()), "shorts")
+        return next(
+            (k for k in PLATFORMS if platform_label(k) == self.platform_var.get()), "shorts"
+        )
 
     def size(self):
         key = self._key()
@@ -167,6 +232,17 @@ class ShortifierTab(BaseTab):
             self.log(self.console, f"Trimming to the {limit}s limit.")
         tw, th = self.size()
         self.log(self.console, f"{PLATFORMS[self._key()][0]} · {tw}×{th}")
-        common.render(self, src=src, info=info, out=out, graph=graph, encoder=self.encoder,
-                      console=self.console, btn=self.btn_render, btn_label="📱  SHORTIFY",
-                      name="Shortifier", extra_args=extra, duration=dur)
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            graph=graph,
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="📱  SHORTIFY",
+            name="Shortifier",
+            extra_args=extra,
+            duration=dur,
+        )

@@ -8,6 +8,7 @@ core/logs.py - Application logging and crash reporting.
   the details and a button to open the log folder - instead of the old
   behaviour of failing silently.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +31,7 @@ _last_dialog = 0.0
 
 def log_file() -> str:
     from core.paths import log_dir
+
     return os.path.join(log_dir(), "app.log")
 
 
@@ -40,20 +42,22 @@ def setup(debug: bool = False) -> logging.Logger:
     if _configured:
         for h in logger.handlers:
             if isinstance(h, logging.StreamHandler) and not isinstance(
-                    h, logging.handlers.RotatingFileHandler):
+                h, logging.handlers.RotatingFileHandler
+            ):
                 h.setLevel(logging.DEBUG if debug else logging.WARNING)
         return logger
     logger.setLevel(logging.DEBUG)
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
     try:
         fh = logging.handlers.RotatingFileHandler(
-            log_file(), maxBytes=2_000_000, backupCount=5, encoding="utf-8")
+            log_file(), maxBytes=2_000_000, backupCount=5, encoding="utf-8"
+        )
         fh.setLevel(logging.DEBUG if debug else logging.INFO)
         fh.setFormatter(fmt)
         logger.addHandler(fh)
     except OSError:
         pass
-    if sys.stderr is not None:   # pythonw / windowed builds have no stderr
+    if sys.stderr is not None:  # pythonw / windowed builds have no stderr
         sh = logging.StreamHandler()
         sh.setLevel(logging.DEBUG if debug else logging.WARNING)
         sh.setFormatter(fmt)
@@ -65,8 +69,13 @@ def setup(debug: bool = False) -> logging.Logger:
     except Exception:
         logger.debug("setup: best-effort step failed", exc_info=True)
         APP_VERSION = "?"
-    logger.info("Started v%s on %s %s (Python %s)", APP_VERSION, platform.system(),
-                platform.release(), platform.python_version())
+    logger.info(
+        "Started v%s on %s %s (Python %s)",
+        APP_VERSION,
+        platform.system(),
+        platform.release(),
+        platform.python_version(),
+    )
     return logger
 
 
@@ -82,7 +91,7 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
     """Modal-less error window with Copy / Open log folder buttons."""
     global _last_dialog
     now = time.monotonic()
-    if now - _last_dialog < 3.0:      # avoid a storm of dialogs
+    if now - _last_dialog < 3.0:  # avoid a storm of dialogs
         return
     _last_dialog = now
     try:
@@ -90,6 +99,7 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
         from tkinter import ttk
 
         from core import ui
+
         root = ui.tk_default_root()
         if root is None:
             return
@@ -97,7 +107,8 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
         win.title(title)
         win.geometry(f"{px(720)}x{px(420)}")
         ttk.Label(win, text=summary, wraplength=px(680), justify="left").pack(
-            fill="x", padx=px(14), pady=px(12, 6))
+            fill="x", padx=px(14), pady=px(12, 6)
+        )
         txt = tk.Text(win, height=14, wrap="none")
         txt.insert("1.0", details)
         txt.configure(state="disabled")
@@ -111,6 +122,7 @@ def _show_dialog(title: str, summary: str, details: str) -> None:
 
         def _open():
             from core.hardware import open_in_explorer
+
             open_in_explorer(os.path.dirname(log_file()))
 
         ttk.Button(row, text="Copy details", command=_copy).pack(side="left")
@@ -124,10 +136,13 @@ def report(exc_type, exc, tb, *, where: str = "", dialog: bool = True) -> None:
     details = _format(exc_type, exc, tb)
     get().error("Unhandled exception%s:\n%s", f" in {where}" if where else "", details)
     if dialog:
-        summary = (f"Something went wrong{(' in ' + where) if where else ''}:\n"
-                   f"{exc_type.__name__}: {exc}\n\nThe details were written to the log file.")
+        summary = (
+            f"Something went wrong{(' in ' + where) if where else ''}:\n"
+            f"{exc_type.__name__}: {exc}\n\nThe details were written to the log file."
+        )
         try:
             from core import ui
+
             ui.call_soon(_show_dialog, "Unexpected error", summary, details)
         except Exception:
             logger.debug("report: best-effort step failed", exc_info=True)
@@ -149,6 +164,8 @@ def install_excepthooks(tk_root=None) -> None:
     sys.excepthook = _sys_hook
     threading.excepthook = _thread_hook
     if tk_root is not None:
+
         def _tk_hook(exc_type, exc, tb):
             report(exc_type, exc, tb, where="a button or window action")
+
         tk_root.report_callback_exception = _tk_hook

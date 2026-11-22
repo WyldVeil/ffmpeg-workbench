@@ -13,6 +13,7 @@ interpolation (single-threaded in FFmpeg) is split into chunks that run in
 parallel; chunk edges fall where source and output frames line up, so the
 joined video stays in sync with its audio.
 """
+
 from __future__ import annotations
 
 import math
@@ -32,15 +33,34 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
 
-SIZES = [("8K (7680×4320)", 7680, 4320), ("4K UHD (3840×2160)", 3840, 2160), ("1440p (2560×1440)", 2560, 1440),
-         ("1080p (1920×1080)", 1920, 1080), ("720p (1280×720)", 1280, 720), ("480p (854×480)", 854, 480),
-         ("360p (640×360)", 640, 360), ("Twice the size (×2)", 2, 0), ("Three times (×3)", 3, 0),
-         ("Four times (×4)", 4, 0), ("Half the size (½)", -2, 0), ("Custom size", 0, 0)]
-SHAPES = {"fit": "Keep the shape (fit inside the size)", "pad": "Keep the shape, add bars to fill the size",
-          "crop": "Fill the size, crop the edges", "stretch": "Stretch to the size exactly"}
-METHODS = {"auto": "Automatic (best for the direction)", "gpu": "GPU - libplacebo EWA Lanczos sharp",
-           "lanczos": "Lanczos (sharp)", "bicubic": "Bicubic (soft)", "area": "Area (smooth downscale)",
-           "neighbor": "Nearest (pixel art)"}
+SIZES = [
+    ("8K (7680×4320)", 7680, 4320),
+    ("4K UHD (3840×2160)", 3840, 2160),
+    ("1440p (2560×1440)", 2560, 1440),
+    ("1080p (1920×1080)", 1920, 1080),
+    ("720p (1280×720)", 1280, 720),
+    ("480p (854×480)", 854, 480),
+    ("360p (640×360)", 640, 360),
+    ("Twice the size (×2)", 2, 0),
+    ("Three times (×3)", 3, 0),
+    ("Four times (×4)", 4, 0),
+    ("Half the size (½)", -2, 0),
+    ("Custom size", 0, 0),
+]
+SHAPES = {
+    "fit": "Keep the shape (fit inside the size)",
+    "pad": "Keep the shape, add bars to fill the size",
+    "crop": "Fill the size, crop the edges",
+    "stretch": "Stretch to the size exactly",
+}
+METHODS = {
+    "auto": "Automatic (best for the direction)",
+    "gpu": "GPU - libplacebo EWA Lanczos sharp",
+    "lanczos": "Lanczos (sharp)",
+    "bicubic": "Bicubic (soft)",
+    "area": "Area (smooth downscale)",
+    "neighbor": "Nearest (pixel art)",
+}
 METHODS.update({key: "Upscale: " + spec[0] for key, spec in upscale.SHADERS.items()})
 
 
@@ -58,12 +78,16 @@ class ResolutionScalerTab(BaseTab):
         self.src_var = self.src_row.var
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
         self.info_lbl.pack(fill="x", padx=px(20))
-        opt = tk.LabelFrame(body, text=f"  {t('scaler.scale_options_section')}  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(
+            body, text=f"  {t('scaler.scale_options_section')}  ", padx=px(12), pady=px(8)
+        )
         opt.pack(fill="x", padx=px(20), pady=px(6))
 
         def row(r, label, *widgets):
             # each row lays out on its own, so a wide widget in one row can't push another row's apart
-            tk.Label(opt, text=label, width=10, anchor="w").grid(row=r, column=0, sticky="w", pady=px(3))
+            tk.Label(opt, text=label, width=10, anchor="w").grid(
+                row=r, column=0, sticky="w", pady=px(3)
+            )
             holder = tk.Frame(opt)
             holder.grid(row=r, column=1, sticky="w", pady=px(3))
             for w in widgets:
@@ -71,23 +95,63 @@ class ResolutionScalerTab(BaseTab):
                 w.lift(holder)
 
         self.size_var = tk.StringVar(value=SIZES[3][0])
-        sb = ttk.Combobox(opt, textvariable=self.size_var, values=[s[0] for s in SIZES], state="readonly", width=24)
+        sb = ttk.Combobox(
+            opt,
+            textvariable=self.size_var,
+            values=[s[0] for s in SIZES],
+            state="readonly",
+            width=24,
+        )
         self.w_var, self.h_var = tk.StringVar(value="1920"), tk.StringVar(value="1080")
-        row(0, "Size:", sb, tk.Entry(opt, textvariable=self.w_var, width=6), tk.Label(opt, text="×"),
-            tk.Entry(opt, textvariable=self.h_var, width=6))
+        row(
+            0,
+            "Size:",
+            sb,
+            tk.Entry(opt, textvariable=self.w_var, width=6),
+            tk.Label(opt, text="×"),
+            tk.Entry(opt, textvariable=self.h_var, width=6),
+        )
         self.shape_var = tk.StringVar(value=SHAPES["fit"])
-        row(1, "Shape:", ttk.Combobox(opt, textvariable=self.shape_var, values=list(SHAPES.values()),
-                                      state="readonly", width=40))
+        row(
+            1,
+            "Shape:",
+            ttk.Combobox(
+                opt,
+                textvariable=self.shape_var,
+                values=list(SHAPES.values()),
+                state="readonly",
+                width=40,
+            ),
+        )
         self.method_var = tk.StringVar(value=METHODS["auto"])
         have = set(upscale.available()) if fl.vulkan_ok() else set()
-        methods = [v for k, v in METHODS.items()
-                   if k not in GPU_METHODS or (k == "gpu" and fl.vulkan_ok()) or k in have]
-        row(2, "Method:", ttk.Combobox(opt, textvariable=self.method_var, values=methods, state="readonly",
-                                       width=40))
+        methods = [
+            v
+            for k, v in METHODS.items()
+            if k not in GPU_METHODS or (k == "gpu" and fl.vulkan_ok()) or k in have
+        ]
+        row(
+            2,
+            "Method:",
+            ttk.Combobox(
+                opt, textvariable=self.method_var, values=methods, state="readonly", width=40
+            ),
+        )
         self.sharpen_var = tk.DoubleVar(value=0.3)
-        row(3, "Sharpen:", tk.Scale(opt, variable=self.sharpen_var, from_=0, to=1, resolution=0.05,
-                                    orient="horizontal", length=px(200)),
-            tk.Label(opt, text="(when upscaling with Lanczos, Bicubic or GPU)", fg=CLR["fgdim"]))
+        row(
+            3,
+            "Sharpen:",
+            tk.Scale(
+                opt,
+                variable=self.sharpen_var,
+                from_=0,
+                to=1,
+                resolution=0.05,
+                orient="horizontal",
+                length=px(200),
+            ),
+            tk.Label(opt, text="(when upscaling with Lanczos, Bicubic or GPU)", fg=CLR["fgdim"]),
+        )
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
         self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=px(4, 0))
         for v in (self.size_var, self.shape_var, self.w_var, self.h_var):
@@ -97,12 +161,23 @@ class ResolutionScalerTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "ffv1"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, self._suffix()))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, self._suffix()),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
-        self.btn_render = tk.Button(body, text="📐  SCALE VIDEO", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=26, command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="📐  SCALE VIDEO",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=26,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -115,12 +190,14 @@ class ResolutionScalerTab(BaseTab):
         _l, a, b = next((s for s in SIZES if s[0] == label), SIZES[3])
         sw, sh = common.even_size(info)
         if a == 0:
-            return (int(common.number(self.w_var.get(), "Width", 16, 16384)),
-                    int(common.number(self.h_var.get(), "Height", 16, 16384)))
+            return (
+                int(common.number(self.w_var.get(), "Width", 16, 16384)),
+                int(common.number(self.h_var.get(), "Height", 16, 16384)),
+            )
         if b == 0:
             f = 0.5 if a < 0 else a
             return sw * f, sh * f
-        return (b, a) if sh > sw else (a, b)            # portrait videos turn the preset round
+        return (b, a) if sh > sw else (a, b)  # portrait videos turn the preset round
 
     def _shape(self):
         return next((k for k, v in SHAPES.items() if v == self.shape_var.get()), "fit")
@@ -142,7 +219,9 @@ class ResolutionScalerTab(BaseTab):
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             w, h = common.even_size(info)
-            self.info_lbl.config(text=f"Now {w}×{h} · {info.require_video().fps:.3g} fps · {ff.format_time(info.duration)}")
+            self.info_lbl.config(
+                text=f"Now {w}×{h} · {info.require_video().fps:.3g} fps · {ff.format_time(info.duration)}"
+            )
         self.out_row.set(self.suggest_output(path, self._suffix()))
         self._update()
 
@@ -173,37 +252,59 @@ class ResolutionScalerTab(BaseTab):
         method = self._method()
         gpu = fl.vulkan_ok()
         try:
-            chain = scale_chain(common.even_size(info), box, self._shape(), method,
-                                sharpen=float(self.sharpen_var.get()), gpu=gpu,
-                                pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
-                                tags=upscale.tags_of(info.video))
+            chain = scale_chain(
+                common.even_size(info),
+                box,
+                self._shape(),
+                method,
+                sharpen=float(self.sharpen_var.get()),
+                gpu=gpu,
+                pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
+                tags=upscale.tags_of(info.video),
+            )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         if "libplacebo" in chain and not gpu:
-            messagebox.showwarning(t("common.warning"), "GPU scaling isn't available on this computer.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), "GPU scaling isn't available on this computer.", parent=self
+            )
             return
         out = common.output_for(self, self.out_row, src, self._suffix())
         if not out:
             return
         extra_pre = ["-init_hw_device", "vulkan"] if "libplacebo" in chain else []
         self.log(self.console, chain)
-        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder, console=self.console,
-                      btn=self.btn_render, btn_label="📐  SCALE VIDEO", name="Resolution Scaler",
-                      pre_input=extra_pre)
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=chain,
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="📐  SCALE VIDEO",
+            name="Resolution Scaler",
+            pre_input=extra_pre,
+        )
 
 
 # ── Framerate Interpolator ───────────────────────────────────────────────────
 
 RATES = ["23.976", "24", "25", "29.97", "30", "48", "50", "59.94", "60", "90", "120", "144"]
-FPS_METHODS = {"motion": "Smooth motion (motion interpolation - slowest, best)",
-               "blend": "Blend frames (fast, slight ghosting)",
-               "dup": "Drop / repeat frames (fastest, no smoothing)"}
+FPS_METHODS = {
+    "motion": "Smooth motion (motion interpolation - slowest, best)",
+    "blend": "Blend frames (fast, slight ghosting)",
+    "dup": "Drop / repeat frames (fastest, no smoothing)",
+}
 
 
 def chunk_step(src: Fraction, dst: Fraction) -> Fraction:
     """Shortest time after which source and output frames line up again."""
-    return Fraction(math.lcm(src.denominator, dst.denominator), math.gcd(src.numerator, dst.numerator))
+    return Fraction(
+        math.lcm(src.denominator, dst.denominator), math.gcd(src.numerator, dst.numerator)
+    )
 
 
 def chunks(duration: float, step: Fraction, parts: int) -> list:
@@ -216,7 +317,9 @@ def chunks(duration: float, step: Fraction, parts: int) -> list:
         length = min(float(size), duration - float(t0))
         out.append((float(t0), length))
         t0 += size
-    if len(out) > 1 and out[-1][1] < float(size) / 2:    # fold a short leftover into the previous piece
+    if (
+        len(out) > 1 and out[-1][1] < float(size) / 2
+    ):  # fold a short leftover into the previous piece
         a, la = out[-2]
         out[-2:] = [(a, la + out[-1][1])]
     return out
@@ -229,8 +332,12 @@ class FPSInterpolatorTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.framerate_interpolator"),
-                         "Change the frame rate smoothly, or make true slow motion.", icon="🎞")
+        self.make_header(
+            self,
+            t("tab.framerate_interpolator"),
+            "Change the frame rate smoothly, or make true slow motion.",
+            icon="🎞",
+        )
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
@@ -243,39 +350,66 @@ class FPSInterpolatorTab(BaseTab):
         r0.pack(anchor="w", pady=px(2))
         tk.Label(r0, text="New frame rate:").pack(side="left")
         self.fps_var = tk.StringVar(value="60")
-        ttk.Combobox(r0, textvariable=self.fps_var, values=RATES, width=8).pack(side="left", padx=px(6))
+        ttk.Combobox(r0, textvariable=self.fps_var, values=RATES, width=8).pack(
+            side="left", padx=px(6)
+        )
         tk.Label(r0, text="fps").pack(side="left")
         self.method_var = tk.StringVar(value=FPS_METHODS["motion"])
-        ttk.Combobox(opt, textvariable=self.method_var, values=list(FPS_METHODS.values()), state="readonly",
-                     width=52).pack(anchor="w", pady=px(4))
+        ttk.Combobox(
+            opt,
+            textvariable=self.method_var,
+            values=list(FPS_METHODS.values()),
+            state="readonly",
+            width=52,
+        ).pack(anchor="w", pady=px(4))
         r1 = tk.Frame(opt)
         r1.pack(anchor="w", pady=px(2))
         self.slowmo_var = tk.BooleanVar(value=False)
         tk.Checkbutton(r1, text="Slow motion: play", variable=self.slowmo_var).pack(side="left")
         self.factor_var = tk.StringVar(value="2")
-        ttk.Combobox(r1, textvariable=self.factor_var, values=["1.5", "2", "3", "4", "8"], width=4).pack(side="left")
+        ttk.Combobox(
+            r1, textvariable=self.factor_var, values=["1.5", "2", "3", "4", "8"], width=4
+        ).pack(side="left")
         tk.Label(r1, text="× slower (new frames are made in between)").pack(side="left", padx=px(4))
         r2 = tk.Frame(opt)
         r2.pack(anchor="w", pady=px(2))
         self.audio_var = tk.StringVar(value="slow")
         tk.Label(r2, text="Slow-motion audio:").pack(side="left")
-        tk.Radiobutton(r2, text="slow it down too (same pitch)", variable=self.audio_var, value="slow").pack(
-            side="left")
-        tk.Radiobutton(r2, text="remove it", variable=self.audio_var, value="none").pack(side="left")
+        tk.Radiobutton(
+            r2, text="slow it down too (same pitch)", variable=self.audio_var, value="slow"
+        ).pack(side="left")
+        tk.Radiobutton(r2, text="remove it", variable=self.audio_var, value="none").pack(
+            side="left"
+        )
         self.parallel_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opt, text=f"Use all processor cores for motion interpolation ({os.cpu_count() or 1} "
-                                 "available)", variable=self.parallel_var).pack(anchor="w")
+        tk.Checkbutton(
+            opt,
+            text=f"Use all processor cores for motion interpolation ({os.cpu_count() or 1} "
+            "available)",
+            variable=self.parallel_var,
+        ).pack(anchor="w")
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "interp"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "interp"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
-        self.btn_render = tk.Button(body, text="🎞  CHANGE FRAME RATE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=26, command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="🎞  CHANGE FRAME RATE",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=26,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -286,7 +420,9 @@ class FPSInterpolatorTab(BaseTab):
     def _source_changed(self, path):
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
-            self.info_lbl.config(text=f"Now {info.require_video().fps:.3f} fps · {ff.format_time(info.duration)}")
+            self.info_lbl.config(
+                text=f"Now {info.require_video().fps:.3f} fps · {ff.format_time(info.duration)}"
+            )
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "interp"))
 
@@ -297,7 +433,11 @@ class FPSInterpolatorTab(BaseTab):
             return
         try:
             target = rate_fraction(self.fps_var.get())
-            factor = Fraction(self.factor_var.get()).limit_denominator(100) if self.slowmo_var.get() else Fraction(1)
+            factor = (
+                Fraction(self.factor_var.get()).limit_denominator(100)
+                if self.slowmo_var.get()
+                else Fraction(1)
+            )
             if not 1 <= factor <= 16:
                 raise ValueError("The slow-motion factor must be between 1 and 16.")
             src_rate = rate_fraction(frame_rate(info))
@@ -305,8 +445,12 @@ class FPSInterpolatorTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         method = next((k for k, v in FPS_METHODS.items() if v == self.method_var.get()), "motion")
-        out = common.output_for(self, self.out_row, src, "slowmo" if factor > 1 else
-                                f"{float(target):.3g}fps".replace(".", "_"))
+        out = common.output_for(
+            self,
+            self.out_row,
+            src,
+            "slowmo" if factor > 1 else f"{float(target):.3g}fps".replace(".", "_"),
+        )
         if not out:
             return
         container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
@@ -325,9 +469,12 @@ class FPSInterpolatorTab(BaseTab):
             limit = 4 if venc.hw else max(1, (os.cpu_count() or 2) - 1)
             parts = max(1, min(limit, int(dur // 4)))
         pieces = chunks(dur, chunk_step(src_rate, work_rate), parts)
-        self.log(self.console, f"{float(src_rate):.3f} → {float(target):.3f} fps"
-                               + (f", {float(factor):g}× slow motion" if factor > 1 else "")
-                               + (f", {len(pieces)} parallel pieces" if len(pieces) > 1 else ""))
+        self.log(
+            self.console,
+            f"{float(src_rate):.3f} → {float(target):.3f} fps"
+            + (f", {float(factor):g}× slow motion" if factor > 1 else "")
+            + (f", {len(pieces)} parallel pieces" if len(pieces) > 1 else ""),
+        )
 
         def audio_args(input_index):
             if not info.has_audio or audio_mode == "none":
@@ -338,33 +485,78 @@ class FPSInterpolatorTab(BaseTab):
                     steps.append("atempo=0.5")
                     tempo /= 0.5
                 steps.append(f"atempo={tempo:.6f}")
-                return ["-map", f"{input_index}:a:0", "-af", ",".join(steps), "-c:a", "aac", "-b:a", "192k"]
+                return [
+                    "-map",
+                    f"{input_index}:a:0",
+                    "-af",
+                    ",".join(steps),
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                ]
             return ["-map", f"{input_index}:a:0", "-c:a", "aac", "-b:a", "192k"]
 
         def work(_p, _c, ctx):
             final = ctx.output()
             if len(pieces) == 1:
-                ctx.run([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *venc.pre_input, "-i", src,
-                         "-map", "0:v:0", *venc.vf_args(chain), *venc.args, *audio_args(0),
-                         "-map_metadata", "0", final], duration=out_dur)
+                ctx.run(
+                    [
+                        ff.ffmpeg_path(),
+                        "-hide_banner",
+                        "-nostdin",
+                        "-y",
+                        *venc.pre_input,
+                        "-i",
+                        src,
+                        "-map",
+                        "0:v:0",
+                        *venc.vf_args(chain),
+                        *venc.args,
+                        *audio_args(0),
+                        "-map_metadata",
+                        "0",
+                        final,
+                    ],
+                    duration=out_dur,
+                )
                 return 0
             import concurrent.futures as cf_
+
             tmp = ctx.tempdir()
             names = [os.path.join(tmp, f"piece{i:03d}.mkv") for i in range(len(pieces))]
             done = [0.0] * len(pieces)
 
             def one(i):
                 start, length = pieces[i]
-                cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *venc.pre_input,
-                       "-ss", f"{start:.6f}", "-t", f"{length:.6f}", "-i", src, "-map", "0:v:0",
-                       *venc.vf_args(chain), *common.intermediate_args(venc), "-an", names[i]]
+                cmd = [
+                    ff.ffmpeg_path(),
+                    "-hide_banner",
+                    "-nostdin",
+                    "-y",
+                    *venc.pre_input,
+                    "-ss",
+                    f"{start:.6f}",
+                    "-t",
+                    f"{length:.6f}",
+                    "-i",
+                    src,
+                    "-map",
+                    "0:v:0",
+                    *venc.vf_args(chain),
+                    *common.intermediate_args(venc),
+                    "-an",
+                    names[i],
+                ]
 
                 def prog(p, i=i):
                     if p.out_time is not None:
                         done[i] = min(1.0, p.out_time / max(0.01, length * float(factor)))
                         ctx.progress(0.92 * sum(done) / len(done))
 
-                res = ff.run(cmd, duration=length * float(factor), on_progress=prog, cancel=ctx.cancelled)
+                res = ff.run(
+                    cmd, duration=length * float(factor), on_progress=prog, cancel=ctx.cancelled
+                )
                 if res.cancelled:
                     raise ff.CancelledError("cancelled")
                 if res.returncode != 0:
@@ -376,11 +568,44 @@ class FPSInterpolatorTab(BaseTab):
                     fut.result()
             listing = fl.write_concat_list(names, os.path.join(tmp, "pieces.txt"))
             ctx.log("Joining the pieces…")
-            ctx.span(0.92, 1.0).run([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-f", "concat",
-                                     "-safe", "0", "-i", listing, "-i", src, "-map", "0:v:0", "-c:v", "copy",
-                                     *common.final_copy_args(venc, container), *audio_args(1),
-                                     "-t", f"{out_dur:.3f}", "-map_metadata", "1", final], duration=out_dur)
+            ctx.span(0.92, 1.0).run(
+                [
+                    ff.ffmpeg_path(),
+                    "-hide_banner",
+                    "-nostdin",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    listing,
+                    "-i",
+                    src,
+                    "-map",
+                    "0:v:0",
+                    "-c:v",
+                    "copy",
+                    *common.final_copy_args(venc, container),
+                    *audio_args(1),
+                    "-t",
+                    f"{out_dur:.3f}",
+                    "-map_metadata",
+                    "1",
+                    final,
+                ],
+                duration=out_dur,
+            )
             return 0
 
-        common.queue_job(self, name="Framerate Interpolator", out=out, work=work, btn=self.btn_render,
-                         btn_label="🎞  CHANGE FRAME RATE", console=self.console, duration=out_dur, inputs=[src])
+        common.queue_job(
+            self,
+            name="Framerate Interpolator",
+            out=out,
+            work=work,
+            btn=self.btn_render,
+            btn_label="🎞  CHANGE FRAME RATE",
+            console=self.console,
+            duration=out_dur,
+            inputs=[src],
+        )

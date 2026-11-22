@@ -12,6 +12,7 @@ Two strategies:
   audio get generated silence so the joined file never loses its sound.
   No temporary files are written.
 """
+
 from __future__ import annotations
 
 import os
@@ -26,6 +27,7 @@ from core import filters as fl
 @dataclass
 class Piece:
     """One input of a join: a whole file or the range [start, end)."""
+
     path: str
     info: ff.MediaInfo
     start: float = 0.0
@@ -33,7 +35,11 @@ class Piece:
 
     @property
     def length(self) -> float:
-        total = self.info.video.duration if (self.info.video and self.info.video.duration) else self.info.duration
+        total = (
+            self.info.video.duration
+            if (self.info.video and self.info.video.duration)
+            else self.info.duration
+        )
         end = total if self.end is None else min(self.end, total)
         return max(0.0, end - self.start)
 
@@ -73,11 +79,14 @@ def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
                 problems.append(f"{name}: video stream missing in one of the files")
             else:
                 diffs = []
-                for label, a, b in (("codec", rv.codec, iv.codec), ("profile", rv.profile, iv.profile),
-                                    ("size", f"{rv.width}x{rv.height}", f"{iv.width}x{iv.height}"),
-                                    ("pixel format", rv.pix_fmt, iv.pix_fmt),
-                                    ("frame rate", f"{rv.fps:.3f}", f"{iv.fps:.3f}"),
-                                    ("aspect", rv.sar, iv.sar)):
+                for label, a, b in (
+                    ("codec", rv.codec, iv.codec),
+                    ("profile", rv.profile, iv.profile),
+                    ("size", f"{rv.width}x{rv.height}", f"{iv.width}x{iv.height}"),
+                    ("pixel format", rv.pix_fmt, iv.pix_fmt),
+                    ("frame rate", f"{rv.fps:.3f}", f"{iv.fps:.3f}"),
+                    ("aspect", rv.sar, iv.sar),
+                ):
                     if a != b:
                         diffs.append(f"{label} {b} ≠ {a}")
                 problems.append(f"{name}: " + ", ".join(diffs))
@@ -86,21 +95,44 @@ def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
             if not ra or not ia:
                 problems.append(f"{name}: audio present in only some files")
             else:
-                problems.append(f"{name}: audio {ia.codec} {ia.sample_rate} Hz {ia.channels}ch "
-                                f"≠ {ra.codec} {ra.sample_rate} Hz {ra.channels}ch")
-        if len(info.video_streams) != len(ref.video_streams) or \
-                len(info.audio_streams) != len(ref.audio_streams):
+                problems.append(
+                    f"{name}: audio {ia.codec} {ia.sample_rate} Hz {ia.channels}ch "
+                    f"≠ {ra.codec} {ra.sample_rate} Hz {ra.channels}ch"
+                )
+        if len(info.video_streams) != len(ref.video_streams) or len(info.audio_streams) != len(
+            ref.audio_streams
+        ):
             problems.append(f"{name}: different number of tracks")
     return problems
 
 
-def copy_join_command(paths: Sequence[str], out: str, list_path: str,
-                      inpoints: Sequence[float | None] | None = None,
-                      outpoints: Sequence[float | None] | None = None) -> list:
+def copy_join_command(
+    paths: Sequence[str],
+    out: str,
+    list_path: str,
+    inpoints: Sequence[float | None] | None = None,
+    outpoints: Sequence[float | None] | None = None,
+) -> list:
     fl.write_concat_list(paths, list_path, inpoints=inpoints, outpoints=outpoints)
     container = os.path.splitext(out)[1].lstrip(".").lower()
-    cmd = [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", list_path,
-           "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-sn", "-dn"]
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        list_path,
+        "-map",
+        "0:v?",
+        "-map",
+        "0:a?",
+        "-c",
+        "copy",
+        "-sn",
+        "-dn",
+    ]
     if container in ("mp4", "m4v", "mov"):
         cmd += ["-movflags", "+faststart"]
     return [*cmd, out]
@@ -129,10 +161,17 @@ def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple:
     return size[0], size[1], fps
 
 
-def filter_join_command(pieces: Sequence[Piece], out: str, *, size: tuple | None = None,
-                        fps: str | None = None, venc: enc.VideoEncode | None = None,
-                        audio: bool = True, audio_codec: str = "aac",
-                        audio_bitrate: str = "192k") -> tuple:
+def filter_join_command(
+    pieces: Sequence[Piece],
+    out: str,
+    *,
+    size: tuple | None = None,
+    fps: str | None = None,
+    venc: enc.VideoEncode | None = None,
+    audio: bool = True,
+    audio_codec: str = "aac",
+    audio_bitrate: str = "192k",
+) -> tuple:
     """Single-pass normalising join.  Returns (argv, expected_seconds)."""
     if venc is None:
         venc = enc.video("h264", "high", hw="off", container=os.path.splitext(out)[1] or "mp4")
@@ -151,23 +190,33 @@ def filter_join_command(pieces: Sequence[Piece], out: str, *, size: tuple | None
         for i, p in enumerate(pieces):
             if not p.info.has_audio:
                 silence[i] = len(pieces) + len(silence)
-                argv += ["-f", "lavfi", "-t", ff.ts(p.length),
-                         "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+                argv += [
+                    "-f",
+                    "lavfi",
+                    "-t",
+                    ff.ts(p.length),
+                    "-i",
+                    "anullsrc=channel_layout=stereo:sample_rate=48000",
+                ]
     graph, labels = [], []
     for i, p in enumerate(pieces):
         trim = f"trim=start={p.start:.6f}:duration={p.length:.6f},"
-        graph.append(f"[{i}:v]{trim}setpts=PTS-STARTPTS,"
-                     f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-                     f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},format={pix}[v{i}]")
+        graph.append(
+            f"[{i}:v]{trim}setpts=PTS-STARTPTS,"
+            f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+            f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},format={pix}[v{i}]"
+        )
         labels.append(f"[v{i}]")
         if use_audio:
             if i in silence:
                 src, atrim = f"[{silence[i]}:a]", ""
             else:
                 src, atrim = f"[{i}:a]", f"atrim=start={p.start:.6f}:duration={p.length:.6f},"
-            graph.append(f"{src}{atrim}asetpts=PTS-STARTPTS,aresample=48000,"
-                         f"aformat=sample_fmts=fltp:channel_layouts=stereo,apad,"
-                         f"atrim=duration={p.length:.6f}[a{i}]")
+            graph.append(
+                f"{src}{atrim}asetpts=PTS-STARTPTS,aresample=48000,"
+                f"aformat=sample_fmts=fltp:channel_layouts=stereo,apad,"
+                f"atrim=duration={p.length:.6f}[a{i}]"
+            )
             labels.append(f"[a{i}]")
     n = len(pieces)
     concat = "".join(labels) + f"concat=n={n}:v=1:a={1 if use_audio else 0}"

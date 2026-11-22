@@ -1,4 +1,5 @@
 """Tests for core/ffmpeg.py (probe, run/progress/cancel, helpers)."""
+
 import time
 
 import pytest
@@ -7,10 +8,20 @@ from core import ffmpeg as ff
 
 # ── time helpers ─────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("text,expected", [
-    ("75", 75.0), ("75.5", 75.5), ("75,5", 75.5), ("01:15", 75.0),
-    ("1:02:03.5", 3723.5), ("00:00:00.040", 0.04), (12, 12.0), (1.5, 1.5),
-])
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("75", 75.0),
+        ("75.5", 75.5),
+        ("75,5", 75.5),
+        ("01:15", 75.0),
+        ("1:02:03.5", 3723.5),
+        ("00:00:00.040", 0.04),
+        (12, 12.0),
+        (1.5, 1.5),
+    ],
+)
 def test_parse_time(text, expected):
     assert ff.parse_time(text) == pytest.approx(expected)
 
@@ -59,6 +70,7 @@ def test_summarize_error_picks_relevant_lines():
 
 # ── probe ────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.ffmpeg
 def test_probe_video_with_audio(media):
     info = ff.probe(media["h264"])
@@ -106,13 +118,29 @@ def test_probe_garbage_raises(tmp_path):
 
 # ── run ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.ffmpeg
 def test_run_reports_progress_and_succeeds(media, outdir):
     out = str(outdir / "o.mp4")
     seen = []
-    res = ff.run([ff.ffmpeg_path(), "-y", "-i", media["h264"], "-t", "3",
-                  "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", out],
-                 on_progress=seen.append)
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            media["h264"],
+            "-t",
+            "3",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-c:a",
+            "aac",
+            out,
+        ],
+        on_progress=seen.append,
+    )
     assert res.ok, res.error_summary
     assert seen and seen[-1].fraction == 1.0
     assert any(p.fraction is not None and 0 < p.fraction < 1 for p in seen) or len(seen) >= 1
@@ -121,8 +149,9 @@ def test_run_reports_progress_and_succeeds(media, outdir):
 
 @pytest.mark.ffmpeg
 def test_run_failure_has_summary(media, outdir):
-    res = ff.run([ff.ffmpeg_path(), "-y", "-i", media["h264"],
-                  "-vf", "nopefilter", str(outdir / "x.mp4")])
+    res = ff.run(
+        [ff.ffmpeg_path(), "-y", "-i", media["h264"], "-vf", "nopefilter", str(outdir / "x.mp4")]
+    )
     assert not res.ok
     assert "nopefilter" in res.error_summary or "filter" in res.error_summary.lower()
 
@@ -136,10 +165,24 @@ def test_run_missing_program():
 def test_run_cancel_kills_process(outdir):
     out = str(outdir / "long.mp4")
     t0 = time.monotonic()
-    res = ff.run([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i",
-                  "testsrc2=size=1920x1080:rate=60", "-t", "600",
-                  "-c:v", "libx264", "-preset", "veryslow", out],
-                 cancel=lambda: time.monotonic() - t0 > 1.0)
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=1920x1080:rate=60",
+            "-t",
+            "600",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryslow",
+            out,
+        ],
+        cancel=lambda: time.monotonic() - t0 > 1.0,
+    )
     assert res.cancelled and not res.ok
     assert time.monotonic() - t0 < 10
     assert ff.active_count() == 0
@@ -149,8 +192,12 @@ def test_run_cancel_kills_process(outdir):
 def test_guess_output_duration(media):
     f = ff.ffmpeg_path()
     assert ff.guess_output_duration([f, "-i", media["h264"], "-t", "2", "o.mp4"]) == 2.0
-    assert ff.guess_output_duration([f, "-ss", "1", "-i", media["h264"], "o.mp4"]) == pytest.approx(5.0, abs=0.1)
-    assert ff.guess_output_duration([f, "-i", media["h264"], "-ss", "1", "-to", "4", "o.mp4"]) == pytest.approx(3.0)
+    assert ff.guess_output_duration([f, "-ss", "1", "-i", media["h264"], "o.mp4"]) == pytest.approx(
+        5.0, abs=0.1
+    )
+    assert ff.guess_output_duration(
+        [f, "-i", media["h264"], "-ss", "1", "-to", "4", "o.mp4"]
+    ) == pytest.approx(3.0)
     assert ff.guess_output_duration([f, "-f", "lavfi", "-i", "testsrc", "o.mp4"]) is None
 
 
@@ -178,9 +225,29 @@ def test_progress_keys_stay_out_of_the_log(tmp_path):
     """FFmpeg's per-stream progress keys (stream_0_0_q=...) arrive in every progress
     block; they must not reach the log or crowd the real messages out of its tail."""
     lines = []
-    cmd = [ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=3",
-           "-filter_complex", "[0:v]split[a][b]", "-map", "[a]", "-map", "[b]", "-c:v", "libx264",
-           "-preset", "ultrafast", "-stats_period", "0.05", "-f", "null", "-"]
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x240:rate=30:duration=3",
+        "-filter_complex",
+        "[0:v]split[a][b]",
+        "-map",
+        "[a]",
+        "-map",
+        "[b]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-stats_period",
+        "0.05",
+        "-f",
+        "null",
+        "-",
+    ]
     res = ff.run(cmd, on_line=lines.append)
     assert res.returncode == 0
     assert not [line for line in lines + res.log_tail if line.startswith("stream_")]

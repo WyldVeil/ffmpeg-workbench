@@ -3,6 +3,7 @@ core/ops/sharpen.py - command builders for tabs/visuals/sharpen.py (also used by
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 

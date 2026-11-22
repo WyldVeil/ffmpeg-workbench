@@ -3,6 +3,7 @@ core/ops/lut.py - command builders for tabs/visuals/lut.py (also used by core/cl
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 import os
@@ -51,9 +52,13 @@ def build_chain(lut_path: str, *, intensity: float = 1.0, interp: str = "tetrahe
         clut = f"movie=filename={fl.filter_path(lut_path)}[clut]"
         if intensity >= 0.999:
             return f"{clut};[in][clut]haldclut"
-        return (f"{clut};[in]split[orig][grade];[grade][clut]haldclut[look];"
-                f"[look][orig]blend=all_mode=normal:all_opacity={intensity:.3f}")
+        return (
+            f"{clut};[in]split[orig][grade];[grade][clut]haldclut[look];"
+            f"[look][orig]blend=all_mode=normal:all_opacity={intensity:.3f}"
+        )
     if intensity >= 0.999:
         return look
-    return (f"split[orig][grade];[grade]{look}[look];"
-            f"[look][orig]blend=all_mode=normal:all_opacity={intensity:.3f}")
+    return (
+        f"split[orig][grade];[grade]{look}[look];"
+        f"[look][orig]blend=all_mode=normal:all_opacity={intensity:.3f}"
+    )

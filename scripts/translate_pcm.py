@@ -43,7 +43,7 @@ def translate_batch(token: str, texts: list[str]) -> list[str]:
                 "src_lang": "eng_Latn",
                 "tgt_lang": "pcm_Latn",
                 "max_length": 512,
-            }
+            },
         }
         for _attempt in range(3):
             resp = requests.post(API_URL, headers=headers, json=payload, timeout=30)
@@ -66,9 +66,9 @@ def translate_batch(token: str, texts: list[str]) -> list[str]:
             results.append(translated)
             break
         else:
-            results.append(text)   # fallback to English on repeated failure
+            results.append(text)  # fallback to English on repeated failure
 
-        time.sleep(0.2)   # gentle pacing
+        time.sleep(0.2)  # gentle pacing
 
     return results
 
@@ -107,7 +107,8 @@ def main() -> None:
     # Keys to translate: those whose current value equals the en_GB or en_US value
     # (meaning they were filled with English, not actually translated)
     to_translate = {
-        k: v for k, v in en.items()
+        k: v
+        for k, v in en.items()
         if pcm.get(k) == en_gb.get(k, v) or pcm.get(k) == v
         # Keep any key where the pcm value differs from both English versions
         # (those were hand-translated by whoever originally built pcm_NG.json)
@@ -124,14 +125,14 @@ def main() -> None:
     print(f"Keys to translate into Nigerian Pidgin: {len(to_translate)}")
     print(f"(Keys already genuinely translated: {len(pcm) - len(to_translate)})\n")
 
-    keys   = list(to_translate.keys())
+    keys = list(to_translate.keys())
     values = list(to_translate.values())
 
     translated_count = 0
     total = len(keys)
 
     for i, (key, eng_text) in enumerate(zip(keys, values, strict=False)):
-        print(f"  [{i+1}/{total}] {key[:50]:<50}  ", end="", flush=True)
+        print(f"  [{i + 1}/{total}] {key[:50]:<50}  ", end="", flush=True)
         try:
             result = translate_batch(token, [eng_text])
             pcm[key] = result[0]
@@ -146,7 +147,7 @@ def main() -> None:
         # Save progress every 50 keys so a crash doesn't lose everything
         if (i + 1) % 50 == 0:
             _save(pcm_path, meta, pcm, en)
-            print(f"  --- checkpoint saved ({i+1}/{total}) ---")
+            print(f"  --- checkpoint saved ({i + 1}/{total}) ---")
 
     _save(pcm_path, meta, pcm, en)
     print(f"\nDone. Translated {translated_count}/{total} strings into Nigerian Pidgin.")

@@ -25,6 +25,7 @@ Classes that existed before keep their names, and their old base classes too
 (RuntimeError, OSError, FileNotFoundError, TimeoutError) so handlers written
 for those still catch them.  Always ``raise NewError(...) from exc``.
 """
+
 from __future__ import annotations
 
 

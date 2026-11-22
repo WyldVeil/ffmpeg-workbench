@@ -13,6 +13,7 @@ from core import ffmpeg as ff
 
 def test_recording_names_never_overwrite(tmp_path):
     from core import recorder
+
     a = recorder.recording_name(str(tmp_path), "Clip {date}", ".mp4")
     open(a, "w").close()
     b = recorder.recording_name(str(tmp_path), "Clip {date}", ".mp4")
@@ -21,21 +22,32 @@ def test_recording_names_never_overwrite(tmp_path):
 
 def test_ffmpeg_command_layout():
     from core import recorder
-    cmd = recorder.ffmpeg_command(["-f", "lavfi", "-i", "testsrc"], ["mon.monitor", "default"], "/x/o.mp4",
-                                  ["-c:v", "libx264"], seconds=5)
+
+    cmd = recorder.ffmpeg_command(
+        ["-f", "lavfi", "-i", "testsrc"],
+        ["mon.monitor", "default"],
+        "/x/o.mp4",
+        ["-c:v", "libx264"],
+        seconds=5,
+    )
     joined = " ".join(cmd)
     assert "amix=inputs=2:duration=longest:normalize=0" in joined
-    assert cmd.index("-t") > cmd.index("-c:v")                    # output option, after all inputs
-    assert "+frag_keyframe" in joined                              # crash-safe MP4
+    assert cmd.index("-t") > cmd.index("-c:v")  # output option, after all inputs
+    assert "+frag_keyframe" in joined  # crash-safe MP4
 
 
 @pytest.mark.ffmpeg
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX signal path")
 def test_recording_stops_cleanly_and_is_playable(tmp_path):
     from core import recorder
+
     out = str(tmp_path / "rec.mp4")
-    cmd = recorder.ffmpeg_command(["-re", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30"], [], out,
-                                  ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"])
+    cmd = recorder.ffmpeg_command(
+        ["-re", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30"],
+        [],
+        out,
+        ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"],
+    )
     ended = {}
     rec = recorder.Recording(cmd, out, on_exit=lambda r, rc: ended.setdefault("rc", rc))
     time.sleep(2.0)
@@ -49,8 +61,11 @@ def test_recording_stops_cleanly_and_is_playable(tmp_path):
 @pytest.mark.ffmpeg
 def test_recording_failure_is_noticed(tmp_path):
     from core import recorder
+
     out = str(tmp_path / "bad.mp4")
-    cmd = recorder.ffmpeg_command(["-f", "lavfi", "-i", "nosuchsource"], [], out, ["-c:v", "libx264"])
+    cmd = recorder.ffmpeg_command(
+        ["-f", "lavfi", "-i", "nosuchsource"], [], out, ["-c:v", "libx264"]
+    )
     ended = {}
     rec = recorder.Recording(cmd, out, on_exit=lambda r, rc: ended.setdefault("rc", rc))
     for _ in range(50):
@@ -63,6 +78,7 @@ def test_recording_failure_is_noticed(tmp_path):
 @pytest.mark.gui
 def test_settings_pages_do_not_revert_other_changes(ui):
     from core import settings
+
     ui.reset()
     page = ui.open("Advanced Settings")
     settings.update({"favourites": ["Audio Mixer"], "test_marker": "kept"})
@@ -75,8 +91,13 @@ def test_settings_pages_do_not_revert_other_changes(ui):
 def test_system_info_has_no_addresses(ui, monkeypatch):
     import tkinter as tk
     import urllib.request
+
     calls = []
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(OSError()),
+    )
     ui.reset()
     page = ui.open("Advanced Settings")
     area = tk.Text(page)
@@ -91,6 +112,7 @@ def test_system_info_has_no_addresses(ui, monkeypatch):
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -99,12 +121,29 @@ def ui():
 @pytest.mark.parametrize("op", ["to_mp4", "loudness", "strip_meta", "resize", "audio_mp3"])
 def test_batch_operations(ui, media, tmp_path, op):
     from tabs.system.batch import OPERATION_LIST
+
     a = tmp_path / "a" / "clip.mkv"
     b = tmp_path / "b" / "clip.mkv"
     for f in (a, b):
         f.parent.mkdir()
-    subprocess.run([ff.ffmpeg_path(), "-y", "-loglevel", "error", "-i", media["h264_1080p25"], "-c", "copy",
-                    "-metadata", "title=secret", "-metadata:s:a:0", "language=eng", str(a)], check=True)
+    subprocess.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            media["h264_1080p25"],
+            "-c",
+            "copy",
+            "-metadata",
+            "title=secret",
+            "-metadata:s:a:0",
+            "language=eng",
+            str(a),
+        ],
+        check=True,
+    )
     shutil.copyfile(a, b)
     out = tmp_path / "out"
     ui.reset()
@@ -119,7 +158,7 @@ def test_batch_operations(ui, media, tmp_path, op):
     ui.wait_idle(300)
     assert not ui.dialogs.errors(), ui.dialogs.errors()
     made = sorted(os.listdir(out))
-    assert len(made) == 2 and len(set(made)) == 2, made           # same names never overwrite
+    assert len(made) == 2 and len(set(made)) == 2, made  # same names never overwrite
     first = ff.probe(str(out / made[0]), use_cache=False)
     if op == "strip_meta":
         assert "title" not in first.tags and first.require_audio().tags.get("language") == "eng"
@@ -132,6 +171,7 @@ def test_batch_operations(ui, media, tmp_path, op):
 @pytest.mark.gui
 def test_network_page_situations(ui):
     from core import network as net
+
     ui.reset()
     page = ui.open("Advanced Settings")
     clash = next(t for t, sid in page._net_app_labels.items() if sid == "clash")
@@ -141,7 +181,11 @@ def test_network_page_situations(ui):
     page._net_vars["network.tor_retries"].set("5")
     page._net_save()
     c = net.get()
-    assert (net.mode(c), c["network.proxy_port"], c["network.proxy_scheme"]) == ("manual", "7890", "http")
+    assert (net.mode(c), c["network.proxy_port"], c["network.proxy_scheme"]) == (
+        "manual",
+        "7890",
+        "http",
+    )
     assert net.tor_retries(c) == 5
     page._net_situation_var.set("auto")
     page._net_choose("auto")

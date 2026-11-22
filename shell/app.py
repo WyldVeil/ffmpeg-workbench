@@ -7,6 +7,7 @@ tool versions are separate objects, each in its own module, wired together
 here.  The window itself only routes between them and offers pages the small
 :class:`~tabs.kit.contracts.Shell` interface.
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,7 +55,7 @@ logger = logging.getLogger("crossfader.shell")
 class App(tk.Tk):
     def __init__(self) -> None:
         _scaling.prepare()
-        super().__init__(className="wyldveil-media-editor")      # WM_CLASS: matches the .desktop file
+        super().__init__(className="wyldveil-media-editor")  # WM_CLASS: matches the .desktop file
         _scaling.apply(self)
         self._set_icons()
         # thread-safe UI calls, logging and crash reports first: everything below relies on them
@@ -62,7 +63,7 @@ class App(tk.Tk):
         logs.setup(debug="--debug" in sys.argv)
         logs.install_excepthooks(self)
         encoders.detect_in_background()
-        capabilities.warm()                          # what this FFmpeg can do, learned off the UI thread
+        capabilities.warm()  # what this FFmpeg can do, learned off the UI thread
 
         self.title(f"{APP_NAME}  ·  {APP_VERSION}")
         self._size_window()
@@ -70,21 +71,29 @@ class App(tk.Tk):
         self._recent_job: str | None = None
         self.debug_mode = tk.BooleanVar(master=self, value=False)
         self.skin = get_skin(load_skin_name())
-        apply_default_options(self, self.skin)        # before any page widget exists
+        apply_default_options(self, self.skin)  # before any page widget exists
         ttk.Style().theme_use("clam")
         apply_ttk_styles(self.skin)
 
-        self.statusbar = StatusBar(self, self.skin, on_queue_click=lambda: self.show_page(ToolId.ENCODE_QUEUE),
-                                   on_ffmpeg_click=lambda: self.versions.explain_ffmpeg(),
-                                   on_ytdlp_click=lambda: self.versions.update_ytdlp())
+        self.statusbar = StatusBar(
+            self,
+            self.skin,
+            on_queue_click=lambda: self.show_page(ToolId.ENCODE_QUEUE),
+            on_ffmpeg_click=lambda: self.versions.explain_ffmpeg(),
+            on_ytdlp_click=lambda: self.versions.update_ytdlp(),
+        )
         self.statusbar.pack(side="bottom", fill="x")
         self.versions = ToolVersions(self, self.statusbar, self.set_status)
 
         body = tk.Frame(self, bg=self.skin["sb_bg"])
         body.pack(fill="both", expand=True)
-        self.sidebar = Sidebar(body, self.skin, on_select=self.show_page, debug_mode=self.debug_mode)
+        self.sidebar = Sidebar(
+            body, self.skin, on_select=self.show_page, debug_mode=self.debug_mode
+        )
         self.sidebar.pack(side="left", fill="y")
-        tk.Frame(body, bg=self.skin.get("border", "#2C2C2C"), width=px(1)).pack(side="left", fill="y")
+        tk.Frame(body, bg=self.skin.get("border", "#2C2C2C"), width=px(1)).pack(
+            side="left", fill="y"
+        )
         self.content = tk.Frame(body, bg=self.skin["content"])
         self.content.pack(side="right", fill="both", expand=True)
         self._build_top_bar()
@@ -92,16 +101,34 @@ class App(tk.Tk):
         area.pack(side="top", fill="both", expand=True)
         self.pages = PageHost(area, self.show_page)
 
-        menubar = menus.build(self, self.skin, menus.MenuActions(
-            show=self.show_page, open_files=lambda: self.files.ask(), open_output_folder=self._open_output_folder,
-            quit=self.quit_app, set_theme=self.apply_theme, scroll_sidebar_top=self.sidebar.scroll_top,
-            expand_sidebar=self.sidebar.expand_all, shortcuts=self._show_shortcuts,
-            system_info=self._show_system_info, check_updates=lambda: self.versions.check_all(),
-            open_logs=lambda: open_in_explorer(log_dir()), about=self._show_about),
-            debug_mode=self.debug_mode, theme=load_skin_name())
+        menubar = menus.build(
+            self,
+            self.skin,
+            menus.MenuActions(
+                show=self.show_page,
+                open_files=lambda: self.files.ask(),
+                open_output_folder=self._open_output_folder,
+                quit=self.quit_app,
+                set_theme=self.apply_theme,
+                scroll_sidebar_top=self.sidebar.scroll_top,
+                expand_sidebar=self.sidebar.expand_all,
+                shortcuts=self._show_shortcuts,
+                system_info=self._show_system_info,
+                check_updates=lambda: self.versions.check_all(),
+                open_logs=lambda: open_in_explorer(log_dir()),
+                about=self._show_about,
+            ),
+            debug_mode=self.debug_mode,
+            theme=load_skin_name(),
+        )
         self._theme_var = menubar.theme
-        self.files = FileOpener(self, menubar.recent, current=lambda: (self.pages.current, self.current()),
-                                show=self.show_page, loaded=self._file_loaded)
+        self.files = FileOpener(
+            self,
+            menubar.recent,
+            current=lambda: (self.pages.current, self.current()),
+            show=self.show_page,
+            loaded=self._file_loaded,
+        )
         self.bind("<Control-o>", lambda _e: self.files.ask())
         self.shortcuts = Shortcuts(self, self.current, self.stop_previews)
         self.wheel = WheelRouter(self, lambda: (self.sidebar, self.sidebar.canvas))
@@ -120,8 +147,10 @@ class App(tk.Tk):
     # ── Building ──────────────────────────────────────────────────────────────
     def _set_icons(self) -> None:
         try:
-            self._icons = [tk.PhotoImage(master=self, file=resource_path("assets", "icons", f"app_{n}.png"))
-                           for n in (256, 128, 64, 48, 32, 16)]
+            self._icons = [
+                tk.PhotoImage(master=self, file=resource_path("assets", "icons", f"app_{n}.png"))
+                for n in (256, 128, 64, 48, 32, 16)
+            ]
             self.iconphoto(True, *self._icons)
         except tk.TclError:
             logger.info("window icons not found")
@@ -139,16 +168,31 @@ class App(tk.Tk):
         bar = tk.Frame(self.content, bg=skin["panel"], height=px(32))
         bar.pack(side="top", fill="x")
         bar.pack_propagate(False)
+
         def button(text: str, tool: ToolId) -> tk.Button:
-            return tk.Button(bar, text=text, font=(UI_FONT, 9, "bold"), bg=skin["panel"], fg=skin["fg"],
-                             activebackground=skin.get("sb_hover", "#2A2A2A"), activeforeground="#FFFFFF",
-                             relief="flat", cursor="hand2", bd=0, padx=px(14), pady=px(4),
-                             command=lambda: self.show_page(tool))
+            return tk.Button(
+                bar,
+                text=text,
+                font=(UI_FONT, 9, "bold"),
+                bg=skin["panel"],
+                fg=skin["fg"],
+                activebackground=skin.get("sb_hover", "#2A2A2A"),
+                activeforeground="#FFFFFF",
+                relief="flat",
+                cursor="hand2",
+                bd=0,
+                padx=px(14),
+                pady=px(4),
+                command=lambda: self.show_page(tool),
+            )
+
         self.start_button = button("🧭  Start", ToolId.START)
         self.start_button.pack(side="left", padx=px(10, 0), pady=px(4))
         self.home_button = button("🏠  Home", ToolId.HOME)
         self.home_button.pack(side="left", padx=px(4), pady=px(4))
-        tk.Frame(self.content, bg=skin.get("border", "#2C2C2C"), height=px(1)).pack(side="top", fill="x")
+        tk.Frame(self.content, bg=skin.get("border", "#2C2C2C"), height=px(1)).pack(
+            side="top", fill="x"
+        )
 
     # ── The Shell contract (tabs/kit/contracts.py) ────────────────────────────
     def show_page(self, tool: ToolId | str) -> tk.Misc | None:
@@ -189,10 +233,12 @@ class App(tk.Tk):
     def apply_theme(self, name: str) -> None:
         if name != load_skin_name():
             save_skin_name(name)
-        self.skin = apply_skin(self, sidebar=self.sidebar, content=self.content, stars_behind=self.sidebar.inner)
+        self.skin = apply_skin(
+            self, sidebar=self.sidebar, content=self.content, stars_behind=self.sidebar.inner
+        )
         self.sidebar.recolour(self.skin)
         self.statusbar.recolour(self.skin)
-        self.versions.check_ffmpeg()                  # describes FFmpeg in the theme's colours
+        self.versions.check_ffmpeg()  # describes FFmpeg in the theme's colours
         self._theme_var.set(name)
 
     # ── Used by tools and the command line ────────────────────────────────────
@@ -248,7 +294,11 @@ class App(tk.Tk):
     def _open_output_folder(self) -> None:
         folder = ""
         page = self.current()
-        for attr in ("_out_var", "out_var", "out_path_var"):      # the usual names for a tool's output box
+        for attr in (
+            "_out_var",
+            "out_var",
+            "out_path_var",
+        ):  # the usual names for a tool's output box
             var = getattr(page, attr, None)
             if isinstance(var, tk.Variable):
                 value = str(var.get()).strip()
@@ -279,7 +329,9 @@ class App(tk.Tk):
             "A free, self-contained video and audio toolkit powered by FFmpeg.\n\n"
             f"{count} tools  ·  FFmpeg {version_of()}  ·  {platform.system()} {platform.machine()}\n\n"
             "https://github.com/WyldVeil/wyldveils-media-editor\n"
-            "Third-party licences: see THIRD_PARTY_NOTICES.md", parent=self)
+            "Third-party licences: see THIRD_PARTY_NOTICES.md",
+            parent=self,
+        )
 
     # ── Quitting ──────────────────────────────────────────────────────────────
     def quit_app(self) -> None:
@@ -288,19 +340,22 @@ class App(tk.Tk):
         busy = queue.active_tasks()
         if busy:
             if not messagebox.askyesno(
-                    "Jobs still running", f"{len(busy)} render job(s) are still running or waiting.\n\n"
-                    "Stop them and quit? Unfinished files will be removed.", parent=self):
+                "Jobs still running",
+                f"{len(busy)} render job(s) are still running or waiting.\n\n"
+                "Stop them and quit? Unfinished files will be removed.",
+                parent=self,
+            ):
                 return
             queue.cancel_all()
         for page in self.pages.built():
             if isinstance(page, ClosingAware):
                 try:
                     page.on_app_closing()
-                except Exception:                    # one page's clean-up failing must not stop the others
+                except Exception:  # one page's clean-up failing must not stop the others
                     logger.exception("on_app_closing failed in %s", type(page).__name__)
         self.stop_previews()
         if self._recent_job is not None:
             self._save_recent_tools()
-        tasks.shutdown()                             # queued background jobs are dropped...
-        proc.kill_all()                              # ...and running ones end with their programs
+        tasks.shutdown()  # queued background jobs are dropped...
+        proc.kill_all()  # ...and running ones end with their programs
         self.destroy()

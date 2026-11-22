@@ -17,6 +17,7 @@ GPU from ``nvidia-smi``.  This module replaces that with:
 Results of the hardware probe are cached in memory and on disk (keyed by the
 FFmpeg binary) so start-up stays fast.
 """
+
 from __future__ import annotations
 
 import glob
@@ -41,65 +42,111 @@ HW_KINDS = ("nvenc", "qsv", "vaapi", "amf", "videotoolbox")
 
 #: Legacy UI labels used throughout the old tabs -> quality keys.
 QUALITY_LABELS = {
-    "Very High": "very_high", "High": "high", "Good": "good",
-    "Medium": "good", "Low": "low", "Lowest": "lowest",
+    "Very High": "very_high",
+    "High": "high",
+    "Good": "good",
+    "Medium": "good",
+    "Low": "low",
+    "Lowest": "lowest",
 }
 
 HW_LABELS = {
-    "nvenc": "NVIDIA NVENC", "qsv": "Intel Quick Sync", "vaapi": "VA-API",
-    "amf": "AMD AMF", "videotoolbox": "Apple VideoToolbox",
+    "nvenc": "NVIDIA NVENC",
+    "qsv": "Intel Quick Sync",
+    "vaapi": "VA-API",
+    "amf": "AMD AMF",
+    "videotoolbox": "Apple VideoToolbox",
 }
 
 _SOFTWARE = {
-    "h264": "libx264", "hevc": "libx265", "av1": "libsvtav1", "vp9": "libvpx-vp9",
-    "vp8": "libvpx", "prores": "prores_ks", "dnxhr": "dnxhd", "ffv1": "ffv1",
-    "mpeg4": "mpeg4", "mjpeg": "mjpeg", "gif": "gif", "png": "png",
+    "h264": "libx264",
+    "hevc": "libx265",
+    "av1": "libsvtav1",
+    "vp9": "libvpx-vp9",
+    "vp8": "libvpx",
+    "prores": "prores_ks",
+    "dnxhr": "dnxhd",
+    "ffv1": "ffv1",
+    "mpeg4": "mpeg4",
+    "mjpeg": "mjpeg",
+    "gif": "gif",
+    "png": "png",
 }
 _SOFTWARE_FALLBACKS = {"av1": ("libsvtav1", "libaom-av1", "librav1e")}
 
 _HW = {
-    ("h264", "nvenc"): "h264_nvenc", ("hevc", "nvenc"): "hevc_nvenc", ("av1", "nvenc"): "av1_nvenc",
-    ("h264", "qsv"): "h264_qsv", ("hevc", "qsv"): "hevc_qsv", ("av1", "qsv"): "av1_qsv", ("vp9", "qsv"): "vp9_qsv",
-    ("h264", "vaapi"): "h264_vaapi", ("hevc", "vaapi"): "hevc_vaapi", ("av1", "vaapi"): "av1_vaapi", ("vp9", "vaapi"): "vp9_vaapi",
-    ("h264", "amf"): "h264_amf", ("hevc", "amf"): "hevc_amf", ("av1", "amf"): "av1_amf",
-    ("h264", "videotoolbox"): "h264_videotoolbox", ("hevc", "videotoolbox"): "hevc_videotoolbox",
+    ("h264", "nvenc"): "h264_nvenc",
+    ("hevc", "nvenc"): "hevc_nvenc",
+    ("av1", "nvenc"): "av1_nvenc",
+    ("h264", "qsv"): "h264_qsv",
+    ("hevc", "qsv"): "hevc_qsv",
+    ("av1", "qsv"): "av1_qsv",
+    ("vp9", "qsv"): "vp9_qsv",
+    ("h264", "vaapi"): "h264_vaapi",
+    ("hevc", "vaapi"): "hevc_vaapi",
+    ("av1", "vaapi"): "av1_vaapi",
+    ("vp9", "vaapi"): "vp9_vaapi",
+    ("h264", "amf"): "h264_amf",
+    ("hevc", "amf"): "hevc_amf",
+    ("av1", "amf"): "av1_amf",
+    ("h264", "videotoolbox"): "h264_videotoolbox",
+    ("hevc", "videotoolbox"): "hevc_videotoolbox",
     ("prores", "videotoolbox"): "prores_videotoolbox",
 }
 
 # Constant-quality values per encoder family, indexed by QUALITIES.
 _Q = {
-    "libx264":      (16, 19, 22, 26, 30),     # -crf
-    "libx265":      (18, 21, 24, 28, 32),     # -crf
-    "libsvtav1":    (22, 28, 34, 40, 48),     # -crf (0-63)
-    "libaom-av1":   (22, 28, 34, 40, 48),     # -crf + -b:v 0
-    "librav1e":     (60, 80, 100, 130, 160),  # -qp (0-255)
-    "libvpx-vp9":   (20, 28, 33, 38, 45),     # -crf + -b:v 0
-    "libvpx":       (6, 10, 16, 24, 32),      # -crf (4-63) + -b:v cap
-    "nvenc":        (17, 20, 24, 28, 32),     # -cq (h264)
-    "nvenc_hevc":   (19, 22, 26, 30, 34),     # -cq (hevc)
-    "nvenc_av1":    (24, 30, 36, 42, 50),     # -cq (0-63)
-    "qsv":          (18, 21, 24, 28, 32),     # -global_quality (ICQ)
-    "vaapi":        (18, 21, 24, 28, 32),     # -qp with -rc_mode CQP
-    "amf":          (18, 21, 24, 28, 32),     # -qp_i/-qp_p/-qp_b with -rc cqp
-    "videotoolbox": (75, 65, 55, 45, 35),     # -q:v (1-100, higher = better)
-    "mpeg4":        (2, 3, 5, 8, 12),         # -q:v (2-31, lower = better)
-    "mjpeg":        (2, 3, 5, 8, 12),
+    "libx264": (16, 19, 22, 26, 30),  # -crf
+    "libx265": (18, 21, 24, 28, 32),  # -crf
+    "libsvtav1": (22, 28, 34, 40, 48),  # -crf (0-63)
+    "libaom-av1": (22, 28, 34, 40, 48),  # -crf + -b:v 0
+    "librav1e": (60, 80, 100, 130, 160),  # -qp (0-255)
+    "libvpx-vp9": (20, 28, 33, 38, 45),  # -crf + -b:v 0
+    "libvpx": (6, 10, 16, 24, 32),  # -crf (4-63) + -b:v cap
+    "nvenc": (17, 20, 24, 28, 32),  # -cq (h264)
+    "nvenc_hevc": (19, 22, 26, 30, 34),  # -cq (hevc)
+    "nvenc_av1": (24, 30, 36, 42, 50),  # -cq (0-63)
+    "qsv": (18, 21, 24, 28, 32),  # -global_quality (ICQ)
+    "vaapi": (18, 21, 24, 28, 32),  # -qp with -rc_mode CQP
+    "amf": (18, 21, 24, 28, 32),  # -qp_i/-qp_p/-qp_b with -rc cqp
+    "videotoolbox": (75, 65, 55, 45, 35),  # -q:v (1-100, higher = better)
+    "mpeg4": (2, 3, 5, 8, 12),  # -q:v (2-31, lower = better)
+    "mjpeg": (2, 3, 5, 8, 12),
 }
 
-_X26X_PRESET = {"fastest": "ultrafast", "fast": "veryfast", "balanced": "medium",
-                "slow": "slow", "slowest": "veryslow"}
+_X26X_PRESET = {
+    "fastest": "ultrafast",
+    "fast": "veryfast",
+    "balanced": "medium",
+    "slow": "slow",
+    "slowest": "veryslow",
+}
 _SVT_PRESET = {"fastest": 12, "fast": 10, "balanced": 8, "slow": 5, "slowest": 3}
 _AOM_CPU = {"fastest": 8, "fast": 6, "balanced": 4, "slow": 3, "slowest": 1}
 _VPX_CPU = {"fastest": 5, "fast": 4, "balanced": 2, "slow": 1, "slowest": 0}
 _NVENC_PRESET = {"fastest": "p1", "fast": "p3", "balanced": "p5", "slow": "p6", "slowest": "p7"}
-_QSV_PRESET = {"fastest": "veryfast", "fast": "faster", "balanced": "medium",
-               "slow": "slow", "slowest": "veryslow"}
-_AMF_QUALITY = {"fastest": "speed", "fast": "speed", "balanced": "balanced",
-                "slow": "quality", "slowest": "quality"}
+_QSV_PRESET = {
+    "fastest": "veryfast",
+    "fast": "faster",
+    "balanced": "medium",
+    "slow": "slow",
+    "slowest": "veryslow",
+}
+_AMF_QUALITY = {
+    "fastest": "speed",
+    "fast": "speed",
+    "balanced": "balanced",
+    "slow": "quality",
+    "slowest": "quality",
+}
 _PRORES_PROFILE = {"very_high": 3, "high": 3, "good": 2, "low": 1, "lowest": 0}
-_DNXHR_PROFILE = {"very_high": ("dnxhr_hqx", "yuv422p10le"), "high": ("dnxhr_hq", "yuv422p"),
-                  "good": ("dnxhr_sq", "yuv422p"), "low": ("dnxhr_lb", "yuv422p"),
-                  "lowest": ("dnxhr_lb", "yuv422p")}
+_DNXHR_PROFILE = {
+    "very_high": ("dnxhr_hqx", "yuv422p10le"),
+    "high": ("dnxhr_hq", "yuv422p"),
+    "good": ("dnxhr_sq", "yuv422p"),
+    "low": ("dnxhr_lb", "yuv422p"),
+    "lowest": ("dnxhr_lb", "yuv422p"),
+}
 
 
 def quality_key(value: str) -> str:
@@ -112,19 +159,21 @@ def quality_key(value: str) -> str:
 # ── Encoder discovery ────────────────────────────────────────────────────────
 
 _lock = threading.Lock()
-_ENCODERS: dict[str, set] = {}          # ffmpeg path -> encoder names
-_HW_OK: dict[str, dict] = {}            # ffmpeg path -> {kind: bool}
-_VAAPI_DEVICE: dict[str, str] = {}      # ffmpeg path -> render node
+_ENCODERS: dict[str, set] = {}  # ffmpeg path -> encoder names
+_HW_OK: dict[str, dict] = {}  # ffmpeg path -> {kind: bool}
+_VAAPI_DEVICE: dict[str, str] = {}  # ffmpeg path -> render node
 
 
 def _ffmpeg() -> str:
     from core.hardware import get_binary_path
+
     return get_binary_path("ffmpeg")
 
 
 def _cache_file() -> str | None:
     try:
         from core.paths import cache_dir
+
         return os.path.join(cache_dir(), "encoders.json")
     except Exception:
         logger.debug("_cache_file: best-effort step failed", exc_info=True)
@@ -212,7 +261,9 @@ def _hw_test(ff: str, kind: str) -> bool:
     attempts = []
     if kind == "vaapi":
         for node in _vaapi_nodes():
-            attempts.append((node, [*base, "-vaapi_device", node, *src, "-vf", "format=nv12,hwupload", *tail]))
+            attempts.append(
+                (node, [*base, "-vaapi_device", node, *src, "-vf", "format=nv12,hwupload", *tail])
+            )
     elif kind == "qsv":
         attempts.append((None, base + src + ["-pix_fmt", "nv12"] + tail))
     else:
@@ -284,6 +335,7 @@ def _setting_hw_mode() -> str:
 
 # ── Video arguments ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class VideoEncode:
     """Everything needed to encode video with a chosen encoder.
@@ -294,6 +346,7 @@ class VideoEncode:
     * ``filter_suffix`` - must be appended to the END of the video filter
       chain (VAAPI upload).  Use :meth:`vf` to merge it with your own chain.
     """
+
     encoder: str
     codec: str
     hw: str | None = None
@@ -337,10 +390,19 @@ def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, str | No
     return _SOFTWARE.get(codec, codec), None
 
 
-def video(codec: str = "h264", quality: str = "high", *, speed: str = "balanced",
-          hw: str = "auto", ten_bit: bool = False, container: str = "mp4",
-          bitrate: str | None = None, maxrate: str | None = None,
-          gop_seconds: float | None = None, fps: float | None = None) -> VideoEncode:
+def video(
+    codec: str = "h264",
+    quality: str = "high",
+    *,
+    speed: str = "balanced",
+    hw: str = "auto",
+    ten_bit: bool = False,
+    container: str = "mp4",
+    bitrate: str | None = None,
+    maxrate: str | None = None,
+    gop_seconds: float | None = None,
+    fps: float | None = None,
+) -> VideoEncode:
     """Build arguments for encoding video.
 
     *quality* uses :data:`QUALITIES` (legacy labels such as ``"High"`` are
@@ -376,7 +438,10 @@ def video(codec: str = "h264", quality: str = "high", *, speed: str = "balanced"
         a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libaom-av1"][q]), "-b:v", "0"]
     elif encoder == "librav1e":
         ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += ["-speed", str({"fastest": 10, "fast": 8, "balanced": 6, "slow": 4, "slowest": 2}[speed])]
+        a += [
+            "-speed",
+            str({"fastest": 10, "fast": 8, "balanced": 6, "slow": 4, "slowest": 2}[speed]),
+        ]
         a += ["-b:v", bitrate] if bitrate else ["-qp", str(_Q["librav1e"][q])]
     elif encoder == "libvpx-vp9":
         ve.pix_fmt = pix("yuv420p", "yuv420p10le")
@@ -479,16 +544,25 @@ def container_video_args(container: str, codec: str) -> list:
     if c in ("mp4", "m4v", "mov"):
         out += ["-movflags", "+faststart"]
         if codec == "hevc":
-            out += ["-tag:v", "hvc1"]      # Apple players require hvc1
+            out += ["-tag:v", "hvc1"]  # Apple players require hvc1
     return out
 
 
 # ── Audio arguments ──────────────────────────────────────────────────────────
 
 AUDIO_ENCODERS = {
-    "aac": "aac", "mp3": "libmp3lame", "opus": "libopus", "vorbis": "libvorbis",
-    "flac": "flac", "alac": "alac", "ac3": "ac3", "eac3": "eac3",
-    "pcm16": "pcm_s16le", "pcm24": "pcm_s24le", "wav": "pcm_s16le", "copy": "copy",
+    "aac": "aac",
+    "mp3": "libmp3lame",
+    "opus": "libopus",
+    "vorbis": "libvorbis",
+    "flac": "flac",
+    "alac": "alac",
+    "ac3": "ac3",
+    "eac3": "eac3",
+    "pcm16": "pcm_s16le",
+    "pcm24": "pcm_s24le",
+    "wav": "pcm_s16le",
+    "copy": "copy",
 }
 
 #: Which audio codecs each container accepts (first = default).
@@ -524,9 +598,18 @@ CONTAINER_VIDEO = {
 }
 
 # ffprobe codec_name -> our audio key
-_PROBED_AUDIO = {"aac": "aac", "mp3": "mp3", "opus": "opus", "vorbis": "vorbis",
-                 "flac": "flac", "alac": "alac", "ac3": "ac3", "eac3": "eac3",
-                 "pcm_s16le": "pcm16", "pcm_s24le": "pcm24"}
+_PROBED_AUDIO = {
+    "aac": "aac",
+    "mp3": "mp3",
+    "opus": "opus",
+    "vorbis": "vorbis",
+    "flac": "flac",
+    "alac": "alac",
+    "ac3": "ac3",
+    "eac3": "eac3",
+    "pcm_s16le": "pcm16",
+    "pcm_s24le": "pcm24",
+}
 
 
 def audio_key_from_probe(codec_name: str) -> str | None:
@@ -548,9 +631,15 @@ def default_audio_for(container: str) -> str:
     return allowed[0] if allowed else "aac"
 
 
-def audio(codec: str = "aac", bitrate: str | None = "192k", *,
-          container: str | None = None, channels: int | None = None,
-          sample_rate: int | None = None, vbr_quality: float | None = None) -> list:
+def audio(
+    codec: str = "aac",
+    bitrate: str | None = "192k",
+    *,
+    container: str | None = None,
+    channels: int | None = None,
+    sample_rate: int | None = None,
+    vbr_quality: float | None = None,
+) -> list:
     """Arguments for encoding audio.
 
     *codec* is a key from :data:`AUDIO_ENCODERS` (``"aac"``, ``"opus"`` …) or
@@ -566,7 +655,9 @@ def audio(codec: str = "aac", bitrate: str | None = "192k", *,
     if enc == "copy":
         return a
     if enc == "libmp3lame" or enc == "libvorbis":
-        a += ["-q:a", f"{vbr_quality:g}"] if vbr_quality is not None else ["-b:a", bitrate or "192k"]
+        a += (
+            ["-q:a", f"{vbr_quality:g}"] if vbr_quality is not None else ["-b:a", bitrate or "192k"]
+        )
     elif enc == "libopus":
         a += ["-b:a", bitrate or "128k", "-vbr", "on"]
     elif enc in ("aac", "ac3", "eac3"):
@@ -586,7 +677,14 @@ def summary() -> str:
     """Human-readable capability line for the About / System Info dialogs."""
     hw = hw_available()
     ok = [HW_LABELS[k] for k, v in hw.items() if v]
-    sw = [n for n in ("libx264", "libx265", "libsvtav1", "libvpx-vp9", "libopus")
-          if n in list_encoders()]
-    return ("Hardware encoders: " + (", ".join(ok) if ok else "none detected") +
-            "\nSoftware encoders: " + ", ".join(sw))
+    sw = [
+        n
+        for n in ("libx264", "libx265", "libsvtav1", "libvpx-vp9", "libopus")
+        if n in list_encoders()
+    ]
+    return (
+        "Hardware encoders: "
+        + (", ".join(ok) if ok else "none detected")
+        + "\nSoftware encoders: "
+        + ", ".join(sw)
+    )

@@ -11,6 +11,7 @@ Used by the Start page ("What do you want to do?"):
 * ``suggest(info)`` - tools worth trying on a particular file, each with the
   reason ("It's 1.3 GB", "It contains a GPS location"...).
 """
+
 from __future__ import annotations
 
 import re
@@ -25,7 +26,9 @@ AIO: Final = spec(ToolId.ALL_IN_ONE_BUILDER).name
 
 #: name -> what the Start page shows and searches (icon, blurb, words), for
 #: every tool a person can open (declared in core/tools.py).
-TOOLS: Final[Mapping[str, ToolSpec]] = {s.name: s for s in SPECS if s.category is not Category.HIDDEN}
+TOOLS: Final[Mapping[str, ToolSpec]] = {
+    s.name: s for s in SPECS if s.category is not Category.HIDDEN
+}
 
 
 @dataclass(frozen=True)
@@ -38,46 +41,207 @@ class Goal:
 
 
 GOALS = (
-    Goal("cut", "✂", "Cut, trim & join", "Shorten clips, split them, or put several together",
-         ("Quick Trimmer", "Batch Joiner", "Crossfader", "The Splicer", "Manual Multi-Splitter",
-          "Multi-Clip Sequencer", "Scene Detector", "Silence Remover")),
-    Goal("smaller", "📉", "Make a file smaller", "Fit a size limit or save space",
-         ("Universal Downsizer", "Codec Cruncher", "Resolution Scaler", "WebM Maker", "Proxy Generator",
-          "Compare & Quality")),
-    Goal("social", "📱", "Post on social media", "Vertical versions, GIFs, thumbnails, chapters",
-         ("The Shortifier", "Smart Reframe", "Pro GIF Maker", "Thumbnail Maker", "Chapter Markers",
-          "Auto-Subtitles", "Universal Downsizer")),
-    Goal("convert", "🔄", "Convert to another format", "MP4, MKV, MOV, WebM, MP3, GIF...",
-         ("Format Converter", "Tracks & Remux", "Audio Converter", "Codec Cruncher", "HDR to SDR",
-          "Audio Extractor", "WebM Maker", "Pro GIF Maker")),
-    Goal("text", "💬", "Subtitles, titles & text", "Captions from speech, titles, watermarks",
-         ("Auto-Subtitles", "Hard-Subber", "Tracks & Remux", "Animated Titles", "Intro/Outro Maker",
-          "Watermarker", "Image Watermark", "Karaoke Generator")),
-    Goal("sound", "🔊", "Fix the sound", "Too quiet, noisy, out of sync, long pauses",
-         ("Loudness Normalizer", "Voice Isolation", "Silence Remover", "Audio Sync Shifter", "Audio Dynamics",
-          "The Muter", "Laugh Track Remover", "Waveform Editor")),
-    Goal("music", "🎵", "Music, voice & mixing", "Soundtracks, voice-overs, karaoke",
-         ("Audio Mixer", "Music Ducker", "Audio Replacer", "TTS Voice-Over", "Voice Changer", "Audio Extractor",
-          "Karaoke Generator", "Beat Sync Cutter", "MIDIfier")),
-    Goal("look", "🎨", "Colour & look", "Brighter, warmer, cinematic, matching",
-         ("Basic Color Corrector", "LUT Applicator", "Colour Match", "Special Effects", "Green Screen Keyer",
-          "Video Scopes")),
-    Goal("repair", "🩹", "Repair a video", "Shaky, noisy, sideways, washed out, interlaced, black bars",
-         ("Deshaker", "Denoise", "Rotate & Flip", "HDR to SDR", "Sharpen", "Deinterlace", "Auto-Cropper",
-          "Manual Crop", "Framerate Interpolator", "Resolution Scaler")),
-    Goal("motion", "✨", "Effects, speed & motion", "Slow motion, zooms, reverse, freeze, loops",
-         ("Speed Ramper", "Framerate Interpolator", "Animated Zoom", "Video Reverser", "Freeze Frame",
-          "Clip Looper", "Special Effects", "Transition Studio")),
-    Goal("combine", "🧩", "Combine & create", "Collages, picture-in-picture, slideshows, intros",
-         ("Video Collage", "Side-by-Side", "Picture-in-Picture", "Slideshow Maker", "Intro/Outro Maker",
-          AIO, "Media Generator")),
-    Goal("privacy", "🔒", "Privacy", "Remove location and names, blur faces, bleep words",
-         ("Metadata Cleaner", "Privacy Blur", "The Muter", "Voice Changer")),
-    Goal("get", "⬇", "Download & record", "From YouTube and 1000+ sites, or your screen",
-         ("Video Downloader", "Screen Recorder", "Snapshot", "Frame Extractor")),
-    Goal("manage", "🧰", "Inspect, batch & automate", "File details, folders of files, job queue",
-         ("Media Inspector", "Compare & Quality", "Batch Processor", "Encode Queue", "Preset Manager",
-          "Advanced Settings")),
+    Goal(
+        "cut",
+        "✂",
+        "Cut, trim & join",
+        "Shorten clips, split them, or put several together",
+        (
+            "Quick Trimmer",
+            "Batch Joiner",
+            "Crossfader",
+            "The Splicer",
+            "Manual Multi-Splitter",
+            "Multi-Clip Sequencer",
+            "Scene Detector",
+            "Silence Remover",
+        ),
+    ),
+    Goal(
+        "smaller",
+        "📉",
+        "Make a file smaller",
+        "Fit a size limit or save space",
+        (
+            "Universal Downsizer",
+            "Codec Cruncher",
+            "Resolution Scaler",
+            "WebM Maker",
+            "Proxy Generator",
+            "Compare & Quality",
+        ),
+    ),
+    Goal(
+        "social",
+        "📱",
+        "Post on social media",
+        "Vertical versions, GIFs, thumbnails, chapters",
+        (
+            "The Shortifier",
+            "Smart Reframe",
+            "Pro GIF Maker",
+            "Thumbnail Maker",
+            "Chapter Markers",
+            "Auto-Subtitles",
+            "Universal Downsizer",
+        ),
+    ),
+    Goal(
+        "convert",
+        "🔄",
+        "Convert to another format",
+        "MP4, MKV, MOV, WebM, MP3, GIF...",
+        (
+            "Format Converter",
+            "Tracks & Remux",
+            "Audio Converter",
+            "Codec Cruncher",
+            "HDR to SDR",
+            "Audio Extractor",
+            "WebM Maker",
+            "Pro GIF Maker",
+        ),
+    ),
+    Goal(
+        "text",
+        "💬",
+        "Subtitles, titles & text",
+        "Captions from speech, titles, watermarks",
+        (
+            "Auto-Subtitles",
+            "Hard-Subber",
+            "Tracks & Remux",
+            "Animated Titles",
+            "Intro/Outro Maker",
+            "Watermarker",
+            "Image Watermark",
+            "Karaoke Generator",
+        ),
+    ),
+    Goal(
+        "sound",
+        "🔊",
+        "Fix the sound",
+        "Too quiet, noisy, out of sync, long pauses",
+        (
+            "Loudness Normalizer",
+            "Voice Isolation",
+            "Silence Remover",
+            "Audio Sync Shifter",
+            "Audio Dynamics",
+            "The Muter",
+            "Laugh Track Remover",
+            "Waveform Editor",
+        ),
+    ),
+    Goal(
+        "music",
+        "🎵",
+        "Music, voice & mixing",
+        "Soundtracks, voice-overs, karaoke",
+        (
+            "Audio Mixer",
+            "Music Ducker",
+            "Audio Replacer",
+            "TTS Voice-Over",
+            "Voice Changer",
+            "Audio Extractor",
+            "Karaoke Generator",
+            "Beat Sync Cutter",
+            "MIDIfier",
+        ),
+    ),
+    Goal(
+        "look",
+        "🎨",
+        "Colour & look",
+        "Brighter, warmer, cinematic, matching",
+        (
+            "Basic Color Corrector",
+            "LUT Applicator",
+            "Colour Match",
+            "Special Effects",
+            "Green Screen Keyer",
+            "Video Scopes",
+        ),
+    ),
+    Goal(
+        "repair",
+        "🩹",
+        "Repair a video",
+        "Shaky, noisy, sideways, washed out, interlaced, black bars",
+        (
+            "Deshaker",
+            "Denoise",
+            "Rotate & Flip",
+            "HDR to SDR",
+            "Sharpen",
+            "Deinterlace",
+            "Auto-Cropper",
+            "Manual Crop",
+            "Framerate Interpolator",
+            "Resolution Scaler",
+        ),
+    ),
+    Goal(
+        "motion",
+        "✨",
+        "Effects, speed & motion",
+        "Slow motion, zooms, reverse, freeze, loops",
+        (
+            "Speed Ramper",
+            "Framerate Interpolator",
+            "Animated Zoom",
+            "Video Reverser",
+            "Freeze Frame",
+            "Clip Looper",
+            "Special Effects",
+            "Transition Studio",
+        ),
+    ),
+    Goal(
+        "combine",
+        "🧩",
+        "Combine & create",
+        "Collages, picture-in-picture, slideshows, intros",
+        (
+            "Video Collage",
+            "Side-by-Side",
+            "Picture-in-Picture",
+            "Slideshow Maker",
+            "Intro/Outro Maker",
+            AIO,
+            "Media Generator",
+        ),
+    ),
+    Goal(
+        "privacy",
+        "🔒",
+        "Privacy",
+        "Remove location and names, blur faces, bleep words",
+        ("Metadata Cleaner", "Privacy Blur", "The Muter", "Voice Changer"),
+    ),
+    Goal(
+        "get",
+        "⬇",
+        "Download & record",
+        "From YouTube and 1000+ sites, or your screen",
+        ("Video Downloader", "Screen Recorder", "Snapshot", "Frame Extractor"),
+    ),
+    Goal(
+        "manage",
+        "🧰",
+        "Inspect, batch & automate",
+        "File details, folders of files, job queue",
+        (
+            "Media Inspector",
+            "Compare & Quality",
+            "Batch Processor",
+            "Encode Queue",
+            "Preset Manager",
+            "Advanced Settings",
+        ),
+    ),
 )
 
 
@@ -85,22 +249,98 @@ GOALS = (
 
 #: everyday words -> words the catalogue uses (both spellings, common phrasings)
 ALIASES = {
-    "color": "colour", "colors": "colour", "colours": "colour", "stabilize": "stabilise", "normalize": "normalise",
-    "grey": "gray", "caption": "captions", "subtitle": "subtitles", "subs": "subtitles", "cc": "captions",
-    "shrink": "smaller", "compress": "smaller", "reduce": "smaller", "tiny": "smaller", "huge": "big",
-    "merge": "join", "combine": "join", "concat": "join", "glue": "join", "stitch": "join",
-    "portrait": "vertical", "tiktok": "vertical", "reels": "vertical", "shorts": "vertical",
-    "slowmo": "slow", "slo": "slow", "timelapse": "fast", "hyperlapse": "fast", "quieter": "volume",
-    "louder": "loud", "boost": "loud", "hiss": "noise", "hum": "noise", "wind": "noise",
-    "shaky": "shake", "wobbly": "shake", "steady": "shake", "sideways": "rotate", "upside": "rotate",
-    "gps": "location", "exif": "metadata", "rip": "extract", "screenshot": "still", "photo": "still",
-    "transcribe": "subtitles", "transcript": "subtitles", "bleep": "mute", "swear": "mute",
+    "color": "colour",
+    "colors": "colour",
+    "colours": "colour",
+    "stabilize": "stabilise",
+    "normalize": "normalise",
+    "grey": "gray",
+    "caption": "captions",
+    "subtitle": "subtitles",
+    "subs": "subtitles",
+    "cc": "captions",
+    "shrink": "smaller",
+    "compress": "smaller",
+    "reduce": "smaller",
+    "tiny": "smaller",
+    "huge": "big",
+    "merge": "join",
+    "combine": "join",
+    "concat": "join",
+    "glue": "join",
+    "stitch": "join",
+    "portrait": "vertical",
+    "tiktok": "vertical",
+    "reels": "vertical",
+    "shorts": "vertical",
+    "slowmo": "slow",
+    "slo": "slow",
+    "timelapse": "fast",
+    "hyperlapse": "fast",
+    "quieter": "volume",
+    "louder": "loud",
+    "boost": "loud",
+    "hiss": "noise",
+    "hum": "noise",
+    "wind": "noise",
+    "shaky": "shake",
+    "wobbly": "shake",
+    "steady": "shake",
+    "sideways": "rotate",
+    "upside": "rotate",
+    "gps": "location",
+    "exif": "metadata",
+    "rip": "extract",
+    "screenshot": "still",
+    "photo": "still",
+    "transcribe": "subtitles",
+    "transcript": "subtitles",
+    "bleep": "mute",
+    "swear": "mute",
 }
 
 #: words that say nothing about which tool is wanted
-STOPWORDS = {"a", "an", "the", "it", "its", "my", "me", "i", "to", "of", "and", "or", "up", "in", "on", "for",
-             "with", "how", "do", "can", "want", "from", "this", "that", "make", "get", "some", "into", "out",
-             "video", "videos", "file", "files", "please", "need", "way", "is", "be", "so"}
+STOPWORDS = {
+    "a",
+    "an",
+    "the",
+    "it",
+    "its",
+    "my",
+    "me",
+    "i",
+    "to",
+    "of",
+    "and",
+    "or",
+    "up",
+    "in",
+    "on",
+    "for",
+    "with",
+    "how",
+    "do",
+    "can",
+    "want",
+    "from",
+    "this",
+    "that",
+    "make",
+    "get",
+    "some",
+    "into",
+    "out",
+    "video",
+    "videos",
+    "file",
+    "files",
+    "please",
+    "need",
+    "way",
+    "is",
+    "be",
+    "so",
+}
 
 _WORD = re.compile(r"[a-z0-9]+")
 
@@ -111,7 +351,7 @@ def _tokens(text: str, *, query: bool = False) -> list:
         if query and w in STOPWORDS:
             continue
         out.append(w)
-        if query and w in ALIASES:              # only the person's words: tool keywords are already exact
+        if query and w in ALIASES:  # only the person's words: tool keywords are already exact
             out.append(ALIASES[w])
         if w.endswith("s") and len(w) > 3:
             out.append(w[:-1])
@@ -124,7 +364,7 @@ def search(text: str, limit: int = 12) -> list:
     if not query:
         return []
     goal_words = {}
-    leaders = {g.tools[0] for g in GOALS}          # ties go to the tool a goal lists first
+    leaders = {g.tools[0] for g in GOALS}  # ties go to the tool a goal lists first
     for g in GOALS:
         for name in g.tools:
             goal_words.setdefault(name, []).extend(_tokens(g.title + " " + g.blurb))
@@ -161,6 +401,7 @@ def search(text: str, limit: int = 12) -> list:
 
 # ── Suggestions for a file ────────────────────────────────────────────────────
 
+
 def _size(n: float) -> str:
     for unit in ("bytes", "KB", "MB", "GB"):
         if n < 1000 or unit == "GB":
@@ -196,6 +437,7 @@ def describe(info) -> str:
 def suggest(info, limit: int = 8) -> list:
     """[(tool name, reason)] worth trying on the file *info*, most specific first."""
     from core import metaclean as mc
+
     out: list = []
 
     def add(name: str, reason: str):
@@ -209,7 +451,10 @@ def suggest(info, limit: int = 8) -> list:
     if "location" in cats:
         add("Metadata Cleaner", "It contains a GPS location - remove it before sharing")
     elif cats & {"device", "telemetry"}:
-        add("Metadata Cleaner", "It names the camera or phone it was made with - remove that before sharing")
+        add(
+            "Metadata Cleaner",
+            "It names the camera or phone it was made with - remove that before sharing",
+        )
     if still:
         add("Slideshow Maker", "Turn photos into a video with music")
         add("Image Watermark", "Use it as a logo on a video")
@@ -217,14 +462,26 @@ def suggest(info, limit: int = 8) -> list:
     if v is not None:
         w, h = v.display_size
         if v.is_hdr:
-            add("HDR to SDR", "It's HDR - convert it so it doesn't look washed out on normal screens")
+            add(
+                "HDR to SDR",
+                "It's HDR - convert it so it doesn't look washed out on normal screens",
+            )
         if info.size > 25_000_000:
-            add("Universal Downsizer", f"It's {_size(info.size)} - shrink it to fit Discord, email or WhatsApp")
+            add(
+                "Universal Downsizer",
+                f"It's {_size(info.size)} - shrink it to fit Discord, email or WhatsApp",
+            )
         n_audio = sum(1 for s in info.streams if s.type == "audio")
         n_subs = sum(1 for s in info.streams if s.type == "subtitle")
         if n_audio > 1 or n_subs:
-            what = ", ".join(x for x in (f"{n_audio} audio tracks" if n_audio > 1 else "",
-                                          f"{n_subs} subtitle track{'s' if n_subs > 1 else ''}" if n_subs else "") if x)
+            what = ", ".join(
+                x
+                for x in (
+                    f"{n_audio} audio tracks" if n_audio > 1 else "",
+                    f"{n_subs} subtitle track{'s' if n_subs > 1 else ''}" if n_subs else "",
+                )
+                if x
+            )
             add("Tracks & Remux", f"It has {what} - choose which to keep, label them, or add more")
         if (v.field_order or "") in ("tt", "bb", "tb", "bt"):
             add("Deinterlace", "It's interlaced - remove the comb lines")

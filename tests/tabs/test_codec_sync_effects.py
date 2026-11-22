@@ -1,5 +1,6 @@
 """Codec Cruncher, Audio Sync Shifter and every Special Effect, rendered for real
 (these tools had no render tests - Codec Cruncher didn't even open)."""
+
 import os
 import re
 
@@ -18,7 +19,10 @@ def _ok(ui):
 
 # ── Codec Cruncher ───────────────────────────────────────────────────────────
 
-def _cruncher(ui, src, out, *, codec, container="auto", audio="aac256", copy_video=False, ten_bit=False):
+
+def _cruncher(
+    ui, src, out, *, codec, container="auto", audio="aac256", copy_video=False, ten_bit=False
+):
     ui.reset()
     tab = ui.open("Codec Cruncher")
     tab.src_row.set(src)
@@ -38,7 +42,9 @@ def _cruncher(ui, src, out, *, codec, container="auto", audio="aac256", copy_vid
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 def test_cruncher_reencodes(ui, media, outdir):
-    info = _cruncher(ui, media["h264"], str(outdir / "c.mkv"), codec="hevc", container="mkv", audio="opus")
+    info = _cruncher(
+        ui, media["h264"], str(outdir / "c.mkv"), codec="hevc", container="mkv", audio="opus"
+    )
     assert (info.require_video().codec, info.require_audio().codec) == ("hevc", "opus")
     assert info.duration == pytest.approx(6.0, abs=0.1)
     info = _cruncher(ui, media["h264_b"], str(outdir / "p.mov"), codec="prores", audio="pcm24")
@@ -48,12 +54,20 @@ def test_cruncher_reencodes(ui, media, outdir):
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 def test_cruncher_copies_video(ui, media, outdir):
-    info = _cruncher(ui, media["vp9"], str(outdir / "v.mkv"), codec="h264", container="mkv", audio="copy",
-                     copy_video=True)
+    info = _cruncher(
+        ui,
+        media["vp9"],
+        str(outdir / "v.mkv"),
+        codec="h264",
+        container="mkv",
+        audio="copy",
+        copy_video=True,
+    )
     assert (info.require_video().codec, info.require_audio().codec) == ("vp9", "opus")
 
 
 # ── Audio Sync Shifter ───────────────────────────────────────────────────────
+
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
@@ -74,24 +88,48 @@ def test_sync_shifter(ui, media, outdir, offset, lossless):
     info = ff.probe(out, use_cache=False)
     if lossless:
         # the sound's timestamps start later; nothing re-encoded
-        assert info.require_audio().start_time - info.require_video().start_time == pytest.approx(offset, abs=0.05)
+        assert info.require_audio().start_time - info.require_video().start_time == pytest.approx(
+            offset, abs=0.05
+        )
         assert info.require_audio().codec == ff.probe(media["h264"]).require_audio().codec
     elif offset > 0:
-        assert _mean_db(out, 0.0, offset - 0.05) < -60          # silence in front...
-        assert _mean_db(out, 1.0, 1.0) > -30                    # ...then the sound
+        assert _mean_db(out, 0.0, offset - 0.05) < -60  # silence in front...
+        assert _mean_db(out, 1.0, 1.0) > -30  # ...then the sound
     else:
-        assert _mean_db(out, 6.0 + offset + 0.05, -offset - 0.1) < -60   # starts earlier: silence at the end
+        assert (
+            _mean_db(out, 6.0 + offset + 0.05, -offset - 0.1) < -60
+        )  # starts earlier: silence at the end
         assert _mean_db(out, 1.0, 1.0) > -30
 
 
 def _mean_db(path, start, dur):
-    r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i",
-                    path, "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-"], timeout=60)
+    r = ff.capture(
+        [
+            ff.ffmpeg_path(),
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            f"{start:.3f}",
+            "-t",
+            f"{dur:.3f}",
+            "-i",
+            path,
+            "-map",
+            "0:a:0",
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        timeout=60,
+    )
     m = re.search(r"mean_volume:\s*(-?[\d.]+|-inf)", r.stderr or "")
     return float(m.group(1)) if m and m.group(1) != "-inf" else -200.0
 
 
 # ── Special Effects: every effect ────────────────────────────────────────────
+
 
 def _effects():
     code = open(os.path.join(ROOT, "tabs", "visuals", "effects.py"), encoding="utf-8").read()

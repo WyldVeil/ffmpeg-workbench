@@ -2,6 +2,7 @@
 shell/files.py - getting files into the app: File › Open, Recent Files,
 drag-and-drop and the command line all end in :meth:`FileOpener.open`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,16 +26,26 @@ def remember(path: str) -> None:
     """Put *path* at the top of Recent Files."""
     path = os.path.normpath(path)
     with settings.transaction() as data:
-        recent = [r for r in data.get("recent_files", []) if isinstance(r, str) and os.path.normpath(r) != path]
+        recent = [
+            r
+            for r in data.get("recent_files", [])
+            if isinstance(r, str) and os.path.normpath(r) != path
+        ]
         data["recent_files"] = [path, *recent][:MAX_RECENT]
 
 
 class FileOpener:
     """*current()* is (the open tool, its page); *show(tool)* opens a tool and returns its page."""
 
-    def __init__(self, window: tk.Tk, recent_menu: tk.Menu, *,
-                 current: Callable[[], tuple[ToolId | None, tk.Misc | None]],
-                 show: Callable[[ToolId], tk.Misc | None], loaded: Callable[[str], object]) -> None:
+    def __init__(
+        self,
+        window: tk.Tk,
+        recent_menu: tk.Menu,
+        *,
+        current: Callable[[], tuple[ToolId | None, tk.Misc | None]],
+        show: Callable[[ToolId], tk.Misc | None],
+        loaded: Callable[[str], object],
+    ) -> None:
         self._window = window
         self._menu = recent_menu
         self._current = current
@@ -58,7 +69,7 @@ class FileOpener:
             for path in files:
                 try:
                     accepted = bool(page.load_file(path)) or accepted
-                except Exception:                 # a page's bug: log it, fall back to the inspector
+                except Exception:  # a page's bug: log it, fall back to the inspector
                     logger.exception("load_file failed in %s", tool)
         if not accepted:
             inspector = self._show(ToolId.MEDIA_INSPECTOR)
@@ -83,13 +94,17 @@ class FileOpener:
             menu.add_command(label="(no recent files)", state="disabled")
             return
         for path in recent:
-            menu.add_command(label=os.path.basename(path), command=lambda p=path: self._open_recent(p))
+            menu.add_command(
+                label=os.path.basename(path), command=lambda p=path: self._open_recent(p)
+            )
         menu.add_separator()
         menu.add_command(label="Clear Recent Files", command=self.clear_recent)
 
     def _open_recent(self, path: str) -> None:
         if not os.path.isfile(path):
-            messagebox.showwarning("File Not Found", f"File no longer exists:\n{path}", parent=self._window)
+            messagebox.showwarning(
+                "File Not Found", f"File no longer exists:\n{path}", parent=self._window
+            )
             return
         self.open([path])
 
@@ -101,12 +116,13 @@ class FileOpener:
     def accept_drops(self, *targets: tk.Misc) -> None:
         try:
             from tkinterdnd2 import DND_FILES, TkinterDnD  # pyright: ignore[reportMissingImports] - optional
+
             TkinterDnD._require(self._window)  # noqa: SLF001 - tkinterdnd2's documented set-up call
             for widget in targets:
                 widget.drop_target_register(DND_FILES)  # type: ignore[attr-defined]
                 widget.dnd_bind("<<Drop>>", self._dropped)  # type: ignore[attr-defined]
             self.drag_and_drop = True
-        except Exception as exc:                  # no tkdnd for this Tk: the app works without it
+        except Exception as exc:  # no tkdnd for this Tk: the app works without it
             logger.info("Drag-and-drop unavailable: %s", exc, exc_info=True)
 
     def _dropped(self, event: tk.Event) -> str:

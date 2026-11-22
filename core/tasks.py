@@ -20,6 +20,7 @@ to the caller.  Fluent Python ch. 20: let ``submit`` make the futures.
 Long-running loops that live as long as the app (the render queue's workers,
 a recorder's reader) are not jobs; start those with :func:`start_service`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,16 +36,18 @@ T = TypeVar("T")
 Pool = Literal["background", "preview"]
 
 _SIZES: dict[Pool, int] = {"background": 8, "preview": 2}
-_pools: dict[Pool, ThreadPoolExecutor] = {}        # threads: created on first use, under _LOCK
+_pools: dict[Pool, ThreadPoolExecutor] = {}  # threads: created on first use, under _LOCK
 _LOCK = threading.Lock()
-Service = threading.Thread                         # what start_service returns (join(), is_alive())
+Service = threading.Thread  # what start_service returns (join(), is_alive())
 
 
 def _pool(kind: Pool) -> ThreadPoolExecutor:
     with _LOCK:
         pool = _pools.get(kind)
         if pool is None:
-            pool = _pools[kind] = ThreadPoolExecutor(max_workers=_SIZES[kind], thread_name_prefix=kind)
+            pool = _pools[kind] = ThreadPoolExecutor(
+                max_workers=_SIZES[kind], thread_name_prefix=kind
+            )
         return pool
 
 
@@ -52,6 +55,7 @@ def _post(fn: Callable[..., object], arg: object) -> None:
     """To the UI thread when there is a window.  Without Tk at all (the command
     line, tests of the engine) straight away, on this thread."""
     from core import ui
+
     tkinter = sys.modules.get("tkinter")
     if ui.installed() or getattr(tkinter, "_default_root", None) is not None:
         ui.call_soon(fn, arg)
@@ -59,8 +63,12 @@ def _post(fn: Callable[..., object], arg: object) -> None:
         fn(arg)
 
 
-def _deliver(future: Future[T], name: str, on_done: Callable[[T], object] | None,
-             on_error: Callable[[BaseException], object] | None) -> None:
+def _deliver(
+    future: Future[T],
+    name: str,
+    on_done: Callable[[T], object] | None,
+    on_error: Callable[[BaseException], object] | None,
+) -> None:
     if future.cancelled():
         return
     exc = future.exception()
@@ -72,16 +80,22 @@ def _deliver(future: Future[T], name: str, on_done: Callable[[T], object] | None
         return
     if on_error is not None:
         from core.errors import AppError
-        if not isinstance(exc, AppError):          # a bug: keep the traceback in the log
+
+        if not isinstance(exc, AppError):  # a bug: keep the traceback in the log
             logger.error("background task %s failed", name, exc_info=exc)
         _post(on_error, exc)
     else:
         logger.error("background task %s failed", name, exc_info=exc)
 
 
-def submit(fn: Callable[[], T], *, on_done: Callable[[T], object] | None = None,
-           on_error: Callable[[BaseException], object] | None = None,
-           pool: Pool = "background", name: str | None = None) -> Future[T]:
+def submit(
+    fn: Callable[[], T],
+    *,
+    on_done: Callable[[T], object] | None = None,
+    on_error: Callable[[BaseException], object] | None = None,
+    pool: Pool = "background",
+    name: str | None = None,
+) -> Future[T]:
     """Run ``fn()`` on a worker thread; deliver its result or error on the UI thread."""
     label = name or getattr(fn, "__name__", None) or repr(fn)
     future = _pool(pool).submit(fn)
@@ -92,10 +106,11 @@ def submit(fn: Callable[[], T], *, on_done: Callable[[T], object] | None = None,
 def start_service(target: Callable[[], object], *, name: str) -> Service:
     """Start a long-lived background loop (a daemon thread: it never keeps the
     app from closing).  For one-off jobs use :func:`submit`."""
+
     def _run() -> None:
         try:
             target()
-        except Exception:                                  # a crashed service is a bug: log it
+        except Exception:  # a crashed service is a bug: log it
             logger.exception("service thread %s crashed", name)
 
     thread = threading.Thread(target=_run, name=name, daemon=True)

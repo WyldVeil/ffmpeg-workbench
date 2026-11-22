@@ -27,6 +27,7 @@ Everything returns proxy URLs in preference order, e.g.
 ``["http://proxy.corp:3128", "direct://"]``; ``direct://`` means connect
 without a proxy.
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -56,10 +57,13 @@ _NO_WINDOW = 0x08000000 if IS_WIN else 0
 @dataclass
 class SystemProxy:
     """The computer's proxy configuration (no per-URL decision yet)."""
-    source: str = "none"                 # where it came from, for the UI
-    mode: str = "direct"                 # direct | manual | pac | wpad | resolver
-    proxies: dict = field(default_factory=dict)   # scheme -> proxy URL ("http", "https", "socks", "all")
-    bypass: list = field(default_factory=list)    # no-proxy patterns
+
+    source: str = "none"  # where it came from, for the UI
+    mode: str = "direct"  # direct | manual | pac | wpad | resolver
+    proxies: dict = field(
+        default_factory=dict
+    )  # scheme -> proxy URL ("http", "https", "socks", "all")
+    bypass: list = field(default_factory=list)  # no-proxy patterns
     pac_url: str = ""
     note: str = ""
 
@@ -89,6 +93,7 @@ def _run(cmd: list, timeout: float = 4.0) -> str | None:
 
 # ── Parsing helpers (pure, unit-tested) ───────────────────────────────────────
 
+
 def normalise_proxy(value: str, default_scheme: str = "http") -> str:
     """'host:port', 'http://host:port', 'http://host port' (KDE) -> scheme://host:port"""
     v = (value or "").strip().strip("'\"")
@@ -97,13 +102,13 @@ def normalise_proxy(value: str, default_scheme: str = "http") -> str:
     m = re.match(r"^([a-z0-9+]+)://(.+)$", v, re.I)
     scheme, rest = (m.group(1).lower(), m.group(2)) if m else (default_scheme, v)
     rest = rest.strip().rstrip("/")
-    if " " in rest and ":" not in rest.rsplit("@", 1)[-1]:      # KDE "host port"
+    if " " in rest and ":" not in rest.rsplit("@", 1)[-1]:  # KDE "host port"
         host, _sp, port = rest.rpartition(" ")
         rest = f"{host.strip()}:{port.strip()}"
     if scheme == "socks":
         scheme = "socks5h"
     elif scheme == "socks5":
-        scheme = "socks5h"                                        # resolve names at the proxy (no DNS leak)
+        scheme = "socks5h"  # resolve names at the proxy (no DNS leak)
     return f"{scheme}://{rest}"
 
 
@@ -149,7 +154,11 @@ def parse_scutil(text: str) -> SystemProxy:
     if d.get("ProxyAutoDiscoveryEnable") == "1":
         sp.mode = "wpad"
         return sp
-    for key, scheme, out in (("HTTP", "http", "http"), ("HTTPS", "http", "https"), ("SOCKS", "socks5h", "socks")):
+    for key, scheme, out in (
+        ("HTTP", "http", "http"),
+        ("HTTPS", "http", "https"),
+        ("SOCKS", "socks5h", "socks"),
+    ):
         if d.get(f"{key}Enable") == "1" and d.get(f"{key}Proxy"):
             sp.proxies[out] = f"{scheme}://{d[f'{key}Proxy']}:{d.get(f'{key}Port', '8080')}"
     if sp.proxies:
@@ -186,12 +195,24 @@ def parse_gsettings(text: str) -> SystemProxy:
         pwd = s("org.gnome.system.proxy.http.authentication-password")
         if user:
             from urllib.parse import quote
+
             auth = quote(user, safe="") + (":" + quote(pwd, safe="") if pwd else "") + "@"
-    for key, scheme, out in (("http", "http", "http"), ("https", "http", "https"), ("socks", "socks5h", "socks")):
-        host, port = s(f"org.gnome.system.proxy.{key}.host"), s(f"org.gnome.system.proxy.{key}.port")
+    for key, scheme, out in (
+        ("http", "http", "http"),
+        ("https", "http", "https"),
+        ("socks", "socks5h", "socks"),
+    ):
+        host, port = (
+            s(f"org.gnome.system.proxy.{key}.host"),
+            s(f"org.gnome.system.proxy.{key}.port"),
+        )
         if host and port and port != "0":
             sp.proxies[out] = f"{scheme}://{auth if key != 'socks' else ''}{host}:{port}"
-    if s("org.gnome.system.proxy.use-same-proxy") == "true" and "http" in sp.proxies and "https" not in sp.proxies:
+    if (
+        s("org.gnome.system.proxy.use-same-proxy") == "true"
+        and "http" in sp.proxies
+        and "https" not in sp.proxies
+    ):
         sp.proxies["https"] = sp.proxies["http"]
     if sp.proxies:
         sp.mode = "manual"
@@ -223,12 +244,16 @@ def parse_kioslaverc(text: str, env: Mapping[str, str] | None = None) -> SystemP
         return sp
     for key, out in (("httpProxy", "http"), ("httpsProxy", "https"), ("socksProxy", "socks")):
         v = vals.get(key, "")
-        if kind == "4":                                   # values are environment variable names
+        if kind == "4":  # values are environment variable names
             v = env.get(v, "") or env.get(v.lower(), "")
         if v:
             sp.proxies[out] = normalise_proxy(v, "socks5h" if out == "socks" else "http")
     if kind == "4" and not sp.bypass:
-        sp.bypass = [x.strip() for x in env.get(vals.get("NoProxyFor", "NO_PROXY"), "").split(",") if x.strip()]
+        sp.bypass = [
+            x.strip()
+            for x in env.get(vals.get("NoProxyFor", "NO_PROXY"), "").split(",")
+            if x.strip()
+        ]
     if sp.proxies:
         sp.mode = "manual"
     return sp
@@ -323,7 +348,7 @@ def choose(sp: SystemProxy, url: str) -> list:
     if bypassed(url, sp.bypass):
         return [DIRECT]
     scheme = urlsplit(url).scheme.lower()
-    for key in ((scheme, "all", "socks") if scheme in ("http", "https") else ("all", "socks")):
+    for key in (scheme, "all", "socks") if scheme in ("http", "https") else ("all", "socks"):
         if sp.proxies.get(key):
             return [sp.proxies[key]]
     if scheme == "https" and sp.proxies.get("http"):
@@ -333,14 +358,17 @@ def choose(sp: SystemProxy, url: str) -> list:
 
 # ── Discovery per platform ────────────────────────────────────────────────────
 
+
 def _windows() -> SystemProxy:
     sp = SystemProxy(source="Windows Internet settings")
-    if sys.platform != "win32":                  # (tells the type checker winreg exists below)
+    if sys.platform != "win32":  # (tells the type checker winreg exists below)
         return sp
     import winreg
+
     try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                             r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+        )
     except OSError:
         return sp
 
@@ -382,9 +410,21 @@ def portal_lookup(url: str) -> list | None:
     gdbus = shutil.which("gdbus")
     if not gdbus or not os.environ.get("DBUS_SESSION_BUS_ADDRESS", "x"):
         return None
-    out = _run([gdbus, "call", "--session", "--dest", "org.freedesktop.portal.Desktop", "--object-path",
-                "/org/freedesktop/portal/desktop", "--method", "org.freedesktop.portal.ProxyResolver.Lookup", url],
-               timeout=6)
+    out = _run(
+        [
+            gdbus,
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.portal.Desktop",
+            "--object-path",
+            "/org/freedesktop/portal/desktop",
+            "--method",
+            "org.freedesktop.portal.ProxyResolver.Lookup",
+            url,
+        ],
+        timeout=6,
+    )
     if not out:
         return None
     found = re.findall(r"'([^']+)'", out)
@@ -413,7 +453,9 @@ def _linux_static() -> SystemProxy:
             sp = parse_gsettings(out)
             if sp.mode != "direct":
                 return sp
-    cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "kioslaverc")
+    cfg = os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "kioslaverc"
+    )
     if os.path.isfile(cfg):
         try:
             with open(cfg, encoding="utf-8", errors="replace") as fh:
@@ -467,7 +509,7 @@ def proxies_for(url: str, *, refresh: bool = False) -> list:
         else:
             result = portal_lookup(url)
             if result is not None and result == [DIRECT]:
-                result = None                                 # the portal may not see KDE/GNOME files
+                result = None  # the portal may not see KDE/GNOME files
             if result is None:
                 result = libproxy_lookup(url)
                 if result == [DIRECT]:
@@ -524,6 +566,7 @@ _pac_cache: dict = {}
 def _deno() -> str | None:
     try:
         from core.hardware import find_binary
+
         return find_binary("deno")
     except Exception:
         logger.debug("_deno: best-effort step failed", exc_info=True)
@@ -533,7 +576,7 @@ def _deno() -> str | None:
 def _my_ip() -> str:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("192.0.2.1", 9))             # TEST-NET: no packet is sent for UDP connect
+            s.connect(("192.0.2.1", 9))  # TEST-NET: no packet is sent for UDP connect
             return s.getsockname()[0]
     except OSError:
         return "127.0.0.1"
@@ -558,18 +601,36 @@ def run_pac(pac_text: str, url: str, *, timeout: float = 10.0) -> list:
         if ip:
             job["dns"][host] = ip
     import tempfile
+
     with tempfile.TemporaryDirectory(prefix="wme_pac_") as tmp:
         script = os.path.join(tmp, "pac.js")
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(_PAC_RUNNER.replace("__PRELUDE__", json.dumps(_PAC_PRELUDE)))
         try:
-            r = _proc.run([deno, "run", "--quiet", "--no-prompt", "--no-config", "--no-lock", "--no-remote",
-                                "--no-npm", script], timeout=timeout, input=json.dumps(job), env={**os.environ, "NO_COLOR": "1", "DENO_NO_UPDATE_CHECK": "1"})
+            r = _proc.run(
+                [
+                    deno,
+                    "run",
+                    "--quiet",
+                    "--no-prompt",
+                    "--no-config",
+                    "--no-lock",
+                    "--no-remote",
+                    "--no-npm",
+                    script,
+                ],
+                timeout=timeout,
+                input=json.dumps(job),
+                env={**os.environ, "NO_COLOR": "1", "DENO_NO_UPDATE_CHECK": "1"},
+            )
         except _proc.ProcessTimeout:
             raise RuntimeError("The auto-config script took too long.") from None
     if r.returncode != 0:
-        raise RuntimeError("The auto-config script failed: " + (r.stderr or "").strip().splitlines()[-1:][0]
-                           if (r.stderr or "").strip() else "The auto-config script failed.")
+        raise RuntimeError(
+            "The auto-config script failed: " + (r.stderr or "").strip().splitlines()[-1:][0]
+            if (r.stderr or "").strip()
+            else "The auto-config script failed."
+        )
     return parse_pac_result(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else "")
 
 
@@ -590,7 +651,7 @@ def _wpad_candidates() -> list:
     out = []
     for d in dict.fromkeys(domains):
         labels = d.strip(".").split(".")
-        for i in range(len(labels) - 1):                   # stop before the top-level domain
+        for i in range(len(labels) - 1):  # stop before the top-level domain
             out.append(f"http://wpad.{'.'.join(labels[i:])}/wpad.dat")
     out.append("http://wpad/wpad.dat")
     return list(dict.fromkeys(out))
@@ -599,6 +660,7 @@ def _wpad_candidates() -> list:
 def _fetch_pac(url: str) -> str:
     """Download a PAC script directly (it normally lives on the local network)."""
     import urllib.request
+
     if url.startswith("file://"):
         with open(url[7:], encoding="utf-8", errors="replace") as fh:
             return fh.read()
@@ -624,7 +686,7 @@ def pac_proxies(sp: SystemProxy, url: str) -> list:
                 text = None
         _pac_cache[key] = text or ""
     if not text:
-        return [DIRECT]                                   # like browsers: no script found -> direct
+        return [DIRECT]  # like browsers: no script found -> direct
     try:
         return run_pac(text, url)
     except RuntimeError:
@@ -632,6 +694,7 @@ def pac_proxies(sp: SystemProxy, url: str) -> list:
 
 
 # ── Special systems ──────────────────────────────────────────────────────────
+
 
 def os_release() -> dict:
     out = {}
@@ -655,7 +718,10 @@ def special_system() -> str:
     rel = os_release()
     if rel.get("ID", "").lower() == "tails" or os.path.exists("/etc/amnesia/version"):
         return "tails"
-    if os.path.exists("/usr/share/anon-ws-base-files/workstation") or os.path.exists("/etc/whonix_version") or \
-            "whonix" in rel.get("ID", "").lower():
+    if (
+        os.path.exists("/usr/share/anon-ws-base-files/workstation")
+        or os.path.exists("/etc/whonix_version")
+        or "whonix" in rel.get("ID", "").lower()
+    ):
         return "whonix"
     return ""

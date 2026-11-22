@@ -5,6 +5,7 @@ Tk sends the wheel to the widget with focus, so without this the sidebar
 would scroll while the pointer is over a page (or not at all).  Text boxes,
 lists and tables that have more to show keep their own scrolling.
 """
+
 from __future__ import annotations
 
 import sys
@@ -12,7 +13,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
-UNITS_PER_NOTCH = 3                # Windows' default is 3 lines
+UNITS_PER_NOTCH = 3  # Windows' default is 3 lines
 _IS_MAC = sys.platform == "darwin"
 
 
@@ -41,7 +42,7 @@ def units(num: int, delta: int, carry: int) -> tuple[int, int]:
     if _IS_MAC and abs(delta) < 120:
         return -delta * UNITS_PER_NOTCH, carry
     carry = (carry if (carry > 0) == (delta > 0) else 0) + delta
-    notches = int(carry / 120)                          # rounds towards zero
+    notches = int(carry / 120)  # rounds towards zero
     return -notches * UNITS_PER_NOTCH, carry - notches * 120
 
 
@@ -54,8 +55,8 @@ class WheelRouter:
         self._sidebar = sidebar
         self._carry = 0
         window.bind_all("<MouseWheel>", self._on_wheel)
-        if tk.TkVersion < 9:      # Tk 9 reports X11's wheel as <MouseWheel> too, and uses buttons
-            window.bind_all("<Button-4>", self._on_wheel)       # 4/5 for the mouse's side buttons
+        if tk.TkVersion < 9:  # Tk 9 reports X11's wheel as <MouseWheel> too, and uses buttons
+            window.bind_all("<Button-4>", self._on_wheel)  # 4/5 for the mouse's side buttons
             window.bind_all("<Button-5>", self._on_wheel)
         # The wheel changes a drop-down's or number box's value even when the pointer
         # merely passes over it while scrolling the page: only let it when the box has
@@ -82,7 +83,7 @@ class WheelRouter:
         try:
             widget: tk.Misc | None = self._window.winfo_containing(x, y)
         except (KeyError, tk.TclError):
-            return None             # one of Tk's own windows, such as an open drop-down
+            return None  # one of Tk's own windows, such as an open drop-down
         sidebar, canvas = self._sidebar()
         while widget is not None:
             if widget is sidebar:
@@ -90,7 +91,11 @@ class WheelRouter:
             if isinstance(widget, (tk.Text, tk.Listbox, ttk.Treeview)):
                 if can_scroll(widget):
                     return None
-            elif isinstance(widget, tk.Canvas) and widget.cget("yscrollcommand") and can_scroll(widget):
+            elif (
+                isinstance(widget, tk.Canvas)
+                and widget.cget("yscrollcommand")
+                and can_scroll(widget)
+            ):
                 return widget
             widget = widget.master
         return None

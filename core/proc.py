@@ -18,6 +18,7 @@ to be written out).  It can also be cancelled, and returns a frozen
     res = proc.run([ffprobe, "-version"], timeout=10)
     if res.ok: ...
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -35,16 +36,32 @@ from core.errors import Cancelled, ProcessError, ProcessTimeout, ProgramNotFound
 from core.procenv import child_env
 
 __all__ = [
-    "DEVNULL", "PIPE", "STDOUT", "Cancelled", "Popen", "ProcResult", "ProcessError", "ProcessTimeout",
-    "ProgramNotFound", "StartError", "TimeoutExpired", "active_count", "forget", "kill_all", "kill_tree",
-    "lines", "list2cmdline", "run", "spawn",
+    "DEVNULL",
+    "PIPE",
+    "STDOUT",
+    "Cancelled",
+    "Popen",
+    "ProcResult",
+    "ProcessError",
+    "ProcessTimeout",
+    "ProgramNotFound",
+    "StartError",
+    "TimeoutExpired",
+    "active_count",
+    "forget",
+    "kill_all",
+    "kill_tree",
+    "lines",
+    "list2cmdline",
+    "run",
+    "spawn",
 ]
 
 logger = logging.getLogger("crossfader.proc")
 
 IS_WINDOWS = os.name == "nt"
 _CREATE_NEW_PROCESS_GROUP = 0x00000200 if IS_WINDOWS else 0
-CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0          # no console window flashing up
+CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0  # no console window flashing up
 
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -53,13 +70,14 @@ Popen = subprocess.Popen
 TimeoutExpired = subprocess.TimeoutExpired
 list2cmdline = subprocess.list2cmdline
 
-_ACTIVE: set[subprocess.Popen[Any]] = set()      # threads: any thread adds/removes, under _LOCK
+_ACTIVE: set[subprocess.Popen[Any]] = set()  # threads: any thread adds/removes, under _LOCK
 _LOCK = threading.Lock()
 
 
 @dataclass(frozen=True, slots=True)
 class ProcResult(Generic[AnyStr]):
     """What a finished program left behind (text or bytes, as asked for)."""
+
     argv: tuple[str, ...]
     returncode: int
     stdout: AnyStr
@@ -72,7 +90,11 @@ class ProcResult(Generic[AnyStr]):
 
     def last_error_line(self) -> str:
         """The last non-empty line of stderr (FFmpeg puts the reason there)."""
-        text = self.stderr.decode("utf-8", "replace") if isinstance(self.stderr, bytes) else self.stderr
+        text = (
+            self.stderr.decode("utf-8", "replace")
+            if isinstance(self.stderr, bytes)
+            else self.stderr
+        )
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         return lines[-1] if lines else f"exited with code {self.returncode}"
 
@@ -81,14 +103,28 @@ def _argv(argv: Sequence[object]) -> list[str]:
     return [os.fsdecode(a) if isinstance(a, os.PathLike) else str(a) for a in argv]  # pyright: ignore[reportUnknownArgumentType]
 
 
-def spawn(argv: Sequence[object], *, stdin: int | IO[Any] | None = DEVNULL,
-          stdout: int | IO[Any] | None = None, stderr: int | IO[Any] | None = None,
-          text: bool = False, cwd: str | None = None, env: Mapping[str, str] | None = None,
-          new_group: bool = True, bufsize: int = -1) -> subprocess.Popen[Any]:
+def spawn(
+    argv: Sequence[object],
+    *,
+    stdin: int | IO[Any] | None = DEVNULL,
+    stdout: int | IO[Any] | None = None,
+    stderr: int | IO[Any] | None = None,
+    text: bool = False,
+    cwd: str | None = None,
+    env: Mapping[str, str] | None = None,
+    new_group: bool = True,
+    bufsize: int = -1,
+) -> subprocess.Popen[Any]:
     """Start a program (not waiting for it) and register it for :func:`kill_all`."""
     args = _argv(argv)
-    kwargs: dict[str, Any] = {"stdin": stdin, "stdout": stdout, "stderr": stderr, "cwd": cwd,
-                              "env": dict(env) if env is not None else child_env(), "bufsize": bufsize}
+    kwargs: dict[str, Any] = {
+        "stdin": stdin,
+        "stdout": stdout,
+        "stderr": stderr,
+        "cwd": cwd,
+        "env": dict(env) if env is not None else child_env(),
+        "bufsize": bufsize,
+    }
     if text:
         kwargs.update(text=True, encoding="utf-8", errors="replace")
     if IS_WINDOWS:
@@ -100,26 +136,51 @@ def spawn(argv: Sequence[object], *, stdin: int | IO[Any] | None = DEVNULL,
     except FileNotFoundError as exc:
         raise ProgramNotFound(f"{os.path.basename(args[0])} was not found") from exc
     except OSError as exc:
-        raise StartError(f"couldn't start {os.path.basename(args[0])}: {exc.strerror or exc}") from exc
+        raise StartError(
+            f"couldn't start {os.path.basename(args[0])}: {exc.strerror or exc}"
+        ) from exc
     with _LOCK:
         _ACTIVE.add(proc)
     return proc
 
 
 @overload
-def run(argv: Sequence[object], *, timeout: float | None, text: Literal[True] = ...,
-        input: str | None = ..., cwd: str | None = ..., env: Mapping[str, str] | None = ...,
-        cancel: Callable[[], bool] | None = ..., merge_stderr: bool = ...) -> ProcResult[str]: ...
+def run(
+    argv: Sequence[object],
+    *,
+    timeout: float | None,
+    text: Literal[True] = ...,
+    input: str | None = ...,
+    cwd: str | None = ...,
+    env: Mapping[str, str] | None = ...,
+    cancel: Callable[[], bool] | None = ...,
+    merge_stderr: bool = ...,
+) -> ProcResult[str]: ...
 @overload
-def run(argv: Sequence[object], *, timeout: float | None, text: Literal[False],
-        input: bytes | None = ..., cwd: str | None = ..., env: Mapping[str, str] | None = ...,
-        cancel: Callable[[], bool] | None = ..., merge_stderr: bool = ...) -> ProcResult[bytes]: ...
+def run(
+    argv: Sequence[object],
+    *,
+    timeout: float | None,
+    text: Literal[False],
+    input: bytes | None = ...,
+    cwd: str | None = ...,
+    env: Mapping[str, str] | None = ...,
+    cancel: Callable[[], bool] | None = ...,
+    merge_stderr: bool = ...,
+) -> ProcResult[bytes]: ...
 
 
-def run(argv: Sequence[object], *, timeout: float | None, text: bool = True,
-        input: str | bytes | None = None, cwd: str | None = None,
-        env: Mapping[str, str] | None = None, cancel: Callable[[], bool] | None = None,
-        merge_stderr: bool = False) -> ProcResult[Any]:
+def run(
+    argv: Sequence[object],
+    *,
+    timeout: float | None,
+    text: bool = True,
+    input: str | bytes | None = None,
+    cwd: str | None = None,
+    env: Mapping[str, str] | None = None,
+    cancel: Callable[[], bool] | None = None,
+    merge_stderr: bool = False,
+) -> ProcResult[Any]:
     """Run a program to the end and collect its output.
 
     Raises :class:`ProgramNotFound`, :class:`ProcessTimeout` (after stopping
@@ -127,8 +188,15 @@ def run(argv: Sequence[object], *, timeout: float | None, text: bool = True,
     non-zero exit code is *not* an exception - check ``result.ok``."""
     start = time.monotonic()
     args = _argv(argv)
-    proc = spawn(args, stdin=PIPE if input is not None else DEVNULL, stdout=PIPE,
-                 stderr=STDOUT if merge_stderr else PIPE, text=text, cwd=cwd, env=env)
+    proc = spawn(
+        args,
+        stdin=PIPE if input is not None else DEVNULL,
+        stdout=PIPE,
+        stderr=STDOUT if merge_stderr else PIPE,
+        text=text,
+        cwd=cwd,
+        env=env,
+    )
     deadline = None if timeout is None else start + timeout
     pending: str | bytes | None = input
     try:
@@ -143,19 +211,25 @@ def run(argv: Sequence[object], *, timeout: float | None, text: bool = True,
                 out, err = proc.communicate(pending, timeout=step)
                 break
             except subprocess.TimeoutExpired:
-                pending = None                      # input is sent once; retrying keeps all output
+                pending = None  # input is sent once; retrying keeps all output
                 if cancel is not None and cancel():
                     kill_tree(proc)
                     raise Cancelled("stopped") from None
                 if deadline is not None and time.monotonic() >= deadline:
                     kill_tree(proc)
-                    raise ProcessTimeout(f"{os.path.basename(args[0])} took longer than "
-                                         f"{timeout:g} s and was stopped") from None
+                    raise ProcessTimeout(
+                        f"{os.path.basename(args[0])} took longer than "
+                        f"{timeout:g} s and was stopped"
+                    ) from None
     finally:
         _forget(proc)
     if text:
-        return ProcResult[str](tuple(args), proc.returncode, out or "", err or "", time.monotonic() - start)
-    return ProcResult[bytes](tuple(args), proc.returncode, out or b"", err or b"", time.monotonic() - start)
+        return ProcResult[str](
+            tuple(args), proc.returncode, out or "", err or "", time.monotonic() - start
+        )
+    return ProcResult[bytes](
+        tuple(args), proc.returncode, out or b"", err or b"", time.monotonic() - start
+    )
 
 
 def lines(child: subprocess.Popen[str]) -> Iterator[str]:
@@ -193,8 +267,13 @@ def kill_tree(proc: subprocess.Popen[Any] | None, grace: float = 3.0) -> None:
             return
         if IS_WINDOWS:
             # A targeted tree kill of this PID only (never "/IM ffmpeg.exe").
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True,
-                           timeout=10, creationflags=CREATE_NO_WINDOW, check=False)
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True,
+                timeout=10,
+                creationflags=CREATE_NO_WINDOW,
+                check=False,
+            )
         else:
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGTERM)

@@ -6,6 +6,7 @@ has to keep up with the sites it downloads from, so its version is compared
 with the latest release and an update offered.  Every check runs on a
 worker (core.tasks); only the results touch the window.
 """
+
 from __future__ import annotations
 
 import re
@@ -66,7 +67,9 @@ class ToolVersions:
         self._ffmpeg = found
         skin = self._bar.skin
         if found.path is None:
-            self._bar.ffmpeg.config(text=t("app.status.ffmpeg_missing_click_install"), fg=skin["red"])
+            self._bar.ffmpeg.config(
+                text=t("app.status.ffmpeg_missing_click_install"), fg=skin["red"]
+            )
         else:
             where = "bundled" if found.bundled else "your own copy"
             self._bar.ffmpeg.config(text=f"FFmpeg {found.version} ({where})", fg=skin["fgdim"])
@@ -75,13 +78,17 @@ class ToolVersions:
         found = self._ffmpeg
         path = found.path or "not found"
         if found.bundled:
-            msg = (f"This app ships FFmpeg {found.version or ''}, the build every tool is tested with. It is "
-                   "updated together with the app, so a new FFmpeg can never break a tool.\n\n"
-                   f"In use: {path}")
+            msg = (
+                f"This app ships FFmpeg {found.version or ''}, the build every tool is tested with. It is "
+                "updated together with the app, so a new FFmpeg can never break a tool.\n\n"
+                f"In use: {path}"
+            )
         else:
-            msg = (f"A different FFmpeg ({found.version or 'unknown version'}) is in use:\n{path}\n\n"
-                   "Tools are tested with the bundled FFmpeg; choose 'Bundled' under Advanced Settings › FFmpeg "
-                   "if something doesn't work.")
+            msg = (
+                f"A different FFmpeg ({found.version or 'unknown version'}) is in use:\n{path}\n\n"
+                "Tools are tested with the bundled FFmpeg; choose 'Bundled' under Advanced Settings › FFmpeg "
+                "if something doesn't work."
+            )
         messagebox.showinfo("FFmpeg", msg, parent=self._window)
 
     # ── yt-dlp ────────────────────────────────────────────────────────────────
@@ -89,9 +96,14 @@ class ToolVersions:
         """The Video Downloader found yt-dlp (*force*: the person asked, so check
         for a newer one even when automatic checks are off)."""
         self._ytdlp_path, self._ytdlp_local = path, version
-        self._bar.ytdlp.config(text=f"yt-dlp {version} (checking…)", fg=self._bar.skin["fgdim"], cursor="watch")
-        tasks.submit(partial(updater.latest_ytdlp_release, force=force), on_done=partial(self._compared, version),
-                     name="yt-dlp latest")
+        self._bar.ytdlp.config(
+            text=f"yt-dlp {version} (checking…)", fg=self._bar.skin["fgdim"], cursor="watch"
+        )
+        tasks.submit(
+            partial(updater.latest_ytdlp_release, force=force),
+            on_done=partial(self._compared, version),
+            name="yt-dlp latest",
+        )
 
     def _compared(self, local: str, latest: str | None) -> None:
         self._ytdlp_latest = latest
@@ -100,34 +112,47 @@ class ToolVersions:
         if have is None or newest is None:
             self._bar.ytdlp.config(text=f"yt-dlp {local}", fg=skin["fgdim"], cursor="hand2")
         elif newest > have:
-            self._bar.ytdlp.config(text=f"yt-dlp {local} → {latest} (click to update)", fg=skin["orange"],
-                                   cursor="hand2")
+            self._bar.ytdlp.config(
+                text=f"yt-dlp {local} → {latest} (click to update)",
+                fg=skin["orange"],
+                cursor="hand2",
+            )
         else:
-            self._bar.ytdlp.config(text=f"yt-dlp {local} (up to date)", fg=skin["green"], cursor="arrow")
+            self._bar.ytdlp.config(
+                text=f"yt-dlp {local} (up to date)", fg=skin["green"], cursor="arrow"
+            )
 
     def check_all(self) -> None:
         """Help › Check for tool updates."""
         self.check_ffmpeg()
         path = find_binary("yt-dlp")
         if path:
-            tasks.submit(partial(ytdlp_version, path), name="yt-dlp version",
-                         on_done=lambda v: (self.set_ytdlp(v, path, force=True), self._bar.show_ytdlp(True)))
+            tasks.submit(
+                partial(ytdlp_version, path),
+                name="yt-dlp version",
+                on_done=lambda v: (self.set_ytdlp(v, path, force=True), self._bar.show_ytdlp(True)),
+            )
 
     def update_ytdlp(self) -> None:
         have, newest = version_tuple(self._ytdlp_local), version_tuple(self._ytdlp_latest)
         if have and newest and newest <= have:
-            messagebox.showinfo(t("msg.ytdlp_update_title"),
-                                f"yt-dlp {self._ytdlp_local} is already up to date.", parent=self._window)
+            messagebox.showinfo(
+                t("msg.ytdlp_update_title"),
+                f"yt-dlp {self._ytdlp_local} is already up to date.",
+                parent=self._window,
+            )
             return
         if self._ytdlp_path and not updater.is_app_managed(self._ytdlp_path):
             if not messagebox.askyesno(
-                    t("msg.ytdlp_update_title"),
-                    f"This yt-dlp ({self._ytdlp_path}) was installed by your system.\n\nDownload the latest "
-                    "official yt-dlp for this app instead? (Your system copy is left untouched.)",
-                    parent=self._window):
+                t("msg.ytdlp_update_title"),
+                f"This yt-dlp ({self._ytdlp_path}) was installed by your system.\n\nDownload the latest "
+                "official yt-dlp for this app instead? (Your system copy is left untouched.)",
+                parent=self._window,
+            ):
                 return
-        elif not messagebox.askyesno(t("msg.ytdlp_update_title"), t("msg.ytdlp_update_confirm"),
-                                     parent=self._window):
+        elif not messagebox.askyesno(
+            t("msg.ytdlp_update_title"), t("msg.ytdlp_update_confirm"), parent=self._window
+        ):
             return
         self._bar.ytdlp.config(text=t("app.status.ytdlp_updating"), fg=self._bar.skin["orange"])
         self._set_status(t("app.status.ytdlp_updating"))
@@ -136,6 +161,7 @@ class ToolVersions:
     def _install(self) -> tuple[str, str] | None:
         """Worker: download yt-dlp; (version, path) when it worked."""
         from core import ui
+
         if not updater.install_ytdlp(lambda msg: ui.call_soon(self._set_status, msg)):
             return None
         path = find_binary("yt-dlp")

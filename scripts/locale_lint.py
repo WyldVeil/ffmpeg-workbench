@@ -16,6 +16,7 @@ which is always better than showing another string's text.
     python scripts/locale_lint.py            # report
     python scripts/locale_lint.py --fix      # remove offending values in place
 """
+
 from __future__ import annotations
 
 import argparse
@@ -63,8 +64,9 @@ def problems(key: str, en: str, tr: str, locale: str) -> list[str]:
         out.append("placeholder mismatch")
     if tr.count("\n") != en.count("\n") and en.count("\n") + tr.count("\n") > 0:
         out.append("line-break mismatch")
-    if _end_class(en) != _end_class(tr) and (_end_class(en) in ("ellipsis", "question") or
-                                              _end_class(tr) in ("ellipsis", "question")):
+    if _end_class(en) != _end_class(tr) and (
+        _end_class(en) in ("ellipsis", "question") or _end_class(tr) in ("ellipsis", "question")
+    ):
         out.append("ending mismatch")
     if locale not in CJK and len(en) >= 12:
         ratio = len(tr) / max(1, len(en))
@@ -76,8 +78,12 @@ def problems(key: str, en: str, tr: str, locale: str) -> list[str]:
 def _neighbour_shifted(order, en, data) -> set:
     import math
     import statistics
-    ratios = [len(data[k]) / len(en[k]) for k in order
-              if k in data and isinstance(data[k], str) and len(en[k]) >= 8]
+
+    ratios = [
+        len(data[k]) / len(en[k])
+        for k in order
+        if k in data and isinstance(data[k], str) and len(en[k]) >= 8
+    ]
     if not ratios:
         return set()
     m = statistics.median(ratios)
@@ -117,7 +123,9 @@ def lint(fix: bool = False, quiet: bool = False) -> int:
             for k in _neighbour_shifted(list(en), en, data):
                 bad.setdefault(k, ["neighbour-shifted"])
         stale = [k for k in data if k != "_meta" and k not in en]
-        kinds = Counter(x.split(" ")[0] if x.startswith("length") else x for v in bad.values() for x in v)
+        kinds = Counter(
+            x.split(" ")[0] if x.startswith("length") else x for v in bad.values() for x in v
+        )
         total += len(bad)
         if not quiet:
             print(f"{locale:7} {len(bad):5} bad, {len(stale):4} stale  {dict(kinds)}")

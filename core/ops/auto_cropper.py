@@ -3,6 +3,7 @@ core/ops/auto_cropper.py - command builders for tabs/social/auto_cropper.py (als
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,9 +16,27 @@ def detect_bars(path: str, duration: float, samples: int = 6) -> tuple | None:
     boxes = []
     for i in range(samples):
         at = duration * (i + 0.5) / samples
-        r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-ss", ff.ts(at), "-t", "1.5",
-                        "-i", path, "-an", "-sn", "-vf", "cropdetect=limit=0.094:round=2:reset=0",
-                        "-f", "null", "-"], timeout=60)
+        r = ff.capture(
+            [
+                ff.ffmpeg_path(),
+                "-hide_banner",
+                "-nostdin",
+                "-ss",
+                ff.ts(at),
+                "-t",
+                "1.5",
+                "-i",
+                path,
+                "-an",
+                "-sn",
+                "-vf",
+                "cropdetect=limit=0.094:round=2:reset=0",
+                "-f",
+                "null",
+                "-",
+            ],
+            timeout=60,
+        )
         found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", r.stderr or "")
         if found:
             w, h, x, y = (int(v) for v in found[-1])

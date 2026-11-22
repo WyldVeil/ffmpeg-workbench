@@ -17,6 +17,7 @@ holds from construction on, so float drift never reaches a cut point).
     f"{tc:ff}"       -> "3723.500"         an FFmpeg -ss/-t argument
     tc.snap(25)      -> the nearest frame at 25 fps
 """
+
 from __future__ import annotations
 
 import math
@@ -31,6 +32,7 @@ _SPEC: Final = re.compile(r"^(?P<lead>[Hm]?)(?:\.(?P<digits>[0-3]))?$")
 @dataclass(frozen=True, slots=True, order=True)
 class Timecode:
     """Whole milliseconds from the start; never negative."""
+
     ms: int
 
     def __post_init__(self) -> None:
@@ -64,9 +66,9 @@ class Timecode:
             raise ValueError(f"not a time: {text!r}")
         a, b, c = m.groups()
         secs = float(c.replace(",", "."))
-        if a is not None and b is not None:            # H:M:S
+        if a is not None and b is not None:  # H:M:S
             secs += int(a) * 3600 + int(b) * 60
-        elif a is not None:                            # M:S
+        elif a is not None:  # M:S
             secs += int(a) * 60
         return cls.of(secs)
 
@@ -127,9 +129,9 @@ class Timecode:
         if not found:
             raise ValueError(f"unknown Timecode format {spec!r}")
         lead, digits = found["lead"], int(found["digits"] or 3)
-        unit = 10 ** (3 - digits)                      # round once, at the shown precision,
-        ticks = round(self.ms / unit)                  # so 59.999 s at 2 digits is 01:00.00
-        whole, frac = divmod(ticks, 10 ** digits)
+        unit = 10 ** (3 - digits)  # round once, at the shown precision,
+        ticks = round(self.ms / unit)  # so 59.999 s at 2 digits is 01:00.00
+        whole, frac = divmod(ticks, 10**digits)
         h, rem = divmod(whole, 3600)
         m, s = divmod(rem, 60)
         tail = f".{frac:0{digits}d}" if digits else ""

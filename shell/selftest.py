@@ -2,6 +2,7 @@
 
 The bundled programs are found and run, a short test encode works, and every
 tool page loads.  Prints what it checked; the exit code is 1 on any problem."""
+
 from __future__ import annotations
 
 import logging
@@ -28,9 +29,28 @@ def run(app: App) -> int:
         if not path:
             problems.append(f"{tool} missing")
     out = os.path.join(tempfile.mkdtemp(prefix="selftest_"), "t.mp4")
-    res = ff.run([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25:d=1",
-                  "-f", "lavfi", "-i", "sine=d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                  "-c:a", "aac", "-shortest", out])
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x240:rate=25:d=1",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=d=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+            out,
+        ]
+    )
     info = ff.try_probe(out)
     ok = res.ok and info is not None and info.has_video and info.has_audio
     print("encode  ", "ok" if ok else res.error_summary)
@@ -42,7 +62,7 @@ def run(app: App) -> int:
             app.update()
             if isinstance(page, ErrorPage):
                 problems.append(f"tool failed to load: {tool.value}")
-        except Exception as exc:                     # report every problem, not just the first
+        except Exception as exc:  # report every problem, not just the first
             logger.debug("run: best-effort step failed", exc_info=True)
             problems.append(f"{tool.value}: {exc}")
     print(f"pages    {len(ToolId)} checked")

@@ -12,6 +12,7 @@ core/dialogs.py - File dialogs that feel native and behave the same everywhere.
 
 All functions return ``""`` / ``[]`` when the user cancels.
 """
+
 from __future__ import annotations
 
 import os
@@ -26,10 +27,46 @@ from core import settings, tasks
 _IS_WIN = sys.platform.startswith("win")
 _IS_MAC = sys.platform == "darwin"
 
-VIDEO_EXTS = ("mp4", "mov", "mkv", "avi", "webm", "m4v", "wmv", "flv", "mpg", "mpeg",
-              "ts", "mts", "m2ts", "3gp", "ogv", "vob", "mxf", "gif", "y4m")
-AUDIO_EXTS = ("mp3", "wav", "flac", "aac", "m4a", "ogg", "oga", "opus", "wma", "aif",
-              "aiff", "alac", "ac3", "eac3", "mka", "caf", "amr")
+VIDEO_EXTS = (
+    "mp4",
+    "mov",
+    "mkv",
+    "avi",
+    "webm",
+    "m4v",
+    "wmv",
+    "flv",
+    "mpg",
+    "mpeg",
+    "ts",
+    "mts",
+    "m2ts",
+    "3gp",
+    "ogv",
+    "vob",
+    "mxf",
+    "gif",
+    "y4m",
+)
+AUDIO_EXTS = (
+    "mp3",
+    "wav",
+    "flac",
+    "aac",
+    "m4a",
+    "ogg",
+    "oga",
+    "opus",
+    "wma",
+    "aif",
+    "aiff",
+    "alac",
+    "ac3",
+    "eac3",
+    "mka",
+    "caf",
+    "amr",
+)
 IMAGE_EXTS = ("png", "jpg", "jpeg", "bmp", "webp", "tif", "tiff", "gif", "avif", "heic")
 SUB_EXTS = ("srt", "ass", "ssa", "vtt", "sub", "sbv")
 LUT_EXTS = ("cube", "3dl", "dat", "m3d", "csp", "png", "tif", "tiff")
@@ -58,7 +95,7 @@ _KINDS = {
 def _patterns(exts: Sequence[str]) -> str:
     if not exts:
         return "*"
-    if _IS_WIN:      # Windows matching is already case-insensitive
+    if _IS_WIN:  # Windows matching is already case-insensitive
         return " ".join(f"*.{e}" for e in exts)
     return " ".join(f"*.{e} *.{e.upper()}" for e in exts)
 
@@ -80,6 +117,7 @@ def is_kind(path: str, kind: str) -> bool:
 
 
 # ── remembered folders ───────────────────────────────────────────────────────
+
 
 def _last_dir(kind: str) -> str:
     d = settings.get(f"last_dir.{kind}", "") or settings.get("last_dir.any", "")
@@ -103,6 +141,7 @@ def _remember(kind: str, path: str) -> None:
 
 # ── native dialogs (Linux) ───────────────────────────────────────────────────
 
+
 def _native_tool() -> str | None:
     if _IS_WIN or _IS_MAC:
         return None
@@ -112,8 +151,14 @@ def _native_tool() -> str | None:
         return None
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         return None
-    desktop = (os.environ.get("XDG_CURRENT_DESKTOP", "") + os.environ.get("DESKTOP_SESSION", "")).lower()
-    order = ("kdialog", "zenity") if ("kde" in desktop or "plasma" in desktop) else ("zenity", "kdialog")
+    desktop = (
+        os.environ.get("XDG_CURRENT_DESKTOP", "") + os.environ.get("DESKTOP_SESSION", "")
+    ).lower()
+    order = (
+        ("kdialog", "zenity")
+        if ("kde" in desktop or "plasma" in desktop)
+        else ("zenity", "kdialog")
+    )
     for tool in order:
         if shutil.which(tool):
             return tool
@@ -125,6 +170,7 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
     import tkinter as tk
 
     from core import ui
+
     root = parent or ui.tk_default_root()
     result: dict = {}
     finished = threading.Event()
@@ -134,6 +180,7 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
         # wait_variable(), not mainloop(), so cross-thread Tk calls fail.
         try:
             from core.procenv import child_env
+
             r = _proc.run(cmd, timeout=None, env=child_env())
             result["rc"], result["out"] = r.returncode, r.stdout
         except OSError as exc:
@@ -162,8 +209,8 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
     if result.get("rc") == 0:
         return result.get("out", "").rstrip("\n")
     if result.get("rc") == -1:
-        return None          # tool failed to start - caller falls back to Tk
-    return ""                # cancelled
+        return None  # tool failed to start - caller falls back to Tk
+    return ""  # cancelled
 
 
 def _kdialog_filter(kind: str) -> str:
@@ -186,12 +233,24 @@ def _zenity_filters(kind: str) -> list:
 
 def _native_open(tool: str, kind: str, title: str, start: str, many: bool, parent) -> list | None:
     if tool == "kdialog":
-        cmd = ["kdialog", "--title", title, "--getopenfilename", start + os.sep, _kdialog_filter(kind)]
+        cmd = [
+            "kdialog",
+            "--title",
+            title,
+            "--getopenfilename",
+            start + os.sep,
+            _kdialog_filter(kind),
+        ]
         if many:
             cmd += ["--multiple", "--separate-output"]
     else:
-        cmd = ["zenity", "--file-selection", f"--title={title}", f"--filename={start}{os.sep}",
-               *_zenity_filters(kind)]
+        cmd = [
+            "zenity",
+            "--file-selection",
+            f"--title={title}",
+            f"--filename={start}{os.sep}",
+            *_zenity_filters(kind),
+        ]
         if many:
             cmd += ["--multiple", "--separator=\n"]
     out = _run_blocking_keep_ui(cmd, parent)
@@ -204,8 +263,14 @@ def _native_save(tool: str, kind: str, title: str, start_path: str, parent) -> s
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getsavefilename", start_path, _kdialog_filter(kind)]
     else:
-        cmd = ["zenity", "--file-selection", "--save", f"--title={title}",
-               f"--filename={start_path}", *_zenity_filters(kind)]
+        cmd = [
+            "zenity",
+            "--file-selection",
+            "--save",
+            f"--title={title}",
+            f"--filename={start_path}",
+            *_zenity_filters(kind),
+        ]
     return _run_blocking_keep_ui(cmd, parent)
 
 
@@ -213,14 +278,22 @@ def _native_dir(tool: str, title: str, start: str, parent) -> str | None:
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getexistingdirectory", start]
     else:
-        cmd = ["zenity", "--file-selection", "--directory", f"--title={title}", f"--filename={start}{os.sep}"]
+        cmd = [
+            "zenity",
+            "--file-selection",
+            "--directory",
+            f"--title={title}",
+            f"--filename={start}{os.sep}",
+        ]
     return _run_blocking_keep_ui(cmd, parent)
 
 
 # ── public API ───────────────────────────────────────────────────────────────
 
-def ask_open(kind: str = "media", *, title: str = "Open", parent=None,
-             initialdir: str | None = None) -> str:
+
+def ask_open(
+    kind: str = "media", *, title: str = "Open", parent=None, initialdir: str | None = None
+) -> str:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
@@ -230,15 +303,21 @@ def ask_open(kind: str = "media", *, title: str = "Open", parent=None,
             _remember(kind, path)
             return path
     from tkinter import filedialog
-    path = filedialog.askopenfilename(title=title, parent=parent, initialdir=start,
-                                      filetypes=filetypes(kind)) or ""
+
+    path = (
+        filedialog.askopenfilename(
+            title=title, parent=parent, initialdir=start, filetypes=filetypes(kind)
+        )
+        or ""
+    )
     path = str(path)
     _remember(kind, path)
     return path
 
 
-def ask_open_many(kind: str = "media", *, title: str = "Open", parent=None,
-                  initialdir: str | None = None) -> list:
+def ask_open_many(
+    kind: str = "media", *, title: str = "Open", parent=None, initialdir: str | None = None
+) -> list:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
@@ -248,16 +327,28 @@ def ask_open_many(kind: str = "media", *, title: str = "Open", parent=None,
                 _remember(kind, res[0])
             return res
     from tkinter import filedialog
-    paths = filedialog.askopenfilenames(title=title, parent=parent, initialdir=start,
-                                        filetypes=filetypes(kind)) or ()
+
+    paths = (
+        filedialog.askopenfilenames(
+            title=title, parent=parent, initialdir=start, filetypes=filetypes(kind)
+        )
+        or ()
+    )
     paths = [str(p) for p in paths]
     if paths:
         _remember(kind, paths[0])
     return paths
 
 
-def ask_save(default_name: str = "", *, kind: str = "video", defaultextension: str = ".mp4",
-             title: str = "Save as", parent=None, initialdir: str | None = None) -> str:
+def ask_save(
+    default_name: str = "",
+    *,
+    kind: str = "video",
+    defaultextension: str = ".mp4",
+    title: str = "Save as",
+    parent=None,
+    initialdir: str | None = None,
+) -> str:
     """Ask where to save.  The native/Tk dialog already confirms overwrites."""
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     if default_name and os.path.isabs(default_name):
@@ -273,10 +364,18 @@ def ask_save(default_name: str = "", *, kind: str = "video", defaultextension: s
                 _CONFIRMED.add(os.path.abspath(res))
             return res
     from tkinter import filedialog
-    path = filedialog.asksaveasfilename(title=title, parent=parent, initialdir=start,
-                                        initialfile=default_name or None,
-                                        defaultextension=defaultextension,
-                                        filetypes=filetypes(kind)) or ""
+
+    path = (
+        filedialog.asksaveasfilename(
+            title=title,
+            parent=parent,
+            initialdir=start,
+            initialfile=default_name or None,
+            defaultextension=defaultextension,
+            filetypes=filetypes(kind),
+        )
+        or ""
+    )
     path = str(path)
     if path:
         _remember(kind, path)
@@ -284,8 +383,13 @@ def ask_save(default_name: str = "", *, kind: str = "video", defaultextension: s
     return path
 
 
-def ask_directory(*, title: str = "Choose folder", parent=None,
-                  initialdir: str | None = None, kind: str = "folder") -> str:
+def ask_directory(
+    *,
+    title: str = "Choose folder",
+    parent=None,
+    initialdir: str | None = None,
+    kind: str = "folder",
+) -> str:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
@@ -294,6 +398,7 @@ def ask_directory(*, title: str = "Choose folder", parent=None,
             _remember(kind, res)
             return res
     from tkinter import filedialog
+
     path = str(filedialog.askdirectory(title=title, parent=parent, initialdir=start) or "")
     _remember(kind, path)
     return path
@@ -311,6 +416,7 @@ def was_confirmed(path: str) -> bool:
 # Same keyword arguments as tkinter.filedialog.*, so existing call sites can
 # switch with a one-word change and gain native Linux dialogs, case-insensitive
 # patterns and remembered folders.
+
 
 def _expand_case(patterns) -> str:
     items = patterns.split() if isinstance(patterns, str) else list(patterns)
@@ -352,12 +458,16 @@ def _normalise_filetypes(filetypes) -> list:
 def _kind_from_filetypes(filetypes) -> str:
     exts = set()
     for _label, pats in filetypes or ():
-        for p in (pats.split() if isinstance(pats, str) else pats):
+        for p in pats.split() if isinstance(pats, str) else pats:
             if p.startswith("*."):
                 exts.add(p[2:].lower())
     for kind in ("subtitle", "lut", "midi", "soundfont", "font", "image", "audio", "video"):
         if exts & set(_KINDS[kind][1]):
-            if kind in ("audio", "video") and exts & set(_KINDS["video"][1]) and exts & set(_KINDS["audio"][1]):
+            if (
+                kind in ("audio", "video")
+                and exts & set(_KINDS["video"][1])
+                and exts & set(_KINDS["audio"][1])
+            ):
                 return "media"
             return kind
     return "any"
@@ -377,17 +487,29 @@ def askopenfilename(**kw) -> str:
     tool = _native_tool()
     if tool:
         if tool == "kdialog":
-            cmd = ["kdialog", "--title", title, "--getopenfilename", start + os.sep,
-                   *_native_filter_from_types(tool, filetypes)]
+            cmd = [
+                "kdialog",
+                "--title",
+                title,
+                "--getopenfilename",
+                start + os.sep,
+                *_native_filter_from_types(tool, filetypes),
+            ]
         else:
-            cmd = ["zenity", "--file-selection", f"--title={title}", f"--filename={start}{os.sep}",
-                   *_native_filter_from_types(tool, filetypes)]
+            cmd = [
+                "zenity",
+                "--file-selection",
+                f"--title={title}",
+                f"--filename={start}{os.sep}",
+                *_native_filter_from_types(tool, filetypes),
+            ]
         res = _run_blocking_keep_ui(cmd, kw.get("parent"))
         if res is not None:
             path = res.splitlines()[0] if res else ""
             _remember(kind, path)
             return path
     from tkinter import filedialog
+
     kw.setdefault("initialdir", start)
     path = str(filedialog.askopenfilename(filetypes=filetypes, **kw) or "")
     _remember(kind, path)
@@ -402,11 +524,26 @@ def askopenfilenames(**kw) -> tuple:
     tool = _native_tool()
     if tool:
         if tool == "kdialog":
-            cmd = ["kdialog", "--title", title, "--getopenfilename", start + os.sep,
-                   *_native_filter_from_types(tool, filetypes), "--multiple", "--separate-output"]
+            cmd = [
+                "kdialog",
+                "--title",
+                title,
+                "--getopenfilename",
+                start + os.sep,
+                *_native_filter_from_types(tool, filetypes),
+                "--multiple",
+                "--separate-output",
+            ]
         else:
-            cmd = ["zenity", "--file-selection", f"--title={title}", f"--filename={start}{os.sep}",
-                   *_native_filter_from_types(tool, filetypes), "--multiple", "--separator=\n"]
+            cmd = [
+                "zenity",
+                "--file-selection",
+                f"--title={title}",
+                f"--filename={start}{os.sep}",
+                *_native_filter_from_types(tool, filetypes),
+                "--multiple",
+                "--separator=\n",
+            ]
         res = _run_blocking_keep_ui(cmd, kw.get("parent"))
         if res is not None:
             paths = tuple(p for p in res.splitlines() if p.strip())
@@ -414,6 +551,7 @@ def askopenfilenames(**kw) -> tuple:
                 _remember(kind, paths[0])
             return paths
     from tkinter import filedialog
+
     kw.setdefault("initialdir", start)
     paths = tuple(str(p) for p in (filedialog.askopenfilenames(filetypes=filetypes, **kw) or ()))
     if paths:
@@ -434,11 +572,23 @@ def asksaveasfilename(**kw) -> str:
     if tool:
         target = os.path.join(start, initialfile)
         if tool == "kdialog":
-            cmd = ["kdialog", "--title", title, "--getsavefilename", target,
-                   *_native_filter_from_types(tool, filetypes)]
+            cmd = [
+                "kdialog",
+                "--title",
+                title,
+                "--getsavefilename",
+                target,
+                *_native_filter_from_types(tool, filetypes),
+            ]
         else:
-            cmd = ["zenity", "--file-selection", "--save", f"--title={title}",
-                   f"--filename={target}", *_native_filter_from_types(tool, filetypes)]
+            cmd = [
+                "zenity",
+                "--file-selection",
+                "--save",
+                f"--title={title}",
+                f"--filename={target}",
+                *_native_filter_from_types(tool, filetypes),
+            ]
         res = _run_blocking_keep_ui(cmd, kw.get("parent"))
         if res is not None:
             if res and defext and not os.path.splitext(res)[1]:
@@ -448,6 +598,7 @@ def asksaveasfilename(**kw) -> str:
                 _CONFIRMED.add(os.path.abspath(res))
             return res
     from tkinter import filedialog
+
     kw.setdefault("initialdir", start)
     if initialfile:
         kw["initialfile"] = initialfile
@@ -468,6 +619,7 @@ def askdirectory(**kw) -> str:
             _remember("folder", res)
             return res
     from tkinter import filedialog
+
     kw.setdefault("initialdir", start)
     path = str(filedialog.askdirectory(**kw) or "")
     _remember("folder", path)

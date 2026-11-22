@@ -12,6 +12,7 @@ from core import ffmpeg as ff
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -22,13 +23,22 @@ def _ok(ui):
 
 # ── Preset Manager ──────────────────────────────────────────────────────────
 
+
 def test_preset_templates_are_not_shell():
     from tabs.transcoder import presets as pr
-    for bad in ("-i {INPUT} -c copy {OUTPUT} && rm -rf ~", "-i {INPUT} {OUTPUT} | tee x", "-i {INPUT} {OUTPUT} > log",
-                "-i {INPUT} -c copy x.mp4", "-c copy {OUTPUT}"):
+
+    for bad in (
+        "-i {INPUT} -c copy {OUTPUT} && rm -rf ~",
+        "-i {INPUT} {OUTPUT} | tee x",
+        "-i {INPUT} {OUTPUT} > log",
+        "-i {INPUT} -c copy x.mp4",
+        "-c copy {OUTPUT}",
+    ):
         with pytest.raises(ValueError):
             pr.check_template(bad)
-    cmd = pr.build_command('ffmpeg -i {INPUT} -vf "scale=640:-2,setsar=1" {OUTPUT}', r"C:\clips\a b.mp4", "/o/x.mp4")
+    cmd = pr.build_command(
+        'ffmpeg -i {INPUT} -vf "scale=640:-2,setsar=1" {OUTPUT}', r"C:\clips\a b.mp4", "/o/x.mp4"
+    )
     assert cmd[-5:] == ["-i", r"C:\clips\a b.mp4", "-vf", "scale=640:-2,setsar=1", "/o/x.mp4"]
     for p in pr.BUILT_IN:
         pr.check_template(p["cmd"])
@@ -39,11 +49,18 @@ def test_preset_templates_are_not_shell():
 def test_preset_run_with_hostile_file_name(ui, media, tmp_path, outdir):
     src = tmp_path / 'clip"; touch wme_pwned_marker; echo $(touch wme_pwned_marker2) ".mp4'
     shutil.copyfile(media["h264"], src)
-    markers = [d / m for d in (tmp_path, pathlib.Path.cwd(), outdir) for m in ("wme_pwned_marker", "wme_pwned_marker2")]
+    markers = [
+        d / m
+        for d in (tmp_path, pathlib.Path.cwd(), outdir)
+        for m in ("wme_pwned_marker", "wme_pwned_marker2")
+    ]
     ui.reset()
     tab = ui.open("Preset Manager")
     from tabs.transcoder import presets as pr
-    tab._selected_idx = next(i for i, p in enumerate(tab.presets) if p["cmd"] == pr.BUILT_IN[5]["cmd"])  # audio only
+
+    tab._selected_idx = next(
+        i for i, p in enumerate(tab.presets) if p["cmd"] == pr.BUILT_IN[5]["cmd"]
+    )  # audio only
     tab.run_src_var.set(str(src))
     out = str(outdir / "preset.m4a")
     tab.run_out_var.set(out)
@@ -57,18 +74,22 @@ def test_preset_run_with_hostile_file_name(ui, media, tmp_path, outdir):
 
 def test_presets_file_corrupt_is_kept(tmp_path, monkeypatch):
     from tabs.transcoder import presets as pr
+
     path = tmp_path / "encode_presets.json"
     path.write_text("{not json")
     monkeypatch.setattr(pr, "presets_file", lambda: str(path))
     presets, warning = pr._load_presets()
     assert warning and len(presets) == len(pr.BUILT_IN)
-    assert not path.exists() and any(f.name.startswith("encode_presets.json.unreadable-") for f in tmp_path.iterdir())
+    assert not path.exists() and any(
+        f.name.startswith("encode_presets.json.unreadable-") for f in tmp_path.iterdir()
+    )
     assert pr._save_user_presets([*presets, {"name": "Mine", "cmd": "-i {INPUT} {OUTPUT}"}]) == ""
     again, warning = pr._load_presets()
     assert not warning and again[-1]["name"] == "Mine"
 
 
 # ── Format Converter ────────────────────────────────────────────────────────
+
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
@@ -79,6 +100,7 @@ def test_format_converter_batch(ui, media, outdir):
     for key in ("hevc10", "vp9", "mp3"):
         tab.load_file(media[key])
     from tabs.transcoder.converter import FORMATS
+
     tab.fmt_var.set(FORMATS["mp4"][0])
     tab.out_dir_var.set(str(outdir))
     tab._render()
@@ -104,6 +126,7 @@ def test_format_converter_reports_failures(ui, media, outdir, tmp_path):
     tab.load_file(media["h264"])
     tab.load_file(str(bad))
     from tabs.transcoder.converter import FORMATS
+
     tab.fmt_var.set(FORMATS["mkv"][0])
     tab.out_dir_var.set(str(outdir))
     tab._render()
@@ -111,15 +134,21 @@ def test_format_converter_reports_failures(ui, media, outdir, tmp_path):
     errs = ui.dialogs.errors()
     assert errs and "1 of 2" in errs[0][2]
     ui.dialogs.reset()
-    assert [f for f in os.listdir(outdir) if f.endswith(".mkv")] and not [f for f in os.listdir(outdir) if ".part" in f]
+    assert [f for f in os.listdir(outdir) if f.endswith(".mkv")] and not [
+        f for f in os.listdir(outdir) if ".part" in f
+    ]
 
 
 # ── Downsizer ───────────────────────────────────────────────────────────────
 
+
 def test_downsizer_plan():
     from core.ops.downsizer import plan, retry_kbps
+
     p = plan(60, 10_000_000, (1920, 1080), 60, codec="h264")
-    assert p.fps == 30 and p.height < 1080 and p.video_kbps + p.audio_kbps < 10_000_000 * 8 / 1000 / 60
+    assert (
+        p.fps == 30 and p.height < 1080 and p.video_kbps + p.audio_kbps < 10_000_000 * 8 / 1000 / 60
+    )
     with pytest.raises(ValueError):
         plan(3600, 8_000_000, (1920, 1080), 30)
     assert retry_kbps(1000, 10_000_000, 11_000_000) < 1000
@@ -134,7 +163,8 @@ def test_downsizer_hits_target(ui, media, outdir, speed):
     tab.src_row.set(media["h264_1080p25"])
     ui.pump(0.4)
     from tabs.transcoder.downsizer import TARGETS
-    tab.target_var.set(TARGETS[-1][0])          # custom
+
+    tab.target_var.set(TARGETS[-1][0])  # custom
     tab._target_mb.set("0.5")
     tab.speed_var.set(speed)
     out = str(outdir / f"small_{speed}.mp4")
@@ -144,15 +174,19 @@ def test_downsizer_hits_target(ui, media, outdir, speed):
     _ok(ui)
     assert os.path.getsize(out) <= 500_000
     info = ff.probe(out, use_cache=False)
-    assert info.has_video and info.duration == pytest.approx(ff.duration_of(media["h264_1080p25"]), abs=0.2)
+    assert info.has_video and info.duration == pytest.approx(
+        ff.duration_of(media["h264_1080p25"]), abs=0.2
+    )
 
 
 # ── Resolution Scaler / Framerate Interpolator ──────────────────────────────
+
 
 def test_scaler_helpers():
     from fractions import Fraction as F
 
     from tabs.transcoder.scaler import chunk_step, chunks, geometry
+
     assert chunk_step(F(30000, 1001), F(60000, 1001)) == F(1001, 30000)
     assert chunk_step(F(25), F(60)) == F(1, 5)
     pieces = chunks(10.0, F(1, 5), 4)
@@ -164,10 +198,13 @@ def test_scaler_helpers():
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("size,shape,want", [("Twice the size (×2)", "fit", (2560, 1440)),
-                                             ("480p (854×480)", "pad", (854, 480))])
+@pytest.mark.parametrize(
+    "size,shape,want",
+    [("Twice the size (×2)", "fit", (2560, 1440)), ("480p (854×480)", "pad", (854, 480))],
+)
 def test_resolution_scaler(ui, media, outdir, size, shape, want):
     from tabs.transcoder.scaler import SHAPES
+
     ui.reset()
     tab = ui.open("Resolution Scaler")
     tab.src_row.set(media["h264"])
@@ -204,10 +241,15 @@ def test_fps_interpolator(ui, media, outdir, slowmo):
     assert info.require_video().fps == pytest.approx(60, abs=0.1)
     assert info.duration == pytest.approx(src_dur * (2 if slowmo else 1), abs=0.15)
     if info.has_audio:
-        assert info.require_audio().duration == pytest.approx(info.duration, abs=0.2) if info.require_audio().duration else True
+        assert (
+            info.require_audio().duration == pytest.approx(info.duration, abs=0.2)
+            if info.require_audio().duration
+            else True
+        )
 
 
 # ── Proxy Generator / Encode Queue ──────────────────────────────────────────
+
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
@@ -223,21 +265,48 @@ def test_proxy_generator(ui, media, tmp_path):
     _ok(ui)
     out = tmp_path / "Proxy" / "A001_C002.mov"
     info = ff.probe(str(out), use_cache=False)
-    assert info.require_video().codec == "prores" and (info.require_video().width, info.require_video().height) == (960, 540)
+    assert info.require_video().codec == "prores" and (
+        info.require_video().width,
+        info.require_video().height,
+    ) == (960, 540)
     assert info.require_audio().codec == "pcm_s16le"
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("vcodec,acodec,ext", [("libx264", "aac", ".mp4"), ("libx265", "aac", ".mp4"),
-                                               ("libvpx-vp9", "libopus", ".webm"), ("libvpx", "libvorbis", ".webm"),
-                                               ("prores_ks", "pcm_s16le", ".mov"), ("dnxhd", "pcm_s16le", ".mov")])
+@pytest.mark.parametrize(
+    "vcodec,acodec,ext",
+    [
+        ("libx264", "aac", ".mp4"),
+        ("libx265", "aac", ".mp4"),
+        ("libvpx-vp9", "libopus", ".webm"),
+        ("libvpx", "libvorbis", ".webm"),
+        ("prores_ks", "pcm_s16le", ".mov"),
+        ("dnxhd", "pcm_s16le", ".mov"),
+    ],
+)
 def test_encode_queue_commands_run(media, tmp_path, vcodec, acodec, ext):
     from tabs.transcoder.encode_queue import Job
+
     j = Job()
     j.src = str(tmp_path / "in.mp4")
     import subprocess
-    subprocess.run([ff.ffmpeg_path(), "-y", "-loglevel", "error", "-t", "1", "-i", media["h264"], "-c", "copy", j.src],
-                   check=True)
+
+    subprocess.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-loglevel",
+            "error",
+            "-t",
+            "1",
+            "-i",
+            media["h264"],
+            "-c",
+            "copy",
+            j.src,
+        ],
+        check=True,
+    )
     j.out = str(tmp_path / f"out{ext}")
     j.vcodec, j.acodec, j.resolution, j.fps = vcodec, acodec, "640x360", "29.97"
     cmd = j.build_cmd(ff.ffmpeg_path())
@@ -249,6 +318,7 @@ def test_encode_queue_commands_run(media, tmp_path, vcodec, acodec, ext):
 
 def test_encode_queue_rejects_bad_combinations():
     from tabs.transcoder.encode_queue import Job
+
     j = Job()
     j.src, j.out = "a.mp4", "b.mp4"
     j.vcodec = "libvpx"

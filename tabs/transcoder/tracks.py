@@ -8,6 +8,7 @@ delay), save any single track as its own file, and move everything into
 MKV, MP4, MOV or WebM - with a plain warning for whatever the chosen
 container can't hold.  See core/remux.py.
 """
+
 from __future__ import annotations
 
 import os
@@ -21,8 +22,12 @@ from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
 
-CONTAINERS = {"mkv": "MKV - holds everything", "mp4": "MP4 - plays everywhere", "mov": "MOV - Apple / editing",
-              "webm": "WebM - web"}
+CONTAINERS = {
+    "mkv": "MKV - holds everything",
+    "mp4": "MP4 - plays everywhere",
+    "mov": "MOV - Apple / editing",
+    "webm": "WebM - web",
+}
 LANG_CHOICES = [f"{name} ({code})" if code else name for code, name in remux.LANGUAGES]
 
 
@@ -36,7 +41,7 @@ def lang_code(text: str) -> str:
     if not text or text == remux.LANGUAGE_NAMES[""]:
         return ""
     if text.endswith(")") and "(" in text:
-        return text[text.rindex("(") + 1:-1].strip()
+        return text[text.rindex("(") + 1 : -1].strip()
     by_name = {name.lower(): code for code, name in remux.LANGUAGES if code}
     return by_name.get(text.lower(), text.lower()[:8])
 
@@ -46,12 +51,17 @@ class TracksRemuxTab(BaseTab):
         super().__init__(parent)
         self.plan = remux.Plan()
         self._editing = False
-        self._edit_index = None        # the track whose values the editor shows
+        self._edit_index = None  # the track whose values the editor shows
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, "Tracks & Remux", "Keep, drop, reorder and label tracks, add audio or subtitles, "
-                                                "change the container - without re-encoding.", icon="🗂")
+        self.make_header(
+            self,
+            "Tracks & Remux",
+            "Keep, drop, reorder and label tracks, add audio or subtitles, "
+            "change the container - without re-encoding.",
+            icon="🗂",
+        )
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_file"), on_change=self._source_changed)
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
@@ -60,9 +70,15 @@ class TracksRemuxTab(BaseTab):
         lf.pack(fill="x", padx=px(20), pady=px(4))
         cols = ("keep", "kind", "what", "lang", "title", "flags", "from")
         self.tree = ttk.Treeview(lf, columns=cols, show="headings", height=9, selectmode="browse")
-        for c, label, w in (("keep", "Keep", 50), ("kind", "Type", 80), ("what", "Codec / details", 240),
-                            ("lang", "Language", 130), ("title", "Title", 170), ("flags", "Flags", 110),
-                            ("from", "From", 140)):
+        for c, label, w in (
+            ("keep", "Keep", 50),
+            ("kind", "Type", 80),
+            ("what", "Codec / details", 240),
+            ("lang", "Language", 130),
+            ("title", "Title", 170),
+            ("flags", "Flags", 110),
+            ("from", "From", 140),
+        ):
             self.tree.heading(c, text=label)
             self.tree.column(c, width=px(w), stretch=c in ("what", "title"))
         self.tree.pack(fill="x")
@@ -70,10 +86,16 @@ class TracksRemuxTab(BaseTab):
         self.tree.bind("<Double-1>", lambda _e: self._toggle_keep())
         bar = tk.Frame(lf)
         bar.pack(fill="x", pady=px(6, 0))
-        for text, cmd in (("✓ / ✗  Keep", self._toggle_keep), ("▲", lambda: self._move(-1)),
-                          ("▼", lambda: self._move(1)), ("➕  Add audio or subtitles…", self._add_file),
-                          ("💾  Save track as a file…", self._extract)):
-            tk.Button(bar, text=text, relief="flat", cursor="hand2", command=cmd).pack(side="left", padx=px(0, 6))
+        for text, cmd in (
+            ("✓ / ✗  Keep", self._toggle_keep),
+            ("▲", lambda: self._move(-1)),
+            ("▼", lambda: self._move(1)),
+            ("➕  Add audio or subtitles…", self._add_file),
+            ("💾  Save track as a file…", self._extract),
+        ):
+            tk.Button(bar, text=text, relief="flat", cursor="hand2", command=cmd).pack(
+                side="left", padx=px(0, 6)
+            )
 
         ed = tk.Frame(lf)
         ed.pack(fill="x", pady=px(8, 0))
@@ -92,8 +114,12 @@ class TracksRemuxTab(BaseTab):
         te.bind("<Return>", lambda _e: self._apply_edit())
         self.default_var = tk.BooleanVar()
         self.forced_var = tk.BooleanVar()
-        tk.Checkbutton(ed, text="Default", variable=self.default_var, command=self._apply_edit).pack(side="left")
-        tk.Checkbutton(ed, text="Forced", variable=self.forced_var, command=self._apply_edit).pack(side="left")
+        tk.Checkbutton(
+            ed, text="Default", variable=self.default_var, command=self._apply_edit
+        ).pack(side="left")
+        tk.Checkbutton(ed, text="Forced", variable=self.forced_var, command=self._apply_edit).pack(
+            side="left"
+        )
 
         opt = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
@@ -101,22 +127,40 @@ class TracksRemuxTab(BaseTab):
         r1.pack(fill="x")
         tk.Label(r1, text="Container:").pack(side="left")
         self.container_var = tk.StringVar(value=CONTAINERS["mkv"])
-        cb = ttk.Combobox(r1, textvariable=self.container_var, values=list(CONTAINERS.values()), state="readonly",
-                          width=26)
+        cb = ttk.Combobox(
+            r1,
+            textvariable=self.container_var,
+            values=list(CONTAINERS.values()),
+            state="readonly",
+            width=26,
+        )
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._container_changed())
         self.chapters_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Keep chapters", variable=self.chapters_var).pack(side="left", padx=px(12))
+        tk.Checkbutton(r1, text="Keep chapters", variable=self.chapters_var).pack(
+            side="left", padx=px(12)
+        )
         tk.Label(r1, text="File title:").pack(side="left")
         self.file_title = tk.StringVar()
         tk.Entry(r1, textvariable=self.file_title, width=24).pack(side="left", padx=px(4))
-        self.notes = tk.Label(opt, text="", fg=CLR["orange"], justify="left", anchor="w", wraplength=px(900))
+        self.notes = tk.Label(
+            opt, text="", fg=CLR["orange"], justify="left", anchor="w", wraplength=px(900)
+        )
         self.notes.pack(fill="x", pady=px(6, 0))
-        self.out_row = FileRow(opt, t("common.output_file"), save=True, ext=".mkv",
-                               suggest=lambda: self._suggest())
+        self.out_row = FileRow(
+            opt, t("common.output_file"), save=True, ext=".mkv", suggest=lambda: self._suggest()
+        )
         self.out_row.pack(fill="x", pady=px(6, 0))
-        self.btn = tk.Button(body, text="🗂  REMUX  (no re-encoding)", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                             fg="white", width=28, cursor="hand2", command=self._render)
+        self.btn = tk.Button(
+            body,
+            text="🗂  REMUX  (no re-encoding)",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=28,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -131,9 +175,13 @@ class TracksRemuxTab(BaseTab):
         return True
 
     def _source_changed(self, path):
-        if not path or not os.path.isfile(path) or (self.plan.inputs and self.plan.inputs[0] == path):
+        if (
+            not path
+            or not os.path.isfile(path)
+            or (self.plan.inputs and self.plan.inputs[0] == path)
+        ):
             return
-        self._edit_index = None            # the editor's values belong to the old file
+        self._edit_index = None  # the editor's values belong to the old file
         try:
             self.plan.load(path)
         except ff.ProbeError as exc:
@@ -160,12 +208,23 @@ class TracksRemuxTab(BaseTab):
     # ── Track list ────────────────────────────────────────────────────
     def _row_values(self, tr) -> tuple:
         flags = ", ".join(f for f, on in (("default", tr.default), ("forced", tr.forced)) if on)
-        src = os.path.basename(self.plan.inputs[tr.source]) if tr.source < len(self.plan.inputs) else ""
+        src = (
+            os.path.basename(self.plan.inputs[tr.source])
+            if tr.source < len(self.plan.inputs)
+            else ""
+        )
         if tr.delay:
             src += f" (+{tr.delay:g}s)"
         what = tr.codec.upper() if len(tr.codec) <= 5 else tr.codec
-        return ("✓" if tr.keep else "✗", tr.kind.capitalize(), f"{what} · {tr.details}" if tr.details else what,
-                lang_label(tr.language) if tr.language else "", tr.title, flags, src)
+        return (
+            "✓" if tr.keep else "✗",
+            tr.kind.capitalize(),
+            f"{what} · {tr.details}" if tr.details else what,
+            lang_label(tr.language) if tr.language else "",
+            tr.title,
+            flags,
+            src,
+        )
 
     def _refresh(self, select=None):
         """Rebuild the list (after loading, moving or adding tracks) and select *select*."""
@@ -177,7 +236,7 @@ class TracksRemuxTab(BaseTab):
         if sel is not None and 0 <= sel < len(self.plan.tracks):
             self.tree.selection_set(str(sel))
             self.tree.see(str(sel))
-            self._selected()               # the editor follows now, not when the select event arrives
+            self._selected()  # the editor follows now, not when the select event arrives
         self._update_notes()
 
     def _update_rows(self):
@@ -189,7 +248,9 @@ class TracksRemuxTab(BaseTab):
 
     def _update_notes(self):
         probs = remux.problems(self.plan.tracks, self._container())
-        self.notes.config(text="\n".join(f"⚠  Track {self.plan.tracks.index(tr) + 1}: {why}" for tr, why in probs))
+        self.notes.config(
+            text="\n".join(f"⚠  Track {self.plan.tracks.index(tr) + 1}: {why}" for tr, why in probs)
+        )
 
     def _index(self):
         sel = self.tree.selection()
@@ -199,7 +260,7 @@ class TracksRemuxTab(BaseTab):
         i = self._index()
         if i is None or i == self._edit_index:
             return
-        self._apply_edit()                 # an edit not yet saved belongs to the previous track
+        self._apply_edit()  # an edit not yet saved belongs to the previous track
         tr = self.plan.tracks[i]
         self._editing = True
         self.lang_var.set(lang_label(tr.language) if tr.language else remux.LANGUAGE_NAMES[""])
@@ -219,7 +280,7 @@ class TracksRemuxTab(BaseTab):
         tr.language = lang_code(self.lang_var.get())
         tr.title = self.title_var.get().strip()
         if self.default_var.get() and not tr.default:
-            self.plan.set_default(i)       # only one default per kind
+            self.plan.set_default(i)  # only one default per kind
         tr.default = bool(self.default_var.get())
         tr.forced = bool(self.forced_var.get())
         self._update_rows()
@@ -262,8 +323,14 @@ class TracksRemuxTab(BaseTab):
         tr = self.plan.tracks[i]
         src = self.plan.inputs[tr.source]
         base = os.path.splitext(src)[0]
-        suggestion = f"{base}.track{tr.index}" + (f".{tr.language}" if tr.language else "") + remux.extract_ext(tr)
-        out = dialogs.ask_save(suggestion, kind="media", defaultextension=remux.extract_ext(tr), parent=self)
+        suggestion = (
+            f"{base}.track{tr.index}"
+            + (f".{tr.language}" if tr.language else "")
+            + remux.extract_ext(tr)
+        )
+        out = dialogs.ask_save(
+            suggestion, kind="media", defaultextension=remux.extract_ext(tr), parent=self
+        )
         if not out:
             return
         self.extract(i, out)
@@ -275,9 +342,16 @@ class TracksRemuxTab(BaseTab):
             return
         cmd = remux.extract_command(self.plan.inputs[tr.source], tr, final)
         self.log(self.console, f"Saving {tr.describe()} → {os.path.basename(final)}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, final), btn=self.btn,
-                        btn_label="🗂  REMUX  (no re-encoding)", output=final, inputs=list(self.plan.inputs),
-                        name="Save track")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, final),
+            btn=self.btn,
+            btn_label="🗂  REMUX  (no re-encoding)",
+            output=final,
+            inputs=list(self.plan.inputs),
+            name="Save track",
+        )
 
     # ── Remux ─────────────────────────────────────────────────────────
     def _render(self):
@@ -293,14 +367,27 @@ class TracksRemuxTab(BaseTab):
         self.out_row.set(out)
         title = self.file_title.get().strip() or None
         try:
-            cmd, notes = remux.remux_command(self.plan.inputs, self.plan.tracks, out,
-                                             keep_chapters=self.chapters_var.get(), title=title)
+            cmd, notes = remux.remux_command(
+                self.plan.inputs,
+                self.plan.tracks,
+                out,
+                keep_chapters=self.chapters_var.get(),
+                title=title,
+            )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         for n in notes:
             self.log(self.console, n)
         info = ff.try_probe(self.plan.inputs[0])
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn,
-                        btn_label="🗂  REMUX  (no re-encoding)", duration=info.duration if info else None,
-                        output=out, inputs=list(self.plan.inputs), name="Remux")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn,
+            btn_label="🗂  REMUX  (no re-encoding)",
+            duration=info.duration if info else None,
+            output=out,
+            inputs=list(self.plan.inputs),
+            name="Remux",
+        )

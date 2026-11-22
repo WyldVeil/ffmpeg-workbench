@@ -25,6 +25,7 @@ It can also be run as a script to inspect a tab::
     python -m tests.gui_harness "Quick Trimmer"        # variables + buttons
     python -m tests.gui_harness --list                 # every page name
 """
+
 from __future__ import annotations
 
 import atexit
@@ -70,10 +71,22 @@ def ensure_display() -> None:
         return  # fall back to whatever display exists (e.g. CI's xvfb-run)
     rfd, wfd = os.pipe()
     proc = _REAL_POPEN(
-        [xvfb, "-displayfd", str(wfd), "-screen", "0", "1600x1000x24",
-         "-nolisten", "tcp", "-noreset"],
-        pass_fds=(wfd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL)
+        [
+            xvfb,
+            "-displayfd",
+            str(wfd),
+            "-screen",
+            "0",
+            "1600x1000x24",
+            "-nolisten",
+            "tcp",
+            "-noreset",
+        ],
+        pass_fds=(wfd,),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+    )
     os.close(wfd)
     buf = b""
     deadline = time.monotonic() + 15
@@ -97,12 +110,14 @@ def ensure_display() -> None:
             proc.wait(timeout=5)
         except Exception:
             pass
+
     atexit.register(_stop)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Subprocess recorder
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class _Recorder:
     def __init__(self) -> None:
@@ -136,11 +151,12 @@ class _RecordingPopen(_REAL_POPEN):  # type: ignore[misc, valid-type]
 #  Dialog stubs
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class _Dialogs:
     """Records modal dialogs and returns scripted answers."""
 
     def __init__(self) -> None:
-        self.log: list[tuple[str, str, str]] = []   # (kind, title, message)
+        self.log: list[tuple[str, str, str]] = []  # (kind, title, message)
         self.answers: dict[str, deque] = {}
         self.default_yes = True
 
@@ -164,6 +180,7 @@ class _Dialogs:
             message = kwargs.get("message") or (args[1] if len(args) > 1 else "")
             self.log.append((kind, str(title), str(message)))
             return self._pop(kind, default_factory())
+
         _stub.__name__ = f"stub_{kind}"
         return _stub
 
@@ -183,13 +200,15 @@ def _install_dialog_stubs() -> None:
 
     def yes():
         return DIALOGS.default_yes
+
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(messagebox, name, DIALOGS.make(name, lambda: "ok"))
     for name in ("askyesno", "askokcancel", "askretrycancel"):
         setattr(messagebox, name, DIALOGS.make(name, yes))
     messagebox.askyesnocancel = DIALOGS.make("askyesnocancel", yes)
     messagebox.askquestion = DIALOGS.make(
-        "askquestion", lambda: "yes" if DIALOGS.default_yes else "no")
+        "askquestion", lambda: "yes" if DIALOGS.default_yes else "no"
+    )
 
     filedialog.askopenfilename = DIALOGS.make("askopenfilename", lambda: "")
     filedialog.askopenfilenames = DIALOGS.make("askopenfilenames", lambda: ())
@@ -205,18 +224,20 @@ def _install_dialog_stubs() -> None:
 #  Settings isolation
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _isolate_settings(tmpdir: str) -> None:
     os.environ["CROSSFADER_CONFIG_DIR"] = tmpdir
     os.environ["CROSSFADER_DATA_DIR"] = os.path.join(tmpdir, "data")
     os.environ["CROSSFADER_CACHE_DIR"] = os.path.join(tmpdir, "cache")
     os.environ.setdefault("CROSSFADER_NO_NETWORK", "1")
     os.environ.setdefault("CROSSFADER_NO_SOUND", "1")
-    os.environ["CROSSFADER_NATIVE_DIALOGS"] = "0"   # use the (stubbed) Tk dialogs
+    os.environ["CROSSFADER_NATIVE_DIALOGS"] = "0"  # use the (stubbed) Tk dialogs
     settings_path = os.path.join(tmpdir, "settings.json")
     with open(settings_path, "w", encoding="utf-8") as fh:
         json.dump({"language": "en_US", "auto_open_output": False}, fh)
     try:
         import core.settings as cs
+
         for attr in ("SETTINGS_FILE", "_SETTINGS_PATH"):
             if hasattr(cs, attr):
                 setattr(cs, attr, settings_path)
@@ -224,6 +245,7 @@ def _isolate_settings(tmpdir: str) -> None:
         pass
     try:
         import core.skins as sk
+
         if hasattr(sk, "SKIN_FILE"):
             sk.SKIN_FILE = os.path.join(tmpdir, "skin.json")
     except Exception:
@@ -233,6 +255,7 @@ def _isolate_settings(tmpdir: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 #  Harness
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class Harness:
     _instance: Harness | None = None
@@ -253,7 +276,8 @@ class Harness:
         from core import i18n
         from shell import chime
         from shell.app import App
-        chime.play = lambda: None                   # no start-up sound in tests
+
+        chime.play = lambda: None  # no start-up sound in tests
         i18n.init()
         self.app = App()
         # Surface Tk callback exceptions instead of printing and continuing.
@@ -261,8 +285,9 @@ class Harness:
 
         def _report(exc, val, tb):
             import traceback
-            self.callback_errors.append(
-                "".join(traceback.format_exception(exc, val, tb)))
+
+            self.callback_errors.append("".join(traceback.format_exception(exc, val, tb)))
+
         self.app.report_callback_exception = _report
 
         # Callbacks queued from worker threads (core.ui.call_soon) log their
@@ -273,8 +298,15 @@ class Harness:
         class _Collect(logging.Handler):
             def emit(handler, record):
                 if record.levelno >= logging.ERROR:
-                    self.callback_errors.append(handler.format(record) + (
-                        "\n" + logging.Formatter().formatException(record.exc_info) if record.exc_info else ""))
+                    self.callback_errors.append(
+                        handler.format(record)
+                        + (
+                            "\n" + logging.Formatter().formatException(record.exc_info)
+                            if record.exc_info
+                            else ""
+                        )
+                    )
+
         logging.getLogger("crossfader.ui").addHandler(_Collect())
         self.pump(0.2)
 
@@ -298,6 +330,7 @@ class Harness:
     def _queue_busy(self) -> bool:
         try:
             from core.queue_manager import RenderQueueManager
+
             stats = RenderQueueManager.get_instance().get_stats()
             return bool(stats[0] or stats[1])
         except Exception:
@@ -307,16 +340,16 @@ class Harness:
         with RECORDER.lock:
             return any(p.poll() is None for p in RECORDER.procs)
 
-    def wait_idle(self, timeout: float = 300.0, settle: float = 0.4,
-                  extra: Callable[[], bool] | None = None) -> None:
+    def wait_idle(
+        self, timeout: float = 300.0, settle: float = 0.4, extra: Callable[[], bool] | None = None
+    ) -> None:
         """Pump Tk until the render queue is empty, every recorded child
         process has exited and *extra()* (if given) returns False."""
         deadline = time.monotonic() + timeout
         quiet_since: float | None = None
         while time.monotonic() < deadline:
             self.pump(0.05)
-            busy = self._queue_busy() or self._procs_busy() or bool(
-                extra and extra())
+            busy = self._queue_busy() or self._procs_busy() or bool(extra and extra())
             if busy:
                 quiet_since = None
                 continue
@@ -339,12 +372,14 @@ class Harness:
     def page_names(self) -> list[str]:
         """The English name of every page the app can show (core/tools.py)."""
         from core import tools
+
         return [s.name for s in tools.SPECS]
 
     def open(self, name: str) -> Any:
         """Open a page by its English name (or ToolId) and return it (typed Any:
         each test knows which page it opened)."""
         from shell.pages import ErrorPage
+
         page = self.app.show_page(name)
         self.pump(0.15)
         if page is None:
@@ -387,8 +422,7 @@ class Harness:
             return [list(c) for c in RECORDER.calls]
 
     def ffmpeg_commands(self) -> list[list[str]]:
-        return [c for c in self.commands
-                if os.path.basename(c[0]).lower().startswith("ffmpeg")]
+        return [c for c in self.commands if os.path.basename(c[0]).lower().startswith("ffmpeg")]
 
     # ── widget helpers ───────────────────────────────────────────────────────
 
@@ -398,8 +432,7 @@ class Harness:
         for child in widget.winfo_children():
             yield from Harness.walk(child)
 
-    def find(self, root, cls: type | tuple | None = None,
-             text: str | None = None) -> list[Any]:
+    def find(self, root, cls: type | tuple | None = None, text: str | None = None) -> list[Any]:
         found = []
         for w in self.walk(root):
             if cls is not None and not isinstance(w, cls):
@@ -418,10 +451,10 @@ class Harness:
         """Invoke the *index*-th button whose label contains *text*."""
         import tkinter as tk
         from tkinter import ttk
+
         buttons = self.find(root, (tk.Button, ttk.Button), text)
         if not buttons:
-            labels = [str(b.cget("text")) for b in
-                      self.find(root, (tk.Button, ttk.Button))]
+            labels = [str(b.cget("text")) for b in self.find(root, (tk.Button, ttk.Button))]
             raise LookupError(f"no button containing {text!r}; have {labels}")
         btn = buttons[index]
         if str(btn.cget("state")) == "disabled":
@@ -433,6 +466,7 @@ class Harness:
     def variables(tab) -> dict[str, tuple[str, Any]]:
         """Return {attribute: (VariableType, value)} for a tab's tk Variables."""
         import tkinter as tk
+
         out = {}
         for name, val in sorted(vars(tab).items()):
             if isinstance(val, tk.Variable):
@@ -456,6 +490,7 @@ class Harness:
     def console_text(self, tab) -> str:
         """Concatenate the contents of every tk.Text widget in *tab*."""
         import tkinter as tk
+
         return "\n".join(self.text_of(w) for w in self.find(tab, tk.Text))
 
     # ── media helpers ────────────────────────────────────────────────────────
@@ -464,16 +499,24 @@ class Harness:
     def probe(path: str) -> dict:
         ffprobe = shutil.which("ffprobe") or "ffprobe"
         r = subprocess.run(
-            [ffprobe, "-v", "error", "-show_format", "-show_streams",
-             "-of", "json", path],
-            capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            [ffprobe, "-v", "error", "-show_format", "-show_streams", "-of", "json", path],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
         if r.returncode != 0:
             raise AssertionError(f"ffprobe failed on {path}: {r.stderr}")
         return json.loads(r.stdout)
 
-    def assert_media(self, path: str, *, video: bool | None = None,
-                     audio: bool | None = None, min_duration: float = 0.0,
-                     max_duration: float | None = None) -> dict:
+    def assert_media(
+        self,
+        path: str,
+        *,
+        video: bool | None = None,
+        audio: bool | None = None,
+        min_duration: float = 0.0,
+        max_duration: float | None = None,
+    ) -> dict:
         assert os.path.isfile(path), f"missing output {path}"
         assert os.path.getsize(path) > 0, f"empty output {path}"
         info = self.probe(path)
@@ -493,9 +536,11 @@ class Harness:
 #  CLI: inspect a tab
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _cli(argv: list[str]) -> int:
     import tkinter as tk
     from tkinter import ttk
+
     h = Harness.instance()
     if not argv or argv[0] == "--list":
         for n in h.page_names():
@@ -510,8 +555,7 @@ def _cli(argv: list[str]) -> int:
         print("-- buttons:")
         for b in h.find(tab, (tk.Button, ttk.Button)):
             print(f"   [{b.cget('state')}] {b.cget('text')!r}")
-        entries = [a for a, v in vars(tab).items()
-                   if isinstance(v, (tk.Entry, ttk.Entry))]
+        entries = [a for a, v in vars(tab).items() if isinstance(v, (tk.Entry, ttk.Entry))]
         print("-- entry attributes:", ", ".join(sorted(entries)) or "(none)")
         if h.callback_errors:
             print("-- Tk callback errors:")

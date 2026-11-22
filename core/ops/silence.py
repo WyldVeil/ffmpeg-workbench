@@ -3,6 +3,7 @@ core/ops/silence.py - command builders for tabs/audio/silence.py (also used by c
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 import re
@@ -11,19 +12,35 @@ from core import ffmpeg as ff
 
 
 def detect_cmd(src: str, threshold_db: float, min_silence: float, stream: int = 0) -> list:
-    return [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-i", src, "-map", f"0:a:{stream}", "-vn", "-sn",
-            "-af", f"silencedetect=noise={threshold_db:g}dB:d={min_silence:g}", "-f", "null", "-"]
+    return [
+        ff.ffmpeg_path(),
+        "-hide_banner",
+        "-nostdin",
+        "-i",
+        src,
+        "-map",
+        f"0:a:{stream}",
+        "-vn",
+        "-sn",
+        "-af",
+        f"silencedetect=noise={threshold_db:g}dB:d={min_silence:g}",
+        "-f",
+        "null",
+        "-",
+    ]
 
 
 def parse_silences(text: str, duration: float) -> list:
     starts = [float(x) for x in re.findall(r"silence_start:\s*(-?[\d.]+)", text)]
     ends = [float(x) for x in re.findall(r"silence_end:\s*([\d.]+)", text)]
-    if len(ends) < len(starts):          # silent until the very end
+    if len(ends) < len(starts):  # silent until the very end
         ends.append(duration)
     return [(max(0.0, a), b) for a, b in zip(starts, ends, strict=False) if b > a]
 
 
-def keep_zones(silences, duration: float, padding: float, fps: float = 0.0, min_keep: float = 0.05) -> list:
+def keep_zones(
+    silences, duration: float, padding: float, fps: float = 0.0, min_keep: float = 0.05
+) -> list:
     """Parts to keep: everything except silences, with *padding* left around speech."""
     zones, pos = [], 0.0
     for a, b in silences:
@@ -34,8 +51,10 @@ def keep_zones(silences, duration: float, padding: float, fps: float = 0.0, min_
     if duration - pos > min_keep:
         zones.append((pos, duration))
     if fps:
+
         def snap(x):
             return round(x * fps) / fps
+
         zones = [(snap(a), snap(b)) for a, b in zones if snap(b) > snap(a)]
     merged = []
     for a, b in zones:

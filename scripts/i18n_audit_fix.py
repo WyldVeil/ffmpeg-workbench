@@ -14,50 +14,122 @@ import json
 import re
 from pathlib import Path
 
-ROOT       = Path(__file__).parent.parent
+ROOT = Path(__file__).parent.parent
 LOCALE_DIR = ROOT / "locale"
-TABS_DIR   = ROOT / "tabs"
+TABS_DIR = ROOT / "tabs"
 
 # ── Heuristics: strings to SKIP (keep as-is) ──────────────────────────────────
 SKIP_PATTERNS = [
-    re.compile(r'^\s*$'),                         # blank / whitespace only
-    re.compile(r'^[\d\s×xX:.\-/\\%+]+$'),         # numbers, dimensions like "1920×1080"
-    re.compile(r'^[A-Z0-9_]{2,}$'),               # ALL_CAPS constants
-    re.compile(r'\{[^}]+\}'),                     # contains {placeholder}
-    re.compile(r'^[-–-·•▸▶◀★✓✗⚠]+\s*$'),         # pure symbol strings
-    re.compile(r'\.(mp4|mkv|mov|avi|webm|flv|m4v|wav|mp3|aac|flac|ogg|srt|ass|ssa|vtt|txt|png|jpg|jpeg|gif|webp|cube|3dl|rnnn?)(\s|$)', re.I),
-    re.compile(r'^(libx264|libx265|libsvtav1|vp9|vp8|hevc|h264|h265|av1|aac|mp3|flac|wav|opus|pcm|yuv|nv12|bgr|rgb|nvenc|amf|vaapi|qsv|cuda|opencl|metal|auto|none|copy|default)', re.I),
-    re.compile(r'^(hstack|vstack|grid|wipe|mix|none|replace|strip)$', re.I),  # internal enum values
-    re.compile(r'^[A-Za-z0-9_\-]+\.(py|json|txt|log|exe|dll|so)$'),          # filenames
-    re.compile(r'^(Alt|Ctrl|Shift)\+'),                                        # hotkeys
-    re.compile(r'^[A-Za-z0-9\-_]+$'),             # single word, no spaces → likely a technical id
-    re.compile(r'^pip install\s'),                 # pip commands
-    re.compile(r'^\d+\s*Hz$', re.I),              # frequencies like "1000 Hz"
-    re.compile(r'^[A-Z]{2,}/[A-Z]{2,}$'),         # like "SRT/ASS"
+    re.compile(r"^\s*$"),  # blank / whitespace only
+    re.compile(r"^[\d\s×xX:.\-/\\%+]+$"),  # numbers, dimensions like "1920×1080"
+    re.compile(r"^[A-Z0-9_]{2,}$"),  # ALL_CAPS constants
+    re.compile(r"\{[^}]+\}"),  # contains {placeholder}
+    re.compile(r"^[-–-·•▸▶◀★✓✗⚠]+\s*$"),  # pure symbol strings
+    re.compile(
+        r"\.(mp4|mkv|mov|avi|webm|flv|m4v|wav|mp3|aac|flac|ogg|srt|ass|ssa|vtt|txt|png|jpg|jpeg|gif|webp|cube|3dl|rnnn?)(\s|$)",
+        re.I,
+    ),
+    re.compile(
+        r"^(libx264|libx265|libsvtav1|vp9|vp8|hevc|h264|h265|av1|aac|mp3|flac|wav|opus|pcm|yuv|nv12|bgr|rgb|nvenc|amf|vaapi|qsv|cuda|opencl|metal|auto|none|copy|default)",
+        re.I,
+    ),
+    re.compile(r"^(hstack|vstack|grid|wipe|mix|none|replace|strip)$", re.I),  # internal enum values
+    re.compile(r"^[A-Za-z0-9_\-]+\.(py|json|txt|log|exe|dll|so)$"),  # filenames
+    re.compile(r"^(Alt|Ctrl|Shift)\+"),  # hotkeys
+    re.compile(r"^[A-Za-z0-9\-_]+$"),  # single word, no spaces → likely a technical id
+    re.compile(r"^pip install\s"),  # pip commands
+    re.compile(r"^\d+\s*Hz$", re.I),  # frequencies like "1000 Hz"
+    re.compile(r"^[A-Z]{2,}/[A-Z]{2,}$"),  # like "SRT/ASS"
 ]
 
 # These strings look like words but are actually technical / universal
 SKIP_EXACT = {
-    "", " ", "…", "·", "×", "↑", "↓", "←", "→", "↔", "↕",
-    "OK", "FFmpeg", "yt-dlp", "ffmpeg", "ffprobe", "ffplay",
-    "CRF", "FPS", "fps", "Hz", "dB", "px", "MB", "GB", "KB",
-    "LUFS", "LRA", "TP", "EBU", "R128",
-    "MP4", "MKV", "MOV", "AVI", "WEBM", "GIF", "WebM",
-    "MP3", "AAC", "WAV", "FLAC", "OGG",
-    "SRT", "ASS", "SSA", "VTT",
-    "PNG", "JPG", "JPEG",
-    "TFF", "BFF",
-    "VP9", "VP8", "H.264", "H.265", "HEVC", "AV1",
+    "",
+    " ",
+    "…",
+    "·",
+    "×",
+    "↑",
+    "↓",
+    "←",
+    "→",
+    "↔",
+    "↕",
+    "OK",
+    "FFmpeg",
+    "yt-dlp",
+    "ffmpeg",
+    "ffprobe",
+    "ffplay",
+    "CRF",
+    "FPS",
+    "fps",
+    "Hz",
+    "dB",
+    "px",
+    "MB",
+    "GB",
+    "KB",
+    "LUFS",
+    "LRA",
+    "TP",
+    "EBU",
+    "R128",
+    "MP4",
+    "MKV",
+    "MOV",
+    "AVI",
+    "WEBM",
+    "GIF",
+    "WebM",
+    "MP3",
+    "AAC",
+    "WAV",
+    "FLAC",
+    "OGG",
+    "SRT",
+    "ASS",
+    "SSA",
+    "VTT",
+    "PNG",
+    "JPG",
+    "JPEG",
+    "TFF",
+    "BFF",
+    "VP9",
+    "VP8",
+    "H.264",
+    "H.265",
+    "HEVC",
+    "AV1",
     "SMPTE",
-    "EQ", "LUT",
-    "W:", "H:", "X:", "Y:", "#",
-    "▶", "⏸", "⏭", "⏹",
-    "In:", "Out:",   # waveform labels that are very short
-    "RGB", "YUV",
-    "HQDN3D", "NLMeans",
-    "arnndn", "anlmdn", "afftdn",
-    "TikTok", "YouTube", "Instagram", "Twitter", "Facebook",
-    "Snapchat", "LinkedIn",
+    "EQ",
+    "LUT",
+    "W:",
+    "H:",
+    "X:",
+    "Y:",
+    "#",
+    "▶",
+    "⏸",
+    "⏭",
+    "⏹",
+    "In:",
+    "Out:",  # waveform labels that are very short
+    "RGB",
+    "YUV",
+    "HQDN3D",
+    "NLMeans",
+    "arnndn",
+    "anlmdn",
+    "afftdn",
+    "TikTok",
+    "YouTube",
+    "Instagram",
+    "Twitter",
+    "Facebook",
+    "Snapchat",
+    "LinkedIn",
     "Ken Burns",
     "EBU R128",
 }
@@ -76,14 +148,14 @@ def make_key(module: str, text: str) -> str:
     """Generate a locale key like  module.some_label_text"""
     slug = text.lower().strip()
     # Remove leading emoji / symbols
-    slug = re.sub(r'^[^\w\s]+\s*', '', slug)
+    slug = re.sub(r"^[^\w\s]+\s*", "", slug)
     # Keep only alphanumeric + spaces
-    slug = re.sub(r'[^\w\s]', ' ', slug)
+    slug = re.sub(r"[^\w\s]", " ", slug)
     slug = slug.strip()
     # Collapse whitespace → underscores
-    slug = re.sub(r'\s+', '_', slug)
+    slug = re.sub(r"\s+", "_", slug)
     # Truncate
-    slug = slug[:48].rstrip('_')
+    slug = slug[:48].rstrip("_")
     if not slug:
         slug = "item"
     return f"{module}.{slug}"
@@ -114,31 +186,31 @@ def save_en(data: dict) -> None:
 # text="..." or text='...' NOT already a t( call
 # We look for: text=  then optional space then quote then content
 _TEXT_ARG_RE = re.compile(
-    r'''(?<!\w)text\s*=\s*(?!t\()(?!f['"]) # not already t() and not f-string
-        (?P<q>["\'])(?P<val>(?:[^"'\\]|\\.)*)(?P=q)''',
+    r"""(?<!\w)text\s*=\s*(?!t\()(?!f['"]) # not already t() and not f-string
+        (?P<q>["\'])(?P<val>(?:[^"'\\]|\\.)*)(?P=q)""",
     re.VERBOSE,
 )
 
 # values=["a", "b", ...] in combobox / OptionMenu
 # captures the entire list literal
 _VALUES_RE = re.compile(
-    r'''values\s*=\s*\[(?P<items>[^\]]+)\]''',
+    r"""values\s*=\s*\[(?P<items>[^\]]+)\]""",
     re.DOTALL,
 )
 
 # Module-level assignment: NAME = ["a", "b"] or NAME = {"a": ..., "b": ...}
 # We capture the right-hand side
 _MODULE_LIST_RE = re.compile(
-    r'''^(?P<indent>\s*)(?P<name>[A-Z_][A-Z0-9_]*)\s*=\s*\[(?P<items>[^\]]+)\]''',
+    r"""^(?P<indent>\s*)(?P<name>[A-Z_][A-Z0-9_]*)\s*=\s*\[(?P<items>[^\]]+)\]""",
     re.MULTILINE | re.DOTALL,
 )
 _MODULE_DICT_RE = re.compile(
-    r'''^(?P<indent>\s*)(?P<name>[A-Z_][A-Z0-9_]*)\s*=\s*\{(?P<items>[^}]+)\}''',
+    r"""^(?P<indent>\s*)(?P<name>[A-Z_][A-Z0-9_]*)\s*=\s*\{(?P<items>[^}]+)\}""",
     re.MULTILINE | re.DOTALL,
 )
 
 # Individual string items inside a list or dict literal (quoted strings)
-_STRING_RE = re.compile(r'''(?P<q>["\'])(?P<val>(?:[^"'\\]|\\.)*)(?P=q)''')
+_STRING_RE = re.compile(r"""(?P<q>["\'])(?P<val>(?:[^"'\\]|\\.)*)(?P=q)""")
 
 
 def extract_strings_from_items(items_text: str):
@@ -149,18 +221,19 @@ def extract_strings_from_items(items_text: str):
 
 # ─── Per-file processor ───────────────────────────────────────────────────────
 
+
 def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
     """
     Scan *path*, replace hardcoded UI strings with t() calls.
     Returns (strings_replaced, new_keys_added).
     """
-    module = path.stem          # e.g. "shortifier"
+    module = path.stem  # e.g. "shortifier"
     # Use parent folder name for disambiguation if needed
 
     source = path.read_text(encoding="utf-8")
     original = source
 
-    new_keys: dict[str, str] = {}   # key → English value (only new ones)
+    new_keys: dict[str, str] = {}  # key → English value (only new ones)
 
     def get_or_create_key(text: str) -> str | None:
         """Return locale key for *text*, creating if necessary. None = skip."""
@@ -204,7 +277,7 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
         # Find key: value pairs. Keys are the first quoted string before ":"
         # Pattern: "display text": "internal_value"  or  "display": (tuple/str/int)
         pair_re = re.compile(
-            r'''(?P<q>["\'])(?P<key>(?:[^"'\\]|\\.)*)(?P=q)\s*:''',
+            r"""(?P<q>["\'])(?P<key>(?:[^"'\\]|\\.)*)(?P=q)\s*:""",
         )
         for pm in pair_re.finditer(items_text):
             key_str = pm.group("key")
@@ -212,7 +285,7 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
                 continue
             locale_key = get_or_create_key(key_str)
             if locale_key:
-                old = f'{pm.group("q")}{key_str}{pm.group("q")}:'
+                old = f"{pm.group('q')}{key_str}{pm.group('q')}:"
                 new = f't("{locale_key}"):'
                 new_items = new_items.replace(old, new, 1)
 
@@ -249,7 +322,7 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
         # Skip if it has tkinter variable references or is a concatenation context
         key = get_or_create_key(val)
         if key:
-            return f't("{key}")'   # replaces just the value expression
+            return f't("{key}")'  # replaces just the value expression
         return m.group(0)
 
     # We need to replace `text=<expr>` not just the string - rebuild carefully
@@ -266,8 +339,9 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
 
     # ── 5. Inline label arrays like clip_labels = ["Left / Top", ...] ────────
     _INLINE_LIST_RE = re.compile(
-        r'''(?P<name>\w+)\s*=\s*\[(?P<items>[^\]]+)\]''',
+        r"""(?P<name>\w+)\s*=\s*\[(?P<items>[^\]]+)\]""",
     )
+
     def replace_inline_list(m: re.Match) -> str:
         name = m.group("name")
         if name.startswith("_") or name.upper() == name:
@@ -300,17 +374,21 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would change without writing files")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would change without writing files"
+    )
     args = parser.parse_args()
 
     en = load_en()
     original_key_count = len(en)
 
     tab_files = list(TABS_DIR.rglob("*.py"))
-    tab_files = [f for f in tab_files
-                 if "__pycache__" not in str(f)
-                 and f.name not in ("__init__.py", "base_tab.py", "registry.py", "all_in_one.py")]
+    tab_files = [
+        f
+        for f in tab_files
+        if "__pycache__" not in str(f)
+        and f.name not in ("__init__.py", "base_tab.py", "registry.py", "all_in_one.py")
+    ]
 
     total_new_keys = 0
     total_changed_files = 0

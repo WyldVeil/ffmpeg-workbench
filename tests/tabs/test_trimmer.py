@@ -1,4 +1,5 @@
 """Quick Trimmer: lossless cuts start A/V together; accurate cuts are frame-exact."""
+
 import pytest
 
 from tabs.cutting import trimmer as tr
@@ -37,7 +38,7 @@ def test_lossless_trim_keeps_av_aligned(ui, media, outdir):
     tab, out = _trim(ui, media, outdir, "h264", "00:01.500", "00:03.500", True, "lossless.mp4")
     info = ui.assert_media(out, video=True, audio=True, min_duration=2.4, max_duration=2.7)
     starts = {s["codec_type"]: float(s.get("start_time", 0)) for s in info["streams"]}
-    assert abs(starts["video"] - starts["audio"]) < 0.05, starts     # was ~1 s apart
+    assert abs(starts["video"] - starts["audio"]) < 0.05, starts  # was ~1 s apart
     assert "keyframe" in ui.console_text(tab).lower()
 
 

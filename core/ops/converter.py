@@ -3,30 +3,53 @@ core/ops/converter.py - command builders for tabs/transcoder/converter.py (also 
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 from core import encoders as enc
 from core import ffmpeg as ff
 
-FORMATS = {   # key: (label, kind)
-    "mp4": ("MP4 - plays everywhere", "video"), "mkv": ("MKV - holds any codec", "video"),
-    "mov": ("MOV - Apple / editing", "video"), "webm": ("WebM - web (VP9/AV1 + Opus)", "video"),
-    "m4v": ("M4V - Apple devices", "video"), "ts": ("TS - broadcast stream", "video"),
+FORMATS = {  # key: (label, kind)
+    "mp4": ("MP4 - plays everywhere", "video"),
+    "mkv": ("MKV - holds any codec", "video"),
+    "mov": ("MOV - Apple / editing", "video"),
+    "webm": ("WebM - web (VP9/AV1 + Opus)", "video"),
+    "m4v": ("M4V - Apple devices", "video"),
+    "ts": ("TS - broadcast stream", "video"),
     "avi": ("AVI - legacy", "video"),
-    "mp3": ("MP3 audio", "audio"), "m4a": ("M4A (AAC) audio", "audio"), "wav": ("WAV audio", "audio"),
-    "flac": ("FLAC audio (lossless)", "audio"), "ogg": ("OGG Vorbis audio", "audio"),
+    "mp3": ("MP3 audio", "audio"),
+    "m4a": ("M4A (AAC) audio", "audio"),
+    "wav": ("WAV audio", "audio"),
+    "flac": ("FLAC audio (lossless)", "audio"),
+    "ogg": ("OGG Vorbis audio", "audio"),
     "opus": ("Opus audio", "audio"),
 }
 
 
-VIDEO_KEYS = {"h264": "h264", "hevc": "hevc", "av1": "av1", "vp9": "vp9", "vp8": "vp8", "mpeg4": "mpeg4",
-              "prores": "prores", "dnxhd": "dnxhr", "mjpeg": "mjpeg", "ffv1": "ffv1"}
+VIDEO_KEYS = {
+    "h264": "h264",
+    "hevc": "hevc",
+    "av1": "av1",
+    "vp9": "vp9",
+    "vp8": "vp8",
+    "mpeg4": "mpeg4",
+    "prores": "prores",
+    "dnxhd": "dnxhr",
+    "mjpeg": "mjpeg",
+    "ffv1": "ffv1",
+}
 
 
 TEXT_SUBS = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text"}
 
 
-SUB_CODEC = {"mp4": "mov_text", "m4v": "mov_text", "mov": "mov_text", "webm": "webvtt", "mkv": "copy"}
+SUB_CODEC = {
+    "mp4": "mov_text",
+    "m4v": "mov_text",
+    "mov": "mov_text",
+    "webm": "webvtt",
+    "mkv": "copy",
+}
 
 
 #: legal in MP4/MOV but unplayable on Apple devices and many TVs/players: convert instead of copying
@@ -34,8 +57,10 @@ POOR_IN_MP4 = {"vp9", "vp8", "mpeg4", "opus", "flac", "vorbis"}
 
 
 AUDIO_FORMAT_ENCODE = {
-    "mp3": ["-c:a", "libmp3lame", "-q:a", "2"], "m4a": ["-c:a", "aac", "-b:a", "256k"],
-    "flac": ["-c:a", "flac", "-compression_level", "8"], "ogg": ["-c:a", "libvorbis", "-q:a", "6"],
+    "mp3": ["-c:a", "libmp3lame", "-q:a", "2"],
+    "m4a": ["-c:a", "aac", "-b:a", "256k"],
+    "flac": ["-c:a", "flac", "-compression_level", "8"],
+    "ogg": ["-c:a", "libvorbis", "-q:a", "6"],
     "opus": ["-c:a", "libopus", "-b:a", "160k", "-ar", "48000"],
 }
 
@@ -54,8 +79,13 @@ def stream_args(info: ff.MediaInfo, fmt: str, smart: bool = True) -> tuple[list,
         key = enc.audio_key_from_probe(a.codec)
         args += ["-map", f"0:{a.index}", "-vn"]
         if fmt == "wav":
-            deep = (a.bits_per_raw_sample or 16) > 16 or a.codec in ("flac", "alac", "pcm_s24le", "pcm_s32le",
-                                                                      "pcm_f32le")
+            deep = (a.bits_per_raw_sample or 16) > 16 or a.codec in (
+                "flac",
+                "alac",
+                "pcm_s24le",
+                "pcm_s32le",
+                "pcm_f32le",
+            )
             args += ["-c:a", "pcm_s24le" if deep else "pcm_s16le"]
             actions.append("audio → WAV")
         elif smart and key and enc.audio_ok_for(fmt, key):
@@ -65,14 +95,20 @@ def stream_args(info: ff.MediaInfo, fmt: str, smart: bool = True) -> tuple[list,
             args += AUDIO_FORMAT_ENCODE[fmt]
             actions.append(f"audio {a.codec} → {AUDIO_FORMAT_ENCODE[fmt][1]}")
         if len(audios) > 1:
-            notes.append(f"{len(audios) - 1} extra audio track(s) left out (audio formats hold one).")
+            notes.append(
+                f"{len(audios) - 1} extra audio track(s) left out (audio formats hold one)."
+            )
         return pre, [*args, "-map_metadata", "0"], notes, ", ".join(actions)
 
     if videos:
         v = videos[0]
         key = VIDEO_KEYS.get(v.codec, v.codec)
         args += ["-map", f"0:{v.index}"]
-        if smart and enc.video_ok_for(fmt, key) and not (fmt in ("mp4", "m4v", "mov") and key in POOR_IN_MP4):
+        if (
+            smart
+            and enc.video_ok_for(fmt, key)
+            and not (fmt in ("mp4", "m4v", "mov") and key in POOR_IN_MP4)
+        ):
             args += ["-c:v", "copy"]
             if key == "hevc" and fmt in ("mp4", "mov", "m4v"):
                 args += ["-tag:v", "hvc1"]
@@ -89,8 +125,12 @@ def stream_args(info: ff.MediaInfo, fmt: str, smart: bool = True) -> tuple[list,
     for n, a in enumerate(audios):
         key = enc.audio_key_from_probe(a.codec)
         args += ["-map", f"0:{a.index}"]
-        if smart and key and enc.audio_ok_for(fmt, key) and not (fmt in ("mp4", "m4v", "mov")
-                                                                  and key in POOR_IN_MP4):
+        if (
+            smart
+            and key
+            and enc.audio_ok_for(fmt, key)
+            and not (fmt in ("mp4", "m4v", "mov") and key in POOR_IN_MP4)
+        ):
             args += [f"-c:a:{n}", "copy"]
             actions.append(f"audio {a.codec} copied")
         else:
@@ -108,11 +148,13 @@ def stream_args(info: ff.MediaInfo, fmt: str, smart: bool = True) -> tuple[list,
             args += ["-map", f"0:{s.index}", f"-c:s:{kept_subs}", sub_codec]
             kept_subs += 1
         else:
-            notes.append(f"Subtitle track {s.index} ({s.codec}) can't go into {fmt.upper()} - left out.")
+            notes.append(
+                f"Subtitle track {s.index} ({s.codec}) can't go into {fmt.upper()} - left out."
+            )
     if kept_subs:
         actions.append(f"{kept_subs} subtitle track(s)")
     if fmt == "mkv":
-        args += ["-map", "0:t?", "-c:t", "copy"]          # attached fonts
+        args += ["-map", "0:t?", "-c:t", "copy"]  # attached fonts
     args += ["-map_metadata", "0", "-map_chapters", "0"]
     if fmt in ("mp4", "mov", "m4v"):
         args += ["-movflags", "+faststart"]

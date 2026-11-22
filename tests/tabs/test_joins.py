@@ -1,4 +1,5 @@
 """core.concat + Batch Joiner, Splicer and Multi-Splitter end to end."""
+
 import os
 
 import pytest
@@ -18,8 +19,11 @@ def test_copy_compatibility(media):
 
 @pytest.mark.ffmpeg
 def test_filter_join_normalises_and_fills_silence(media, outdir):
-    pieces = [concat.Piece.of(media["h264"], 1.0, 3.0), concat.Piece.of(media["vertical_noaudio"], 0, 2.0),
-              concat.Piece.of(media["hevc10"], 2.0, None)]
+    pieces = [
+        concat.Piece.of(media["h264"], 1.0, 3.0),
+        concat.Piece.of(media["vertical_noaudio"], 0, 2.0),
+        concat.Piece.of(media["hevc10"], 2.0, None),
+    ]
     out = str(outdir / "j.mp4")
     cmd, seconds = concat.filter_join_command(pieces, out)
     assert seconds == pytest.approx(7.0, abs=0.05)
@@ -45,7 +49,7 @@ def test_batch_joiner_offers_reencode_for_mismatched_files(ui, media, outdir):
     out = str(outdir / "joined.mp4")
     tab.out_var.set(out)
     tab.reencode_var.set(False)
-    ui.click_text(tab, "JOIN")                 # stubbed askyesno -> yes, re-encode
+    ui.click_text(tab, "JOIN")  # stubbed askyesno -> yes, re-encode
     ui.wait_idle(180)
     assert any(d[0] == "askyesno" for d in ui.dialogs.log)
     ui.assert_media(out, video=True, audio=True, min_duration=10.8, max_duration=11.2)
@@ -71,6 +75,7 @@ def test_batch_joiner_lossless_with_hostile_names(ui, media, outdir):
 def test_batch_joiner_refuses_to_overwrite_an_input(ui, media, tmp_path):
     src = tmp_path / "a.mp4"
     import shutil
+
     shutil.copy(media["h264"], src)
     tab = ui.open("Batch Joiner")
     tab._clear()
@@ -88,7 +93,10 @@ def test_splicer_segments_from_mixed_sources(ui, media, outdir):
     tab = ui.open("The Splicer")
     for _ in range(len(tab.segments)):
         tab._remove_last()
-    for path, start, end in ((media["h264"], "00:01", "00:03"), (media["vertical_noaudio"], "0", "2")):
+    for path, start, end in (
+        (media["h264"], "00:01", "00:03"),
+        (media["vertical_noaudio"], "0", "2"),
+    ):
         ui.answer_open(path)
         tab._add_segment()
         tab.segments[-1]["start"].set(start)
@@ -105,6 +113,7 @@ def test_splicer_segments_from_mixed_sources(ui, media, outdir):
 @pytest.mark.ffmpeg
 def test_multi_splitter_reports_and_names(ui, media, tmp_path):
     import shutil
+
     src = tmp_path / "source clip.mp4"
     shutil.copy(media["h264"], src)
     tab = ui.open("Manual Multi-Splitter")

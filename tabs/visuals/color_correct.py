@@ -5,6 +5,7 @@ Exposure, contrast, tone (blacks / shadows / highlights / whites), white
 balance, saturation, vibrance, hue and sharpening, with a live in-app
 before/after preview of the exact filter chain that will be rendered.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -18,20 +19,20 @@ from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 # key: (label, low, high, default, resolution)
 CONTROLS = {
-    "exposure":    ("Exposure (stops)", -2.0, 2.0, 0.0, 0.05),
-    "contrast":    ("Contrast", 0.5, 2.0, 1.0, 0.01),
-    "brightness":  ("Brightness", -0.3, 0.3, 0.0, 0.01),
-    "gamma":       ("Gamma (midtones)", 0.4, 2.5, 1.0, 0.01),
-    "blacks":      ("Blacks", -0.2, 0.2, 0.0, 0.01),
-    "shadows":     ("Shadows", -1.0, 1.0, 0.0, 0.05),
-    "highlights":  ("Highlights", -1.0, 1.0, 0.0, 0.05),
-    "whites":      ("Whites", -0.2, 0.2, 0.0, 0.01),
+    "exposure": ("Exposure (stops)", -2.0, 2.0, 0.0, 0.05),
+    "contrast": ("Contrast", 0.5, 2.0, 1.0, 0.01),
+    "brightness": ("Brightness", -0.3, 0.3, 0.0, 0.01),
+    "gamma": ("Gamma (midtones)", 0.4, 2.5, 1.0, 0.01),
+    "blacks": ("Blacks", -0.2, 0.2, 0.0, 0.01),
+    "shadows": ("Shadows", -1.0, 1.0, 0.0, 0.05),
+    "highlights": ("Highlights", -1.0, 1.0, 0.0, 0.05),
+    "whites": ("Whites", -0.2, 0.2, 0.0, 0.01),
     "temperature": ("Temperature (cool / warm)", -100.0, 100.0, 0.0, 1.0),
-    "tint":        ("Tint (green / magenta)", -100.0, 100.0, 0.0, 1.0),
-    "saturation":  ("Saturation", 0.0, 2.5, 1.0, 0.01),
-    "vibrance":    ("Vibrance", -1.0, 1.0, 0.0, 0.05),
-    "hue":         ("Hue rotate (degrees)", -180.0, 180.0, 0.0, 1.0),
-    "sharpen":     ("Sharpen", 0.0, 2.0, 0.0, 0.05),
+    "tint": ("Tint (green / magenta)", -100.0, 100.0, 0.0, 1.0),
+    "saturation": ("Saturation", 0.0, 2.5, 1.0, 0.01),
+    "vibrance": ("Vibrance", -1.0, 1.0, 0.0, 0.05),
+    "hue": ("Hue rotate (degrees)", -180.0, 180.0, 0.0, 1.0),
+    "sharpen": ("Sharpen", 0.0, 2.0, 0.0, 0.05),
 }
 DEFAULTS = {k: v[3] for k, v in CONTROLS.items()}
 GROUPS = [
@@ -45,10 +46,20 @@ LOOKS = {
     "Warm & sunny": {"temperature": 35, "saturation": 1.12, "vibrance": 0.2, "highlights": 0.15},
     "Cool & clean": {"temperature": -30, "contrast": 1.06, "whites": 0.03},
     "Punchy": {"contrast": 1.18, "vibrance": 0.45, "blacks": -0.03, "sharpen": 0.5},
-    "Faded film": {"blacks": 0.08, "contrast": 0.9, "saturation": 0.8, "temperature": 12,
-                   "highlights": -0.2},
-    "Moody": {"exposure": -0.25, "contrast": 1.12, "saturation": 0.75, "temperature": -15,
-              "shadows": -0.3},
+    "Faded film": {
+        "blacks": 0.08,
+        "contrast": 0.9,
+        "saturation": 0.8,
+        "temperature": 12,
+        "highlights": -0.2,
+    },
+    "Moody": {
+        "exposure": -0.25,
+        "contrast": 1.12,
+        "saturation": 0.75,
+        "temperature": -15,
+        "shadows": -0.3,
+    },
     "Black & white": {"saturation": 0.0, "contrast": 1.15},
     "Lift shadows": {"shadows": 0.45, "blacks": 0.02},
 }
@@ -75,8 +86,11 @@ def build_chain(values: dict) -> str:
         else:
             m = f"{gain:.4f}"
             parts.append(f"colorlevels=romax={m}:gomax={m}:bomax={m}")
-    eq = [f"{k}={v[k]:.3f}" for k in ("contrast", "brightness", "gamma", "saturation")
-          if _changed(v, k)]
+    eq = [
+        f"{k}={v[k]:.3f}"
+        for k in ("contrast", "brightness", "gamma", "saturation")
+        if _changed(v, k)
+    ]
     if eq:
         parts.append("eq=" + ":".join(eq))
     if any(_changed(v, k) for k in ("blacks", "shadows", "highlights", "whites")):
@@ -106,13 +120,17 @@ class ColorCorrectorTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        self.make_header(self, t("tab.basic_color_corrector"),
-                         "Exposure, tone, white balance and colour with a live before/after preview.",
-                         icon="🌈")
+        self.make_header(
+            self,
+            t("tab.basic_color_corrector"),
+            "Exposure, tone, white balance and colour with a live before/after preview.",
+            icon="🌈",
+        )
         body = scroll_body(self)
 
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         self.compare = CompareView(body, 400, 225)
@@ -120,36 +138,60 @@ class ColorCorrectorTab(BaseTab):
 
         looks = tk.Frame(body, bg=CLR["bg"])
         looks.pack(fill="x", padx=px(20), pady=px(2, 4))
-        tk.Label(looks, text="Quick look:", bg=CLR["bg"], fg=CLR["fg"],
-                 font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(
+            looks, text="Quick look:", bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10, "bold")
+        ).pack(side="left")
         self.look_var = tk.StringVar(value="Neutral (reset)")
-        box = ttk.Combobox(looks, textvariable=self.look_var, values=list(LOOKS),
-                           state="readonly", width=22)
+        box = ttk.Combobox(
+            looks, textvariable=self.look_var, values=list(LOOKS), state="readonly", width=22
+        )
         box.pack(side="left", padx=px(8))
         box.bind("<<ComboboxSelected>>", lambda _e: self._apply_look(self.look_var.get()))
-        tk.Button(looks, text=t("color_correct.btn_reset_all"), relief="flat", cursor="hand2",
-                  command=lambda: self._apply_look("Neutral (reset)")).pack(side="left", padx=px(6))
+        tk.Button(
+            looks,
+            text=t("color_correct.btn_reset_all"),
+            relief="flat",
+            cursor="hand2",
+            command=lambda: self._apply_look("Neutral (reset)"),
+        ).pack(side="left", padx=px(6))
 
         grid = tk.Frame(body, bg=CLR["bg"])
         grid.pack(fill="x", padx=px(20), pady=px(4))
         for col, (title, keys) in enumerate((GROUPS[0], GROUPS[2])):
-            self._group(grid, title, keys).grid(row=0, column=col, sticky="nsew", padx=px(4), pady=px(4))
+            self._group(grid, title, keys).grid(
+                row=0, column=col, sticky="nsew", padx=px(4), pady=px(4)
+            )
         for col, (title, keys) in enumerate((GROUPS[1], GROUPS[3])):
-            self._group(grid, title, keys).grid(row=1, column=col, sticky="nsew", padx=px(4), pady=px(4))
+            self._group(grid, title, keys).grid(
+                row=1, column=col, sticky="nsew", padx=px(4), pady=px(4)
+            )
         grid.columnconfigure(0, weight=1)
         grid.columnconfigure(1, weight=1)
 
         enc_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         enc_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(enc_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
+        self.encoder = EncoderPanel(
+            enc_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
+        )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(enc_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "graded"))
+        self.out_row = FileRow(
+            enc_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "graded"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
 
-        self.btn_render = tk.Button(body, text=t("color_correct.render_grade"),
-                                    font=(UI_FONT, 12, "bold"), bg=CLR["pink"], fg="white",
-                                    width=24, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("color_correct.render_grade"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["pink"],
+            fg="white",
+            width=24,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body, bg=CLR["bg"])
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -164,12 +206,25 @@ class ColorCorrectorTab(BaseTab):
             var = tk.DoubleVar(value=default)
             self.vars[key] = var
             tk.Label(lf, text=label, anchor="w", width=22).grid(row=row, column=0, sticky="w")
-            tk.Scale(lf, variable=var, from_=lo, to=hi, resolution=res, orient="horizontal",
-                     length=px(190), showvalue=True,
-                     command=lambda _v: self._schedule_preview()).grid(row=row, column=1)
-            tk.Button(lf, text="↺", width=2, relief="flat", cursor="hand2",
-                      command=lambda v=var, d=default: (v.set(d), self._schedule_preview())
-                      ).grid(row=row, column=2, padx=px(2))
+            tk.Scale(
+                lf,
+                variable=var,
+                from_=lo,
+                to=hi,
+                resolution=res,
+                orient="horizontal",
+                length=px(190),
+                showvalue=True,
+                command=lambda _v: self._schedule_preview(),
+            ).grid(row=row, column=1)
+            tk.Button(
+                lf,
+                text="↺",
+                width=2,
+                relief="flat",
+                cursor="hand2",
+                command=lambda v=var, d=default: (v.set(d), self._schedule_preview()),
+            ).grid(row=row, column=2, padx=px(2))
         return lf
 
     # ── Behaviour ────────────────────────────────────────────────────────────
@@ -210,6 +265,15 @@ class ColorCorrectorTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "graded")
         if not out:
             return
-        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder,
-                      console=self.console, btn=self.btn_render,
-                      btn_label=t("color_correct.render_grade"), name="Colour Correct")
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=chain,
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label=t("color_correct.render_grade"),
+            name="Colour Correct",
+        )

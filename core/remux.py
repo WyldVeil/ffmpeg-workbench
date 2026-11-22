@@ -15,6 +15,7 @@ hold (picture-based subtitles in MP4, fonts outside MKV, PCM audio in MP4...)
 ``extract_command(...)`` saves a single track as its own file, in the format
 that track already has (.srt, .ass, .sup, .m4a, .flac, .ac3...).
 """
+
 from __future__ import annotations
 
 import os
@@ -26,37 +27,108 @@ TEXT_SUBS = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text"}
 BITMAP_SUBS = {"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub"}
 
 #: what each container can carry as-is (None = anything)
-VIDEO_OK = {"mp4": {"h264", "hevc", "av1", "vp9", "mpeg4", "mpeg2video", "mjpeg"},
-            "mov": {"h264", "hevc", "prores", "dnxhd", "mjpeg", "mpeg4", "mpeg2video", "av1"},
-            "webm": {"vp8", "vp9", "av1"}, "mkv": None}
-AUDIO_OK = {"mp4": {"aac", "mp3", "ac3", "eac3", "alac", "opus", "flac", "mp2"},
-            "mov": {"aac", "mp3", "ac3", "eac3", "alac", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_s16be",
-                    "pcm_s24be", "pcm_f32le"},
-            "webm": {"opus", "vorbis"}, "mkv": None}
+VIDEO_OK = {
+    "mp4": {"h264", "hevc", "av1", "vp9", "mpeg4", "mpeg2video", "mjpeg"},
+    "mov": {"h264", "hevc", "prores", "dnxhd", "mjpeg", "mpeg4", "mpeg2video", "av1"},
+    "webm": {"vp8", "vp9", "av1"},
+    "mkv": None,
+}
+AUDIO_OK = {
+    "mp4": {"aac", "mp3", "ac3", "eac3", "alac", "opus", "flac", "mp2"},
+    "mov": {
+        "aac",
+        "mp3",
+        "ac3",
+        "eac3",
+        "alac",
+        "pcm_s16le",
+        "pcm_s24le",
+        "pcm_s32le",
+        "pcm_s16be",
+        "pcm_s24be",
+        "pcm_f32le",
+    },
+    "webm": {"opus", "vorbis"},
+    "mkv": None,
+}
 
-LANGUAGES = [("", "(not set)"), ("eng", "English"), ("spa", "Spanish"), ("fra", "French"), ("deu", "German"),
-             ("ita", "Italian"), ("por", "Portuguese"), ("nld", "Dutch"), ("pol", "Polish"), ("rus", "Russian"),
-             ("ukr", "Ukrainian"), ("tur", "Turkish"), ("ara", "Arabic"), ("heb", "Hebrew"), ("fas", "Persian"),
-             ("hin", "Hindi"), ("ben", "Bengali"), ("urd", "Urdu"), ("jpn", "Japanese"), ("kor", "Korean"),
-             ("zho", "Chinese"), ("vie", "Vietnamese"), ("tha", "Thai"), ("ind", "Indonesian"), ("msa", "Malay"),
-             ("tgl", "Tagalog"), ("swe", "Swedish"), ("nor", "Norwegian"), ("dan", "Danish"), ("fin", "Finnish"),
-             ("ell", "Greek"), ("ces", "Czech"), ("hun", "Hungarian"), ("ron", "Romanian"), ("und", "Undetermined")]
+LANGUAGES = [
+    ("", "(not set)"),
+    ("eng", "English"),
+    ("spa", "Spanish"),
+    ("fra", "French"),
+    ("deu", "German"),
+    ("ita", "Italian"),
+    ("por", "Portuguese"),
+    ("nld", "Dutch"),
+    ("pol", "Polish"),
+    ("rus", "Russian"),
+    ("ukr", "Ukrainian"),
+    ("tur", "Turkish"),
+    ("ara", "Arabic"),
+    ("heb", "Hebrew"),
+    ("fas", "Persian"),
+    ("hin", "Hindi"),
+    ("ben", "Bengali"),
+    ("urd", "Urdu"),
+    ("jpn", "Japanese"),
+    ("kor", "Korean"),
+    ("zho", "Chinese"),
+    ("vie", "Vietnamese"),
+    ("tha", "Thai"),
+    ("ind", "Indonesian"),
+    ("msa", "Malay"),
+    ("tgl", "Tagalog"),
+    ("swe", "Swedish"),
+    ("nor", "Norwegian"),
+    ("dan", "Danish"),
+    ("fin", "Finnish"),
+    ("ell", "Greek"),
+    ("ces", "Czech"),
+    ("hun", "Hungarian"),
+    ("ron", "Romanian"),
+    ("und", "Undetermined"),
+]
 LANGUAGE_NAMES = dict(LANGUAGES)
 
 #: extension for a track saved on its own, by codec
-EXTRACT_EXT = {"subrip": ".srt", "srt": ".srt", "ass": ".ass", "ssa": ".ass", "webvtt": ".vtt", "mov_text": ".srt",
-               "hdmv_pgs_subtitle": ".sup", "dvd_subtitle": ".mks", "dvb_subtitle": ".mks",
-               "aac": ".m4a", "alac": ".m4a", "mp3": ".mp3", "ac3": ".ac3", "eac3": ".eac3", "flac": ".flac",
-               "opus": ".opus", "vorbis": ".ogg", "dts": ".dts", "truehd": ".thd", "mp2": ".mp2",
-               "h264": ".mkv", "hevc": ".mkv", "av1": ".mkv", "vp9": ".webm", "vp8": ".webm", "prores": ".mov",
-               "mjpeg": ".jpg", "png": ".png"}
+EXTRACT_EXT = {
+    "subrip": ".srt",
+    "srt": ".srt",
+    "ass": ".ass",
+    "ssa": ".ass",
+    "webvtt": ".vtt",
+    "mov_text": ".srt",
+    "hdmv_pgs_subtitle": ".sup",
+    "dvd_subtitle": ".mks",
+    "dvb_subtitle": ".mks",
+    "aac": ".m4a",
+    "alac": ".m4a",
+    "mp3": ".mp3",
+    "ac3": ".ac3",
+    "eac3": ".eac3",
+    "flac": ".flac",
+    "opus": ".opus",
+    "vorbis": ".ogg",
+    "dts": ".dts",
+    "truehd": ".thd",
+    "mp2": ".mp2",
+    "h264": ".mkv",
+    "hevc": ".mkv",
+    "av1": ".mkv",
+    "vp9": ".webm",
+    "vp8": ".webm",
+    "prores": ".mov",
+    "mjpeg": ".jpg",
+    "png": ".png",
+}
 
 
 @dataclass
 class Track:
-    source: int                    # input number (0 = the main file)
-    index: int                     # stream index inside that input
-    kind: str                      # video | audio | subtitle | attachment | data | cover
+    source: int  # input number (0 = the main file)
+    index: int  # stream index inside that input
+    kind: str  # video | audio | subtitle | attachment | data | cover
     codec: str
     details: str = ""
     language: str = ""
@@ -64,8 +136,8 @@ class Track:
     default: bool = False
     forced: bool = False
     keep: bool = True
-    delay: float = 0.0             # added files: start this many seconds later
-    path: str = ""                 # added files: where the track comes from
+    delay: float = 0.0  # added files: start this many seconds later
+    path: str = ""  # added files: where the track comes from
 
     def describe(self) -> str:
         lang = LANGUAGE_NAMES.get(self.language, self.language) if self.language else ""
@@ -89,9 +161,15 @@ def tracks_of(info: ff.MediaInfo, source: int = 0, path: str = "") -> list:
         kind = _kind(s)
         tags = s.tags or {}
         if kind == "video":
-            details = f"{s.width}×{s.height}" + (f" {s.fps:.3g} fps" if s.fps else "") + (" HDR" if s.is_hdr else "")
+            details = (
+                f"{s.width}×{s.height}"
+                + (f" {s.fps:.3g} fps" if s.fps else "")
+                + (" HDR" if s.is_hdr else "")
+            )
         elif kind == "audio":
-            layout = {1: "mono", 2: "stereo", 6: "5.1", 8: "7.1"}.get(s.channels, f"{s.channels} ch")
+            layout = {1: "mono", 2: "stereo", 6: "5.1", 8: "7.1"}.get(
+                s.channels, f"{s.channels} ch"
+            )
             details = f"{layout}, {s.sample_rate // 1000 if s.sample_rate else '?'} kHz"
         elif kind == "attachment":
             details = tags.get("filename", "") or tags.get("mimetype", "")
@@ -99,15 +177,26 @@ def tracks_of(info: ff.MediaInfo, source: int = 0, path: str = "") -> list:
             details = f"{s.width}×{s.height}"
         else:
             details = ""
-        disp = (s.raw.get("disposition") or {})
+        disp = s.raw.get("disposition") or {}
         codec = s.codec if s.codec and s.codec != "unknown" else ""
         if kind == "attachment" and not codec:
             codec = os.path.splitext(tags.get("filename", ""))[1].lstrip(".").lower() or "file"
         tag = str(s.raw.get("codec_tag_string") or "")
         codec = codec or (tag if tag and not tag.startswith("[") else "data")
-        out.append(Track(source, s.index, kind, codec, details,
-                         language=str(tags.get("language", "") or ""), title=str(tags.get("title", "") or ""),
-                         default=bool(disp.get("default")), forced=bool(disp.get("forced")), path=path))
+        out.append(
+            Track(
+                source,
+                s.index,
+                kind,
+                codec,
+                details,
+                language=str(tags.get("language", "") or ""),
+                title=str(tags.get("title", "") or ""),
+                default=bool(disp.get("default")),
+                forced=bool(disp.get("forced")),
+                path=path,
+            )
+        )
     return out
 
 
@@ -126,15 +215,30 @@ def problems(tracks: list, container: str) -> list:
             out.append((t, f"{t.codec} audio can't go into {container.upper()} - use MKV"))
         elif t.kind == "subtitle":
             if t.codec in BITMAP_SUBS:
-                out.append((t, f"picture-based subtitles ({t.codec}) can't go into {container.upper()} - "
-                               "they'll be left out (use MKV to keep them)"))
+                out.append(
+                    (
+                        t,
+                        f"picture-based subtitles ({t.codec}) can't go into {container.upper()} - "
+                        "they'll be left out (use MKV to keep them)",
+                    )
+                )
             elif container == "webm" and t.codec != "webvtt":
                 out.append((t, "text subtitles will be converted to WebVTT (styling is lost)"))
             elif container in ("mp4", "mov") and t.codec != "mov_text":
-                out.append((t, f"{t.codec} subtitles will be converted to MP4 text subtitles (styling is lost)"))
+                out.append(
+                    (
+                        t,
+                        f"{t.codec} subtitles will be converted to MP4 text subtitles (styling is lost)",
+                    )
+                )
         elif t.kind == "attachment":
-            out.append((t, f"attached files (fonts) can only go into MKV - '{t.details or 'attachment'}' "
-                           "will be left out"))
+            out.append(
+                (
+                    t,
+                    f"attached files (fonts) can only go into MKV - '{t.details or 'attachment'}' "
+                    "will be left out",
+                )
+            )
         elif t.kind == "data" and container != "mov":
             out.append((t, f"data track ({t.codec}) will be left out"))
         elif t.kind == "cover" and container == "webm":
@@ -147,8 +251,15 @@ def _droppable(t: Track, container: str) -> bool:
     return any("left out" in why or "can't go into" in why for _t, why in problems([t], container))
 
 
-def remux_command(inputs: list, tracks: list, out: str, *, keep_chapters: bool = True,
-                  title: str | None = None, keep_tags: bool = True) -> tuple:
+def remux_command(
+    inputs: list,
+    tracks: list,
+    out: str,
+    *,
+    keep_chapters: bool = True,
+    title: str | None = None,
+    keep_tags: bool = True,
+) -> tuple:
     """(argv, [notes]) copying *tracks* (in order) from *inputs* into *out*."""
     container = os.path.splitext(out)[1].lstrip(".").lower()
     container = {"m4v": "mp4", "mka": "mkv", "mks": "mkv"}.get(container, container)
@@ -172,7 +283,12 @@ def remux_command(inputs: list, tracks: list, out: str, *, keep_chapters: bool =
     for t in kept:
         argv += ["-map", f"{t.source}:{t.index}"]
     argv += ["-c", "copy"]
-    argv += ["-map_metadata", "0" if keep_tags else "-1", "-map_chapters", "0" if keep_chapters else "-1"]
+    argv += [
+        "-map_metadata",
+        "0" if keep_tags else "-1",
+        "-map_chapters",
+        "0" if keep_chapters else "-1",
+    ]
     if title is not None:
         argv += ["-metadata", f"title={title}"]
     for n, t in enumerate(kept):
@@ -184,9 +300,14 @@ def remux_command(inputs: list, tracks: list, out: str, *, keep_chapters: bool =
             elif container == "mkv" and t.codec == "mov_text":
                 argv += [f"-c:{n}", "srt"]
         if t.kind == "video" and t.codec == "hevc" and container in ("mp4", "mov"):
-            argv += [f"-tag:{n}", "hvc1"]                    # Apple players need this tag for HEVC
+            argv += [f"-tag:{n}", "hvc1"]  # Apple players need this tag for HEVC
         if t.kind in ("audio", "subtitle", "video"):
-            argv += [f"-metadata:s:{n}", f"language={t.language or 'und'}", f"-metadata:s:{n}", f"title={t.title}"]
+            argv += [
+                f"-metadata:s:{n}",
+                f"language={t.language or 'und'}",
+                f"-metadata:s:{n}",
+                f"title={t.title}",
+            ]
             flags = [f for f, on in (("default", t.default), ("forced", t.forced)) if on]
             argv += [f"-disposition:{n}", "+".join(flags) if flags else "0"]
         elif t.kind == "cover":
@@ -223,6 +344,7 @@ def extract_ext(track: Track) -> str:
 @dataclass
 class Plan:
     """What the Tracks tool holds: the files and the track list in output order."""
+
     inputs: list = field(default_factory=list)
     tracks: list = field(default_factory=list)
 

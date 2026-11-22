@@ -1,4 +1,3 @@
-
 """
 core/i18n.py  -  Internationalisation engine for Quintessential Video Editor
 
@@ -13,6 +12,7 @@ Call init() once at application startup (before any widgets are created).
 Language is persisted in settings.json under the "language" key.
 An empty string or missing key triggers auto-detection from the OS locale.
 """
+
 import json
 import locale as _locale
 import logging
@@ -28,45 +28,66 @@ _LOCALE_DIR = os.path.join(
 
 # ── Supported language catalogue ──────────────────────────────────────────────
 SUPPORTED_LANGUAGES: list[str] = [
-    "en_US", "en_GB",
-    "zh_CN", "hi_IN", "es_ES", "ar_MSA", "fr_FR",
-    "bn_BD", "pt_BR", "id_ID", "ur_PK",  "ru_RU",
-    "de_DE", "ja_JP", "pcm_NG","vi_VN",  "ko_KR",
-    "it_IT", "tr_TR", "pl_PL", "nl_NL",  "th_TH",
-    "fa_IR", "sw_KE", "tl_PH", "uk_UA",  "ro_RO",
+    "en_US",
+    "en_GB",
+    "zh_CN",
+    "hi_IN",
+    "es_ES",
+    "ar_MSA",
+    "fr_FR",
+    "bn_BD",
+    "pt_BR",
+    "id_ID",
+    "ur_PK",
+    "ru_RU",
+    "de_DE",
+    "ja_JP",
+    "pcm_NG",
+    "vi_VN",
+    "ko_KR",
+    "it_IT",
+    "tr_TR",
+    "pl_PL",
+    "nl_NL",
+    "th_TH",
+    "fa_IR",
+    "sw_KE",
+    "tl_PH",
+    "uk_UA",
+    "ro_RO",
     "ms_MY",
 ]
 
 # Display names shown in the language selector
 LANGUAGE_NAMES: dict[str, str] = {
-    "en_US":  "English (US)",
-    "en_GB":  "English (British)",
-    "zh_CN":  "中文 (普通话)",
-    "hi_IN":  "हिन्दी",
-    "es_ES":  "Español",
+    "en_US": "English (US)",
+    "en_GB": "English (British)",
+    "zh_CN": "中文 (普通话)",
+    "hi_IN": "हिन्दी",
+    "es_ES": "Español",
     "ar_MSA": "العربية",
-    "fr_FR":  "Français",
-    "bn_BD":  "বাংলা",
-    "pt_BR":  "Português (Brasil)",
-    "id_ID":  "Bahasa Indonesia",
-    "ur_PK":  "اردو",
-    "ru_RU":  "Русский",
-    "de_DE":  "Deutsch",
-    "ja_JP":  "日本語",
+    "fr_FR": "Français",
+    "bn_BD": "বাংলা",
+    "pt_BR": "Português (Brasil)",
+    "id_ID": "Bahasa Indonesia",
+    "ur_PK": "اردو",
+    "ru_RU": "Русский",
+    "de_DE": "Deutsch",
+    "ja_JP": "日本語",
     "pcm_NG": "Nigerian Pidgin",
-    "vi_VN":  "Tiếng Việt",
-    "ko_KR":  "한국어",
-    "it_IT":  "Italiano",
-    "tr_TR":  "Türkçe",
-    "pl_PL":  "Polski",
-    "nl_NL":  "Nederlands",
-    "th_TH":  "ภาษาไทย",
-    "fa_IR":  "فارسی",
-    "sw_KE":  "Kiswahili",
-    "tl_PH":  "Filipino",
-    "uk_UA":  "Українська",
-    "ro_RO":  "Română",
-    "ms_MY":  "Bahasa Melayu",
+    "vi_VN": "Tiếng Việt",
+    "ko_KR": "한국어",
+    "it_IT": "Italiano",
+    "tr_TR": "Türkçe",
+    "pl_PL": "Polski",
+    "nl_NL": "Nederlands",
+    "th_TH": "ภาษาไทย",
+    "fa_IR": "فارسی",
+    "sw_KE": "Kiswahili",
+    "tl_PH": "Filipino",
+    "uk_UA": "Українська",
+    "ro_RO": "Română",
+    "ms_MY": "Bahasa Melayu",
 }
 
 # RTL languages
@@ -74,45 +95,71 @@ RTL_LANGUAGES: set[str] = {"ar_MSA", "ur_PK", "fa_IR"}
 
 # ── OS locale → our language code ─────────────────────────────────────────────
 _OS_MAP: dict[str, str] = {
-    "en_US": "en_US", "en_AU": "en_GB", "en_CA": "en_GB",
-    "en_GB": "en_GB", "en_NZ": "en_GB", "en_IE": "en_GB",
-    "zh_CN": "zh_CN", "zh_SG": "zh_CN", "zh_TW": "zh_CN",
+    "en_US": "en_US",
+    "en_AU": "en_GB",
+    "en_CA": "en_GB",
+    "en_GB": "en_GB",
+    "en_NZ": "en_GB",
+    "en_IE": "en_GB",
+    "zh_CN": "zh_CN",
+    "zh_SG": "zh_CN",
+    "zh_TW": "zh_CN",
     "hi_IN": "hi_IN",
-    "es_ES": "es_ES", "es_MX": "es_ES", "es_AR": "es_ES",
-    "es_CO": "es_ES", "es_CL": "es_ES", "es_PE": "es_ES",
-    "ar_SA": "ar_MSA", "ar_EG": "ar_MSA", "ar_AE": "ar_MSA",
-    "ar_IQ": "ar_MSA", "ar_MA": "ar_MSA", "ar_DZ": "ar_MSA",
-    "fr_FR": "fr_FR", "fr_CA": "fr_FR", "fr_BE": "fr_FR",
+    "es_ES": "es_ES",
+    "es_MX": "es_ES",
+    "es_AR": "es_ES",
+    "es_CO": "es_ES",
+    "es_CL": "es_ES",
+    "es_PE": "es_ES",
+    "ar_SA": "ar_MSA",
+    "ar_EG": "ar_MSA",
+    "ar_AE": "ar_MSA",
+    "ar_IQ": "ar_MSA",
+    "ar_MA": "ar_MSA",
+    "ar_DZ": "ar_MSA",
+    "fr_FR": "fr_FR",
+    "fr_CA": "fr_FR",
+    "fr_BE": "fr_FR",
     "fr_CH": "fr_FR",
-    "bn_BD": "bn_BD", "bn_IN": "bn_BD",
-    "pt_BR": "pt_BR", "pt_PT": "pt_BR",
+    "bn_BD": "bn_BD",
+    "bn_IN": "bn_BD",
+    "pt_BR": "pt_BR",
+    "pt_PT": "pt_BR",
     "id_ID": "id_ID",
     "ur_PK": "ur_PK",
-    "ru_RU": "ru_RU", "ru_UA": "ru_RU",
-    "de_DE": "de_DE", "de_AT": "de_DE", "de_CH": "de_DE",
+    "ru_RU": "ru_RU",
+    "ru_UA": "ru_RU",
+    "de_DE": "de_DE",
+    "de_AT": "de_DE",
+    "de_CH": "de_DE",
     "ja_JP": "ja_JP",
     "vi_VN": "vi_VN",
     "ko_KR": "ko_KR",
-    "it_IT": "it_IT", "it_CH": "it_IT",
+    "it_IT": "it_IT",
+    "it_CH": "it_IT",
     "tr_TR": "tr_TR",
     "pl_PL": "pl_PL",
-    "nl_NL": "nl_NL", "nl_BE": "nl_NL",
+    "nl_NL": "nl_NL",
+    "nl_BE": "nl_NL",
     "th_TH": "th_TH",
     "fa_IR": "fa_IR",
-    "sw_KE": "sw_KE", "sw_TZ": "sw_KE",
+    "sw_KE": "sw_KE",
+    "sw_TZ": "sw_KE",
     "tl_PH": "tl_PH",
     "uk_UA": "uk_UA",
     "ro_RO": "ro_RO",
-    "ms_MY": "ms_MY", "ms_SG": "ms_MY",
+    "ms_MY": "ms_MY",
+    "ms_SG": "ms_MY",
 }
 
 # ── Runtime state ─────────────────────────────────────────────────────────────
-_strings:  dict[str, str] = {}
-_fallback: dict[str, str] = {}   # always en_US
-_current:  str = "en_US"
+_strings: dict[str, str] = {}
+_fallback: dict[str, str] = {}  # always en_US
+_current: str = "en_US"
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
+
 
 def _load_file(code: str) -> dict[str, str]:
     path = os.path.join(_LOCALE_DIR, f"{code}.json")
@@ -147,6 +194,7 @@ def detect_system_language() -> str:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def get_language() -> str:
     """Return the currently active language code."""
     return _current
@@ -160,8 +208,11 @@ def is_rtl() -> bool:
 def _load_fragments(code: str) -> dict[str, str]:
     """Extra strings from locale/fragments/*.json (en_US) or
     locale/fragments/<code>/*.json, merged in file-name order."""
-    folder = os.path.join(_LOCALE_DIR, "fragments") if code == "en_US" else \
-        os.path.join(_LOCALE_DIR, "fragments", code)
+    folder = (
+        os.path.join(_LOCALE_DIR, "fragments")
+        if code == "en_US"
+        else os.path.join(_LOCALE_DIR, "fragments", code)
+    )
     merged: dict[str, str] = {}
     if os.path.isdir(folder):
         for name in sorted(os.listdir(folder)):
@@ -200,6 +251,7 @@ def set_language(code: str) -> None:
     any t() calls made after this point; existing widgets are not updated
     (a restart is required to re-build all widgets in the new language)."""
     from core import settings
+
     settings.LANGUAGE.set(code)
     load_language(code)
 
@@ -213,6 +265,7 @@ def init() -> None:
       3. Fallback: en_US
     """
     from core import settings  # here, not at the top: settings is imported by i18n's users
+
     saved = settings.LANGUAGE.get()
 
     if saved and saved in SUPPORTED_LANGUAGES:

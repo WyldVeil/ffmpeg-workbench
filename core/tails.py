@@ -23,6 +23,7 @@ downloading), when the person asks for it:
 Untested on real Tails by the developers so far - built to mirror Tails' own
 launcher; reports exactly what is missing when it can't be used.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -46,7 +47,9 @@ def is_tails() -> bool:
 
 def _sudo(args: list, password: str | None = None, timeout: float = 20) -> _proc.ProcResult[str]:
     cmd = ["sudo", "-S", "-p", "", *args] if password is not None else ["sudo", "-n", *args]
-    return _proc.run(cmd, timeout=timeout, input=(password + "\n") if password is not None else None)
+    return _proc.run(
+        cmd, timeout=timeout, input=(password + "\n") if password is not None else None
+    )
 
 
 def sudo_state() -> str:
@@ -71,13 +74,21 @@ def problems() -> list:
         return ["This is only for Tails."]
     out = []
     if not os.path.exists(NETNS_PATH) or not os.path.exists(RESOLV):
-        out.append("The Unsafe Browser is not enabled. Restart Tails and, in the Welcome Screen, open "
-                   "Additional Settings → Unsafe Browser → Enable.")
+        out.append(
+            "The Unsafe Browser is not enabled. Restart Tails and, in the Welcome Screen, open "
+            "Additional Settings → Unsafe Browser → Enable."
+        )
     if sudo_state() == "denied":
-        out.append("No administration password is set. Restart Tails and, in the Welcome Screen, set one under "
-                   "Additional Settings → Administration Password.")
+        out.append(
+            "No administration password is set. Restart Tails and, in the Welcome Screen, set one under "
+            "Additional Settings → Administration Password."
+        )
     for tool in ("ip", "bwrap"):
-        if not shutil.which(tool) and not os.path.exists(f"/usr/bin/{tool}") and not os.path.exists(f"/sbin/{tool}"):
+        if (
+            not shutil.which(tool)
+            and not os.path.exists(f"/usr/bin/{tool}")
+            and not os.path.exists(f"/sbin/{tool}")
+        ):
             out.append(f"The '{tool}' program is missing.")
     return out
 
@@ -96,6 +107,7 @@ def enable(password: str, remember: bool = False) -> tuple:
         return False, "That administration password was not accepted."
     _remembered = bytearray(password.encode("utf-8")) if remember else None
     from core import network
+
     network.set_tails_direct(True)
     return True, "Direct downloads are on for this session. Everything else still goes through Tor."
 
@@ -103,17 +115,19 @@ def enable(password: str, remember: bool = False) -> tuple:
 def disable() -> None:
     global _remembered
     from core import network
+
     network.set_tails_direct(False)
     if _remembered is not None:
         for i in range(len(_remembered)):
             _remembered[i] = 0
     _remembered = None
-    with contextlib.suppress(OSError, _proc.ProcessError):    # forget sudo's cached login
+    with contextlib.suppress(OSError, _proc.ProcessError):  # forget sudo's cached login
         _proc.run(["sudo", "-K"], timeout=10, text=False)
 
 
 def direct_enabled() -> bool:
     from core import network
+
     return network.tails_direct() and is_tails()
 
 
@@ -128,6 +142,29 @@ def wrap(argv: list) -> list:
     """Run *argv* in Tails' clearnet namespace as the normal user - the same
     steps as Tails' Unsafe Browser launcher."""
     _refresh()
-    return ["sudo", "-n", "ip", "netns", "exec", NETNS, "sudo", "-u", USER, "-H", "--",
-            "bwrap", "--bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--bind", RESOLV, "/etc/resolv.conf",
-            "--", *argv]
+    return [
+        "sudo",
+        "-n",
+        "ip",
+        "netns",
+        "exec",
+        NETNS,
+        "sudo",
+        "-u",
+        USER,
+        "-H",
+        "--",
+        "bwrap",
+        "--bind",
+        "/",
+        "/",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--bind",
+        RESOLV,
+        "/etc/resolv.conf",
+        "--",
+        *argv,
+    ]

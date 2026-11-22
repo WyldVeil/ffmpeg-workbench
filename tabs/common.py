@@ -6,6 +6,7 @@ Every tool follows the same shape: validate the source, build a filter chain,
 pick an encoder from the EncoderPanel, keep the audio when the container can
 hold it, and queue one render with progress, cancel and overwrite protection.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -26,21 +27,22 @@ def container_of(path: str) -> str:
     return os.path.splitext(path)[1].lower().lstrip(".") or "mp4"
 
 
-def check_source(tab, path: str, *, need_video: bool = True,
-                 what: str = "") -> ff.MediaInfo | None:
+def check_source(tab, path: str, *, need_video: bool = True, what: str = "") -> ff.MediaInfo | None:
     """Probe *path*; explain the problem and return None when unusable."""
     label = what or t("common.source_video")
     if not path:
         messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=tab)
         return None
     if not os.path.isfile(path):
-        messagebox.showwarning(t("common.warning"), f"{label}\n\nFile not found:\n{path}",
-                               parent=tab)
+        messagebox.showwarning(
+            t("common.warning"), f"{label}\n\nFile not found:\n{path}", parent=tab
+        )
         return None
     info = ff.try_probe(path)
     if info is None or (need_video and not info.has_video):
-        messagebox.showerror(t("common.error"),
-                             f"{label}\n\nThis file has no readable video:\n{path}", parent=tab)
+        messagebox.showerror(
+            t("common.error"), f"{label}\n\nThis file has no readable video:\n{path}", parent=tab
+        )
         return None
     return info
 
@@ -61,11 +63,27 @@ def even_size(info: ff.MediaInfo) -> tuple[int, int]:
     return max(2, w // 2 * 2), max(2, h // 2 * 2)
 
 
-def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn,
-           btn_label: str, name: str, chain: str = "", graph: str = "",
-           extra_inputs: Sequence[str] = (), audio: Sequence[str] | None = None,
-           duration: float | None = None, extra_args: Sequence[str] = (),
-           inputs: Sequence[str] = (), on_done=None, pre_input: Sequence[str] = ()) -> None:
+def render(
+    tab,
+    *,
+    src: str,
+    info: ff.MediaInfo,
+    out: str,
+    encoder,
+    console,
+    btn,
+    btn_label: str,
+    name: str,
+    chain: str = "",
+    graph: str = "",
+    extra_inputs: Sequence[str] = (),
+    audio: Sequence[str] | None = None,
+    duration: float | None = None,
+    extra_args: Sequence[str] = (),
+    inputs: Sequence[str] = (),
+    on_done=None,
+    pre_input: Sequence[str] = (),
+) -> None:
     """Queue ``ffmpeg -i src [extra inputs] <chain|graph> <audio> <encoder> out``.
 
     *chain* is a simple ``-vf`` chain; *graph* a ``-filter_complex`` graph
@@ -93,9 +111,17 @@ def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn
         else:
             tab.show_result(rc, out)
 
-    tab.run_ffmpeg(cmd, console, on_done=_done, btn=btn, btn_label=btn_label,
-                   duration=duration or info.duration or None, output=out,
-                   inputs=[src, *inputs], name=name)
+    tab.run_ffmpeg(
+        cmd,
+        console,
+        on_done=_done,
+        btn=btn,
+        btn_label=btn_label,
+        duration=duration or info.duration or None,
+        output=out,
+        inputs=[src, *inputs],
+        name=name,
+    )
 
 
 def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) -> str | None:
@@ -108,9 +134,20 @@ def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) 
     return out
 
 
-def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
-              duration: float | None = None, inputs: Sequence[str] = (),
-              on_start=None, on_done=None) -> str:
+def queue_job(
+    tab,
+    *,
+    name: str,
+    out: str,
+    work,
+    btn,
+    btn_label: str,
+    console,
+    duration: float | None = None,
+    inputs: Sequence[str] = (),
+    on_start=None,
+    on_done=None,
+) -> str:
     """Queue a multi-step ``work(progress, cancelled, ctx)`` job.  While it
     runs, *btn* shows the progress and cancels the job when clicked;
     ``on_done(rc)`` runs on the UI thread afterwards."""
@@ -118,7 +155,7 @@ def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
     queued_at = time.monotonic()
 
     def cancel():
-        if time.monotonic() - queued_at > 0.8:      # ignore a double-click on Render
+        if time.monotonic() - queued_at > 0.8:  # ignore a double-click on Render
             tab.cancel_render(state["tid"])
 
     def on_progress(tid, line):
@@ -137,9 +174,16 @@ def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
             on_done(rc)
 
     state = {"tid": None}
-    state["tid"] = tab.enqueue_render(name, out, worker_fn=work, on_start=on_start,
-                                      on_progress=on_progress, on_complete=on_complete,
-                                      expected_duration=duration, inputs=inputs)
+    state["tid"] = tab.enqueue_render(
+        name,
+        out,
+        worker_fn=work,
+        on_start=on_start,
+        on_progress=on_progress,
+        on_complete=on_complete,
+        expected_duration=duration,
+        inputs=inputs,
+    )
     btn.config(text=f"\u2716 {t('btn.cancel')}", command=cancel)
     tab.log(console, f"Queued: {os.path.basename(out)}")
     return state["tid"]
@@ -178,21 +222,45 @@ def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 1
     """Render a short processed WAV in the background and play it."""
     from core.hardware import launch_preview
     from core.paths import temp_dir
+
     if not src or not os.path.isfile(src):
         messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=tab)
         return
     wav = os.path.join(temp_dir("preview_"), "preview.wav")
-    cmd = [ff.ffmpeg_path(), "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
-           "-ss", ff.ts(start), "-t", ff.ts(seconds), "-i", src, "-map", "0:a:0", "-vn",
-           *(["-af", af] if af else []), "-c:a", "pcm_s16le", wav]
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-ss",
+        ff.ts(start),
+        "-t",
+        ff.ts(seconds),
+        "-i",
+        src,
+        "-map",
+        "0:a:0",
+        "-vn",
+        *(["-af", af] if af else []),
+        "-c:a",
+        "pcm_s16le",
+        wav,
+    ]
 
     def done(res):
         if res.returncode != 0 or not os.path.isfile(wav):
-            messagebox.showerror(t("common.error"), "Preview failed:\n" + ff.summarize_error(
-                (res.stderr or "").splitlines(), res.returncode), parent=tab)
+            messagebox.showerror(
+                t("common.error"),
+                "Preview failed:\n"
+                + ff.summarize_error((res.stderr or "").splitlines(), res.returncode),
+                parent=tab,
+            )
             return
         if launch_preview(wav) is None:
-            messagebox.showinfo(t("common.warning"), f"No player available - the preview is at\n{wav}",
-                                parent=tab)
+            messagebox.showinfo(
+                t("common.warning"), f"No player available - the preview is at\n{wav}", parent=tab
+            )
 
     tasks.submit(partial(ff.capture, cmd, timeout=120), on_done=done, name="AudioPreview")

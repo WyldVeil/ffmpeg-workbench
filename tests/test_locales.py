@@ -1,5 +1,6 @@
 """Locale hygiene: every translation must plausibly belong to its key, and
 no FFmpeg syntax may live in the string catalogue."""
+
 import json
 import os
 import re
@@ -11,6 +12,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 def test_no_corrupted_translations():
     from locale_lint import lint
+
     assert lint(fix=False, quiet=True) == 0, "run scripts/locale_lint.py to see the offenders"
 
 
@@ -24,7 +26,10 @@ def test_catalogue_contains_no_cli_syntax():
 
 def test_t_is_not_used_inside_ffmpeg_argument_lists():
     """No t(...) call may appear inside a list that starts an ffmpeg argv."""
-    pattern = re.compile(r'\[\s*(?:ffmpeg|ffprobe|ff_exe|self\._ffmpeg|get_binary_path\([^)]*\))[^\]]*?\bt\(\s*"([^"]+)"', re.S)
+    pattern = re.compile(
+        r'\[\s*(?:ffmpeg|ffprobe|ff_exe|self\._ffmpeg|get_binary_path\([^)]*\))[^\]]*?\bt\(\s*"([^"]+)"',
+        re.S,
+    )
     hits = []
     for dirpath, _dirs, files in os.walk(os.path.join(ROOT, "tabs")):
         for f in files:

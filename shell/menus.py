@@ -1,5 +1,6 @@
 """shell/menus.py - the menu bar.  Tool menus come from core/tools.py, so they
 are always complete; every command calls back into the window."""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -16,6 +17,7 @@ from tabs.kit import labels
 @dataclass(frozen=True, slots=True)
 class MenuActions:
     """What the menu items do (all provided by the window)."""
+
     show: Callable[[ToolId], object]
     open_files: Callable[[], object]
     open_output_folder: Callable[[], object]
@@ -37,19 +39,42 @@ class MenuBar:
     theme: tk.StringVar
 
 
-def build(window: tk.Tk, skin: dict[str, Any], actions: MenuActions, *, debug_mode: tk.BooleanVar,
-          theme: str) -> MenuBar:
+def build(
+    window: tk.Tk,
+    skin: dict[str, Any],
+    actions: MenuActions,
+    *,
+    debug_mode: tk.BooleanVar,
+    theme: str,
+) -> MenuBar:
     def menu(parent: tk.Menu) -> tk.Menu:
-        return tk.Menu(parent, tearoff=0, bg=skin["panel"], fg=skin["fg"], activebackground=skin["accent"],
-                       activeforeground="#FFFFFF", relief="flat", bd=0)
+        return tk.Menu(
+            parent,
+            tearoff=0,
+            bg=skin["panel"],
+            fg=skin["fg"],
+            activebackground=skin["accent"],
+            activeforeground="#FFFFFF",
+            relief="flat",
+            bd=0,
+        )
 
-    bar = tk.Menu(window, bg=skin["panel"], fg=skin["fg"], activebackground=skin["accent"],
-                  activeforeground="#FFFFFF", relief="flat", bd=0)
+    bar = tk.Menu(
+        window,
+        bg=skin["panel"],
+        fg=skin["fg"],
+        activebackground=skin["accent"],
+        activeforeground="#FFFFFF",
+        relief="flat",
+        bd=0,
+    )
     window.config(menu=bar)
 
     file = menu(bar)
     bar.add_cascade(label="File", menu=file)
-    file.add_command(label="Start - what do you want to do?", command=lambda: actions.show(ToolId.START))
+    file.add_command(
+        label="Start - what do you want to do?", command=lambda: actions.show(ToolId.START)
+    )
     file.add_command(label="Home - all tools", command=lambda: actions.show(ToolId.HOME))
     file.add_separator()
     file.add_command(label="Open video file…", command=actions.open_files, accelerator="Ctrl+O")
@@ -64,7 +89,9 @@ def build(window: tk.Tk, skin: dict[str, Any], actions: MenuActions, *, debug_mo
     edit = menu(bar)
     bar.add_cascade(label="Edit", menu=edit)
     edit.add_command(label="Quick Settings", command=lambda: actions.show(ToolId.SETTINGS))
-    edit.add_command(label="Advanced Settings", command=lambda: actions.show(ToolId.ADVANCED_SETTINGS))
+    edit.add_command(
+        label="Advanced Settings", command=lambda: actions.show(ToolId.ADVANCED_SETTINGS)
+    )
     edit.add_separator()
     edit.add_checkbutton(label="Debug mode", variable=debug_mode)
 
@@ -82,7 +109,9 @@ def build(window: tk.Tk, skin: dict[str, Any], actions: MenuActions, *, debug_mo
     view.add_cascade(label="Theme", menu=themes)
     theme_var = tk.StringVar(master=window, value=theme)
     for name in SKINS:
-        themes.add_radiobutton(label=name, variable=theme_var, value=name, command=lambda n=name: actions.set_theme(n))
+        themes.add_radiobutton(
+            label=name, variable=theme_var, value=name, command=lambda n=name: actions.set_theme(n)
+        )
     view.add_separator()
     view.add_command(label="Jump to top of sidebar", command=actions.scroll_sidebar_top)
     view.add_command(label="Expand all categories", command=lambda: actions.expand_sidebar(True))

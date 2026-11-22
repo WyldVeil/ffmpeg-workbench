@@ -3,14 +3,30 @@
 import pytest
 
 EFFECTS = [
-    ("fi", "_render_fadein"), ("zb", "_render_zoomburst"), ("sl", "_render_slidein"),
-    ("sp", "_render_spinin"), ("spo", "_render_splitopen"), ("fo", "_render_fadeout"),
-    ("fz", "_render_freezezoom"), ("ir", "_render_irisclose"), ("em", "_render_emoji"),
-    ("lt", "_render_lowerthird"), ("sub", "_render_subscribe"), ("cd", "_render_countdown"),
-    ("pb", "_render_progressbar"), ("rgb", "_render_rgb"), ("vhs", "_render_vhs"),
-    ("gr", "_render_grain"), ("vi", "_render_vignette"), ("ll", "_render_lightleak"),
-    ("sh", "_render_shake"), ("zp", "_render_zoompunch"), ("kb", "_render_kenburns"),
-    ("wp", "_render_whippan"), ("mc", "_render_meme"), ("cb", "_render_cinebars"),
+    ("fi", "_render_fadein"),
+    ("zb", "_render_zoomburst"),
+    ("sl", "_render_slidein"),
+    ("sp", "_render_spinin"),
+    ("spo", "_render_splitopen"),
+    ("fo", "_render_fadeout"),
+    ("fz", "_render_freezezoom"),
+    ("ir", "_render_irisclose"),
+    ("em", "_render_emoji"),
+    ("lt", "_render_lowerthird"),
+    ("sub", "_render_subscribe"),
+    ("cd", "_render_countdown"),
+    ("pb", "_render_progressbar"),
+    ("rgb", "_render_rgb"),
+    ("vhs", "_render_vhs"),
+    ("gr", "_render_grain"),
+    ("vi", "_render_vignette"),
+    ("ll", "_render_lightleak"),
+    ("sh", "_render_shake"),
+    ("zp", "_render_zoompunch"),
+    ("kb", "_render_kenburns"),
+    ("wp", "_render_whippan"),
+    ("mc", "_render_meme"),
+    ("cb", "_render_cinebars"),
     ("wm", "_render_watermark"),
 ]
 
@@ -20,6 +36,7 @@ SOURCES = ["h264", "hevc10", "vertical_noaudio"]
 @pytest.fixture(scope="module")
 def fx_tab():
     from tests.gui_harness import Harness
+
     h = Harness.instance()
     return h, h.open("Special Effects")
 
@@ -34,7 +51,7 @@ def _shorten_times(tab, prefix):
         tab._cd_from.set("2")
         tab._cd_start.set("0.5")
     if prefix == "lt":
-        tab._lt_title.set("O'Brien: 50% \\ \"quoted\"")
+        tab._lt_title.set('O\'Brien: 50% \\ "quoted"')
 
 
 @pytest.mark.gui
@@ -52,7 +69,7 @@ def test_effect_renders(fx_tab, media, outdir, prefix, method, source):
     h.wait_idle(180)
     errs = h.dialogs.errors() + [d for d in h.dialogs.warnings() if "already as wide" not in d[2]]
     if prefix == "cb" and source == "vertical_noaudio":
-        return                                    # nothing to letterbox on a 9:16 clip
+        return  # nothing to letterbox on a 9:16 clip
     assert not errs, errs
     info = h.assert_media(out, video=True, min_duration=0.5)
     v = next(s for s in info["streams"] if s["codec_type"] == "video")

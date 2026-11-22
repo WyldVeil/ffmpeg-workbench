@@ -3,6 +3,7 @@ core/ops/crop.py - command builders for tabs/cutting/crop.py (also used by core/
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 

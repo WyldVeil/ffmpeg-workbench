@@ -8,6 +8,7 @@ Shared pytest fixtures.
 Tests that need FFmpeg are marked ``ffmpeg``; GUI tests are marked ``gui``.
 Both are skipped automatically when the prerequisite is missing.
 """
+
 from __future__ import annotations
 
 import os
@@ -50,6 +51,7 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope="session")
 def media():
     from tests.media import build_media, default_media_dir
+
     if not _have_ffmpeg():
         pytest.skip("ffmpeg not available")
     return build_media(default_media_dir())
@@ -58,6 +60,7 @@ def media():
 @pytest.fixture(scope="session")
 def _harness():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -84,6 +87,7 @@ def no_leftover_processes():
     import time
 
     from core import ffmpeg as ff
+
     deadline = time.monotonic() + 5
     while ff.active_count() and time.monotonic() < deadline:
         time.sleep(0.1)

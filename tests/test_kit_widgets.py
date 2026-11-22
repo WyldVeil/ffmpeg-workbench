@@ -1,4 +1,5 @@
 """tabs/kit/widgets.py: typed widgets."""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -16,7 +17,9 @@ class Speed(StrEnum):
 @pytest.mark.gui
 def test_choice_box_stores_members_not_labels(ui):
     seen: list[Speed] = []
-    box = ChoiceBox(ui.app, {Speed.SLOW: "Gentle", Speed.FAST: "Quick!"}, Speed.SLOW, on_change=seen.append)
+    box = ChoiceBox(
+        ui.app, {Speed.SLOW: "Gentle", Speed.FAST: "Quick!"}, Speed.SLOW, on_change=seen.append
+    )
     try:
         assert box.value is Speed.SLOW and box.get() == "Gentle"
         box.value = Speed.FAST

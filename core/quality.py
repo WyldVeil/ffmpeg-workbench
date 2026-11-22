@@ -11,6 +11,7 @@ was trimmed, and an optional time limit.
 log paths need no escaping; ``read(...)`` -> :class:`Result` with per-frame
 scores, averages, 1% lows and the worst moments.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,9 +22,11 @@ from dataclasses import dataclass, field
 
 from core import ffmpeg as ff
 
-MODELS = {"hd": ("Standard - HD screens and laptops", "version=vmaf_v0.6.1"),
-          "4k": ("4K TV, watched from a sofa", "version=vmaf_4k_v0.6.1"),
-          "neg": ("Ignore sharpening tricks (NEG)", "version=vmaf_v0.6.1neg")}
+MODELS = {
+    "hd": ("Standard - HD screens and laptops", "version=vmaf_v0.6.1"),
+    "4k": ("4K TV, watched from a sofa", "version=vmaf_4k_v0.6.1"),
+    "neg": ("Ignore sharpening tricks (NEG)", "version=vmaf_v0.6.1neg"),
+}
 METRICS = ("vmaf", "ssim", "psnr")
 
 
@@ -49,9 +52,20 @@ def _rate(info: ff.MediaInfo) -> str:
     return rate
 
 
-def build(ref: str, dist: str, ref_info: ff.MediaInfo, dist_info: ff.MediaInfo, *,
-          metrics=METRICS, model: str = "hd", skip_ref: float = 0.0, skip_dist: float = 0.0,
-          seconds: float | None = None, subsample: int = 1, threads: int | None = None) -> tuple:
+def build(
+    ref: str,
+    dist: str,
+    ref_info: ff.MediaInfo,
+    dist_info: ff.MediaInfo,
+    *,
+    metrics=METRICS,
+    model: str = "hd",
+    skip_ref: float = 0.0,
+    skip_dist: float = 0.0,
+    seconds: float | None = None,
+    subsample: int = 1,
+    threads: int | None = None,
+) -> tuple:
     """(argv, {metric: log file name}).  *skip_ref* / *skip_dist*: seconds to
     skip at the start of the original / the copy, to line them up when one of
     them was trimmed."""
@@ -76,36 +90,59 @@ def build(ref: str, dist: str, ref_info: ff.MediaInfo, dist_info: ff.MediaInfo, 
     tag = ("setparams=" + ":".join(f"{k}={v}" for k, v in tags.items()) + ",") if tags else ""
     d_trim += tag
     r_trim += tag
-    parts = [f"[0:v]{d_trim}setpts=PTS-STARTPTS,scale={w}:{h}:flags=bicubic,setsar=1,fps={rate},format={fmt}"
-             f"{limit},setpts=PTS-STARTPTS" + (f",split={n}" + "".join(f"[d{i}]" for i in range(n)) if n > 1
-                                               else "[d0]"),
-             f"[1:v]{r_trim}setpts=PTS-STARTPTS,scale={w}:{h}:flags=bicubic,setsar=1,fps={rate},format={fmt}"
-             f"{limit},setpts=PTS-STARTPTS" + (f",split={n}" + "".join(f"[r{i}]" for i in range(n)) if n > 1
-                                               else "[r0]")]
+    parts = [
+        f"[0:v]{d_trim}setpts=PTS-STARTPTS,scale={w}:{h}:flags=bicubic,setsar=1,fps={rate},format={fmt}"
+        f"{limit},setpts=PTS-STARTPTS"
+        + (f",split={n}" + "".join(f"[d{i}]" for i in range(n)) if n > 1 else "[d0]"),
+        f"[1:v]{r_trim}setpts=PTS-STARTPTS,scale={w}:{h}:flags=bicubic,setsar=1,fps={rate},format={fmt}"
+        f"{limit},setpts=PTS-STARTPTS"
+        + (f",split={n}" + "".join(f"[r{i}]" for i in range(n)) if n > 1 else "[r0]"),
+    ]
     files = {}
     sync = "shortest=1:repeatlast=0"
     for i, m in enumerate(metrics):
         if m == "vmaf":
             files[m] = "vmaf.json"
-            parts.append(f"[d{i}][r{i}]libvmaf=model={MODELS.get(model, MODELS['hd'])[1]}:log_fmt=json:"
-                         f"log_path=vmaf.json:n_threads={threads or max(1, min(16, os.cpu_count() or 4))}:"
-                         f"n_subsample={max(1, int(subsample))}:{sync}")
+            parts.append(
+                f"[d{i}][r{i}]libvmaf=model={MODELS.get(model, MODELS['hd'])[1]}:log_fmt=json:"
+                f"log_path=vmaf.json:n_threads={threads or max(1, min(16, os.cpu_count() or 4))}:"
+                f"n_subsample={max(1, int(subsample))}:{sync}"
+            )
         elif m == "ssim":
             files[m] = "ssim.log"
             parts.append(f"[d{i}][r{i}]ssim=stats_file=ssim.log:{sync}")
         else:
             files[m] = "psnr.log"
             parts.append(f"[d{i}][r{i}]psnr=stats_file=psnr.log:{sync}")
-    argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", dist, "-i", ref,
-            "-filter_complex", ";".join(parts), "-an", "-sn", "-f", "null", "-"]
+    argv = [
+        ff.ffmpeg_path(),
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-i",
+        dist,
+        "-i",
+        ref,
+        "-filter_complex",
+        ";".join(parts),
+        "-an",
+        "-sn",
+        "-f",
+        "null",
+        "-",
+    ]
     return argv, files
 
 
 def shared_tags(a, b) -> dict:
     """setparams values for colour tags present on only one of two streams."""
     out = {}
-    for key, attr in (("range", "color_range"), ("color_primaries", "color_primaries"),
-                      ("color_trc", "color_transfer"), ("colorspace", "color_space")):
+    for key, attr in (
+        ("range", "color_range"),
+        ("color_primaries", "color_primaries"),
+        ("color_trc", "color_transfer"),
+        ("colorspace", "color_space"),
+    ):
         va, vb = (getattr(a, attr, "") or ""), (getattr(b, attr, "") or "")
         va, vb = ("" if v in ("unknown", "reserved") else v for v in (va, vb))
         if bool(va) != bool(vb):
@@ -120,7 +157,7 @@ class Series:
 
     def mean(self) -> float:
         vals = [v for v in self.values if math.isfinite(v)]
-        if not vals:            # every frame identical (PSNR is infinite) - or nothing measured
+        if not vals:  # every frame identical (PSNR is infinite) - or nothing measured
             return float("inf") if self.values else float("nan")
         return sum(vals) / len(vals)
 
@@ -158,13 +195,19 @@ class Result:
 
     def summary(self) -> dict:
         d = {}
+
         def num(v):
             return round(v, 4) if math.isfinite(v) else ("inf" if v > 0 else None)
+
         for name in METRICS:
             s = getattr(self, name)
             if s.values:
-                d[name] = {"mean": num(s.mean()), "low_1pct": num(s.low()), "min": num(s.minimum()),
-                           "frames": len(s.values)}
+                d[name] = {
+                    "mean": num(s.mean()),
+                    "low_1pct": num(s.low()),
+                    "min": num(s.minimum()),
+                    "frames": len(s.values),
+                }
         if self.vmaf.values and math.isfinite(self.vmaf_harmonic):
             d["vmaf"]["harmonic_mean"] = round(self.vmaf_harmonic, 4)
         return d
@@ -178,7 +221,11 @@ class Result:
         with open(path, "w", encoding="utf-8", newline="") as fh:
             fh.write("time," + ",".join(METRICS) + "\n")
             for t in sorted(rows):
-                fh.write(f"{t:.3f}," + ",".join(f"{rows[t][m]:.4f}" if m in rows[t] else "" for m in METRICS) + "\n")
+                fh.write(
+                    f"{t:.3f},"
+                    + ",".join(f"{rows[t][m]:.4f}" if m in rows[t] else "" for m in METRICS)
+                    + "\n"
+                )
 
 
 _SSIM = re.compile(r"n:(\d+).*?All:([\d.]+)")
@@ -196,8 +243,11 @@ def read(folder: str, files: dict, fps: float, skip_ref: float = 0.0) -> Result:
         for fr in data.get("frames", []):
             res.vmaf.times.append(start + fr["frameNum"] / fps)
             res.vmaf.values.append(float(fr["metrics"]["vmaf"]))
-        res.vmaf_harmonic = float(((data.get("pooled_metrics") or {}).get("vmaf") or {}).get("harmonic_mean",
-                                                                                          float("nan")))
+        res.vmaf_harmonic = float(
+            ((data.get("pooled_metrics") or {}).get("vmaf") or {}).get(
+                "harmonic_mean", float("nan")
+            )
+        )
     for name, rx in (("ssim", _SSIM), ("psnr", _PSNR)):
         path = os.path.join(folder, files.get(name, ""))
         if name not in files or not os.path.isfile(path):

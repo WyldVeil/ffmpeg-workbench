@@ -1,5 +1,6 @@
 """Animated Titles, Intro/Outro Maker, Frame Extractor, Hard-Subber and
 Slideshow Maker: pure helpers plus real renders through the GUI."""
+
 import os
 
 import pytest
@@ -14,15 +15,17 @@ NASTY_TEXT = "Don't stop: 50% off, {now} [ok]; \\o/ \\N é"
 def test_ass_escape_keeps_text_literal():
     esc = ass.escape(NASTY_TEXT)
     assert "\\{now\\}" in esc and "{" not in esc.replace("\\{", "")
-    assert "\\" + ass.ZWSP + "N" in esc          # a literal backslash-N, not a line break
+    assert "\\" + ass.ZWSP + "N" in esc  # a literal backslash-N, not a line break
     assert ass.escape("a\nb") == "a\\Nb"
     assert ass.colour("#112233", 0.0) == "&H00332211"
     assert ass.ts(3725.456) == "1:02:05.46"
 
 
 def test_title_script_all_styles_scale():
-    cards = [titles.Card(style, NASTY_TEXT, "second line", i * 3.0, 2.5)
-             for i, style in enumerate(titles.STYLES)]
+    cards = [
+        titles.Card(style, NASTY_TEXT, "second line", i * 3.0, 2.5)
+        for i, style in enumerate(titles.STYLES)
+    ]
     for w, h in ((1280, 720), (1080, 1920), (3840, 2160)):
         text = titles.build_script(cards, w, h).render()
         assert f"PlayResX: {w}" in text and text.count("Dialogue:") >= len(cards) * 2
@@ -39,6 +42,7 @@ def test_frame_helpers():
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -74,9 +78,10 @@ def test_titles_render(ui, media, outdir, source):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("mode,bg,anim", [("none", "gradient", "typewriter"),
-                                          ("both", "file", "slide"),
-                                          ("before", "solid", "zoom")])
+@pytest.mark.parametrize(
+    "mode,bg,anim",
+    [("none", "gradient", "typewriter"), ("both", "file", "slide"), ("before", "solid", "zoom")],
+)
 def test_intro_maker(ui, media, outdir, mode, bg, anim):
     ui.reset()
     tab = ui.open("Intro/Outro Maker")
@@ -108,8 +113,9 @@ def test_intro_maker(ui, media, outdir, mode, bg, anim):
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("mode,fmt", [("single", "jpg"), ("interval", "png"),
-                                      ("scenes", "webp"), ("sheet", "jpg")])
+@pytest.mark.parametrize(
+    "mode,fmt", [("single", "jpg"), ("interval", "png"), ("scenes", "webp"), ("sheet", "jpg")]
+)
 def test_frame_extractor(ui, media, outdir, mode, fmt):
     ui.reset()
     tab = ui.open("Frame Extractor")
@@ -129,10 +135,10 @@ def test_frame_extractor(ui, media, outdir, mode, fmt):
     files = [os.path.join(dp, f) for dp, _d, fs in os.walk(folder) for f in fs]
     assert files, "nothing extracted"
     assert all(f.endswith("." + fmt) for f in files)
-    if mode == "interval":                    # one frame per second of the clip
+    if mode == "interval":  # one frame per second of the clip
         assert abs(len(files) - round(ff.duration_of(media["nasty"]))) <= 1
     if mode == "scenes":
-        assert any("scene_0001" in f for f in files)   # the first scene is always kept
+        assert any("scene_0001" in f for f in files)  # the first scene is always kept
     if mode == "sheet":
         assert len(files) == 1 and os.path.getsize(files[0]) > 10000
 
@@ -144,8 +150,9 @@ def test_hard_subber_legacy_encoding_and_odd_name(ui, media, outdir, tmp_path):
     tab = ui.open("Hard-Subber")
     _src(ui, tab, media["h264"])
     odd = tmp_path / "it's, [odd]; name.srt"
-    odd.write_bytes("1\n00:00:00,500 --> 00:00:03,000\nCafé crème — 50% {x}\n".encode("cp1252",
-                                                                                     "replace"))
+    odd.write_bytes(
+        "1\n00:00:00,500 --> 00:00:03,000\nCafé crème — 50% {x}\n".encode("cp1252", "replace")
+    )
     tab.sub_row.set(str(odd))
     tab.box_var.set(True)
     ui.pump(0.6)
@@ -165,8 +172,19 @@ def test_slideshow(ui, media, outdir, tmp_path, trans):
     tab = ui.open("Slideshow Maker")
     tab._clear()
     portrait = tmp_path / "portrait.jpg"
-    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=s=600x900:d=1", "-frames:v",
-              "1", str(portrait)])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=600x900:d=1",
+            "-frames:v",
+            "1",
+            str(portrait),
+        ]
+    )
     added = tab.add_paths([media["png"], str(portrait), media["png"]])
     assert added == 3
     tab.slides[0].caption = NASTY_TEXT

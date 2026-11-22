@@ -1,4 +1,5 @@
 """Rotate & Flip, Manual Crop, Side-by-Side, Smart Reframe and Beat Sync."""
+
 import pytest
 
 from core import ffmpeg as ff
@@ -7,23 +8,39 @@ from tabs.cutting import beat_sync, crop, side_by_side, smart_reframe
 
 def test_pure_helpers():
     assert crop.fit_aspect(1920, 1080, 9, 16) == (656, 0, 606, 1080)
-    assert crop.parse_cropdetect("x crop=1920:800:0:140 y crop=1920:800:0:140 z crop=1920:804:0:138") \
-        == (0, 140, 1920, 800)
+    assert crop.parse_cropdetect(
+        "x crop=1920:800:0:140 y crop=1920:800:0:140 z crop=1920:804:0:138"
+    ) == (0, 140, 1920, 800)
     assert smart_reframe.crop_box(1920, 1080, 9, 16) == (608, 1080)
     plan = beat_sync.frame_plan([0.5, 1.0, 1.5], 2.0, 30)
     assert sum(f for _s, f in plan) == 60 and [s for s, _f in plan] == [0.0, 0.5, 1.0, 1.5]
     segs = beat_sync.assign_sources(plan, [("a", 1.0), ("b", 10.0)], "sequential", 30)
     assert [s[0] for s in segs] == ["a", "b", "a", "b"]
-    assert all(start + frames / 30 <= dur + 1e-6 for (path, start, frames), (p2, dur) in
-               zip(segs, [("a", 1.0), ("b", 10.0)] * 2, strict=False))
+    assert all(
+        start + frames / 30 <= dur + 1e-6
+        for (path, start, frames), (p2, dur) in zip(
+            segs, [("a", 1.0), ("b", 10.0)] * 2, strict=False
+        )
+    )
     assert side_by_side.cells("grid", 4, 1920, 1080)[3] == (960, 540, 960, 540)
 
 
 @pytest.mark.ffmpeg
 def test_beat_detection_on_click_track(tmp_path):
     song = str(tmp_path / "drums.m4a")
-    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i",
-              "aevalsrc='0.8*sin(2*PI*55*t)*exp(-25*mod(t,0.5))':s=44100:d=20", "-c:a", "aac", song])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "aevalsrc='0.8*sin(2*PI*55*t)*exp(-25*mod(t,0.5))':s=44100:d=20",
+            "-c:a",
+            "aac",
+            song,
+        ]
+    )
     on = beat_sync.onset_strength(beat_sync.envelope(song))
     bpm = 60 * beat_sync.ENV_RATE / beat_sync.estimate_tempo(on)
     assert bpm == pytest.approx(120, abs=1)
@@ -34,6 +51,7 @@ def test_beat_detection_on_click_track(tmp_path):
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -67,8 +85,23 @@ def test_rotate(ui, media, outdir, lossless):
 @pytest.mark.ffmpeg
 def test_crop_detect_and_render(ui, media, outdir):
     boxed = str(outdir / "letterboxed.mp4")
-    ff.check([ff.ffmpeg_path(), "-y", "-i", media["h264"], "-vf", "scale=1280:536,pad=1280:720:0:92",
-              "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "copy", boxed])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            media["h264"],
+            "-vf",
+            "scale=1280:536,pad=1280:720:0:92",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-c:a",
+            "copy",
+            boxed,
+        ]
+    )
     ui.reset()
     tab = ui.open("Manual Crop")
     tab.src_var.set(boxed)
@@ -126,8 +159,19 @@ def test_smart_reframe(ui, media, outdir):
 @pytest.mark.ffmpeg
 def test_beat_montage(ui, media, outdir, tmp_path):
     song = str(tmp_path / "song.m4a")
-    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i",
-              "aevalsrc='0.8*sin(2*PI*55*t)*exp(-25*mod(t,0.5))':s=44100:d=8", "-c:a", "aac", song])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "aevalsrc='0.8*sin(2*PI*55*t)*exp(-25*mod(t,0.5))':s=44100:d=8",
+            "-c:a",
+            "aac",
+            song,
+        ]
+    )
     ui.reset()
     tab = ui.open("Beat Sync Cutter")
     tab._clear()

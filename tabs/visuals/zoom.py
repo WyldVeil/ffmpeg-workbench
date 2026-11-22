@@ -9,6 +9,7 @@ its length and frame rate:
 * CPU: zoompan, one output frame per input frame, on a 2x supersampled
   picture (for sources up to 1080p) so slow moves don't jitter.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -24,10 +25,20 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, here_button, scroll_body
 
-MODES = {"punch": "Punch-in (zoom in at a moment, then back out)", "kenburns": "Ken Burns (slow move over the clip)",
-         "keyframes": "Keyframe pan (from one framing to another)", "pulse": "Zoom pulse (quick bump)"}
-KB = {"in": "Zoom in", "out": "Zoom out", "lr": "Pan left → right", "rl": "Pan right → left",
-      "tb": "Pan top → bottom", "bt": "Pan bottom → top"}
+MODES = {
+    "punch": "Punch-in (zoom in at a moment, then back out)",
+    "kenburns": "Ken Burns (slow move over the clip)",
+    "keyframes": "Keyframe pan (from one framing to another)",
+    "pulse": "Zoom pulse (quick bump)",
+}
+KB = {
+    "in": "Zoom in",
+    "out": "Zoom out",
+    "lr": "Pan left → right",
+    "rl": "Pan right → left",
+    "tb": "Pan top → bottom",
+    "bt": "Pan bottom → top",
+}
 EASES = {"smooth": "Smooth", "snappy": "Snappy", "linear": "Linear"}
 
 
@@ -68,29 +79,46 @@ def zoom_exprs(mode: str, p: dict, duration: float) -> tuple:
     # keyframes
     e = _ease(_progress(p["t0"], p["t1"]), ease)
     (x0, y0, z0), (x1, y1, z1) = p["from"], p["to"]
-    return (f"{z0:.4f}+{z1 - z0:.4f}*{e}", f"{x0 / 100:.4f}+{(x1 - x0) / 100:.4f}*{e}",
-            f"{y0 / 100:.4f}+{(y1 - y0) / 100:.4f}*{e}")
+    return (
+        f"{z0:.4f}+{z1 - z0:.4f}*{e}",
+        f"{x0 / 100:.4f}+{(x1 - x0) / 100:.4f}*{e}",
+        f"{y0 / 100:.4f}+{(y1 - y0) / 100:.4f}*{e}",
+    )
 
 
-def zoom_filter(exprs: tuple, size: tuple, fps: str, *, gpu: bool, pix_fmt: str = "yuv420p",
-                supersample: bool = True) -> str:
+def zoom_filter(
+    exprs: tuple,
+    size: tuple,
+    fps: str,
+    *,
+    gpu: bool,
+    pix_fmt: str = "yuv420p",
+    supersample: bool = True,
+) -> str:
     z, fx, fy = exprs
     w, h = size
     if gpu:
         z, fx, fy = (e.replace("T", "t") for e in (z, fx, fy))
-        return (f"libplacebo=w={w}:h={h}:crop_w='iw/max(1,{z})':crop_h='ih/max(1,{z})':"
-                f"crop_x='clip(({fx})*iw-crop_w/2,0,iw-crop_w)':crop_y='clip(({fy})*ih-crop_h/2,0,ih-crop_h)':"
-                f"format={pix_fmt}")
+        return (
+            f"libplacebo=w={w}:h={h}:crop_w='iw/max(1,{z})':crop_h='ih/max(1,{z})':"
+            f"crop_x='clip(({fx})*iw-crop_w/2,0,iw-crop_w)':crop_y='clip(({fy})*ih-crop_h/2,0,ih-crop_h)':"
+            f"format={pix_fmt}"
+        )
     z, fx, fy = (e.replace("T", "it") for e in (z, fx, fy))
     pre = "scale=iw*2:ih*2:flags=bicubic," if supersample else ""
-    return (f"{pre}zoompan=z='max(1,{z})':x='clip(({fx})*iw-iw/zoom/2,0,iw-iw/zoom)':"
-            f"y='clip(({fy})*ih-ih/zoom/2,0,ih-ih/zoom)':d=1:s={w}x{h}:fps={fps},setsar=1")
+    return (
+        f"{pre}zoompan=z='max(1,{z})':x='clip(({fx})*iw-iw/zoom/2,0,iw-iw/zoom)':"
+        f"y='clip(({fy})*ih-ih/zoom/2,0,ih-ih/zoom)':d=1:s={w}x{h}:fps={fps},setsar=1"
+    )
 
 
 class AnimatedZoomTab(BaseTab):
     # i / o: the move starts / ends at the frame shown (for the chosen kind of move)
     _MARKS: ClassVar[dict[str, tuple[str, str | None]]] = {
-        "punch": ("p_start", "p_end"), "keyframes": ("k_t0", "k_t1"), "pulse": ("u_time", None)}
+        "punch": ("p_start", "p_end"),
+        "keyframes": ("k_t0", "k_t1"),
+        "pulse": ("u_time", None),
+    }
 
     def _mark(self, which):
         key = next((k for k, v in MODES.items() if v == self.mode_var.get()), "")
@@ -112,26 +140,42 @@ class AnimatedZoomTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.animated_zoom"), "Punch-ins, Ken Burns moves and smooth pans.", icon="🔍")
+        self.make_header(
+            self, t("tab.animated_zoom"), "Punch-ins, Ken Burns moves and smooth pans.", icon="🔍"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         pv = tk.Frame(body)
         pv.pack(pady=px(4))
         self.preview = FramePreview(pv, 400, 225)
         self.preview.pack()
         self.pos_var = tk.DoubleVar(value=0)
-        self.slider = ttk.Scale(pv, from_=0, to=1, variable=self.pos_var, length=px(400),
-                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider = ttk.Scale(
+            pv,
+            from_=0,
+            to=1,
+            variable=self.pos_var,
+            length=px(400),
+            command=lambda _v: self.preview.show(float(self.pos_var.get())),
+        )
         self.slider.pack(fill="x")
-        framestep.slider(self.slider, self.preview)      # , and . step a frame
-        tk.Label(pv, text="Move the slider to see the zoom at any moment.", fg=CLR["fgdim"],
-                 font=(UI_FONT, 8)).pack()
+        framestep.slider(self.slider, self.preview)  # , and . step a frame
+        tk.Label(
+            pv,
+            text="Move the slider to see the zoom at any moment.",
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack()
 
         opt = tk.LabelFrame(body, text="  Move  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value=MODES["punch"])
-        mb = ttk.Combobox(opt, textvariable=self.mode_var, values=list(MODES.values()), state="readonly", width=46)
+        mb = ttk.Combobox(
+            opt, textvariable=self.mode_var, values=list(MODES.values()), state="readonly", width=46
+        )
         mb.pack(anchor="w")
         mb.bind("<<ComboboxSelected>>", lambda _e: self._mode_changed())
         self.frames = {}
@@ -152,46 +196,109 @@ class AnimatedZoomTab(BaseTab):
             row = tk.Frame(parent)
             row.pack(anchor="w", pady=px(2))
             for item in items:
-                (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(side="left", padx=px(2))
+                (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(
+                    side="left", padx=px(2)
+                )
 
         f = self.frames["punch"] = tk.Frame(opt)
-        labelled(f, "From", lambda r: time_entry(r, "p_start", "1"), "to", lambda r: time_entry(r, "p_end", "3"),
-                 "  zoom ×", lambda r: entry(r, "p_zoom", "1.5", 5))
-        labelled(f, "Keep in view - X %", lambda r: entry(r, "p_x", "50", 5), "Y %", lambda r: entry(r, "p_y", "40", 5))
+        labelled(
+            f,
+            "From",
+            lambda r: time_entry(r, "p_start", "1"),
+            "to",
+            lambda r: time_entry(r, "p_end", "3"),
+            "  zoom ×",
+            lambda r: entry(r, "p_zoom", "1.5", 5),
+        )
+        labelled(
+            f,
+            "Keep in view - X %",
+            lambda r: entry(r, "p_x", "50", 5),
+            "Y %",
+            lambda r: entry(r, "p_y", "40", 5),
+        )
         f = self.frames["kenburns"] = tk.Frame(opt)
         self.kb_var = tk.StringVar(value=KB["in"])
-        kb = ttk.Combobox(f, textvariable=self.kb_var, values=list(KB.values()), state="readonly", width=20)
+        kb = ttk.Combobox(
+            f, textvariable=self.kb_var, values=list(KB.values()), state="readonly", width=20
+        )
         kb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         labelled(f, lambda r: kb, "  zoom ×", lambda r: entry(r, "kb_zoom", "1.3", 5))
         f = self.frames["keyframes"] = tk.Frame(opt)
-        labelled(f, "Start: X %", lambda r: entry(r, "k_x0", "50", 5), "Y %", lambda r: entry(r, "k_y0", "50", 5),
-                 "zoom ×", lambda r: entry(r, "k_z0", "1.0", 5), "  at", lambda r: time_entry(r, "k_t0", "0"))
-        labelled(f, "End:   X %", lambda r: entry(r, "k_x1", "70", 5), "Y %", lambda r: entry(r, "k_y1", "35", 5),
-                 "zoom ×", lambda r: entry(r, "k_z1", "1.6", 5), "  at", lambda r: time_entry(r, "k_t1", ""),
-                 "(empty = the end)")
+        labelled(
+            f,
+            "Start: X %",
+            lambda r: entry(r, "k_x0", "50", 5),
+            "Y %",
+            lambda r: entry(r, "k_y0", "50", 5),
+            "zoom ×",
+            lambda r: entry(r, "k_z0", "1.0", 5),
+            "  at",
+            lambda r: time_entry(r, "k_t0", "0"),
+        )
+        labelled(
+            f,
+            "End:   X %",
+            lambda r: entry(r, "k_x1", "70", 5),
+            "Y %",
+            lambda r: entry(r, "k_y1", "35", 5),
+            "zoom ×",
+            lambda r: entry(r, "k_z1", "1.6", 5),
+            "  at",
+            lambda r: time_entry(r, "k_t1", ""),
+            "(empty = the end)",
+        )
         f = self.frames["pulse"] = tk.Frame(opt)
-        labelled(f, "At", lambda r: time_entry(r, "u_time", "1"), "lasting", lambda r: entry(r, "u_dur", "0.4", 5),
-                 "s   zoom ×", lambda r: entry(r, "u_zoom", "1.3", 5))
-        labelled(f, "Keep in view - X %", lambda r: entry(r, "u_x", "50", 5), "Y %", lambda r: entry(r, "u_y", "50", 5))
+        labelled(
+            f,
+            "At",
+            lambda r: time_entry(r, "u_time", "1"),
+            "lasting",
+            lambda r: entry(r, "u_dur", "0.4", 5),
+            "s   zoom ×",
+            lambda r: entry(r, "u_zoom", "1.3", 5),
+        )
+        labelled(
+            f,
+            "Keep in view - X %",
+            lambda r: entry(r, "u_x", "50", 5),
+            "Y %",
+            lambda r: entry(r, "u_y", "50", 5),
+        )
         er = self._ease_row = tk.Frame(opt)
         er.pack(anchor="w", pady=px(4))
         tk.Label(er, text="Motion:").pack(side="left")
         self.ease_var = tk.StringVar(value=EASES["smooth"])
-        eb = ttk.Combobox(er, textvariable=self.ease_var, values=list(EASES.values()), state="readonly", width=10)
+        eb = ttk.Combobox(
+            er, textvariable=self.ease_var, values=list(EASES.values()), state="readonly", width=10
+        )
         eb.pack(side="left", padx=px(4))
         eb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        tk.Label(er, text="GPU (smoothest)" if fl.vulkan_ok() else "CPU", fg=CLR["fgdim"]).pack(side="left",
-                                                                                                padx=px(10))
+        tk.Label(er, text="GPU (smoothest)" if fl.vulkan_ok() else "CPU", fg=CLR["fgdim"]).pack(
+            side="left", padx=px(10)
+        )
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "zoom"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "zoom"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text="🔍  RENDER ZOOM", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="🔍  RENDER ZOOM",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=22,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -218,24 +325,44 @@ class AnimatedZoomTab(BaseTab):
         ease = next((k for k, x in EASES.items() if x == self.ease_var.get()), "smooth")
         mode = self._mode()
         if mode == "punch":
-            p = {"start": ff.parse_time(v["p_start"] or "0"), "end": ff.parse_time(v["p_end"] or "0"),
-                 "zoom": num(v["p_zoom"], "Zoom", 1.01, 10), "x": num(v["p_x"], "X %", 0, 100),
-                 "y": num(v["p_y"], "Y %", 0, 100)}
+            p = {
+                "start": ff.parse_time(v["p_start"] or "0"),
+                "end": ff.parse_time(v["p_end"] or "0"),
+                "zoom": num(v["p_zoom"], "Zoom", 1.01, 10),
+                "x": num(v["p_x"], "X %", 0, 100),
+                "y": num(v["p_y"], "Y %", 0, 100),
+            }
             if p["end"] <= p["start"]:
                 raise ValueError("The zoom must end after it starts.")
         elif mode == "pulse":
-            p = {"time": ff.parse_time(v["u_time"] or "0"), "dur": num(v["u_dur"], "Length", 0.05, 10),
-                 "zoom": num(v["u_zoom"], "Zoom", 1.01, 10), "x": num(v["u_x"], "X %", 0, 100),
-                 "y": num(v["u_y"], "Y %", 0, 100)}
+            p = {
+                "time": ff.parse_time(v["u_time"] or "0"),
+                "dur": num(v["u_dur"], "Length", 0.05, 10),
+                "zoom": num(v["u_zoom"], "Zoom", 1.01, 10),
+                "x": num(v["u_x"], "X %", 0, 100),
+                "y": num(v["u_y"], "Y %", 0, 100),
+            }
         elif mode == "kenburns":
-            p = {"dir": next((k for k, x in KB.items() if x == self.kb_var.get()), "in"),
-                 "zoom": num(v["kb_zoom"], "Zoom", 1.01, 10)}
+            p = {
+                "dir": next((k for k, x in KB.items() if x == self.kb_var.get()), "in"),
+                "zoom": num(v["kb_zoom"], "Zoom", 1.01, 10),
+            }
         else:
             t1 = ff.parse_time(v["k_t1"]) if v["k_t1"] else duration
-            p = {"from": (num(v["k_x0"], "X %", 0, 100), num(v["k_y0"], "Y %", 0, 100),
-                          num(v["k_z0"], "Zoom", 1, 10)),
-                 "to": (num(v["k_x1"], "X %", 0, 100), num(v["k_y1"], "Y %", 0, 100), num(v["k_z1"], "Zoom", 1, 10)),
-                 "t0": ff.parse_time(v["k_t0"] or "0"), "t1": t1}
+            p = {
+                "from": (
+                    num(v["k_x0"], "X %", 0, 100),
+                    num(v["k_y0"], "Y %", 0, 100),
+                    num(v["k_z0"], "Zoom", 1, 10),
+                ),
+                "to": (
+                    num(v["k_x1"], "X %", 0, 100),
+                    num(v["k_y1"], "Y %", 0, 100),
+                    num(v["k_z1"], "Zoom", 1, 10),
+                ),
+                "t0": ff.parse_time(v["k_t0"] or "0"),
+                "t1": t1,
+            }
             if p["t1"] <= p["t0"]:
                 raise ValueError("The end time must be after the start time.")
         p["ease"] = ease
@@ -264,8 +391,12 @@ class AnimatedZoomTab(BaseTab):
             exprs = zoom_exprs(self._mode(), self.params(info.duration), info.duration)
         except ValueError:
             return
-        self.preview.set_filter(zoom_filter(exprs, common.even_size(info), frame_rate(info), gpu=False,
-                                            supersample=False), keep_time=True)
+        self.preview.set_filter(
+            zoom_filter(
+                exprs, common.even_size(info), frame_rate(info), gpu=False, supersample=False
+            ),
+            keep_time=True,
+        )
 
     def _render(self):
         src = self.src_row.path
@@ -282,9 +413,24 @@ class AnimatedZoomTab(BaseTab):
             return
         size = common.even_size(info)
         gpu = fl.vulkan_ok()
-        chain = zoom_filter(exprs, size, frame_rate(info), gpu=gpu,
-                            pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
-                            supersample=max(size) <= 1920)
-        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder, console=self.console,
-                      btn=self.btn_render, btn_label="🔍  RENDER ZOOM", name="Animated Zoom",
-                      pre_input=["-init_hw_device", "vulkan"] if gpu else ())
+        chain = zoom_filter(
+            exprs,
+            size,
+            frame_rate(info),
+            gpu=gpu,
+            pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
+            supersample=max(size) <= 1920,
+        )
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=chain,
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="🔍  RENDER ZOOM",
+            name="Animated Zoom",
+            pre_input=["-init_hw_device", "vulkan"] if gpu else (),
+        )

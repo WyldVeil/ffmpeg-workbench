@@ -4,6 +4,7 @@ shell/sidebar.py - the tool list down the left of the window.
 The wordmark, the pinned All-in-One Builder, a search box, then one
 collapsible section per category (core/tools.py), each tool a button.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -20,7 +21,7 @@ from core.skins import UI_FONT
 from core.tools import Category, ToolId, sidebar
 from tabs.kit import labels
 
-WIDTH = 272                         # design pixels
+WIDTH = 272  # design pixels
 _SEARCH_DELAY_MS = 80
 
 
@@ -33,15 +34,21 @@ class _Section:
 
 
 class Sidebar(tk.Frame):
-    def __init__(self, master: tk.Misc, skin: dict[str, Any], *, on_select: Callable[[ToolId], object],
-                 debug_mode: tk.BooleanVar) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        skin: dict[str, Any],
+        *,
+        on_select: Callable[[ToolId], object],
+        debug_mode: tk.BooleanVar,
+    ) -> None:
         super().__init__(master, bg=skin["sb_bg"], width=px(WIDTH))
         self.pack_propagate(False)
         self.skin = skin
         self._on_select = on_select
         self.buttons: dict[ToolId, tk.Button] = {}
         self.indicators: dict[ToolId, tk.Frame] = {}
-        self._rows: list[tuple[str, tk.Frame]] = []          # (search text, row) per tool
+        self._rows: list[tuple[str, tk.Frame]] = []  # (search text, row) per tool
         self._sections: dict[Category, _Section] = {}
         self._active: ToolId | None = None
         self._search_job: str | None = None
@@ -59,21 +66,35 @@ class Sidebar(tk.Frame):
         badge = tk.Canvas(logo, width=px(38), height=px(34), bg=bg, highlightthickness=0)
         badge.pack(side="left", padx=px(0, 12))
         try:
-            size = min((32, 48, 64, 128), key=lambda n: (abs(n - px(32)), n))   # sharpest at this scale
-            self._badge = tk.PhotoImage(master=self, file=resource_path("assets", "icons", f"app_{size}.png"))
+            size = min(
+                (32, 48, 64, 128), key=lambda n: (abs(n - px(32)), n)
+            )  # sharpest at this scale
+            self._badge = tk.PhotoImage(
+                master=self, file=resource_path("assets", "icons", f"app_{size}.png")
+            )
             badge.create_image(px(19), px(17), image=self._badge)
         except tk.TclError:
             badge.create_rectangle(0, 0, px(38), px(34), fill=skin["accent"], outline="")
         names = tk.Frame(logo, bg=bg)
         names.pack(side="left", anchor="w")
-        tk.Label(names, text="WYLDVEIL", font=(UI_FONT, 11, "bold"), bg=bg, fg="#CCCCCC").pack(anchor="w")
-        tk.Label(names, text=t("app.subtitle"), font=(UI_FONT, 8), bg=bg, fg="#424242").pack(anchor="w")
+        tk.Label(names, text="WYLDVEIL", font=(UI_FONT, 11, "bold"), bg=bg, fg="#CCCCCC").pack(
+            anchor="w"
+        )
+        tk.Label(names, text=t("app.subtitle"), font=(UI_FONT, 8), bg=bg, fg="#424242").pack(
+            anchor="w"
+        )
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14), pady=px(16, 0))
 
         pinned = tk.Frame(top, bg=bg)
         pinned.pack(fill="x", padx=px(6), pady=px(8, 5))
-        self._add_button(pinned, ToolId.ALL_IN_ONE_BUILDER, f"   ⚡  {t('tab.all_in_one')}",
-                         font=(UI_FONT, 10, "bold"), fg=skin["accent"], pady=px(5))
+        self._add_button(
+            pinned,
+            ToolId.ALL_IN_ONE_BUILDER,
+            f"   ⚡  {t('tab.all_in_one')}",
+            font=(UI_FONT, 10, "bold"),
+            fg=skin["accent"],
+            pady=px(5),
+        )
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14), pady=px(4, 0))
 
         box = tk.Frame(top, bg=bg)
@@ -83,19 +104,30 @@ class Sidebar(tk.Frame):
         edge.pack(fill="x")
         inner = tk.Frame(edge, bg=field_bg)
         inner.pack(fill="x", padx=px(1), pady=px(1))
-        tk.Label(inner, text="⌕", bg=field_bg, fg="#484848", font=(UI_FONT, 11)).pack(side="left", padx=px(7, 0),
-                                                                                    pady=px(3))
+        tk.Label(inner, text="⌕", bg=field_bg, fg="#484848", font=(UI_FONT, 11)).pack(
+            side="left", padx=px(7, 0), pady=px(3)
+        )
         self.search_var = tk.StringVar()
-        self._search = tk.Entry(inner, textvariable=self.search_var, bg=field_bg, fg="#808080",
-                                insertbackground=skin["accent"], relief="flat", bd=0, font=(UI_FONT, 9),
-                                highlightthickness=0)
+        self._search = tk.Entry(
+            inner,
+            textvariable=self.search_var,
+            bg=field_bg,
+            fg="#808080",
+            insertbackground=skin["accent"],
+            relief="flat",
+            bd=0,
+            font=(UI_FONT, 9),
+            highlightthickness=0,
+        )
         self._search.pack(side="left", fill="x", expand=True, padx=px(4, 6), pady=px(4))
         self._placeholder = t("app.search_placeholder")
         self._search.insert(0, self._placeholder)
         self._search.bind("<FocusIn>", self._search_focus)
         self._search.bind("<FocusOut>", self._search_blur)
         self.search_var.trace_add("write", lambda *_: self._search_soon())
-        self._clear = tk.Label(inner, text="✕", bg=field_bg, fg="#484848", font=(UI_FONT, 8), cursor="hand2")
+        self._clear = tk.Label(
+            inner, text="✕", bg=field_bg, fg="#484848", font=(UI_FONT, 8), cursor="hand2"
+        )
         self._clear.bind("<Button-1>", lambda _e: self.clear_search())
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14))
 
@@ -106,9 +138,13 @@ class Sidebar(tk.Frame):
         self.canvas = tk.Canvas(holder, bg=bg, highlightthickness=0, yscrollincrement=px(20))
         bar = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)
         self.inner = tk.Frame(self.canvas, bg=bg)
-        window = self.canvas.create_window((0, 0), window=self.inner, anchor="nw", width=px(WIDTH - 18))
+        window = self.canvas.create_window(
+            (0, 0), window=self.inner, anchor="nw", width=px(WIDTH - 18)
+        )
         # the list is exactly as wide as the visible canvas, whatever the scrollbar's width
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(window, width=e.width), add=True)
+        self.canvas.bind(
+            "<Configure>", lambda e: self.canvas.itemconfigure(window, width=e.width), add=True
+        )
         self.inner.bind("<Configure>", lambda _e: self._update_scrollregion())
         self.canvas.configure(yscrollcommand=bar.set)
         self.canvas.unbind_class("Canvas", "<<FocusIn>>")
@@ -119,7 +155,7 @@ class Sidebar(tk.Frame):
             if specs and category not in (Category.PINNED, Category.HIDDEN):
                 self._build_section(category, [s.id for s in specs])
         tk.Frame(self.inner, bg=bg, height=px(20)).pack()
-        self.after_idle(self._update_scrollregion)       # once laid out: bbox() is empty before
+        self.after_idle(self._update_scrollregion)  # once laid out: bbox() is empty before
 
     def _build_section(self, category: Category, tools: list[ToolId]) -> None:
         skin, bg = self.skin, self.skin["sb_bg"]
@@ -127,36 +163,81 @@ class Sidebar(tk.Frame):
         header.pack(fill="x", pady=px(10, 0))
         arrow = tk.Label(header, text="▾", bg=bg, fg="#484848", font=(UI_FONT, 7), cursor="hand2")
         arrow.pack(side="left", padx=px(14, 0), pady=px(2))
-        title = tk.Label(header, text=labels.section(category), font=(UI_FONT, 7, "bold"), bg=bg,
-                         fg=skin["sb_cat"], anchor="w", cursor="hand2")
+        title = tk.Label(
+            header,
+            text=labels.section(category),
+            font=(UI_FONT, 7, "bold"),
+            bg=bg,
+            fg=skin["sb_cat"],
+            anchor="w",
+            cursor="hand2",
+        )
         title.pack(side="left", padx=px(5, 4), pady=px(2), fill="x", expand=True)
-        tk.Label(header, text=str(len(tools)), bg=skin.get("input_bg", "#1E1E1E"), fg="#4A4A4A",
-                 font=(UI_FONT, 7), padx=px(5), pady=px(1)).pack(side="right", padx=px(0, 12), pady=px(4))
+        tk.Label(
+            header,
+            text=str(len(tools)),
+            bg=skin.get("input_bg", "#1E1E1E"),
+            fg="#4A4A4A",
+            font=(UI_FONT, 7),
+            padx=px(5),
+            pady=px(1),
+        ).pack(side="right", padx=px(0, 12), pady=px(4))
         items = tk.Frame(self.inner, bg=bg)
         items.pack(fill="x")
         section = self._sections[category] = _Section(header, items, arrow)
         for w in (header, title, arrow):
-            w.bind("<Button-1>", lambda _e, c=category: self.expand(c, not self._sections[c].expanded))
+            w.bind(
+                "<Button-1>", lambda _e, c=category: self.expand(c, not self._sections[c].expanded)
+            )
         for tool in tools:
             row = tk.Frame(section.items, bg=bg)
             row.pack(fill="x", padx=px(6), pady=0)
             label = labels.tool(tool)
-            self._add_button(row, tool, f"    {label}", font=(UI_FONT, 9), fg=skin["sb_btn"], pady=px(3))
-            self._rows.append((f"{tool.value} {labels.tool(tool).casefold()} {label.casefold()}", row))
+            self._add_button(
+                row, tool, f"    {label}", font=(UI_FONT, 9), fg=skin["sb_btn"], pady=px(3)
+            )
+            self._rows.append(
+                (f"{tool.value} {labels.tool(tool).casefold()} {label.casefold()}", row)
+            )
 
-    def _add_button(self, row: tk.Frame, tool: ToolId, text: str, *, font: tuple[str, int] | tuple[str, int, str],
-                    fg: str, pady: int) -> None:
+    def _add_button(
+        self,
+        row: tk.Frame,
+        tool: ToolId,
+        text: str,
+        *,
+        font: tuple[str, int] | tuple[str, int, str],
+        fg: str,
+        pady: int,
+    ) -> None:
         skin, bg = self.skin, self.skin["sb_bg"]
         mark = tk.Frame(row, bg=bg, width=px(3))
         mark.pack(side="left", fill="y")
         mark.pack_propagate(False)
-        btn = tk.Button(row, text=text, font=font, bg=bg, fg=fg, relief="flat", anchor="w", cursor="hand2",
-                        activebackground=skin["sb_hover"], activeforeground="#FFFFFF",
-                        command=lambda: self._on_select(tool), bd=0, padx=0, pady=pady)
+        btn = tk.Button(
+            row,
+            text=text,
+            font=font,
+            bg=bg,
+            fg=fg,
+            relief="flat",
+            anchor="w",
+            cursor="hand2",
+            activebackground=skin["sb_hover"],
+            activeforeground="#FFFFFF",
+            command=lambda: self._on_select(tool),
+            bd=0,
+            padx=0,
+            pady=pady,
+        )
         btn.pack(side="left", fill="x", expand=True)
         btn.bind("<Enter>", lambda _e: btn.config(bg=self.skin["sb_hover"]))
-        btn.bind("<Leave>", lambda _e: btn.config(
-            bg=self.skin["sb_active"] if self._active is tool else self.skin["sb_bg"]))
+        btn.bind(
+            "<Leave>",
+            lambda _e: btn.config(
+                bg=self.skin["sb_active"] if self._active is tool else self.skin["sb_bg"]
+            ),
+        )
         self.buttons[tool] = btn
         self.indicators[tool] = mark
 
@@ -167,9 +248,20 @@ class Sidebar(tk.Frame):
         tk.Frame(footer, bg=border, height=px(1)).pack(fill="x")
         inner = tk.Frame(footer, bg=bg)
         inner.pack(fill="x", padx=px(14), pady=px(7))
-        tk.Label(inner, text=f"v{APP_VERSION}", bg=bg, fg="#343434", font=(UI_FONT, 8)).pack(side="left")
-        tk.Checkbutton(inner, text="DEBUG", variable=debug_mode, bg=bg, fg="#343434", selectcolor=bg,
-                       activebackground=bg, font=(UI_FONT, 8), cursor="hand2").pack(side="right")
+        tk.Label(inner, text=f"v{APP_VERSION}", bg=bg, fg="#343434", font=(UI_FONT, 8)).pack(
+            side="left"
+        )
+        tk.Checkbutton(
+            inner,
+            text="DEBUG",
+            variable=debug_mode,
+            bg=bg,
+            fg="#343434",
+            selectcolor=bg,
+            activebackground=bg,
+            font=(UI_FONT, 8),
+            cursor="hand2",
+        ).pack(side="right")
 
     # ── The active tool ───────────────────────────────────────────────────────
     def set_active(self, tool: ToolId | None) -> None:
@@ -180,7 +272,9 @@ class Sidebar(tk.Frame):
             self.indicators[previous].config(bg=skin["sb_bg"])
         self._active = tool
         if tool is not None and tool in self.buttons:
-            self.buttons[tool].config(bg=skin["sb_active"], fg=skin["accent"], font=(UI_FONT, 9, "bold"))
+            self.buttons[tool].config(
+                bg=skin["sb_active"], fg=skin["accent"], font=(UI_FONT, 9, "bold")
+            )
             self.indicators[tool].config(bg=skin["accent"])
             self.scroll_to(tool)
 
@@ -275,8 +369,12 @@ class Sidebar(tk.Frame):
     def recolour(self, skin: dict[str, Any]) -> None:
         self.skin = skin
         for tool, btn in self.buttons.items():
-            btn.config(bg=skin["sb_bg"], fg=skin["accent"] if tool is ToolId.ALL_IN_ONE_BUILDER else skin["sb_btn"],
-                       activebackground=skin["sb_hover"], activeforeground="#FFFFFF")
+            btn.config(
+                bg=skin["sb_bg"],
+                fg=skin["accent"] if tool is ToolId.ALL_IN_ONE_BUILDER else skin["sb_btn"],
+                activebackground=skin["sb_hover"],
+                activeforeground="#FFFFFF",
+            )
         for mark in self.indicators.values():
             mark.config(bg=skin["sb_bg"])
         self.set_active(self._active)

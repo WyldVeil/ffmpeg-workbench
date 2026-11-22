@@ -11,6 +11,7 @@ nothing needs registering or inheriting, and pyright checks both sides.
 The shell asks with ``isinstance(page, MarksIn)`` (the protocols are
 runtime-checkable) and then calls the methods - never private names.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -105,6 +106,7 @@ class Shell(Protocol):
 
 
 # ── Adapter for pages whose playhead is a scrubber (VideoTimeline is a Transport itself) ──
+
 
 class ScrubTransport:
     """A scrubber - a :class:`tk.Scale` or the Tk variable behind one - and the

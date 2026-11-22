@@ -10,6 +10,6 @@ command builders).  ARCHITECTURE.md has the map.
 # ── Application identity (single source of truth) ────────────────────────────
 APP_VERSION = "1.2.5"
 APP_NAME = "WyldVeil's Media Editor"
-APP_ID = "io.github.wyldveil.MediaEditor"     # Linux desktop/AppStream id
-APP_SLUG = "wyldveil-media-editor"            # Linux executable / folder names
+APP_ID = "io.github.wyldveil.MediaEditor"  # Linux desktop/AppStream id
+APP_SLUG = "wyldveil-media-editor"  # Linux executable / folder names
 APP_URL = "https://github.com/WyldVeil/wyldveils-media-editor"

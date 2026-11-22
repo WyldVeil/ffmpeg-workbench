@@ -1,4 +1,5 @@
 """Video Reverser, Freeze Frame, Clip Looper, Scene Detector and Sequencer."""
+
 import os
 
 import pytest
@@ -21,6 +22,7 @@ def test_pure_helpers():
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -38,7 +40,9 @@ def _src(ui, tab, path):
 @pytest.mark.ffmpeg
 @pytest.mark.parametrize("mode", ["full", "pingpong"])
 def test_reverser_chunked(ui, media, outdir, monkeypatch, mode):
-    monkeypatch.setattr(reverser, "MEMORY_BUDGET", 1280 * 720 * 1.5 * 1.3 * 30 * 1.5)   # 1.5 s chunks
+    monkeypatch.setattr(
+        reverser, "MEMORY_BUDGET", 1280 * 720 * 1.5 * 1.3 * 30 * 1.5
+    )  # 1.5 s chunks
     ui.reset()
     tab = ui.open("Video Reverser")
     _src(ui, tab, media["h264"])
@@ -56,7 +60,7 @@ def test_reverser_chunked(ui, media, outdir, monkeypatch, mode):
     expected = ff.duration_of(media["h264"]) if mode == "full" else 1.5 * 4
     assert info.require_video().duration == pytest.approx(expected, abs=0.1)
     assert info.require_audio().duration == pytest.approx(expected, abs=0.1)
-    if mode == "full":   # first output frame == last source frame
+    if mode == "full":  # first output frame == last source frame
         last = ff.grab_frame_png(media["h264"], expected - 0.04, width=64)
         first = ff.grab_frame_png(out, 0.0, width=64)
         assert last and first
@@ -119,11 +123,35 @@ def test_looper(ui, media, outdir, mode):
 @pytest.mark.ffmpeg
 def test_scene_detect_split_and_chapters(ui, outdir, tmp_path):
     clip = str(tmp_path / "three scenes.mp4")
-    ff.check([ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=25:d=2",
-              "-f", "lavfi", "-i", "smptebars=s=640x360:r=25:d=2", "-f", "lavfi",
-              "-i", "mandelbrot=s=640x360:r=25", "-filter_complex",
-              "[2]trim=duration=2[m];[0][1][m]concat=n=3:v=1:a=0[v]", "-map", "[v]", "-c:v", "libx264",
-              "-preset", "ultrafast", "-pix_fmt", "yuv420p", clip])
+    ff.check(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=640x360:r=25:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "smptebars=s=640x360:r=25:d=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "mandelbrot=s=640x360:r=25",
+            "-filter_complex",
+            "[2]trim=duration=2[m];[0][1][m]concat=n=3:v=1:a=0[v]",
+            "-map",
+            "[v]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            clip,
+        ]
+    )
     ui.reset()
     tab = ui.open("Scene Detector")
     _src(ui, tab, clip)
@@ -141,8 +169,21 @@ def test_scene_detect_split_and_chapters(ui, outdir, tmp_path):
     tab._chapters()
     ui.wait_idle(60)
     _ok(ui)
-    chaps = ff.capture([ff.ffprobe_path(), "-v", "error", "-show_chapters", "-of", "csv=p=0",
-                        str(tmp_path / "three scenes_chapters.mp4")]).stdout.strip().splitlines()
+    chaps = (
+        ff.capture(
+            [
+                ff.ffprobe_path(),
+                "-v",
+                "error",
+                "-show_chapters",
+                "-of",
+                "csv=p=0",
+                str(tmp_path / "three scenes_chapters.mp4"),
+            ]
+        )
+        .stdout.strip()
+        .splitlines()
+    )
     assert len(chaps) == 3
 
 

@@ -3,6 +3,7 @@ core/ops/scaler.py - command builders for tabs/transcoder/scaler.py (also used b
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 from fractions import Fraction
@@ -29,8 +30,17 @@ def geometry(src: tuple, box: tuple, shape: str) -> tuple:
     return scaled, (_even(bw), _even(bh))
 
 
-def scale_chain(src: tuple, box: tuple, shape: str, method: str, *, sharpen: float = 0.0,
-                gpu: bool = False, pix_fmt: str = "yuv420p", tags: dict | None = None) -> str:
+def scale_chain(
+    src: tuple,
+    box: tuple,
+    shape: str,
+    method: str,
+    *,
+    sharpen: float = 0.0,
+    gpu: bool = False,
+    pix_fmt: str = "yuv420p",
+    tags: dict | None = None,
+) -> str:
     """Filter graph scaling *src* into *box*.  GPU methods (libplacebo, with
     or without an upscaling shader) process the brightness plane only, see
     core/upscale.py; they need ``-init_hw_device vulkan``."""
@@ -42,10 +52,17 @@ def scale_chain(src: tuple, box: tuple, shape: str, method: str, *, sharpen: flo
         else:
             method = "area" if w * 2 <= src[0] else "lanczos"
     if method in upscale.SHADERS and not up:
-        method = "gpu"                      # upscaling shaders do nothing when shrinking
+        method = "gpu"  # upscaling shaders do nothing when shrinking
     if method in GPU_METHODS:
-        chain = [upscale.plane_graph((w, h), shader=method if method in upscale.SHADERS else None,
-                                     deep=pix_fmt.endswith("10le"), tags=tags), "setsar=1"]
+        chain = [
+            upscale.plane_graph(
+                (w, h),
+                shader=method if method in upscale.SHADERS else None,
+                deep=pix_fmt.endswith("10le"),
+                tags=tags,
+            ),
+            "setsar=1",
+        ]
     else:
         chain = [f"scale={w}:{h}:flags={method}+accurate_rnd+full_chroma_int", "setsar=1"]
     if sharpen > 0 and up and method not in upscale.SHADERS:
@@ -57,8 +74,12 @@ def scale_chain(src: tuple, box: tuple, shape: str, method: str, *, sharpen: flo
     return ",".join(chain)
 
 
-_NTSC = {"23.976": Fraction(24000, 1001), "29.97": Fraction(30000, 1001), "59.94": Fraction(60000, 1001),
-         "119.88": Fraction(120000, 1001)}
+_NTSC = {
+    "23.976": Fraction(24000, 1001),
+    "29.97": Fraction(30000, 1001),
+    "59.94": Fraction(60000, 1001),
+    "119.88": Fraction(120000, 1001),
+}
 
 
 def rate_fraction(text: str) -> Fraction:

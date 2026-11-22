@@ -12,6 +12,7 @@ subject over a video, an image, a solid colour - or keep it transparent
   at the foreground's frame rate; the result lasts as long as the
   foreground.
 """
+
 from __future__ import annotations
 
 import os
@@ -52,7 +53,7 @@ def hex_colour(value: str) -> str:
 
 
 def spill_type(hex_rgb: str) -> str | None:
-    r, g, b = (int(hex_rgb[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (int(hex_rgb[i : i + 2], 16) for i in (0, 2, 4))
     if g > r and g >= b:
         return "green"
     if b > r and b > g:
@@ -60,15 +61,16 @@ def spill_type(hex_rgb: str) -> str | None:
     return None
 
 
-def key_chain(method: str, colour: str, similarity: float, blend: float,
-              despill: bool) -> str:
+def key_chain(method: str, colour: str, similarity: float, blend: float, despill: bool) -> str:
     """Filter chain that makes the background transparent (yuva output)."""
     if method == "luma_white":
-        return (f"format=yuva420p,lumakey=threshold=1:tolerance={similarity:.3f}"
-                f":softness={blend:.3f}")
+        return (
+            f"format=yuva420p,lumakey=threshold=1:tolerance={similarity:.3f}:softness={blend:.3f}"
+        )
     if method == "luma_black":
-        return (f"format=yuva420p,lumakey=threshold=0:tolerance={similarity:.3f}"
-                f":softness={blend:.3f}")
+        return (
+            f"format=yuva420p,lumakey=threshold=0:tolerance={similarity:.3f}:softness={blend:.3f}"
+        )
     if method == "color":
         return f"colorkey=color=0x{colour}:similarity={similarity:.3f}:blend={blend:.3f}"
     chain = f"chromakey=color=0x{colour}:similarity={similarity:.3f}:blend={blend:.3f}"
@@ -80,32 +82,74 @@ def key_chain(method: str, colour: str, similarity: float, blend: float,
 
 def background_chain(width: int, height: int, fps: str) -> str:
     """Cover-fit a background stream to WxH at *fps* (no distortion)."""
-    return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},setsar=1,fps={fps}")
+    return (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},setsar=1,fps={fps}"
+    )
 
 
 def sample_border_colour(path: str, at: float = 0.5) -> str | None:
     """Median colour of the frame edges (where a backdrop usually is)."""
     w, h = 64, 36
-    r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
-                    "-ss", ff.ts(at), "-i", path, "-frames:v", "1",
-                    "-vf", f"scale={w}:{h}:flags=area,format=rgb24", "-f", "rawvideo", "-"],
-                   timeout=30, text=False)
+    r = ff.capture(
+        [
+            ff.ffmpeg_path(),
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-ss",
+            ff.ts(at),
+            "-i",
+            path,
+            "-frames:v",
+            "1",
+            "-vf",
+            f"scale={w}:{h}:flags=area,format=rgb24",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        timeout=30,
+        text=False,
+    )
     data = r.stdout or b""
     if r.returncode != 0 or len(data) != w * h * 3:
         return None
-    px = [data[(y * w + x) * 3:(y * w + x) * 3 + 3]
-          for y in range(h) for x in range(w) if x < 3 or x >= w - 3 or y < 3 or y >= h - 3]
+    px = [
+        data[(y * w + x) * 3 : (y * w + x) * 3 + 3]
+        for y in range(h)
+        for x in range(w)
+        if x < 3 or x >= w - 3 or y < 3 or y >= h - 3
+    ]
     med = [int(statistics.median(p[i] for p in px)) for i in range(3)]
     return "".join(f"{c:02X}" for c in med)
 
 
 def sample_point(path: str, at: float, x: int, y: int) -> str | None:
     """Average colour of a 5x5 patch at source pixel (x, y)."""
-    r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
-                    "-ss", ff.ts(at), "-i", path, "-frames:v", "1",
-                    "-vf", f"crop=5:5:{max(0, x - 2)}:{max(0, y - 2)},scale=1:1:flags=area,format=rgb24",
-                    "-f", "rawvideo", "-"], timeout=30, text=False)
+    r = ff.capture(
+        [
+            ff.ffmpeg_path(),
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-ss",
+            ff.ts(at),
+            "-i",
+            path,
+            "-frames:v",
+            "1",
+            "-vf",
+            f"crop=5:5:{max(0, x - 2)}:{max(0, y - 2)},scale=1:1:flags=area,format=rgb24",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        timeout=30,
+        text=False,
+    )
     data = r.stdout or b""
     if r.returncode != 0 or len(data) != 3:
         return None
@@ -116,7 +160,7 @@ class GreenKeyerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.key_colour = "00B140"          # typical chroma green until sampled
+        self.key_colour = "00B140"  # typical chroma green until sampled
         self._info = None
         self._job = None
         self._build_ui()
@@ -129,84 +173,153 @@ class GreenKeyerTab(BaseTab):
 
         pick = tk.LabelFrame(body, text=f"  {t('section.input_files')}  ", padx=px(12), pady=px(8))
         pick.pack(fill="x", padx=px(20), pady=px(10, 4))
-        self.src_row = FileRow(pick, t("green_key.foreground_label"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            pick, t("green_key.foreground_label"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", pady=px(2))
         brow = tk.Frame(pick)
         brow.pack(fill="x", pady=px(2))
-        tk.Label(brow, text="Background:", width=16, anchor="w",
-                 font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(brow, text="Background:", width=16, anchor="w", font=(UI_FONT, 10, "bold")).pack(
+            side="left"
+        )
         self.bg_mode = tk.StringVar(value=BACKGROUNDS["file"])
-        bm = ttk.Combobox(brow, textvariable=self.bg_mode, values=list(BACKGROUNDS.values()),
-                          state="readonly", width=32)
+        bm = ttk.Combobox(
+            brow,
+            textvariable=self.bg_mode,
+            values=list(BACKGROUNDS.values()),
+            state="readonly",
+            width=32,
+        )
         bm.pack(side="left", padx=px(6))
         bm.bind("<<ComboboxSelected>>", lambda _e: self._bg_mode_changed())
         self.bg_colour = "202020"
-        self.bg_swatch = tk.Button(brow, text="  Colour…  ", bg="#202020", fg="white",
-                                   relief="flat", command=self._pick_bg_colour)
-        self.bg_row = FileRow(pick, t("green_key.background_label"), kind="visual",
-                              on_change=lambda _p: self._schedule())
+        self.bg_swatch = tk.Button(
+            brow,
+            text="  Colour…  ",
+            bg="#202020",
+            fg="white",
+            relief="flat",
+            command=self._pick_bg_colour,
+        )
+        self.bg_row = FileRow(
+            pick,
+            t("green_key.background_label"),
+            kind="visual",
+            on_change=lambda _p: self._schedule(),
+        )
         self.bg_row.pack(fill="x", pady=px(2))
         self.loop_var = tk.BooleanVar(value=True)
-        self.loop_chk = tk.Checkbutton(pick, text=t("green_key.loop_bg_checkbox"),
-                                       variable=self.loop_var)
+        self.loop_chk = tk.Checkbutton(
+            pick, text=t("green_key.loop_bg_checkbox"), variable=self.loop_var
+        )
         self.loop_chk.pack(anchor="w")
 
-        self.compare = CompareView(body, 400, 225, before_label="Before - click to pick the key colour",
-                                   after_label="Result")
+        self.compare = CompareView(
+            body,
+            400,
+            225,
+            before_label="Before - click to pick the key colour",
+            after_label="Result",
+        )
         self.compare.pack(pady=px(6))
         self.compare.view_before.canvas.bind("<Button-1>", self._eyedropper)
         self.compare.view_before.canvas.config(cursor="crosshair")
 
-        opts = tk.LabelFrame(body, text=f"  {t('green_key.key_options_section')}  ", padx=px(12), pady=px(8))
+        opts = tk.LabelFrame(
+            body, text=f"  {t('green_key.key_options_section')}  ", padx=px(12), pady=px(8)
+        )
         opts.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(opts)
         r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Method:", font=(UI_FONT, 10, "bold")).pack(side="left")
         self.method_var = tk.StringVar(value=METHODS["chroma"])
-        mb = ttk.Combobox(r0, textvariable=self.method_var, values=list(METHODS.values()),
-                          state="readonly", width=34)
+        mb = ttk.Combobox(
+            r0,
+            textvariable=self.method_var,
+            values=list(METHODS.values()),
+            state="readonly",
+            width=34,
+        )
         mb.pack(side="left", padx=px(6))
         mb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
         tk.Label(r0, text=t("green_key.key_colour_label"), font=(UI_FONT, 10, "bold")).pack(
-            side="left", padx=px(16, 4))
-        self.swatch = tk.Button(r0, text=f"  #{self.key_colour}  ", bg=f"#{self.key_colour}",
-                                fg="black", relief="flat", command=self._pick_key_colour)
+            side="left", padx=px(16, 4)
+        )
+        self.swatch = tk.Button(
+            r0,
+            text=f"  #{self.key_colour}  ",
+            bg=f"#{self.key_colour}",
+            fg="black",
+            relief="flat",
+            command=self._pick_key_colour,
+        )
         self.swatch.pack(side="left")
-        tk.Button(r0, text="Auto-detect", relief="flat", cursor="hand2",
-                  command=lambda: self._auto_sample(force=True)).pack(side="left", padx=px(6))
+        tk.Button(
+            r0,
+            text="Auto-detect",
+            relief="flat",
+            cursor="hand2",
+            command=lambda: self._auto_sample(force=True),
+        ).pack(side="left", padx=px(6))
 
         self.sim_var = tk.DoubleVar(value=0.12)
         self.blend_var = tk.DoubleVar(value=0.08)
-        for label, var, hi, hint in ((t("green_key.similarity_label"), self.sim_var, 0.6,
-                                      t("green_key.similarity_hint")),
-                                     (t("green_key.blend_label"), self.blend_var, 0.5,
-                                      t("green_key.blend_hint"))):
+        for label, var, hi, hint in (
+            (t("green_key.similarity_label"), self.sim_var, 0.6, t("green_key.similarity_hint")),
+            (t("green_key.blend_label"), self.blend_var, 0.5, t("green_key.blend_hint")),
+        ):
             row = tk.Frame(opts)
             row.pack(fill="x", pady=px(2))
             tk.Label(row, text=label, width=14, anchor="w").pack(side="left")
-            tk.Scale(row, variable=var, from_=0.0, to=hi, resolution=0.005,
-                     orient="horizontal", length=px(260),
-                     command=lambda _v: self._schedule()).pack(side="left", padx=px(6))
+            tk.Scale(
+                row,
+                variable=var,
+                from_=0.0,
+                to=hi,
+                resolution=0.005,
+                orient="horizontal",
+                length=px(260),
+                command=lambda _v: self._schedule(),
+            ).pack(side="left", padx=px(6))
             tk.Label(row, text=hint, fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
         self.despill_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(opts, text="Remove colour spill from the subject (green/blue screens)",
-                       variable=self.despill_var, command=self._schedule).pack(anchor="w")
+        tk.Checkbutton(
+            opts,
+            text="Remove colour spill from the subject (green/blue screens)",
+            variable=self.despill_var,
+            command=self._schedule,
+        ).pack(anchor="w")
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
+        self.encoder = EncoderPanel(
+            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
+        )
         self.encoder.pack(anchor="w")
-        self.alpha_note = tk.Label(out_lf, text="Transparent output: save as .mov (ProRes 4444) "
-                                                "or .webm (VP9 with alpha).",
-                                   fg=CLR["fgdim"], font=(UI_FONT, 8))
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self._suggest(self.src_row.path))
+        self.alpha_note = tk.Label(
+            out_lf,
+            text="Transparent output: save as .mov (ProRes 4444) or .webm (VP9 with alpha).",
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        )
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self._suggest(self.src_row.path),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
 
-        self.btn_render = tk.Button(body, text=t("green_key.composite_button"),
-                                    font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
-                                    width=28, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("green_key.composite_button"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=28,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -225,8 +338,13 @@ class GreenKeyerTab(BaseTab):
         return next((k for k, v in BACKGROUNDS.items() if v == label), "file")
 
     def keyer(self) -> str:
-        return key_chain(self.method(), self.key_colour, self.sim_var.get(),
-                         self.blend_var.get(), self.despill_var.get())
+        return key_chain(
+            self.method(),
+            self.key_colour,
+            self.sim_var.get(),
+            self.blend_var.get(),
+            self.despill_var.get(),
+        )
 
     def preview_chain(self) -> str:
         info = self._info
@@ -243,9 +361,11 @@ class GreenKeyerTab(BaseTab):
                 src = f"{fl.preview_movie(bg)}{background_chain(w, h, frame_rate(info))}[bg]"
         if kind == "color":
             src = f"color=c=0x{self.bg_colour}:s={w}x{h}[bg]"
-        if kind == "alpha":     # checkerboard so transparency is visible
-            src = (f"nullsrc=s={w}x{h},geq=lum='if(mod(floor(X/24)+floor(Y/24),2),200,140)'"
-                   f":cb=128:cr=128[bg]")
+        if kind == "alpha":  # checkerboard so transparency is visible
+            src = (
+                f"nullsrc=s={w}x{h},geq=lum='if(mod(floor(X/24)+floor(Y/24),2),200,140)'"
+                f":cb=128:cr=128[bg]"
+            )
         return f"{src};[in]{self.keyer()}[fg];[bg][fg]overlay=format=auto:shortest=1"
 
     def _suggest(self, src):
@@ -271,8 +391,11 @@ class GreenKeyerTab(BaseTab):
                 self._set_key(colour)
                 self.log(self.console, f"Key colour sampled from the frame edges: #{colour}")
             elif force:
-                self.log(self.console, "Could not detect a backdrop colour - pick one with "
-                                       "the eyedropper (click the Before image).")
+                self.log(
+                    self.console,
+                    "Could not detect a backdrop colour - pick one with "
+                    "the eyedropper (click the Before image).",
+                )
             self._schedule()
 
         tasks.submit(partial(sample_border_colour, path, at), on_done=done, name="KeySample")
@@ -296,13 +419,20 @@ class GreenKeyerTab(BaseTab):
                 self._set_key(colour)
                 self._schedule()
 
-        tasks.submit(partial(sample_point, path, self.compare.position, x, y), on_done=done, name="KeyEyedropper")
+        tasks.submit(
+            partial(sample_point, path, self.compare.position, x, y),
+            on_done=done,
+            name="KeyEyedropper",
+        )
 
     def _set_key(self, colour):
         self.key_colour = colour
-        r, g, b = (int(colour[i:i + 2], 16) for i in (0, 2, 4))
-        self.swatch.config(text=f"  #{colour}  ", bg=f"#{colour}",
-                           fg="black" if (r * 299 + g * 587 + b * 114) > 128000 else "white")
+        r, g, b = (int(colour[i : i + 2], 16) for i in (0, 2, 4))
+        self.swatch.config(
+            text=f"  #{colour}  ",
+            bg=f"#{colour}",
+            fg="black" if (r * 299 + g * 587 + b * 114) > 128000 else "white",
+        )
 
     def _pick_key_colour(self):
         res = colorchooser.askcolor(f"#{self.key_colour}", parent=self)
@@ -360,8 +490,9 @@ class GreenKeyerTab(BaseTab):
         if kind == "file":
             if common.check_source(self, bg, what=t("green_key.background_label")) is None:
                 return
-        out = common.output_for(self, self.out_row, src, "keyed",
-                                inputs=[bg] if kind == "file" else [])
+        out = common.output_for(
+            self, self.out_row, src, "keyed", inputs=[bg] if kind == "file" else []
+        )
         if not out:
             return
         w, h = common.even_size(info)
@@ -371,25 +502,70 @@ class GreenKeyerTab(BaseTab):
         extra_inputs: list = []
         if kind == "alpha":
             if container not in ("mov", "webm", "mkv"):
-                messagebox.showwarning(t("common.warning"),
-                                       "Transparent video needs a .mov (ProRes 4444) or .webm "
-                                       "(VP9) output file.", parent=self)
+                messagebox.showwarning(
+                    t("common.warning"),
+                    "Transparent video needs a .mov (ProRes 4444) or .webm (VP9) output file.",
+                    parent=self,
+                )
                 return
-            graph = f"[0:v]{keyer},format=yuva444p10le[v]" if container != "webm" else \
-                f"[0:v]{keyer},format=yuva420p[v]"
+            graph = (
+                f"[0:v]{keyer},format=yuva444p10le[v]"
+                if container != "webm"
+                else f"[0:v]{keyer},format=yuva420p[v]"
+            )
             if container == "webm":
-                venc_args = ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-crf", "28", "-b:v", "0",
-                             "-row-mt", "1", "-auto-alt-ref", "0"]
+                venc_args = [
+                    "-c:v",
+                    "libvpx-vp9",
+                    "-pix_fmt",
+                    "yuva420p",
+                    "-crf",
+                    "28",
+                    "-b:v",
+                    "0",
+                    "-row-mt",
+                    "1",
+                    "-auto-alt-ref",
+                    "0",
+                ]
             else:
-                venc_args = ["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
-                             "-alpha_bits", "16", "-vendor", "apl0"]
-            cmd = [ff.ffmpeg_path(), "-y", "-i", src, "-filter_complex", graph, "-map", "[v]",
-                   *keep_audio_args(info, container), *venc_args, out]
+                venc_args = [
+                    "-c:v",
+                    "prores_ks",
+                    "-profile:v",
+                    "4444",
+                    "-pix_fmt",
+                    "yuva444p10le",
+                    "-alpha_bits",
+                    "16",
+                    "-vendor",
+                    "apl0",
+                ]
+            cmd = [
+                ff.ffmpeg_path(),
+                "-y",
+                "-i",
+                src,
+                "-filter_complex",
+                graph,
+                "-map",
+                "[v]",
+                *keep_audio_args(info, container),
+                *venc_args,
+                out,
+            ]
             self.log(self.console, "Keying to a transparent video…")
-            self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                            btn=self.btn_render, btn_label=t("green_key.composite_button"),
-                            duration=info.duration or None, output=out, inputs=[src],
-                            name="Green screen")
+            self.run_ffmpeg(
+                cmd,
+                self.console,
+                on_done=lambda rc: self.show_result(rc, out),
+                btn=self.btn_render,
+                btn_label=t("green_key.composite_button"),
+                duration=info.duration or None,
+                output=out,
+                inputs=[src],
+                name="Green screen",
+            )
             return
         if kind == "color":
             bg_src = f"color=c=0x{self.bg_colour}:s={w}x{h}:r={fps},setsar=1[bg]"
@@ -406,10 +582,19 @@ class GreenKeyerTab(BaseTab):
                 extra_inputs = ["-i", bg]
                 hold = ",tpad=stop_mode=clone:stop=-1"
             bg_src = f"[1:v]{background_chain(w, h, fps)}{hold}[bg]"
-        graph = (f"{bg_src};[0:v]setsar=1,{keyer}[fg];"
-                 f"[bg][fg]overlay=format=auto:shortest=1[v]")
+        graph = f"{bg_src};[0:v]setsar=1,{keyer}[fg];[bg][fg]overlay=format=auto:shortest=1[v]"
         self.log(self.console, f"Keying #{self.key_colour} ({self.method_var.get()})")
-        common.render(self, src=src, info=info, out=out, graph=graph, encoder=self.encoder,
-                      extra_inputs=extra_inputs, console=self.console, btn=self.btn_render,
-                      btn_label=t("green_key.composite_button"), name="Green screen",
-                      inputs=[bg] if kind == "file" else [])
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            graph=graph,
+            encoder=self.encoder,
+            extra_inputs=extra_inputs,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label=t("green_key.composite_button"),
+            name="Green screen",
+            inputs=[bg] if kind == "file" else [],
+        )

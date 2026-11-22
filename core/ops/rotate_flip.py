@@ -3,13 +3,15 @@ core/ops/rotate_flip.py - command builders for tabs/cutting/rotate_flip.py (also
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 
 def reencode_chain(rot_cw: int, hflip: bool, vflip: bool) -> str:
     """Pixel filters: rotate clockwise by *rot_cw*, then mirror (as displayed)."""
     parts = {90: ["transpose=clock"], 180: ["hflip", "vflip"], 270: ["transpose=cclock"]}.get(
-        rot_cw % 360, [])
+        rot_cw % 360, []
+    )
     if hflip:
         parts.append("hflip")
     if vflip:

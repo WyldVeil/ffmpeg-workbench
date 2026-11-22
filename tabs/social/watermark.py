@@ -7,6 +7,7 @@ place every few seconds.  Show it all the time or only at chosen times,
 with soft fades.  Rendered by libass (core/ass.py), so any text works and
 sizes scale with the video.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,12 +24,31 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
-PLACES = {"tl": "Top left", "tc": "Top centre", "tr": "Top right", "ml": "Middle left",
-          "center": "Centre", "mr": "Middle right", "bl": "Bottom left", "bc": "Bottom centre",
-          "br": "Bottom right", "custom": "Custom spot (%)", "bounce": "Bouncing (DVD style)",
-          "jump": "Jumping around"}
-_ANCHOR = {"tl": (7, 0, 0), "tc": (8, 0.5, 0), "tr": (9, 1, 0), "ml": (4, 0, 0.5), "center": (5, 0.5, 0.5),
-           "mr": (6, 1, 0.5), "bl": (1, 0, 1), "bc": (2, 0.5, 1), "br": (3, 1, 1)}
+PLACES = {
+    "tl": "Top left",
+    "tc": "Top centre",
+    "tr": "Top right",
+    "ml": "Middle left",
+    "center": "Centre",
+    "mr": "Middle right",
+    "bl": "Bottom left",
+    "bc": "Bottom centre",
+    "br": "Bottom right",
+    "custom": "Custom spot (%)",
+    "bounce": "Bouncing (DVD style)",
+    "jump": "Jumping around",
+}
+_ANCHOR = {
+    "tl": (7, 0, 0),
+    "tc": (8, 0.5, 0),
+    "tr": (9, 1, 0),
+    "ml": (4, 0, 0.5),
+    "center": (5, 0.5, 0.5),
+    "mr": (6, 1, 0.5),
+    "bl": (1, 0, 1),
+    "bc": (2, 0.5, 1),
+    "br": (3, 1, 1),
+}
 
 
 def parse_ranges(text: str) -> list:
@@ -76,16 +96,46 @@ def bounce_path(duration: float, w: int, h: int, tw: float, th: float, speed: fl
     return segs
 
 
-def build_script(*, text, w, h, duration, place, font="Montserrat", size=64, colour="#FFFFFF",
-                 opacity=1.0, bold=True, italic=False, shadow=True, outline=True, angle=0.0,
-                 custom=(50.0, 50.0), every=3.0, random_every=None, ranges=None, fade=True,
-                 speed=180.0, seed=7) -> ass.Script:
+def build_script(
+    *,
+    text,
+    w,
+    h,
+    duration,
+    place,
+    font="Montserrat",
+    size=64,
+    colour="#FFFFFF",
+    opacity=1.0,
+    bold=True,
+    italic=False,
+    shadow=True,
+    outline=True,
+    angle=0.0,
+    custom=(50.0, 50.0),
+    every=3.0,
+    random_every=None,
+    ranges=None,
+    fade=True,
+    speed=180.0,
+    seed=7,
+) -> ass.Script:
     sc = ass.Script(w, h)
     u = min(w, h) / 1080
     px = max(8, round(size * u))
-    sc.style(ass.Style("WM", font=font, size=px, colour=colour, bold=bold, italic=italic,
-                       outline=(2.5 * u if outline else 0), shadow=(2 * u if shadow else 0),
-                       back_alpha=0.5))
+    sc.style(
+        ass.Style(
+            "WM",
+            font=font,
+            size=px,
+            colour=colour,
+            bold=bold,
+            italic=italic,
+            outline=(2.5 * u if outline else 0),
+            shadow=(2 * u if shadow else 0),
+            back_alpha=0.5,
+        )
+    )
     body = ass.escape(text)
     alpha = f"\\alpha{ass.alpha_tag(1 - opacity)}"
     windows = ranges or [(0.0, duration)]
@@ -136,11 +186,17 @@ class TextBurnerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.watermarker"), "Burn a text watermark - fixed, rotated, "
-                         "bouncing or jumping, all the time or only at chosen moments.", icon="©")
+        self.make_header(
+            self,
+            t("tab.watermarker"),
+            "Burn a text watermark - fixed, rotated, "
+            "bouncing or jumping, all the time or only at chosen moments.",
+            icon="©",
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="With watermark")
         self.compare.pack(pady=px(4))
@@ -148,31 +204,62 @@ class TextBurnerTab(BaseTab):
         ty = tk.LabelFrame(body, text="  Text  ", padx=px(12), pady=px(6))
         ty.pack(fill="x", padx=px(20), pady=px(4))
         self.text_var = tk.StringVar(value="© My Channel")
-        tk.Entry(ty, textvariable=self.text_var, width=40).grid(row=0, column=0, columnspan=3, sticky="w")
+        tk.Entry(ty, textvariable=self.text_var, width=40).grid(
+            row=0, column=0, columnspan=3, sticky="w"
+        )
         self.font_var = tk.StringVar(value="Montserrat")
-        ttk.Combobox(ty, textvariable=self.font_var, values=ass.families(), state="readonly",
-                     width=16).grid(row=1, column=0, sticky="w", pady=px(4))
+        ttk.Combobox(
+            ty, textvariable=self.font_var, values=ass.families(), state="readonly", width=16
+        ).grid(row=1, column=0, sticky="w", pady=px(4))
         self.size_var = tk.IntVar(value=48)
-        tk.Scale(ty, variable=self.size_var, from_=12, to=200, orient="horizontal", length=px(160),
-                 label="Size", command=lambda _v: self._changed()).grid(row=1, column=1, sticky="w")
+        tk.Scale(
+            ty,
+            variable=self.size_var,
+            from_=12,
+            to=200,
+            orient="horizontal",
+            length=px(160),
+            label="Size",
+            command=lambda _v: self._changed(),
+        ).grid(row=1, column=1, sticky="w")
         self.opacity_var = tk.DoubleVar(value=0.8)
-        tk.Scale(ty, variable=self.opacity_var, from_=0.1, to=1.0, resolution=0.05, orient="horizontal",
-                 length=px(140), label="Opacity", command=lambda _v: self._changed()).grid(row=1, column=2, sticky="w")
+        tk.Scale(
+            ty,
+            variable=self.opacity_var,
+            from_=0.1,
+            to=1.0,
+            resolution=0.05,
+            orient="horizontal",
+            length=px(140),
+            label="Opacity",
+            command=lambda _v: self._changed(),
+        ).grid(row=1, column=2, sticky="w")
         flags = tk.Frame(ty)
         flags.grid(row=2, column=0, columnspan=3, sticky="w")
         self.bold_var, self.italic_var = tk.BooleanVar(value=True), tk.BooleanVar(value=False)
         self.shadow_var, self.outline_var = tk.BooleanVar(value=True), tk.BooleanVar(value=True)
-        for text, var in (("Bold", self.bold_var), ("Italic", self.italic_var), ("Shadow", self.shadow_var),
-                          ("Outline", self.outline_var)):
+        for text, var in (
+            ("Bold", self.bold_var),
+            ("Italic", self.italic_var),
+            ("Shadow", self.shadow_var),
+            ("Outline", self.outline_var),
+        ):
             tk.Checkbutton(flags, text=text, variable=var, command=self._changed).pack(side="left")
-        self.col_btn = tk.Button(flags, text="Colour…", relief="flat", bg=self.colour, command=self._pick)
+        self.col_btn = tk.Button(
+            flags, text="Colour…", relief="flat", bg=self.colour, command=self._pick
+        )
         self.col_btn.pack(side="left", padx=px(8))
 
         pos = tk.LabelFrame(body, text="  Position & motion  ", padx=px(12), pady=px(6))
         pos.pack(fill="x", padx=px(20), pady=px(4))
         self.place_var = tk.StringVar(value=PLACES["br"])
-        pb = ttk.Combobox(pos, textvariable=self.place_var, values=list(PLACES.values()), state="readonly",
-                          width=24)
+        pb = ttk.Combobox(
+            pos,
+            textvariable=self.place_var,
+            values=list(PLACES.values()),
+            state="readonly",
+            width=24,
+        )
         pb.grid(row=0, column=0, sticky="w")
         pb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.angle_var = tk.StringVar(value="0")
@@ -180,27 +267,37 @@ class TextBurnerTab(BaseTab):
         self.every_var, self.rand_var = tk.StringVar(value="3"), tk.BooleanVar(value=False)
         row = tk.Frame(pos)
         row.grid(row=1, column=0, sticky="w", pady=px(4))
-        for label, var, w in (("Angle°", self.angle_var, 5), ("X %", self.cx_var, 5), ("Y %", self.cy_var, 5),
-                              ("Jump every (s)", self.every_var, 5)):
+        for label, var, w in (
+            ("Angle°", self.angle_var, 5),
+            ("X %", self.cx_var, 5),
+            ("Y %", self.cy_var, 5),
+            ("Jump every (s)", self.every_var, 5),
+        ):
             tk.Label(row, text=label).pack(side="left", padx=px(6, 2))
             tk.Entry(row, textvariable=var, width=w).pack(side="left")
             var.trace_add("write", lambda *_a: self._changed())
-        tk.Checkbutton(row, text="random (1-2× that)", variable=self.rand_var,
-                       command=self._changed).pack(side="left", padx=px(6))
+        tk.Checkbutton(
+            row, text="random (1-2× that)", variable=self.rand_var, command=self._changed
+        ).pack(side="left", padx=px(6))
 
         tm = tk.LabelFrame(body, text="  When  ", padx=px(12), pady=px(6))
         tm.pack(fill="x", padx=px(20), pady=px(4))
         self.always_var = tk.BooleanVar(value=True)
-        tk.Radiobutton(tm, text="The whole video", value=True, variable=self.always_var,
-                       command=self._changed).grid(row=0, column=0, sticky="w")
-        tk.Radiobutton(tm, text="Only at:", value=False, variable=self.always_var,
-                       command=self._changed).grid(row=1, column=0, sticky="w")
+        tk.Radiobutton(
+            tm, text="The whole video", value=True, variable=self.always_var, command=self._changed
+        ).grid(row=0, column=0, sticky="w")
+        tk.Radiobutton(
+            tm, text="Only at:", value=False, variable=self.always_var, command=self._changed
+        ).grid(row=1, column=0, sticky="w")
         self.ranges_var = tk.StringVar(value="0-5, 20-25")
         tk.Entry(tm, textvariable=self.ranges_var, width=30).grid(row=1, column=1, sticky="w")
-        tk.Label(tm, text="e.g. 0-5, 1:20-1:30", fg=CLR["fgdim"], font=(UI_FONT, 8)).grid(row=1, column=2)
+        tk.Label(tm, text="e.g. 0-5, 1:20-1:30", fg=CLR["fgdim"], font=(UI_FONT, 8)).grid(
+            row=1, column=2
+        )
         self.fade_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(tm, text="Fade in and out", variable=self.fade_var,
-                       command=self._changed).grid(row=2, column=0, sticky="w")
+        tk.Checkbutton(
+            tm, text="Fade in and out", variable=self.fade_var, command=self._changed
+        ).grid(row=2, column=0, sticky="w")
         for var in (self.text_var, self.font_var, self.ranges_var):
             var.trace_add("write", lambda *_a: self._changed())
 
@@ -208,11 +305,23 @@ class TextBurnerTab(BaseTab):
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text="©  BURN WATERMARK", font=(UI_FONT, 12, "bold"), bg="#E91E63",
-                                    fg="white", width=24, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="©  BURN WATERMARK",
+            font=(UI_FONT, 12, "bold"),
+            bg="#E91E63",
+            fg="white",
+            width=24,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -231,15 +340,29 @@ class TextBurnerTab(BaseTab):
         place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
         every = common.number(self.every_var.get() or "3", "Jump every", 0.2, 3600)
         return build_script(
-            text=self.text_var.get(), w=w, h=h, duration=duration, place=place, font=self.font_var.get(),
-            size=int(self.size_var.get()), colour=self.colour, opacity=float(self.opacity_var.get()),
-            bold=self.bold_var.get(), italic=self.italic_var.get(), shadow=self.shadow_var.get(),
-            outline=self.outline_var.get(), angle=common.number(self.angle_var.get() or "0", "Angle", -360, 360),
-            custom=(common.number(self.cx_var.get() or "50", "X %", 0, 100),
-                    common.number(self.cy_var.get() or "50", "Y %", 0, 100)),
-            every=every, random_every=(every, every * 2) if self.rand_var.get() else None,
+            text=self.text_var.get(),
+            w=w,
+            h=h,
+            duration=duration,
+            place=place,
+            font=self.font_var.get(),
+            size=int(self.size_var.get()),
+            colour=self.colour,
+            opacity=float(self.opacity_var.get()),
+            bold=self.bold_var.get(),
+            italic=self.italic_var.get(),
+            shadow=self.shadow_var.get(),
+            outline=self.outline_var.get(),
+            angle=common.number(self.angle_var.get() or "0", "Angle", -360, 360),
+            custom=(
+                common.number(self.cx_var.get() or "50", "X %", 0, 100),
+                common.number(self.cy_var.get() or "50", "Y %", 0, 100),
+            ),
+            every=every,
+            random_every=(every, every * 2) if self.rand_var.get() else None,
             ranges=None if self.always_var.get() else parse_ranges(self.ranges_var.get()),
-            fade=self.fade_var.get())
+            fade=self.fade_var.get(),
+        )
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
@@ -265,6 +388,7 @@ class TextBurnerTab(BaseTab):
             return
         if self._pdir is None:
             from core.paths import temp_dir
+
             self._pdir = temp_dir("wm_preview_")
         self._pn += 1
         path = sc.write(os.path.join(self._pdir, f"p{self._pn}.ass"))
@@ -288,6 +412,7 @@ class TextBurnerTab(BaseTab):
         if not out:
             return
         from core.paths import temp_dir
+
         work = temp_dir("wm_")
         path = sc.write(os.path.join(work, "watermark.ass"))
 
@@ -295,9 +420,19 @@ class TextBurnerTab(BaseTab):
             shutil.rmtree(work, ignore_errors=True)
             self.show_result(rc, out)
 
-        common.render(self, src=src, info=info, out=out, chain=ass.subtitles_filter(path),
-                      encoder=self.encoder, console=self.console, btn=self.btn_render,
-                      btn_label="©  BURN WATERMARK", name="Watermarker", on_done=done)
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=ass.subtitles_filter(path),
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="©  BURN WATERMARK",
+            name="Watermarker",
+            on_done=done,
+        )
 
     def load_file(self, path=None):
         if path:

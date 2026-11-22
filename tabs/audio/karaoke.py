@@ -25,7 +25,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-MODELS = {   # label: core.whisper model key (whisper.cpp, downloaded once on first use)
+MODELS = {  # label: core.whisper model key (whisper.cpp, downloaded once on first use)
     "Tiny - fastest, rough (32 MB)": "tiny",
     "Base - fast (60 MB)": "base",
     "Small - good balance (190 MB)": "small",
@@ -33,43 +33,68 @@ MODELS = {   # label: core.whisper model key (whisper.cpp, downloaded once on fi
 }
 
 LANGUAGES = [
-    "auto-detect", "English", "Spanish", "French", "German", "Italian",
-    "Portuguese", "Dutch", "Russian", "Chinese", "Japanese", "Korean",
-    "Arabic", "Hindi", "Turkish", "Polish",
+    "auto-detect",
+    "English",
+    "Spanish",
+    "French",
+    "German",
+    "Italian",
+    "Portuguese",
+    "Dutch",
+    "Russian",
+    "Chinese",
+    "Japanese",
+    "Korean",
+    "Arabic",
+    "Hindi",
+    "Turkish",
+    "Polish",
 ]
 
 LANG_CODES = {
-    "auto-detect": None, "English": "en", "Spanish": "es", "French": "fr",
-    "German": "de",      "Italian": "it", "Portuguese": "pt", "Dutch": "nl",
-    "Russian": "ru",     "Chinese": "zh", "Japanese": "ja",  "Korean": "ko",
-    "Arabic": "ar",      "Hindi": "hi",   "Turkish": "tr",   "Polish": "pl",
+    "auto-detect": None,
+    "English": "en",
+    "Spanish": "es",
+    "French": "fr",
+    "German": "de",
+    "Italian": "it",
+    "Portuguese": "pt",
+    "Dutch": "nl",
+    "Russian": "ru",
+    "Chinese": "zh",
+    "Japanese": "ja",
+    "Korean": "ko",
+    "Arabic": "ar",
+    "Hindi": "hi",
+    "Turkish": "tr",
+    "Polish": "pl",
 }
 
 # ASS colours are &HAABBGGRR  (AA=alpha 00=opaque, then BGR, then R last)
 ASS_COLOURS = {
-    "Yellow":  "&H0000FFFF",   # #FFFF00
-    "White":   "&H00FFFFFF",   # #FFFFFF
-    "Cyan":    "&H00FFFF00",   # #00FFFF
-    "Green":   "&H0000FF00",   # #00FF00
-    "Pink":    "&H008080FF",   # #FF8080 - soft pink, readable
-    "Orange":  "&H000080FF",   # #FF8000
+    "Yellow": "&H0000FFFF",  # #FFFF00
+    "White": "&H00FFFFFF",  # #FFFFFF
+    "Cyan": "&H00FFFF00",  # #00FFFF
+    "Green": "&H0000FF00",  # #00FF00
+    "Pink": "&H008080FF",  # #FF8080 - soft pink, readable
+    "Orange": "&H000080FF",  # #FF8000
 }
 
 
 # ── ASS builder ───────────────────────────────────────────────────────────────
 
+
 def _ass_time(seconds: float) -> str:
     """Format seconds → ASS timestamp  H:MM:SS.cs"""
     total_cs = round(seconds * 100)
-    cs  = total_cs % 100
-    s   = (total_cs // 100) % 60
-    m   = (total_cs // 6000) % 60
-    h   = total_cs // 360000
+    cs = total_cs % 100
+    s = (total_cs // 100) % 60
+    m = (total_cs // 6000) % 60
+    h = total_cs // 360000
     return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def _build_ass(segments, path, font_size, primary, secondary,
-               res_x=1920, res_y=1080):
+def _build_ass(segments, path, font_size, primary, secondary, res_x=1920, res_y=1080):
     """
     Write an ASS karaoke file.
 
@@ -110,6 +135,7 @@ def _build_ass(segments, path, font_size, primary, secondary,
         if not words:
             # No word-level data - treat whole segment as one karaoke block
             from core.ass import escape as _esc
+
             text = _esc(seg.get("text", "").strip())
             if not text:
                 continue
@@ -122,14 +148,15 @@ def _build_ass(segments, path, font_size, primary, secondary,
 
         # Build the \\kf chain, accounting for silence gaps between words
         seg_start = words[0]["start"]
-        seg_end   = words[-1]["end"]
-        prev_end  = seg_start
-        parts     = []
+        seg_end = words[-1]["end"]
+        prev_end = seg_start
+        parts = []
 
         from core.ass import escape as _esc
+
         for n, w in enumerate(words):
-            w_start   = w.get("start", prev_end)
-            w_end     = w.get("end",   w_start + 0.1)
+            w_start = w.get("start", prev_end)
+            w_end = w.get("end", w_start + 0.1)
             word_text = _esc(w.get("word", "").lstrip() if n == 0 else w.get("word", ""))
 
             # Silence/gap before this word: an empty timed token keeps the sweep in
@@ -156,15 +183,18 @@ def _build_ass(segments, path, font_size, primary, secondary,
 
 # ── Tab ───────────────────────────────────────────────────────────────────────
 
+
 def _whisper_ok():
     """The bundled whisper.cpp engine is present (models download on demand)."""
     from core import whisper
+
     return bool(whisper.cli_path())
 
 
 def segments_from_whispercpp(path: str) -> list:
     """whisper.cpp full JSON (-ojf) -> [{'start','end','text','words':[{'word','start','end'}]}]."""
     import json
+
     with open(path, encoding="utf-8", errors="replace") as fh:
         data = json.load(fh)
     segments = []
@@ -183,16 +213,24 @@ def segments_from_whispercpp(path: str) -> list:
                 words.append({"word": text, "start": a, "end": max(b, a + 0.05)})
         off = seg.get("offsets", {})
         if words:
-            segments.append({"start": off.get("from", 0) / 1000.0, "end": off.get("to", 0) / 1000.0,
-                             "text": seg.get("text", "").strip(), "words": words})
+            segments.append(
+                {
+                    "start": off.get("from", 0) / 1000.0,
+                    "end": off.get("to", 0) / 1000.0,
+                    "text": seg.get("text", "").strip(),
+                    "words": words,
+                }
+            )
     return segments
 
 
 def vocal_remove_filter() -> str:
     """Centre-panned vocals out, bass (usually centred too) kept, same polarity on both sides."""
-    return ("asplit[ka][kb];[ka]pan=stereo|c0=c0-c1|c1=c0-c1[side];"
-            "[kb]lowpass=f=180,pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1[bass];"
-            "[side][bass]amix=inputs=2:normalize=0,alimiter=limit=0.95")
+    return (
+        "asplit[ka][kb];[ka]pan=stereo|c0=c0-c1|c1=c0-c1[side];"
+        "[kb]lowpass=f=180,pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1[bass];"
+        "[side][bass]amix=inputs=2:normalize=0,alimiter=limit=0.95"
+    )
 
 
 class KaraokeTab(BaseTab):
@@ -208,89 +246,138 @@ class KaraokeTab(BaseTab):
         hdr.pack(fill="x")
         hdr_inner = tk.Frame(hdr, bg=CLR["panel"])
         hdr_inner.pack(fill="x", padx=px(20), pady=px(14, 13))
-        tk.Label(hdr_inner, text="🎤  " + t("tab.karaoke_generator"),
-                 font=(UI_FONT, 15, "bold"),
-                 bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
-        tk.Label(hdr_inner,
-                 text=t("karaoke.subtitle"),
-                 font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"], anchor="w").pack(side="left", fill="x", expand=True, padx=px(16, 0))
+        tk.Label(
+            hdr_inner,
+            text="🎤  " + t("tab.karaoke_generator"),
+            font=(UI_FONT, 15, "bold"),
+            bg=CLR["panel"],
+            fg=CLR["accent"],
+        ).pack(side="left")
+        tk.Label(
+            hdr_inner,
+            text=t("karaoke.subtitle"),
+            font=(UI_FONT, 10),
+            bg=CLR["panel"],
+            fg=CLR["fgdim"],
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # ── Whisper status banner ──────────────────────────────────────────
         self._banner = tk.Frame(self, bg="#1A2A1A", relief="groove", bd=px(1))
         self._banner.pack(fill="x", padx=px(16), pady=px(8, 4))
         self._whisper_lbl = tk.Label(
-            self._banner, text=t("karaoke.checking_for_whisper"),
-            bg="#1A2A1A", fg=CLR["fgdim"], font=(MONO_FONT, 9))
+            self._banner,
+            text=t("karaoke.checking_for_whisper"),
+            bg="#1A2A1A",
+            fg=CLR["fgdim"],
+            font=(MONO_FONT, 9),
+        )
         self._whisper_lbl.pack(side="left", padx=px(12), pady=px(6))
-        tk.Button(self._banner, text=t("karaoke.install_whisper_button"),
-                  bg="#2E7D32", fg="white",
-                  command=self._install_whisper).pack(side="right", padx=px(8), pady=px(4))
+        tk.Button(
+            self._banner,
+            text=t("karaoke.install_whisper_button"),
+            bg="#2E7D32",
+            fg="white",
+            command=self._install_whisper,
+        ).pack(side="right", padx=px(8), pady=px(4))
         self.after(120, self._check_whisper)
 
         # ── Source ────────────────────────────────────────────────────────
         r1 = tk.Frame(self)
         r1.pack(fill="x", padx=px(16), pady=px(8))
-        tk.Label(r1, text=t("karaoke.music_video_label"),
-                 font=(UI_FONT, 10, "bold"), width=16, anchor="e").pack(side="left")
+        tk.Label(
+            r1,
+            text=t("karaoke.music_video_label"),
+            font=(UI_FONT, 10, "bold"),
+            width=16,
+            anchor="e",
+        ).pack(side="left")
         self._src_var = tk.StringVar()
-        tk.Entry(r1, textvariable=self._src_var, width=60,
-                 relief="flat").pack(side="left", padx=px(8))
-        tk.Button(r1, text=t("btn.browse"), command=self._browse_src,
-                  cursor="hand2", relief="flat").pack(side="left")
+        tk.Entry(r1, textvariable=self._src_var, width=60, relief="flat").pack(
+            side="left", padx=px(8)
+        )
+        tk.Button(
+            r1, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat"
+        ).pack(side="left")
 
         # ── Settings ──────────────────────────────────────────────────────
-        sf = tk.LabelFrame(self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10))
+        sf = tk.LabelFrame(
+            self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10)
+        )
         sf.pack(fill="x", padx=px(20), pady=px(6))
 
         # Whisper model + language
-        ra = tk.Frame(sf); ra.pack(fill="x", pady=px(3))
+        ra = tk.Frame(sf)
+        ra.pack(fill="x", pady=px(3))
         tk.Label(ra, text=t("karaoke.whisper_model_label"), width=16, anchor="e").pack(side="left")
         self._model_var = tk.StringVar(value=list(MODELS.keys())[2])
-        ttk.Combobox(ra, textvariable=self._model_var,
-                     values=list(MODELS.keys()),
-                     state="readonly", width=34).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            ra, textvariable=self._model_var, values=list(MODELS.keys()), state="readonly", width=34
+        ).pack(side="left", padx=px(8))
         tk.Label(ra, text=t("karaoke.language")).pack(side="left")
         self._lang_var = tk.StringVar(value="auto-detect")
-        ttk.Combobox(ra, textvariable=self._lang_var, values=LANGUAGES,
-                     state="readonly", width=14).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            ra, textvariable=self._lang_var, values=LANGUAGES, state="readonly", width=14
+        ).pack(side="left", padx=px(8))
 
         # Video darkness
-        rb = tk.Frame(sf); rb.pack(fill="x", pady=px(3))
+        rb = tk.Frame(sf)
+        rb.pack(fill="x", pady=px(3))
         tk.Label(rb, text=t("karaoke.video_darkness_label"), width=16, anchor="e").pack(side="left")
         self._darkness = tk.DoubleVar(value=0.28)
-        tk.Scale(rb, variable=self._darkness, from_=0.05, to=0.65,
-                 resolution=0.01, orient="horizontal",
-                 length=px(200)).pack(side="left", padx=px(8))
+        tk.Scale(
+            rb,
+            variable=self._darkness,
+            from_=0.05,
+            to=0.65,
+            resolution=0.01,
+            orient="horizontal",
+            length=px(200),
+        ).pack(side="left", padx=px(8))
         self._dark_lbl = tk.Label(rb, text="", width=7, fg=CLR["accent"])
         self._dark_lbl.pack(side="left")
         self._darkness.trace_add("write", self._update_dark_lbl)
         self._update_dark_lbl()
-        tk.Label(rb, text=t("karaoke.max_brightness_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
+        tk.Label(
+            rb, text=t("karaoke.max_brightness_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
+        ).pack(side="left", padx=px(12))
 
         # Font size + colours
-        rc = tk.Frame(sf); rc.pack(fill="x", pady=px(3))
+        rc = tk.Frame(sf)
+        rc.pack(fill="x", pady=px(3))
         tk.Label(rc, text=t("karaoke.subtitle_font_label"), width=16, anchor="e").pack(side="left")
         self._font_size = tk.StringVar(value="72")
-        tk.Entry(rc, textvariable=self._font_size, width=5,
-                 relief="flat").pack(side="left", padx=px(8, 16))
-        tk.Label(rc, text=f"{t('karaoke.px_label')}   {t('karaoke.unsung_colour_label')}").pack(side="left")
+        tk.Entry(rc, textvariable=self._font_size, width=5, relief="flat").pack(
+            side="left", padx=px(8, 16)
+        )
+        tk.Label(rc, text=f"{t('karaoke.px_label')}   {t('karaoke.unsung_colour_label')}").pack(
+            side="left"
+        )
         self._col_unsung = tk.StringVar(value="Yellow")
-        ttk.Combobox(rc, textvariable=self._col_unsung,
-                     values=list(ASS_COLOURS.keys()),
-                     state="readonly", width=8).pack(side="left", padx=px(6))
+        ttk.Combobox(
+            rc,
+            textvariable=self._col_unsung,
+            values=list(ASS_COLOURS.keys()),
+            state="readonly",
+            width=8,
+        ).pack(side="left", padx=px(6))
         tk.Label(rc, text=f"  {t('karaoke.fill_colour_label')}").pack(side="left")
         self._col_sung = tk.StringVar(value="Green")
-        ttk.Combobox(rc, textvariable=self._col_sung,
-                     values=list(ASS_COLOURS.keys()),
-                     state="readonly", width=8).pack(side="left", padx=px(6))
-        tk.Label(rc, text=t("karaoke.colour_as_sung_hint"),
-                 fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(8))
+        ttk.Combobox(
+            rc,
+            textvariable=self._col_sung,
+            values=list(ASS_COLOURS.keys()),
+            state="readonly",
+            width=8,
+        ).pack(side="left", padx=px(6))
+        tk.Label(
+            rc, text=t("karaoke.colour_as_sung_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
+        ).pack(side="left", padx=px(8))
 
         # Vocal removal checkbox
-        rd = tk.Frame(sf); rd.pack(fill="x", pady=px(3))
+        rd = tk.Frame(sf)
+        rd.pack(fill="x", pady=px(3))
         self._rm_vocals = tk.BooleanVar(value=True)
         tk.Checkbutton(
             rd,
@@ -301,34 +388,46 @@ class KaraokeTab(BaseTab):
         # ── Output ────────────────────────────────────────────────────────
         ro = tk.Frame(self)
         ro.pack(fill="x", padx=px(16), pady=px(6))
-        tk.Label(ro, text=t("common.output_file"),
-                 font=(UI_FONT, 10, "bold"), width=16, anchor="e").pack(side="left")
+        tk.Label(
+            ro, text=t("common.output_file"), font=(UI_FONT, 10, "bold"), width=16, anchor="e"
+        ).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(ro, textvariable=self._out_var, width=60,
-                 relief="flat").pack(side="left", padx=px(8))
-        tk.Button(ro, text=t("common.save_as"), command=self._browse_out,
-                  cursor="hand2", relief="flat").pack(side="left")
+        tk.Entry(ro, textvariable=self._out_var, width=60, relief="flat").pack(
+            side="left", padx=px(8)
+        )
+        tk.Button(
+            ro, text=t("common.save_as"), command=self._browse_out, cursor="hand2", relief="flat"
+        ).pack(side="left")
 
         # ── Action buttons ─────────────────────────────────────────────────
         btn_row = tk.Frame(self)
         btn_row.pack(pady=px(8))
         self._btn_go = tk.Button(
-            btn_row, text=t("karaoke.generate_button"),
+            btn_row,
+            text=t("karaoke.generate_button"),
             font=(UI_FONT, 12, "bold"),
-            bg="#7B1FA2", fg="white",
-            height=2, width=26,
-            command=self._generate)
+            bg="#7B1FA2",
+            fg="white",
+            height=2,
+            width=26,
+            command=self._generate,
+        )
         self._btn_go.pack(side="left", padx=px(8))
         self._btn_stop = tk.Button(
-            btn_row, text=t("btn.stop"),
-            font=(UI_FONT, 10), bg=CLR["red"], fg="white",
-            height=2, width=10, state="disabled",
-            command=self._stop)
+            btn_row,
+            text=t("btn.stop"),
+            font=(UI_FONT, 10),
+            bg=CLR["red"],
+            fg="white",
+            height=2,
+            width=10,
+            state="disabled",
+            command=self._stop,
+        )
         self._btn_stop.pack(side="left", padx=px(4))
 
         # Progress
-        self._prog_lbl = tk.Label(self, text="",
-                                   fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
+        self._prog_lbl = tk.Label(self, text="", fg=CLR["accent"], font=(UI_FONT, 10, "bold"))
         self._prog_lbl.pack()
         self._progress = ttk.Progressbar(self, mode="indeterminate", length=px(600))
         self._progress.pack(pady=px(2))
@@ -347,27 +446,39 @@ class KaraokeTab(BaseTab):
 
     def _check_whisper(self):
         from core import whisper
+
         key = MODELS.get(self._model_var.get(), "base")
         if not whisper.cli_path():
-            self._whisper_lbl.config(text="⚠  The speech engine (whisper-cli) is missing from this build.",
-                                     fg=CLR["red"])
+            self._whisper_lbl.config(
+                text="⚠  The speech engine (whisper-cli) is missing from this build.", fg=CLR["red"]
+            )
         elif whisper.is_installed(key):
-            self._whisper_lbl.config(text="✅  Speech recognition ready (runs offline).", fg=CLR["green"])
+            self._whisper_lbl.config(
+                text="✅  Speech recognition ready (runs offline).", fg=CLR["green"]
+            )
         else:
-            self._whisper_lbl.config(text=f"ℹ  The {whisper.MODELS[key].label} model downloads once on "
-                                          f"first use.", fg=CLR["fgdim"])
+            self._whisper_lbl.config(
+                text=f"ℹ  The {whisper.MODELS[key].label} model downloads once on first use.",
+                fg=CLR["fgdim"],
+            )
 
     def _install_whisper(self):
         from core import whisper
+
         key = MODELS.get(self._model_var.get(), "base")
         self._log(f"Downloading {whisper.MODELS[key].label}…")
-        tasks.submit(partial(whisper.download_model, key), on_done=lambda _p: (self._log("✅  Model ready."),
-                                                                           self._check_whisper()), on_error=lambda e: self._log(f"❌  Download failed: {e}"), name="KaraokeModel")
+        tasks.submit(
+            partial(whisper.download_model, key),
+            on_done=lambda _p: (self._log("✅  Model ready."), self._check_whisper()),
+            on_error=lambda e: self._log(f"❌  Download failed: {e}"),
+            name="KaraokeModel",
+        )
 
     def _browse_src(self):
         p = dialogs.askopenfilename(
             title="Select music video",
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))])
+            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
+        )
         if p:
             self._src_var.set(p)
             if not self._out_var.get():
@@ -375,16 +486,19 @@ class KaraokeTab(BaseTab):
 
     def _browse_out(self):
         p = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")])
+            defaultextension=".mp4", filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv")]
+        )
         if p:
             self._out_var.set(p)
 
     def _log(self, msg):
-        self.after(0, lambda m=msg: [
-            self.console.insert(tk.END, m + "\n"),
-            self.console.see(tk.END),
-        ])
+        self.after(
+            0,
+            lambda m=msg: [
+                self.console.insert(tk.END, m + "\n"),
+                self.console.see(tk.END),
+            ],
+        )
 
     def _status(self, msg):
         self.after(0, lambda m=msg: self._prog_lbl.config(text=m))
@@ -405,8 +519,8 @@ class KaraokeTab(BaseTab):
             return
         if not _whisper_ok():
             messagebox.showerror(
-                t("karaoke.whisper_not_installed_title"),
-                t("karaoke.install_first_message"))
+                t("karaoke.whisper_not_installed_title"), t("karaoke.install_first_message")
+            )
             return
         out = self.confirm_output(out or self.suggest_output(src, "karaoke"), [src])
         if not out:
@@ -423,7 +537,9 @@ class KaraokeTab(BaseTab):
                 "rm_vocals": self._rm_vocals.get(),
             }
         except ValueError:
-            messagebox.showerror(t("msg.bad_input_title"), t("msg.font_size_whole_number"), parent=self)
+            messagebox.showerror(
+                t("msg.bad_input_title"), t("msg.font_size_whole_number"), parent=self
+            )
             return
         self._btn_go.config(state="disabled", text=t("app.status.queued_btn"))
         self._btn_stop.config(state="normal")
@@ -435,10 +551,14 @@ class KaraokeTab(BaseTab):
             self.last_task = self.task(tid)
             self.show_result(rc, out)
 
-        self._task = self.enqueue_render("Karaoke", output_path=out,
-                                         worker_fn=lambda p, c, ctx: self._worker(src, out, settings, ctx),
-                                         on_progress=lambda _t, line: self._log(line), on_complete=done,
-                                         inputs=[src])
+        self._task = self.enqueue_render(
+            "Karaoke",
+            output_path=out,
+            worker_fn=lambda p, c, ctx: self._worker(src, out, settings, ctx),
+            on_progress=lambda _t, line: self._log(line),
+            on_complete=done,
+            inputs=[src],
+        )
 
     # ─── Background worker (queue job) ───────────────────────────────────────
     def _worker(self, src, out, cfg, ctx):
@@ -447,6 +567,7 @@ class KaraokeTab(BaseTab):
         from core import ass as ass_mod
         from core import ffmpeg as ff
         from core import whisper
+
         info = ff.probe(src)
         tmp = ctx.tempdir()
         if not whisper.is_installed(cfg["model"]):
@@ -456,11 +577,23 @@ class KaraokeTab(BaseTab):
         ctx.log("Step 1/3: transcribing the lyrics…")
         ctx.span(0.2, 0.25).run(whisper.audio_extract_cmd(src, wav), duration=info.duration or None)
         base = os.path.join(tmp, "words")
-        cmd = whisper.transcribe_cmd(wav, whisper.model_path(cfg["model"]), base, language=cfg["lang"],
-                                     max_len=40, formats=("json",))
-        res = ff.run(cmd, on_line=lambda line: (ctx.progress(0.25 + 0.45 * f)
-                                                if (f := whisper.parse_progress(line)) is not None else None),
-                     cancel=ctx.cancelled)
+        cmd = whisper.transcribe_cmd(
+            wav,
+            whisper.model_path(cfg["model"]),
+            base,
+            language=cfg["lang"],
+            max_len=40,
+            formats=("json",),
+        )
+        res = ff.run(
+            cmd,
+            on_line=lambda line: (
+                ctx.progress(0.25 + 0.45 * f)
+                if (f := whisper.parse_progress(line)) is not None
+                else None
+            ),
+            cancel=ctx.cancelled,
+        )
         if res.cancelled:
             raise ff.CancelledError("cancelled")
         if res.returncode != 0 or not os.path.isfile(base + ".json"):
@@ -469,24 +602,55 @@ class KaraokeTab(BaseTab):
         if not segments:
             raise RuntimeError("No sung or spoken words were recognised.")
         ctx.log(f"Step 2/3: {len(segments)} lyric lines.")
-        w, h = (info.require_video().display_size if info.has_video else (1920, 1080))
+        w, h = info.require_video().display_size if info.has_video else (1920, 1080)
         ass_path = os.path.join(tmp, "karaoke.ass")
-        _build_ass(segments, ass_path, font_size=round(cfg["font_size"] * min(w, h) / 1080),
-                   primary=cfg["primary"], secondary=cfg["secondary"], res_x=w, res_y=h)
+        _build_ass(
+            segments,
+            ass_path,
+            font_size=round(cfg["font_size"] * min(w, h) / 1080),
+            primary=cfg["primary"],
+            secondary=cfg["secondary"],
+            res_x=w,
+            res_y=h,
+        )
         ctx.log("Step 3/3: rendering the karaoke video…")
         if info.has_video:
             cmd = [ff.ffmpeg_path(), "-y", "-i", src]
             vf = f"curves=all='0/0 1/{cfg['darkness']:.2f}',{ass_mod.subtitles_filter(ass_path)},format=yuv420p"
-        else:   # audio only: lyrics on a dark background
-            cmd = [ff.ffmpeg_path(), "-y", "-f", "lavfi", "-i", f"color=c=0x101018:s={w}x{h}:r=30",
-                   "-i", src, "-shortest"]
+        else:  # audio only: lyrics on a dark background
+            cmd = [
+                ff.ffmpeg_path(),
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c=0x101018:s={w}x{h}:r=30",
+                "-i",
+                src,
+                "-shortest",
+            ]
             vf = f"{ass_mod.subtitles_filter(ass_path)},format=yuv420p"
         a_in = "0:a:0" if info.has_video else "1:a:0"
         cmd += ["-map", "0:v:0", "-map", a_in, "-vf", vf]
         if cfg["rm_vocals"]:
             cmd += ["-af", vocal_remove_filter()]
-        cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", ctx.output(out)]
+        cmd += [
+            "-c:v",
+            "libx264",
+            "-crf",
+            "18",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "256k",
+            "-movflags",
+            "+faststart",
+            ctx.output(out),
+        ]
         ctx.span(0.7, 1.0).run(cmd, duration=info.duration or None)
         return 0
 

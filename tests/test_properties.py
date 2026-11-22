@@ -2,6 +2,7 @@
 instead of a few hand-picked examples, Hypothesis tries hundreds of inputs -
 including the awkward ones (0, huge values, 59.999...) - and shrinks any
 failure to the smallest case that shows it."""
+
 from __future__ import annotations
 
 import json
@@ -17,7 +18,7 @@ from core import settings as app_settings
 from core import tools
 from core.timecode import Timecode
 
-millis = st.integers(min_value=0, max_value=1000 * 3600 * 200)        # up to 200 hours
+millis = st.integers(min_value=0, max_value=1000 * 3600 * 200)  # up to 200 hours
 seconds = st.floats(min_value=0, max_value=3600 * 200, allow_nan=False, allow_infinity=False)
 
 
@@ -35,7 +36,7 @@ def test_timecode_text_is_well_formed(ms, spec):
     *head, last = text.split(":")
     assert all(part.isdigit() for part in head)
     secs = float(last)
-    assert 0 <= secs < 60                     # never "00:60.00", whatever the rounding
+    assert 0 <= secs < 60  # never "00:60.00", whatever the rounding
     if not spec.startswith("m") and len(head) >= 1:
         assert int(head[-1]) < 60
 
@@ -64,7 +65,7 @@ def test_snapping_lands_on_a_frame_and_moves_less_than_half_a_frame(ms, fps):
     tc = Timecode(ms)
     snapped = tc.snap(fps)
     assert abs(snapped.seconds - tc.seconds) <= 0.5 / fps + 0.001
-    assert snapped.snap(fps) == snapped                  # idempotent
+    assert snapped.snap(fps) == snapped  # idempotent
 
 
 @given(st.text(alphabet=string.printable, max_size=12))
@@ -77,14 +78,26 @@ def test_parse_accepts_or_refuses_but_never_crashes(text):
     assert tc.ms >= 0
 
 
-@given(st.lists(st.sampled_from([*[t.value for t in tools.ToolId], *[s.name for s in tools.SPECS],
-                                 "gone", "", "Not A Tool"]), max_size=20))
+@given(
+    st.lists(
+        st.sampled_from(
+            [
+                *[t.value for t in tools.ToolId],
+                *[s.name for s in tools.SPECS],
+                "gone",
+                "",
+                "Not A Tool",
+            ]
+        ),
+        max_size=20,
+    )
+)
 def test_stored_tool_lists_parse_to_unique_known_ids(values):
     ids = tools.parse_all(values)
     assert len(ids) == len(set(ids))
     assert all(isinstance(t, tools.ToolId) for t in ids)
     known = [tools.parse(v) for v in values if tools.parse(v) is not None]
-    assert ids == list(dict.fromkeys(known))            # order kept, first wins
+    assert ids == list(dict.fromkeys(known))  # order kept, first wins
 
 
 # ── Settings: a stateful test (Robust Python ch. 23) ──────────────────────────
@@ -93,9 +106,13 @@ def test_stored_tool_lists_parse_to_unique_known_ids(values):
 # step, what the store says must match the model.
 
 
-_KEYS = {"auto_open_output": st.booleans(), "max_parallel_jobs": st.sampled_from([1, 2, 3, 4]),
-         "star_speed": st.floats(min_value=0.1, max_value=4, allow_nan=False),
-         "default_crf": st.sampled_from(["18", "23", "28"]), "theme": st.sampled_from(["Classic", "Mystical"])}
+_KEYS = {
+    "auto_open_output": st.booleans(),
+    "max_parallel_jobs": st.sampled_from([1, 2, 3, 4]),
+    "star_speed": st.floats(min_value=0.1, max_value=4, allow_nan=False),
+    "default_crf": st.sampled_from(["18", "23", "28"]),
+    "theme": st.sampled_from(["Classic", "Mystical"]),
+}
 
 
 class SettingsStore(RuleBasedStateMachine):
@@ -115,7 +132,9 @@ class SettingsStore(RuleBasedStateMachine):
 
     @rule(data=st.data())
     def update_many(self, data):
-        keys = data.draw(st.lists(st.sampled_from(sorted(_KEYS)), min_size=1, max_size=3, unique=True))
+        keys = data.draw(
+            st.lists(st.sampled_from(sorted(_KEYS)), min_size=1, max_size=3, unique=True)
+        )
         changes = {k: data.draw(_KEYS[k]) for k in keys}
         assert app_settings.update(changes)
         self.model.update(changes)

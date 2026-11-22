@@ -6,6 +6,7 @@ clip itself (palettegen/paletteuse in one pass), proper dithering choices,
 frame rate, width, loop count and an optional size target - the GIF is
 re-made smaller automatically until it fits.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,9 +21,13 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
-DITHERS = {"sierra2_4a": "Sierra (smooth, recommended)", "floyd_steinberg": "Floyd-Steinberg (detailed)",
-           "bayer2": "Bayer pattern - fine", "bayer4": "Bayer pattern - coarse (smaller files)",
-           "none": "None (posterised, smallest)"}
+DITHERS = {
+    "sierra2_4a": "Sierra (smooth, recommended)",
+    "floyd_steinberg": "Floyd-Steinberg (detailed)",
+    "bayer2": "Bayer pattern - fine",
+    "bayer4": "Bayer pattern - coarse (smaller files)",
+    "none": "None (posterised, smallest)",
+}
 
 
 class GIFMakerTab(BaseTab):
@@ -48,8 +53,9 @@ class GIFMakerTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.pro_gif_maker"), t("gif_maker.subtitle"), icon="🎞")
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var,
-                               on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         pv = tk.Frame(body)
         pv.pack(pady=px(4))
@@ -58,10 +64,15 @@ class GIFMakerTab(BaseTab):
         self.pos_var = tk.DoubleVar(value=0)
         bar = tk.Frame(pv)
         bar.pack(fill="x")
-        self.slider = ttk.Scale(bar, from_=0, to=1, variable=self.pos_var,
-                                command=lambda _v: self.preview.show(float(self.pos_var.get())))
+        self.slider = ttk.Scale(
+            bar,
+            from_=0,
+            to=1,
+            variable=self.pos_var,
+            command=lambda _v: self.preview.show(float(self.pos_var.get())),
+        )
         self.slider.pack(side="left", fill="x", expand=True)
-        framestep.slider(self.slider, self.preview)      # , and . step a frame
+        framestep.slider(self.slider, self.preview)  # , and . step a frame
         tk.Button(bar, text="Start here", relief="flat", command=self.mark_in).pack(side="left")
         tk.Button(bar, text="End here", relief="flat", command=self.mark_out).pack(side="left")
 
@@ -69,41 +80,110 @@ class GIFMakerTab(BaseTab):
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(row=r, column=0, sticky="w", pady=px(2))
+            tk.Label(opt, text=label, width=12, anchor="w").grid(
+                row=r, column=0, sticky="w", pady=px(2)
+            )
             for i, w in enumerate(widgets):
                 w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
 
         self.start_var, self.dur_var = tk.StringVar(value="0"), tk.StringVar(value="4")
-        row(0, "Start:", tk.Entry(opt, textvariable=self.start_var, width=11), tk.Label(opt, text="Length (s):"),
-            tk.Entry(opt, textvariable=self.dur_var, width=6))
+        row(
+            0,
+            "Start:",
+            tk.Entry(opt, textvariable=self.start_var, width=11),
+            tk.Label(opt, text="Length (s):"),
+            tk.Entry(opt, textvariable=self.dur_var, width=6),
+        )
         self.fps_var, self.width_var = tk.StringVar(value="15"), tk.StringVar(value="480")
-        row(1, "Frame rate:", ttk.Combobox(opt, textvariable=self.fps_var, values=["8", "10", "12", "15", "20", "24", "30"],
-                                           width=5), tk.Label(opt, text="Width (px):"),
-            ttk.Combobox(opt, textvariable=self.width_var, values=["240", "320", "400", "480", "640", "800"], width=6))
+        row(
+            1,
+            "Frame rate:",
+            ttk.Combobox(
+                opt,
+                textvariable=self.fps_var,
+                values=["8", "10", "12", "15", "20", "24", "30"],
+                width=5,
+            ),
+            tk.Label(opt, text="Width (px):"),
+            ttk.Combobox(
+                opt,
+                textvariable=self.width_var,
+                values=["240", "320", "400", "480", "640", "800"],
+                width=6,
+            ),
+        )
         self.colours_var = tk.StringVar(value="256")
         self.dither_var = tk.StringVar(value=DITHERS["sierra2_4a"])
-        row(2, "Colours:", ttk.Combobox(opt, textvariable=self.colours_var, values=["32", "64", "128", "256"],
-                                        state="readonly", width=5), tk.Label(opt, text="Dither:"),
-            ttk.Combobox(opt, textvariable=self.dither_var, values=list(DITHERS.values()), state="readonly",
-                         width=34))
+        row(
+            2,
+            "Colours:",
+            ttk.Combobox(
+                opt,
+                textvariable=self.colours_var,
+                values=["32", "64", "128", "256"],
+                state="readonly",
+                width=5,
+            ),
+            tk.Label(opt, text="Dither:"),
+            ttk.Combobox(
+                opt,
+                textvariable=self.dither_var,
+                values=list(DITHERS.values()),
+                state="readonly",
+                width=34,
+            ),
+        )
         self.loop_var = tk.StringVar(value="forever")
         self.limit_var = tk.StringVar(value="")
-        row(3, "Loop:", ttk.Combobox(opt, textvariable=self.loop_var, values=["forever", "once", "twice", "3 times"],
-                                     state="readonly", width=8), tk.Label(opt, text="Max size (MB, optional):"),
-            tk.Entry(opt, textvariable=self.limit_var, width=6))
+        row(
+            3,
+            "Loop:",
+            ttk.Combobox(
+                opt,
+                textvariable=self.loop_var,
+                values=["forever", "once", "twice", "3 times"],
+                state="readonly",
+                width=8,
+            ),
+            tk.Label(opt, text="Max size (MB, optional):"),
+            tk.Entry(opt, textvariable=self.limit_var, width=6),
+        )
         self.format_var = tk.StringVar(value="GIF")
-        row(4, "Format:", ttk.Combobox(opt, textvariable=self.format_var, values=["GIF", "Animated WebP"],
-                                       state="readonly", width=16))
+        row(
+            4,
+            "Format:",
+            ttk.Combobox(
+                opt,
+                textvariable=self.format_var,
+                values=["GIF", "Animated WebP"],
+                state="readonly",
+                width=16,
+            ),
+        )
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True, kind="image", ext=".gif",
-                               suggest=self._suggest)
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            kind="image",
+            ext=".gif",
+            suggest=self._suggest,
+        )
         self.out_row.pack(fill="x")
         self.size_lbl = tk.Label(out_lf, text="", fg=CLR["accent"])
         self.size_lbl.pack(anchor="w")
-        self.btn_render = tk.Button(body, text=t("gif_maker.create_button"), font=(UI_FONT, 12, "bold"),
-                                    bg=CLR["green"], fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("gif_maker.create_button"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=22,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -134,7 +214,11 @@ class GIFMakerTab(BaseTab):
             dur = common.number(self.dur_var.get(), "Length", 0.1, 600)
             fps = common.number(self.fps_var.get(), "Frame rate", 1, 60)
             width = int(common.number(self.width_var.get(), "Width", 16, 4096)) // 2 * 2
-            limit = common.number(self.limit_var.get(), "Max size", 0.05, 500) if self.limit_var.get().strip() else 0
+            limit = (
+                common.number(self.limit_var.get(), "Max size", 0.05, 500)
+                if self.limit_var.get().strip()
+                else 0
+            )
             if start >= info.duration:
                 raise ValueError("The start time is past the end of the clip.")
         except ValueError as exc:
@@ -158,11 +242,31 @@ class GIFMakerTab(BaseTab):
         def work(_p, _c, ctx):
             def runner(cmd, duration, lo, hi):
                 ctx.span(lo, hi).run(cmd, duration=duration)
-            return make_animation(src, ctx.output(), start=start, dur=dur, fps=fps, width=width, colours=colours,
-                                  dither=dither, loops=loops, cap=cap, webp=webp, run=runner, log=ctx.log)
 
-        common.queue_job(self, name="GIF", out=out, work=work, btn=self.btn_render,
-                         btn_label=t("gif_maker.create_button"), console=self.console, duration=dur,
-                         inputs=[src])
+            return make_animation(
+                src,
+                ctx.output(),
+                start=start,
+                dur=dur,
+                fps=fps,
+                width=width,
+                colours=colours,
+                dither=dither,
+                loops=loops,
+                cap=cap,
+                webp=webp,
+                run=runner,
+                log=ctx.log,
+            )
 
-
+        common.queue_job(
+            self,
+            name="GIF",
+            out=out,
+            work=work,
+            btn=self.btn_render,
+            btn_label=t("gif_maker.create_button"),
+            console=self.console,
+            duration=dur,
+            inputs=[src],
+        )

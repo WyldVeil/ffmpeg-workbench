@@ -3,6 +3,7 @@ update_pcm_new_keys.py  --  Fill new keys added to en_US into pcm_NG using
 en_GB as the base (same approach as before for unsupported language).
 Run this AFTER translate_missing.py finishes.
 """
+
 import json
 from pathlib import Path
 

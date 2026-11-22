@@ -9,6 +9,7 @@ Remove sensor noise, grain and compression mush with a before/after view:
 * Temporal (atadenoise) - averages over time; ideal for locked-off shots.
 * Grain (fftdnoiz) - frequency-domain cleaning for film grain.
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -23,8 +24,12 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
-METHODS = {"fast": "Fast - spatial + temporal (hqdn3d)", "nlm": "Best quality - non-local means",
-           "temporal": "Temporal - static / tripod shots (atadenoise)", "grain": "Film grain - frequency domain"}
+METHODS = {
+    "fast": "Fast - spatial + temporal (hqdn3d)",
+    "nlm": "Best quality - non-local means",
+    "temporal": "Temporal - static / tripod shots (atadenoise)",
+    "grain": "Film grain - frequency domain",
+}
 PRESETS = {"Light": 2.5, "Medium": 5.0, "Strong": 7.5, "Very strong": 10.0}
 
 
@@ -37,38 +42,72 @@ class DenoiseTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        self.make_header(self, t("tab.denoise"), "Clean up noisy, grainy or blocky video.", icon="✨")
+        self.make_header(
+            self, t("tab.denoise"), "Clean up noisy, grainy or blocky video.", icon="✨"
+        )
         body = scroll_body(self)
-        self.src_row = FileRow(body, t("common.source_video"), self.src_var, on_change=self._source_changed)
+        self.src_row = FileRow(
+            body, t("common.source_video"), self.src_var, on_change=self._source_changed
+        )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="Denoised")
         self.compare.pack(pady=px(4))
         opt = tk.LabelFrame(body, text="  Denoise  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value=METHODS["fast"])
-        mb = ttk.Combobox(opt, textvariable=self.method_var, values=list(METHODS.values()), state="readonly",
-                          width=44)
+        mb = ttk.Combobox(
+            opt,
+            textvariable=self.method_var,
+            values=list(METHODS.values()),
+            state="readonly",
+            width=44,
+        )
         mb.grid(row=0, column=0, columnspan=3, sticky="w")
         mb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.gpu_lbl = tk.Label(opt, text="", fg=CLR["fgdim"])
         self.gpu_lbl.grid(row=0, column=3, sticky="w", padx=px(8))
         self.strength_var = tk.DoubleVar(value=PRESETS["Medium"])
-        tk.Scale(opt, variable=self.strength_var, from_=1, to=10, resolution=0.5, orient="horizontal", length=px(260),
-                 label="Strength", command=lambda _v: self._changed()).grid(row=1, column=0, sticky="w", pady=px(4))
+        tk.Scale(
+            opt,
+            variable=self.strength_var,
+            from_=1,
+            to=10,
+            resolution=0.5,
+            orient="horizontal",
+            length=px(260),
+            label="Strength",
+            command=lambda _v: self._changed(),
+        ).grid(row=1, column=0, sticky="w", pady=px(4))
         pf = tk.Frame(opt)
         pf.grid(row=1, column=1, columnspan=3, sticky="w")
         for name, val in PRESETS.items():
-            tk.Button(pf, text=name, relief="flat", command=lambda v=val: (self.strength_var.set(v),
-                                                                          self._changed())).pack(side="left", padx=px(2))
+            tk.Button(
+                pf,
+                text=name,
+                relief="flat",
+                command=lambda v=val: (self.strength_var.set(v), self._changed()),
+            ).pack(side="left", padx=px(2))
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "denoised"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "denoised"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
-        self.btn_render = tk.Button(body, text="✨  DENOISE", font=(UI_FONT, 12, "bold"), bg=CLR["green"],
-                                    fg="white", width=22, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text="✨  DENOISE",
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["green"],
+            fg="white",
+            width=22,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -89,8 +128,11 @@ class DenoiseTab(BaseTab):
 
     def _changed(self):
         nlm = self._method() == "nlm"
-        self.gpu_lbl.config(text=("GPU (Vulkan) will be used" if fl.vulkan_ok() else "CPU - slow on long clips")
-                            if nlm else "")
+        self.gpu_lbl.config(
+            text=("GPU (Vulkan) will be used" if fl.vulkan_ok() else "CPU - slow on long clips")
+            if nlm
+            else ""
+        )
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(300, self._refresh)
@@ -111,6 +153,16 @@ class DenoiseTab(BaseTab):
         chain = denoise_chain(self._method(), float(self.strength_var.get()), gpu=gpu)
         if gpu and self.encoder.ten_bit:
             chain = chain.replace("format=yuv420p", "format=yuv420p10le")
-        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder, console=self.console,
-                      btn=self.btn_render, btn_label="✨  DENOISE", name="Denoise",
-                      pre_input=["-init_hw_device", "vulkan"] if gpu else ())
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=chain,
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label="✨  DENOISE",
+            name="Denoise",
+            pre_input=["-init_hw_device", "vulkan"] if gpu else (),
+        )

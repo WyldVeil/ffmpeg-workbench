@@ -27,6 +27,7 @@ Usage::
 Network access uses GITHUB_TOKEN (or `gh auth token`) when available to avoid
 API rate limits.  Requires only the Python standard library.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -62,6 +63,7 @@ FFMPEG_VARIANT = {"windows-x64": "win64-gpl-shared", "linux-x64": "linux64-gpl-s
 # ─────────────────────────────────────────────────────────────────────────────
 #  HTTP helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _token() -> str | None:
     tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
@@ -128,7 +130,9 @@ def download(url: str, dest: str, expected_sha256: str | None = None) -> str:
     digest = sha256_file(tmp)
     if expected_sha256 and digest != expected_sha256.lower():
         os.remove(tmp)
-        raise SystemExit(f"SHA-256 mismatch for {url}\n  expected {expected_sha256}\n  got      {digest}")
+        raise SystemExit(
+            f"SHA-256 mismatch for {url}\n  expected {expected_sha256}\n  got      {digest}"
+        )
     os.replace(tmp, dest)
     return dest
 
@@ -145,6 +149,7 @@ def sha256_file(path: str) -> str:
 #  Resolving latest versions (writes the lock file)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _parse_sums(text: str) -> dict:
     out = {}
     for line in text.splitlines():
@@ -154,7 +159,7 @@ def _parse_sums(text: str) -> dict:
     return out
 
 
-_BUILDS_REPO = "FFmpeg-Builds/FFmpeg-Builds"     # formerly BtbN/FFmpeg-Builds
+_BUILDS_REPO = "FFmpeg-Builds/FFmpeg-Builds"  # formerly BtbN/FFmpeg-Builds
 
 
 def _month_end_release() -> dict:
@@ -163,7 +168,9 @@ def _month_end_release() -> dict:
     keeps the lock file reproducible."""
     releases = []
     for page in (1, 2, 3):
-        batch = get_json(f"https://api.github.com/repos/{_BUILDS_REPO}/releases?per_page=100&page={page}")
+        batch = get_json(
+            f"https://api.github.com/repos/{_BUILDS_REPO}/releases?per_page=100&page={page}"
+        )
         if not batch:
             break
         releases += [r for r in batch if r["tag_name"].startswith("autobuild-")]
@@ -171,19 +178,24 @@ def _month_end_release() -> dict:
         raise SystemExit("No FFmpeg autobuild releases found")
     by_month = {}
     for r in releases:
-        month = r["tag_name"][len("autobuild-"):len("autobuild-") + 7]       # YYYY-MM
+        month = r["tag_name"][len("autobuild-") : len("autobuild-") + 7]  # YYYY-MM
         if month not in by_month or r["tag_name"] > by_month[month]["tag_name"]:
             by_month[month] = r
     months = sorted(by_month)
-    current = max(r["tag_name"] for r in releases)[len("autobuild-"):len("autobuild-") + 7]
+    current = max(r["tag_name"] for r in releases)[len("autobuild-") : len("autobuild-") + 7]
     complete = [m for m in months if m < current] or months
     return by_month[complete[-1]]
 
 
 def resolve_ffmpeg() -> dict:
     rel = _month_end_release()
-    pattern = re.compile(r"^ffmpeg-(n" + re.escape(FFMPEG_LINE) + r"[^-]*-\d+-g[0-9a-f]+)-(.+)-"
-                         + re.escape(FFMPEG_LINE) + r"\.(zip|tar\.xz)$")
+    pattern = re.compile(
+        r"^ffmpeg-(n"
+        + re.escape(FFMPEG_LINE)
+        + r"[^-]*-\d+-g[0-9a-f]+)-(.+)-"
+        + re.escape(FFMPEG_LINE)
+        + r"\.(zip|tar\.xz)$"
+    )
     assets = {a["name"]: a for a in rel["assets"]}
     found, version = {}, None
     for name, a in assets.items():
@@ -222,9 +234,11 @@ def resolve_ytdlp() -> dict:
     return {
         "version": tag,
         "license": "Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work "
-                   "(see THIRD_PARTY_LICENSES.txt)",
-        "license_urls": [f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/LICENSE",
-                         f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/THIRD_PARTY_LICENSES.txt"],
+        "(see THIRD_PARTY_LICENSES.txt)",
+        "license_urls": [
+            f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/LICENSE",
+            f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{tag}/THIRD_PARTY_LICENSES.txt",
+        ],
         "assets": {p: {"name": n, "url": assets[n], "sha256": sums[n]} for p, n in want.items()},
     }
 
@@ -233,8 +247,10 @@ def resolve_deno() -> dict:
     rel = get_json("https://api.github.com/repos/denoland/deno/releases/latest")
     tag = rel["tag_name"]
     assets = {a["name"]: a["browser_download_url"] for a in rel["assets"]}
-    want = {"windows-x64": "deno-x86_64-pc-windows-msvc.zip",
-            "linux-x64": "deno-x86_64-unknown-linux-gnu.zip"}
+    want = {
+        "windows-x64": "deno-x86_64-pc-windows-msvc.zip",
+        "linux-x64": "deno-x86_64-unknown-linux-gnu.zip",
+    }
     out = {}
     for plat, name in want.items():
         text = get_text(assets[name + ".sha256sum"])
@@ -255,15 +271,24 @@ def resolve_fluidsynth(cache: str) -> dict:
     digest = (asset.get("digest") or "").split(":", 1)[-1]
     if not re.fullmatch(r"[0-9a-f]{64}", digest or ""):
         # older API responses have no digest: pin the hash of what we download now
-        digest = sha256_file(download(asset["browser_download_url"], os.path.join(cache, asset["name"])))
+        digest = sha256_file(
+            download(asset["browser_download_url"], os.path.join(cache, asset["name"]))
+        )
     return {
         "version": tag.lstrip("v"),
         "license": "LGPL-2.1-or-later (bundled DLLs: SDL3 - zlib licence; libsndfile - LGPL-2.1-or-later)",
-        "license_urls": [f"https://raw.githubusercontent.com/FluidSynth/fluidsynth/{tag}/LICENSE",
-                         "https://raw.githubusercontent.com/libsndfile/libsndfile/1.2.2/COPYING",
-                         "https://raw.githubusercontent.com/libsdl-org/SDL/release-3.2.10/LICENSE.txt"],
-        "assets": {"windows-x64": {"name": asset["name"], "url": asset["browser_download_url"],
-                                   "sha256": digest}},
+        "license_urls": [
+            f"https://raw.githubusercontent.com/FluidSynth/fluidsynth/{tag}/LICENSE",
+            "https://raw.githubusercontent.com/libsndfile/libsndfile/1.2.2/COPYING",
+            "https://raw.githubusercontent.com/libsdl-org/SDL/release-3.2.10/LICENSE.txt",
+        ],
+        "assets": {
+            "windows-x64": {
+                "name": asset["name"],
+                "url": asset["browser_download_url"],
+                "sha256": digest,
+            }
+        },
     }
 
 
@@ -279,12 +304,17 @@ def resolve_whisper() -> dict:
             for plat, name in want.items():
                 a = assets[name]
                 digest = (a.get("digest") or "").split(":", 1)[-1]
-                out[plat] = {"name": name, "url": a["browser_download_url"],
-                             "sha256": digest if re.fullmatch(r"[0-9a-f]{64}", digest) else None}
+                out[plat] = {
+                    "name": name,
+                    "url": a["browser_download_url"],
+                    "sha256": digest if re.fullmatch(r"[0-9a-f]{64}", digest) else None,
+                }
             return {
                 "version": tag,
                 "license": "MIT",
-                "license_urls": [f"https://raw.githubusercontent.com/ggml-org/whisper.cpp/{tag}/LICENSE"],
+                "license_urls": [
+                    f"https://raw.githubusercontent.com/ggml-org/whisper.cpp/{tag}/LICENSE"
+                ],
                 "assets": out,
             }
     raise SystemExit("no whisper.cpp release with Windows and Linux binaries found")
@@ -297,13 +327,17 @@ def resolve_soundfont(cache: str) -> dict:
     """GeneralUser GS (General MIDI SoundFont for the MIDIfier).  Its licence
     asks for a local copy rather than links to the author's downloads, so the
     build ships one, pinned to a commit and verified by hash."""
-    commit = get_json(f"https://api.github.com/repos/{GENERALUSER_REPO}/commits?per_page=1")[0]["sha"]
+    commit = get_json(f"https://api.github.com/repos/{GENERALUSER_REPO}/commits?per_page=1")[0][
+        "sha"
+    ]
     raw = f"https://raw.githubusercontent.com/{GENERALUSER_REPO}/{commit}"
     url = f"{raw}/GeneralUser-GS.sf2"
     licence = get_text(f"{raw}/documentation/LICENSE.txt")
     m = re.search(r"GeneralUser GS v(\d+(?:\.\d+)+)", licence)
     version = m.group(1) if m else commit[:10]
-    path = download(url, os.path.join(cache, f"{version}-GeneralUser-GS.sf2"))   # same name install uses
+    path = download(
+        url, os.path.join(cache, f"{version}-GeneralUser-GS.sf2")
+    )  # same name install uses
     return {
         "version": version,
         "license": "GeneralUser GS License v2.0 (free use in software projects)",
@@ -314,14 +348,23 @@ def resolve_soundfont(cache: str) -> dict:
 
 SHADER_SOURCES = (
     # (name in the bundle, how to find it, licence)
-    ("FSR.glsl", ("gist", "agyild", "82219c545228d70c5604f865ce0b0ce5", "FSR.glsl"),
-     "MIT (AMD FidelityFX Super Resolution 1.0, mpv port by agyild; licence in the file)"),
-    ("NVScaler.glsl", ("gist", "agyild", "7e8951915b2bf24526a9343d951db214", "NVScaler.glsl"),
-     "MIT (NVIDIA Image Scaling, mpv port by agyild; licence in the file)"),
+    (
+        "FSR.glsl",
+        ("gist", "agyild", "82219c545228d70c5604f865ce0b0ce5", "FSR.glsl"),
+        "MIT (AMD FidelityFX Super Resolution 1.0, mpv port by agyild; licence in the file)",
+    ),
+    (
+        "NVScaler.glsl",
+        ("gist", "agyild", "7e8951915b2bf24526a9343d951db214", "NVScaler.glsl"),
+        "MIT (NVIDIA Image Scaling, mpv port by agyild; licence in the file)",
+    ),
     ("ArtCNN_C4F16.glsl", ("repo", "Artoriuz/ArtCNN", "GLSL/ArtCNN_C4F16.glsl", "LICENSE"), "MIT"),
     ("ArtCNN_C4F32.glsl", ("repo", "Artoriuz/ArtCNN", "GLSL/ArtCNN_C4F32.glsl", "LICENSE"), "MIT"),
-    ("Anime4K_Upscale_CNN_x2_M.glsl", ("repo", "bloc97/Anime4K", "glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl",
-                                       "LICENSE"), "MIT"),
+    (
+        "Anime4K_Upscale_CNN_x2_M.glsl",
+        ("repo", "bloc97/Anime4K", "glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl", "LICENSE"),
+        "MIT",
+    ),
 )
 
 
@@ -338,13 +381,19 @@ def resolve_shaders(cache: str) -> dict:
         else:
             repo, path, lic = where
             if repo not in commits:
-                commits[repo] = get_json(f"https://api.github.com/repos/{repo}/commits?per_page=1")[0]["sha"]
+                commits[repo] = get_json(f"https://api.github.com/repos/{repo}/commits?per_page=1")[
+                    0
+                ]["sha"]
                 licences.append(f"https://raw.githubusercontent.com/{repo}/{commits[repo]}/{lic}")
             url = f"https://raw.githubusercontent.com/{repo}/{commits[repo]}/{path}"
         local = download(url, os.path.join(cache, "shaders", name))
         assets[name] = {"url": url, "sha256": sha256_file(local), "license": licence}
-    return {"version": time.strftime("%Y-%m-%d"), "license": "MIT (each file)", "license_urls": licences,
-            "assets": {"any": assets}}
+    return {
+        "version": time.strftime("%Y-%m-%d"),
+        "license": "MIT (each file)",
+        "license_urls": licences,
+        "assets": {"any": assets},
+    }
 
 
 def refresh_lock(cache: str) -> dict:
@@ -373,9 +422,15 @@ def refresh_lock(cache: str) -> dict:
 #  Extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _safe_name(name: str) -> str:
     norm = os.path.normpath(name).replace("\\", "/")
-    if norm.startswith("/") or norm.startswith("../") or "/../" in norm or re.match(r"^[A-Za-z]:", norm):
+    if (
+        norm.startswith("/")
+        or norm.startswith("../")
+        or "/../" in norm
+        or re.match(r"^[A-Za-z]:", norm)
+    ):
         raise SystemExit(f"refusing unsafe archive member: {name}")
     return norm
 
@@ -437,17 +492,21 @@ def install_ffmpeg(info: dict, plat: str, archive: str, out: str) -> list:
     missing = [b for b in wanted_bins if not any(p.startswith(b) for p in placed)]
     if missing:
         raise SystemExit(f"FFmpeg archive lacks {missing}")
-    note = (f"FFmpeg {info['version']} ({plat}) - built by BtbN/FFmpeg-Builds\n"
-            f"Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/{info['release']}\n"
-            f"Corresponding source (FFmpeg): {info['source']}\n"
-            f"Source tarball: {info['source_tarball']}\n"
-            f"Build scripts (exact library versions and configure flags): {info['build_scripts']}\n"
-            f"Licence: {info['license']} - see LICENSE.txt in this folder.\n")
+    note = (
+        f"FFmpeg {info['version']} ({plat}) - built by BtbN/FFmpeg-Builds\n"
+        f"Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/{info['release']}\n"
+        f"Corresponding source (FFmpeg): {info['source']}\n"
+        f"Source tarball: {info['source_tarball']}\n"
+        f"Build scripts (exact library versions and configure flags): {info['build_scripts']}\n"
+        f"Licence: {info['license']} - see LICENSE.txt in this folder.\n"
+    )
     _write(os.path.join(out, "licenses", "ffmpeg", "SOURCE.txt"), note.encode())
     return placed
 
 
-def install_single(archive_or_file: str, out: str, target_name: str, member_suffix: str | None = None) -> None:
+def install_single(
+    archive_or_file: str, out: str, target_name: str, member_suffix: str | None = None
+) -> None:
     if member_suffix is None:
         shutil.copyfile(archive_or_file, os.path.join(out, target_name))
         os.chmod(os.path.join(out, target_name), 0o755)
@@ -471,8 +530,10 @@ def install_fluidsynth(archive: str, out: str) -> None:
             _write(os.path.join(out, "licenses", "fluidsynth", base), read())
 
 
-_WHISPER_KEEP = re.compile(r"^(whisper-cli(\.exe)?|(lib)?whisper[\w.-]*\.(dll|so[\d.]*)|"
-                           r"(lib)?ggml[\w.-]*\.(dll|so[\d.]*)|LICENSE)$")
+_WHISPER_KEEP = re.compile(
+    r"^(whisper-cli(\.exe)?|(lib)?whisper[\w.-]*\.(dll|so[\d.]*)|"
+    r"(lib)?ggml[\w.-]*\.(dll|so[\d.]*)|LICENSE)$"
+)
 
 
 def install_whisper(archive: str, out: str) -> list:
@@ -510,13 +571,18 @@ def fetch_licence_texts(tool: str, urls: list, out: str) -> None:
             raise
         parts = url.split("/")
         repo = parts[4] if len(parts) > 4 and "raw.githubusercontent.com" in url else tool
-        name = os.path.basename(url) if repo == tool or repo.lower() in tool.lower() else f"{repo}-{os.path.basename(url)}"
+        name = (
+            os.path.basename(url)
+            if repo == tool or repo.lower() in tool.lower()
+            else f"{repo}-{os.path.basename(url)}"
+        )
         _write(os.path.join(out, "licenses", tool, name), text.encode("utf-8"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Main
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
     out = os.path.join(dest_root, plat)
@@ -537,24 +603,37 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
     a = ff["assets"][plat]
     path = download(a["url"], os.path.join(cache, a["name"]), a["sha256"])
     install_ffmpeg(ff, plat, path, out)
-    versions["ffmpeg"] = {"version": ff["version"], "url": a["url"], "sha256": a["sha256"],
-                          "license": ff["license"], "source": ff["source"]}
+    versions["ffmpeg"] = {
+        "version": ff["version"],
+        "url": a["url"],
+        "sha256": a["sha256"],
+        "license": ff["license"],
+        "source": ff["source"],
+    }
 
     yt = tools["yt-dlp"]
     a = yt["assets"][plat]
     path = download(a["url"], os.path.join(cache, f"{yt['version']}-{a['name']}"), a["sha256"])
     install_single(path, out, "yt-dlp" + exe)
     fetch_licence_texts("yt-dlp", yt["license_urls"], out)
-    versions["yt-dlp"] = {"version": yt["version"], "url": a["url"], "sha256": a["sha256"],
-                          "license": yt["license"]}
+    versions["yt-dlp"] = {
+        "version": yt["version"],
+        "url": a["url"],
+        "sha256": a["sha256"],
+        "license": yt["license"],
+    }
 
     dn = tools["deno"]
     a = dn["assets"][plat]
     path = download(a["url"], os.path.join(cache, f"{dn['version']}-{a['name']}"), a["sha256"])
     install_single(path, out, "deno" + exe, member_suffix="deno" + exe)
     fetch_licence_texts("deno", dn["license_urls"], out)
-    versions["deno"] = {"version": dn["version"], "url": a["url"], "sha256": a["sha256"],
-                        "license": dn["license"]}
+    versions["deno"] = {
+        "version": dn["version"],
+        "url": a["url"],
+        "sha256": a["sha256"],
+        "license": dn["license"],
+    }
 
     fs = tools.get("fluidsynth", {})
     if plat in fs.get("assets", {}):
@@ -562,8 +641,12 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
         path = download(a["url"], os.path.join(cache, a["name"]), a["sha256"])
         install_fluidsynth(path, out)
         fetch_licence_texts("fluidsynth", fs["license_urls"], out)
-        versions["fluidsynth"] = {"version": fs["version"], "url": a["url"], "sha256": a["sha256"],
-                                  "license": fs["license"]}
+        versions["fluidsynth"] = {
+            "version": fs["version"],
+            "url": a["url"],
+            "sha256": a["sha256"],
+            "license": fs["license"],
+        }
 
     wh = tools.get("whisper", {})
     if plat in wh.get("assets", {}):
@@ -571,8 +654,12 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
         path = download(a["url"], os.path.join(cache, f"{wh['version']}-{a['name']}"), a["sha256"])
         install_whisper(path, out)
         fetch_licence_texts("whisper", wh["license_urls"], out)
-        versions["whisper.cpp"] = {"version": wh["version"], "url": a["url"], "sha256": a["sha256"],
-                                   "license": wh["license"]}
+        versions["whisper.cpp"] = {
+            "version": wh["version"],
+            "url": a["url"],
+            "sha256": a["sha256"],
+            "license": wh["license"],
+        }
 
     sf = tools.get("soundfont", {})
     a = sf.get("assets", {}).get("any")
@@ -581,37 +668,72 @@ def install_platform(lock: dict, plat: str, cache: str, dest_root: str) -> None:
         os.makedirs(os.path.join(out, "soundfonts"), exist_ok=True)
         shutil.copyfile(path, os.path.join(out, "soundfonts", a["name"]))
         fetch_licence_texts("generaluser-gs", sf["license_urls"], out)
-        versions["GeneralUser GS"] = {"version": sf["version"], "url": a["url"], "sha256": a["sha256"],
-                                      "license": sf["license"]}
+        versions["GeneralUser GS"] = {
+            "version": sf["version"],
+            "url": a["url"],
+            "sha256": a["sha256"],
+            "license": sf["license"],
+        }
 
     sh = tools.get("shaders", {})
     for name, a in sh.get("assets", {}).get("any", {}).items():
-        path = download(a["url"], os.path.join(cache, "shaders", f"{a['sha256'][:12]}-{name}"), a["sha256"])
+        path = download(
+            a["url"], os.path.join(cache, "shaders", f"{a['sha256'][:12]}-{name}"), a["sha256"]
+        )
         os.makedirs(os.path.join(out, "shaders"), exist_ok=True)
         shutil.copyfile(path, os.path.join(out, "shaders", name))
-        versions[f"shader {name}"] = {"version": sh["version"], "url": a["url"], "sha256": a["sha256"],
-                                      "license": a["license"]}
+        versions[f"shader {name}"] = {
+            "version": sh["version"],
+            "url": a["url"],
+            "sha256": a["sha256"],
+            "license": a["license"],
+        }
     if sh:
         fetch_licence_texts("shaders", sh.get("license_urls", []), out)
 
     with open(os.path.join(out, "VERSIONS.json"), "w", encoding="utf-8", newline="\n") as fh:
-        json.dump({"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2)
+        json.dump(
+            {"platform": plat, "generated": lock.get("generated"), "tools": versions}, fh, indent=2
+        )
         fh.write("\n")
 
     # Smoke-test what we can run on this machine.
-    host = ("windows-x64" if os.name == "nt" else "linux-x64" if sys.platform.startswith("linux") else "")
+    host = (
+        "windows-x64"
+        if os.name == "nt"
+        else "linux-x64"
+        if sys.platform.startswith("linux")
+        else ""
+    )
     if host == plat:
-        for tool, args in (("ffmpeg", ["-version"]), ("ffprobe", ["-version"]),
-                           ("yt-dlp", ["--version"]), ("deno", ["--version"]),
-                           ("whisper-cli", ["--help"])):
+        for tool, args in (
+            ("ffmpeg", ["-version"]),
+            ("ffprobe", ["-version"]),
+            ("yt-dlp", ["--version"]),
+            ("deno", ["--version"]),
+            ("whisper-cli", ["--help"]),
+        ):
             if tool == "whisper-cli" and not os.path.isdir(os.path.join(out, "whisper")):
                 continue
-            folder = (os.path.join(out, "ffmpeg", "bin") if tool.startswith("ff") else
-                      os.path.join(out, "whisper") if tool == "whisper-cli" else out)
-            r = subprocess.run([os.path.join(folder, tool + exe), *args], capture_output=True, text=True, timeout=60)
+            folder = (
+                os.path.join(out, "ffmpeg", "bin")
+                if tool.startswith("ff")
+                else os.path.join(out, "whisper")
+                if tool == "whisper-cli"
+                else out
+            )
+            r = subprocess.run(
+                [os.path.join(folder, tool + exe), *args],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
             first = (r.stdout or r.stderr).splitlines()[:1]
-            print(f"  ok      {tool:<8} {first[0] if first else '?'}" if r.returncode == 0
-                  else f"  FAILED  {tool}: {r.stderr[:200]}")
+            print(
+                f"  ok      {tool:<8} {first[0] if first else '?'}"
+                if r.returncode == 0
+                else f"  FAILED  {tool}: {r.stderr[:200]}"
+            )
             if r.returncode != 0:
                 raise SystemExit(1)
 
@@ -626,9 +748,13 @@ def fetch_sources(lock: dict, dest: str) -> None:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--platform", choices=(*PLATFORMS, "all"), default="all")
-    ap.add_argument("--refresh", action="store_true", help="resolve the latest versions into the lock file")
+    ap.add_argument(
+        "--refresh", action="store_true", help="resolve the latest versions into the lock file"
+    )
     ap.add_argument("--dest", default=os.path.join(ROOT, "bin"))
     ap.add_argument("--cache", default=os.path.join(ROOT, ".cache", "downloads"))
     ap.add_argument("--sources", metavar="DIR", help="also download FFmpeg source to DIR")

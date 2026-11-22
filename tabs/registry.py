@@ -10,6 +10,7 @@ shell shows an error page for that tool instead.
 
     page = PAGES[ToolId.QUICK_TRIMMER](parent)     # imports + builds on demand
 """
+
 from __future__ import annotations
 
 import importlib
@@ -139,7 +140,11 @@ PAGES: Final[Mapping[ToolId, LazyTab]] = {
 #: sidebar heading -> [(name, page class)]
 TOOLS: Final[dict[str, list[tuple[str, LazyTab]]]] = {
     cat.value: [(s.name, PAGES[s.id]) for s in sidebar(cat)]
-    for cat in Category if cat not in (Category.PINNED, Category.HIDDEN)
+    for cat in Category
+    if cat not in (Category.PINNED, Category.HIDDEN)
 }
-PINNED: Final[tuple[str, LazyTab]] = (spec(ToolId.ALL_IN_ONE_BUILDER).name, PAGES[ToolId.ALL_IN_ONE_BUILDER])
+PINNED: Final[tuple[str, LazyTab]] = (
+    spec(ToolId.ALL_IN_ONE_BUILDER).name,
+    PAGES[ToolId.ALL_IN_ONE_BUILDER],
+)
 HIDDEN: Final[dict[str, LazyTab]] = {s.name: PAGES[s.id] for s in sidebar(Category.HIDDEN)}

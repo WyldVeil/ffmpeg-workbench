@@ -40,9 +40,12 @@ ignore = [
     "SIM108",   # ternaries are not always clearer
     "SIM102",   # "if X: if not ask(...): return" reads better than one long condition
     # ── DEBT ──
-    "C901", "PLR0913",             # complexity / long signatures (phases 4-6)
-    "E701", "E702",                # several statements on one line
+    "C901",      # 5 functions over the complexity limit (the next to split)
+    "PLR0913",   # 31 long signatures, mostly keyword-only builder options (candidates for spec dataclasses)
 ]
+
+[tool.ruff.format]
+# ruff format is the one style; CI checks it (`ruff format --check`).
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["SLF001", "BLE001", "S110", "SIM105", "SIM115"]   # tests look inside objects, catch anything to

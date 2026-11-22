@@ -3,6 +3,7 @@ core/ops/hdr_args.py - command builders for tabs/transcoder/hdr.py (also used by
 
 Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 """
+
 from __future__ import annotations
 
 from core import ffmpeg as ff
@@ -17,6 +18,12 @@ def subtitle_args(info: ff.MediaInfo, container: str) -> list:
         return []
     if container == "mkv":
         return ["-map", "0:s?", "-c:s", "copy"]
-    target = {"mp4": "mov_text", "mov": "mov_text", "m4v": "mov_text", "webm": "webvtt"}.get(container)
-    maps = [a for s in subs if s.codec in TEXT_SUBS for a in ("-map", f"0:{s.index}")] if target else []
+    target = {"mp4": "mov_text", "mov": "mov_text", "m4v": "mov_text", "webm": "webvtt"}.get(
+        container
+    )
+    maps = (
+        [a for s in subs if s.codec in TEXT_SUBS for a in ("-map", f"0:{s.index}")]
+        if target
+        else []
+    )
     return maps + (["-c:s", target] if maps else [])

@@ -11,6 +11,7 @@ core/tts.py  -  Text-to-speech engines
 
 ``synthesize()`` is blocking - call it from a worker thread or a queue job.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -36,6 +37,7 @@ class TTSError(ToolError):
 def _edge():
     try:
         from core.deps import require
+
         return require("edge-tts", import_name="edge_tts", auto_install=False)
     except Exception:
         logger.debug("_edge: best-effort step failed", exc_info=True)
@@ -46,6 +48,7 @@ def edge_available() -> bool:
     """Is the online engine installed?  Answered without importing it: edge-tts
     pulls in aiohttp and asyncio (~70 ms, ~22 MB) that offline users never need."""
     from core import deps
+
     deps.ensure_libs_on_path()
     return importlib.util.find_spec("edge_tts") is not None
 
@@ -54,8 +57,12 @@ def system_engine() -> str | None:
     """Path or name of the offline engine, None when there is none."""
     if IS_WIN:
         return shutil.which("powershell") or os.path.join(
-            os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", "WindowsPowerShell", "v1.0",
-            "powershell.exe")
+            os.environ.get("SYSTEMROOT", r"C:\Windows"),
+            "System32",
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe",
+        )
     if IS_MAC:
         return shutil.which("say")
     return shutil.which("espeak-ng") or shutil.which("espeak")
@@ -88,6 +95,7 @@ def edge_proxy() -> str | None:
     the computer's own proxy / auto-config); refuses SOCKS rather than going
     around it."""
     from core import network
+
     try:
         network.check_online()
         url = network.tool_proxy(VOICE_SERVICE)
@@ -96,14 +104,25 @@ def edge_proxy() -> str | None:
     if not url:
         return None
     if url.lower().startswith("socks"):
-        raise TTSError("The online voices can't go through a SOCKS proxy (such as Tor), and they "
-                       "won't connect around it either. Use the offline system voice, or an HTTP proxy.")
+        raise TTSError(
+            "The online voices can't go through a SOCKS proxy (such as Tor), and they "
+            "won't connect around it either. Use the offline system voice, or an HTTP proxy."
+        )
     return url
 
 
-def synthesize(text: str, out_path: str, *, engine: str = "edge", voice: str = "en-GB-RyanNeural",
-               rate: str = "+0%", pitch: str = "+0Hz", volume: str = "+0%", subtitles: bool = False,
-               cancelled=None) -> str | None:
+def synthesize(
+    text: str,
+    out_path: str,
+    *,
+    engine: str = "edge",
+    voice: str = "en-GB-RyanNeural",
+    rate: str = "+0%",
+    pitch: str = "+0Hz",
+    volume: str = "+0%",
+    subtitles: bool = False,
+    cancelled=None,
+) -> str | None:
     """Speak *text* into *out_path* (mp3 for edge, wav for system).
 
     Returns SRT text (sentence cues) when *subtitles* and the engine gives
@@ -119,22 +138,32 @@ def synthesize(text: str, out_path: str, *, engine: str = "edge", voice: str = "
 
 def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled):
     import asyncio
+
     edge_tts = _edge()
     if edge_tts is None:
         raise TTSError("The online voice engine (edge-tts) is not available in this copy.")
     proxy = edge_proxy()
-    try:                                          # the app's trust settings (company certificates...)
+    try:  # the app's trust settings (company certificates...)
         import edge_tts.communicate as _comm
 
         from core import network
+
         _comm._SSL_CTX = network.ssl_context()  # noqa: SLF001 - edge-tts offers no option for it
     except Exception:
         logger.debug("_edge_synth: best-effort step failed", exc_info=True)
 
     async def run():
-        comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume,
-                                    boundary="SentenceBoundary", proxy=proxy, connect_timeout=15,
-                                    receive_timeout=90)
+        comm = edge_tts.Communicate(
+            text,
+            voice,
+            rate=rate,
+            pitch=pitch,
+            volume=volume,
+            boundary="SentenceBoundary",
+            proxy=proxy,
+            connect_timeout=15,
+            receive_timeout=90,
+        )
         subs = edge_tts.SubMaker()
         got_audio = False
         with open(out_path, "wb") as fh:
@@ -154,11 +183,13 @@ def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled
         return asyncio.run(run())
     except TTSError:
         raise
-    except Exception as exc:       # aiohttp / service errors -> one readable message
+    except Exception as exc:  # aiohttp / service errors -> one readable message
         name = type(exc).__name__
         if "ClientConnector" in name or "Timeout" in name or isinstance(exc, OSError):
-            raise TTSError("Could not reach the online voice service - check the internet connection "
-                           f"or proxy settings, or use the offline system voice.\n({exc})") from exc
+            raise TTSError(
+                "Could not reach the online voice service - check the internet connection "
+                f"or proxy settings, or use the offline system voice.\n({exc})"
+            ) from exc
         raise TTSError(f"The online voice service failed: {exc}") from exc
 
 
@@ -175,46 +206,73 @@ def _run(cmd, cancelled, timeout=600):
                 if (cancelled and cancelled()) or waited > timeout:
                     proc.kill()
                     proc.communicate()
-                    raise TTSError("Cancelled." if cancelled and cancelled() else "The voice engine timed out.") from None
+                    raise TTSError(
+                        "Cancelled." if cancelled and cancelled() else "The voice engine timed out."
+                    ) from None
     finally:
         if proc.poll() is None:
             proc.kill()
     if proc.returncode != 0:
         msg = (err or out or b"").decode("utf-8", "replace").strip().splitlines()
-        raise TTSError("The system voice failed: " + (msg[-1] if msg else f"exit code {proc.returncode}"))
+        raise TTSError(
+            "The system voice failed: " + (msg[-1] if msg else f"exit code {proc.returncode}")
+        )
 
 
 def _system_synth(text, out_path, rate, pitch, volume, cancelled):
     eng = system_engine()
     if not eng:
-        raise TTSError("No offline voice was found. On Linux install espeak-ng "
-                       "(e.g. 'sudo apt install espeak-ng' or 'sudo pacman -S espeak-ng').")
+        raise TTSError(
+            "No offline voice was found. On Linux install espeak-ng "
+            "(e.g. 'sudo apt install espeak-ng' or 'sudo pacman -S espeak-ng')."
+        )
     r, p, v = _pct(rate), _pct(pitch), _pct(volume)
     with tempfile.TemporaryDirectory(prefix="wme_tts_") as tmp:
         txt = os.path.join(tmp, "text.txt")
         with open(txt, "w", encoding="utf-8") as fh:
             fh.write(text)
         if IS_WIN:
+
             def q(s):
                 return "'" + s.replace("'", "''") + "'"
+
             ps = os.path.join(tmp, "speak.ps1")
             with open(ps, "w", encoding="utf-8-sig") as fh:
-                fh.write("Add-Type -AssemblyName System.Speech\n"
-                         "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer\n"
-                         f"$s.Rate = {max(-10, min(10, round(r / 10)))}\n"
-                         f"$s.Volume = {max(0, min(100, round(100 + v)))}\n"
-                         f"$s.SetOutputToWaveFile({q(out_path)})\n"
-                         f"$s.Speak([IO.File]::ReadAllText({q(txt)}, [Text.Encoding]::UTF8))\n"
-                         "$s.Dispose()\n")
-            _run([eng, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps], cancelled)
+                fh.write(
+                    "Add-Type -AssemblyName System.Speech\n"
+                    "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer\n"
+                    f"$s.Rate = {max(-10, min(10, round(r / 10)))}\n"
+                    f"$s.Volume = {max(0, min(100, round(100 + v)))}\n"
+                    f"$s.SetOutputToWaveFile({q(out_path)})\n"
+                    f"$s.Speak([IO.File]::ReadAllText({q(txt)}, [Text.Encoding]::UTF8))\n"
+                    "$s.Dispose()\n"
+                )
+            _run(
+                [eng, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps],
+                cancelled,
+            )
         elif IS_MAC:
             aiff = os.path.join(tmp, "speech.aiff")
             _run([eng, "-r", str(round(180 * (1 + r / 100))), "-o", aiff, "-f", txt], cancelled)
             from core import ffmpeg as ff
+
             _run([ff.ffmpeg_path(), "-y", "-loglevel", "error", "-i", aiff, out_path], cancelled)
         else:
-            _run([eng, "-w", out_path, "-s", str(max(80, min(450, round(175 * (1 + r / 100))))),
-                  "-p", str(max(0, min(99, round(50 + p * 2)))), "-a", str(max(0, min(200, round(100 + v)))),
-                  "-f", txt], cancelled)
+            _run(
+                [
+                    eng,
+                    "-w",
+                    out_path,
+                    "-s",
+                    str(max(80, min(450, round(175 * (1 + r / 100))))),
+                    "-p",
+                    str(max(0, min(99, round(50 + p * 2)))),
+                    "-a",
+                    str(max(0, min(200, round(100 + v)))),
+                    "-f",
+                    txt,
+                ],
+                cancelled,
+            )
     if not os.path.isfile(out_path) or os.path.getsize(out_path) < 100:
         raise TTSError("The system voice produced no audio.")

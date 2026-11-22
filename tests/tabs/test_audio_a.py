@@ -9,22 +9,41 @@ from tabs.audio import extractor, muter, silence, sync
 
 def test_pure_helpers():
     zones = silence.keep_zones([(1.0, 2.0), (5.0, 9.0)], 10.0, 0.1, fps=25)
-    expected = [(0.0, 1.1), (1.9, 5.1), (8.9, 10.0)]          # padding 0.1, snapped to 1/25 s
-    assert all(abs(a - x) <= 0.04 and abs(b - y) <= 0.04 for (a, b), (x, y) in zip(zones, expected, strict=False))
+    expected = [(0.0, 1.1), (1.9, 5.1), (8.9, 10.0)]  # padding 0.1, snapped to 1/25 s
+    assert all(
+        abs(a - x) <= 0.04 and abs(b - y) <= 0.04
+        for (a, b), (x, y) in zip(zones, expected, strict=False)
+    )
     assert all(round(v * 25, 6) == round(v * 25) for z in zones for v in z)
     g = silence.cut_graph(zones, True, True)
     assert "split=3" in g and "concat=n=3:v=1:a=1[v][a]" in g
     assert muter.gain_expr([], 0.1) == "1"
     assert sync.reencode_filter(-0.25) == "atrim=start=0.250,asetpts=PTS-STARTPTS"
-    assert extractor.copy_extension("pcm_s24le") == ".wav" and extractor.copy_extension("aac") == ".m4a"
-    m = ln.parse_measurement(['[Parsed_loudnorm_0 @ 0x1]', '{', '"input_i" : "-20.5",', '"input_tp" : "-3.0",',
-                              '"input_lra" : "5.0",', '"input_thresh" : "-31.0",', '"target_offset" : "0.2"', '}'])
-    assert m.input_i == -20.5 and "measured_I=-20.50" in ln.normalise_filter(-16, -1.5, 11, m, 44100)
+    assert (
+        extractor.copy_extension("pcm_s24le") == ".wav"
+        and extractor.copy_extension("aac") == ".m4a"
+    )
+    m = ln.parse_measurement(
+        [
+            "[Parsed_loudnorm_0 @ 0x1]",
+            "{",
+            '"input_i" : "-20.5",',
+            '"input_tp" : "-3.0",',
+            '"input_lra" : "5.0",',
+            '"input_thresh" : "-31.0",',
+            '"target_offset" : "0.2"',
+            "}",
+        ]
+    )
+    assert m.input_i == -20.5 and "measured_I=-20.50" in ln.normalise_filter(
+        -16, -1.5, 11, m, 44100
+    )
 
 
 @pytest.fixture(scope="module")
 def ui():
     from tests.gui_harness import Harness
+
     return Harness.instance()
 
 
@@ -68,7 +87,10 @@ def test_loudness_two_pass(ui, media, outdir):
     _ok(ui)
     m = ln.measure(out, -16, -1.5, 11)
     assert m.input_i == pytest.approx(-16, abs=1.0)
-    assert ff.probe(out, use_cache=False).require_audio().sample_rate == ff.probe(media["wav_silence"]).require_audio().sample_rate
+    assert (
+        ff.probe(out, use_cache=False).require_audio().sample_rate
+        == ff.probe(media["wav_silence"]).require_audio().sample_rate
+    )
 
 
 @pytest.mark.gui

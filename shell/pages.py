@@ -5,6 +5,7 @@ A page is built from tabs/registry.py the first time it is opened, so start-up
 stays fast and a tool that fails to load shows an error page instead of
 taking the app down (it is retried the next time it is opened).
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,10 +28,20 @@ class ErrorPage(ttk.Frame):
 
     def __init__(self, parent: tk.Misc, title: str, error: str = "") -> None:
         super().__init__(parent)
-        tk.Label(self, text=f"⚠  {title}", font=(UI_FONT, 20, "bold"), fg="#C0392B").pack(pady=px(120, 10))
-        msg = (f"This tool could not be loaded:\n{error}\n\nThe full details were written to the log file "
-               "(Help › Open log folder).") if error else t("app.under_construction")
-        tk.Label(self, text=msg, font=(UI_FONT, 11), fg="#808080", wraplength=px(700), justify="center").pack()
+        tk.Label(self, text=f"⚠  {title}", font=(UI_FONT, 20, "bold"), fg="#C0392B").pack(
+            pady=px(120, 10)
+        )
+        msg = (
+            (
+                f"This tool could not be loaded:\n{error}\n\nThe full details were written to the log file "
+                "(Help › Open log folder)."
+            )
+            if error
+            else t("app.under_construction")
+        )
+        tk.Label(
+            self, text=msg, font=(UI_FONT, 11), fg="#808080", wraplength=px(700), justify="center"
+        ).pack()
 
 
 class PageHost:
@@ -55,14 +66,14 @@ class PageHost:
     def build(self, tool: ToolId) -> tk.Widget:
         existing = self._pages.get(tool)
         if isinstance(existing, ErrorPage) and tool != self.current:
-            existing.destroy()                          # try loading the tool again
+            existing.destroy()  # try loading the tool again
             existing = None
         if existing is not None:
             return existing
         page: tk.Widget
         try:
             page = PAGES[tool](self._area)
-        except Exception as exc:                        # a broken tool must not take the app down
+        except Exception as exc:  # a broken tool must not take the app down
             logger.exception("Could not load tool %r", tool.value)
             page = ErrorPage(self._area, spec(tool).name, f"{type(exc).__name__}: {exc}")
         if isinstance(page, Navigating):
@@ -80,6 +91,6 @@ class PageHost:
         if isinstance(page, Showable):
             try:
                 page.on_show()
-            except Exception:                           # a page's refresh failing is its own bug
+            except Exception:  # a page's refresh failing is its own bug
                 logger.exception("on_show failed in %s", tool.value)
         return page

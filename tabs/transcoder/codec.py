@@ -7,6 +7,7 @@ container follows the codec (or your choice when it can hold it), every
 audio track and subtitle can be kept, HDR is kept for 10-bit HEVC/AV1 and
 tone-mapped for 8-bit outputs.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,13 +24,24 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
 
 CONTAINERS = ("auto", "mp4", "mkv", "mov", "webm")
-DEFAULT_CONTAINER = {"h264": "mp4", "hevc": "mp4", "av1": "mp4", "vp9": "webm", "prores": "mov", "dnxhr": "mov",
-                     "ffv1": "mkv"}
+DEFAULT_CONTAINER = {
+    "h264": "mp4",
+    "hevc": "mp4",
+    "av1": "mp4",
+    "vp9": "webm",
+    "prores": "mov",
+    "dnxhr": "mov",
+    "ffv1": "mkv",
+}
 AUDIO = {
-    "aac256": ("AAC 256 kb/s", "aac", "256k"), "aac192": ("AAC 192 kb/s", "aac", "192k"),
-    "opus": ("Opus 160 kb/s", "opus", "160k"), "mp3": ("MP3 320 kb/s", "mp3", "320k"),
-    "flac": ("FLAC (lossless)", "flac", None), "pcm24": ("PCM 24-bit (editing)", "pcm24", None),
-    "copy": ("Copy (no change)", "copy", None), "none": (t("codec.remove_audio"), "", None),
+    "aac256": ("AAC 256 kb/s", "aac", "256k"),
+    "aac192": ("AAC 192 kb/s", "aac", "192k"),
+    "opus": ("Opus 160 kb/s", "opus", "160k"),
+    "mp3": ("MP3 320 kb/s", "mp3", "320k"),
+    "flac": ("FLAC (lossless)", "flac", None),
+    "pcm24": ("PCM 24-bit (editing)", "pcm24", None),
+    "copy": ("Copy (no change)", "copy", None),
+    "none": (t("codec.remove_audio"), "", None),
 }
 
 
@@ -57,10 +69,14 @@ def audio_args(info: ff.MediaInfo, key: str, container: str, keep_all: bool) -> 
                 args += [f"-c:a:{n}", "copy"]
                 continue
             want = enc.default_audio_for(container)
-            notes.append(f"Audio track {n + 1} ({a.codec}) can't be copied into {container.upper()} - "
-                         f"converted to {want}.")
+            notes.append(
+                f"Audio track {n + 1} ({a.codec}) can't be copied into {container.upper()} - "
+                f"converted to {want}."
+            )
         elif not enc.audio_ok_for(container, want):
-            notes.append(f"{label} doesn't fit {container.upper()} - using {enc.default_audio_for(container)}.")
+            notes.append(
+                f"{label} doesn't fit {container.upper()} - using {enc.default_audio_for(container)}."
+            )
             want = enc.default_audio_for(container)
         spec = enc.audio(want, rate, container=container)
         args += [f"{x}:{n}" if x in ("-c:a", "-b:a", "-q:a") else x for x in spec]
@@ -85,16 +101,25 @@ class CodecCruncherTab(BaseTab):
         vc = tk.LabelFrame(body, text=t("section.video_codec"), padx=px(12), pady=px(8))
         vc.pack(fill="x", padx=px(20), pady=px(5))
         self.copy_video = tk.BooleanVar(value=False)
-        tk.Checkbutton(vc, text="Copy the video as it is (only change audio / container)", variable=self.copy_video,
-                       command=self._update_ext).pack(anchor="w")
-        self.encoder = EncoderPanel(vc, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr", "ffv1"),
-                                    on_change=self._update_ext)
+        tk.Checkbutton(
+            vc,
+            text="Copy the video as it is (only change audio / container)",
+            variable=self.copy_video,
+            command=self._update_ext,
+        ).pack(anchor="w")
+        self.encoder = EncoderPanel(
+            vc,
+            codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr", "ffv1"),
+            on_change=self._update_ext,
+        )
         self.encoder.pack(anchor="w", pady=px(4, 0))
         r = tk.Frame(vc)
         r.pack(anchor="w", pady=px(6, 0))
         tk.Label(r, text="Container:").pack(side="left")
         self.container_var = tk.StringVar(value="auto")
-        cb = ttk.Combobox(r, textvariable=self.container_var, values=list(CONTAINERS), state="readonly", width=8)
+        cb = ttk.Combobox(
+            r, textvariable=self.container_var, values=list(CONTAINERS), state="readonly", width=8
+        )
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._update_ext())
         tk.Label(r, text="(auto = the usual one for the codec)", fg=CLR["fgdim"]).pack(side="left")
@@ -102,20 +127,37 @@ class CodecCruncherTab(BaseTab):
         ac = tk.LabelFrame(body, text=t("section.audio_codec"), padx=px(12), pady=px(8))
         ac.pack(fill="x", padx=px(20), pady=px(5))
         self.audio_var = tk.StringVar(value=AUDIO["aac256"][0])
-        ttk.Combobox(ac, textvariable=self.audio_var, values=[v[0] for v in AUDIO.values()], state="readonly",
-                     width=24).pack(side="left")
+        ttk.Combobox(
+            ac,
+            textvariable=self.audio_var,
+            values=[v[0] for v in AUDIO.values()],
+            state="readonly",
+            width=24,
+        ).pack(side="left")
         self.keep_all = tk.BooleanVar(value=True)
-        tk.Checkbutton(ac, text="Keep every audio track and the subtitles", variable=self.keep_all).pack(
-            side="left", padx=px(12))
+        tk.Checkbutton(
+            ac, text="Keep every audio track and the subtitles", variable=self.keep_all
+        ).pack(side="left", padx=px(12))
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "encoded", self._ext()))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "encoded", self._ext()),
+        )
         self.out_row.pack(fill="x")
         self.out_var = self.out_row.var
-        self.btn_render = tk.Button(body, text=t("codec.btn_encode"), font=(UI_FONT, 12, "bold"), bg=CLR["accent"],
-                                    fg="white", width=28, command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("codec.btn_encode"),
+            font=(UI_FONT, 12, "bold"),
+            bg=CLR["accent"],
+            fg="white",
+            width=28,
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -125,7 +167,9 @@ class CodecCruncherTab(BaseTab):
 
     def _codec(self) -> str:
         if self.copy_video.get() and self._info is not None and self._info.has_video:
-            return {"dnxhd": "dnxhr"}.get(self._info.require_video().codec, self._info.require_video().codec)
+            return {"dnxhd": "dnxhr"}.get(
+                self._info.require_video().codec, self._info.require_video().codec
+            )
         return self.encoder.codec
 
     def _container(self) -> str:
@@ -135,7 +179,7 @@ class CodecCruncherTab(BaseTab):
         return "." + self._container()
 
     def _update_ext(self, *_a):
-        if not hasattr(self, "out_row"):           # called while the page is still being built
+        if not hasattr(self, "out_row"):  # called while the page is still being built
             return
         out = self.out_row.path
         if out and self.src_row.path:
@@ -147,9 +191,11 @@ class CodecCruncherTab(BaseTab):
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             v = info.require_video()
-            self.info_lbl.config(text=f"{ff.format_time(info.duration)}  ·  {v.codec} {v.width}×{v.height}  ·  "
-                                      f"{v.fps:.3g} fps  ·  {v.pix_fmt}{'  ·  HDR' if v.is_hdr else ''}  ·  "
-                                      f"{len([s for s in info.streams if s.type == 'audio'])} audio track(s)")
+            self.info_lbl.config(
+                text=f"{ff.format_time(info.duration)}  ·  {v.codec} {v.width}×{v.height}  ·  "
+                f"{v.fps:.3g} fps  ·  {v.pix_fmt}{'  ·  HDR' if v.is_hdr else ''}  ·  "
+                f"{len([s for s in info.streams if s.type == 'audio'])} audio track(s)"
+            )
         else:
             self.info_lbl.config(text="")
         if not self.out_row.path:
@@ -183,17 +229,24 @@ class CodecCruncherTab(BaseTab):
         else:
             venc = self.encoder.video_encode(container)
             chain = []
-            if v.is_hdr and not venc.pix_fmt.endswith(("10le", "p010le", "p010")) and venc.encoder not in (
-                    "prores_ks", "dnxhd", "ffv1"):
+            if (
+                v.is_hdr
+                and not venc.pix_fmt.endswith(("10le", "p010le", "p010"))
+                and venc.encoder not in ("prores_ks", "dnxhd", "ffv1")
+            ):
                 chain.append(fl.hdr_to_sdr_chain(out_fmt=venc.pix_fmt or "yuv420p"))
-                notes.append("HDR source tone-mapped to SDR for this 8-bit output (tick 10-bit to keep HDR).")
+                notes.append(
+                    "HDR source tone-mapped to SDR for this 8-bit output (tick 10-bit to keep HDR)."
+                )
             cmd += venc.pre_input
             v_args = ["-map", "0:v:0", *venc.vf_args(",".join(chain) or None), *venc.args]
             label = venc.label
         cmd += ["-i", src, *v_args, *a_args]
         if self.keep_all.get():
             subs = [s for s in info.streams if s.type == "subtitle"]
-            sub_codec = {"mkv": "copy", "mp4": "mov_text", "mov": "mov_text", "webm": "webvtt"}.get(container)
+            sub_codec = {"mkv": "copy", "mp4": "mov_text", "mov": "mov_text", "webm": "webvtt"}.get(
+                container
+            )
             n = 0
             for s in subs:
                 if sub_codec == "copy" or s.codec in ("subrip", "ass", "ssa", "webvtt", "mov_text"):
@@ -203,6 +256,14 @@ class CodecCruncherTab(BaseTab):
         for note in notes:
             self.log(self.console, "  " + note)
         self.log(self.console, f"Encoding with {label} → {container.upper()}…")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
-                        btn_label=t("codec.btn_encode"), duration=info.duration or None, output=out, inputs=[src],
-                        name="Codec Cruncher")
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, out),
+            btn=self.btn_render,
+            btn_label=t("codec.btn_encode"),
+            duration=info.duration or None,
+            output=out,
+            inputs=[src],
+            name="Codec Cruncher",
+        )

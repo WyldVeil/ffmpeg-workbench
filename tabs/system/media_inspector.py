@@ -7,6 +7,7 @@ layout, language, default/forced flags), chapters and tags, plus a frame
 preview, the raw ffprobe JSON, and quick diagnostics (variable frame rate,
 interlacing, HDR, rotation metadata, missing audio, odd dimensions).
 """
+
 from __future__ import annotations
 
 import json
@@ -59,45 +60,99 @@ def diagnose(info: ff.MediaInfo) -> list[tuple[str, str]]:
     notes: list[tuple[str, str]] = []
     v, a = info.video, info.audio
     if v:
-        if v.r_fps and v.fps and abs(v.r_fps - v.fps) / max(v.fps, 1e-6) > 0.01 and not info.is_image:
-            notes.append(("warn", _tr("inspector.vfr",
-                          "Variable frame rate likely (average {avg} fps vs nominal {nom} fps). "
-                          "Editing tools may drift; convert to constant frame rate first.")
-                          .format(avg=_fps_text(v.fps), nom=_fps_text(v.r_fps))))
+        if (
+            v.r_fps
+            and v.fps
+            and abs(v.r_fps - v.fps) / max(v.fps, 1e-6) > 0.01
+            and not info.is_image
+        ):
+            notes.append(
+                (
+                    "warn",
+                    _tr(
+                        "inspector.vfr",
+                        "Variable frame rate likely (average {avg} fps vs nominal {nom} fps). "
+                        "Editing tools may drift; convert to constant frame rate first.",
+                    ).format(avg=_fps_text(v.fps), nom=_fps_text(v.r_fps)),
+                )
+            )
         if v.field_order and v.field_order not in ("progressive", "unknown"):
-            notes.append(("warn", _tr("inspector.interlaced",
-                          "Interlaced video ({order}). Use the Deinterlace tool before scaling or "
-                          "slow motion.").format(order=v.field_order)))
+            notes.append(
+                (
+                    "warn",
+                    _tr(
+                        "inspector.interlaced",
+                        "Interlaced video ({order}). Use the Deinterlace tool before scaling or "
+                        "slow motion.",
+                    ).format(order=v.field_order),
+                )
+            )
         if v.is_hdr:
-            notes.append(("info", _tr("inspector.hdr",
-                          "HDR video ({tr}). Converting to SDR needs tone-mapping or colours "
-                          "will look washed out.").format(tr=v.color_transfer)))
+            notes.append(
+                (
+                    "info",
+                    _tr(
+                        "inspector.hdr",
+                        "HDR video ({tr}). Converting to SDR needs tone-mapping or colours "
+                        "will look washed out.",
+                    ).format(tr=v.color_transfer),
+                )
+            )
         if v.rotation:
-            notes.append(("info", _tr("inspector.rotation",
-                          "Rotation metadata: {deg}°. Players rotate it on display; FFmpeg "
-                          "applies it automatically when re-encoding.").format(deg=v.rotation)))
+            notes.append(
+                (
+                    "info",
+                    _tr(
+                        "inspector.rotation",
+                        "Rotation metadata: {deg}°. Players rotate it on display; FFmpeg "
+                        "applies it automatically when re-encoding.",
+                    ).format(deg=v.rotation),
+                )
+            )
         if v.width % 2 or v.height % 2:
-            notes.append(("warn", _tr("inspector.odd_size",
-                          "Odd frame size ({w}×{h}): H.264/H.265 in 4:2:0 need even "
-                          "dimensions, so tools will round them.").format(w=v.width, h=v.height)))
-        if v.pix_fmt and not v.pix_fmt.startswith(("yuv420p", "yuvj420p", "nv12", "p010")) \
-                and not info.is_image:
-            notes.append(("info", _tr("inspector.pixfmt",
-                          "Pixel format {pf} is not 4:2:0; some players and web sites will "
-                          "not play it until converted.").format(pf=v.pix_fmt)))
+            notes.append(
+                (
+                    "warn",
+                    _tr(
+                        "inspector.odd_size",
+                        "Odd frame size ({w}×{h}): H.264/H.265 in 4:2:0 need even "
+                        "dimensions, so tools will round them.",
+                    ).format(w=v.width, h=v.height),
+                )
+            )
+        if (
+            v.pix_fmt
+            and not v.pix_fmt.startswith(("yuv420p", "yuvj420p", "nv12", "p010"))
+            and not info.is_image
+        ):
+            notes.append(
+                (
+                    "info",
+                    _tr(
+                        "inspector.pixfmt",
+                        "Pixel format {pf} is not 4:2:0; some players and web sites will "
+                        "not play it until converted.",
+                    ).format(pf=v.pix_fmt),
+                )
+            )
         if v.sar and v.sar not in ("1:1", "0:1", ""):
-            notes.append(("info", _tr("inspector.sar",
-                          "Non-square pixels (SAR {sar}).").format(sar=v.sar)))
+            notes.append(
+                ("info", _tr("inspector.sar", "Non-square pixels (SAR {sar}).").format(sar=v.sar))
+            )
     if not a and v and not info.is_image:
         notes.append(("info", _tr("inspector.no_audio", "No audio stream.")))
     if len(info.audio_streams) > 1:
-        notes.append(("info", _tr("inspector.multi_audio",
-                      "{n} audio tracks - most tools use the first one.")
-                      .format(n=len(info.audio_streams))))
+        notes.append(
+            (
+                "info",
+                _tr(
+                    "inspector.multi_audio", "{n} audio tracks - most tools use the first one."
+                ).format(n=len(info.audio_streams)),
+            )
+        )
     if not notes:
         notes.append(("ok", _tr("inspector.all_good", "Nothing unusual detected.")))
     return notes
-
 
 
 def _seconds(value: object) -> float:
@@ -106,6 +161,7 @@ def _seconds(value: object) -> float:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return 0.0
+
 
 class MediaInspectorTab(BaseTab):
     def __init__(self, parent):
@@ -117,21 +173,39 @@ class MediaInspectorTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        self.make_header(self, _tr("tab.media_inspector", "Media Inspector"),
-                         _tr("inspector.subtitle",
-                             "Everything inside a media file - streams, codecs, colour, chapters, tags"),
-                         icon="\U0001F50D")
+        self.make_header(
+            self,
+            _tr("tab.media_inspector", "Media Inspector"),
+            _tr(
+                "inspector.subtitle",
+                "Everything inside a media file - streams, codecs, colour, chapters, tags",
+            ),
+            icon="\U0001f50d",
+        )
         row = tk.Frame(self, bg=CLR["bg"])
         row.pack(fill="x", padx=px(20), pady=px(12, 6))
         self.src_var = tk.StringVar()
-        self.make_file_row(row, _tr("common.source_file", "Source file"), self.src_var,
-                           self._browse).pack(side="left")
-        tk.Button(row, text=_tr("inspector.copy_report", "Copy report"), relief="flat",
-                  bg=CLR["panel"], fg=CLR["fg"], cursor="hand2",
-                  command=self._copy_report).pack(side="left", padx=px(8, 0))
-        tk.Button(row, text=_tr("inspector.export_json", "Export JSON…"), relief="flat",
-                  bg=CLR["panel"], fg=CLR["fg"], cursor="hand2",
-                  command=self._export_json).pack(side="left", padx=px(6, 0))
+        self.make_file_row(
+            row, _tr("common.source_file", "Source file"), self.src_var, self._browse
+        ).pack(side="left")
+        tk.Button(
+            row,
+            text=_tr("inspector.copy_report", "Copy report"),
+            relief="flat",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            cursor="hand2",
+            command=self._copy_report,
+        ).pack(side="left", padx=px(8, 0))
+        tk.Button(
+            row,
+            text=_tr("inspector.export_json", "Export JSON…"),
+            relief="flat",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            cursor="hand2",
+            command=self._export_json,
+        ).pack(side="left", padx=px(6, 0))
 
         top = tk.Frame(self, bg=CLR["bg"])
         top.pack(fill="x", padx=px(20), pady=px(4))
@@ -139,34 +213,64 @@ class MediaInspectorTab(BaseTab):
         self.preview.pack(side="left", anchor="n")
         side = tk.Frame(top, bg=CLR["bg"])
         side.pack(side="left", fill="both", expand=True, padx=px(16, 0))
-        self.summary_lbl = tk.Label(side, text=_tr("inspector.drop_hint",
-                                    "Open or drop a video, audio or image file."),
-                                    bg=CLR["bg"], fg=CLR["accent"], font=(UI_FONT, 11, "bold"),
-                                    justify="left", anchor="w", wraplength=px(620))
+        self.summary_lbl = tk.Label(
+            side,
+            text=_tr("inspector.drop_hint", "Open or drop a video, audio or image file."),
+            bg=CLR["bg"],
+            fg=CLR["accent"],
+            font=(UI_FONT, 11, "bold"),
+            justify="left",
+            anchor="w",
+            wraplength=px(620),
+        )
         self.summary_lbl.pack(fill="x")
-        self.notes = tk.Text(side, height=8, wrap="word", bg=CLR["bg"], fg=CLR["fg"],
-                             relief="flat", font=(UI_FONT, 9), highlightthickness=0)
+        self.notes = tk.Text(
+            side,
+            height=8,
+            wrap="word",
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            relief="flat",
+            font=(UI_FONT, 9),
+            highlightthickness=0,
+        )
         self.notes.tag_configure("warn", foreground=CLR["orange"])
         self.notes.tag_configure("info", foreground=CLR["fgdim"])
         self.notes.tag_configure("ok", foreground=CLR["green"])
         self.notes.pack(fill="both", expand=True, pady=px(6, 0))
         scrub_row = tk.Frame(side, bg=CLR["bg"])
         scrub_row.pack(fill="x", pady=px(4, 0))
-        tk.Label(scrub_row, text=_tr("inspector.scrub", "Preview position"), bg=CLR["bg"],
-                 fg=CLR["fgdim"], font=(UI_FONT, 8)).pack(side="left")
-        self.scrub = ttk.Scale(scrub_row, from_=0, to=1, orient="horizontal",
-                               command=lambda v: self.preview.show(float(v)))
+        tk.Label(
+            scrub_row,
+            text=_tr("inspector.scrub", "Preview position"),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(side="left")
+        self.scrub = ttk.Scale(
+            scrub_row,
+            from_=0,
+            to=1,
+            orient="horizontal",
+            command=lambda v: self.preview.show(float(v)),
+        )
         self.scrub.pack(side="left", fill="x", expand=True, padx=px(6))
-        framestep.slider(self.scrub, self.preview)      # , and . step a frame
+        framestep.slider(self.scrub, self.preview)  # , and . step a frame
 
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=px(20), pady=px(8, 12))
 
         streams = tk.Frame(self.nb, bg=CLR["bg"])
         cols = ("idx", "type", "codec", "detail", "rate", "lang", "flags")
-        heads = ("#", _tr("inspector.col_type", "Type"), _tr("inspector.col_codec", "Codec"),
-                 _tr("inspector.col_detail", "Details"), _tr("inspector.col_bitrate", "Bitrate"),
-                 _tr("inspector.col_lang", "Language / title"), _tr("inspector.col_flags", "Flags"))
+        heads = (
+            "#",
+            _tr("inspector.col_type", "Type"),
+            _tr("inspector.col_codec", "Codec"),
+            _tr("inspector.col_detail", "Details"),
+            _tr("inspector.col_bitrate", "Bitrate"),
+            _tr("inspector.col_lang", "Language / title"),
+            _tr("inspector.col_flags", "Flags"),
+        )
         self.tree = ttk.Treeview(streams, columns=cols, show="headings", height=7)
         widths = (40, 80, 150, 420, 100, 180, 120)
         for c, h, w in zip(cols, heads, widths, strict=False):
@@ -185,8 +289,16 @@ class MediaInspectorTab(BaseTab):
 
     def _text_page(self, title: str) -> tk.Text:
         frame = tk.Frame(self.nb, bg=CLR["bg"])
-        txt = tk.Text(frame, wrap="none", bg=CLR["console_bg"], fg=CLR["console_fg"],
-                      font=(MONO_FONT, 9), relief="flat", padx=px(10), pady=px(8))
+        txt = tk.Text(
+            frame,
+            wrap="none",
+            bg=CLR["console_bg"],
+            fg=CLR["console_fg"],
+            font=(MONO_FONT, 9),
+            relief="flat",
+            padx=px(10),
+            pady=px(8),
+        )
         sb = ttk.Scrollbar(frame, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         txt.pack(side="left", fill="both", expand=True)
@@ -208,12 +320,16 @@ class MediaInspectorTab(BaseTab):
         self.src_var.set(path)
         self.info = None
         self.summary_lbl.config(text=_tr("inspector.reading", "Reading..."), fg=CLR["fgdim"])
-        tasks.submit(partial(ff.probe, path, use_cache=False), on_done=partial(self._probed, path),
-                     on_error=partial(self._unreadable, path), name="Inspect")
+        tasks.submit(
+            partial(ff.probe, path, use_cache=False),
+            on_done=partial(self._probed, path),
+            on_error=partial(self._unreadable, path),
+            name="Inspect",
+        )
         return True
 
     def _probed(self, path: str, info: ff.MediaInfo) -> None:
-        if path != self.file_path:                       # another file was opened meanwhile
+        if path != self.file_path:  # another file was opened meanwhile
             return
         self.info = info
         self._populate(info)
@@ -222,8 +338,10 @@ class MediaInspectorTab(BaseTab):
         if path != self.file_path:
             return
         self.info = None
-        self.summary_lbl.config(text=_tr("inspector.unreadable", "Not a readable media file:")
-                                + f" {exc}", fg=CLR["red"])
+        self.summary_lbl.config(
+            text=_tr("inspector.unreadable", "Not a readable media file:") + f" {exc}",
+            fg=CLR["red"],
+        )
         self._fill_notes([])
         for txt in (self.format_txt, self.chapters_txt, self.tags_txt, self.json_txt):
             self._set_text(txt, "")
@@ -253,8 +371,7 @@ class MediaInspectorTab(BaseTab):
         for s in info.streams:
             if s.type == "video":
                 w, h = s.display_size
-                detail = (f"{w}×{h}  {_fps_text(s.fps)} fps  {s.pix_fmt or ''}  "
-                          f"{s.bit_depth}-bit")
+                detail = f"{w}×{h}  {_fps_text(s.fps)} fps  {s.pix_fmt or ''}  {s.bit_depth}-bit"
                 if s.color_transfer or s.color_primaries:
                     detail += f"  {s.color_primaries or '?'}/{s.color_transfer or '?'}"
                 if s.rotation:
@@ -262,16 +379,28 @@ class MediaInspectorTab(BaseTab):
                 if s.attached_pic:
                     detail = f"cover art {w}×{h}"
             elif s.type == "audio":
-                detail = (f"{s.sample_rate} Hz  {s.channels} ch "
-                          f"({s.channel_layout or '?'})  {s.sample_fmt}")
+                detail = (
+                    f"{s.sample_rate} Hz  {s.channels} ch "
+                    f"({s.channel_layout or '?'})  {s.sample_fmt}"
+                )
             else:
                 detail = s.codec_long
-            flags = ", ".join(f for f, on in (("default", s.default), ("forced", s.forced),
-                                               ("cover", s.attached_pic)) if on)
+            flags = ", ".join(
+                f
+                for f, on in (
+                    ("default", s.default),
+                    ("forced", s.forced),
+                    ("cover", s.attached_pic),
+                )
+                if on
+            )
             lang = " / ".join(x for x in (s.language if s.language != "und" else "", s.title) if x)
             codec = s.codec + (f" ({s.profile})" if s.profile else "")
-            self.tree.insert("", "end", values=(s.index, s.type, codec, detail,
-                                                _human_rate(s.bit_rate), lang, flags))
+            self.tree.insert(
+                "",
+                "end",
+                values=(s.index, s.type, codec, detail, _human_rate(s.bit_rate), lang, flags),
+            )
 
         fmt_lines = [
             f"File:        {info.path}",
@@ -314,8 +443,13 @@ class MediaInspectorTab(BaseTab):
     def report_text(self) -> str:
         if not self.info:
             return ""
-        parts = [self.summary_lbl.cget("text"), "",
-                 self.format_txt.get("1.0", "end-1c"), "", "Streams:"]
+        parts = [
+            self.summary_lbl.cget("text"),
+            "",
+            self.format_txt.get("1.0", "end-1c"),
+            "",
+            "Streams:",
+        ]
         for iid in self.tree.get_children():
             vals = self.tree.item(iid, "values")
             parts.append("  #" + "  |  ".join(str(v) for v in vals if str(v)))
@@ -333,8 +467,12 @@ class MediaInspectorTab(BaseTab):
         if not self.info:
             return
         default = os.path.splitext(os.path.basename(self.info.path))[0] + "_probe.json"
-        out = dialogs.ask_save(default, kind="preset", defaultextension=".json",
-                               title=_tr("inspector.export_json", "Export JSON…"))
+        out = dialogs.ask_save(
+            default,
+            kind="preset",
+            defaultextension=".json",
+            title=_tr("inspector.export_json", "Export JSON…"),
+        )
         if out:
             with open(out, "w", encoding="utf-8") as fh:
                 json.dump(self.info.raw, fh, indent=2, ensure_ascii=False)

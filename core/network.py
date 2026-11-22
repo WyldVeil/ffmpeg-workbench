@@ -20,6 +20,7 @@ app's own downloads, ``build_yt_dlp_args`` / ``subprocess_env`` for yt-dlp
 (and the Deno runtime it starts).  Proxy passwords are never put on a
 command line.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -45,50 +46,109 @@ DEFAULTS = {s.key: s.default for s in _settings.NETWORK}
 
 
 def _manual(scheme: str, port: str, strict: bool = False, host: str = "127.0.0.1") -> dict:
-    return {"network.mode": "manual", "network.proxy_enabled": True, "network.proxy_scheme": scheme,
-            "network.proxy_host": host, "network.proxy_port": port, "network.strict": strict}
+    return {
+        "network.mode": "manual",
+        "network.proxy_enabled": True,
+        "network.proxy_scheme": scheme,
+        "network.proxy_host": host,
+        "network.proxy_port": port,
+        "network.strict": strict,
+    }
 
 
 #: Common situations, most common first: (id, title, explanation, settings)
 SITUATIONS = [
-    ("auto", "Automatic - follow this computer's settings",
-     "Uses whatever Windows, macOS or your Linux desktop is set to: no proxy, a fixed proxy, or an "
-     "automatic configuration script (common in companies and universities).",
-     {"network.mode": "auto", "network.proxy_enabled": False, "network.strict": False}),
-    ("direct", "No proxy - connect directly",
-     "Ignore any proxy settings on this computer.",
-     {"network.mode": "direct", "network.proxy_enabled": False, "network.strict": False}),
-    ("clash", "Clash / Clash for Windows / Mihomo (127.0.0.1:7890)",
-     "Local proxy app common in China and elsewhere.", _manual("http", "7890")),
-    ("clash_verge", "Clash Verge Rev (127.0.0.1:7897)", "Clash Verge's mixed port.", _manual("http", "7897")),
-    ("v2rayn", "v2rayN / Xray (127.0.0.1:10809)", "v2rayN's local HTTP port.", _manual("http", "10809")),
+    (
+        "auto",
+        "Automatic - follow this computer's settings",
+        "Uses whatever Windows, macOS or your Linux desktop is set to: no proxy, a fixed proxy, or an "
+        "automatic configuration script (common in companies and universities).",
+        {"network.mode": "auto", "network.proxy_enabled": False, "network.strict": False},
+    ),
+    (
+        "direct",
+        "No proxy - connect directly",
+        "Ignore any proxy settings on this computer.",
+        {"network.mode": "direct", "network.proxy_enabled": False, "network.strict": False},
+    ),
+    (
+        "clash",
+        "Clash / Clash for Windows / Mihomo (127.0.0.1:7890)",
+        "Local proxy app common in China and elsewhere.",
+        _manual("http", "7890"),
+    ),
+    (
+        "clash_verge",
+        "Clash Verge Rev (127.0.0.1:7897)",
+        "Clash Verge's mixed port.",
+        _manual("http", "7897"),
+    ),
+    (
+        "v2rayn",
+        "v2rayN / Xray (127.0.0.1:10809)",
+        "v2rayN's local HTTP port.",
+        _manual("http", "10809"),
+    ),
     ("v2raya", "v2rayA (127.0.0.1:20171)", "v2rayA's local HTTP port.", _manual("http", "20171")),
-    ("shadowsocks", "Shadowsocks (SOCKS 127.0.0.1:1080)", "Shadowsocks clients' local SOCKS port.",
-     _manual("socks5h", "1080")),
-    ("nekoray", "NekoRay / NekoBox / sing-box (127.0.0.1:2080)", "Mixed port of sing-box based apps.",
-     _manual("socks5h", "2080")),
+    (
+        "shadowsocks",
+        "Shadowsocks (SOCKS 127.0.0.1:1080)",
+        "Shadowsocks clients' local SOCKS port.",
+        _manual("socks5h", "1080"),
+    ),
+    (
+        "nekoray",
+        "NekoRay / NekoBox / sing-box (127.0.0.1:2080)",
+        "Mixed port of sing-box based apps.",
+        _manual("socks5h", "2080"),
+    ),
     ("hiddify", "Hiddify (127.0.0.1:12334)", "Hiddify's mixed port.", _manual("socks5h", "12334")),
     ("privoxy", "Privoxy (127.0.0.1:8118)", "Local filtering proxy.", _manual("http", "8118")),
-    ("tor_browser", "Tor Browser running (127.0.0.1:9150)",
-     "Send everything through the Tor Browser's Tor; nothing goes out without it. Some sites block Tor.",
-     _manual("socks5h", "9150", strict=True)),
-    ("tor", "Tor service (127.0.0.1:9050)",
-     "Send everything through a Tor service on this computer; nothing goes out without it.",
-     _manual("socks5h", "9050", strict=True)),
-    ("offline", "Offline - never use the network",
-     "For air-gapped or metered machines: no downloads, no update checks.",
-     {"network.mode": "offline"}),
+    (
+        "tor_browser",
+        "Tor Browser running (127.0.0.1:9150)",
+        "Send everything through the Tor Browser's Tor; nothing goes out without it. Some sites block Tor.",
+        _manual("socks5h", "9150", strict=True),
+    ),
+    (
+        "tor",
+        "Tor service (127.0.0.1:9050)",
+        "Send everything through a Tor service on this computer; nothing goes out without it.",
+        _manual("socks5h", "9050", strict=True),
+    ),
+    (
+        "offline",
+        "Offline - never use the network",
+        "For air-gapped or metered machines: no downloads, no update checks.",
+        {"network.mode": "offline"},
+    ),
 ]
 PRESETS = {sid: values for sid, _t, _d, values in SITUATIONS}
-PRESETS["system"] = PRESETS["auto"]          # legacy ids
+PRESETS["system"] = PRESETS["auto"]  # legacy ids
 PRESETS["local_http"] = _manual("http", "8080")
 
 #: Local proxy apps to look for on this computer: port -> label
-LOCAL_PORTS = {7890: "Clash / Mihomo", 7897: "Clash Verge", 7891: "Clash (SOCKS)", 10809: "v2rayN (HTTP)",
-               10808: "v2rayN (SOCKS)", 20171: "v2rayA (HTTP)", 20170: "v2rayA (SOCKS)", 1080: "SOCKS proxy",
-               2080: "NekoRay / sing-box", 12334: "Hiddify", 8118: "Privoxy", 3128: "Squid / local proxy",
-               8080: "Local proxy", 8888: "Local debugging proxy", 1087: "V2rayU (HTTP)", 1086: "V2rayU (SOCKS)",
-               6152: "Surge", 9050: "Tor", 9150: "Tor Browser"}
+LOCAL_PORTS = {
+    7890: "Clash / Mihomo",
+    7897: "Clash Verge",
+    7891: "Clash (SOCKS)",
+    10809: "v2rayN (HTTP)",
+    10808: "v2rayN (SOCKS)",
+    20171: "v2rayA (HTTP)",
+    20170: "v2rayA (SOCKS)",
+    1080: "SOCKS proxy",
+    2080: "NekoRay / sing-box",
+    12334: "Hiddify",
+    8118: "Privoxy",
+    3128: "Squid / local proxy",
+    8080: "Local proxy",
+    8888: "Local debugging proxy",
+    1087: "V2rayU (HTTP)",
+    1086: "V2rayU (SOCKS)",
+    6152: "Surge",
+    9050: "Tor",
+    9150: "Tor Browser",
+}
 
 
 class OfflineError(errors.OfflineError):
@@ -101,6 +161,7 @@ class SocksUnavailable(errors.NetworkError):
 
 # ── Load / save ───────────────────────────────────────────────────────────────
 
+
 def get() -> dict:
     """Every network.* setting with saved values over the defaults."""
     s = _settings.load_settings()
@@ -110,7 +171,7 @@ def get() -> dict:
             v = s[k]
             out[k] = default if (isinstance(default, str) and v == "") else v
     if "network.mode" not in s and s.get("network.proxy_enabled"):
-        out["network.mode"] = "manual"                    # settings from before 2.0
+        out["network.mode"] = "manual"  # settings from before 2.0
     return out
 
 
@@ -166,11 +227,12 @@ def _effective(cfg: dict) -> dict:
     """Settings after systems with fixed networking are taken into account."""
     if sysproxy.special_system() == "tails":
         cfg = dict(cfg)
-        cfg.update(_manual("socks5h", "9050", strict=True))   # Tails only lets Tor out
+        cfg.update(_manual("socks5h", "9050", strict=True))  # Tails only lets Tor out
     return cfg
 
 
 # ── Proxy decisions ───────────────────────────────────────────────────────────
+
 
 def proxy_url(cfg: dict | None = None) -> str | None:
     """The manual proxy "scheme://[user:pass@]host:port", or None."""
@@ -183,7 +245,7 @@ def proxy_url(cfg: dict | None = None) -> str | None:
     if not host or not port:
         return None
     if ":" in host and not host.startswith("["):
-        host = f"[{host}]"                                 # IPv6 literal
+        host = f"[{host}]"  # IPv6 literal
     user = (cfg.get("network.proxy_user") or "").strip()
     pwd = (cfg.get("network.proxy_pass") or "").strip()
     auth = ""
@@ -221,8 +283,9 @@ def describe(cfg: dict | None = None, url: str = "https://www.youtube.com/") -> 
     cfg = cfg if cfg is not None else get()
     special = sysproxy.special_system()
     if special == "tails":
-        return ("Tails: everything goes through Tor" +
-                (" - direct downloads allowed for this session" if _tails_direct else ""))
+        return "Tails: everything goes through Tor" + (
+            " - direct downloads allowed for this session" if _tails_direct else ""
+        )
     if special == "whonix":
         return "Whonix: the gateway sends everything through Tor"
     m = mode(cfg)
@@ -234,7 +297,10 @@ def describe(cfg: dict | None = None, url: str = "https://www.youtube.com/") -> 
         found = proxies_for(url, cfg)
     except OSError as exc:
         return str(exc)
-    shown = ", ".join("direct" if p == DIRECT else sysproxy.hide_auth(p) for p in found) or "nothing (blocked)"
+    shown = (
+        ", ".join("direct" if p == DIRECT else sysproxy.hide_auth(p) for p in found)
+        or "nothing (blocked)"
+    )
     if m == "manual":
         return f"Through {shown}" + (" only (strict)" if strict(cfg) else "")
     return f"Following this computer: {shown}"
@@ -243,15 +309,15 @@ def describe(cfg: dict | None = None, url: str = "https://www.youtube.com/") -> 
 # ── Certificates ──────────────────────────────────────────────────────────────
 
 LINUX_CA_BUNDLES = (
-    "/etc/ssl/certs/ca-certificates.crt",                  # Debian, Ubuntu, Mint, Arch, Gentoo, Alpine, Tails
-    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",   # Fedora, RHEL, CentOS, Rocky, Alma
-    "/etc/pki/tls/certs/ca-bundle.crt",                    # older Fedora / RHEL
-    "/var/lib/ca-certificates/ca-bundle.pem",              # openSUSE (newer)
-    "/etc/ssl/ca-bundle.pem",                              # openSUSE / SLES
-    "/etc/ssl/cert.pem",                                   # Alpine, BSDs, macOS
-    "/etc/pki/tls/cacert.pem",                             # OpenELEC
-    "/usr/local/share/certs/ca-root-nss.crt",              # FreeBSD
-    "/etc/certs/ca-certificates.crt",                      # Solus
+    "/etc/ssl/certs/ca-certificates.crt",  # Debian, Ubuntu, Mint, Arch, Gentoo, Alpine, Tails
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",  # Fedora, RHEL, CentOS, Rocky, Alma
+    "/etc/pki/tls/certs/ca-bundle.crt",  # older Fedora / RHEL
+    "/var/lib/ca-certificates/ca-bundle.pem",  # openSUSE (newer)
+    "/etc/ssl/ca-bundle.pem",  # openSUSE / SLES
+    "/etc/ssl/cert.pem",  # Alpine, BSDs, macOS
+    "/etc/pki/tls/cacert.pem",  # OpenELEC
+    "/usr/local/share/certs/ca-root-nss.crt",  # FreeBSD
+    "/etc/certs/ca-certificates.crt",  # Solus
 )
 
 
@@ -271,6 +337,7 @@ def system_ca_file() -> str | None:
 def _truststore():
     try:
         from core.deps import require
+
         return require("truststore")
     except Exception:
         logger.debug("_truststore: best-effort step failed", exc_info=True)
@@ -290,12 +357,12 @@ def ssl_context(cfg: dict | None = None) -> ssl.SSLContext:
         ts = _truststore()
         if ts is not None:
             try:
-                ctx = ts.SSLContext(ssl.PROTOCOL_TLS_CLIENT)      # the OS's own verifier
+                ctx = ts.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # the OS's own verifier
             except Exception:
                 logger.debug("ssl_context: best-effort step failed", exc_info=True)
                 ctx = None
         if ctx is None:
-            ctx = ssl.create_default_context()                    # Windows: loads the system store
+            ctx = ssl.create_default_context()  # Windows: loads the system store
             ca = system_ca_file()
             if ca:
                 with contextlib.suppress(OSError, ssl.SSLError):
@@ -307,7 +374,7 @@ def ssl_context(cfg: dict | None = None) -> ssl.SSLContext:
         try:
             ctx.load_verify_locations(cafile=extra)
         except (OSError, ssl.SSLError, NotImplementedError, AttributeError):
-            try:                                            # plain OpenSSL context + system bundle + extra
+            try:  # plain OpenSSL context + system bundle + extra
                 ctx = ssl.create_default_context()
                 ca = system_ca_file()
                 if ca:
@@ -330,6 +397,7 @@ def ca_bundle_for_tools(cfg: dict | None = None) -> str | None:
         return base
     try:
         from core.paths import cache_dir
+
         merged = os.path.join(cache_dir(), "ca-bundle.pem")
         parts = []
         for path in (base, extra):
@@ -351,6 +419,7 @@ def ca_bundle_for_tools(cfg: dict | None = None) -> str | None:
 
 # ── The app's own downloads ───────────────────────────────────────────────────
 
+
 def _socks_handler(pu: str):
     try:
         import socks  # PySocks
@@ -358,6 +427,7 @@ def _socks_handler(pu: str):
     except ImportError:
         try:
             from core.deps import require
+
             if require("PySocks", import_name="socks") is None:
                 return None
             import socks
@@ -367,8 +437,14 @@ def _socks_handler(pu: str):
             return None
     u = urlsplit(pu)
     kind = socks.SOCKS4 if u.scheme.startswith("socks4") else socks.SOCKS5
-    return SocksiPyHandler(kind, u.hostname or "127.0.0.1", u.port or 1080, rdns=u.scheme.endswith(("h", "4a")),
-                           username=u.username, password=u.password)
+    return SocksiPyHandler(
+        kind,
+        u.hostname or "127.0.0.1",
+        u.port or 1080,
+        rdns=u.scheme.endswith(("h", "4a")),
+        username=u.username,
+        password=u.password,
+    )
 
 
 def _opener(proxy: str, ctx: ssl.SSLContext):
@@ -378,8 +454,10 @@ def _opener(proxy: str, ctx: ssl.SSLContext):
     elif proxy.startswith("socks"):
         h = _socks_handler(proxy)
         if h is None:
-            raise SocksUnavailable("A SOCKS proxy is set, but SOCKS support is missing from this copy - "
-                                   "nothing was sent. Use an HTTP proxy, or reinstall the app.")
+            raise SocksUnavailable(
+                "A SOCKS proxy is set, but SOCKS support is missing from this copy - "
+                "nothing was sent. Use an HTTP proxy, or reinstall the app."
+            )
         handlers += [urllib.request.ProxyHandler({}), h]
     else:
         handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
@@ -388,8 +466,9 @@ def _opener(proxy: str, ctx: ssl.SSLContext):
 
 def _is_connect_failure(exc: Exception) -> bool:
     reason = getattr(exc, "reason", exc)
-    return isinstance(reason, (ConnectionError, socket.timeout, TimeoutError, socket.gaierror)) or \
-        isinstance(exc, (ConnectionError, socket.timeout, TimeoutError))
+    return isinstance(
+        reason, (ConnectionError, socket.timeout, TimeoutError, socket.gaierror)
+    ) or isinstance(exc, (ConnectionError, socket.timeout, TimeoutError))
 
 
 def urlopen(url, timeout=None, headers=None, cfg=None, data=None):
@@ -419,23 +498,26 @@ def urlopen(url, timeout=None, headers=None, cfg=None, data=None):
         raise ValueError("Plain HTTP downloads are blocked by your network settings.")
     routes = proxies_for(full, cfg)
     if not routes:
-        raise OSError("The proxy is not set up, and strict mode doesn't allow connecting without it.")
+        raise OSError(
+            "The proxy is not set up, and strict mode doesn't allow connecting without it."
+        )
     ctx = ssl_context(cfg)
     last = None
     for i, route in enumerate(routes):
         # urllib rewrites a Request when it sends it through a proxy, so every
         # attempt gets a fresh copy (otherwise a fall-back would still go to the
         # first proxy).
-        attempt = urllib.request.Request(full, data=req.data, headers=dict(req.header_items()),
-                                         method=req.get_method())
+        attempt = urllib.request.Request(
+            full, data=req.data, headers=dict(req.header_items()), method=req.get_method()
+        )
         try:
             return _opener(route, ctx).open(attempt, timeout=timeout)
         except urllib.error.HTTPError:
-            raise                                          # the route worked; the server answered
+            raise  # the route worked; the server answered
         except (urllib.error.URLError, OSError) as exc:
             last = exc
             if i + 1 < len(routes) and _is_connect_failure(exc):
-                continue                                   # PAC "PROXY a; PROXY b; DIRECT" fall-back
+                continue  # PAC "PROXY a; PROXY b; DIRECT" fall-back
             raise
     raise last if last else OSError("No route")
 
@@ -445,15 +527,21 @@ def mirror_url(url: str, cfg: dict | None = None) -> str:
     cfg = cfg if cfg is not None else get()
     hf = (cfg.get("network.hf_mirror") or "").strip().rstrip("/")
     if hf and url.startswith("https://huggingface.co/"):
-        return hf + url[len("https://huggingface.co"):]
+        return hf + url[len("https://huggingface.co") :]
     gh = (cfg.get("network.github_mirror") or "").strip()
-    if gh and url.startswith(("https://github.com/", "https://objects.githubusercontent.com/",
-                              "https://raw.githubusercontent.com/")):
+    if gh and url.startswith(
+        (
+            "https://github.com/",
+            "https://objects.githubusercontent.com/",
+            "https://raw.githubusercontent.com/",
+        )
+    ):
         return (gh if gh.endswith("/") else gh + "/") + url
     return url
 
 
 # ── Command-line tools (yt-dlp and the Deno it starts) ────────────────────────
+
 
 def wrapper_prefix(cfg: dict | None = None) -> list:
     """Command to put in front of network tools (split tunnelling etc.)."""
@@ -462,8 +550,9 @@ def wrapper_prefix(cfg: dict | None = None) -> list:
     if not text:
         return []
     import shlex
+
     lex = shlex.shlex(text, posix=True)
-    lex.whitespace_split, lex.escape, lex.commenters = True, "", ""   # keep Windows backslashes
+    lex.whitespace_split, lex.escape, lex.commenters = True, "", ""  # keep Windows backslashes
     return list(lex)
 
 
@@ -486,7 +575,7 @@ def build_yt_dlp_args(cfg=None, url: str = "https://www.youtube.com/"):
     args = []
     pu = tool_proxy(url, cfg)
     if pu is not None and not urlsplit(pu or "http://x").username:
-        args += ["--proxy", pu]                            # '' forces a direct connection
+        args += ["--proxy", pu]  # '' forces a direct connection
     rate = (cfg.get("network.bandwidth_limit") or "").strip()
     if rate:
         args += ["--limit-rate", rate]
@@ -507,7 +596,7 @@ def build_yt_dlp_args(cfg=None, url: str = "https://www.youtube.com/"):
     if cfg.get("network.verify_ssl", True) is False:
         args += ["--no-check-certificates"]
     elif cfg.get("network.system_certs", True) and (sysproxy.IS_WIN or ca_bundle_for_tools(cfg)):
-        args += ["--compat-options", "no-certifi"]          # use the OS / distribution certificates
+        args += ["--compat-options", "no-certifi"]  # use the OS / distribution certificates
     return args
 
 
@@ -516,6 +605,7 @@ def subprocess_env(extra=None, cfg=None, url: str = "https://www.youtube.com/"):
     for yt-dlp, Deno and OpenSSL-based tools."""
     cfg = cfg if cfg is not None else get()
     from core.procenv import child_env
+
     env = child_env()
     if extra:
         env.update(extra)
@@ -546,6 +636,7 @@ def subprocess_env(extra=None, cfg=None, url: str = "https://www.youtube.com/"):
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
+
 def explain_error(exc: BaseException) -> str:
     """A sentence a person can act on."""
     text = str(exc)
@@ -554,18 +645,29 @@ def explain_error(exc: BaseException) -> str:
         return text
     if isinstance(exc, urllib.error.HTTPError) and exc.code == 407:
         return "The proxy wants a username and password - enter them under Settings → Network."
-    if isinstance(reason, ssl.SSLCertVerificationError) or isinstance(exc, ssl.SSLCertVerificationError) or \
-            "CERTIFICATE_VERIFY_FAILED" in text:
-        return ("The connection's security certificate isn't trusted. On company or school networks a security "
-                "product often re-signs websites - keep 'Trust this computer's certificates' on, or add your "
-                "organisation's certificate file under Settings → Network.")
+    if (
+        isinstance(reason, ssl.SSLCertVerificationError)
+        or isinstance(exc, ssl.SSLCertVerificationError)
+        or "CERTIFICATE_VERIFY_FAILED" in text
+    ):
+        return (
+            "The connection's security certificate isn't trusted. On company or school networks a security "
+            "product often re-signs websites - keep 'Trust this computer's certificates' on, or add your "
+            "organisation's certificate file under Settings → Network."
+        )
     if isinstance(reason, ConnectionRefusedError) or isinstance(exc, ConnectionRefusedError):
-        return ("Nothing answered at the proxy address - is the proxy app (or Tor) running, and is the port "
-                "right?")
+        return (
+            "Nothing answered at the proxy address - is the proxy app (or Tor) running, and is the port "
+            "right?"
+        )
     if isinstance(reason, socket.gaierror) or isinstance(exc, socket.gaierror):
         return "The server's name couldn't be looked up - check the internet connection or DNS."
-    if isinstance(reason, (socket.timeout, TimeoutError)) or isinstance(exc, (socket.timeout, TimeoutError)):
-        return "The connection timed out - the network may be blocking it, or a proxy may be needed."
+    if isinstance(reason, (socket.timeout, TimeoutError)) or isinstance(
+        exc, (socket.timeout, TimeoutError)
+    ):
+        return (
+            "The connection timed out - the network may be blocking it, or a proxy may be needed."
+        )
     if isinstance(exc, SocksUnavailable):
         return text
     return text or type(exc).__name__
@@ -591,8 +693,10 @@ def test(cfg=None):
             with urlopen("http://detectportal.firefox.com/canonical.html", timeout=6, cfg=cfg) as r:
                 body = r.read(600).decode("utf-8", "replace")
             if "success" not in body.lower():
-                return False, ("This network wants you to sign in first (hotel, airport or campus Wi-Fi?). "
-                               "Open any website in your browser to reach the sign-in page.")
+                return False, (
+                    "This network wants you to sign in first (hotel, airport or campus Wi-Fi?). "
+                    "Open any website in your browser to reach the sign-in page."
+                )
         except Exception:
             logger.debug("test: best-effort step failed", exc_info=True)
     return False, f"{message}  ({route})"
@@ -606,7 +710,7 @@ def find_local_proxies(timeout: float = 0.25) -> list:
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
                 s.settimeout(timeout)
-                s.sendall(b"\x05\x01\x00")                 # SOCKS5 greeting, "no authentication"
+                s.sendall(b"\x05\x01\x00")  # SOCKS5 greeting, "no authentication"
                 try:
                     reply = s.recv(2)
                 except (TimeoutError, OSError):
@@ -630,8 +734,16 @@ def find_local_proxies(timeout: float = 0.25) -> list:
 
 # ── Tor: a fresh circuit for each retry ───────────────────────────────────────
 
-BLOCK_MARKERS = ("confirm you", "not a bot", "http error 403", "http error 429", "too many requests",
-                 "precondition check failed", "unable to download api page", "sign in to confirm")
+BLOCK_MARKERS = (
+    "confirm you",
+    "not a bot",
+    "http error 403",
+    "http error 429",
+    "too many requests",
+    "precondition check failed",
+    "unable to download api page",
+    "sign in to confirm",
+)
 
 
 def tor_retries(cfg: dict | None = None) -> int:
@@ -661,6 +773,7 @@ def tor_like_proxy(cmd: list) -> str | None:
 def fresh_circuit(proxy: str, attempt: int) -> str:
     """Same Tor, new circuit: Tor isolates streams by SOCKS username/password."""
     import secrets
+
     u = urlsplit(proxy)
     host = u.hostname or "127.0.0.1"
     if ":" in host:

@@ -1,4 +1,3 @@
-
 """
 tab_youtubedownloader.py  ─  Video Downloader & Media Extractor
 
@@ -18,6 +17,7 @@ Requirements
     1. bin/yt-dlp.exe  (drop it next to ffmpeg.exe - recommended)
     2. yt-dlp on the system PATH  (pip install yt-dlp)
 """
+
 import contextlib
 import json
 import logging
@@ -48,9 +48,11 @@ logger = logging.getLogger("crossfader.social.youtube")
 #  Module-level helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _find_ytdlp() -> str | None:
     """Return the path to the yt-dlp executable, or None if not found."""
     from core.ytdlp import ytdlp_path
+
     return ytdlp_path()
 
 
@@ -58,6 +60,7 @@ def _yt(ytdlp, url="https://www.youtube.com/"):
     """yt-dlp argv prefix: JS runtime, FFmpeg location and the network route for *url*
     (auto-config, proxy, offline/strict checks, Tails, wrapper command)."""
     from core.ytdlp import base_argv
+
     return base_argv(ytdlp, url=url)
 
 
@@ -100,10 +103,10 @@ def _parse_time(t: str) -> float:
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".qve_yt_history.json")
 
 _DL_PROGRESS_RE = re.compile(
-    r'\[download\]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\s*\S+)\s+at\s+(\S+)\s+ETA\s+(\S+)'
+    r"\[download\]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\s*\S+)\s+at\s+(\S+)\s+ETA\s+(\S+)"
 )
 
-_FFMPEG_TIME_RE = re.compile(r'time=(\d+):(\d+):([\d.]+)')
+_FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):([\d.]+)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -119,14 +122,15 @@ def _ytdlp_version(ytdlp: str) -> str:
 def _fetch_info(ytdlp: str, url: str, *, playlist: bool) -> dict:
     """Worker: ask yt-dlp about *url* (no Tk here - the caller read the settings)."""
     from core import network as _net
+
     cmd = [*_yt(ytdlp, url), "--yes-playlist" if playlist else "--no-playlist", "-J", url]
     r = _proc.run(cmd, timeout=45, env=_net.subprocess_env(url=url))
     if not r.ok:
         raise ToolError("yt-dlp error:\n" + (r.stderr or r.stdout or "")[:600])
     return json.loads(r.stdout)
 
-class YouTubeDownloaderTab(BaseTab):
 
+class YouTubeDownloaderTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         # Bug fix: Removed self.configure(bg=CLR["bg"]) to prevent ttk styling crash
@@ -188,9 +192,15 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _build_ui(self):
         # Tails: a clear warning while downloads bypass Tor (Settings → Network)
-        self._route_banner = tk.Label(self, text="⚠  DIRECT CONNECTION - NOT ANONYMOUS: downloads are bypassing "
-                                                 "Tor for this session (Settings → Network to turn off)",
-                                      bg="#B71C1C", fg="white", font=(UI_FONT, 10, "bold"), pady=px(6))
+        self._route_banner = tk.Label(
+            self,
+            text="⚠  DIRECT CONNECTION - NOT ANONYMOUS: downloads are bypassing "
+            "Tor for this session (Settings → Network to turn off)",
+            bg="#B71C1C",
+            fg="white",
+            font=(UI_FONT, 10, "bold"),
+            pady=px(6),
+        )
         self._poll_route_banner()
         # Outer scrollable frame
         outer = tk.Frame(self, bg=CLR["bg"])
@@ -204,15 +214,18 @@ class YouTubeDownloaderTab(BaseTab):
         canvas_scroll.pack(side="left", fill="both", expand=True)
 
         self._scroll_frame = tk.Frame(canvas_scroll, bg=CLR["bg"])
-        self._scroll_win = canvas_scroll.create_window((0, 0), window=self._scroll_frame, anchor="nw")
+        self._scroll_win = canvas_scroll.create_window(
+            (0, 0), window=self._scroll_frame, anchor="nw"
+        )
 
         def _on_configure(event):
             canvas_scroll.configure(scrollregion=canvas_scroll.bbox("all"))
             canvas_scroll.itemconfig(self._scroll_win, width=canvas_scroll.winfo_width())
 
         self._scroll_frame.bind("<Configure>", _on_configure)
-        canvas_scroll.bind("<Configure>", lambda e: canvas_scroll.itemconfig(
-            self._scroll_win, width=e.width))
+        canvas_scroll.bind(
+            "<Configure>", lambda e: canvas_scroll.itemconfig(self._scroll_win, width=e.width)
+        )
 
         root = self._scroll_frame
 
@@ -274,7 +287,8 @@ class YouTubeDownloaderTab(BaseTab):
         terms in a single canonical form.
         """
         outer = tk.Frame(
-            root, bg=CLR["bg"],
+            root,
+            bg=CLR["bg"],
             highlightthickness=px(1),
             highlightbackground=CLR["orange"],
         )
@@ -287,7 +301,8 @@ class YouTubeDownloaderTab(BaseTab):
             inner,
             text="⚠  Important Notice: Third-Party Tool & User Responsibility",
             font=(UI_FONT, 10, "bold"),
-            bg=CLR["bg"], fg=CLR["orange"],
+            bg=CLR["bg"],
+            fg=CLR["orange"],
             anchor="w",
         ).pack(fill="x")
 
@@ -315,7 +330,7 @@ class YouTubeDownloaderTab(BaseTab):
             "  •  You will not use this software to circumvent technical "
             "protection measures, paywalls, geographic restrictions, or "
             "DRM where doing so is unlawful.\n"
-            "  •  This software is provided \"AS IS\", WITHOUT WARRANTY "
+            '  •  This software is provided "AS IS", WITHOUT WARRANTY '
             "OF ANY KIND, express or implied. To the maximum extent "
             "permitted by law, WyldVeil and its contributors disclaim "
             "all liability for any direct, indirect, incidental, "
@@ -330,8 +345,10 @@ class YouTubeDownloaderTab(BaseTab):
             inner,
             text=body,
             font=(UI_FONT, 8),
-            bg=CLR["bg"], fg=CLR["fgdim"],
-            anchor="w", justify="left",
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            anchor="w",
+            justify="left",
             wraplength=px(900),
         ).pack(fill="x", pady=px(4, 0))
 
@@ -341,104 +358,169 @@ class YouTubeDownloaderTab(BaseTab):
         url_f = tk.Frame(root, bg=CLR["bg"])
         url_f.pack(fill="x", padx=px(20), pady=px(14, 8))
 
-        tk.Label(url_f, text=t("youtube.url"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            url_f, text=t("youtube.url"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
 
         self._url_var = tk.StringVar()
         self._url_entry = tk.Entry(
-            url_f, textvariable=self._url_var, width=52,
-            relief="flat", font=(UI_FONT, 10),
-            bg=CLR["input_bg"], fg=CLR["input_fg"],
+            url_f,
+            textvariable=self._url_var,
+            width=52,
+            relief="flat",
+            font=(UI_FONT, 10),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
             highlightthickness=px(1),
             highlightbackground=CLR["border"],
-            highlightcolor=CLR["accent"])
+            highlightcolor=CLR["accent"],
+        )
         self._url_entry.pack(side="left", padx=px(8))
         self._url_entry.bind("<<Paste>>", self._on_paste)
 
         # Playlist Toggle
         self._playlist_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            url_f, text="Playlist", variable=self._playlist_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"],
-            cursor="hand2"
+            url_f,
+            text="Playlist",
+            variable=self._playlist_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
+            cursor="hand2",
         ).pack(side="left", padx=px(0, 8))
 
         def _btn(text, cmd, bg=None):
-            b = tk.Button(url_f, text=text, relief="flat",
-                          font=(UI_FONT, 9), cursor="hand2",
-                          bg=bg or CLR["panel"], fg=CLR["fg"] if not bg else "white",
-                          activebackground=CLR["accent"], activeforeground="white",
-                          padx=px(8), pady=px(3), command=cmd)
+            b = tk.Button(
+                url_f,
+                text=text,
+                relief="flat",
+                font=(UI_FONT, 9),
+                cursor="hand2",
+                bg=bg or CLR["panel"],
+                fg=CLR["fg"] if not bg else "white",
+                activebackground=CLR["accent"],
+                activeforeground="white",
+                padx=px(8),
+                pady=px(3),
+                command=cmd,
+            )
             b.pack(side="left", padx=px(0, 5))
             return b
 
-        self._btn_fetch   = _btn("🔍 Fetch Info", self._on_fetch)
-        self._btn_preview = _btn("▶ Preview",     self._preview, bg=CLR["accent"])
+        self._btn_fetch = _btn("🔍 Fetch Info", self._on_fetch)
+        self._btn_preview = _btn("▶ Preview", self._preview, bg=CLR["accent"])
         _btn("🌐 Browser", self._open_browser)
-        self._btn_record  = tk.Button(
-            url_f, text=t("youtube.record"), relief="flat",
-            font=(UI_FONT, 9), cursor="hand2",
-            bg=CLR["red"], fg="white",
-            activebackground=CLR["pink"], activeforeground="white",
-            padx=px(8), pady=px(3), state="disabled",
-            command=self._start_record)
+        self._btn_record = tk.Button(
+            url_f,
+            text=t("youtube.record"),
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["red"],
+            fg="white",
+            activebackground=CLR["pink"],
+            activeforeground="white",
+            padx=px(8),
+            pady=px(3),
+            state="disabled",
+            command=self._start_record,
+        )
         self._btn_record.pack(side="left", padx=px(0, 5))
 
     # ── Info panel ───────────────────────────────────────────────────────────
 
     def _build_info_panel(self, root):
         info_lf = tk.LabelFrame(
-            root, text=t("youtube.video_info"),
-            padx=px(10), pady=px(8),
+            root,
+            text=t("youtube.video_info"),
+            padx=px(10),
+            pady=px(8),
             font=(UI_FONT, 9, "bold"),
-            bg=CLR["bg"], fg=CLR["fgdim"],
-            bd=px(1), relief="solid")
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            bd=px(1),
+            relief="solid",
+        )
         info_lf.pack(fill="x", padx=px(20), pady=px(0, 8))
 
         self._thumb_canvas = tk.Canvas(
-            info_lf, width=px(256), height=px(144), bg="#0A0A0A",
-            highlightthickness=px(1), highlightbackground=CLR["border"])
+            info_lf,
+            width=px(256),
+            height=px(144),
+            bg="#0A0A0A",
+            highlightthickness=px(1),
+            highlightbackground=CLR["border"],
+        )
         self._thumb_canvas.pack(side="left", padx=px(0, 14))
-        self._thumb_canvas.create_text(px(128), px(72), text="...",
-                                       fill=CLR["fgdim"], font=(UI_FONT, 13))
+        self._thumb_canvas.create_text(
+            px(128), px(72), text="...", fill=CLR["fgdim"], font=(UI_FONT, 13)
+        )
 
         meta_right = tk.Frame(info_lf, bg=CLR["bg"])
         meta_right.pack(side="left", fill="both", expand=True, anchor="n")
 
-        self._title_var   = tk.StringVar(value="-")
-        self._dur_var     = tk.StringVar(value="-")
+        self._title_var = tk.StringVar(value="-")
+        self._dur_var = tk.StringVar(value="-")
         self._channel_var = tk.StringVar(value="-")
-        self._views_var   = tk.StringVar(value="-")
-        self._live_var    = tk.StringVar(value="")
+        self._views_var = tk.StringVar(value="-")
+        self._live_var = tk.StringVar(value="")
 
         for lbl_text, var in [
-            ("Title:",    self._title_var),
+            ("Title:", self._title_var),
             ("Duration:", self._dur_var),
-            ("Channel:",  self._channel_var),
-            ("Views:",    self._views_var),
+            ("Channel:", self._channel_var),
+            ("Views:", self._views_var),
         ]:
             row = tk.Frame(meta_right, bg=CLR["bg"])
             row.pack(fill="x", pady=px(2))
-            tk.Label(row, text=lbl_text, font=(UI_FONT, 9, "bold"),
-                     width=10, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
-            tk.Label(row, textvariable=var, font=(UI_FONT, 9),
-                     wraplength=px(400), justify="left", anchor="w",
-                     bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(6))
+            tk.Label(
+                row,
+                text=lbl_text,
+                font=(UI_FONT, 9, "bold"),
+                width=10,
+                anchor="e",
+                bg=CLR["bg"],
+                fg=CLR["fgdim"],
+            ).pack(side="left")
+            tk.Label(
+                row,
+                textvariable=var,
+                font=(UI_FONT, 9),
+                wraplength=px(400),
+                justify="left",
+                anchor="w",
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+            ).pack(side="left", padx=px(6))
 
         live_row = tk.Frame(meta_right, bg=CLR["bg"])
         live_row.pack(fill="x", pady=px(2))
-        self._live_badge = tk.Label(live_row, textvariable=self._live_var,
-                                    font=(UI_FONT, 9, "bold"),
-                                    bg=CLR["red"], fg="white", padx=px(6), pady=px(1))
+        self._live_badge = tk.Label(
+            live_row,
+            textvariable=self._live_var,
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["red"],
+            fg="white",
+            padx=px(6),
+            pady=px(1),
+        )
 
         thumb_btn = tk.Button(
-            meta_right, text=t("youtube.save_thumbnail"), relief="flat",
-            font=(UI_FONT, 9), cursor="hand2",
-            bg=CLR["panel"], fg=CLR["fg"],
-            activebackground=CLR["accent"], activeforeground="white",
-            command=self._save_thumbnail)
+            meta_right,
+            text=t("youtube.save_thumbnail"),
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._save_thumbnail,
+        )
         thumb_btn.pack(anchor="w", pady=px(6, 0))
 
     # ── Settings notebook ────────────────────────────────────────────────────
@@ -450,8 +532,7 @@ class YouTubeDownloaderTab(BaseTab):
         style = ttk.Style()
         try:
             style.configure("YT.TNotebook", background=CLR["bg"])
-            style.configure("YT.TNotebook.Tab", font=(UI_FONT, 9),
-                            padding=px(8, 4))
+            style.configure("YT.TNotebook.Tab", font=(UI_FONT, 9), padding=px(8, 4))
         except Exception:
             logger.debug("_build_settings_notebook: best-effort step failed", exc_info=True)
 
@@ -492,190 +573,326 @@ class YouTubeDownloaderTab(BaseTab):
         # Format filter radios
         filter_row = tk.Frame(parent, bg=CLR["bg"])
         filter_row.pack(fill="x", pady=px(0, 6))
-        tk.Label(filter_row, text=t("youtube.filter"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            filter_row,
+            text=t("youtube.filter"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(side="left")
 
         self._filter_var = tk.StringVar(value="All")
         for label in ("All", "4K", "1080p", "720p", "480p", "Audio only"):
             tk.Radiobutton(
-                filter_row, text=label, variable=self._filter_var, value=label,
-                font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-                activebackground=CLR["bg"], selectcolor=CLR["panel"],
-                command=self._apply_format_filter
+                filter_row,
+                text=label,
+                variable=self._filter_var,
+                value=label,
+                font=(UI_FONT, 9),
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                activebackground=CLR["bg"],
+                selectcolor=CLR["panel"],
+                command=self._apply_format_filter,
             ).pack(side="left", padx=px(4))
 
         # Quality combobox + size estimate
         q_row = tk.Frame(parent, bg=CLR["bg"])
         q_row.pack(fill="x", pady=px(0, 6))
-        tk.Label(q_row, text=t("common.quality"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
-        self._format_cb = ttk.Combobox(q_row, state="readonly", width=58,
-                                       font=(UI_FONT, 9))
+        tk.Label(
+            q_row, text=t("common.quality"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
+        self._format_cb = ttk.Combobox(q_row, state="readonly", width=58, font=(UI_FONT, 9))
         self._format_cb["values"] = ["(fetch video info first)"]
         self._format_cb.current(0)
         self._format_cb.pack(side="left", padx=px(8))
         self._format_cb.bind("<<ComboboxSelected>>", self._on_format_selected)
 
         self._size_var = tk.StringVar(value="")
-        tk.Label(q_row, textvariable=self._size_var,
-                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["orange"]).pack(side="left")
+        tk.Label(
+            q_row, textvariable=self._size_var, font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["orange"]
+        ).pack(side="left")
 
         # Download mode radios
-        mode_lf = tk.LabelFrame(parent, text=f"  {t('youtube.download_mode_section')}  ",
-                                font=(UI_FONT, 8, "bold"),
-                                bg=CLR["bg"], fg=CLR["fgdim"],
-                                bd=px(1), relief="solid", padx=px(10), pady=px(6))
+        mode_lf = tk.LabelFrame(
+            parent,
+            text=f"  {t('youtube.download_mode_section')}  ",
+            font=(UI_FONT, 8, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            bd=px(1),
+            relief="solid",
+            padx=px(10),
+            pady=px(6),
+        )
         mode_lf.pack(fill="x", pady=px(4, 0))
 
         self._dl_mode = tk.StringVar(value="copy")
         modes = [
-            ("copy",   t("youtube.direct_copy_remux_to_chosen_container_no_re_enco")),
+            ("copy", t("youtube.direct_copy_remux_to_chosen_container_no_re_enco")),
             ("encode", t("youtube.re_encode_download_best_ffmpeg_with_encode_setti")),
-            ("audio",  t("youtube.audio_only_yt_dlp_x_with_chosen_audio_format_bit")),
+            ("audio", t("youtube.audio_only_yt_dlp_x_with_chosen_audio_format_bit")),
         ]
         for val, label in modes:
             tk.Radiobutton(
-                mode_lf, text=label, variable=self._dl_mode, value=val,
-                font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-                activebackground=CLR["bg"], selectcolor=CLR["panel"]
+                mode_lf,
+                text=label,
+                variable=self._dl_mode,
+                value=val,
+                font=(UI_FONT, 9),
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                activebackground=CLR["bg"],
+                selectcolor=CLR["panel"],
             ).pack(anchor="w", pady=px(1))
 
     def _build_encode_tab(self, parent):
         def _row(p, lbl, widget_factory, pady=3):
             r = tk.Frame(p, bg=CLR["bg"])
             r.pack(fill="x", pady=px(pady))
-            tk.Label(r, text=lbl, font=(UI_FONT, 9),
-                     width=18, anchor="e",
-                     bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+            tk.Label(
+                r, text=lbl, font=(UI_FONT, 9), width=18, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]
+            ).pack(side="left")
             widget_factory(r)
             return r
 
         def _combo(parent_row, var, values, width=22):
-            cb = ttk.Combobox(parent_row, textvariable=var, values=values,
-                              state="readonly", width=width, font=(UI_FONT, 9))
+            cb = ttk.Combobox(
+                parent_row,
+                textvariable=var,
+                values=values,
+                state="readonly",
+                width=width,
+                font=(UI_FONT, 9),
+            )
             cb.pack(side="left", padx=px(6))
             return cb
 
-        col_left  = tk.Frame(parent, bg=CLR["bg"])
+        col_left = tk.Frame(parent, bg=CLR["bg"])
         col_left.pack(side="left", fill="both", expand=True, padx=px(0, 16))
         col_right = tk.Frame(parent, bg=CLR["bg"])
         col_right.pack(side="left", fill="both", expand=True)
 
         # Left column
         self._vcodec_var = tk.StringVar(value="libx264")
-        _row(col_left, "Video codec:",
-             lambda p: _combo(p, self._vcodec_var,
-                              ["libx264", "libx265", "libsvtav1",
-                               "libvpx-vp9", "prores_ks", "copy"]))
+        _row(
+            col_left,
+            "Video codec:",
+            lambda p: _combo(
+                p,
+                self._vcodec_var,
+                ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "prores_ks", "copy"],
+            ),
+        )
 
         self._acodec_var = tk.StringVar(value="aac")
-        _row(col_left, "Audio codec:",
-             lambda p: _combo(p, self._acodec_var,
-                              ["aac", "libmp3lame", "flac", "libopus",
-                               "libvorbis", "copy"]))
+        _row(
+            col_left,
+            "Audio codec:",
+            lambda p: _combo(
+                p, self._acodec_var, ["aac", "libmp3lame", "flac", "libopus", "libvorbis", "copy"]
+            ),
+        )
 
         self._container_var = tk.StringVar(value="mp4")
-        _row(col_left, "Container:",
-             lambda p: _combo(p, self._container_var,
-                              ["mp4", "mkv", "webm", "mov"], width=12))
+        _row(
+            col_left,
+            "Container:",
+            lambda p: _combo(p, self._container_var, ["mp4", "mkv", "webm", "mov"], width=12),
+        )
 
         self._preset_var = tk.StringVar(value="fast")
-        _row(col_left, "Preset:",
-             lambda p: _combo(p, self._preset_var,
-                              ["ultrafast", "superfast", "veryfast", "faster",
-                               "fast", "medium", "slow", "slower", "veryslow"],
-                              width=14))
+        _row(
+            col_left,
+            "Preset:",
+            lambda p: _combo(
+                p,
+                self._preset_var,
+                [
+                    "ultrafast",
+                    "superfast",
+                    "veryfast",
+                    "faster",
+                    "fast",
+                    "medium",
+                    "slow",
+                    "slower",
+                    "veryslow",
+                ],
+                width=14,
+            ),
+        )
 
         self._res_var = tk.StringVar(value="Original")
         res_row = tk.Frame(col_left, bg=CLR["bg"])
         res_row.pack(fill="x", pady=px(3))
-        tk.Label(res_row, text=t("common.resolution"), font=(UI_FONT, 9),
-                 width=18, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            res_row,
+            text=t("common.resolution"),
+            font=(UI_FONT, 9),
+            width=18,
+            anchor="e",
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(side="left")
         res_cb = ttk.Combobox(
-            res_row, textvariable=self._res_var,
-            values=["Original", "3840×2160", "2560×1440", "1920×1080",
-                    "1280×720", "854×480", "640×360", t("youtube.smart_reframe_custom")],
-            state="readonly", width=14, font=(UI_FONT, 9))
+            res_row,
+            textvariable=self._res_var,
+            values=[
+                "Original",
+                "3840×2160",
+                "2560×1440",
+                "1920×1080",
+                "1280×720",
+                "854×480",
+                "640×360",
+                t("youtube.smart_reframe_custom"),
+            ],
+            state="readonly",
+            width=14,
+            font=(UI_FONT, 9),
+        )
         res_cb.pack(side="left", padx=px(6))
         self._custom_res_var = tk.StringVar(value="1280×720")
         self._custom_res_entry = tk.Entry(
-            res_row, textvariable=self._custom_res_var, width=10,
-            relief="flat", font=(UI_FONT, 9),
-            bg=CLR["input_bg"], fg=CLR["input_fg"],
-            insertbackground=CLR["accent"])
-        res_cb.bind("<<ComboboxSelected>>",
-                    lambda e: (self._custom_res_entry.pack(side="left", padx=px(4))
-                               if self._res_var.get() == "Custom…"
-                               else self._custom_res_entry.pack_forget()))
+            res_row,
+            textvariable=self._custom_res_var,
+            width=10,
+            relief="flat",
+            font=(UI_FONT, 9),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+        )
+        res_cb.bind(
+            "<<ComboboxSelected>>",
+            lambda e: (
+                self._custom_res_entry.pack(side="left", padx=px(4))
+                if self._res_var.get() == "Custom…"
+                else self._custom_res_entry.pack_forget()
+            ),
+        )
 
         # Right column
         crf_row = tk.Frame(col_right, bg=CLR["bg"])
         crf_row.pack(fill="x", pady=px(3))
-        tk.Label(crf_row, text=t("youtube.crf_0_51"), font=(UI_FONT, 9),
-                 width=16, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            crf_row,
+            text=t("youtube.crf_0_51"),
+            font=(UI_FONT, 9),
+            width=16,
+            anchor="e",
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(side="left")
         self._crf_var = tk.IntVar(value=18)
         crf_scale = tk.Scale(
-            crf_row, variable=self._crf_var, from_=0, to=51,
-            orient="horizontal", length=px(120),
-            bg=CLR["panel"], fg=CLR["fg"],
-            highlightthickness=0, command=lambda v: self._crf_entry_var.set(str(int(float(v)))))
+            crf_row,
+            variable=self._crf_var,
+            from_=0,
+            to=51,
+            orient="horizontal",
+            length=px(120),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            highlightthickness=0,
+            command=lambda v: self._crf_entry_var.set(str(int(float(v)))),
+        )
         crf_scale.pack(side="left", padx=px(4))
         self._crf_entry_var = tk.StringVar(value="18")
-        crf_entry = tk.Entry(crf_row, textvariable=self._crf_entry_var,
-                             width=4, relief="flat", font=(UI_FONT, 9),
-                             bg=CLR["input_bg"], fg=CLR["input_fg"],
-                             insertbackground=CLR["accent"])
+        crf_entry = tk.Entry(
+            crf_row,
+            textvariable=self._crf_entry_var,
+            width=4,
+            relief="flat",
+            font=(UI_FONT, 9),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+        )
         crf_entry.pack(side="left", padx=px(4))
-        crf_entry.bind("<Return>", lambda e: self._crf_var.set(
-            max(0, min(51, int(self._crf_entry_var.get() or 18)))))
+        crf_entry.bind(
+            "<Return>",
+            lambda e: self._crf_var.set(max(0, min(51, int(self._crf_entry_var.get() or 18)))),
+        )
 
         self._abitrate_var = tk.StringVar(value="192k")
-        _row(col_right, "Audio bitrate:",
-             lambda p: _combo(p, self._abitrate_var,
-                              ["320k", "256k", "192k", "128k", "96k", "64k"],
-                              width=10))
+        _row(
+            col_right,
+            "Audio bitrate:",
+            lambda p: _combo(
+                p, self._abitrate_var, ["320k", "256k", "192k", "128k", "96k", "64k"], width=10
+            ),
+        )
 
         self._asamplerate_var = tk.StringVar(value="48000")
-        _row(col_right, "Sample rate:",
-             lambda p: _combo(p, self._asamplerate_var,
-                              ["48000", "44100", "22050"], width=10))
+        _row(
+            col_right,
+            "Sample rate:",
+            lambda p: _combo(p, self._asamplerate_var, ["48000", "44100", "22050"], width=10),
+        )
 
     def _build_audio_tab(self, parent):
         r1 = tk.Frame(parent, bg=CLR["bg"])
         r1.pack(fill="x", pady=px(4))
-        tk.Label(r1, text=t("tts.audio_format_label"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r1, text=t("tts.audio_format_label"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self._audio_fmt_var = tk.StringVar(value="mp3")
         ttk.Combobox(
-            r1, textvariable=self._audio_fmt_var,
+            r1,
+            textvariable=self._audio_fmt_var,
             values=["mp3", "aac", "flac", "opus", "wav", "m4a"],
-            state="readonly", width=10, font=(UI_FONT, 9)
+            state="readonly",
+            width=10,
+            font=(UI_FONT, 9),
         ).pack(side="left", padx=px(8))
 
         r2 = tk.Frame(parent, bg=CLR["bg"])
         r2.pack(fill="x", pady=px(4))
-        tk.Label(r2, text=t("youtube.audio_quality"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            r2, text=t("youtube.audio_quality"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self._audio_quality_var = tk.StringVar(value="0")
         ttk.Combobox(
-            r2, textvariable=self._audio_quality_var,
-            values=[t("youtube.youtube_0_best"), "2", "4", t("youtube.youtube_5_medium"), "7", t("youtube.youtube_9_worst")],
-            state="readonly", width=14, font=(UI_FONT, 9)
+            r2,
+            textvariable=self._audio_quality_var,
+            values=[
+                t("youtube.youtube_0_best"),
+                "2",
+                "4",
+                t("youtube.youtube_5_medium"),
+                "7",
+                t("youtube.youtube_9_worst"),
+            ],
+            state="readonly",
+            width=14,
+            font=(UI_FONT, 9),
         ).pack(side="left", padx=px(8))
 
         r3 = tk.Frame(parent, bg=CLR["bg"])
         r3.pack(fill="x", pady=px(4))
         self._embed_thumb_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            r3, text=t("youtube.embed_thumbnail"), variable=self._embed_thumb_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            r3,
+            text=t("youtube.embed_thumbnail"),
+            variable=self._embed_thumb_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left")
         self._add_metadata_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            r3, text=t("youtube.add_metadata_tags"), variable=self._add_metadata_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            r3,
+            text=t("youtube.add_metadata_tags"),
+            variable=self._add_metadata_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
     def _build_subs_tab(self, parent):
@@ -684,88 +901,135 @@ class YouTubeDownloaderTab(BaseTab):
         r1.pack(fill="x", pady=px(4))
         self._dl_subs_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            r1, text=t("youtube.download_subtitles"), variable=self._dl_subs_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            r1,
+            text=t("youtube.download_subtitles"),
+            variable=self._dl_subs_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left")
 
         r2 = tk.Frame(parent, bg=CLR["bg"])
         r2.pack(fill="x", pady=px(4))
-        tk.Label(r2, text=t("common.language"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            r2, text=t("common.language"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left")
         self._sub_lang_var = tk.StringVar(value="en")
         self._sub_lang_cb = ttk.Combobox(
-            r2, textvariable=self._sub_lang_var,
+            r2,
+            textvariable=self._sub_lang_var,
             values=["en", "es", "fr", "de", "ja", "zh", "pt", "ar"],
-            width=14, font=(UI_FONT, 9))
+            width=14,
+            font=(UI_FONT, 9),
+        )
         self._sub_lang_cb.pack(side="left", padx=px(6))
 
         self._sub_auto_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            r2, text=t("youtube.include_auto_generated"), variable=self._sub_auto_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            r2,
+            text=t("youtube.include_auto_generated"),
+            variable=self._sub_auto_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(10))
 
         r3 = tk.Frame(parent, bg=CLR["bg"])
         r3.pack(fill="x", pady=px(4))
-        tk.Label(r3, text=t("common.format"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            r3, text=t("common.format"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left")
         self._sub_fmt_var = tk.StringVar(value="srt")
         ttk.Combobox(
-            r3, textvariable=self._sub_fmt_var,
+            r3,
+            textvariable=self._sub_fmt_var,
             values=["srt", "vtt", "ass"],
-            state="readonly", width=8, font=(UI_FONT, 9)
+            state="readonly",
+            width=8,
+            font=(UI_FONT, 9),
         ).pack(side="left", padx=px(6))
 
         r4 = tk.Frame(parent, bg=CLR["bg"])
         r4.pack(fill="x", pady=px(4))
         self._embed_subs_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            r4, text=t("youtube.embed_subtitles_in_container"), variable=self._embed_subs_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            r4,
+            text=t("youtube.embed_subtitles_in_container"),
+            variable=self._embed_subs_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left")
         self._burn_subs_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            r4, text=t("youtube.burn_into_video_hardcode"), variable=self._burn_subs_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            r4,
+            text=t("youtube.burn_into_video_hardcode"),
+            variable=self._burn_subs_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
         # Metadata & Chapters (Upgraded features)
         tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(8))
-        tk.Label(parent, text=t("youtube.metadata_extra"), font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=px(0, 4))
+        tk.Label(
+            parent,
+            text=t("youtube.metadata_extra"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(anchor="w", pady=px(0, 4))
 
         meta_r = tk.Frame(parent, bg=CLR["bg"])
         meta_r.pack(fill="x")
         self._embed_chapters_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            meta_r, text=t("youtube.embed_chapters"), variable=self._embed_chapters_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            meta_r,
+            text=t("youtube.embed_chapters"),
+            variable=self._embed_chapters_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left")
 
         self._embed_metadata_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            meta_r, text=t("youtube.embed_video_metadata"), variable=self._embed_metadata_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            meta_r,
+            text=t("youtube.embed_video_metadata"),
+            variable=self._embed_metadata_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
     def _build_sponsorblock_tab(self, parent):
-        tk.Label(parent, text=t("youtube.skip_remove_these_segment_types"),
-                 font=(UI_FONT, 9, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=px(0, 6))
+        tk.Label(
+            parent,
+            text=t("youtube.skip_remove_these_segment_types"),
+            font=(UI_FONT, 9, "bold"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+        ).pack(anchor="w", pady=px(0, 6))
 
         cats = [
-            ("sponsor",        "Sponsor"),
-            ("intro",          "Intro"),
-            ("outro",          "Outro"),
-            ("selfpromo",      "Self-promo"),
-            ("interaction",    t("youtube.interaction_reminder")),
-            ("preview",        t("youtube.preview_recap")),
+            ("sponsor", "Sponsor"),
+            ("intro", "Intro"),
+            ("outro", "Outro"),
+            ("selfpromo", "Self-promo"),
+            ("interaction", t("youtube.interaction_reminder")),
+            ("preview", t("youtube.preview_recap")),
             ("music_offtopic", t("youtube.non_music_section")),
         ]
         self._sb_vars: dict[str, tk.BooleanVar] = {}
@@ -775,80 +1039,132 @@ class YouTubeDownloaderTab(BaseTab):
             var = tk.BooleanVar(value=(key == "sponsor"))
             self._sb_vars[key] = var
             tk.Checkbutton(
-                grid, text=label, variable=var,
-                font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-                activebackground=CLR["bg"], selectcolor=CLR["panel"]
+                grid,
+                text=label,
+                variable=var,
+                font=(UI_FONT, 9),
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                activebackground=CLR["bg"],
+                selectcolor=CLR["panel"],
             ).grid(row=i // 4, column=i % 4, sticky="w", padx=px(8), pady=px(2))
 
         action_row = tk.Frame(parent, bg=CLR["bg"])
         action_row.pack(fill="x", pady=px(8, 0))
-        tk.Label(action_row, text=t("youtube.action"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(
+            action_row, text=t("youtube.action"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left")
         self._sb_action_var = tk.StringVar(value="remove")
         tk.Radiobutton(
-            action_row, text=t("youtube.remove_segments"),
-            variable=self._sb_action_var, value="remove",
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            action_row,
+            text=t("youtube.remove_segments"),
+            variable=self._sb_action_var,
+            value="remove",
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(8))
         tk.Radiobutton(
-            action_row, text=t("youtube.mark_as_chapters"),
-            variable=self._sb_action_var, value="mark",
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            action_row,
+            text=t("youtube.mark_as_chapters"),
+            variable=self._sb_action_var,
+            value="mark",
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(4))
 
     def _build_auth_tab(self, parent):
         def _labeled_entry(parent_row, lbl, var, width=32, show=None):
             r = tk.Frame(parent_row, bg=CLR["bg"])
             r.pack(fill="x", pady=px(3))
-            tk.Label(r, text=lbl, font=(UI_FONT, 9),
-                     width=14, anchor="e",
-                     bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
+            tk.Label(
+                r, text=lbl, font=(UI_FONT, 9), width=14, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]
+            ).pack(side="left")
             kw = {"show": show} if show else {}
-            tk.Entry(r, textvariable=var, width=width,
-                     relief="flat", font=(UI_FONT, 9),
-                     bg=CLR["input_bg"], fg=CLR["input_fg"],
-                     insertbackground=CLR["accent"],
-                     highlightthickness=px(1),
-                     highlightbackground=CLR["border"],
-                     highlightcolor=CLR["accent"], **kw).pack(side="left", padx=px(6))
+            tk.Entry(
+                r,
+                textvariable=var,
+                width=width,
+                relief="flat",
+                font=(UI_FONT, 9),
+                bg=CLR["input_bg"],
+                fg=CLR["input_fg"],
+                insertbackground=CLR["accent"],
+                highlightthickness=px(1),
+                highlightbackground=CLR["border"],
+                highlightcolor=CLR["accent"],
+                **kw,
+            ).pack(side="left", padx=px(6))
             return r
 
-        self._cookies_var   = tk.StringVar()
-        self._username_var  = tk.StringVar()
-        self._password_var  = tk.StringVar()
+        self._cookies_var = tk.StringVar()
+        self._username_var = tk.StringVar()
+        self._password_var = tk.StringVar()
         self._ratelimit_var = tk.StringVar()
-        self._proxy_var     = tk.StringVar()
+        self._proxy_var = tk.StringVar()
         self._custom_args_var = tk.StringVar()
 
         # Cookies file row
         cookies_row = tk.Frame(parent, bg=CLR["bg"])
         cookies_row.pack(fill="x", pady=px(3))
-        tk.Label(cookies_row, text=t("youtube.cookies_txt"), font=(UI_FONT, 9),
-                 width=14, anchor="e",
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
-        tk.Entry(cookies_row, textvariable=self._cookies_var, width=28,
-                 relief="flat", font=(UI_FONT, 9),
-                 bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 highlightthickness=px(1),
-                 highlightbackground=CLR["border"],
-                 highlightcolor=CLR["accent"]).pack(side="left", padx=px(6))
-        tk.Button(cookies_row, text=t("btn.browse"), relief="flat",
-                  font=(UI_FONT, 9), cursor="hand2",
-                  bg=CLR["panel"], fg=CLR["fg"],
-                  activebackground=CLR["accent"], activeforeground="white",
-                  command=self._browse_cookies).pack(side="left")
+        tk.Label(
+            cookies_row,
+            text=t("youtube.cookies_txt"),
+            font=(UI_FONT, 9),
+            width=14,
+            anchor="e",
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(side="left")
+        tk.Entry(
+            cookies_row,
+            textvariable=self._cookies_var,
+            width=28,
+            relief="flat",
+            font=(UI_FONT, 9),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            highlightthickness=px(1),
+            highlightbackground=CLR["border"],
+            highlightcolor=CLR["accent"],
+        ).pack(side="left", padx=px(6))
+        tk.Button(
+            cookies_row,
+            text=t("btn.browse"),
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._browse_cookies,
+        ).pack(side="left")
 
         _labeled_entry(parent, "Username:", self._username_var)
         _labeled_entry(parent, "Password:", self._password_var, show="*")
         _labeled_entry(parent, "Rate limit:", self._ratelimit_var, width=14)
-        tk.Label(parent, text=t("youtube.e_g_1m_500k_leave_blank_for_unlimited"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
+        tk.Label(
+            parent,
+            text=t("youtube.e_g_1m_500k_leave_blank_for_unlimited"),
+            font=(UI_FONT, 8),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(anchor="w", padx=px(20))
         _labeled_entry(parent, "Proxy:", self._proxy_var, width=28)
-        tk.Label(parent, text=t("youtube.e_g_socks5_127_0_0_1_1080"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
+        tk.Label(
+            parent,
+            text=t("youtube.e_g_socks5_127_0_0_1_1080"),
+            font=(UI_FONT, 8),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(anchor="w", padx=px(20))
 
         tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
 
@@ -857,26 +1173,39 @@ class YouTubeDownloaderTab(BaseTab):
         aria_row.pack(fill="x", pady=px(3))
         self._use_aria2c_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            aria_row, text=t("youtube.use_aria2c_fast_external_downloader_requires_ari"),
+            aria_row,
+            text=t("youtube.use_aria2c_fast_external_downloader_requires_ari"),
             variable=self._use_aria2c_var,
-            font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"]
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(4))
 
         _labeled_entry(parent, "Custom yt-dlp args:", self._custom_args_var, width=40)
-        tk.Label(parent, text=t("youtube.e_g_write_comments_dateafter_now_7days"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
-
+        tk.Label(
+            parent,
+            text=t("youtube.e_g_write_comments_dateafter_now_7days"),
+            font=(UI_FONT, 8),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(anchor="w", padx=px(20))
 
     # ── Time range / chapters ────────────────────────────────────────────────
 
     def _build_time_range(self, root):
         trim_lf = tk.LabelFrame(
-            root, text=t("youtube.time_range"),
-            padx=px(10), pady=px(8),
+            root,
+            text=t("youtube.time_range"),
+            padx=px(10),
+            pady=px(8),
             font=(UI_FONT, 9, "bold"),
-            bg=CLR["bg"], fg=CLR["fgdim"],
-            bd=px(1), relief="solid")
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            bd=px(1),
+            relief="solid",
+        )
         trim_lf.pack(fill="x", padx=px(20), pady=px(0, 8))
 
         left_f = tk.Frame(trim_lf, bg=CLR["bg"])
@@ -890,54 +1219,79 @@ class YouTubeDownloaderTab(BaseTab):
         trim_row.pack(fill="x")
         self._trim_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            trim_row, text=t("youtube.trim_section_only"),
-            variable=self._trim_var, font=(UI_FONT, 9),
-            bg=CLR["bg"], fg=CLR["fg"],
-            activebackground=CLR["bg"], selectcolor=CLR["panel"],
-            command=self._on_trim_toggle
+            trim_row,
+            text=t("youtube.trim_section_only"),
+            variable=self._trim_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            activebackground=CLR["bg"],
+            selectcolor=CLR["panel"],
+            command=self._on_trim_toggle,
         ).pack(side="left")
 
-        tk.Label(trim_row, text=t("youtube.from"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(16, 0))
+        tk.Label(
+            trim_row, text=t("youtube.from"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left", padx=px(16, 0))
         self._start_var = tk.StringVar(value="00:00:00")
         self._start_ent = tk.Entry(
-            trim_row, textvariable=self._start_var,
-            width=10, relief="flat", font=(MONO_FONT, 9),
-            bg=CLR["input_bg"], fg=CLR["input_fg"],
+            trim_row,
+            textvariable=self._start_var,
+            width=10,
+            relief="flat",
+            font=(MONO_FONT, 9),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
-            state="disabled")
+            state="disabled",
+        )
         self._start_ent.pack(side="left", padx=px(4))
 
-        tk.Label(trim_row, text=t("youtube.to"), font=(UI_FONT, 9),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            trim_row, text=t("youtube.to"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self._end_var = tk.StringVar(value="00:00:00")
         self._end_ent = tk.Entry(
-            trim_row, textvariable=self._end_var,
-            width=10, relief="flat", font=(MONO_FONT, 9),
-            bg=CLR["input_bg"], fg=CLR["input_fg"],
+            trim_row,
+            textvariable=self._end_var,
+            width=10,
+            relief="flat",
+            font=(MONO_FONT, 9),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
-            state="disabled")
+            state="disabled",
+        )
         self._end_ent.pack(side="left", padx=px(4))
 
-        tk.Label(trim_row, text=t("youtube.hh_mm_ss"), font=(UI_FONT, 8),
-                 bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left", padx=px(4, 0))
+        tk.Label(
+            trim_row, text=t("youtube.hh_mm_ss"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
+        ).pack(side="left", padx=px(4, 0))
 
         # Chapters listbox
-        tk.Label(right_f, text=t("youtube.chapters_click_to_set_trim_range"),
-                 font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w")
+        tk.Label(
+            right_f,
+            text=t("youtube.chapters_click_to_set_trim_range"),
+            font=(UI_FONT, 8),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(anchor="w")
         ch_box_f = tk.Frame(right_f, bg=CLR["bg"])
         ch_box_f.pack(fill="both", expand=True)
         self._chapters_lb = tk.Listbox(
-            ch_box_f, height=4, width=44,
-            bg=CLR["input_bg"], fg=CLR["input_fg"],
+            ch_box_f,
+            height=4,
+            width=44,
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
             font=(MONO_FONT, 8),
             selectbackground=CLR["accent"],
             selectforeground="white",
             relief="flat",
             highlightthickness=px(1),
-            highlightbackground=CLR["border"])
-        ch_sb = ttk.Scrollbar(ch_box_f, orient="vertical",
-                              command=self._chapters_lb.yview)
+            highlightbackground=CLR["border"],
+        )
+        ch_sb = ttk.Scrollbar(ch_box_f, orient="vertical", command=self._chapters_lb.yview)
         self._chapters_lb.configure(yscrollcommand=ch_sb.set)
         self._chapters_lb.pack(side="left", fill="both", expand=True)
         ch_sb.pack(side="right", fill="y")
@@ -949,26 +1303,47 @@ class YouTubeDownloaderTab(BaseTab):
     def _build_output_row(self, root):
         out_f = tk.Frame(root, bg=CLR["bg"])
         out_f.pack(fill="x", padx=px(20), pady=px(0, 8))
-        tk.Label(out_f, text=t("youtube.save_to"), font=(UI_FONT, 10, "bold"),
-                 bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
+        tk.Label(
+            out_f, text=t("youtube.save_to"), font=(UI_FONT, 10, "bold"), bg=CLR["bg"], fg=CLR["fg"]
+        ).pack(side="left")
         self._out_var = tk.StringVar()
-        tk.Entry(out_f, textvariable=self._out_var, width=54,
-                 relief="flat", font=(UI_FONT, 10),
-                 bg=CLR["input_bg"], fg=CLR["input_fg"],
-                 insertbackground=CLR["accent"],
-                 highlightthickness=px(1),
-                 highlightbackground=CLR["border"],
-                 highlightcolor=CLR["accent"]).pack(side="left", padx=px(8))
-        tk.Button(out_f, text=t("btn.browse"), relief="flat",
-                  font=(UI_FONT, 9), cursor="hand2",
-                  bg=CLR["panel"], fg=CLR["fg"],
-                  activebackground=CLR["accent"], activeforeground="white",
-                  command=self._browse_out).pack(side="left")
-        tk.Button(out_f, text=t("youtube.open_folder"), relief="flat",
-                  font=(UI_FONT, 9), cursor="hand2",
-                  bg=CLR["panel"], fg=CLR["fg"],
-                  activebackground=CLR["accent"], activeforeground="white",
-                  command=self._open_output_folder).pack(side="left", padx=px(6, 0))
+        tk.Entry(
+            out_f,
+            textvariable=self._out_var,
+            width=54,
+            relief="flat",
+            font=(UI_FONT, 10),
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            insertbackground=CLR["accent"],
+            highlightthickness=px(1),
+            highlightbackground=CLR["border"],
+            highlightcolor=CLR["accent"],
+        ).pack(side="left", padx=px(8))
+        tk.Button(
+            out_f,
+            text=t("btn.browse"),
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._browse_out,
+        ).pack(side="left")
+        tk.Button(
+            out_f,
+            text=t("youtube.open_folder"),
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._open_output_folder,
+        ).pack(side="left", padx=px(6, 0))
 
     # ── Progress row ─────────────────────────────────────────────────────────
 
@@ -976,12 +1351,19 @@ class YouTubeDownloaderTab(BaseTab):
         prog_f = tk.Frame(root, bg=CLR["bg"])
         prog_f.pack(fill="x", padx=px(20), pady=px(0, 6))
         self._progress = ttk.Progressbar(
-            prog_f, orient="horizontal", mode="determinate", length=px(100))
+            prog_f, orient="horizontal", mode="determinate", length=px(100)
+        )
         self._progress.pack(side="left", fill="x", expand=True, padx=px(0, 10))
         self._prog_status_var = tk.StringVar(value="")
-        tk.Label(prog_f, textvariable=self._prog_status_var,
-                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["orange"],
-                 width=38, anchor="w").pack(side="left")
+        tk.Label(
+            prog_f,
+            textvariable=self._prog_status_var,
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["orange"],
+            width=38,
+            anchor="w",
+        ).pack(side="left")
 
     # ── Action buttons ───────────────────────────────────────────────────────
 
@@ -990,73 +1372,119 @@ class YouTubeDownloaderTab(BaseTab):
         btn_f.pack(pady=px(8))
 
         self._btn_dl = tk.Button(
-            btn_f, text=t("youtube.download"),
+            btn_f,
+            text=t("youtube.download"),
             font=(UI_FONT, 12, "bold"),
-            bg=CLR["green"], fg="white",
-            height=2, width=20, cursor="hand2", relief="flat",
-            activebackground=CLR["accent"], activeforeground="white",
-            command=self._download)
+            bg=CLR["green"],
+            fg="white",
+            height=2,
+            width=20,
+            cursor="hand2",
+            relief="flat",
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._download,
+        )
         self._btn_dl.pack(side="left", padx=px(6))
 
         self._btn_cancel = tk.Button(
-            btn_f, text=t("youtube.cancel"),
+            btn_f,
+            text=t("youtube.cancel"),
             font=(UI_FONT, 10),
-            bg=CLR["red"], fg="white",
-            height=2, width=12, cursor="hand2", relief="flat",
+            bg=CLR["red"],
+            fg="white",
+            height=2,
+            width=12,
+            cursor="hand2",
+            relief="flat",
             state="disabled",
-            activebackground=CLR["pink"], activeforeground="white",
-            command=self._cancel_download)
+            activebackground=CLR["pink"],
+            activeforeground="white",
+            command=self._cancel_download,
+        )
         self._btn_cancel.pack(side="left", padx=px(6))
 
         self._btn_batch_toggle = tk.Button(
-            btn_f, text=t("youtube.batch_mode"),
+            btn_f,
+            text=t("youtube.batch_mode"),
             font=(UI_FONT, 10),
-            bg=CLR["panel"], fg=CLR["fg"],
-            height=2, width=14, cursor="hand2", relief="flat",
-            activebackground=CLR["accent"], activeforeground="white",
-            command=self._toggle_batch)
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            height=2,
+            width=14,
+            cursor="hand2",
+            relief="flat",
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._toggle_batch,
+        )
         self._btn_batch_toggle.pack(side="left", padx=px(6))
 
     # ── Batch panel ──────────────────────────────────────────────────────────
 
     def _build_batch_panel(self, root):
         self._batch_frame = tk.LabelFrame(
-            root, text=t("youtube.batch_queue"),
-            padx=px(10), pady=px(8),
+            root,
+            text=t("youtube.batch_queue"),
+            padx=px(10),
+            pady=px(8),
             font=(UI_FONT, 9, "bold"),
-            bg=CLR["bg"], fg=CLR["fgdim"],
-            bd=px(1), relief="solid")
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            bd=px(1),
+            relief="solid",
+        )
         # Do NOT pack yet - hidden by default
 
         # URL textarea
         url_area_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
         url_area_f.pack(fill="x", pady=px(0, 6))
-        tk.Label(url_area_f, text=t("youtube.paste_urls_one_per_line"),
-                 font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w")
+        tk.Label(
+            url_area_f,
+            text=t("youtube.paste_urls_one_per_line"),
+            font=(UI_FONT, 9),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+        ).pack(anchor="w")
         self._batch_text = tk.Text(
-            url_area_f, height=4, width=70,
-            bg=CLR["input_bg"], fg=CLR["input_fg"],
-            font=(MONO_FONT, 9), relief="flat",
+            url_area_f,
+            height=4,
+            width=70,
+            bg=CLR["input_bg"],
+            fg=CLR["input_fg"],
+            font=(MONO_FONT, 9),
+            relief="flat",
             insertbackground=CLR["accent"],
             highlightthickness=px(1),
-            highlightbackground=CLR["border"])
+            highlightbackground=CLR["border"],
+        )
         self._batch_text.pack(fill="x")
 
         batch_ctrl_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
         batch_ctrl_f.pack(fill="x", pady=px(4, 6))
         tk.Button(
-            batch_ctrl_f, text=t("youtube.add_urls"), relief="flat",
-            font=(UI_FONT, 9), cursor="hand2",
-            bg=CLR["panel"], fg=CLR["fg"],
-            activebackground=CLR["accent"], activeforeground="white",
-            command=self._batch_add_urls
+            batch_ctrl_f,
+            text=t("youtube.add_urls"),
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._batch_add_urls,
         ).pack(side="left", padx=px(0, 6))
         tk.Button(
-            batch_ctrl_f, text="Clear", relief="flat",
-            font=(UI_FONT, 9), cursor="hand2",
-            bg=CLR["panel"], fg=CLR["fg"],
-            activebackground=CLR["red"], activeforeground="white",
-            command=self._batch_clear
+            batch_ctrl_f,
+            text="Clear",
+            relief="flat",
+            font=(UI_FONT, 9),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["red"],
+            activeforeground="white",
+            command=self._batch_clear,
         ).pack(side="left")
 
         # Queue treeview
@@ -1066,11 +1494,10 @@ class YouTubeDownloaderTab(BaseTab):
         self._batch_tree = ttk.Treeview(tree_f, columns=cols, show="headings", height=5)
         for col in cols:
             self._batch_tree.heading(col, text=col)
-        self._batch_tree.column("Title",  width=px(220))
-        self._batch_tree.column("URL",    width=px(280))
+        self._batch_tree.column("Title", width=px(220))
+        self._batch_tree.column("URL", width=px(280))
         self._batch_tree.column("Status", width=px(120))
-        b_sb = ttk.Scrollbar(tree_f, orient="vertical",
-                             command=self._batch_tree.yview)
+        b_sb = ttk.Scrollbar(tree_f, orient="vertical", command=self._batch_tree.yview)
         self._batch_tree.configure(yscrollcommand=b_sb.set)
         self._batch_tree.pack(side="left", fill="both", expand=True)
         b_sb.pack(side="right", fill="y")
@@ -1078,19 +1505,31 @@ class YouTubeDownloaderTab(BaseTab):
         batch_act_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
         batch_act_f.pack(fill="x", pady=px(6, 0))
         self._btn_dl_all = tk.Button(
-            batch_act_f, text=t("youtube.download_all"), relief="flat",
-            font=(UI_FONT, 10, "bold"), cursor="hand2",
-            bg=CLR["green"], fg="white",
-            activebackground=CLR["accent"], activeforeground="white",
-            command=self._batch_download_all)
+            batch_act_f,
+            text=t("youtube.download_all"),
+            relief="flat",
+            font=(UI_FONT, 10, "bold"),
+            cursor="hand2",
+            bg=CLR["green"],
+            fg="white",
+            activebackground=CLR["accent"],
+            activeforeground="white",
+            command=self._batch_download_all,
+        )
         self._btn_dl_all.pack(side="left", padx=px(0, 8))
         self._btn_stop_batch = tk.Button(
-            batch_act_f, text=t("youtube.stop_batch"), relief="flat",
-            font=(UI_FONT, 10), cursor="hand2",
-            bg=CLR["red"], fg="white",
-            activebackground=CLR["pink"], activeforeground="white",
+            batch_act_f,
+            text=t("youtube.stop_batch"),
+            relief="flat",
+            font=(UI_FONT, 10),
+            cursor="hand2",
+            bg=CLR["red"],
+            fg="white",
+            activebackground=CLR["pink"],
+            activeforeground="white",
             state="disabled",
-            command=self._batch_stop)
+            command=self._batch_stop,
+        )
         self._btn_stop_batch.pack(side="left")
 
     # ── History panel ────────────────────────────────────────────────────────
@@ -1099,18 +1538,30 @@ class YouTubeDownloaderTab(BaseTab):
         hist_hdr = tk.Frame(root, bg=CLR["panel"])
         hist_hdr.pack(fill="x", padx=px(20), pady=px(8, 0))
         self._hist_toggle_btn = tk.Button(
-            hist_hdr, text=t("youtube.download_history"),
-            font=(UI_FONT, 9, "bold"), relief="flat", cursor="hand2",
-            bg=CLR["panel"], fg=CLR["fg"],
-            activebackground=CLR["panel"], activeforeground=CLR["accent"],
-            command=self._toggle_history, anchor="w")
+            hist_hdr,
+            text=t("youtube.download_history"),
+            font=(UI_FONT, 9, "bold"),
+            relief="flat",
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            activebackground=CLR["panel"],
+            activeforeground=CLR["accent"],
+            command=self._toggle_history,
+            anchor="w",
+        )
         self._hist_toggle_btn.pack(side="left", fill="x", expand=True, padx=px(4), pady=px(4))
         tk.Button(
-            hist_hdr, text=t("youtube.clear_history"), relief="flat",
-            font=(UI_FONT, 8), cursor="hand2",
-            bg=CLR["panel"], fg=CLR["fgdim"],
-            activebackground=CLR["red"], activeforeground="white",
-            command=self._clear_history
+            hist_hdr,
+            text=t("youtube.clear_history"),
+            relief="flat",
+            font=(UI_FONT, 8),
+            cursor="hand2",
+            bg=CLR["panel"],
+            fg=CLR["fgdim"],
+            activebackground=CLR["red"],
+            activeforeground="white",
+            command=self._clear_history,
         ).pack(side="right", padx=px(6))
 
         self._hist_body = tk.Frame(root, bg=CLR["bg"])
@@ -1118,15 +1569,15 @@ class YouTubeDownloaderTab(BaseTab):
 
         hist_cols = ("Date", "Title", "Duration", "File")
         self._hist_tree = ttk.Treeview(
-            self._hist_body, columns=hist_cols, show="headings", height=5)
+            self._hist_body, columns=hist_cols, show="headings", height=5
+        )
         for col in hist_cols:
             self._hist_tree.heading(col, text=col)
-        self._hist_tree.column("Date",     width=px(130))
-        self._hist_tree.column("Title",    width=px(260))
+        self._hist_tree.column("Date", width=px(130))
+        self._hist_tree.column("Title", width=px(260))
         self._hist_tree.column("Duration", width=px(80))
-        self._hist_tree.column("File",     width=px(220))
-        hist_sb = ttk.Scrollbar(self._hist_body, orient="vertical",
-                                command=self._hist_tree.yview)
+        self._hist_tree.column("File", width=px(220))
+        hist_sb = ttk.Scrollbar(self._hist_body, orient="vertical", command=self._hist_tree.yview)
         self._hist_tree.configure(yscrollcommand=hist_sb.set)
         self._hist_tree.pack(side="left", fill="both", expand=True)
         hist_sb.pack(side="right", fill="y")
@@ -1140,9 +1591,12 @@ class YouTubeDownloaderTab(BaseTab):
     def _check_ytdlp(self):
         p = _find_ytdlp()
         if p:
-            tasks.submit(partial(_ytdlp_version, p), on_done=partial(self._ytdlp_found, p),
-                         on_error=lambda _e: self.log_tagged(self.console, "✔ yt-dlp found.", "success"),
-                         name="yt-dlp version")
+            tasks.submit(
+                partial(_ytdlp_version, p),
+                on_done=partial(self._ytdlp_found, p),
+                on_error=lambda _e: self.log_tagged(self.console, "✔ yt-dlp found.", "success"),
+                name="yt-dlp version",
+            )
         else:
             self.log_tagged(
                 self.console,
@@ -1150,7 +1604,8 @@ class YouTubeDownloaderTab(BaseTab):
                 "   • pip install yt-dlp\n"
                 "   • Download yt-dlp.exe → place in bin/ next to ffmpeg.exe\n"
                 "   • https://github.com/yt-dlp/yt-dlp/releases\n",
-                "warn")
+                "warn",
+            )
 
     def on_app_closing(self) -> None:
         """The app is quitting: stop a live-stream recording (the file is kept)."""
@@ -1158,7 +1613,9 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _ytdlp_found(self, path: str, version: str) -> None:
         self.log_tagged(self.console, f"✔ yt-dlp found (v{version}).", "success")
-        setter = getattr(self.winfo_toplevel(), "set_ytdlp_status", None)   # the main window's status bar
+        setter = getattr(
+            self.winfo_toplevel(), "set_ytdlp_status", None
+        )  # the main window's status bar
         if setter is not None:
             setter(version, path)
 
@@ -1179,14 +1636,23 @@ class YouTubeDownloaderTab(BaseTab):
     def _browse_out(self):
         p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
-            filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"),
-                       ("WebM", "*.webm"), (t("youtube.all_files"), t("ducker.item_2"))])
+            filetypes=[
+                ("MP4", "*.mp4"),
+                ("MKV", "*.mkv"),
+                ("WebM", "*.webm"),
+                (t("youtube.all_files"), t("ducker.item_2")),
+            ],
+        )
         if p:
             self._out_var.set(p)
 
     def _browse_cookies(self):
         p = dialogs.askopenfilename(
-            filetypes=[(t("youtube.text_cookies"), "*.txt"), (t("youtube.all_files"), t("ducker.item_2"))])
+            filetypes=[
+                (t("youtube.text_cookies"), "*.txt"),
+                (t("youtube.all_files"), t("ducker.item_2")),
+            ]
+        )
         if p:
             self._cookies_var.set(p)
 
@@ -1196,6 +1662,7 @@ class YouTubeDownloaderTab(BaseTab):
             folder = os.path.dirname(p) if not os.path.isdir(p) else p
             if os.path.isdir(folder):
                 from core.hardware import open_in_explorer
+
                 open_in_explorer(folder)
 
     def _on_paste(self, event):
@@ -1203,16 +1670,21 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _auto_fetch_after_paste(self):
         url = self._url_var.get().strip()
-        if url and ("youtube.com" in url or "youtu.be" in url or
-                    "vimeo.com" in url or "twitch.tv" in url or
-                    "twitter.com" in url or "tiktok.com" in url):
+        if url and (
+            "youtube.com" in url
+            or "youtu.be" in url
+            or "vimeo.com" in url
+            or "twitch.tv" in url
+            or "twitter.com" in url
+            or "tiktok.com" in url
+        ):
             self._on_fetch()
 
     def _on_format_selected(self, event=None):
         idx = self._format_cb.current()
         if 0 <= idx < len(self._format_options):
             label, _ = self._format_options[idx]
-            m = re.search(r'~([\d.]+\s*\w+)', label)
+            m = re.search(r"~([\d.]+\s*\w+)", label)
             if m:
                 self._size_var.set(f"~{m.group(1)}")
             else:
@@ -1251,8 +1723,8 @@ class YouTubeDownloaderTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Fetch video info first.")
             return
         p = dialogs.asksaveasfilename(
-            defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")])
+            defaultextension=".png", filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")]
+        )
         if not p:
             return
         data = getattr(self, "_thumb_bytes", None)
@@ -1261,14 +1733,41 @@ class YouTubeDownloaderTab(BaseTab):
             return
 
         from core import ffmpeg as ff
-        codec = ["-c:v", "mjpeg", "-q:v", "2"] if p.lower().endswith((".jpg", ".jpeg")) else ["-c:v", "png"]
-        res = _proc.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0",
-                              "-frames:v", "1", *codec, "-update", "1", p], timeout=30, text=False, input=data)
+
+        codec = (
+            ["-c:v", "mjpeg", "-q:v", "2"]
+            if p.lower().endswith((".jpg", ".jpeg"))
+            else ["-c:v", "png"]
+        )
+        res = _proc.run(
+            [
+                ff.ffmpeg_path(),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                "pipe:0",
+                "-frames:v",
+                "1",
+                *codec,
+                "-update",
+                "1",
+                p,
+            ],
+            timeout=30,
+            text=False,
+            input=data,
+        )
         if res.returncode == 0 and os.path.isfile(p):
             self.log_tagged(self.console, f"✔ Thumbnail saved: {p}", "success")
         else:
-            messagebox.showerror(t("common.error"), "Could not save the thumbnail:\n"
-                                 + (res.stderr or b"").decode("utf-8", "replace")[-300:], parent=self)
+            messagebox.showerror(
+                t("common.error"),
+                "Could not save the thumbnail:\n"
+                + (res.stderr or b"").decode("utf-8", "replace")[-300:],
+                parent=self,
+            )
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Format filter
@@ -1305,15 +1804,21 @@ class YouTubeDownloaderTab(BaseTab):
             return
         ytdlp = _find_ytdlp()
         if not ytdlp:
-            messagebox.showerror(t("common.error"),
+            messagebox.showerror(
+                t("common.error"),
                 "yt-dlp is required.\n\n"
                 "Install:  pip install yt-dlp\n"
-                "or place yt-dlp.exe in bin/ next to ffmpeg.exe")
+                "or place yt-dlp.exe in bin/ next to ffmpeg.exe",
+            )
             return
         self._btn_fetch.config(state="disabled", text=t("youtube.fetching"))
         self.log(self.console, f"↳ Fetching info: {url}")
-        tasks.submit(partial(_fetch_info, ytdlp, url, playlist=bool(self._playlist_var.get())),
-                     on_done=self._fetched, on_error=self._fetch_failed, name="yt-dlp info")
+        tasks.submit(
+            partial(_fetch_info, ytdlp, url, playlist=bool(self._playlist_var.get())),
+            on_done=self._fetched,
+            on_error=self._fetch_failed,
+            name="yt-dlp info",
+        )
 
     def _fetched(self, info: dict) -> None:
         self._btn_fetch.config(state="normal", text=t("youtube.fetch_info"))
@@ -1331,10 +1836,10 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _populate_info(self, info: dict):
         self._video_info = info
-        title   = info.get("title") or "Unknown"
-        dur     = info.get("duration") or 0
+        title = info.get("title") or "Unknown"
+        dur = info.get("duration") or 0
         channel = info.get("uploader") or info.get("channel") or "-"
-        views   = info.get("view_count")
+        views = info.get("view_count")
         is_live = bool(info.get("is_live"))
 
         self._title_var.set(title)
@@ -1363,8 +1868,7 @@ class YouTubeDownloaderTab(BaseTab):
         # afterwards.
         current = self._out_var.get().strip()
         if (not current) or current == self._last_auto_out:
-            safe = "".join(
-                c if c.isalnum() or c in " _-." else "_" for c in title)[:64]
+            safe = "".join(c if c.isalnum() or c in " _-." else "_" for c in title)[:64]
             dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
             if self._playlist_var.get():
                 new_out = os.path.join(dl_dir, "%(title)s.%(ext)s")
@@ -1380,32 +1884,33 @@ class YouTubeDownloaderTab(BaseTab):
         if thumb_url:
             tasks.submit(partial(self._load_thumbnail, thumb_url))
 
-        self.log_tagged(self.console,
-            f"✔ {title}  [{_fmt_dur(dur)}]", "success")
+        self.log_tagged(self.console, f"✔ {title}  [{_fmt_dur(dur)}]", "success")
 
     def _populate_formats(self, formats: list):
         if not formats:
             return
 
         vfmts = sorted(
-            [f for f in formats
-             if (f.get("vcodec") or "none") != "none" and f.get("height")],
+            [f for f in formats if (f.get("vcodec") or "none") != "none" and f.get("height")],
             key=lambda f: (f.get("height", 0), f.get("fps") or 0),
-            reverse=True)
+            reverse=True,
+        )
 
         self._format_options = [
-            ("⭐  Best available  (auto-select highest quality video + audio)",
-             "bestvideo+bestaudio/best"),
+            (
+                "⭐  Best available  (auto-select highest quality video + audio)",
+                "bestvideo+bestaudio/best",
+            ),
         ]
         seen: set = set()
         for f in vfmts:
             fid = f.get("format_id", "?")
-            h   = f.get("height", 0)
+            h = f.get("height", 0)
             fps = int(f.get("fps") or 0)
             ext = f.get("ext", "?")
-            vc  = (f.get("vcodec") or "?").split(".")[0]
-            ac  = f.get("acodec") or "none"
-            fs  = f.get("filesize") or f.get("filesize_approx")
+            vc = (f.get("vcodec") or "?").split(".")[0]
+            ac = f.get("acodec") or "none"
+            fs = f.get("filesize") or f.get("filesize_approx")
 
             key = (h, fps, ext, vc)
             if key in seen:
@@ -1413,10 +1918,10 @@ class YouTubeDownloaderTab(BaseTab):
             seen.add(key)
 
             has_audio = ac and ac != "none"
-            fps_s  = f"  {fps}fps" if fps else ""
+            fps_s = f"  {fps}fps" if fps else ""
             size_s = f"  ~{fs / 1_000_000:.0f} MB" if fs else ""
-            aud_s  = "  +audio" if has_audio else "  (video only, audio auto-added)"
-            label  = f"{h}p{fps_s}  ·  {ext}  ·  {vc}{aud_s}{size_s}  [id {fid}]"
+            aud_s = "  +audio" if has_audio else "  (video only, audio auto-added)"
+            label = f"{h}p{fps_s}  ·  {ext}  ·  {vc}{aud_s}{size_s}  [id {fid}]"
             fmt_str = fid if has_audio else f"{fid}+bestaudio/best"
             self._format_options.append((label, fmt_str))
 
@@ -1434,7 +1939,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _populate_subtitle_langs(self, info: dict):
         manual_langs = set(info.get("subtitles", {}).keys())
-        auto_langs   = set(info.get("automatic_captions", {}).keys())
+        auto_langs = set(info.get("automatic_captions", {}).keys())
         all_langs = sorted(manual_langs | auto_langs)
         labeled = []
         for lang in all_langs:
@@ -1456,23 +1961,49 @@ class YouTubeDownloaderTab(BaseTab):
 
         from core import ffmpeg as ff
         from core import network as _net
+
         try:
             with _net.urlopen(thumb_url, timeout=12, headers={"User-Agent": "Mozilla/5.0"}) as resp:
                 data = resp.read()
             self._thumb_bytes = data
-            tw, th = px(256), px(144)                     # the thumbnail box, in screen pixels
-            res = _proc.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-                                  "-frames:v", "1", "-vf", f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
-                                  f"pad={tw}:{th}:-1:-1:color=black", "-f", "image2pipe", "-c:v", "png", "pipe:1"], timeout=20, text=False, input=data)
+            tw, th = px(256), px(144)  # the thumbnail box, in screen pixels
+            res = _proc.run(
+                [
+                    ff.ffmpeg_path(),
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    "pipe:0",
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
+                    f"pad={tw}:{th}:-1:-1:color=black",
+                    "-f",
+                    "image2pipe",
+                    "-c:v",
+                    "png",
+                    "pipe:1",
+                ],
+                timeout=20,
+                text=False,
+                input=data,
+            )
             if res.returncode != 0 or not res.stdout:
-                raise RuntimeError((res.stderr or b"").decode("utf-8", "replace").strip()[-80:] or "decode failed")
+                raise RuntimeError(
+                    (res.stderr or b"").decode("utf-8", "replace").strip()[-80:] or "decode failed"
+                )
             png = base64.b64encode(res.stdout).decode("ascii")
             self.after(0, lambda: self._set_thumbnail(tk.PhotoImage(master=self, data=png)))
         except Exception as exc:
             logger.debug("_load_thumbnail: best-effort step failed", exc_info=True)
             err = str(exc) or type(exc).__name__
             self.after(0, lambda e=err: self._set_thumbnail_message(f"Thumbnail failed:\n{e[:80]}"))
-            self.after(0, lambda e=err: self.log_tagged(self.console, f"⚠ Thumbnail load error: {e}", "warn"))
+            self.after(
+                0,
+                lambda e=err: self.log_tagged(self.console, f"⚠ Thumbnail load error: {e}", "warn"),
+            )
 
     def _set_thumbnail(self, photo):
         self._thumb_photo = photo
@@ -1484,8 +2015,14 @@ class YouTubeDownloaderTab(BaseTab):
         try:
             self._thumb_canvas.delete("all")
             self._thumb_canvas.create_text(
-                px(128), px(72), text=msg, fill=CLR["fgdim"],
-                font=(UI_FONT, 9), justify="center", width=px(240))
+                px(128),
+                px(72),
+                text=msg,
+                fill=CLR["fgdim"],
+                font=(UI_FONT, 9),
+                justify="center",
+                width=px(240),
+            )
         except Exception:
             logger.debug("_set_thumbnail_message: best-effort step failed", exc_info=True)
 
@@ -1508,19 +2045,40 @@ class YouTubeDownloaderTab(BaseTab):
         def _worker():
             try:
                 from core import network as _net
+
                 playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
                 route = _net.tool_proxy(url)
                 if route and route.startswith("socks"):
-                    self.after(0, lambda: self.log_tagged(
-                        self.console, "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
-                        "one and would connect around it). Download the video instead.", "warn"))
+                    self.after(
+                        0,
+                        lambda: self.log_tagged(
+                            self.console,
+                            "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
+                            "one and would connect around it). Download the video instead.",
+                            "warn",
+                        ),
+                    )
                     return
-                r = _proc.run([*_yt(ytdlp, url), playlist_flag, "-g", "-f", "best[height<=720][ext=mp4]/best[height<=720]/best", url], timeout=25, env=_net.subprocess_env(url=url))
+                r = _proc.run(
+                    [
+                        *_yt(ytdlp, url),
+                        playlist_flag,
+                        "-g",
+                        "-f",
+                        "best[height<=720][ext=mp4]/best[height<=720]/best",
+                        url,
+                    ],
+                    timeout=25,
+                    env=_net.subprocess_env(url=url),
+                )
                 lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
                 if not lines:
-                    self.after(0, lambda: self.log_tagged(
-                        self.console,
-                        "⚠ Could not resolve stream URL for preview.", "error"))
+                    self.after(
+                        0,
+                        lambda: self.log_tagged(
+                            self.console, "⚠ Could not resolve stream URL for preview.", "error"
+                        ),
+                    )
                     return
                 stream_url = lines[0]
                 try:
@@ -1529,19 +2087,25 @@ class YouTubeDownloaderTab(BaseTab):
                     logger.debug("_worker: best-effort step failed", exc_info=True)
                     ffplay = shutil.which("ffplay") or "ffplay"
                 self.preview_proc = _proc.spawn(
-                    [ffplay, "-autoexit",
-                     "-window_title", "Video Preview - Quintessential Video Editor",
-                     stream_url],
-                    env=_net.subprocess_env())
-                self.after(0, lambda: self.log_tagged(
-                    self.console, "▶ Playing in ffplay.", "info"))
+                    [
+                        ffplay,
+                        "-autoexit",
+                        "-window_title",
+                        "Video Preview - Quintessential Video Editor",
+                        stream_url,
+                    ],
+                    env=_net.subprocess_env(),
+                )
+                self.after(0, lambda: self.log_tagged(self.console, "▶ Playing in ffplay.", "info"))
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
-                self.after(0, lambda e=exc: self.log_tagged(
-                    self.console, f"⚠ Preview error: {e}", "error"))
+                self.after(
+                    0, lambda e=exc: self.log_tagged(self.console, f"⚠ Preview error: {e}", "error")
+                )
             finally:
-                self.after(0, lambda: self._btn_preview.config(
-                    state="normal", text=t("youtube.preview")))
+                self.after(
+                    0, lambda: self._btn_preview.config(state="normal", text=t("youtube.preview"))
+                )
 
         tasks.submit(_worker)
 
@@ -1563,6 +2127,7 @@ class YouTubeDownloaderTab(BaseTab):
         out_template = os.path.join(out_dir, f"recording_{ts}.%(ext)s")
 
         from core import network as _net
+
         try:
             cmd = [*_yt(ytdlp, url), "-f", "best", "--live-from-start", "-o", out_template, url]
         except OSError as exc:
@@ -1576,8 +2141,13 @@ class YouTubeDownloaderTab(BaseTab):
         def _worker():
             try:
                 self._record_proc = _proc.spawn(
-                    cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1,
-                    env=_net.subprocess_env())
+                    cmd,
+                    stdout=_proc.PIPE,
+                    stderr=_proc.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    env=_net.subprocess_env(),
+                )
                 for line in _proc.lines(self._record_proc):
                     stripped = line.rstrip()
                     if stripped:
@@ -1585,25 +2155,32 @@ class YouTubeDownloaderTab(BaseTab):
                         h, r = divmod(elapsed, 3600)
                         m, s = divmod(r, 60)
                         et = f"[{h:02d}:{m:02d}:{s:02d}]"
-                        self.after(0, lambda msg=f"{et} {stripped}":
-                                   self.log(self.console, msg))
+                        self.after(0, lambda msg=f"{et} {stripped}": self.log(self.console, msg))
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
-                self.after(0, lambda e=exc: self.log_tagged(
-                    self.console, f"⚠ Record error: {e}", "error"))
+                self.after(
+                    0, lambda e=exc: self.log_tagged(self.console, f"⚠ Record error: {e}", "error")
+                )
             finally:
-                self.after(0, lambda: self._btn_record.config(
-                    state="normal", text=t("youtube.record")))
+                self.after(
+                    0, lambda: self._btn_record.config(state="normal", text=t("youtube.record"))
+                )
                 self._record_proc = None
 
-        tasks.start_service(_worker, name='worker')
+        tasks.start_service(_worker, name="worker")
 
     # ─────────────────────────────────────────────────────────────────────────
     #  yt-dlp streaming subprocess
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _stream_ytdlp(self, cmd: list,
-                      on_line=None, on_progress=None, on_done=None, url: str = "https://www.youtube.com/"):
+    def _stream_ytdlp(
+        self,
+        cmd: list,
+        on_line=None,
+        on_progress=None,
+        on_done=None,
+        url: str = "https://www.youtube.com/",
+    ):
         """Run yt-dlp; parse progress lines; call callbacks. Blocks until done.
         Behind a Tor proxy, a block (bot check, 403/429) is retried through
         fresh Tor circuits - as many as set under Settings → Network."""
@@ -1611,44 +2188,79 @@ class YouTubeDownloaderTab(BaseTab):
         if on_done:
             self.after(0, lambda c=rc: on_done(c))
 
-    def _run_with_fresh_circuits(self, cmd: list, url: str, *, on_line=None, on_progress=None,
-                                 batch: bool = False) -> int:
+    def _run_with_fresh_circuits(
+        self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False
+    ) -> int:
         from core import network as _net
+
         tor = _net.tor_like_proxy(cmd)
         retries = _net.tor_retries() if tor else 0
         attempt = 0
         while True:
-            rc, tail = self._run_ytdlp_once(cmd, url, on_line=on_line, on_progress=on_progress, batch=batch)
+            rc, tail = self._run_ytdlp_once(
+                cmd, url, on_line=on_line, on_progress=on_progress, batch=batch
+            )
             if rc != 0 and tor and attempt >= retries and retries and _net.looks_blocked(tail):
                 from core import sysproxy
-                hint = ("Tails can download directly for this session instead: Settings → Network → Tails."
-                        if sysproxy.special_system() == "tails" else
-                        "Raise the number of fresh-circuit retries, or choose another route, under Settings → "
-                        "Network.")
-                self.after(0, lambda h=hint, n=retries: self.log_tagged(
-                    self.console, f"The site still blocked Tor after {n} fresh circuits. {h}", "warn"))
-            if rc == 0 or tor is None or attempt >= retries or getattr(self, "_cancel_requested", False) \
-                    or not _net.looks_blocked(tail):
+
+                hint = (
+                    "Tails can download directly for this session instead: Settings → Network → Tails."
+                    if sysproxy.special_system() == "tails"
+                    else "Raise the number of fresh-circuit retries, or choose another route, under Settings → "
+                    "Network."
+                )
+                self.after(
+                    0,
+                    lambda h=hint, n=retries: self.log_tagged(
+                        self.console,
+                        f"The site still blocked Tor after {n} fresh circuits. {h}",
+                        "warn",
+                    ),
+                )
+            if (
+                rc == 0
+                or tor is None
+                or attempt >= retries
+                or getattr(self, "_cancel_requested", False)
+                or not _net.looks_blocked(tail)
+            ):
                 return rc
             attempt += 1
-            self.after(0, lambda n=attempt, m=retries: self.log_tagged(
-                self.console, f"↻ The site blocked this Tor exit - trying a fresh Tor circuit ({n}/{m})…", "warn"))
+            self.after(
+                0,
+                lambda n=attempt, m=retries: self.log_tagged(
+                    self.console,
+                    f"↻ The site blocked this Tor exit - trying a fresh Tor circuit ({n}/{m})…",
+                    "warn",
+                ),
+            )
             cmd = list(cmd)
             idx = max(i for i, a in enumerate(cmd[:-1]) if a == "--proxy")
             cmd[idx + 1] = _net.fresh_circuit(tor, attempt)
 
-    def _run_ytdlp_once(self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False):
+    def _run_ytdlp_once(
+        self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False
+    ):
         """(returncode, last output lines)"""
         from collections import deque
 
         from core import network as _net
         from core.ytdlp import redact
+
         tail = deque(maxlen=40)
         prefix = "BATCH CMD: " if batch else "CMD: "
-        self.after(0, lambda: self.log(self.console, prefix + " ".join(str(c) for c in redact(cmd))))
+        self.after(
+            0, lambda: self.log(self.console, prefix + " ".join(str(c) for c in redact(cmd)))
+        )
         try:
-            proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1,
-                               env=_net.subprocess_env(url=url))
+            proc = _proc.spawn(
+                cmd,
+                stdout=_proc.PIPE,
+                stderr=_proc.STDOUT,
+                text=True,
+                bufsize=1,
+                env=_net.subprocess_env(url=url),
+            )
             self._active_proc = proc
             for line in _proc.lines(proc):
                 stripped = line.rstrip()
@@ -1659,9 +2271,13 @@ class YouTubeDownloaderTab(BaseTab):
                     pct = float(m.group(1))
                     size, spd, eta = m.group(2).strip(), m.group(3).strip(), m.group(4).strip()
                     if batch:
-                        self.after(0, lambda p_=pct, s_=spd: self._on_progress_update(p_, "-", s_, "-"))
+                        self.after(
+                            0, lambda p_=pct, s_=spd: self._on_progress_update(p_, "-", s_, "-")
+                        )
                     elif on_progress is not None:
-                        self.after(0, lambda p_=pct, sz=size, sp=spd, et=eta: on_progress(p_, sz, sp, et))
+                        self.after(
+                            0, lambda p_=pct, sz=size, sp=spd, et=eta: on_progress(p_, sz, sp, et)
+                        )
                 else:
                     tail.append(stripped)
                     if on_line is not None:
@@ -1671,7 +2287,9 @@ class YouTubeDownloaderTab(BaseTab):
             rc = proc.returncode
         except Exception as exc:
             logger.debug("_run_ytdlp_once: best-effort step failed", exc_info=True)
-            self.after(0, lambda e=exc: self.log_tagged(self.console, f"⚠ yt-dlp error: {e}", "error"))
+            self.after(
+                0, lambda e=exc: self.log_tagged(self.console, f"⚠ yt-dlp error: {e}", "error")
+            )
             rc = 1
         finally:
             self._active_proc = None
@@ -1679,12 +2297,12 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _on_progress_update(self, pct: float, size: str, speed: str, eta: str):
         self._progress["value"] = pct
-        self._prog_status_var.set(
-            f"{pct:.1f}%  {size}  {speed}/s  ETA {eta}")
+        self._prog_status_var.set(f"{pct:.1f}%  {size}  {speed}/s  ETA {eta}")
 
     def _poll_route_banner(self):
         try:
             from core import tails
+
             on = tails.direct_enabled()
         except Exception:
             logger.debug("_poll_route_banner: best-effort step failed", exc_info=True)
@@ -1692,7 +2310,9 @@ class YouTubeDownloaderTab(BaseTab):
         try:
             if on and not self._route_banner.winfo_ismapped():
                 outer = getattr(self, "_outer_frame", None)
-                self._route_banner.pack(fill="x", **({"before": outer} if outer is not None else {}))
+                self._route_banner.pack(
+                    fill="x", **({"before": outer} if outer is not None else {})
+                )
             elif not on and self._route_banner.winfo_ismapped():
                 self._route_banner.pack_forget()
             self.after(1500, self._poll_route_banner)
@@ -1704,15 +2324,14 @@ class YouTubeDownloaderTab(BaseTab):
         # processes. proc.terminate() only kills yt-dlp itself, leaving the
         # children running and the download effectively continuing. Kill
         # the whole process tree instead.
-        self._cancel_requested = True              # also stops fresh-circuit retries
+        self._cancel_requested = True  # also stops fresh-circuit retries
         proc = self._active_proc
         if proc:
             try:
                 self._kill_process_tree(proc)
             except Exception as exc:
                 logger.debug("_cancel_download: best-effort step failed", exc_info=True)
-                self.log_tagged(
-                    self.console, f"⚠ Cancel error: {exc}", "warn")
+                self.log_tagged(self.console, f"⚠ Cancel error: {exc}", "warn")
         self._batch_running = False
         self.log_tagged(self.console, "⏹ Download cancelled.", "warn")
         self._reset_download_ui()
@@ -1721,6 +2340,7 @@ class YouTubeDownloaderTab(BaseTab):
         """Stop *proc* and every child it started (never our own process
         group - the old killpg() on POSIX terminated the whole app)."""
         from core import ffmpeg as _ff
+
         _ff.kill_tree(proc)
 
     def _reset_download_ui(self):
@@ -1791,15 +2411,13 @@ class YouTubeDownloaderTab(BaseTab):
         if s1 <= s0:
             messagebox.showwarning(t("common.warning"), "'To' must be after 'From'.")
             return None
-        return ["--download-sections", f"*{s0:.3f}-{s1:.3f}",
-                "--force-keyframes-at-cuts"]
+        return ["--download-sections", f"*{s0:.3f}-{s1:.3f}", "--force-keyframes-at-cuts"]
 
     # ─────────────────────────────────────────────────────────────────────────
     #  FFmpeg encode command builder
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_encode_cmd(self, inp: str, out: str,
-                          sub_path: str = "") -> list:
+    def _build_encode_cmd(self, inp: str, out: str, sub_path: str = "") -> list:
         ffmpeg = _ffmpeg_exe()
         cmd = [ffmpeg, "-i", inp]
 
@@ -1820,12 +2438,22 @@ class YouTubeDownloaderTab(BaseTab):
         elif vcodec == "libsvtav1":
             cmd += ["-c:v", "libsvtav1", "-preset", "4", "-crf", str(crf)]
         elif vcodec == "libvpx-vp9":
-            cmd += ["-c:v", "libvpx-vp9", "-crf", str(crf), "-b:v", "0",
-                    "-deadline", "good", "-cpu-used", "2"]
+            cmd += [
+                "-c:v",
+                "libvpx-vp9",
+                "-crf",
+                str(crf),
+                "-b:v",
+                "0",
+                "-deadline",
+                "good",
+                "-cpu-used",
+                "2",
+            ]
         else:
             cmd += ["-c:v", vcodec, "-crf", str(crf), "-preset", preset]
         if vcodec in ("libx264", "libx265", "libsvtav1", "libvpx-vp9"):
-            cmd += ["-pix_fmt", "yuv420p"]          # 10-bit sources -> playable 8-bit
+            cmd += ["-pix_fmt", "yuv420p"]  # 10-bit sources -> playable 8-bit
         if vcodec == "libx265" and container.lower() in ("mp4", "mov", "m4v"):
             cmd += ["-tag:v", "hvc1"]
 
@@ -1843,12 +2471,16 @@ class YouTubeDownloaderTab(BaseTab):
                 res_clean = res.replace("×", "x")
                 parts = res_clean.split("x")
                 if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                    cmd += ["-vf", f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease"
-                                   f":force_divisible_by=2,setsar=1"]
+                    cmd += [
+                        "-vf",
+                        f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease"
+                        f":force_divisible_by=2,setsar=1",
+                    ]
 
         # Subtitle burn-in (overrides plain vf, append to filter chain)
         if sub_path and os.path.isfile(sub_path):
             from core.filters import subtitles_filter
+
             sub_filter = subtitles_filter(sub_path)
             if "-vf" in cmd:
                 vi = cmd.index("-vf")
@@ -1886,26 +2518,32 @@ class YouTubeDownloaderTab(BaseTab):
         if not out:
             out = dialogs.asksaveasfilename(
                 defaultextension=".mp4",
-                filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"),
-                           (t("youtube.all_files"), t("ducker.item_2"))])
+                filetypes=[
+                    ("MP4", "*.mp4"),
+                    ("MKV", "*.mkv"),
+                    (t("youtube.all_files"), t("ducker.item_2")),
+                ],
+            )
         if not out:
             return
         self._out_var.set(out)
 
         ytdlp = _find_ytdlp()
         if not ytdlp:
-            messagebox.showerror(t("common.error"),
-                "Install:  pip install yt-dlp\n"
-                "or place yt-dlp.exe in bin/ next to ffmpeg.exe")
+            messagebox.showerror(
+                t("common.error"),
+                "Install:  pip install yt-dlp\nor place yt-dlp.exe in bin/ next to ffmpeg.exe",
+            )
             return
 
         trim_args = self._build_trim_args()
         if trim_args is None:
             return
         try:
-            _yt(ytdlp, url)                    # offline? strict proxy not set up? say so now
+            _yt(ytdlp, url)  # offline? strict proxy not set up? say so now
         except OSError as exc:
             from core import network as _net
+
             messagebox.showwarning(t("common.warning"), _net.explain_error(exc), parent=self)
             return
 
@@ -1925,22 +2563,30 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Direct copy ──────────────────────────────────────────────────────────
 
-    def _run_direct_copy(self, url: str, out: str,
-                         ytdlp: str, trim_args: list):
+    def _run_direct_copy(self, url: str, out: str, ytdlp: str, trim_args: list):
         idx = self._format_cb.current()
-        fmt_str = (self._format_options[idx][1]
-                   if 0 <= idx < len(self._format_options)
-                   else "bestvideo+bestaudio/best")
+        fmt_str = (
+            self._format_options[idx][1]
+            if 0 <= idx < len(self._format_options)
+            else "bestvideo+bestaudio/best"
+        )
         container = self._container_var.get()
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [*_yt(ytdlp, url), playlist_flag, "-f", fmt_str, "--merge-output-format", container, "--no-overwrites"]
+        cmd = [
+            *_yt(ytdlp, url),
+            playlist_flag,
+            "-f",
+            fmt_str,
+            "--merge-output-format",
+            container,
+            "--no-overwrites",
+        ]
 
         # Subtitles
         if self._dl_subs_var.get():
             lang = self._sub_lang_var.get().replace("(auto) ", "")
-            cmd += ["--write-sub", "--sub-lang", lang,
-                    "--sub-format", self._sub_fmt_var.get()]
+            cmd += ["--write-sub", "--sub-lang", lang, "--sub-format", self._sub_fmt_var.get()]
             if self._sub_auto_var.get():
                 cmd += ["--write-auto-sub"]
             if self._embed_subs_var.get():
@@ -1954,21 +2600,31 @@ class YouTubeDownloaderTab(BaseTab):
             cmd,
             on_line=lambda s: self.log(self.console, s),
             on_progress=self._on_progress_update,
-            on_done=lambda rc: self._on_single_done(rc, out), url=url)
+            on_done=lambda rc: self._on_single_done(rc, out),
+            url=url,
+        )
 
     # ── Audio only ───────────────────────────────────────────────────────────
 
-    def _run_audio_only(self, url: str, out: str,
-                        ytdlp: str, trim_args: list):
+    def _run_audio_only(self, url: str, out: str, ytdlp: str, trim_args: list):
         audio_fmt = self._audio_fmt_var.get()
-        quality   = self._audio_quality_var.get().split()[0]
+        quality = self._audio_quality_var.get().split()[0]
 
         # Derive output path with audio extension
         base = os.path.splitext(out)[0]
         audio_out = base + "." + audio_fmt
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [*_yt(ytdlp, url), playlist_flag, "-x", "--audio-format", audio_fmt, "--audio-quality", quality, "--no-overwrites"]
+        cmd = [
+            *_yt(ytdlp, url),
+            playlist_flag,
+            "-x",
+            "--audio-format",
+            audio_fmt,
+            "--audio-quality",
+            quality,
+            "--no-overwrites",
+        ]
         if self._embed_thumb_var.get():
             cmd += ["--embed-thumbnail"]
         if self._add_metadata_var.get():
@@ -1983,33 +2639,41 @@ class YouTubeDownloaderTab(BaseTab):
         def _sync_audio_out(p=audio_out):
             self._out_var.set(p)
             self._last_auto_out = p
+
         self.after(0, _sync_audio_out)
         self._stream_ytdlp(
             cmd,
             on_line=lambda s: self.log(self.console, s),
             on_progress=self._on_progress_update,
-            on_done=lambda rc: self._on_single_done(rc, audio_out), url=url)
+            on_done=lambda rc: self._on_single_done(rc, audio_out),
+            url=url,
+        )
 
     # ── Re-encode ────────────────────────────────────────────────────────────
 
-    def _run_reencode(self, url: str, out: str,
-                      ytdlp: str, trim_args: list):
+    def _run_reencode(self, url: str, out: str, ytdlp: str, trim_args: list):
         tmp = os.path.join(tempfile.gettempdir(), f"_cf_yt_tmp_{os.getpid()}.mkv")
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [*_yt(ytdlp, url), playlist_flag, "-f", "bv*+ba/b", "--merge-output-format", "mkv", "--no-overwrites"]
+        cmd = [
+            *_yt(ytdlp, url),
+            playlist_flag,
+            "-f",
+            "bv*+ba/b",
+            "--merge-output-format",
+            "mkv",
+            "--no-overwrites",
+        ]
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
         cmd += ["-o", tmp, url]
 
         # Phase 1: download
-        self.after(0, lambda: self.log(self.console,
-                                       t("log.youtube.downloading_best_quality")))
+        self.after(0, lambda: self.log(self.console, t("log.youtube.downloading_best_quality")))
 
         def _dl_done(rc: int):
             if rc != 0:
-                self.log_tagged(self.console,
-                                f"⚠ Download failed (code {rc})", "error")
+                self.log_tagged(self.console, f"⚠ Download failed (code {rc})", "error")
                 self._reset_download_ui()
                 return
             self.log(self.console, t("log.youtube.re_encoding_with_ffmpeg"))
@@ -2029,7 +2693,8 @@ class YouTubeDownloaderTab(BaseTab):
             cmd,
             on_line=lambda s: self.log(self.console, s),
             on_progress=self._on_progress_update,
-            on_done=_dl_done)
+            on_done=_dl_done,
+        )
 
     def _download_sub_for_burn(self, url: str, ytdlp: str) -> str:
         """Download subtitle to a temp file and return the path."""
@@ -2039,8 +2704,21 @@ class YouTubeDownloaderTab(BaseTab):
         tmp_base = os.path.join(tmp_dir, "sub")
 
         from core import network as _net
+
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [*_yt(ytdlp), playlist_flag, "--write-sub", "--skip-download", "--sub-lang", lang, "--sub-format", sub_fmt, "-o", tmp_base, url]
+        cmd = [
+            *_yt(ytdlp),
+            playlist_flag,
+            "--write-sub",
+            "--skip-download",
+            "--sub-lang",
+            lang,
+            "--sub-format",
+            sub_fmt,
+            "-o",
+            tmp_base,
+            url,
+        ]
         if self._sub_auto_var.get():
             cmd.insert(-3, "--write-auto-sub")
         try:
@@ -2049,8 +2727,7 @@ class YouTubeDownloaderTab(BaseTab):
             logger.debug("_download_sub_for_burn: best-effort step failed", exc_info=True)
         # Find the downloaded sub file
         for fname in os.listdir(tmp_dir):
-            if fname.startswith("sub") and fname.endswith(
-                    ("." + sub_fmt, ".srt", ".vtt", ".ass")):
+            if fname.startswith("sub") and fname.endswith(("." + sub_fmt, ".srt", ".vtt", ".ass")):
                 return os.path.join(tmp_dir, fname)
         return ""
 
@@ -2059,7 +2736,9 @@ class YouTubeDownloaderTab(BaseTab):
 
         def _worker(progress_cb, cancel_fn):
             try:
-                proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1)
+                proc = _proc.spawn(
+                    cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1
+                )
                 self._active_proc = proc
                 for line in _proc.lines(proc):
                     if cancel_fn():
@@ -2071,19 +2750,19 @@ class YouTubeDownloaderTab(BaseTab):
                         continue
                     m = _FFMPEG_TIME_RE.search(stripped)
                     if m and total_dur > 0:
-                        elapsed = (int(m.group(1)) * 3600 +
-                                   int(m.group(2)) * 60 +
-                                   float(m.group(3)))
+                        elapsed = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
                         pct = min(100.0, (elapsed / total_dur) * 100)
-                        self.after(0, lambda p=pct, t=elapsed:
-                                   self._on_encode_progress(p, t, total_dur))
+                        self.after(
+                            0, lambda p=pct, t=elapsed: self._on_encode_progress(p, t, total_dur)
+                        )
                     else:
                         progress_cb(stripped)
                 rc = proc.returncode
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
-                self.after(0, lambda e=exc: self.log_tagged(
-                    self.console, f"⚠ Encode error: {e}", "error"))
+                self.after(
+                    0, lambda e=exc: self.log_tagged(self.console, f"⚠ Encode error: {e}", "error")
+                )
                 rc = 1
             finally:
                 self._active_proc = None
@@ -2107,8 +2786,7 @@ class YouTubeDownloaderTab(BaseTab):
         remaining = max(0, total - elapsed)
         h, r = divmod(int(remaining), 3600)
         m, s = divmod(r, 60)
-        self._prog_status_var.set(
-            f"Encoding {pct:.1f}%  ETA {h:02d}:{m:02d}:{s:02d}")
+        self._prog_status_var.set(f"Encoding {pct:.1f}%  ETA {h:02d}:{m:02d}:{s:02d}")
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Post-download
@@ -2120,9 +2798,9 @@ class YouTubeDownloaderTab(BaseTab):
             self._progress["value"] = 100
             self._prog_status_var.set("✔ Complete!")
             self.log_tagged(self.console, f"✔ Saved: {out_path}", "success")
-            title    = self._title_var.get()
+            title = self._title_var.get()
             duration = self._dur_var.get()
-            url      = self._url_var.get().strip()
+            url = self._url_var.get().strip()
             self._append_history(title, duration, url, out_path)
             self.show_result(0, out_path)
         else:
@@ -2151,8 +2829,7 @@ class YouTubeDownloaderTab(BaseTab):
             return
         ytdlp = _find_ytdlp()
         if not ytdlp:
-            messagebox.showerror(t("common.error"),
-                "Install yt-dlp first.")
+            messagebox.showerror(t("common.error"), "Install yt-dlp first.")
             return
         self._batch_running = True
         self._cancel_requested = False
@@ -2165,38 +2842,63 @@ class YouTubeDownloaderTab(BaseTab):
             if not self._batch_running:
                 break
             vals = self._batch_tree.item(item, "values")
-            url  = vals[1] if vals else ""
+            url = vals[1] if vals else ""
             if not url:
                 continue
 
-            self.after(0, lambda i=item: self._batch_tree.item(
-                i, values=(self._batch_tree.item(i, "values")[0],
-                            self._batch_tree.item(i, "values")[1],
-                            "Fetching…")))
+            self.after(
+                0,
+                lambda i=item: self._batch_tree.item(
+                    i,
+                    values=(
+                        self._batch_tree.item(i, "values")[0],
+                        self._batch_tree.item(i, "values")[1],
+                        "Fetching…",
+                    ),
+                ),
+            )
 
             # Quick title fetch
             title = "-"
             try:
                 from core import network as _net
-                r = _proc.run([*_yt(ytdlp, url), "--no-playlist", "--get-title", url], timeout=20, env=_net.subprocess_env(url=url))
+
+                r = _proc.run(
+                    [*_yt(ytdlp, url), "--no-playlist", "--get-title", url],
+                    timeout=20,
+                    env=_net.subprocess_env(url=url),
+                )
                 if r.returncode == 0:
                     title = r.stdout.strip().splitlines()[0][:60]
             except Exception:
                 logger.debug("_batch_worker: best-effort step failed", exc_info=True)
 
-            self.after(0, lambda i=item, t=title: self._batch_tree.item(
-                i, values=(t,
-                            self._batch_tree.item(i, "values")[1],
-                            "Downloading…")))
+            self.after(
+                0,
+                lambda i=item, t=title: self._batch_tree.item(
+                    i, values=(t, self._batch_tree.item(i, "values")[1], "Downloading…")
+                ),
+            )
 
-            dl_dir   = os.path.join(os.path.expanduser("~"), "Downloads")
+            dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
             out_path = os.path.join(dl_dir, "%(title)s.%(ext)s")
 
             try:
-                cmd = [*_yt(ytdlp, url), "--yes-playlist", "-f", "bv*+ba/b", "--merge-output-format", self._container_var.get(), "--no-overwrites"]
+                cmd = [
+                    *_yt(ytdlp, url),
+                    "--yes-playlist",
+                    "-f",
+                    "bv*+ba/b",
+                    "--merge-output-format",
+                    self._container_var.get(),
+                    "--no-overwrites",
+                ]
             except OSError as exc:
                 from core import network as _net
-                self.after(0, lambda e=exc: self.log_tagged(self.console, _net.explain_error(e), "error"))
+
+                self.after(
+                    0, lambda e=exc: self.log_tagged(self.console, _net.explain_error(e), "error")
+                )
                 break
             cmd += self._build_common_ytdlp_args()
             cmd += ["-o", out_path, url]
@@ -2204,9 +2906,12 @@ class YouTubeDownloaderTab(BaseTab):
             rc = self._run_ytdlp_sync_batch(cmd, url=url)
             status = "✔ Done" if rc == 0 else f"✘ Error ({rc})"
 
-            self.after(0, lambda i=item, t=title, s=status:
-                       self._batch_tree.item(i, values=(t,
-                           self._batch_tree.item(i, "values")[1], s)))
+            self.after(
+                0,
+                lambda i=item, t=title, s=status: self._batch_tree.item(
+                    i, values=(t, self._batch_tree.item(i, "values")[1], s)
+                ),
+            )
             if rc == 0:
                 self._append_history(title, "-", url, dl_dir)
 
@@ -2241,14 +2946,11 @@ class YouTubeDownloaderTab(BaseTab):
         for item in self._hist_tree.get_children():
             self._hist_tree.delete(item)
         for entry in reversed(self._history[-200:]):
-            ts    = entry.get("ts", "")
+            ts = entry.get("ts", "")
             title = entry.get("title", "")
-            dur   = entry.get("duration", "")
+            dur = entry.get("duration", "")
             fpath = entry.get("file", "")
-            self._hist_tree.insert(
-                "", tk.END,
-                values=(ts, title[:50], dur, fpath),
-                tags=("entry",))
+            self._hist_tree.insert("", tk.END, values=(ts, title[:50], dur, fpath), tags=("entry",))
 
     def _on_history_dclick(self, event):
         sel = self._hist_tree.selection()
@@ -2259,6 +2961,7 @@ class YouTubeDownloaderTab(BaseTab):
         if not fpath:
             return
         from core.hardware import open_in_explorer, reveal_file
+
         if os.path.isfile(fpath):
             reveal_file(fpath)
         elif os.path.isdir(fpath):

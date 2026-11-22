@@ -17,6 +17,7 @@ Highlights
 
 The module has no Tk dependency and is safe to use from worker threads.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -45,6 +46,7 @@ logger = logging.getLogger("crossfader.ffmpeg")
 #  Binaries
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def ffmpeg_path() -> str:
     return get_binary_path("ffmpeg")
 
@@ -68,6 +70,7 @@ def is_ffmpeg(argv0: str) -> bool:
 #  Time helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def parse_time(value: Any) -> float:
     """Parse ``"1:02:03.5"``, ``"02:03"``, ``"75.5"``, ``"75,5"`` or a number
     into seconds.  Raises ``ValueError`` on anything else (including negative
@@ -75,8 +78,9 @@ def parse_time(value: Any) -> float:
     return Timecode.parse(value).seconds
 
 
-def format_time(seconds: float, *, ms: bool = True, always_hours: bool = False,
-                ms_digits: int = 3) -> str:
+def format_time(
+    seconds: float, *, ms: bool = True, always_hours: bool = False, ms_digits: int = 3
+) -> str:
     """``83.25 -> "01:23.250"`` (or ``"00:01:23.250"`` with *always_hours*)."""
     spec = ("H" if always_hours else "") + (f".{max(1, min(3, ms_digits))}" if ms else ".0")
     return format(Timecode.of(seconds), spec)
@@ -91,7 +95,7 @@ def ts(seconds: float) -> str:
 #  Probing
 # ─────────────────────────────────────────────────────────────────────────────
 
-ProbeError = errors.ProbeError                      # raised by probe(); part of core.errors
+ProbeError = errors.ProbeError  # raised by probe(); part of core.errors
 
 
 def _f(value: Any, default: float = 0.0) -> float:
@@ -127,15 +131,16 @@ def _rate(value: Any) -> float:
 @dataclass(frozen=True, slots=True)
 class Stream:
     """One stream of a probed file.  Frozen: probe() results are cached and shared."""
+
     index: int
-    type: str                       # video | audio | subtitle | data | attachment
+    type: str  # video | audio | subtitle | data | attachment
     codec: str = ""
     codec_long: str = ""
     profile: str = ""
     width: int = 0
     height: int = 0
     pix_fmt: str = ""
-    fps: float = 0.0                # average frame rate (falls back to r_frame_rate)
+    fps: float = 0.0  # average frame rate (falls back to r_frame_rate)
     r_fps: float = 0.0
     sar: str = ""
     field_order: str = ""
@@ -157,7 +162,7 @@ class Stream:
     default: bool = False
     forced: bool = False
     attached_pic: bool = False
-    rotation: int = 0               # clockwise display rotation: 0/90/180/270
+    rotation: int = 0  # clockwise display rotation: 0/90/180/270
     tags: Mapping[str, Any] = field(default_factory=dict)
     raw: Mapping[str, Any] = field(default_factory=dict)
 
@@ -184,6 +189,7 @@ class Stream:
 class MediaInfo:
     """What ffprobe says about a file.  Frozen: probe() caches and shares it,
     so nobody may change it (Robust Python ch. 10; Fluent Python ch. 5)."""
+
     path: str
     format_name: str = ""
     format_long: str = ""
@@ -384,14 +390,24 @@ def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaI
             if hit is not None:
                 _PROBE_CACHE.move_to_end(key)
                 return hit
-    cmd = [ffprobe_path(), "-v", "error", "-hide_banner",
-           "-show_format", "-show_streams", "-show_chapters",
-           "-of", "json", path]
+    cmd = [
+        ffprobe_path(),
+        "-v",
+        "error",
+        "-hide_banner",
+        "-show_format",
+        "-show_streams",
+        "-show_chapters",
+        "-of",
+        "json",
+        path,
+    ]
     try:
         r = proc.run(cmd, timeout=timeout)
     except errors.ProgramNotFound as exc:
-        raise ProbeError("ffprobe was not found - install FFmpeg or set its "
-                         "location in Advanced Settings") from exc
+        raise ProbeError(
+            "ffprobe was not found - install FFmpeg or set its location in Advanced Settings"
+        ) from exc
     except errors.ProcessTimeout as exc:
         raise ProbeError(f"ffprobe timed out on {os.path.basename(path)}") from exc
     except errors.ProcessError as exc:
@@ -441,15 +457,16 @@ active_count = proc.active_count
 #  Running with progress
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class Progress:
-    out_time: float = 0.0             # seconds of output written so far
+    out_time: float = 0.0  # seconds of output written so far
     fraction: float | None = None  # 0..1 when the expected duration is known
-    speed: float | None = None     # x realtime
+    speed: float | None = None  # x realtime
     fps: float | None = None
     frame: int | None = None
-    size: int | None = None        # bytes written
-    eta: float | None = None       # seconds remaining
+    size: int | None = None  # bytes written
+    eta: float | None = None  # seconds remaining
     elapsed: float = 0.0
     done: bool = False
 
@@ -495,10 +512,14 @@ class CommandError(errors.CommandError):
 _ERROR_HINTS = re.compile(
     r"(error|invalid|unable|cannot|can't|could not|failed|no such|not found|"
     r"unknown|unrecognized|does not|permission denied|not supported|"
-    r"incompatible|too many|out of memory|conversion failed)", re.I)
+    r"incompatible|too many|out of memory|conversion failed)",
+    re.I,
+)
 
-_NOISE = re.compile(r"^(frame=|size=|video:|audio:|\s*Stream #|\s*Metadata:|"
-                    r"\s*Duration:|Input #|Output #|\s+[a-z_]+\s+:|Press \[q\])")
+_NOISE = re.compile(
+    r"^(frame=|size=|video:|audio:|\s*Stream #|\s*Metadata:|"
+    r"\s*Duration:|Input #|Output #|\s+[a-z_]+\s+:|Press \[q\])"
+)
 
 
 def summarize_error(lines: Iterable[str], returncode: int | None = None) -> str:
@@ -537,8 +558,10 @@ def prepare_ffmpeg_cmd(cmd: Sequence[str]) -> list[str]:
     extra: list[str] = []
     if "-hide_banner" not in rest:
         extra.append("-hide_banner")
-    reads_stdin = any(rest[i] == "-i" and i + 1 < len(rest) and rest[i + 1] in ("-", "pipe:", "pipe:0")
-                      for i in range(len(rest)))
+    reads_stdin = any(
+        rest[i] == "-i" and i + 1 < len(rest) and rest[i + 1] in ("-", "pipe:", "pipe:0")
+        for i in range(len(rest))
+    )
     if "-nostdin" not in rest and not reads_stdin:
         extra.append("-nostdin")
     if "-progress" not in rest:
@@ -548,11 +571,36 @@ def prepare_ffmpeg_cmd(cmd: Sequence[str]) -> list[str]:
 
 
 _INPUT_OPTS_WITH_VALUE = {
-    "-ss", "-t", "-to", "-sseof", "-itsoffset", "-stream_loop", "-f", "-r",
-    "-framerate", "-c", "-c:v", "-c:a", "-vcodec", "-acodec", "-hwaccel",
-    "-hwaccel_output_format", "-i", "-loop", "-safe", "-protocol_whitelist",
-    "-analyzeduration", "-probesize", "-fflags", "-video_size", "-pix_fmt",
-    "-sample_rate", "-ar", "-ac", "-channel_layout", "-display_rotation",
+    "-ss",
+    "-t",
+    "-to",
+    "-sseof",
+    "-itsoffset",
+    "-stream_loop",
+    "-f",
+    "-r",
+    "-framerate",
+    "-c",
+    "-c:v",
+    "-c:a",
+    "-vcodec",
+    "-acodec",
+    "-hwaccel",
+    "-hwaccel_output_format",
+    "-i",
+    "-loop",
+    "-safe",
+    "-protocol_whitelist",
+    "-analyzeduration",
+    "-probesize",
+    "-fflags",
+    "-video_size",
+    "-pix_fmt",
+    "-sample_rate",
+    "-ar",
+    "-ac",
+    "-channel_layout",
+    "-display_rotation",
 }
 
 
@@ -589,8 +637,18 @@ def guess_output_duration(cmd: Sequence[str]) -> float | None:
     if not inputs:
         return None
     path, in_opts = inputs[0]
-    if in_opts.get("-f") in ("lavfi", "concat", "image2", "gdigrab", "ddagrab",
-                             "x11grab", "dshow", "avfoundation", "pulse", "alsa"):
+    if in_opts.get("-f") in (
+        "lavfi",
+        "concat",
+        "image2",
+        "gdigrab",
+        "ddagrab",
+        "x11grab",
+        "dshow",
+        "avfoundation",
+        "pulse",
+        "alsa",
+    ):
         if "-t" in in_opts:
             try:
                 return parse_time(in_opts["-t"])
@@ -606,7 +664,9 @@ def guess_output_duration(cmd: Sequence[str]) -> float | None:
         if "-t" in in_opts:
             remaining = min(remaining, parse_time(in_opts["-t"]))
         elif "-to" in in_opts:
-            remaining = min(remaining, max(0.0, parse_time(in_opts["-to"]) - parse_time(in_opts.get("-ss", 0))))
+            remaining = min(
+                remaining, max(0.0, parse_time(in_opts["-to"]) - parse_time(in_opts.get("-ss", 0)))
+            )
         return remaining or None
     except ValueError:
         return None
@@ -614,13 +674,22 @@ def guess_output_duration(cmd: Sequence[str]) -> float | None:
 
 _LINE_SPLIT = re.compile(rb"[\r\n]")
 
-_PROGRESS_KEYS = {"frame", "fps", "bitrate", "total_size", "out_time_us",
-                  "out_time_ms", "out_time", "dup_frames", "drop_frames",
-                  "speed", "progress"}
+_PROGRESS_KEYS = {
+    "frame",
+    "fps",
+    "bitrate",
+    "total_size",
+    "out_time_us",
+    "out_time_ms",
+    "out_time",
+    "dup_frames",
+    "drop_frames",
+    "speed",
+    "progress",
+}
 
 
-def _parse_progress_block(block: dict, duration: float | None,
-                          started: float) -> Progress:
+def _parse_progress_block(block: dict, duration: float | None, started: float) -> Progress:
     p = Progress(elapsed=time.monotonic() - started)
     us = block.get("out_time_us") or block.get("out_time_ms")
     if us not in (None, "", "N/A"):
@@ -645,15 +714,18 @@ def _parse_progress_block(block: dict, duration: float | None,
     return p
 
 
-def run(cmd: Sequence[str], *,
-        duration: float | None = None,
-        on_line: Callable[[str], None] | None = None,
-        on_progress: Callable[[Progress], None] | None = None,
-        cancel: Callable[[], bool] | None = None,
-        timeout: float | None = None,
-        cwd: str | None = None,
-        env: dict | None = None,
-        tail: int = 200) -> RunResult:
+def run(
+    cmd: Sequence[str],
+    *,
+    duration: float | None = None,
+    on_line: Callable[[str], None] | None = None,
+    on_progress: Callable[[Progress], None] | None = None,
+    cancel: Callable[[], bool] | None = None,
+    timeout: float | None = None,
+    cwd: str | None = None,
+    env: dict | None = None,
+    tail: int = 200,
+) -> RunResult:
     """Run *cmd* to completion, streaming its log and progress.
 
     * FFmpeg commands get ``-progress`` added automatically; *duration* (the
@@ -697,7 +769,7 @@ def run(cmd: Sequence[str], *,
         if on_line:
             try:
                 on_line(text)
-            except Exception:                     # a bug in the caller's callback: log, keep running
+            except Exception:  # a bug in the caller's callback: log, keep running
                 logger.exception("on_line callback failed")
 
     def _handle_progress_line(text: str) -> bool:
@@ -750,10 +822,12 @@ def run(cmd: Sequence[str], *,
             except Exception:
                 logger.debug("_pump: best-effort step failed", exc_info=True)
 
-    err_thread = tasks.start_service(partial(_pump, child.stderr, progress_on_stderr),
-                                     name="ffmpeg-stderr")
-    out_thread = tasks.start_service(partial(_pump, child.stdout, ffmpeg_mode and not progress_on_stderr),
-                                     name="ffmpeg-stdout")
+    err_thread = tasks.start_service(
+        partial(_pump, child.stderr, progress_on_stderr), name="ffmpeg-stderr"
+    )
+    out_thread = tasks.start_service(
+        partial(_pump, child.stdout, ffmpeg_mode and not progress_on_stderr), name="ffmpeg-stdout"
+    )
 
     try:
         while True:
@@ -788,9 +862,14 @@ def run(cmd: Sequence[str], *,
     result.elapsed = time.monotonic() - started
     if on_progress and result.returncode == 0 and not result.cancelled:
         try:
-            on_progress(Progress(out_time=duration or 0.0,
-                                 fraction=1.0 if duration else None,
-                                 elapsed=result.elapsed, done=True))
+            on_progress(
+                Progress(
+                    out_time=duration or 0.0,
+                    fraction=1.0 if duration else None,
+                    elapsed=result.elapsed,
+                    done=True,
+                )
+            )
         except Exception:
             logger.exception("on_progress callback failed")
     return result
@@ -808,23 +887,34 @@ def check(cmd: Sequence[str], **kwargs) -> RunResult:
 
 
 @overload
-def capture(cmd: Sequence[str], *, timeout: float | None = ..., text: Literal[True] = ...
-            ) -> proc.ProcResult[str]: ...
+def capture(
+    cmd: Sequence[str], *, timeout: float | None = ..., text: Literal[True] = ...
+) -> proc.ProcResult[str]: ...
 @overload
-def capture(cmd: Sequence[str], *, timeout: float | None = ..., text: Literal[False]
-            ) -> proc.ProcResult[bytes]: ...
+def capture(
+    cmd: Sequence[str], *, timeout: float | None = ..., text: Literal[False]
+) -> proc.ProcResult[bytes]: ...
 
 
-def capture(cmd: Sequence[str], *, timeout: float | None = 60.0, text: bool = True) -> proc.ProcResult[Any]:
+def capture(
+    cmd: Sequence[str], *, timeout: float | None = 60.0, text: bool = True
+) -> proc.ProcResult[Any]:
     """Run a short command and collect its output (see :func:`core.proc.run`)."""
     if text:
         return proc.run(cmd, timeout=timeout)
     return proc.run(cmd, timeout=timeout, text=False)
 
 
-def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
-                   vf: str = "", keep_time: bool = False,
-                   timeout: float = 20.0) -> bytes | None:
+def grab_frame_png(
+    path: str,
+    at: float,
+    *,
+    width: int = 0,
+    height: int = 0,
+    vf: str = "",
+    keep_time: bool = False,
+    timeout: float = 20.0,
+) -> bytes | None:
     """Return one frame of *path* at *at* seconds as PNG bytes (or None).
 
     Input-side seeking with decoding is frame-accurate in modern FFmpeg.
@@ -842,10 +932,27 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
     # 8-bit RGB: a 10-bit source would otherwise give a 16-bit PNG, ~4x bigger and ~3x
     # slower for Tk to decode on the UI thread (High Performance Python findings, R5)
     chain.append("format=rgb24")
-    gpu = any("libplacebo" in f or "_vulkan" in f for f in chain)      # GPU filters need a Vulkan device
-    cmd = [ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
-           *(["-copyts"] if keep_time else []), *(["-init_hw_device", "vulkan"] if gpu else []),
-           "-ss", ts(max(0.0, at)), "-i", path, "-frames:v", "1", "-an", "-sn", "-dn"]
+    gpu = any(
+        "libplacebo" in f or "_vulkan" in f for f in chain
+    )  # GPU filters need a Vulkan device
+    cmd = [
+        ffmpeg_path(),
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        *(["-copyts"] if keep_time else []),
+        *(["-init_hw_device", "vulkan"] if gpu else []),
+        "-ss",
+        ts(max(0.0, at)),
+        "-i",
+        path,
+        "-frames:v",
+        "1",
+        "-an",
+        "-sn",
+        "-dn",
+    ]
     cmd += ["-vf", ",".join(chain)]
     cmd += ["-f", "image2pipe", "-c:v", "png", "-"]
     try:
@@ -861,6 +968,7 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
 def has_filter(name: str) -> bool:
     """True if the FFmpeg in use was built with filter *name* (see core.capabilities)."""
     from core import capabilities
+
     return name in capabilities.get("filters")
 
 
@@ -877,7 +985,7 @@ def version_of(binary: str | None = None) -> str:
     if not m:
         return "Unknown"
     ver = m.group(1)
-    ver = re.sub(r"^n(?=\d)", "", ver)          # "n9.0.2" -> "9.0.2"
+    ver = re.sub(r"^n(?=\d)", "", ver)  # "n9.0.2" -> "9.0.2"
     return ver
 
 
@@ -886,4 +994,5 @@ def format_cmd(cmd: Sequence[str]) -> str:
     if _IS_WIN:
         return proc.list2cmdline([str(c) for c in cmd])
     import shlex
+
     return " ".join(shlex.quote(str(c)) for c in cmd)

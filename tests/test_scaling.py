@@ -1,4 +1,5 @@
 """HiDPI scaling: core/scaling.py, and the app on a 200 % screen."""
+
 from __future__ import annotations
 
 import json
@@ -38,8 +39,8 @@ def test_px_scales_ints_floats_and_pairs(factor):
     assert scaling.px(1.5) == 3.0
     assert scaling.px(-6) == -12
     factor(1.25)
-    assert scaling.px(1) == 1          # 1.25 rounds to 1, but never down to 0
-    assert scaling.px(10) == 12        # round(12.5) -> 12 (banker's), still close
+    assert scaling.px(1) == 1  # 1.25 rounds to 1, but never down to 0
+    assert scaling.px(10) == 12  # round(12.5) -> 12 (banker's), still close
     factor(0.75)
     assert scaling.px(1) == 1 and scaling.px(-1) == -1
 
@@ -80,9 +81,18 @@ def test_no_override_leaves_the_environment_alone(monkeypatch):
     assert "XENVIRONMENT" not in os.environ
 
 
-@pytest.mark.parametrize("desktop, output, expected", [
-    ("XFCE", "2", 2), ("XFCE", "1", 1), ("MATE", "uint32 2", 2), ("MATE", "uint32 0", 1),
-    ("GNOME", "{'Gdk/WindowScalingFactor': <2>}", 2), ("GNOME", "@a{sv} {}", 1), ("KDE", "2", 1)])
+@pytest.mark.parametrize(
+    "desktop, output, expected",
+    [
+        ("XFCE", "2", 2),
+        ("XFCE", "1", 1),
+        ("MATE", "uint32 2", 2),
+        ("MATE", "uint32 0", 1),
+        ("GNOME", "{'Gdk/WindowScalingFactor': <2>}", 2),
+        ("GNOME", "@a{sv} {}", 1),
+        ("KDE", "2", 1),
+    ],
+)
 def test_window_scale_from_the_desktop(monkeypatch, desktop, output, expected):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
     monkeypatch.delenv("DESKTOP_SESSION", raising=False)
@@ -91,8 +101,10 @@ def test_window_scale_from_the_desktop(monkeypatch, desktop, output, expected):
 
 
 @pytest.mark.skipif(sys.platform.startswith(("win", "darwin")), reason="X11 only")
-@pytest.mark.parametrize("xft, ws, expected", [(96.0, 2, 2.0), (None, 2, 2.0), (120.0, 2, 2.5),
-                                               (192.0, 2, None), (96.0, 1, None)])
+@pytest.mark.parametrize(
+    "xft, ws, expected",
+    [(96.0, 2, 2.0), (None, 2, 2.0), (120.0, 2, 2.5), (192.0, 2, None), (96.0, 1, None)],
+)
 def test_window_scale_with_unscaled_font_dpi_overrides(tmp_path, monkeypatch, xft, ws, expected):
     monkeypatch.setenv("CROSSFADER_CACHE_DIR", str(tmp_path))
     monkeypatch.delenv("GDK_SCALE", raising=False)
@@ -146,18 +158,25 @@ _APP_AT_200 = textwrap.dedent("""
 def _run_app(env_extra: dict) -> dict:
     env = dict(os.environ)
     env.pop("CROSSFADER_TEST_USE_REAL_DISPLAY", None)
-    env.pop("DISPLAY", None)                  # the harness starts its own Xvfb
+    env.pop("DISPLAY", None)  # the harness starts its own Xvfb
     env.update(env_extra)
-    res = subprocess.run([sys.executable, "-c", _APP_AT_200.format(root=ROOT)], env=env, cwd=ROOT,
-                         capture_output=True, text=True, timeout=180)
+    res = subprocess.run(
+        [sys.executable, "-c", _APP_AT_200.format(root=ROOT)],
+        env=env,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
     lines = [ln for ln in res.stdout.splitlines() if ln.startswith("RESULT ")]
     assert lines, f"app did not start (rc {res.returncode}):\n{res.stderr[-3000:]}"
     return json.loads(lines[-1][7:])
 
 
 @pytest.mark.gui
-@pytest.mark.skipif(sys.platform.startswith(("win", "darwin")) or not shutil.which("Xvfb"),
-                    reason="needs Xvfb")
+@pytest.mark.skipif(
+    sys.platform.startswith(("win", "darwin")) or not shutil.which("Xvfb"), reason="needs Xvfb"
+)
 def test_app_runs_at_200_percent(tmp_path):
     """GNOME at 200 % sets Xft.dpi to 192.  The app used to die at start with
     'BadValue ... X_CreatePixmap' (the Start page widened itself without end)."""
@@ -167,14 +186,15 @@ def test_app_runs_at_200_percent(tmp_path):
     normal = _run_app({"XENVIRONMENT": str(tmp_path / "none")})
     assert big["factor"] == 2.0 and normal["factor"] == 1.0
     assert not big["errors"]
-    assert big["width"] == big["first"] <= big["screen"]           # stable, fits the screen
-    assert big["inner"] <= big["canvas"] + 1                        # Start page fits its view
-    assert 1.8 < big["font"] / normal["font"] < 2.2                 # text really is twice the size
+    assert big["width"] == big["first"] <= big["screen"]  # stable, fits the screen
+    assert big["inner"] <= big["canvas"] + 1  # Start page fits its view
+    assert 1.8 < big["font"] / normal["font"] < 2.2  # text really is twice the size
 
 
 @pytest.mark.gui
-@pytest.mark.skipif(sys.platform.startswith(("win", "darwin")) or not shutil.which("Xvfb"),
-                    reason="needs Xvfb")
+@pytest.mark.skipif(
+    sys.platform.startswith(("win", "darwin")) or not shutil.which("Xvfb"), reason="needs Xvfb"
+)
 def test_ui_scale_setting_scales_the_whole_app(tmp_path):
     scaled = _run_app({"TEST_UI_SCALE": "1.5", "XENVIRONMENT": str(tmp_path / "none")})
     normal = _run_app({"XENVIRONMENT": str(tmp_path / "none")})
@@ -187,6 +207,7 @@ def test_tk_font_doubling_is_undone(ui):
     """Tk 9 doubles its standard fonts on a desktop window scale of 2; the
     font DPI already does the scaling, so they must go back to normal."""
     import tkinter
+
     if tkinter.TkVersion < 9:
         pytest.skip("Tk 8.6 does not double its fonts")
     call = ui.app.tk.call

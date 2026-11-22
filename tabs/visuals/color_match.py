@@ -12,6 +12,7 @@ channel is then remapped with ``lutrgb``:
 blended with the original by the chosen strength (Reinhard-style statistical
 transfer, applied per RGB channel).
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -49,9 +50,19 @@ def rgb_stats(path: str, count: int = 10) -> dict:
         cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error"]
         if at > 0:
             cmd += ["-ss", ff.ts(at)]
-        cmd += ["-i", path, "-frames:v", "1", "-an", "-sn",
-                "-vf", f"scale={_SAMPLE_W}:{_SAMPLE_H}:flags=area,format=rgb24",
-                "-f", "rawvideo", "-"]
+        cmd += [
+            "-i",
+            path,
+            "-frames:v",
+            "1",
+            "-an",
+            "-sn",
+            "-vf",
+            f"scale={_SAMPLE_W}:{_SAMPLE_H}:flags=area,format=rgb24",
+            "-f",
+            "rawvideo",
+            "-",
+        ]
         r = ff.capture(cmd, timeout=60, text=False)
         frame = r.stdout or b""
         if r.returncode == 0 and len(frame) == _SAMPLE_W * _SAMPLE_H * 3:
@@ -65,12 +76,13 @@ def rgb_stats(path: str, count: int = 10) -> dict:
         n = len(chan)
         mean = sum(chan) / n
         var = max(sum(map(_SQ.__getitem__, chan)) / n - mean * mean, 0.0)
-        out[ch] = (mean, var ** 0.5)
+        out[ch] = (mean, var**0.5)
     return out
 
 
-def build_filter(src: dict, ref: dict, *, strength: float = 1.0, channels: str = "RGB",
-                 contrast: bool = True) -> str:
+def build_filter(
+    src: dict, ref: dict, *, strength: float = 1.0, channels: str = "RGB", contrast: bool = True
+) -> str:
     """lutrgb chain moving *src* statistics towards *ref* ('' if nothing to do)."""
     parts = []
     for ch in "RGB":
@@ -88,7 +100,7 @@ class ColorMatchTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._stats = None            # (src_path, ref_path, src_stats, ref_stats)
+        self._stats = None  # (src_path, ref_path, src_stats, ref_stats)
         self._analysing = False
         self._build_ui()
 
@@ -102,63 +114,106 @@ class ColorMatchTab(BaseTab):
         inp.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.src_row = FileRow(inp, "Clip to fix:", self.src_var, on_change=self._inputs_changed)
         self.src_row.pack(fill="x", pady=px(2))
-        tk.Label(inp, text=f"  ℹ  {t('color_match.source_hint')}", fg=CLR["fgdim"],
-                 font=(UI_FONT, 8)).pack(anchor="w")
-        self.ref_row = FileRow(inp, "Reference look:", kind="visual",
-                               on_change=self._inputs_changed)
+        tk.Label(
+            inp, text=f"  ℹ  {t('color_match.source_hint')}", fg=CLR["fgdim"], font=(UI_FONT, 8)
+        ).pack(anchor="w")
+        self.ref_row = FileRow(
+            inp, "Reference look:", kind="visual", on_change=self._inputs_changed
+        )
         self.ref_row.pack(fill="x", pady=px(2))
-        tk.Label(inp, text=f"  ℹ  {t('color_match.reference_hint')}", fg=CLR["fgdim"],
-                 font=(UI_FONT, 8)).pack(anchor="w")
+        tk.Label(
+            inp, text=f"  ℹ  {t('color_match.reference_hint')}", fg=CLR["fgdim"], font=(UI_FONT, 8)
+        ).pack(anchor="w")
 
         self.compare = CompareView(body, 400, 225, after_label="Matched")
         self.compare.pack(pady=px(6))
 
-        opts = tk.LabelFrame(body, text=f"  {t('color_match.match_options_section')}  ",
-                             padx=px(12), pady=px(8))
+        opts = tk.LabelFrame(
+            body, text=f"  {t('color_match.match_options_section')}  ", padx=px(12), pady=px(8)
+        )
         opts.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(opts)
         r0.pack(fill="x", pady=px(2))
-        tk.Label(r0, text=t("color_match.strength_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(r0, text=t("color_match.strength_label"), font=(UI_FONT, 10, "bold")).pack(
+            side="left"
+        )
         self.strength_var = tk.DoubleVar(value=1.0)
-        tk.Scale(r0, variable=self.strength_var, from_=0.0, to=1.0, resolution=0.05,
-                 orient="horizontal", length=px(260),
-                 command=lambda _v: self._update_filter()).pack(side="left", padx=px(8))
+        tk.Scale(
+            r0,
+            variable=self.strength_var,
+            from_=0.0,
+            to=1.0,
+            resolution=0.05,
+            orient="horizontal",
+            length=px(260),
+            command=lambda _v: self._update_filter(),
+        ).pack(side="left", padx=px(8))
         r1 = tk.Frame(opts)
         r1.pack(fill="x", pady=px(2))
-        tk.Label(r1, text=t("color_match.channels_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(r1, text=t("color_match.channels_label"), font=(UI_FONT, 10, "bold")).pack(
+            side="left"
+        )
         self.ch_vars = {}
         for ch in "RGB":
             var = tk.BooleanVar(value=True)
             self.ch_vars[ch] = var
-            tk.Checkbutton(r1, text=ch, variable=var, font=(UI_FONT, 10, "bold"),
-                           command=self._update_filter).pack(side="left", padx=px(6))
+            tk.Checkbutton(
+                r1, text=ch, variable=var, font=(UI_FONT, 10, "bold"), command=self._update_filter
+            ).pack(side="left", padx=px(6))
         self.contrast_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Match contrast too", variable=self.contrast_var,
-                       command=self._update_filter).pack(side="left", padx=px(16, 0))
+        tk.Checkbutton(
+            r1, text="Match contrast too", variable=self.contrast_var, command=self._update_filter
+        ).pack(side="left", padx=px(16, 0))
 
-        stats_lf = tk.LabelFrame(body, text=f"  {t('color_match.statistics_section')}  ",
-                                 padx=px(12), pady=px(6))
+        stats_lf = tk.LabelFrame(
+            body, text=f"  {t('color_match.statistics_section')}  ", padx=px(12), pady=px(6)
+        )
         stats_lf.pack(fill="x", padx=px(20), pady=px(4))
-        self.stats_text = tk.Text(stats_lf, height=5, bg=CLR["console_bg"], fg="#00FF88",
-                                  font=(MONO_FONT, 9), relief="flat")
+        self.stats_text = tk.Text(
+            stats_lf,
+            height=5,
+            bg=CLR["console_bg"],
+            fg="#00FF88",
+            font=(MONO_FONT, 9),
+            relief="flat",
+        )
         self.stats_text.pack(fill="x")
         self._show_stats("Choose both files, then press Analyse.")
-        self.btn_analyse = tk.Button(stats_lf, text=t("color_match.analyse_button"),
-                                     font=(UI_FONT, 10, "bold"), bg="#37474F", fg="white",
-                                     cursor="hand2", command=self._analyse)
+        self.btn_analyse = tk.Button(
+            stats_lf,
+            text=t("color_match.analyse_button"),
+            font=(UI_FONT, 10, "bold"),
+            bg="#37474F",
+            fg="white",
+            cursor="hand2",
+            command=self._analyse,
+        )
         self.btn_analyse.pack(anchor="w", pady=px(6, 0))
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr"))
+        self.encoder = EncoderPanel(
+            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
+        )
         self.encoder.pack(anchor="w")
-        self.out_row = FileRow(out_lf, t("common.output_file"), save=True,
-                               suggest=lambda: self.suggest_output(self.src_row.path, "matched"))
+        self.out_row = FileRow(
+            out_lf,
+            t("common.output_file"),
+            save=True,
+            suggest=lambda: self.suggest_output(self.src_row.path, "matched"),
+        )
         self.out_row.pack(fill="x", pady=px(8, 0))
 
-        self.btn_render = tk.Button(body, text=t("color_match.apply_button"),
-                                    font=(UI_FONT, 12, "bold"), bg="#AD1457", fg="white",
-                                    width=26, cursor="hand2", command=self._render)
+        self.btn_render = tk.Button(
+            body,
+            text=t("color_match.apply_button"),
+            font=(UI_FONT, 12, "bold"),
+            bg="#AD1457",
+            fg="white",
+            width=26,
+            cursor="hand2",
+            command=self._render,
+        )
         self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
@@ -177,7 +232,11 @@ class ColorMatchTab(BaseTab):
         self._update_filter()
 
     def _current_stats(self):
-        if self._stats and self._stats[0] == self.src_row.path and self._stats[1] == self.ref_row.path:
+        if (
+            self._stats
+            and self._stats[0] == self.src_row.path
+            and self._stats[1] == self.ref_row.path
+        ):
             return self._stats[2], self._stats[3]
         return None
 
@@ -186,8 +245,12 @@ class ColorMatchTab(BaseTab):
         if stats is None:
             return ""
         channels = "".join(ch for ch, v in self.ch_vars.items() if v.get())
-        return build_filter(*stats, strength=self.strength_var.get(), channels=channels,
-                            contrast=self.contrast_var.get())
+        return build_filter(
+            *stats,
+            strength=self.strength_var.get(),
+            channels=channels,
+            contrast=self.contrast_var.get(),
+        )
 
     def _update_filter(self):
         self.compare.set_filter(self.current_filter())
@@ -222,18 +285,21 @@ class ColorMatchTab(BaseTab):
                 return
             s, r = result
             self._stats = (src, ref, s, r)
-            lines = ["Channel   clip mean / spread     reference mean / spread",
-                     "─" * 56]
+            lines = ["Channel   clip mean / spread     reference mean / spread", "─" * 56]
             for ch in "RGB":
-                lines.append(f"  {ch}       {s[ch][0]:6.1f} / {s[ch][1]:5.1f}"
-                             f"          {r[ch][0]:6.1f} / {r[ch][1]:5.1f}")
+                lines.append(
+                    f"  {ch}       {s[ch][0]:6.1f} / {s[ch][1]:5.1f}"
+                    f"          {r[ch][0]:6.1f} / {r[ch][1]:5.1f}"
+                )
             self._show_stats("\n".join(lines))
             self.log(self.console, t("log.color_match.analysis_complete"))
             self._update_filter()
             if then is not None:
                 then()
 
-        tasks.submit(work, on_done=done, on_error=lambda exc: done(None, exc), name="ColourMatchAnalyse")
+        tasks.submit(
+            work, on_done=done, on_error=lambda exc: done(None, exc), name="ColourMatchAnalyse"
+        )
 
     def _render(self):
         src = self.src_row.path
@@ -245,12 +311,22 @@ class ColorMatchTab(BaseTab):
             return
         chain = self.current_filter()
         if not chain:
-            messagebox.showwarning(t("color_match.no_filter_title"),
-                                   t("color_match.no_filter_message"), parent=self)
+            messagebox.showwarning(
+                t("color_match.no_filter_title"), t("color_match.no_filter_message"), parent=self
+            )
             return
         out = common.output_for(self, self.out_row, src, "matched", inputs=[self.ref_row.path])
         if not out:
             return
-        common.render(self, src=src, info=info, out=out, chain=chain, encoder=self.encoder,
-                      console=self.console, btn=self.btn_render,
-                      btn_label=t("color_match.apply_button"), name="Colour Match")
+        common.render(
+            self,
+            src=src,
+            info=info,
+            out=out,
+            chain=chain,
+            encoder=self.encoder,
+            console=self.console,
+            btn=self.btn_render,
+            btn_label=t("color_match.apply_button"),
+            name="Colour Match",
+        )

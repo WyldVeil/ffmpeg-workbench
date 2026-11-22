@@ -21,6 +21,7 @@ EncoderPanel
     :class:`core.encoders.VideoEncode` with correct arguments for whichever
     encoder (software or GPU) is selected and actually works on this machine.
 """
+
 from __future__ import annotations
 
 import base64
@@ -44,6 +45,7 @@ logger = logging.getLogger("crossfader.widgets")
 
 def _clr():
     from tabs.base_tab import CLR
+
     return CLR
 
 
@@ -56,34 +58,48 @@ def _tr(key: str, fallback: str) -> str:
 #  FramePreview
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FramePreview(tk.Frame):
     """In-app still-frame viewer for a video file."""
 
-    def __init__(self, parent, width: int = 480, height: int = 270,
-                 show_time: bool = True, on_click: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        parent,
+        width: int = 480,
+        height: int = 270,
+        show_time: bool = True,
+        on_click: Callable[[], None] | None = None,
+    ):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
-        self._pw, self._ph = px(width), px(height)      # design px -> screen px
+        self._pw, self._ph = px(width), px(height)  # design px -> screen px
         self._path: str | None = None
         self._duration = 0.0
         self._photo: tk.PhotoImage | None = None
         self._lock = threading.Lock()
-        self._wanted: float | None = None       # newest requested time
+        self._wanted: float | None = None  # newest requested time
         self._busy = False
         self._shown_t: float | None = None
         self._last_at = 0.0
-        self._vf = ""                               # optional preview filter
+        self._vf = ""  # optional preview filter
         self._keep_time = False
-        self._gen = 0                               # bumps on every load()
-        self.after_draw: Callable[[], None] | None = None   # called after each new frame
-        self.canvas = tk.Canvas(self, width=self._pw, height=self._ph, bg="#000000",
-                                highlightthickness=px(1), highlightbackground=clr["border"],
-                                cursor="hand2" if on_click else "")
+        self._gen = 0  # bumps on every load()
+        self.after_draw: Callable[[], None] | None = None  # called after each new frame
+        self.canvas = tk.Canvas(
+            self,
+            width=self._pw,
+            height=self._ph,
+            bg="#000000",
+            highlightthickness=px(1),
+            highlightbackground=clr["border"],
+            cursor="hand2" if on_click else "",
+        )
         self.canvas.pack()
         self._time_lbl = None
         if show_time:
-            self._time_lbl = tk.Label(self, text="", bg=clr["bg"], fg=clr["fgdim"],
-                                      font=(MONO_FONT, 8))
+            self._time_lbl = tk.Label(
+                self, text="", bg=clr["bg"], fg=clr["fgdim"], font=(MONO_FONT, 8)
+            )
             self._time_lbl.pack(anchor="e")
         if on_click:
             self.canvas.bind("<Button-1>", lambda _e: on_click())
@@ -91,8 +107,7 @@ class FramePreview(tk.Frame):
 
     # ── public ───────────────────────────────────────────────────────────────
 
-    def load(self, path: str | None, duration: float | None = None,
-             at: float = 0.0) -> None:
+    def load(self, path: str | None, duration: float | None = None, at: float = 0.0) -> None:
         """Set the source file and show the frame at *at* seconds."""
         self._gen += 1
         self._path = path or None
@@ -151,8 +166,9 @@ class FramePreview(tk.Frame):
     def _placeholder(self, text: str) -> None:
         self.canvas.delete("all")
         self._photo = None
-        self.canvas.create_text(self._pw // 2, self._ph // 2, text=text,
-                                fill="#777777", font=(UI_FONT, 10))
+        self.canvas.create_text(
+            self._pw // 2, self._ph // 2, text=text, fill="#777777", font=(UI_FONT, 10)
+        )
         if self._time_lbl is not None:
             self._time_lbl.config(text="")
 
@@ -169,11 +185,14 @@ class FramePreview(tk.Frame):
                     self._busy = False
                     return
                 gen, path, vf, keep = self._gen, self._path, self._vf, self._keep_time
-            png = ff.grab_frame_png(path or "", at, width=self._pw, height=self._ph, vf=vf, keep_time=keep)
+            png = ff.grab_frame_png(
+                path or "", at, width=self._pw, height=self._ph, vf=vf, keep_time=keep
+            )
             self._deliver(gen, at, png)
 
     def _deliver(self, gen: int, at: float, png: bytes | None) -> None:
         from core import ui
+
         ui.call_soon(self._apply, gen, at, png)
 
     def _apply(self, gen: int, at: float, png: bytes | None) -> None:
@@ -208,22 +227,32 @@ class FramePreview(tk.Frame):
 #  CompareView
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CompareView(tk.Frame):
     """Before / after preview of one video with a shared position slider."""
 
-    def __init__(self, parent, width: int = 360, height: int = 203,
-                 before_label: str = "", after_label: str = ""):
+    def __init__(
+        self,
+        parent,
+        width: int = 360,
+        height: int = 203,
+        before_label: str = "",
+        after_label: str = "",
+    ):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         row = tk.Frame(self, bg=clr["bg"])
         row.pack()
         self.views = []
-        for label in (before_label or _tr("preview.before", "Before"),
-                      after_label or _tr("preview.after", "After")):
+        for label in (
+            before_label or _tr("preview.before", "Before"),
+            after_label or _tr("preview.after", "After"),
+        ):
             col = tk.Frame(row, bg=clr["bg"])
             col.pack(side="left", padx=px(4))
-            tk.Label(col, text=label, bg=clr["bg"], fg=clr["fgdim"],
-                     font=(UI_FONT, 9, "bold")).pack(anchor="w")
+            tk.Label(
+                col, text=label, bg=clr["bg"], fg=clr["fgdim"], font=(UI_FONT, 9, "bold")
+            ).pack(anchor="w")
             view = FramePreview(col, width, height, show_time=False)
             view.pack()
             self.views.append(view)
@@ -231,12 +260,14 @@ class CompareView(tk.Frame):
         bar = tk.Frame(self, bg=clr["bg"])
         bar.pack(fill="x", pady=px(4, 0))
         self._pos = tk.DoubleVar(value=0.0)
-        self._scale = ttk.Scale(bar, from_=0.0, to=1.0, variable=self._pos,
-                                command=lambda _v: self._moved())
+        self._scale = ttk.Scale(
+            bar, from_=0.0, to=1.0, variable=self._pos, command=lambda _v: self._moved()
+        )
         self._scale.pack(side="left", fill="x", expand=True, padx=px(4, 8))
-        framestep.slider(self._scale, self.view_before)          # , and . step a frame
-        self._time = tk.Label(bar, text="", width=12, bg=clr["bg"], fg=clr["fgdim"],
-                              font=(MONO_FONT, 9))
+        framestep.slider(self._scale, self.view_before)  # , and . step a frame
+        self._time = tk.Label(
+            bar, text="", width=12, bg=clr["bg"], fg=clr["fgdim"], font=(MONO_FONT, 9)
+        )
         self._time.pack(side="right")
         self._duration = 0.0
 
@@ -268,6 +299,7 @@ class CompareView(tk.Frame):
 #  FileRow
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FileRow(tk.Frame):
     """``Label [entry......] [Browse]`` bound to a StringVar.
 
@@ -276,24 +308,41 @@ class FileRow(tk.Frame):
     browsed ones.  *on_change(path)* fires (debounced) when the entry holds
     an existing file (any text for save rows)."""
 
-    def __init__(self, parent, label: str, var: tk.StringVar | None = None, *,
-                 kind: str = "video", save: bool = False, ext: str = ".mp4",
-                 width: int = 56, label_width: int = 16,
-                 on_change: Callable[[str], object] | None = None,
-                 suggest: Callable[[], str] | None = None):
+    def __init__(
+        self,
+        parent,
+        label: str,
+        var: tk.StringVar | None = None,
+        *,
+        kind: str = "video",
+        save: bool = False,
+        ext: str = ".mp4",
+        width: int = 56,
+        label_width: int = 16,
+        on_change: Callable[[str], object] | None = None,
+        suggest: Callable[[], str] | None = None,
+    ):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self.var = var if var is not None else tk.StringVar()
         self._kind, self._save, self._ext = kind, save, ext
         self._on_change, self._suggest = on_change, suggest
         self._job = None
-        tk.Label(self, text=label, width=label_width, anchor="w", bg=clr["bg"], fg=clr["fg"],
-                 font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(
+            self,
+            text=label,
+            width=label_width,
+            anchor="w",
+            bg=clr["bg"],
+            fg=clr["fg"],
+            font=(UI_FONT, 10, "bold"),
+        ).pack(side="left")
         self.entry = tk.Entry(self, textvariable=self.var, width=width, relief="flat")
         self.entry.pack(side="left", fill="x", expand=True, padx=px(6))
-        text = (_tr("common.save_as", "Save as…") if save else _tr("btn.browse", "Browse…"))
-        tk.Button(self, text=text, command=self._browse, cursor="hand2",
-                  relief="flat").pack(side="left")
+        text = _tr("common.save_as", "Save as…") if save else _tr("btn.browse", "Browse…")
+        tk.Button(self, text=text, command=self._browse, cursor="hand2", relief="flat").pack(
+            side="left"
+        )
         if on_change is not None:
             self.var.trace_add("write", self._changed)
 
@@ -306,10 +355,12 @@ class FileRow(tk.Frame):
 
     def _browse(self) -> None:
         from core import dialogs
+
         if self._save:
             current = self.path or (self._suggest() if self._suggest else "")
-            chosen = dialogs.ask_save(current, kind=self._kind, defaultextension=self._ext,
-                                      parent=self)
+            chosen = dialogs.ask_save(
+                current, kind=self._kind, defaultextension=self._ext, parent=self
+            )
         else:
             chosen = dialogs.ask_open(self._kind, parent=self)
         if chosen:
@@ -331,6 +382,7 @@ class FileRow(tk.Frame):
 # ─────────────────────────────────────────────────────────────────────────────
 #  scroll_body
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def scroll_body(parent) -> tk.Frame:
     """Fill *parent* with a vertically scrolling area and return the inner
@@ -364,25 +416,46 @@ _CODEC_LABELS = [
     ("dnxhr", "DNxHR (editing)"),
     ("ffv1", "FFV1 (lossless archive)"),
 ]
-_QUALITY_LABELS = [("very_high", "Very High"), ("high", "High"), ("good", "Good"),
-                   ("low", "Low"), ("lowest", "Lowest")]
-_SPEED_LABELS = [("fastest", "Fastest"), ("fast", "Fast"), ("balanced", "Balanced"),
-                 ("slow", "Slow (smaller)"), ("slowest", "Slowest (smallest)")]
+_QUALITY_LABELS = [
+    ("very_high", "Very High"),
+    ("high", "High"),
+    ("good", "Good"),
+    ("low", "Low"),
+    ("lowest", "Lowest"),
+]
+_SPEED_LABELS = [
+    ("fastest", "Fastest"),
+    ("fast", "Fast"),
+    ("balanced", "Balanced"),
+    ("slow", "Slow (smaller)"),
+    ("slowest", "Slowest (smallest)"),
+]
 
 
 class EncoderPanel(tk.Frame):
     """Video encoder choice: codec, quality, speed, GPU, 10-bit."""
 
-    def __init__(self, parent, *, codecs=("h264", "hevc", "av1", "vp9"),
-                 default_codec: str = "h264", default_quality: str = "high",
-                 default_speed: str = "balanced", show_ten_bit: bool = True,
-                 on_change: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        parent,
+        *,
+        codecs=("h264", "hevc", "av1", "vp9"),
+        default_codec: str = "h264",
+        default_quality: str = "high",
+        default_speed: str = "balanced",
+        show_ten_bit: bool = True,
+        on_change: Callable[[], None] | None = None,
+    ):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self._on_change = on_change
         self._codecs = [c for c in _CODEC_LABELS if c[0] in codecs]
-        self._codec_var = tk.StringVar(value=dict(self._codecs).get(default_codec, self._codecs[0][1]))
-        self._quality_var = tk.StringVar(value=dict(_QUALITY_LABELS)[encoders.quality_key(default_quality)])
+        self._codec_var = tk.StringVar(
+            value=dict(self._codecs).get(default_codec, self._codecs[0][1])
+        )
+        self._quality_var = tk.StringVar(
+            value=dict(_QUALITY_LABELS)[encoders.quality_key(default_quality)]
+        )
         self._speed_var = tk.StringVar(value=dict(_SPEED_LABELS).get(default_speed, "Balanced"))
         self._hw_var = tk.StringVar(value=_tr("encoder.hw_auto", "Auto (use GPU if available)"))
         self._ten_bit = tk.BooleanVar(value=False)
@@ -390,35 +463,62 @@ class EncoderPanel(tk.Frame):
         def lbl(text):
             return tk.Label(self, text=text, bg=clr["bg"], fg=clr["fg"], font=(UI_FONT, 9))
 
-        lbl(_tr("encoder.codec", "Codec")).grid(row=0, column=0, sticky="w", padx=px(0, 6), pady=px(2))
-        cb = ttk.Combobox(self, textvariable=self._codec_var, state="readonly", width=30,
-                          values=[v for _, v in self._codecs])
+        lbl(_tr("encoder.codec", "Codec")).grid(
+            row=0, column=0, sticky="w", padx=px(0, 6), pady=px(2)
+        )
+        cb = ttk.Combobox(
+            self,
+            textvariable=self._codec_var,
+            state="readonly",
+            width=30,
+            values=[v for _, v in self._codecs],
+        )
         cb.grid(row=0, column=1, sticky="w", pady=px(2))
         lbl(_tr("encoder.quality", "Quality")).grid(row=0, column=2, sticky="w", padx=px(14, 6))
-        qb = ttk.Combobox(self, textvariable=self._quality_var, state="readonly", width=11,
-                          values=[v for _, v in _QUALITY_LABELS])
+        qb = ttk.Combobox(
+            self,
+            textvariable=self._quality_var,
+            state="readonly",
+            width=11,
+            values=[v for _, v in _QUALITY_LABELS],
+        )
         qb.grid(row=0, column=3, sticky="w")
-        lbl(_tr("encoder.speed", "Speed")).grid(row=1, column=0, sticky="w", padx=px(0, 6), pady=px(2))
-        sb = ttk.Combobox(self, textvariable=self._speed_var, state="readonly", width=30,
-                          values=[v for _, v in _SPEED_LABELS])
+        lbl(_tr("encoder.speed", "Speed")).grid(
+            row=1, column=0, sticky="w", padx=px(0, 6), pady=px(2)
+        )
+        sb = ttk.Combobox(
+            self,
+            textvariable=self._speed_var,
+            state="readonly",
+            width=30,
+            values=[v for _, v in _SPEED_LABELS],
+        )
         sb.grid(row=1, column=1, sticky="w", pady=px(2))
         lbl(_tr("encoder.hardware", "Encoder")).grid(row=1, column=2, sticky="w", padx=px(14, 6))
         self._hw_box = ttk.Combobox(self, textvariable=self._hw_var, state="readonly", width=26)
         self._hw_box.grid(row=1, column=3, sticky="w")
         if show_ten_bit:
-            tk.Checkbutton(self, text=_tr("encoder.ten_bit", "10-bit colour (HDR-safe, less compatible)"),
-                           variable=self._ten_bit, bg=clr["bg"], fg=clr["fg"],
-                           selectcolor=clr["input_bg"], activebackground=clr["bg"],
-                           command=self._changed).grid(row=2, column=1, columnspan=3, sticky="w")
+            tk.Checkbutton(
+                self,
+                text=_tr("encoder.ten_bit", "10-bit colour (HDR-safe, less compatible)"),
+                variable=self._ten_bit,
+                bg=clr["bg"],
+                fg=clr["fg"],
+                selectcolor=clr["input_bg"],
+                activebackground=clr["bg"],
+                command=self._changed,
+            ).grid(row=2, column=1, columnspan=3, sticky="w")
         self._status = tk.Label(self, text="", bg=clr["bg"], fg=clr["fgdim"], font=(UI_FONT, 8))
         self._status.grid(row=3, column=0, columnspan=4, sticky="w", pady=px(2, 0))
         for w in (cb, qb, sb, self._hw_box):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        self._hw_choices = [("auto", self._hw_var.get()),
-                            ("off", _tr("encoder.hw_off", "Software (best quality per MB)"))]
+        self._hw_choices = [
+            ("auto", self._hw_var.get()),
+            ("off", _tr("encoder.hw_off", "Software (best quality per MB)")),
+        ]
         self._hw_box.config(values=[v for _, v in self._hw_choices])
         tasks.submit(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
-        self._changed(notify=False)        # the owner is still being built: don't call back into it yet
+        self._changed(notify=False)  # the owner is still being built: don't call back into it yet
 
     def _hw_detected(self, kinds) -> None:
         if not self.winfo_exists():
@@ -464,8 +564,15 @@ class EncoderPanel(tk.Frame):
         hw = self.hw
         if self.codec in ("prores", "dnxhr", "ffv1"):
             hw = "off"
-        return encoders.video(self.codec, self.quality, speed=self.speed, hw=hw,
-                              ten_bit=self.ten_bit, container=container, **kwargs)
+        return encoders.video(
+            self.codec,
+            self.quality,
+            speed=self.speed,
+            hw=hw,
+            ten_bit=self.ten_bit,
+            container=container,
+            **kwargs,
+        )
 
     def _changed(self, notify: bool = True) -> None:
         try:
@@ -481,9 +588,14 @@ class EncoderPanel(tk.Frame):
 #  here_button
 # ─────────────────────────────────────────────────────────────────────────────
 
-def here_button(parent, var: tk.StringVar, get_pos: Callable[[], float],
-                on_set: Callable[[], None] | None = None,
-                tip: str = "Use the frame shown in the preview") -> tk.Button:
+
+def here_button(
+    parent,
+    var: tk.StringVar,
+    get_pos: Callable[[], float],
+    on_set: Callable[[], None] | None = None,
+    tip: str = "Use the frame shown in the preview",
+) -> tk.Button:
     """A small ◉ button that puts the preview's position (to the millisecond,
     so frame-exact after , and . stepping) into the time field *var*."""
     from tabs.base_tab import add_tooltip
@@ -502,13 +614,20 @@ def here_button(parent, var: tk.StringVar, get_pos: Callable[[], float],
 #  FramePicker - choose a time by looking at the frames (for tools without a preview)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FramePicker(tk.Toplevel):
     """A small window to find a moment: the frame, a slider, ◀ ▶ buttons and
     the , and . keys (Shift: a second).  "Use this frame" puts its time into
     *var*."""
 
-    def __init__(self, parent, path: str, var: tk.StringVar,
-                 fmt: Callable[[float], str] = ff.format_time, title: str = "Pick a frame"):
+    def __init__(
+        self,
+        parent,
+        path: str,
+        var: tk.StringVar,
+        fmt: Callable[[float], str] = ff.format_time,
+        title: str = "Pick a frame",
+    ):
         super().__init__(parent)
         clr = _clr()
         self.configure(bg=clr["bg"])
@@ -521,24 +640,53 @@ class FramePicker(tk.Toplevel):
         self.preview = FramePreview(self, 480, 270, show_time=False)
         self.preview.pack(padx=px(12), pady=px(12, 4))
         self.pos = tk.DoubleVar(value=0.0)
-        self.slider = ttk.Scale(self, from_=0.0, to=max(0.0, dur - 1.0 / self._fps), variable=self.pos,
-                                command=lambda _v: self._moved())
+        self.slider = ttk.Scale(
+            self,
+            from_=0.0,
+            to=max(0.0, dur - 1.0 / self._fps),
+            variable=self.pos,
+            command=lambda _v: self._moved(),
+        )
         self.slider.pack(fill="x", padx=px(12))
         framestep.slider(self.slider, lambda: self._fps)
         bar = tk.Frame(self, bg=clr["bg"])
         bar.pack(fill="x", padx=px(12), pady=px(6))
         for label, frames, seconds in (("◀◀", 0, -1), ("◀", -1, 0), ("▶", 1, 0), ("▶▶", 0, 1)):
-            tk.Button(bar, text=label, relief="flat", width=3,
-                      command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s)).pack(side="left")
-        self.time_lbl = tk.Label(bar, text="", bg=clr["bg"], fg=clr["accent"], font=(MONO_FONT, 10, "bold"))
+            tk.Button(
+                bar,
+                text=label,
+                relief="flat",
+                width=3,
+                command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s),
+            ).pack(side="left")
+        self.time_lbl = tk.Label(
+            bar, text="", bg=clr["bg"], fg=clr["accent"], font=(MONO_FONT, 10, "bold")
+        )
         self.time_lbl.pack(side="left", padx=px(10))
         tk.Button(bar, text="Cancel", relief="flat", command=self.destroy).pack(side="right")
-        tk.Button(bar, text="✓  Use this frame", bg=clr["green"], fg="white", relief="flat",
-                  command=self._use).pack(side="right", padx=px(6))
-        tk.Label(self, text="Keys:  ,  and  .  one frame   ·   with Shift, one second   ·   Enter to use it",
-                 bg=clr["bg"], fg=clr["fgdim"], font=(UI_FONT, 8)).pack(pady=px(0, 8))
-        for key, frames, seconds in (("<comma>", -1, 0), ("<period>", 1, 0), ("<less>", 0, -1),
-                                     ("<semicolon>", 0, -1), ("<greater>", 0, 1), ("<colon>", 0, 1)):
+        tk.Button(
+            bar,
+            text="✓  Use this frame",
+            bg=clr["green"],
+            fg="white",
+            relief="flat",
+            command=self._use,
+        ).pack(side="right", padx=px(6))
+        tk.Label(
+            self,
+            text="Keys:  ,  and  .  one frame   ·   with Shift, one second   ·   Enter to use it",
+            bg=clr["bg"],
+            fg=clr["fgdim"],
+            font=(UI_FONT, 8),
+        ).pack(pady=px(0, 8))
+        for key, frames, seconds in (
+            ("<comma>", -1, 0),
+            ("<period>", 1, 0),
+            ("<less>", 0, -1),
+            ("<semicolon>", 0, -1),
+            ("<greater>", 0, 1),
+            ("<colon>", 0, 1),
+        ):
             self.bind(key, lambda _e, f=frames, s=seconds: framestep.step(self.slider, f, s))
         self.bind("<Return>", lambda _e: self._use())
         self.bind("<Escape>", lambda _e: self.destroy())
@@ -564,8 +712,12 @@ class FramePicker(tk.Toplevel):
         self.destroy()
 
 
-def pick_button(parent, var: tk.StringVar, get_path: Callable[[], str | None],
-                fmt: Callable[[float], str] = ff.format_time) -> tk.Button:
+def pick_button(
+    parent,
+    var: tk.StringVar,
+    get_path: Callable[[], str | None],
+    fmt: Callable[[float], str] = ff.format_time,
+) -> tk.Button:
     """A 🎞 button that opens a :class:`FramePicker` for the time field *var*."""
     from tabs.base_tab import add_tooltip
 
@@ -573,6 +725,7 @@ def pick_button(parent, var: tk.StringVar, get_path: Callable[[], str | None],
         path = get_path()
         if not path or not os.path.isfile(path):
             from tkinter import messagebox
+
             messagebox.showinfo("Pick a frame", "Choose a video first.", parent=parent)
             return
         FramePicker(parent, path, var, fmt)
@@ -582,8 +735,12 @@ def pick_button(parent, var: tk.StringVar, get_path: Callable[[], str | None],
     return btn
 
 
-def add_pickers(root, variables, get_path: Callable[[], str | None],
-                fmt: Callable[[float], str] = ff.format_time) -> int:
+def add_pickers(
+    root,
+    variables,
+    get_path: Callable[[], str | None],
+    fmt: Callable[[float], str] = ff.format_time,
+) -> int:
     """Put a 🎞 button right after the entry of each time field in *variables*
     (looked up under *root*).  Returns how many were added."""
     names = {str(v): v for v in variables}
@@ -593,7 +750,11 @@ def add_pickers(root, variables, get_path: Callable[[], str | None],
         w = todo.pop()
         todo.extend(w.winfo_children())
         try:
-            tv = str(w.cget("textvariable")) if w.winfo_class() in ("Entry", "Spinbox", "TEntry") else ""
+            tv = (
+                str(w.cget("textvariable"))
+                if w.winfo_class() in ("Entry", "Spinbox", "TEntry")
+                else ""
+            )
         except tk.TclError:
             tv = ""
         if tv in names and w.winfo_manager() == "pack":

@@ -1,4 +1,5 @@
 """Tests for core/encoders.py - every argument set must actually encode."""
+
 import os
 
 import pytest
@@ -29,8 +30,9 @@ def test_software_args_shape(monkeypatch):
 
 
 def test_vf_merging():
-    v = enc.VideoEncode(encoder="h264_vaapi", codec="h264", hw="vaapi",
-                        filter_suffix="format=nv12,hwupload")
+    v = enc.VideoEncode(
+        encoder="h264_vaapi", codec="h264", hw="vaapi", filter_suffix="format=nv12,hwupload"
+    )
     assert v.vf("scale=1280:-2") == "scale=1280:-2,format=nv12,hwupload"
     assert v.vf(None) == "format=nv12,hwupload"
     plain = enc.VideoEncode(encoder="libx264", codec="h264")
@@ -56,9 +58,21 @@ def test_two_pass_args():
 
 def _encode_ok(v, outdir, name, container):
     out = os.path.join(outdir, f"{name}.{container}")
-    cmd = [ff.ffmpeg_path(), "-y", *v.pre_input, "-f", "lavfi", "-i",
-           "testsrc2=size=640x360:rate=30", "-t", "1", *v.vf_args("scale=640:-2"),
-           *v.args, "-an", out]
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        *v.pre_input,
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=640x360:rate=30",
+        "-t",
+        "1",
+        *v.vf_args("scale=640:-2"),
+        *v.args,
+        "-an",
+        out,
+    ]
     res = ff.run(cmd)
     assert res.ok, f"{v.encoder} {v.args}: {res.error_summary}"
     info = ff.probe(out, use_cache=False)
@@ -67,8 +81,14 @@ def _encode_ok(v, outdir, name, container):
 
 
 SOFTWARE_MATRIX = [
-    ("h264", "mp4"), ("hevc", "mp4"), ("av1", "mkv"), ("vp9", "webm"),
-    ("prores", "mov"), ("dnxhr", "mov"), ("ffv1", "mkv"), ("mpeg4", "avi"),
+    ("h264", "mp4"),
+    ("hevc", "mp4"),
+    ("av1", "mkv"),
+    ("vp9", "webm"),
+    ("prores", "mov"),
+    ("dnxhr", "mov"),
+    ("ffv1", "mkv"),
+    ("mpeg4", "avi"),
 ]
 
 
@@ -98,7 +118,7 @@ def test_ten_bit_software(codec, outdir):
 def test_hw_probe_is_cached_and_hw_args_encode(outdir):
     hw = enc.hw_available()
     assert isinstance(hw, dict)
-    assert enc.hw_available() == hw          # cached
+    assert enc.hw_available() == hw  # cached
     working = [k for k, ok in hw.items() if ok]
     if not working:
         pytest.skip("no working hardware encoder on this machine")
@@ -120,12 +140,30 @@ def test_hw_probe_is_cached_and_hw_args_encode(outdir):
 
 
 @pytest.mark.ffmpeg
-@pytest.mark.parametrize("codec,container", [("aac", "m4a"), ("mp3", "mp3"), ("opus", "opus"),
-                                             ("vorbis", "ogg"), ("flac", "flac"), ("alac", "m4a"),
-                                             ("pcm16", "wav"), ("ac3", "ac3")])
+@pytest.mark.parametrize(
+    "codec,container",
+    [
+        ("aac", "m4a"),
+        ("mp3", "mp3"),
+        ("opus", "opus"),
+        ("vorbis", "ogg"),
+        ("flac", "flac"),
+        ("alac", "m4a"),
+        ("pcm16", "wav"),
+        ("ac3", "ac3"),
+    ],
+)
 def test_audio_encoders_really_encode(codec, container, media, outdir):
     out = os.path.join(outdir, f"a.{container}")
-    res = ff.run([ff.ffmpeg_path(), "-y", "-i", media["wav_silence"],
-                  *enc.audio(codec, "128k", container=container), out])
+    res = ff.run(
+        [
+            ff.ffmpeg_path(),
+            "-y",
+            "-i",
+            media["wav_silence"],
+            *enc.audio(codec, "128k", container=container),
+            out,
+        ]
+    )
     assert res.ok, res.error_summary
     assert ff.probe(out, use_cache=False).has_audio

@@ -9,6 +9,7 @@ SHA-256 list, over verified TLS regardless of the user's "verify SSL"
 setting, and only replaces the previous version after the new one has run
 successfully.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -39,6 +40,7 @@ def _offline() -> bool:
         return True
     try:
         from core import network
+
         return network.is_offline()
     except Exception:
         logger.debug("_offline: best-effort step failed", exc_info=True)
@@ -55,12 +57,15 @@ def _checks_enabled() -> bool:
 def _open(url: str, timeout: float = 30.0):
     """urlopen honouring proxy settings but ALWAYS verifying TLS."""
     import urllib.request
+
     try:
         from core import network
+
         cfg = dict(network.get())
         cfg["network.verify_ssl"] = True
-        return network.urlopen(url, timeout=timeout, cfg=cfg,
-                               headers={"User-Agent": "WyldVeil-Media-Editor-updater"})
+        return network.urlopen(
+            url, timeout=timeout, cfg=cfg, headers={"User-Agent": "WyldVeil-Media-Editor-updater"}
+        )
     except ImportError:
         ctx = ssl.create_default_context()
         req = urllib.request.Request(url, headers={"User-Agent": "WyldVeil-Media-Editor-updater"})
@@ -114,11 +119,13 @@ def _sums(text: str) -> dict:
 # it changes only with app releases (a newer FFmpeg can change or drop options
 # the tools rely on).  There is deliberately no in-app FFmpeg updater.
 
+
 def is_app_managed(path: str | None) -> bool:
     """True if *path* is the FFmpeg shipped with the app."""
     if not path:
         return True
     from core.hardware import APP_ROOT
+
     p = os.path.abspath(path)
     roots = [os.path.abspath(APP_ROOT)]
     meipass = getattr(sys, "_MEIPASS", None)
@@ -150,6 +157,7 @@ def install_ytdlp(log: Log) -> bool:
         return False
     try:
         from core import network
+
         try:
             rel = _json(_YTDLP_API)
             assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
@@ -187,6 +195,7 @@ def install_ytdlp(log: Log) -> bool:
 def tool_versions() -> dict:
     """{tool: (path, version)} for the About / System Info dialogs."""
     from core.ffmpeg import version_of
+
     out = {}
     for tool in ("ffmpeg", "ffprobe", "ffplay"):
         path = find_binary(tool)

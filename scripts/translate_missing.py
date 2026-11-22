@@ -27,48 +27,52 @@ LOCALE_DIR = Path(__file__).parent.parent / "locale"
 
 # Maps our locale codes → Google Translate target language codes
 GOOGLE_LANG = {
-    "en_GB":  "en",
-    "zh_CN":  "zh-CN",
-    "hi_IN":  "hi",
-    "es_ES":  "es",
+    "en_GB": "en",
+    "zh_CN": "zh-CN",
+    "hi_IN": "hi",
+    "es_ES": "es",
     "ar_MSA": "ar",
-    "fr_FR":  "fr",
-    "bn_BD":  "bn",
-    "pt_BR":  "pt",
-    "id_ID":  "id",
-    "ur_PK":  "ur",
-    "ru_RU":  "ru",
-    "de_DE":  "de",
-    "ja_JP":  "ja",
-    "pcm_NG": None,   # Nigerian Pidgin not supported by Google Translate - skip
-    "vi_VN":  "vi",
-    "ko_KR":  "ko",
-    "it_IT":  "it",
-    "tr_TR":  "tr",
-    "pl_PL":  "pl",
-    "nl_NL":  "nl",
-    "th_TH":  "th",
-    "fa_IR":  "fa",
-    "sw_KE":  "sw",
-    "tl_PH":  "tl",
-    "uk_UA":  "uk",
-    "ro_RO":  "ro",
-    "ms_MY":  "ms",
+    "fr_FR": "fr",
+    "bn_BD": "bn",
+    "pt_BR": "pt",
+    "id_ID": "id",
+    "ur_PK": "ur",
+    "ru_RU": "ru",
+    "de_DE": "de",
+    "ja_JP": "ja",
+    "pcm_NG": None,  # Nigerian Pidgin not supported by Google Translate - skip
+    "vi_VN": "vi",
+    "ko_KR": "ko",
+    "it_IT": "it",
+    "tr_TR": "tr",
+    "pl_PL": "pl",
+    "nl_NL": "nl",
+    "th_TH": "th",
+    "fa_IR": "fa",
+    "sw_KE": "sw",
+    "tl_PH": "tl",
+    "uk_UA": "uk",
+    "ro_RO": "ro",
+    "ms_MY": "ms",
 }
 
 # Tokens we don't want Google to mangle - wrap in a placeholder, restore after
 # Pattern: {varname}, file extensions, common technical terms
 _PROTECT_RE = re.compile(
-    r'(\{[^}]+\})'          # {placeholder} variables
+    r"(\{[^}]+\})"  # {placeholder} variables
 )
+
 
 def _protect(text: str) -> tuple[str, list[str]]:
     """Replace protected tokens with §0§, §1§, … and return the map."""
     tokens: list[str] = []
+
     def replacer(m: re.Match) -> str:
         tokens.append(m.group(0))
-        return f"§{len(tokens)-1}§"
+        return f"§{len(tokens) - 1}§"
+
     return _PROTECT_RE.sub(replacer, text), tokens
+
 
 def _restore(text: str, tokens: list[str]) -> str:
     for i, tok in enumerate(tokens):
@@ -81,7 +85,7 @@ def translate_batch(target_lang: str, keys: list[str], values: list[str]) -> dic
     Translate a list of UI strings into target_lang.
     Joins them with a delimiter so it's a single API call per batch.
     """
-    SEP = " ⟦§⟧ "   # unlikely to appear in normal text
+    SEP = " ⟦§⟧ "  # unlikely to appear in normal text
 
     protected: list[str] = []
     token_maps: list[list[str]] = []
@@ -105,12 +109,12 @@ def translate_batch(target_lang: str, keys: list[str], values: list[str]) -> dic
     # If the split count doesn't match, try a looser split
     if len(parts) != len(values):
         # Google may have altered the separator slightly
-        parts = re.split(r'\s*[⟦\[]\s*§\s*[⟧\]]\s*', translated_joined)
+        parts = re.split(r"\s*[⟦\[]\s*§\s*[⟧\]]\s*", translated_joined)
 
     # Pad or trim to match expected count
     while len(parts) < len(values):
         parts.append(values[len(parts)])  # fallback to English
-    parts = parts[:len(values)]
+    parts = parts[: len(values)]
 
     result: dict[str, str] = {}
     for i, key in enumerate(keys):
@@ -131,8 +135,9 @@ def save_json(path: Path, data: dict) -> None:
     print(f"  saved {path.name}")
 
 
-def process_language(lang_code: str, google_code: str, en_strings: dict,
-                     batch_size: int, dry_run: bool) -> None:
+def process_language(
+    lang_code: str, google_code: str, en_strings: dict, batch_size: int, dry_run: bool
+) -> None:
     lang_file = LOCALE_DIR / f"{lang_code}.json"
     if not lang_file.exists():
         print(f"  SKIP {lang_code}: file not found")
@@ -156,9 +161,13 @@ def process_language(lang_code: str, google_code: str, en_strings: dict,
     total_batches = (len(missing_keys) + batch_size - 1) // batch_size
 
     for batch_num, batch_start in enumerate(range(0, len(missing_keys), batch_size), 1):
-        batch_keys   = missing_keys[batch_start: batch_start + batch_size]
+        batch_keys = missing_keys[batch_start : batch_start + batch_size]
         batch_values = [en_strings[k] for k in batch_keys]
-        print(f"    batch {batch_num}/{total_batches} ({len(batch_keys)} strings)…", end=" ", flush=True)
+        print(
+            f"    batch {batch_num}/{total_batches} ({len(batch_keys)} strings)…",
+            end=" ",
+            flush=True,
+        )
 
         try:
             translations = translate_batch(google_code, batch_keys, batch_values)
@@ -177,7 +186,7 @@ def process_language(lang_code: str, google_code: str, en_strings: dict,
             except Exception as exc2:  # noqa: BLE001 - as above
                 print(f"    Retry also failed ({exc2}), skipping batch.")
 
-        time.sleep(0.3)   # be polite to Google's free endpoint
+        time.sleep(0.3)  # be polite to Google's free endpoint
 
     # Rebuild file: _meta first, then keys in en_US order
     output: dict = {}
@@ -194,11 +203,19 @@ def process_language(lang_code: str, google_code: str, en_strings: dict,
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Translate missing locale keys via Google Translate")
+    parser = argparse.ArgumentParser(
+        description="Translate missing locale keys via Google Translate"
+    )
     parser.add_argument("--lang", help="Only process this language (e.g. de_DE)")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be done without writing")
-    parser.add_argument("--batch-size", type=int, default=40,
-                        help="Strings per API call (default 40; lower = safer)")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be done without writing"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=40,
+        help="Strings per API call (default 40; lower = safer)",
+    )
     args = parser.parse_args()
 
     en_data = load_json(LOCALE_DIR / "en_US.json")
@@ -213,7 +230,9 @@ def main() -> None:
         languages = [code for code in GOOGLE_LANG]
 
     print(f"Source: {len(en_data)} English strings")
-    print(f"Languages: {len(languages)}  |  Batch size: {args.batch_size}  |  Dry run: {args.dry_run}\n")
+    print(
+        f"Languages: {len(languages)}  |  Batch size: {args.batch_size}  |  Dry run: {args.dry_run}\n"
+    )
 
     skipped = []
     for lang in languages:
