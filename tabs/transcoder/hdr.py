@@ -322,7 +322,7 @@ class HdrToSdrTab(BaseTab):
                 chain=chain,
                 name="HDR to SDR",
                 extra_args=subtitle_args(info, common.container_of(out)),
-                pre_input=["-init_hw_device", "vulkan"] if self._gpu() else (),
+                pre_input=ff.VULKAN_DEVICE if self._gpu() else (),
             ),
             encoder=venc,
             console=self.console,

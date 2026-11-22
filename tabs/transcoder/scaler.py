@@ -272,7 +272,7 @@ class ResolutionScalerTab(BaseTab):
         out = common.output_for(self, self.out_row, src, self._suffix())
         if not out:
             return
-        extra_pre = ["-init_hw_device", "vulkan"] if "libplacebo" in chain else []
+        extra_pre = list(ff.VULKAN_DEVICE) if "libplacebo" in chain else []
         self.log(self.console, chain)
         common.render(
             self,

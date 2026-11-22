@@ -29,28 +29,7 @@ def run(app: App) -> int:
         if not path:
             problems.append(f"{tool} missing")
     out = os.path.join(tempfile.mkdtemp(prefix="selftest_"), "t.mp4")
-    res = ff.run(
-        [
-            ff.ffmpeg_path(),
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            "testsrc2=size=320x240:rate=25:d=1",
-            "-f",
-            "lavfi",
-            "-i",
-            "sine=d=1",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-shortest",
-            out,
-        ]
-    )
+    res = ff.run(ff.test_encode_cmd(out))
     info = ff.try_probe(out)
     ok = res.ok and info is not None and info.has_video and info.has_audio
     print("encode  ", "ok" if ok else res.error_summary)

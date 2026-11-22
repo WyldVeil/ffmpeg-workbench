@@ -1928,7 +1928,7 @@ class YouTubeDownloaderTab(BaseTab):
             try:
                 from core import network as _net
 
-                playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
+                playlist = self._playlist_var.get()
                 route = _net.tool_proxy(url)
                 if route and route.startswith("socks"):
                     self.after(
@@ -1941,7 +1941,7 @@ class YouTubeDownloaderTab(BaseTab):
                     )
                     return
                 r = _proc.run(
-                    yto.stream_url_argv(ytdlp, url, playlist_flag),
+                    yto.stream_url_argv(ytdlp, url, playlist=playlist),
                     timeout=25,
                     env=_net.subprocess_env(url=url),
                 )
@@ -2095,9 +2095,7 @@ class YouTubeDownloaderTab(BaseTab):
                 f"↻ The site blocked this Tor exit - trying a fresh Tor circuit ({attempt}/{retries})…",
                 "warn",
             )
-            cmd = list(cmd)
-            idx = max(i for i, a in enumerate(cmd[:-1]) if a == "--proxy")
-            cmd[idx + 1] = _net.fresh_circuit(tor, attempt)
+            cmd = yto.with_proxy(cmd, _net.fresh_circuit(tor, attempt))
 
     def _run_ytdlp_once(
         self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False
@@ -2331,8 +2329,7 @@ class YouTubeDownloaderTab(BaseTab):
         )
         container = self._container_var.get()
 
-        playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = yto.download_argv(ytdlp, url, playlist_flag, fmt_str, container)
+        cmd = yto.download_argv(ytdlp, url, fmt_str, container, playlist=self._playlist_var.get())
         if self._dl_subs_var.get():
             cmd += yto.subtitle_args(
                 self._sub_lang_var.get().replace("(auto) ", ""),
@@ -2343,7 +2340,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
-        cmd += ["-o", out, url]
+        cmd += yto.output_args(out, url)
 
         self._stream_ytdlp(
             cmd,
@@ -2363,14 +2360,19 @@ class YouTubeDownloaderTab(BaseTab):
         base = os.path.splitext(out)[0]
         audio_out = base + "." + audio_fmt
 
-        playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = yto.audio_argv(ytdlp, url, playlist_flag, audio_fmt, quality)
-        cmd += ["--embed-thumbnail"] if self._embed_thumb_var.get() else []
-        cmd += ["--add-metadata"] if self._add_metadata_var.get() else []
+        cmd = yto.audio_argv(
+            ytdlp,
+            url,
+            audio_fmt,
+            quality,
+            playlist=self._playlist_var.get(),
+            thumbnail=self._embed_thumb_var.get(),
+            metadata=self._add_metadata_var.get(),
+        )
 
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
-        cmd += ["-o", audio_out, url]
+        cmd += yto.output_args(audio_out, url)
 
         # Mirror the post-processed audio path back into the box, and treat
         # it as still auto-managed so the next fetched URL refreshes it.
@@ -2392,11 +2394,10 @@ class YouTubeDownloaderTab(BaseTab):
     def _run_reencode(self, url: str, out: str, ytdlp: str, trim_args: list):
         tmp = os.path.join(tempfile.gettempdir(), f"_cf_yt_tmp_{os.getpid()}.mkv")
 
-        playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = yto.download_argv(ytdlp, url, playlist_flag, "bv*+ba/b", "mkv")
+        cmd = yto.download_argv(ytdlp, url, yto.BEST, "mkv", playlist=self._playlist_var.get())
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
-        cmd += ["-o", tmp, url]
+        cmd += yto.output_args(tmp, url)
 
         # Phase 1: download
         self.after(0, lambda: self.log(self.console, t("log.youtube.downloading_best_quality")))
@@ -2435,10 +2436,15 @@ class YouTubeDownloaderTab(BaseTab):
 
         from core import network as _net
 
-        playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = yto.subtitles_only_argv(ytdlp, url, playlist_flag, lang, sub_fmt, tmp_base)
-        if self._sub_auto_var.get():
-            cmd.insert(-3, "--write-auto-sub")
+        cmd = yto.subtitles_only_argv(
+            ytdlp,
+            url,
+            lang,
+            sub_fmt,
+            tmp_base,
+            playlist=self._playlist_var.get(),
+            auto=self._sub_auto_var.get(),
+        )
         try:
             _proc.run(cmd, timeout=30, text=False, env=_net.subprocess_env())
         except Exception:
@@ -2602,7 +2608,7 @@ class YouTubeDownloaderTab(BaseTab):
 
             try:
                 cmd = yto.download_argv(
-                    ytdlp, url, "--yes-playlist", "bv*+ba/b", self._container_var.get()
+                    ytdlp, url, yto.BEST, self._container_var.get(), playlist=True
                 )
             except OSError as exc:
                 from core import network as _net
@@ -2612,7 +2618,7 @@ class YouTubeDownloaderTab(BaseTab):
                 )
                 break
             cmd += self._build_common_ytdlp_args()
-            cmd += ["-o", out_path, url]
+            cmd += yto.output_args(out_path, url)
 
             rc = self._run_ytdlp_sync_batch(cmd, url=url)
             status = "✔ Done" if rc == 0 else f"✘ Error ({rc})"

@@ -985,7 +985,7 @@ def grab_frame_png(
         "-loglevel",
         "error",
         *(["-copyts"] if keep_time else []),
-        *(["-init_hw_device", "vulkan"] if gpu else []),
+        *(VULKAN_DEVICE if gpu else ()),
         "-ss",
         ts(max(0.0, at)),
         "-i",
@@ -1073,6 +1073,26 @@ def format_cmd_lines(cmd: Sequence[str]) -> str:
             lines.append(f"  {shlex.quote(p)}")
             i += 1
     return " \\\n".join(lines)
+
+
+#: input options that open a Vulkan device (for libplacebo, nlmeans_vulkan)
+VULKAN_DEVICE = ("-init_hw_device", "vulkan")
+
+
+def test_encode_cmd(out: str) -> list[str]:
+    """A one-second H.264 + AAC test file: proves FFmpeg can encode at all."""
+    sources = [
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x240:rate=25:d=1",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=d=1",
+    ]
+    codecs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"]
+    return [ffmpeg_path(), "-y", *sources, *codecs, out]
 
 
 def listen_cmd(path: str) -> list[str]:

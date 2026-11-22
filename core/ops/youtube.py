@@ -10,6 +10,7 @@ the bundled JS runtime, FFmpeg's folder and the app's network route for the URL.
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -29,10 +30,23 @@ def check_route(ytdlp: str, url: str) -> None:
     base_argv(ytdlp, url=url)
 
 
-def stream_url_argv(ytdlp: str, url: str, playlist_flag: str) -> list[str]:
+BEST = "bv*+ba/b"  # the best video with the best sound (or the best single file)
+
+
+def playlist_arg(playlist: bool) -> str:
+    """The whole playlist, or just the one video the link points at."""
+    return "--yes-playlist" if playlist else "--no-playlist"
+
+
+def output_args(out: str, url: str) -> list[str]:
+    """Where to save (*out*: a path or an output template), then what."""
+    return ["-o", out, url]
+
+
+def stream_url_argv(ytdlp: str, url: str, *, playlist: bool) -> list[str]:
     """Ask for a playable stream URL (up to 720p), for the preview."""
     fmt = "best[height<=720][ext=mp4]/best[height<=720]/best"
-    return [*base_argv(ytdlp, url=url), playlist_flag, "-g", "-f", fmt, url]
+    return [*base_argv(ytdlp, url=url), playlist_arg(playlist), "-g", "-f", fmt, url]
 
 
 def live_record_argv(ytdlp: str, url: str, out_template: str) -> list[str]:
@@ -43,11 +57,11 @@ def title_argv(ytdlp: str, url: str) -> list[str]:
     return [*base_argv(ytdlp, url=url), "--no-playlist", "--get-title", url]
 
 
-def download_argv(ytdlp: str, url: str, playlist_flag: str, fmt: str, container: str) -> list[str]:
+def download_argv(ytdlp: str, url: str, fmt: str, container: str, *, playlist: bool) -> list[str]:
     """The download (format *fmt*, merged into *container*), without the output and URL."""
     return [
         *base_argv(ytdlp, url=url),
-        playlist_flag,
+        playlist_arg(playlist),
         "-f",
         fmt,
         "--merge-output-format",
@@ -57,11 +71,26 @@ def download_argv(ytdlp: str, url: str, playlist_flag: str, fmt: str, container:
 
 
 def audio_argv(
-    ytdlp: str, url: str, playlist_flag: str, audio_format: str, quality: str
+    ytdlp: str,
+    url: str,
+    audio_format: str,
+    quality: str,
+    *,
+    playlist: bool,
+    thumbnail: bool = False,
+    metadata: bool = False,
 ) -> list[str]:
-    """Sound only, converted to *audio_format*, without the output and URL."""
-    head = [*base_argv(ytdlp, url=url), playlist_flag, "-x", "--audio-format", audio_format]
-    return [*head, "--audio-quality", quality, "--no-overwrites"]
+    """Sound only, converted to *audio_format* (cover picture and tags embedded
+    when asked), without the output and URL."""
+    head = [
+        *base_argv(ytdlp, url=url),
+        playlist_arg(playlist),
+        "-x",
+        "--audio-format",
+        audio_format,
+    ]
+    extras = ["--embed-thumbnail"] * thumbnail + ["--add-metadata"] * metadata
+    return [*head, "--audio-quality", quality, "--no-overwrites", *extras]
 
 
 def subtitle_args(lang: str, fmt: str, *, auto: bool, embed: bool) -> list[str]:
@@ -71,10 +100,12 @@ def subtitle_args(lang: str, fmt: str, *, auto: bool, embed: bool) -> list[str]:
 
 
 def subtitles_only_argv(
-    ytdlp: str, url: str, playlist_flag: str, lang: str, fmt: str, out_base: str
+    ytdlp: str, url: str, lang: str, fmt: str, out_base: str, *, playlist: bool, auto: bool = False
 ) -> list[str]:
-    head = [*base_argv(ytdlp, url=""), playlist_flag, "--write-sub", "--skip-download"]
-    return [*head, "--sub-lang", lang, "--sub-format", fmt, "-o", out_base, url]
+    """Only the subtitles (the automatic ones too when *auto*), to *out_base*.<lang>.<fmt>."""
+    head = [*base_argv(ytdlp, url=""), playlist_arg(playlist), "--write-sub", "--skip-download"]
+    head += ["--write-auto-sub"] if auto else []
+    return [*head, "--sub-lang", lang, "--sub-format", fmt, *output_args(out_base, url)]
 
 
 def section_args(start: float, end: float) -> list[str]:
@@ -247,3 +278,11 @@ def stream_preview_cmd(stream_url: str) -> list[str]:
         f"Video Preview - {APP_NAME}",
         stream_url,
     ]
+
+
+def with_proxy(cmd: Sequence[str], proxy: str) -> list[str]:
+    """*cmd* going through *proxy* instead (its last --proxy changed)."""
+    out = list(cmd)
+    idx = max(i for i, a in enumerate(out[:-1]) if a == "--proxy")
+    out[idx + 1] = proxy
+    return out

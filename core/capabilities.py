@@ -66,6 +66,8 @@ def _learn_filters() -> list[str]:
 
 
 def _learn_vulkan() -> bool:
+    from core import ffmpeg as ff
+
     if "libplacebo" not in get("filters"):
         return False
     r = proc.run(
@@ -75,8 +77,7 @@ def _learn_vulkan() -> bool:
             "-nostdin",
             "-loglevel",
             "error",
-            "-init_hw_device",
-            "vulkan",
+            *ff.VULKAN_DEVICE,
             "-f",
             "lavfi",
             "-i",

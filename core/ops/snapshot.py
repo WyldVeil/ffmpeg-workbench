@@ -161,7 +161,7 @@ def save_command(path: str, at: float, chain: str, out: str) -> list[str]:
         "-loglevel",
         "error",
         "-y",
-        *(["-init_hw_device", "vulkan"] if gpu else []),
+        *(ff.VULKAN_DEVICE if gpu else ()),
         "-ss",
         ff.ts(at),
         "-i",

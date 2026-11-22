@@ -909,7 +909,7 @@ def op_scale(ctx: Ctx) -> Result:
         info,
         out,
         chain,
-        pre=["-init_hw_device", "vulkan"] if "libplacebo" in chain else None,
+        pre=list(ff.VULKAN_DEVICE) if "libplacebo" in chain else None,
     )
     return result(out)
 
@@ -1203,7 +1203,7 @@ def op_hdr_to_sdr(ctx: Ctx) -> Result:
         info,
         out,
         chain,
-        pre=["-init_hw_device", "vulkan"] if gpu else None,
+        pre=list(ff.VULKAN_DEVICE) if gpu else None,
         extra=subtitle_args(info, container_of(out)),
     )
     return result(
