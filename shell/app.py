@@ -137,9 +137,7 @@ class App(tk.Tk):
 
         self.apply_theme(load_skin_name())
         self.protocol("WM_DELETE_WINDOW", self.quit_app)
-        queue = RenderQueueManager.get_instance()
-        queue.set_tk_root(self)
-        queue.register_update_callback(self.statusbar.queue_changed)
+        RenderQueueManager.get_instance().register_update_callback(self.statusbar.queue_changed)
 
         self.show_page(self.first_page())
         self.files.accept_drops(self, self.content, area)

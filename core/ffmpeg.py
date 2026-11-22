@@ -32,7 +32,7 @@ from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Literal, overload
+from typing import IO, Any, Literal, cast, overload
 
 from core import errors, proc, tasks
 from core.hardware import get_binary_path
@@ -116,6 +116,21 @@ def _i(value: Any, default: int = 0) -> int:
         return default
 
 
+def _obj(value: object) -> dict[str, Any]:
+    """A JSON object from ffprobe, or {} when the field is missing or the wrong shape."""
+    return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
+
+
+def _objs(value: object) -> list[dict[str, Any]]:
+    """A JSON list of objects from ffprobe (anything else is skipped)."""
+    items = cast("list[object]", value) if isinstance(value, list) else []
+    return [cast("dict[str, Any]", x) for x in items if isinstance(x, dict)]
+
+
+def _tags(value: object) -> dict[str, Any]:
+    return {k.lower(): v for k, v in _obj(value).items()}
+
+
 def _rate(value: Any) -> float:
     """``"30000/1001" -> 29.97`` ; ``"0/0" -> 0.0``."""
     if not value or value in ("0/0", "N/A"):
@@ -163,8 +178,8 @@ class Stream:
     forced: bool = False
     attached_pic: bool = False
     rotation: int = 0  # clockwise display rotation: 0/90/180/270
-    tags: Mapping[str, Any] = field(default_factory=dict)
-    raw: Mapping[str, Any] = field(default_factory=dict)
+    tags: Mapping[str, Any] = field(default_factory=dict[str, Any])
+    raw: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
     @property
     def is_hdr(self) -> bool:
@@ -199,8 +214,8 @@ class MediaInfo:
     start_time: float = 0.0
     streams: tuple[Stream, ...] = ()
     chapters: tuple[Mapping[str, Any], ...] = ()
-    tags: Mapping[str, Any] = field(default_factory=dict)
-    raw: Mapping[str, Any] = field(default_factory=dict)
+    tags: Mapping[str, Any] = field(default_factory=dict[str, Any])
+    raw: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
     # ── stream shortcuts ────────────────────────────────────────────────────
     @property
@@ -274,7 +289,7 @@ class MediaInfo:
 
     def summary(self) -> str:
         """One-line human description, e.g. ``1920×1080 · 29.97 fps · H264 · 02:03``."""
-        parts = []
+        parts: list[str] = []
         v, a = self.video, self.audio
         if v:
             w, h = v.display_size
@@ -296,11 +311,11 @@ class MediaInfo:
         return " · ".join(parts)
 
 
-def _parse_stream(d: dict) -> Stream:
-    tags = {str(k).lower(): v for k, v in (d.get("tags") or {}).items()}
-    disp = d.get("disposition") or {}
+def _parse_stream(d: dict[str, Any]) -> Stream:
+    tags = _tags(d.get("tags"))
+    disp = _obj(d.get("disposition"))
     rotation = 0
-    for sd in d.get("side_data_list") or []:
+    for sd in _objs(d.get("side_data_list")):
         if "rotation" in sd:
             rotation = round(-_f(sd.get("rotation"))) % 360
             break
@@ -346,9 +361,9 @@ def _parse_stream(d: dict) -> Stream:
     )
 
 
-def parse_probe_json(path: str, data: dict) -> MediaInfo:
-    fmt = data.get("format") or {}
-    streams = tuple(_parse_stream(s) for s in data.get("streams") or [])
+def parse_probe_json(path: str, data: dict[str, Any]) -> MediaInfo:
+    fmt = _obj(data.get("format"))
+    streams = tuple(_parse_stream(s) for s in _objs(data.get("streams")))
     duration = _f(fmt.get("duration"))
     if not duration:
         duration = max((s.duration for s in streams), default=0.0)
@@ -361,13 +376,13 @@ def parse_probe_json(path: str, data: dict) -> MediaInfo:
         bit_rate=_i(fmt.get("bit_rate")),
         start_time=_f(fmt.get("start_time")),
         streams=streams,
-        chapters=tuple(data.get("chapters") or ()),
-        tags={str(k).lower(): v for k, v in (fmt.get("tags") or {}).items()},
+        chapters=tuple(_objs(data.get("chapters"))),
+        tags=_tags(fmt.get("tags")),
         raw=data,
     )
 
 
-_PROBE_CACHE: OrderedDict[tuple, MediaInfo] = OrderedDict()
+_PROBE_CACHE: OrderedDict[tuple[str, int, int], MediaInfo] = OrderedDict()
 _PROBE_LOCK = threading.Lock()
 _PROBE_CACHE_MAX = 256
 
@@ -480,7 +495,7 @@ class RunResult:
     returncode: int
     cancelled: bool = False
     timed_out: bool = False
-    log_tail: list = field(default_factory=list)
+    log_tail: list[str] = field(default_factory=list[str])
     elapsed: float = 0.0
 
     @property
@@ -609,8 +624,8 @@ def guess_output_duration(cmd: Sequence[str]) -> float | None:
     percentage progress when the caller did not supply one."""
     args = [str(c) for c in cmd[1:]]
     # Split into per-input option groups and the output option group.
-    inputs: list[tuple[str, dict]] = []
-    opts: dict = {}
+    inputs: list[tuple[str, dict[str, str]]] = []
+    opts: dict[str, str] = {}
     i = 0
     while i < len(args):
         a = args[i]
@@ -689,7 +704,9 @@ _PROGRESS_KEYS = {
 }
 
 
-def _parse_progress_block(block: dict, duration: float | None, started: float) -> Progress:
+def _parse_progress_block(
+    block: dict[str, str], duration: float | None, started: float
+) -> Progress:
     p = Progress(elapsed=time.monotonic() - started)
     us = block.get("out_time_us") or block.get("out_time_ms")
     if us not in (None, "", "N/A"):
@@ -723,7 +740,7 @@ def run(
     cancel: Callable[[], bool] | None = None,
     timeout: float | None = None,
     cwd: str | None = None,
-    env: dict | None = None,
+    env: Mapping[str, str] | None = None,
     tail: int = 200,
 ) -> RunResult:
     """Run *cmd* to completion, streaming its log and progress.
@@ -747,7 +764,7 @@ def run(
             duration = None
     progress_on_stderr = ffmpeg_mode and "pipe:2" in argv
 
-    lines: deque = deque(maxlen=tail)
+    lines: deque[str] = deque(maxlen=tail)
     result = RunResult(returncode=-1)
     try:
         child = proc.spawn(argv, stdout=proc.PIPE, stderr=proc.PIPE, cwd=cwd, env=env)
@@ -762,7 +779,7 @@ def run(
         result.log_tail = list(lines)
         return result
 
-    block: dict = {}
+    block: dict[str, str] = {}
 
     def _emit_line(text: str) -> None:
         lines.append(text)
@@ -796,7 +813,7 @@ def run(
             return
         _emit_line(piece)
 
-    def _pump(stream, is_progress_stream: bool) -> None:
+    def _pump(stream: IO[bytes], is_progress_stream: bool) -> None:
         # Read whatever is available and split on BOTH \r and \n: tools that
         # redraw one status line with \r (yt-dlp, ffmpeg -stats) would
         # otherwise only be seen when a \n finally arrives.
@@ -822,6 +839,7 @@ def run(
             except Exception:
                 logger.debug("_pump: best-effort step failed", exc_info=True)
 
+    assert child.stderr is not None and child.stdout is not None  # both are pipes (above)
     err_thread = tasks.start_service(
         partial(_pump, child.stderr, progress_on_stderr), name="ffmpeg-stderr"
     )
@@ -875,7 +893,7 @@ def run(
     return result
 
 
-def check(cmd: Sequence[str], **kwargs) -> RunResult:
+def check(cmd: Sequence[str], **kwargs: Any) -> RunResult:
     """:func:`run`, raising :class:`CancelledError` / :class:`CommandError`
     on cancellation or failure - convenient inside multi-step jobs."""
     res = run(cmd, **kwargs)
@@ -960,7 +978,7 @@ def grab_frame_png(
     except errors.ProcessError:
         return None
     frame = r.stdout
-    if not r.ok or not isinstance(frame, bytes) or not frame.startswith(b"\x89PNG"):
+    if not r.ok or not frame.startswith(b"\x89PNG"):
         return None
     return frame
 

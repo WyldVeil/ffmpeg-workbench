@@ -31,9 +31,28 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any, overload
+from collections.abc import Callable
+from typing import Any, Protocol, overload
 
 from core import proc as _proc
+
+TkCall = Callable[..., Any]
+
+
+class _TkApp(Protocol):
+    def call(self, command: Any, /, *args: Any) -> Any: ...
+
+
+class _HasTk(Protocol):
+    """A Tk window, as far as scaling needs one (no Tk import here)."""
+
+    @property
+    def tk(self) -> _TkApp: ...
+
+
+class _Scalable(Protocol):
+    def scale(self, tag: str, x: float, y: float, xs: float, ys: float, /) -> None: ...
+
 
 logger = logging.getLogger("crossfader.scaling")
 
@@ -73,12 +92,12 @@ def px(*values: Any) -> Any:  # type: ignore[misc]
     if len(values) == 1:
         v = values[0]
         if isinstance(v, (tuple, list)):
-            return tuple(_one(x) for x in v)
+            return tuple(_one(x) for x in v)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType] - px's overloads type the result
         return _one(v)
     return tuple(_one(x) for x in values)
 
 
-def _one(v):
+def _one(v: float) -> float:
     if _factor == 1.0 or not v:
         return v
     if isinstance(v, int):
@@ -89,7 +108,7 @@ def _one(v):
     return v * _factor
 
 
-def scale_drawing(canvas, tag: str = "all") -> None:
+def scale_drawing(canvas: _Scalable, tag: str = "all") -> None:
     """Grow canvas items drawn at fixed design coordinates (a swatch, an
     icon) to screen size in one go.  Text keeps its font, which is already
     the right size; line widths do not change, so give those with px()."""
@@ -138,7 +157,7 @@ def _env_scale() -> float | None:
     return None
 
 
-def _run_quiet(cmd: list) -> str:
+def _run_quiet(cmd: list[str]) -> str:
     try:
         return _proc.run(cmd, timeout=3).stdout.strip()
     except (OSError, _proc.ProcessError):
@@ -272,7 +291,7 @@ def prepare() -> None:
         logger.warning("could not apply ui_scale %s to fonts", _override, exc_info=True)
 
 
-def apply(root) -> float:
+def apply(root: _HasTk) -> float:
     """Call right after the Tk root is created: sets ``tk scaling`` and the
     factor used by :func:`px`.  Returns the factor."""
     tk_call = root.tk.call
@@ -304,7 +323,7 @@ def apply(root) -> float:
     return _factor
 
 
-def _undo_tk_font_doubling(tk_call) -> None:
+def _undo_tk_font_doubling(tk_call: TkCall) -> None:
     """Tk 9 doubles its standard fonts (TkDefaultFont...) when it sees a
     desktop window scale of 2.  The font DPI already makes text big enough
     here, so put them back to their normal point sizes."""

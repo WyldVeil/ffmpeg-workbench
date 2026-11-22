@@ -27,13 +27,16 @@ import os
 import shutil
 import tempfile
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Final, Generic, TypeVar
+from typing import Any, Final, Generic, TypeVar, cast
 
 from core.errors import InputError
 from core.paths import APP_ROOT, config_dir
+
+#: settings.json: a JSON object, whose values are checked by each Setting when read
+Json = dict[str, Any]
 
 logger = logging.getLogger("crossfader.settings")
 
@@ -41,11 +44,11 @@ SETTINGS_FILE = os.path.join(config_dir(), "settings.json")
 
 
 _lock = threading.RLock()
-_cache: dict | None = None
-_cache_sig: tuple | None = None
+_cache: Json | None = None
+_cache_sig: tuple[int, int] | None = None
 
 
-def _sig(path: str) -> tuple | None:
+def _sig(path: str) -> tuple[int, int] | None:
     try:
         st = os.stat(path)
         return (st.st_mtime_ns, st.st_size)
@@ -59,7 +62,7 @@ def _migrate_legacy() -> None:
         return
     legacy = os.path.join(APP_ROOT, "settings.json")
     legacy_skin = os.path.join(APP_ROOT, "skin.json")
-    data: dict = {}
+    data: Json = {}
     try:
         if os.path.isfile(legacy):
             with open(legacy, encoding="utf-8") as fh:
@@ -77,7 +80,7 @@ def _migrate_legacy() -> None:
         logger.info("Migrated settings from %s", APP_ROOT)
 
 
-def _read_file() -> dict:
+def _read_file() -> Json:
     for path in (SETTINGS_FILE, SETTINGS_FILE + ".bak"):
         if not os.path.exists(path):
             continue
@@ -87,7 +90,7 @@ def _read_file() -> dict:
             if isinstance(data, dict):
                 if path.endswith(".bak"):
                     logger.warning("settings.json unreadable - recovered from backup")
-                return data
+                return cast("Json", data)  # a JSON object's keys are always text
         except (OSError, ValueError) as exc:
             logger.warning("Ignoring unreadable %s: %s", path, exc)
     return {}
@@ -102,7 +105,7 @@ def _readable(path: str) -> bool:
         return False
 
 
-def _write(data: dict) -> bool:
+def _write(data: Json) -> bool:
     folder = os.path.dirname(SETTINGS_FILE)
     tmp = ""
     try:
@@ -125,7 +128,7 @@ def _write(data: dict) -> bool:
         return False
 
 
-def _current() -> dict:
+def _current() -> Json:
     """Merged defaults + file (cached; re-read when the file changes)."""
     global _cache, _cache_sig
     with _lock:
@@ -139,7 +142,7 @@ def _current() -> dict:
         return _cache
 
 
-def load_settings() -> dict:
+def load_settings() -> Json:
     """A copy of all settings (defaults filled in, declared keys checked and
     converted to their types).  Never raises."""
     with _lock:
@@ -151,7 +154,7 @@ def load_settings() -> dict:
     return data
 
 
-def save_settings(data: dict) -> bool:
+def save_settings(data: Json) -> bool:
     """Replace the stored settings with *data* (prefer :func:`update`)."""
     global _cache, _cache_sig
     with _lock:
@@ -161,7 +164,7 @@ def save_settings(data: dict) -> bool:
         return ok
 
 
-def update(changes: dict) -> bool:
+def update(changes: Json) -> bool:
     """Merge *changes* into the stored settings atomically."""
     global _cache, _cache_sig
     with _lock:
@@ -200,7 +203,7 @@ def delete(key: str) -> bool:
 
 
 @contextlib.contextmanager
-def transaction() -> Iterator[dict]:
+def transaction() -> Generator[Json]:
     """Read-modify-write under the lock::
 
     with settings.transaction() as s:
@@ -212,7 +215,7 @@ def transaction() -> Iterator[dict]:
         update(stored)
 
 
-def defaults() -> dict:
+def defaults() -> Json:
     return dict(_DEFAULTS)
 
 
@@ -285,7 +288,9 @@ class Setting(Generic[T]):
                 raise ValueError(f"{self.key}: expected text, got {raw!r}")
             value = str(raw)
         elif isinstance(raw, list):
-            value = json.loads(json.dumps(raw))  # a private copy
+            value = [
+                item for item in cast("list[object]", raw) if isinstance(item, str)
+            ]  # text entries, copied
         else:
             raise ValueError(f"{self.key}: expected a list, got {raw!r}")
         if self.choices and value not in self.choices:
@@ -342,9 +347,9 @@ PLAY_STARTUP_SOUND: Final = Setting("play_startup_sound", True)
 STAR_SPEED: Final = Setting("star_speed", 1.0)
 STAR_COUNT: Final = Setting("star_count", 55)
 LANGUAGE: Final = Setting("language", "")
-FAVOURITE_TABS: Final = Setting[list]("favourite_tabs", [])
-RECENT_FILES: Final = Setting[list]("recent_files", [])
-RECENT_TOOLS: Final = Setting[list]("recent_tools", [])
+FAVOURITE_TABS: Final = Setting[list[str]]("favourite_tabs", [])
+RECENT_FILES: Final = Setting[list[str]]("recent_files", [])
+RECENT_TOOLS: Final = Setting[list[str]]("recent_tools", [])
 
 
 class StartPage(StrEnum):

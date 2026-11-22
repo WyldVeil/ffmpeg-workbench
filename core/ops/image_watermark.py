@@ -28,8 +28,8 @@ def logo_graph(
     opacity: float,
     place: str,
     margin_pct: float = 3.0,
-    custom=(50.0, 50.0),
-    window=None,
+    custom: tuple[float, float] = (50.0, 50.0),
+    window: tuple[float, float] | None = None,
     fade: float = 0.0,
     logo_input: str = "[1:v]",
 ) -> str:

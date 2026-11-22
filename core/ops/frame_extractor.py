@@ -7,7 +7,7 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 
-def quality_args(ext: str, quality: int) -> list:
+def quality_args(ext: str, quality: int) -> list[str]:
     q = max(1, min(100, int(quality)))
     if ext == "jpg":
         return ["-c:v", "mjpeg", "-q:v", str(max(2, min(31, round(31 - (q - 1) * 29 / 99))))]

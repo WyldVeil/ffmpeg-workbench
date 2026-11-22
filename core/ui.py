@@ -22,27 +22,37 @@ import logging
 import queue
 import sys
 import threading
-from collections.abc import Callable, Iterator
-from typing import Any
+from collections.abc import Callable, Generator
+from typing import Any, Protocol
+
+
+class EventLoop(Protocol):
+    """What the engine needs from a window: Tk's ``after`` and ``after_cancel``."""
+
+    def after(self, ms: int, func: Callable[[], object], /) -> str: ...
+    def after_cancel(self, id: str, /) -> None: ...
+
+
+_Call = tuple[Callable[..., object], tuple[Any, ...], dict[str, Any]]
 
 logger = logging.getLogger("crossfader.ui")
 
-_q: queue.SimpleQueue[tuple] = queue.SimpleQueue()
-_root = None
+_q: queue.SimpleQueue[_Call] = queue.SimpleQueue()
+_root: EventLoop | None = None
 _main_ident: int | None = None
-_POLL_MS = 15
+_poll_ms = 15
 _IDLE_MS = 100
 _quiet_ms = 0
 _BATCH = 400
 
 
-def install(root, poll_ms: int = 15) -> None:
+def install(root: EventLoop, poll_ms: int = 15) -> None:
     """Start draining the queue on *root*'s event loop (call on the Tk thread)."""
-    global _root, _main_ident, _POLL_MS
+    global _root, _main_ident, _poll_ms
     _root = root
     _main_ident = threading.get_ident()
-    _POLL_MS = max(5, int(poll_ms))
-    root.after(_POLL_MS, _drain)
+    _poll_ms = max(5, int(poll_ms))
+    root.after(_poll_ms, _drain)
 
 
 def tk_error() -> type[Exception]:
@@ -64,18 +74,18 @@ def installed() -> bool:
 
 
 @contextlib.contextmanager
-def hosted_by(root: Any, poll_ms: int = 15) -> Iterator[None]:
+def hosted_by(root: EventLoop, poll_ms: int = 15) -> Generator[None]:
     """Hand UI calls to *root* for a while (a throwaway window in a test); the
     window that had them before gets them back afterwards."""
-    global _root, _main_ident, _POLL_MS
-    previous = (_root, _main_ident, _POLL_MS)
+    global _root, _main_ident, _poll_ms
+    previous: tuple[EventLoop | None, int | None, int] = (_root, _main_ident, _poll_ms)
     install(root, poll_ms)
     try:
         yield
     finally:
-        _root, _main_ident, _POLL_MS = previous
+        _root, _main_ident, _poll_ms = previous
         if _root is not None:
-            _root.after(_POLL_MS, _drain)  # its drain loop moved to *root*: restart it
+            _root.after(_poll_ms, _drain)  # its drain loop moved to *root*: restart it
 
 
 def on_main_thread() -> bool:
@@ -100,12 +110,12 @@ def _drain() -> None:
     finally:
         root = _root
         if root is not None:
-            # Every _POLL_MS while there is work; when idle, back off gradually to
+            # Every _poll_ms while there is work; when idle, back off gradually to
             # _IDLE_MS so an idle app doesn't wake the CPU 66 times a second.
             global _quiet_ms
-            _quiet_ms = 0 if did_work else min(_IDLE_MS, _quiet_ms + _POLL_MS)
+            _quiet_ms = 0 if did_work else min(_IDLE_MS, _quiet_ms + _poll_ms)
             try:
-                root.after(max(_POLL_MS, _quiet_ms), _drain)
+                root.after(max(_poll_ms, _quiet_ms), _drain)
             except tk_error():
                 logger.debug("_drain: the window is gone", exc_info=True)
 
@@ -127,20 +137,21 @@ def call_soon(fn: Callable[..., object], *args: Any, **kwargs: Any) -> None:
     _q.put((fn, args, kwargs))
 
 
-def debounce(widget, delay_ms: int, fn: Callable[[], None]) -> Callable[[], None]:
+def debounce(widget: EventLoop, delay_ms: int, fn: Callable[[], None]) -> Callable[..., None]:
     """Return a callable that runs *fn* once, *delay_ms* after the last call
     (main thread only) - e.g. for regenerating a preview while dragging."""
-    state = {"after": None}
+    state: dict[str, str | None] = {"after": None}
 
-    def trigger(*_a):
-        if state["after"] is not None:
+    def trigger(*_a: object) -> None:
+        pending = state["after"]
+        if pending is not None:
             try:
-                widget.after_cancel(state["after"])
+                widget.after_cancel(pending)
             except Exception:
                 logger.debug("trigger: best-effort step failed", exc_info=True)
         state["after"] = widget.after(delay_ms, _fire)
 
-    def _fire():
+    def _fire() -> None:
         state["after"] = None
         fn()
 

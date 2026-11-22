@@ -11,7 +11,8 @@ def atempo_chain(speed: float, engine: str = "atempo") -> str:
     """Pitch-preserving constant tempo for any speed."""
     if engine == "rubberband" and 0.01 <= speed <= 100:
         return f"rubberband=tempo={speed:.6f}"
-    parts, rem = [], speed
+    parts: list[str] = []
+    rem = speed
     while rem < 0.5:
         parts.append("atempo=0.5")
         rem /= 0.5

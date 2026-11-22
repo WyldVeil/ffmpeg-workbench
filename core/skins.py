@@ -39,7 +39,7 @@ UI_FONT = _detect_ui_font()
 MONO_FONT = _detect_mono_font()
 
 # ── Default colors for the Custom skin (based on Classic) ────────────────────
-_CUSTOM_DEFAULTS: dict = {
+_CUSTOM_DEFAULTS: dict[str, Any] = {
     "sb_bg": "#111111",
     "sb_cat": "#424242",
     "sb_btn": "#B0B0B0",
@@ -235,7 +235,7 @@ def save_skin_name(name: str) -> None:
     settings.THEME.set(name)
 
 
-def get_skin(name: str) -> dict:
+def get_skin(name: str) -> dict[str, Any]:
     """Return the skin dict for *name*.
     For "Custom", overlay saved user colours from settings.json on top of defaults.
     """

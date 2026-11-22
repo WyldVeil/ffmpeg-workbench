@@ -35,21 +35,21 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _LIBS_DIR = os.path.join(os.path.dirname(_HERE), "libs")
 
 
-def _user_libs_dir():
+def _user_libs_dir() -> str:
     """Per-user place for add-ons when the app folder is read-only (installed
     under /opt or Program Files); one per Python version, because some
     packages contain compiled code."""
     try:
-        from core.paths import _base  # the path only - nothing is created here
+        from core.paths import base_dir  # the path only - nothing is created here
 
-        base = _base("data")
+        base = base_dir("data")
     except Exception:
         logger.debug("_user_libs_dir: best-effort step failed", exc_info=True)
         base = os.path.join(os.path.expanduser("~"), ".local", "share", "wyldveil-media-editor")
     return os.path.join(base, "python-libs", "py{}.{}".format(*sys.version_info[:2]))
 
 
-def _install_dir():
+def _install_dir() -> str:
     """libs/ next to the app when it can be written to, else the per-user folder."""
     try:
         os.makedirs(_LIBS_DIR, exist_ok=True)
@@ -75,8 +75,7 @@ ensure_libs_on_path()
 _install_lock = threading.Lock()
 
 
-def _pip_install(pip_name):
-    # type: (str) -> bool
+def _pip_install(pip_name: str) -> bool:
     """
     Install *pip_name* into _LIBS_DIR.
     Returns True on success, False on failure.  Completely silent - no
@@ -167,8 +166,7 @@ def require(
             return None
 
 
-def ensure(pip_name, import_name=None):
-    # type: (str, str | None) -> object
+def ensure(pip_name: str, import_name: str | None = None) -> ModuleType:
     """
     Like require() but raises ImportError if the package cannot be loaded.
     Use for hard dependencies where the tab cannot function without them.
@@ -185,8 +183,7 @@ def ensure(pip_name, import_name=None):
     return mod
 
 
-def is_available(pip_name, import_name=None):
-    # type: (str, str | None) -> bool
+def is_available(pip_name: str, import_name: str | None = None) -> bool:
     """
     Non-installing check - returns True only if the package is already present.
     Useful for feature-detection without triggering an install.
@@ -202,8 +199,7 @@ def is_available(pip_name, import_name=None):
         return False
 
 
-def preinstall_all():
-    # type: () -> dict
+def preinstall_all() -> dict[str, bool]:
     """
     Pre-populate libs/ with all optional packages.
     Returns a dict of {pip_name: True/False} results.
@@ -213,7 +209,7 @@ def preinstall_all():
         ("edge-tts", "edge_tts"),
         ("pyttsx3", "pyttsx3"),
     ]
-    results = {}
+    results: dict[str, bool] = {}
     for pip_name, imp_name in packages:
         if is_available(pip_name, imp_name):
             results[pip_name] = True

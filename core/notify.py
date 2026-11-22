@@ -8,6 +8,11 @@ macOS: ``osascript``; Windows: flashes the taskbar button.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.queue_manager import RenderTask
+
 import logging
 import os
 import shutil
@@ -31,7 +36,7 @@ def _root():
     return ui.tk_default_root()
 
 
-def _window_focused(root) -> bool:
+def _window_focused(root: Any) -> bool:
     try:
         return root is not None and root.focus_displayof() is not None
     except Exception:
@@ -97,7 +102,7 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
         logger.debug("notification failed: %s", exc, exc_info=True)
 
 
-def job_finished(task) -> None:
+def job_finished(task: RenderTask) -> None:
     """Called by the render queue (on a worker thread) when a task ends."""
     if not _enabled() or task.status == "cancelled":
         return

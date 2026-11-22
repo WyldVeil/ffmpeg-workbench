@@ -7,7 +7,7 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 
-def fit_aspect(vw: int, vh: int, rw: int, rh: int) -> tuple:
+def fit_aspect(vw: int, vh: int, rw: int, rh: int) -> tuple[int, int, int, int]:
     """Largest centred rectangle of aspect rw:rh inside vw x vh (even sizes)."""
     if vw / vh > rw / rh:
         h = vh

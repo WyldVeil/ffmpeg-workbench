@@ -46,7 +46,7 @@ _EXE = ".exe" if _IS_WIN else ""
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Global cache to prevent redundant, slow hardware polling
-_CACHED_GPU: str | None = None
+_cached_gpu: str | None = None
 
 
 # ── Binary path resolution ────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ def user_tools_dir() -> str | None:
         return None
 
 
-def bundled_bin_dirs() -> list:
+def bundled_bin_dirs() -> list[str]:
     """Folders searched for bundled tools, most specific first.
 
     ``bin/<platform-tag>/`` holds the per-platform downloads made by
@@ -89,7 +89,7 @@ def bundled_bin_dirs() -> list:
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass and os.path.abspath(meipass) != APP_ROOT:
         roots.append(meipass)
-    dirs = []
+    dirs: list[str] = []
     # Tools installed or updated by the app itself (always user-writable).
     user_bin = user_tools_dir()
     if user_bin:
@@ -184,11 +184,6 @@ def get_binary_path(name: str) -> str:
     return os.path.join(APP_ROOT, "bin", platform_tag(), _exe_name(name))
 
 
-def _resolve(name: str) -> str:
-    """Backwards-compatible alias of :func:`get_binary_path`."""
-    return get_binary_path(name)
-
-
 # ── GPU detection ─────────────────────────────────────────────────────────────
 
 
@@ -199,9 +194,9 @@ def detect_gpu() -> str:
     Based on a *functional* encode test (core/encoders.py) rather than on
     whether nvidia-smi exists; cached for the session.
     """
-    global _CACHED_GPU
-    if _CACHED_GPU is not None:
-        return _CACHED_GPU
+    global _cached_gpu
+    if _cached_gpu is not None:
+        return _cached_gpu
     try:
         from core.encoders import preferred_hw
 
@@ -209,14 +204,14 @@ def detect_gpu() -> str:
     except Exception:
         logger.debug("detect_gpu: best-effort step failed", exc_info=True)
         kind = None
-    _CACHED_GPU = {
+    _cached_gpu = {
         "nvenc": "nvidia",
         "amf": "amd",
         "qsv": "intel",
         "videotoolbox": "apple",
         "vaapi": "vaapi",
     }.get(kind or "", "cpu")
-    return _CACHED_GPU
+    return _cached_gpu
 
 
 # ── Metadata helpers (thin wrappers over core.ffmpeg) ─────────────────────────
@@ -287,7 +282,7 @@ def get_local_version() -> str:
 # ── Opening files and folders ─────────────────────────────────────────────────
 
 
-def _spawn(cmd: list) -> bool:
+def _spawn(cmd: list[str]) -> bool:
     try:
         from core.procenv import child_env
 

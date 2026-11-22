@@ -11,7 +11,7 @@ from core import ffmpeg as ff
 TEXT_SUBS = {"subrip", "ass", "ssa", "webvtt", "mov_text", "text"}
 
 
-def subtitle_args(info: ff.MediaInfo, container: str) -> list:
+def subtitle_args(info: ff.MediaInfo, container: str) -> list[str]:
     """Keep subtitles where the container can hold them (text ones converted for MP4/MOV/WebM)."""
     subs = [s for s in info.streams if s.type == "subtitle"]
     if not subs:
@@ -26,4 +26,4 @@ def subtitle_args(info: ff.MediaInfo, container: str) -> list:
         if target
         else []
     )
-    return maps + (["-c:s", target] if maps else [])
+    return [*maps, "-c:s", target] if maps and target else []

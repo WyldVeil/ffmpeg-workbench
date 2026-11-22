@@ -70,7 +70,7 @@ def _ensure(path: str) -> str:
     return path
 
 
-def _base(kind: str) -> str:
+def base_dir(kind: str) -> str:
     env = os.environ.get(f"CROSSFADER_{kind.upper()}_DIR")
     if env:
         return env
@@ -108,21 +108,21 @@ def _base(kind: str) -> str:
 
 def config_dir() -> str:
     """Settings, skin choice, presets, recent files."""
-    return _ensure(_base("config"))
+    return _ensure(base_dir("config"))
 
 
 def data_dir() -> str:
     """Larger per-user data: optional Python packages, downloaded models."""
-    return _ensure(_base("data"))
+    return _ensure(base_dir("data"))
 
 
 def cache_dir() -> str:
     """Disposable data: frame previews, waveforms, encoder probe results."""
-    return _ensure(_base("cache"))
+    return _ensure(base_dir("cache"))
 
 
 def log_dir() -> str:
-    return _ensure(_base("log"))
+    return _ensure(base_dir("log"))
 
 
 def models_dir() -> str:

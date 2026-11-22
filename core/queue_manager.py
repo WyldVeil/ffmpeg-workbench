@@ -38,6 +38,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from core import ffmpeg as ff
@@ -70,51 +71,46 @@ PENDING, ACTIVE, DONE, FAILED, CANCELLED = (
 )
 
 
+#: worker_fn(progress_cb, cancel_fn[, ctx]) -> return code (None means 0)
+WorkerFn = Callable[..., int | None]
+OnStart = Callable[[str], object]  # (task_id)
+OnProgress = Callable[[str, str], object]  # (task_id, log line)
+OnComplete = Callable[[str, int], object]  # (task_id, returncode)
+
+
+@dataclass(eq=False, kw_only=True)
 class RenderTask:
     """One unit of work in the queue (read-only from the UI's point of view)."""
 
-    def __init__(
-        self,
-        *,
-        id,
-        name,
-        output_path="",
-        cmds=None,
-        worker_fn=None,
-        on_start=None,
-        on_progress=None,
-        on_complete=None,
-        expected_duration=None,
-        inputs=(),
-        atomic_output=True,
-    ):
-        self.id = id
-        self.name = name
-        self.output_path = output_path or ""
-        self.cmds = cmds
-        self.worker_fn = worker_fn
-        self.inputs = list(inputs or ())
-        self.expected_duration = expected_duration
-        self.atomic_output = atomic_output
-        self.status: TaskStatus = TaskStatus.PENDING
-        self.progress = ""  # latest log line
-        self.fraction: float | None = None
-        self.eta: float | None = None
-        self.speed: float | None = None
-        self.error = ""
-        self.log_tail: list = []
-        self.created_at = time.time()
-        self.started_at: float | None = None
-        self.finished_at: float | None = None
-        self.returncode = 0
-        self.on_start = on_start
-        self.on_progress = on_progress
-        self.on_complete = on_complete
-        self.cancel_event = threading.Event()
-        self._proc = None
-        self.completed_fired = False
-        self.tempdirs: list = []
-        self.parts: list = []  # (part, final) promoted on success
+    id: str
+    name: str
+    output_path: str = ""
+    cmds: list[list[str]] | None = None
+    worker_fn: WorkerFn | None = None
+    on_start: OnStart | None = None
+    on_progress: OnProgress | None = None
+    on_complete: OnComplete | None = None
+    expected_duration: float | None = None
+    inputs: list[str] = field(default_factory=list[str])
+    atomic_output: bool = True
+    # ── state, updated by the queue ──
+    status: TaskStatus = field(default=TaskStatus.PENDING, init=False)
+    progress: str = field(default="", init=False)  # latest log line
+    fraction: float | None = field(default=None, init=False)
+    eta: float | None = field(default=None, init=False)
+    speed: float | None = field(default=None, init=False)
+    error: str = field(default="", init=False)
+    log_tail: list[str] = field(default_factory=list[str], init=False)
+    created_at: float = field(default_factory=time.time, init=False)
+    started_at: float | None = field(default=None, init=False)
+    finished_at: float | None = field(default=None, init=False)
+    returncode: int = field(default=0, init=False)
+    cancel_event: threading.Event = field(default_factory=threading.Event, init=False)
+    completed_fired: bool = field(default=False, init=False)
+    tempdirs: list[str] = field(default_factory=list[str], init=False)
+    parts: list[tuple[str, str]] = field(
+        default_factory=list[tuple[str, str]], init=False
+    )  # (part, final)
 
     @property
     def cancelled(self) -> bool:
@@ -190,7 +186,7 @@ class TaskContext:
         simply call ``ctx.run`` repeatedly."""
         lo, hi = self._span
 
-        def on_prog(p: ff.Progress):
+        def on_prog(p: ff.Progress) -> None:
             if p.fraction is not None:
                 self._m.set_fraction(self.task, lo + (hi - lo) * p.fraction, p)
 
@@ -230,8 +226,7 @@ class RenderQueueManager:
         self._tasks: list[RenderTask] = []
         self._lock = threading.RLock()
         self._work = threading.Condition(self._lock)
-        self._update_callbacks: list[Callable] = []
-        self._tk_root = None
+        self._update_callbacks: list[Callable[[], object]] = []
         self._workers: list[tasks.Service] = []
         self._last_ui_update = 0.0
         self._ensure_workers()
@@ -251,10 +246,7 @@ class RenderQueueManager:
                     )
                 )
 
-    def set_tk_root(self, root) -> None:
-        self._tk_root = root
-
-    def register_update_callback(self, cb: Callable) -> None:
+    def register_update_callback(self, cb: Callable[[], object]) -> None:
         self._update_callbacks.append(cb)
 
     # ── public API ───────────────────────────────────────────────────────────
@@ -264,12 +256,12 @@ class RenderQueueManager:
         name: str,
         output_path: str = "",
         *,
-        cmd=None,
-        cmds=None,
-        worker_fn=None,
-        on_start=None,
-        on_progress=None,
-        on_complete=None,
+        cmd: Sequence[object] | None = None,
+        cmds: Sequence[Sequence[object]] | None = None,
+        worker_fn: WorkerFn | None = None,
+        on_start: OnStart | None = None,
+        on_progress: OnProgress | None = None,
+        on_complete: OnComplete | None = None,
         expected_duration: float | None = None,
         inputs: Sequence[str] = (),
         atomic_output: bool = True,
@@ -279,7 +271,7 @@ class RenderQueueManager:
         elif cmds is not None:
             cmds_arg = [[str(c) for c in c_] for c_ in cmds]
         else:
-            cmds_arg = None
+            cmds_arg: list[list[str]] | None = None
         if cmds_arg is None and worker_fn is None:
             raise ValueError("enqueue() needs cmd, cmds or worker_fn")
         task = RenderTask(
@@ -292,7 +284,7 @@ class RenderQueueManager:
             on_progress=on_progress,
             on_complete=on_complete,
             expected_duration=expected_duration,
-            inputs=inputs,
+            inputs=[i for i in inputs if i],
             atomic_output=atomic_output,
         )
         with self._work:
@@ -388,7 +380,7 @@ class RenderQueueManager:
         for cb in list(self._update_callbacks):
             ui.call_soon(_safe_call, cb)
 
-    def _dispatch(self, fn: Callable | None, *args) -> None:
+    def _dispatch(self, fn: Callable[..., object] | None, *args: object) -> None:
         if fn is None:
             return
         from core import ui
@@ -500,7 +492,7 @@ class RenderQueueManager:
                 pass
         return rc
 
-    def _run_worker_fn(self, task: RenderTask, progress_cb) -> int:
+    def _run_worker_fn(self, task: RenderTask, progress_cb: Callable[[str], None]) -> int:
         fn = task.worker_fn
         assert fn is not None, "only called for worker tasks"
         wants_ctx = False
@@ -519,7 +511,7 @@ class RenderQueueManager:
             result = fn(progress_cb, lambda: task.cancelled)
         return result if isinstance(result, int) else 0
 
-    def _run_cmds(self, task: RenderTask, progress_cb) -> int:
+    def _run_cmds(self, task: RenderTask, progress_cb: Callable[[str], None]) -> int:
         n = len(task.cmds or [])
         for i, cmd in enumerate(task.cmds or []):
             if task.cancelled:
@@ -540,7 +532,7 @@ class RenderQueueManager:
                     argv.insert(1, "-y")
             lo, hi = i / n, (i + 1) / n
 
-            def on_prog(p: ff.Progress, lo=lo, hi=hi):
+            def on_prog(p: ff.Progress, lo: float = lo, hi: float = hi) -> None:
                 if p.fraction is not None:
                     self.set_fraction(task, lo + (hi - lo) * p.fraction, p)
 
@@ -583,7 +575,7 @@ class RenderQueueManager:
             logger.debug("_complete: best-effort step failed", exc_info=True)
 
 
-def _safe_call(fn, *args):
+def _safe_call(fn: Callable[..., object], *args: object) -> None:
     try:
         fn(*args)
     except Exception:

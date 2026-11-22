@@ -19,7 +19,7 @@ def reencode_chain(rot_cw: int, hflip: bool, vflip: bool) -> str:
     return ",".join(parts)
 
 
-def lossless_args(existing_cw: int, rot_cw: int, hflip: bool, vflip: bool) -> list:
+def lossless_args(existing_cw: int, rot_cw: int, hflip: bool, vflip: bool) -> list[str]:
     """Input options that rewrite the orientation flag (display matrix): the
     total rotation, then mirroring as displayed (verified against the pixel
     filters for all 16 combinations, including already-rotated sources)."""
