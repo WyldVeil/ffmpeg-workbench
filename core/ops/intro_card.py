@@ -7,10 +7,13 @@ widgets, no Tk.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
-from core import ass
+from core import ass, concat
+from core import encoders as enc
 from core import ffmpeg as ff
+from core.queue_manager import TaskContext
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -155,3 +158,131 @@ def background_input(bg: Background, w: int, h: int, fps: str, dur: float) -> tu
         return ["-stream_loop", "-1", "-t", f"{dur:.3f}", "-i", path], fit
     col = "000000" if kind == "black" else c1
     return ["-f", "lavfi", "-i", f"color=c=0x{col}:{size}"], "format=yuv420p"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CardLook:
+    background: Background
+    fade: bool = True  # fade the card in and out
+    music: str = ""  # sound under the card (silence without)
+
+
+def _picture(
+    look: CardLook, w: int, h: int, fps: str, dur: float, subs: str
+) -> tuple[list[str], str]:
+    """(inputs, graph so far): the background with the text burnt in, faded."""
+    args, base = background_input(look.background, w, h, fps, dur)
+    chain = f"[0:v]{base},{ass.subtitles_filter(subs)}"
+    if look.fade:
+        f = min(0.6, dur / 4)
+        chain += f",fade=t=in:st=0:d={f:.2f},fade=t=out:st={dur - f:.3f}:d={f:.2f}"
+    return [ff.ffmpeg_path(), "-y", *args], chain
+
+
+def preview_cmd(
+    look: CardLook, w: int, h: int, fps: str, dur: float, subs: str, at: float, box: tuple[int, int]
+) -> list[str]:
+    """One PNG of the card at *at* seconds, fitted into *box*, to stdout."""
+    cmd, chain = _picture(look, w, h, fps, dur, subs)
+    fit = f",scale={box[0]}:{box[1]}:force_original_aspect_ratio=decrease[v]"
+    return [
+        *cmd,
+        "-filter_complex",
+        chain + fit,
+        "-map",
+        "[v]",
+        "-ss",
+        f"{at:.3f}",
+        "-frames:v",
+        "1",
+        "-f",
+        "image2pipe",
+        "-c:v",
+        "png",
+        "-",
+    ]
+
+
+def card_cmd(
+    look: CardLook,
+    w: int,
+    h: int,
+    fps: str,
+    dur: float,
+    subs: str,
+    out: str,
+    venc: enc.VideoEncode | None = None,
+) -> list[str]:
+    """The card as a video with sound (the music, faded out, or silence)."""
+    cmd, chain = _picture(look, w, h, fps, dur, subs)
+    if look.music and os.path.isfile(look.music):
+        fo = min(1.5, dur / 3)
+        cmd += ["-i", look.music]
+        chain += f"[v];[1:a:0]atrim=0:{dur:.3f},asetpts=PTS-STARTPTS,afade=t=out:st={dur - fo:.3f}:d={fo:.2f},aresample=48000[a]"
+        amap = ["-map", "[a]"]
+    else:
+        cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+        chain += "[v]"
+        amap = ["-map", "1:a"]
+    venc = venc or enc.video("h264", "very_high", hw="off", container="mp4")
+    return [
+        *cmd,
+        "-filter_complex",
+        chain,
+        "-map",
+        "[v]",
+        *amap,
+        *venc.args,
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-t",
+        f"{dur:.3f}",
+        out,
+    ]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class IntroJob:
+    """The card alone (*attach* "none"), or joined before, after or around *main*."""
+
+    look: CardLook
+    script: ass.Script
+    attach: str  # "none", "before", "after", "both"
+    main: str
+    size: tuple[int, int]
+    fps: str
+    duration: float
+    venc: enc.VideoEncode
+    audio_codec: str
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        tmp = ctx.tempdir()
+        w, h = self.size
+        subs = self.script.write(os.path.join(tmp, "card.ass"))
+        if self.attach == "none":
+            ctx.run(
+                card_cmd(self.look, w, h, self.fps, self.duration, subs, ctx.output(), self.venc),
+                duration=self.duration,
+            )
+            return 0
+        card = os.path.join(tmp, "card.mp4")
+        ctx.span(0.0, 0.15).run(
+            card_cmd(self.look, w, h, self.fps, self.duration, subs, card), duration=self.duration
+        )
+        pieces = [concat.Piece.of(self.main)]
+        if self.attach in ("before", "both"):
+            pieces.insert(0, concat.Piece.of(card))
+        if self.attach in ("after", "both"):
+            pieces.append(concat.Piece.of(card))
+        argv, seconds = concat.filter_join_command(
+            pieces,
+            ctx.output(),
+            size=(w, h),
+            fps=self.fps,
+            venc=self.venc,
+            audio_codec=self.audio_codec,
+        )
+        ctx.span(0.15, 1.0).run(argv, duration=seconds)
+        return 0

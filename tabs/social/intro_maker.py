@@ -21,11 +21,12 @@ import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
 from typing import Literal
 
-from core import ass, concat, tasks
+from core import ass, tasks
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.intro_card import Background, Card, background_input, card_script
+from core.ops import intro_card as ic
+from core.ops.intro_card import Background, Card, card_script
 from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
@@ -368,8 +369,7 @@ class IntroMakerTab(BaseTab):
     def attach_key(self):
         return self._key(ATTACH, self.attach_var, "none")
 
-    def card_command(self, w, h, fps, dur, ass_path, out, *, venc=None, preview_at=None):
-        """FFmpeg command that renders the card (or one preview PNG to stdout)."""
+    def _card(self) -> ic.CardLook:
         bg = Background(
             self.bg_kind(),
             self.colour,
@@ -377,60 +377,7 @@ class IntroMakerTab(BaseTab):
             self._key(GRADIENTS, self.grad_var, "horizontal"),
             self.bg_row.path,
         )
-        args, base = background_input(bg, w, h, fps, dur)
-        chain = f"[0:v]{base},{ass.subtitles_filter(ass_path)}"
-        if self.fade_var.get():
-            f = min(0.6, dur / 4)
-            chain += f",fade=t=in:st=0:d={f:.2f},fade=t=out:st={dur - f:.3f}:d={f:.2f}"
-        cmd = [ff.ffmpeg_path(), "-y", *args]
-        if preview_at is not None:
-            pw, ph = px(384), px(216)  # the preview box, in screen pixels
-            return [
-                *cmd,
-                "-filter_complex",
-                chain + f",scale={pw}:{ph}:force_original_aspect_ratio=decrease[v]",
-                "-map",
-                "[v]",
-                "-ss",
-                f"{preview_at:.3f}",
-                "-frames:v",
-                "1",
-                "-f",
-                "image2pipe",
-                "-c:v",
-                "png",
-                "-",
-            ]
-        music = self.music_row.path
-        if music and os.path.isfile(music):
-            cmd += ["-i", music]
-            fo = min(1.5, dur / 3)
-            chain += (
-                f"[v];[1:a:0]atrim=0:{dur:.3f},asetpts=PTS-STARTPTS,"
-                f"afade=t=out:st={dur - fo:.3f}:d={fo:.2f},aresample=48000[a]"
-            )
-            amap = ["-map", "[a]"]
-        else:
-            cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
-            chain += "[v]"
-            amap = ["-map", "1:a"]
-        venc = venc or enc.video("h264", "very_high", hw="off", container="mp4")
-        return [
-            *cmd,
-            "-filter_complex",
-            chain,
-            "-map",
-            "[v]",
-            *amap,
-            *venc.args,
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-t",
-            f"{dur:.3f}",
-            out,
-        ]
+        return ic.CardLook(background=bg, fade=self.fade_var.get(), music=self.music_row.path)
 
     def settings(self):
         dur = common.number(self.dur_var.get(), "Length", 0.5, 120)
@@ -471,7 +418,16 @@ class IntroMakerTab(BaseTab):
         work = temp_dir("intro_preview_")
         path = self.script(w, h, dur).write(os.path.join(work, "card.ass"))
         at = min(dur * 0.6, 2.5)
-        cmd = self.card_command(w, h, int(self.fps_var.get() or 30), dur, path, "-", preview_at=at)
+        cmd = ic.preview_cmd(
+            self._card(),
+            w,
+            h,
+            str(int(self.fps_var.get() or 30)),
+            dur,
+            path,
+            at,
+            (px(384), px(216)),
+        )
 
         def work_fn():
             try:
@@ -530,32 +486,17 @@ class IntroMakerTab(BaseTab):
         script = self.script(w, h, dur)
         total = dur * (2 if mode == "both" else 1) + (main_info.duration if main_info else 0)
 
-        def work(_progress, _cancelled, ctx):
-            tmp = ctx.tempdir()
-            ass_path = script.write(os.path.join(tmp, "card.ass"))
-            if mode == "none":
-                ctx.run(
-                    self.card_command(w, h, fps, dur, ass_path, ctx.output(), venc=venc),
-                    duration=dur,
-                )
-                return 0
-            card = os.path.join(tmp, "card.mp4")
-            ctx.span(0.0, 0.15).run(self.card_command(w, h, fps, dur, ass_path, card), duration=dur)
-            pieces = [concat.Piece.of(main)]
-            if mode in ("before", "both"):
-                pieces.insert(0, concat.Piece.of(card))
-            if mode in ("after", "both"):
-                pieces.append(concat.Piece.of(card))
-            argv, seconds = concat.filter_join_command(
-                pieces,
-                ctx.output(),
-                size=(w, h),
-                fps=fps,
-                venc=venc,
-                audio_codec=enc.default_audio_for(container),
-            )
-            ctx.span(0.15, 1.0).run(argv, duration=seconds)
-            return 0
+        job = ic.IntroJob(
+            look=self._card(),
+            script=script,
+            attach=mode,
+            main=main,
+            size=(w, h),
+            fps=str(fps),
+            duration=dur,
+            venc=venc,
+            audio_codec=enc.default_audio_for(container),
+        )
 
         self.log(
             self.console,
@@ -567,7 +508,7 @@ class IntroMakerTab(BaseTab):
             common.Job(
                 name="Intro/Outro",
                 out=out,
-                work=work,
+                work=job.run,
                 duration=total,
                 inputs=[p for p in (main, self.bg_row.path, self.music_row.path) if p],
             ),
