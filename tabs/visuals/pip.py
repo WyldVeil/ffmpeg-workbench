@@ -11,12 +11,12 @@ sound are kept (or the inset's sound, or both mixed).
 from __future__ import annotations
 
 import tkinter as tk
-from dataclasses import dataclass
 from tkinter import colorchooser, messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops import pip as pip_ops
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
@@ -45,92 +45,6 @@ ANIMS = {
     "bottom": "Slide in from the bottom",
 }
 AUDIO = {"bg": "Background's sound", "fg": "Inset's sound", "mix": "Both mixed", "none": "No sound"}
-
-
-@dataclass
-class PipSpec:
-    bg_size: tuple
-    fg_size: tuple
-    pct: float = 30.0
-    place: str = "br"
-    custom: tuple = (50.0, 50.0)
-    margin_pct: float = 3.0
-    border: int = 0
-    border_colour: str = "FFFFFF"
-    radius: int = 0
-    opacity: float = 1.0
-    start: float = 0.0
-    end: float | None = None
-    anim: str = "none"
-    anim_dur: float = 0.5
-
-    def inset_size(self) -> tuple:
-        bw, _bh = self.bg_size
-        fw, fh = self.fg_size
-        w = max(16, int(bw * self.pct / 100) // 2 * 2)
-        h = max(16, round(w * fh / max(1, fw) / 2) * 2)
-        return w, h
-
-    def target_xy(self) -> tuple:
-        bw, bh = self.bg_size
-        w, h = self.inset_size()
-        w, h = w + 2 * self.border, h + 2 * self.border
-        m = int(min(bw, bh) * self.margin_pct / 100)
-        if self.place == "custom":
-            return int((bw - w) * self.custom[0] / 100), int((bh - h) * self.custom[1] / 100)
-        col = {"l": m, "c": (bw - w) // 2, "r": bw - w - m}
-        row = {"t": m, "m": (bh - h) // 2, "b": bh - h - m}
-        key = {"c": "mc"}.get(self.place, self.place)
-        return col[key[1]], row[key[0]]
-
-
-def pip_graph(spec: PipSpec, bg: str = "[0:v]", fg: str = "[1:v]", out: str = "[v]") -> str:
-    w, h = spec.inset_size()
-    x, y = spec.target_xy()
-    bw, bh = spec.bg_size
-    fgc = [
-        f"setpts=PTS-STARTPTS+{spec.start:.3f}/TB",
-        f"scale={w}:{h}:flags=lanczos",
-        "setsar=1",
-        "format=yuva420p",
-    ]
-    if spec.radius > 0:
-        r = min(spec.radius, w // 2, h // 2)
-        fgc.append(
-            f"geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':"
-            f"a='255*lte(hypot(max(0,abs(X-W/2)-(W/2-{r})),max(0,abs(Y-H/2)-(H/2-{r}))),{r})'"
-        )
-    if spec.border > 0:
-        b = spec.border
-        fgc.append(f"pad={w + 2 * b}:{h + 2 * b}:{b}:{b}:color=0x{spec.border_colour}")
-    if spec.opacity < 0.999:
-        fgc.append(f"colorchannelmixer=aa={spec.opacity:.3f}")
-    end = spec.end
-    d = max(0.05, spec.anim_dur)
-    if spec.anim == "fade":
-        fgc.append(f"fade=t=in:st={spec.start:.3f}:d={d:.2f}:alpha=1")
-        if end is not None:
-            fgc.append(f"fade=t=out:st={max(spec.start, end - d):.3f}:d={d:.2f}:alpha=1")
-    xe, ye = str(x), str(y)
-    if spec.anim in ("left", "right", "top", "bottom"):
-        ow, oh = w + 2 * spec.border, h + 2 * spec.border
-        p = f"min(1,max(0,(t-{spec.start:.3f})/{d:.3f}))"
-        ease = f"(1-pow(1-{p},3))"  # ease-out cubic
-        if spec.anim == "left":
-            xe = f"{-ow}+({x}+{ow})*{ease}"
-        elif spec.anim == "right":
-            xe = f"{bw}-({bw}-{x})*{ease}"
-        elif spec.anim == "top":
-            ye = f"{-oh}+({y}+{oh})*{ease}"
-        else:
-            ye = f"{bh}-({bh}-{y})*{ease}"
-    enable = (
-        f"between(t,{spec.start:.3f},{end:.3f})" if end is not None else f"gte(t,{spec.start:.3f})"
-    )
-    return (
-        f"{fg}{','.join(fgc)}[pipfg];{bg}[pipfg]overlay=x='{xe}':y='{ye}':eof_action=pass:format=auto:"
-        f"enable='{enable}',format=yuv420p{out}"
-    )
 
 
 class PIPTab(BaseTab):
@@ -317,13 +231,13 @@ class PIPTab(BaseTab):
         self._fg = ff.try_probe(path)
         self._changed()
 
-    def spec(self) -> PipSpec:
+    def spec(self) -> pip_ops.PipSpec:
         if self._bg is None or not self._bg.has_video or self._fg is None or not self._fg.has_video:
             raise ValueError("Choose a background video and an inset video.")
         start, end = self.window.span()
         if end is None and self._fg.duration:
             end = min(start + self._fg.duration, self._bg.duration or start + self._fg.duration)
-        return PipSpec(
+        return pip_ops.PipSpec(
             bg_size=common.even_size(self._bg),
             fg_size=common.even_size(self._fg),
             pct=float(self.size_var.get()),
@@ -355,7 +269,7 @@ class PIPTab(BaseTab):
         except ValueError:
             return
         fg = fl.preview_movie(self.fg_row.path)
-        g = pip_graph(spec, "[in]", fg, "")
+        g = pip_ops.pip_graph(spec, "[in]", fg, "")
         self.compare.set_filter(g, keep_time=True)
 
     def _render(self):
@@ -375,26 +289,12 @@ class PIPTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "pip", inputs=[fg])
         if not out:
             return
-        graph = pip_graph(spec)
         mode = next((k for k, v in AUDIO.items() if v == self.audio_var.get()), "bg")
         dur = info.duration
-        st = "aresample=48000,aformat=channel_layouts=stereo"
-        if mode == "fg" and fginfo.has_audio:
-            graph += (
-                f";[1:a:0]{st},adelay=delays={round(spec.start * 1000)}:all=1,apad,"
-                f"atrim=duration={dur:.3f}[a]"
-            )
-            audio = ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
-        elif mode == "mix" and fginfo.has_audio and info.has_audio:
-            graph += (
-                f";[1:a:0]{st},adelay=delays={round(spec.start * 1000)}:all=1,apad,atrim=duration={dur:.3f}[fa];"
-                f"[0:a:0]{st}[ba];[ba][fa]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97[a]"
-            )
-            audio = ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
-        elif mode == "none" or not info.has_audio:
-            audio = ["-an"]
-        else:
-            audio = None  # background sound, kept as is when possible
+        sound, audio = pip_ops.pip_audio(
+            mode, spec.start, dur, fg_audio=fginfo.has_audio, bg_audio=info.has_audio
+        )
+        graph = pip_ops.pip_graph(spec) + sound
         common.render(
             self,
             RenderJob(
@@ -402,10 +302,10 @@ class PIPTab(BaseTab):
                 info=info,
                 out=out,
                 graph=graph,
-                extra_inputs=["-i", fg],
+                extra_files=[fg],
                 name="Picture-in-Picture",
                 audio=audio,
-                extra_args=["-t", f"{dur:.3f}"],
+                limit=dur,
                 duration=dur,
                 inputs=[fg],
             ),

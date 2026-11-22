@@ -134,6 +134,8 @@ class RenderJob:
     extra_args: Sequence[str] = ()
     inputs: Sequence[str] = ()
     pre_input: Sequence[str] = ()
+    extra_files: Sequence[str] = ()  # more inputs (1, 2, ...), after *extra_inputs*
+    limit: float | None = None  # stop after this many seconds
 
     def command(self, venc: enc.VideoEncode) -> list[str]:
         container = os.path.splitext(self.out)[1].lower().lstrip(".") or "mp4"
@@ -145,6 +147,7 @@ class RenderJob:
             "-i",
             self.src,
             *self.extra_inputs,
+            *(a for f in self.extra_files for a in ("-i", f)),
         ]
         if self.graph:
             if venc.filter_suffix:
@@ -159,7 +162,8 @@ class RenderJob:
         else:
             cmd += ["-map", "0:v:0", *venc.vf_args(self.chain)]
         cmd += list(self.audio if self.audio is not None else keep_audio_args(self.info, container))
-        return [*cmd, *self.extra_args, *venc.args, "-map_metadata", "0", self.out]
+        limit = ["-t", f"{self.limit:.3f}"] if self.limit is not None else []
+        return [*cmd, *self.extra_args, *limit, *venc.args, "-map_metadata", "0", self.out]
 
 
 def intermediate_args(venc: enc.VideoEncode) -> list[str]:

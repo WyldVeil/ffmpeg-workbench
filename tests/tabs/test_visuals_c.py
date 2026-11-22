@@ -45,7 +45,7 @@ def _pixel_luma(path, at, x, y):
 
 
 def test_graphs():
-    from tabs.visuals.pip import PipSpec, pip_graph
+    from core.ops.pip import PipSpec, pip_graph
     from tabs.visuals.region_blur import Region, blur_graph
 
     g = blur_graph(
