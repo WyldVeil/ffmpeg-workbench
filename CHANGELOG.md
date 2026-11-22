@@ -43,6 +43,11 @@
   size, colour and text); before, there was no preview in the app at all.
 - The Trimmer and Thumbnail Maker sliders were too coarse to reach every
   frame.
+- **Thumbnail Maker, Chapter Markers and Laugh Track Remover** only filled in
+  the file name when a video was dropped on them or opened with File > Open;
+  its length (and now the preview) wasn't loaded until you typed the path.
+- Manual Multi-Splitter numbers the clips 1, 2, 3... again after one is
+  removed, and its time boxes are wide enough for milliseconds.
 - Some tool names in Bengali, Persian and Urdu were wrong (Frame Extractor
   showed as "Video", "Audio Replacer" and "Slideshow Maker").
 
