@@ -10,15 +10,14 @@ displayed, so rotated phone videos crop correctly.
 from __future__ import annotations
 
 import base64
-import collections
-import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
-from core.ops.crop import fit_aspect
+from core.ops.auto_cropper import detect_bars
+from core.ops.crop import crop_chain, fit_aspect
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
@@ -34,15 +33,6 @@ ASPECTS = [
     ("4:3", "4:3 (classic)", (4, 3)),
     ("21:9", "21:9 (cinema)", (21, 9)),
 ]
-
-
-def parse_cropdetect(text: str):
-    """Most frequent crop=W:H:X:Y suggestion in cropdetect output, or None."""
-    found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", text or "")
-    if not found:
-        return None
-    (w, h, x, y), _n = collections.Counter(found).most_common(1)[0]
-    return int(x), int(y), int(w), int(h)
 
 
 class ManualCropTab(BaseTab):
@@ -393,29 +383,10 @@ class ManualCropTab(BaseTab):
         path = self.src_row.path
         if not path or not self.vid_w:
             return
-        start = max(0.0, min(self.duration * 0.1, 30.0))
-        cmd = [
-            ff.ffmpeg_path(),
-            "-hide_banner",
-            "-nostdin",
-            "-ss",
-            ff.ts(start),
-            "-t",
-            "20",
-            "-i",
-            path,
-            "-an",
-            "-sn",
-            "-vf",
-            "cropdetect=limit=24:round=2:reset=0",
-            "-f",
-            "null",
-            "-",
-        ]
         self.detect_btn.config(state="disabled", text="Detecting…")
 
         def work():
-            return parse_cropdetect(ff.capture(cmd, timeout=120).stderr)
+            return detect_bars(path, self.duration)
 
         def done(found):
             self.detect_btn.config(state="normal", text="Detect black bars")
@@ -439,7 +410,7 @@ class ManualCropTab(BaseTab):
             return
         x, y, w, h = self.rect()
         w, h = w // 2 * 2, h // 2 * 2
-        chain = f"crop={w}:{h}:{x}:{y}"
+        scale_to = None
         if self.scale_var.get() == "scale":
             try:
                 sw = int(common.number(self.sw_var.get(), "Width", 16, 8192)) // 2 * 2
@@ -447,11 +418,8 @@ class ManualCropTab(BaseTab):
             except ValueError as exc:
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
                 return
-            chain += (
-                f",scale={sw}:{sh}:force_original_aspect_ratio=decrease:flags=lanczos,"
-                f"pad={sw}:{sh}:(ow-iw)/2:(oh-ih)/2"
-            )
-        chain += ",setsar=1"
+            scale_to = (sw, sh)
+        chain = crop_chain(x, y, w, h, scale_to)
         out = common.output_for(self, self.out_row, src, "cropped")
         if not out:
             return

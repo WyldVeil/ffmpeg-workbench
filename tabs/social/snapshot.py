@@ -396,7 +396,7 @@ class SnapshotTab(BaseTab):
         self.size_lbl.config(text=f"{w}×{h} PNG, {bits}")
 
     def _detect_bars(self):
-        from tabs.social.auto_cropper import detect_bars
+        from core.ops.auto_cropper import detect_bars
 
         path, info = self.file_path, self._info
         if info is None or info.video is None:

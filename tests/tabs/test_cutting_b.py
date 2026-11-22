@@ -5,16 +5,14 @@ import pytest
 from core import beats as beats_core
 from core import ffmpeg as ff
 from core.ops import beat_montage as bm
+from core.ops import crop as crop_ops
 from core.ops import reframe as rf
 from core.ops import side_by_side as side_by_side_ops
-from tabs.cutting import crop, side_by_side
+from tabs.cutting import side_by_side
 
 
 def test_pure_helpers():
-    assert crop.fit_aspect(1920, 1080, 9, 16) == (656, 0, 606, 1080)
-    assert crop.parse_cropdetect(
-        "x crop=1920:800:0:140 y crop=1920:800:0:140 z crop=1920:804:0:138"
-    ) == (0, 140, 1920, 800)
+    assert crop_ops.fit_aspect(1920, 1080, 9, 16) == (656, 0, 606, 1080)
     assert rf.crop_box(1920, 1080, 9, 16) == (608, 1080)
     plan = bm.frame_plan([0.5, 1.0, 1.5], 2.0, 30)
     assert sum(f for _s, f in plan) == 60 and [s for s, _f in plan] == [0.0, 0.5, 1.0, 1.5]
