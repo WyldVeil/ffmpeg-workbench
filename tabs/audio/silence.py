@@ -14,12 +14,11 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
-from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
-from core.ops.silence import cut_graph, detect_cmd, keep_zones, parse_silences
+from core.ops import silence as sil
+from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -119,11 +118,7 @@ class SilenceTab(BaseTab):
         )
 
     def _detect(self, src, info, thr, min_s, pad, runner):
-        res = runner(detect_cmd(src, thr, min_s))
-        text = "\n".join(res.log_tail if hasattr(res, "log_tail") else [])
-        fps = info.require_video().fps if info.has_video and info.video else 0.0
-        zones = keep_zones(parse_silences(text, info.duration), info.duration, pad, fps)
-        return zones
+        return sil.find_zones(src, info, thr, min_s, pad, runner)
 
     def _analyse_failed(self, exc):
         self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
@@ -200,33 +195,12 @@ class SilenceTab(BaseTab):
             ctx.log(
                 f"Keeping {len(zones)} parts ({ff.format_time(kept)} of {ff.format_time(info.duration)})"
             )
-            graph = cut_graph(zones, not audio_only, True)
             with open(os.path.join(tmp, "cuts.txt"), "w", encoding="utf-8") as fh:
-                fh.write(graph)
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                *(venc.pre_input if venc else []),
-                "-i",
-                src,
-                "-/filter_complex",
-                "cuts.txt",
-            ]
-            if audio_only:
-                cmd += ["-map", "[a]", *audio_encoder_args(out)]
-            else:
-                assert venc is not None  # a video output always has an encoder
-                if venc.filter_suffix:
-                    raise RuntimeError("Choose a software or NVENC/QSV encoder for this tool.")
-                cmd += [
-                    "-map",
-                    "[v]",
-                    "-map",
-                    "[a]",
-                    *venc.args,
-                    *enc.audio(enc.default_audio_for(container), container=container),
-                ]
-            ctx.span(0.25, 1.0).run([*cmd, ctx.output()], duration=kept, cwd=tmp)
+                fh.write(sil.cut_graph(zones, not audio_only, True))
+            if venc is not None and venc.filter_suffix:
+                raise RuntimeError("Choose a software or NVENC/QSV encoder for this tool.")
+            cmd = sil.tighten_cmd(src, "cuts.txt", ctx.output(), venc, container)
+            ctx.span(0.25, 1.0).run(cmd, duration=kept, cwd=tmp)
             return 0
 
         common.queue_job(

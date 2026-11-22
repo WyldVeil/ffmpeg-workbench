@@ -6,19 +6,19 @@ from core import ffmpeg as ff
 from core import loudness as ln
 from core.ops import extractor as xo
 from core.ops import mute
+from core.ops import silence as sil
 from core.ops import sync as sy
-from tabs.audio import silence
 
 
 def test_pure_helpers():
-    zones = silence.keep_zones([(1.0, 2.0), (5.0, 9.0)], 10.0, 0.1, fps=25)
+    zones = sil.keep_zones([(1.0, 2.0), (5.0, 9.0)], 10.0, 0.1, fps=25)
     expected = [(0.0, 1.1), (1.9, 5.1), (8.9, 10.0)]  # padding 0.1, snapped to 1/25 s
     assert all(
         abs(a - x) <= 0.04 and abs(b - y) <= 0.04
         for (a, b), (x, y) in zip(zones, expected, strict=False)
     )
     assert all(round(v * 25, 6) == round(v * 25) for z in zones for v in z)
-    g = silence.cut_graph(zones, True, True)
+    g = sil.cut_graph(zones, True, True)
     assert "split=3" in g and "concat=n=3:v=1:a=1[v][a]" in g
     assert mute.gain_expr([], 0.1) == "1"
     assert sy.reencode_filter(-0.25) == "atrim=start=0.250,asetpts=PTS-STARTPTS"

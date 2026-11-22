@@ -7,9 +7,11 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
+from core import encoders as enc
 from core import ffmpeg as ff
+from core.ops.shared import audio_encoder_args
 
 Span = tuple[float, float]  # start, end in seconds
 
@@ -91,3 +93,40 @@ def cut_graph(zones: Sequence[Span], has_video: bool, has_audio: bool) -> str:
     outs = ("[v]" if has_video else "") + ("[a]" if has_audio else "")
     parts.append(f"{pads}concat=n={n}:v={1 if has_video else 0}:a={1 if has_audio else 0}{outs}")
     return ";\n".join(parts)
+
+
+def find_zones(
+    src: str,
+    info: ff.MediaInfo,
+    threshold_db: float,
+    min_silence: float,
+    pad: float,
+    runner: Callable[[list[str]], ff.RunResult],
+) -> list[Span]:
+    """The parts to keep (sound, padded by *pad*, on frame boundaries); *runner*
+    runs the detection (so it can report progress or be cancelled)."""
+    res = runner(detect_cmd(src, threshold_db, min_silence))
+    fps = info.require_video().fps if info.has_video and info.video else 0.0
+    return keep_zones(
+        parse_silences("\n".join(res.log_tail), info.duration), info.duration, pad, fps
+    )
+
+
+def tighten_cmd(
+    src: str, graph_file: str, out: str, venc: enc.VideoEncode | None, container: str
+) -> list[str]:
+    """*src* with only the kept parts (the cut graph read from *graph_file*):
+    the sound alone when *venc* is None."""
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        *(venc.pre_input if venc else []),
+        "-i",
+        src,
+        "-/filter_complex",
+        graph_file,
+    ]
+    if venc is None:
+        return [*cmd, "-map", "[a]", *audio_encoder_args(out), out]
+    audio = enc.audio(enc.default_audio_for(container), container=container)
+    return [*cmd, "-map", "[v]", "-map", "[a]", *venc.args, *audio, out]

@@ -16,7 +16,7 @@ import tkinter as tk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.rotate_flip import lossless_args, reencode_chain
+from core.ops.rotate_flip import lossless_cmd, reencode_chain
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
@@ -171,20 +171,7 @@ class RotateFlipTab(BaseTab):
                     "warn",
                 )
             else:
-                cmd = [
-                    ff.ffmpeg_path(),
-                    "-y",
-                    *lossless_args(info.require_video().rotation, rot, hf, vf),
-                    "-i",
-                    src,
-                    "-map",
-                    "0",
-                    "-c",
-                    "copy",
-                    "-map_metadata",
-                    "0",
-                    out,
-                ]
+                cmd = lossless_cmd(src, out, info.require_video().rotation, rot, hf, vf)
                 self.run_ffmpeg(
                     cmd,
                     self.console,

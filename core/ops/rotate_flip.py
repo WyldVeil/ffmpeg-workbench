@@ -6,6 +6,8 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 
 from __future__ import annotations
 
+from core import ffmpeg as ff
+
 
 def reencode_chain(rot_cw: int, hflip: bool, vflip: bool) -> str:
     """Pixel filters: rotate clockwise by *rot_cw*, then mirror (as displayed)."""
@@ -30,3 +32,24 @@ def lossless_args(existing_cw: int, rot_cw: int, hflip: bool, vflip: bool) -> li
     if vflip:
         args.append("-display_vflip:v:0")
     return args
+
+
+def lossless_cmd(
+    src: str, out: str, existing_cw: int, rot_cw: int, hflip: bool, vflip: bool
+) -> list[str]:
+    """Rotated and flipped by the orientation flag alone: every stream copied."""
+    flags = lossless_args(existing_cw, rot_cw, hflip, vflip)
+    return [
+        ff.ffmpeg_path(),
+        "-y",
+        *flags,
+        "-i",
+        src,
+        "-map",
+        "0",
+        "-c",
+        "copy",
+        "-map_metadata",
+        "0",
+        out,
+    ]
