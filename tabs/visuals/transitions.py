@@ -20,10 +20,10 @@ from core import ffmpeg as ff
 from core import tasks
 from core.hardware import launch_preview
 from core.i18n import t
+from core.ops import crossfader as xf
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.cutting import crossfader as xf
 from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 FAMILIES = {
@@ -230,49 +230,8 @@ class TransitionStudioTab(BaseTab):
         self.btn_preview.config(state="disabled", text="Making the preview…")
 
         def make():
-            a, b = clips
-            ctx_len = T + 1.5
-            parts = []
-            for i, (c, start) in enumerate(((a, max(0.0, a.duration - ctx_len)), (b, 0.0))):
-                piece = os.path.join(tmp, f"{i}.mp4")
-                res = ff.run(
-                    [
-                        ff.ffmpeg_path(),
-                        "-hide_banner",
-                        "-nostdin",
-                        "-y",
-                        "-ss",
-                        f"{start:.3f}",
-                        "-t",
-                        f"{ctx_len:.3f}",
-                        "-i",
-                        c.path,
-                        "-vf",
-                        "scale=-2:360",
-                        "-c:v",
-                        "libx264",
-                        "-preset",
-                        "ultrafast",
-                        "-crf",
-                        "26",
-                        "-c:a",
-                        "aac",
-                        piece,
-                    ]
-                )
-                if res.returncode != 0:
-                    raise RuntimeError("\n".join(res.log_tail[-4:]))
-                parts.append(xf.Clip.from_info(ff.probe(piece)))
-            out = os.path.join(tmp, "preview.mp4")
-            from core import encoders as enc
-
-            venc = enc.video("h264", "low", speed="fastest", hw="off", container="mp4")
             fade = xf.Crossfade(T, [trans], freeze, audio, curve)
-            argv, _secs = xf.build_command(parts, out, fade, venc=venc)
-            res = ff.run(argv)
-            if res.returncode != 0:
-                raise RuntimeError("\n".join(res.log_tail[-4:]))
-            return out
+            return xf.preview_cut(clips, fade, tmp)
 
         def done(path):
             self.btn_preview.config(state="normal", text="▶  Preview the cut")

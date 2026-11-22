@@ -232,3 +232,49 @@ def build_command(
     argv += ["-map", "[aout]", *_audio_encoding(out, fade.audio_mode)] if use_audio else ["-an"]
     argv += [*venc.args, "-map_metadata", "-1", "-sn", out]
     return argv, total_duration(clips, fade.seconds, fade.freeze)
+
+
+def preview_cut(clips: Sequence[Clip], fade: Crossfade, folder: str) -> str:
+    """A small, quick render of the cut between two clips (with a little of each
+    either side) in *folder*; its path."""
+    a, b = clips
+    around = fade.seconds + 1.5
+    parts: list[Clip] = []
+    for i, (c, start) in enumerate(((a, max(0.0, a.duration - around)), (b, 0.0))):
+        piece = os.path.join(folder, f"{i}.mp4")
+        cut = [
+            ff.ffmpeg_path(),
+            "-hide_banner",
+            "-nostdin",
+            "-y",
+            "-ss",
+            f"{start:.3f}",
+            "-t",
+            f"{around:.3f}",
+            "-i",
+            c.path,
+        ]
+        small = [
+            "-vf",
+            "scale=-2:360",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "26",
+            "-c:a",
+            "aac",
+            piece,
+        ]
+        res = ff.run([*cut, *small])
+        if res.returncode != 0:
+            raise RuntimeError("\n".join(res.log_tail[-4:]))
+        parts.append(Clip.from_info(ff.probe(piece)))
+    out = os.path.join(folder, "preview.mp4")
+    venc = enc.video("h264", "low", speed="fastest", hw="off", container="mp4")
+    argv, _secs = build_command(parts, out, fade, venc=venc)
+    res = ff.run(argv)
+    if res.returncode != 0:
+        raise RuntimeError("\n".join(res.log_tail[-4:]))
+    return out
