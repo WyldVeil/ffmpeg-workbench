@@ -19,7 +19,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.i18n import t
-from core.ops.shared import audio_job_args
+from core.ops import dynamics as dyn
+from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -367,62 +368,38 @@ class AudioDynamicsTab(BaseTab):
         self._update_filter_preview()
 
     # ── Filter string ─────────────────────────────────────────────────────
-    def _build_filter(self):
-        parts = []
-
-        # Gate
-        if self.controls["gate_on"].get():
-            gt = self.controls["gate_thresh"].get()
-            gr = self.controls["gate_ratio"].get()
-            ga = self.controls["gate_attack"].get()
-            grel = self.controls["gate_release"].get()
-            parts.append(
-                f"agate=threshold={10 ** (gt / 20):.6f}:ratio={gr:.1f}"
-                f":attack={ga:.1f}:release={grel:.1f}"
+    def _build_filter(self) -> str:
+        c = self.controls
+        eq = [
+            (ftype, freq, max(-24.0, min(24.0, float(var.get()))))
+            for var, ftype, freq in self._eq_vars.values()
+        ]
+        spec = dyn.Dynamics(
+            gate=dyn.Gate(
+                c["gate_thresh"].get(),
+                c["gate_ratio"].get(),
+                c["gate_attack"].get(),
+                c["gate_release"].get(),
             )
-
-        # EQ: real shelving filters at the ends, peaking bands in between
-        if self.controls["eq_on"].get():
-            for _i, (var, ftype, freq) in self._eq_vars.items():
-                gain = max(-24.0, min(24.0, float(var.get())))
-                if abs(gain) <= 0.1:
-                    continue
-                if ftype == "lowshelf":
-                    parts.append(f"lowshelf=f={freq}:g={gain:.1f}")
-                elif ftype == "highshelf":
-                    parts.append(f"highshelf=f={freq}:g={gain:.1f}")
-                else:
-                    parts.append(f"equalizer=f={freq}:t=q:w=1.0:g={gain:.1f}")
-
-        # Compressor
-        if self.controls["comp_on"].get():
-            ct = self.controls["comp_thresh"].get()
-            cr = self.controls["comp_ratio"].get()
-            ca = self.controls["comp_attack"].get()
-            crel = self.controls["comp_release"].get()
-            mk = self.controls["comp_makeup"].get()
-            parts.append(
-                f"acompressor=threshold={10 ** (ct / 20):.6f}:ratio={cr:.1f}"
-                f":attack={ca:.1f}:release={crel:.1f}:makeup={10 ** (mk / 20):.4f}"
+            if c["gate_on"].get()
+            else None,
+            eq=eq if c["eq_on"].get() else [],
+            compressor=dyn.Compressor(
+                c["comp_thresh"].get(),
+                c["comp_ratio"].get(),
+                c["comp_attack"].get(),
+                c["comp_release"].get(),
+                c["comp_makeup"].get(),
             )
-
-        # De-esser (high-pass shelving compressor on the sibilant range)
-        if self.controls["deess_on"].get():
-            # deesser: i = intensity 0-1, m = max reduction 0-1,
-            # f = frequency as a fraction of the Nyquist frequency
-            nyquist = (getattr(self, "_sample_rate", 0) or 48000) / 2
-            df = min(max(float(self.controls["deess_freq"].get()) / nyquist, 0.01), 0.99)
-            dt = min(max(float(self.controls["deess_thresh"].get()), 0.0), 1.0)
-            parts.append(f"deesser=i={dt:.2f}:m=0.5:f={df:.3f}:s=o")
-
-        # Limiter
-        if self.controls["limit_on"].get():
-            lt = self.controls["limit_thresh"].get()
-            parts.append(
-                f"alimiter=level_in=1:level_out={10 ** (lt / 20):.6f}:limit=1:attack=5:release=50"
-            )
-
-        return ",".join(parts) if parts else "anull"
+            if c["comp_on"].get()
+            else None,
+            deesser=(float(c["deess_freq"].get()), float(c["deess_thresh"].get()))
+            if c["deess_on"].get()
+            else None,
+            limit=c["limit_thresh"].get() if c["limit_on"].get() else None,
+            sample_rate=getattr(self, "_sample_rate", 0) or 48000,
+        )
+        return dyn.dynamics_filter(spec)
 
     def _update_filter_preview(self):
         filt = self._build_filter()
@@ -470,7 +447,6 @@ class AudioDynamicsTab(BaseTab):
         return info
 
     def _render(self):
-        from core import ffmpeg as ff
         from tabs import common
 
         src = self.src_var.get().strip()
@@ -483,16 +459,7 @@ class AudioDynamicsTab(BaseTab):
         if not out:
             return
         self.out_var.set(out)
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-i",
-            src,
-            "-af",
-            self._build_filter(),
-            *audio_job_args(out, info),
-            out,
-        ]
+        cmd = audio_filter_cmd(src, self._build_filter(), out, info)
         self.log(self.console, t("log.dynamics.applying_audio_dynamics_chain"))
         self.run_ffmpeg(
             cmd,

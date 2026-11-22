@@ -16,6 +16,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops import audio_replace as ar
+from core.ops.shared import strip_audio_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -123,7 +124,7 @@ class AudioReplacerTab(BaseTab):
         if not out:
             return
         if mode == "strip":
-            cmd = ar.strip_cmd(src, out)
+            cmd = strip_audio_cmd(src, out)
         else:
             ainfo = common.check_source(
                 self, self.audio_row.path, need_video=False, what="New audio"

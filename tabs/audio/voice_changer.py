@@ -15,6 +15,7 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops import voice as vc
+from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -129,7 +130,7 @@ class VoiceChangerTab(BaseTab):
         if not out:
             return
         af = self.chain(info)
-        cmd = vc.voice_cmd(src, af, out, info)
+        cmd = audio_filter_cmd(src, af, out, info)
         self.log(self.console, f"Effect: {self.preset_var.get()}")
         self.run_ffmpeg(
             cmd,

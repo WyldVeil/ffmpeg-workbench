@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core.ops.shared import audio_job_args
 
 PRESETS: dict[
     str, tuple[str, float | None, str]
@@ -67,8 +66,3 @@ def voice_filter(
 
 def rubberband_available() -> bool:
     return ff.has_filter("rubberband")
-
-
-def voice_cmd(src: str, af: str, out: str, info: ff.MediaInfo) -> list[str]:
-    """*src* with its voice through *af* (picture, if any, kept)."""
-    return [ff.ffmpeg_path(), "-y", "-i", src, "-af", af, *audio_job_args(out, info), out]

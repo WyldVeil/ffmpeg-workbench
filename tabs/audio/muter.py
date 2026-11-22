@@ -14,7 +14,8 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.shared import audio_job_args
+from core.ops import mute
+from core.ops.shared import audio_filter_cmd, strip_audio_cmd
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -27,20 +28,6 @@ MODES = {
     "silent_track": "Replace all sound with silence (keeps a silent track)",
     "remove": "Remove the audio track completely",
 }
-
-
-def gain_expr(ranges, fade: float) -> str:
-    """1 outside every range, 0 inside, linear ramps of *fade* seconds."""
-    f = max(fade, 0.001)
-    terms = [f"clip(max(({a:.4f}-t)/{f:.4f}\\,(t-{b:.4f})/{f:.4f})\\,0\\,1)" for a, b in ranges]
-    return "*".join(terms) if terms else "1"
-
-
-def mute_filter(ranges, fade: float, bleep: bool) -> str:
-    g = gain_expr(ranges, fade)
-    if bleep:
-        return f"aeval=val(ch)*({g})+0.25*sin(2*PI*1000*t)*(1-({g})):c=same"
-    return f"aeval=val(ch)*({g}):c=same"
 
 
 class MuterTab(BaseTab):
@@ -192,18 +179,14 @@ class MuterTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "muted")
         if not out:
             return
-        cmd = [ff.ffmpeg_path(), "-y", "-i", src]
         if mode == "remove":
-            cmd += ["-map", "0", "-map", "-0:a", "-c", "copy", out]
+            cmd = strip_audio_cmd(src, out)
         elif mode == "silent_track":
-            cmd += ["-af", "volume=0", *audio_job_args(out, info), out]
+            cmd = audio_filter_cmd(src, mute.SILENCE, out, info)
         else:
-            cmd += [
-                "-af",
-                mute_filter(self.ranges, fade, mode == "bleep"),
-                *audio_job_args(out, info),
-                out,
-            ]
+            cmd = audio_filter_cmd(
+                src, mute.mute_filter(self.ranges, fade, mode == "bleep"), out, info
+            )
         self.run_ffmpeg(
             cmd,
             self.console,

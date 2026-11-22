@@ -61,8 +61,3 @@ def replace_cmd(src: str, audio: str, out: str, info: ff.MediaInfo, r: Replaceme
     if container in ("mp4", "mov", "m4v"):
         cmd += ["-movflags", "+faststart"]
     return [*cmd, out]
-
-
-def strip_cmd(src: str, out: str) -> list[str]:
-    """*src* without its sound (everything else copied)."""
-    return [ff.ffmpeg_path(), "-y", "-i", src, "-map", "0", "-map", "-0:a", "-c", "copy", out]
