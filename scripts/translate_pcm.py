@@ -115,7 +115,6 @@ def main() -> None:
     }
 
     # Exclude keys that were genuinely translated in the original pcm_NG
-    original_pcm_keys = set()
     # Re-read original to know what was there before the en_GB fill
     # We can infer: any key where pcm value != en_US value AND != en_GB value was original
     for k in list(to_translate.keys()):

@@ -167,7 +167,7 @@ def process_language(lang_code: str, google_code: str, en_strings: dict,
             print(f"done  ({translated_count}/{len(missing_keys)})")
         except Exception as exc:
             print(f"FAILED: {exc}")
-            print(f"    Retrying in 5s…")
+            print("    Retrying in 5s…")
             time.sleep(5)
             try:
                 translations = translate_batch(google_code, batch_keys, batch_values)

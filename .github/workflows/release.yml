@@ -1,8 +1,8 @@
 name: Release
 
+# The downloads on the Releases page are built with packaging/release.py (see its
+# docstring), which this older PyInstaller build predates.  Run it by hand only.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:

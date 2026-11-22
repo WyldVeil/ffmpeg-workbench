@@ -11,7 +11,6 @@ After running, execute translate_missing.py to fill in all other languages.
 
 import re
 import json
-import sys
 import argparse
 from pathlib import Path
 
@@ -161,13 +160,11 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
     """
     module = path.stem          # e.g. "shortifier"
     # Use parent folder name for disambiguation if needed
-    parent = path.parent.name   # e.g. "cutting"
 
     source = path.read_text(encoding="utf-8")
     original = source
 
     new_keys: dict[str, str] = {}   # key → English value (only new ones)
-    replacements: list[tuple[str, str]] = []  # (old_text, new_text) pairs in source
 
     def get_or_create_key(text: str) -> str | None:
         """Return locale key for *text*, creating if necessary. None = skip."""
@@ -190,7 +187,6 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
 
     # ── 1. Module-level list constants (CROP_POSITIONS, BG_MODES, etc.) ──────
     def replace_module_list(m: re.Match) -> str:
-        name = m.group("name")
         items_text = m.group("items")
         new_items = items_text
         for full, val in extract_strings_from_items(items_text):
@@ -206,7 +202,6 @@ def process_file(path: Path, en: dict, dry_run: bool) -> tuple[int, int]:
     # ── 2. Module-level dict constants (LAYOUTS, AUDIO_SOURCES, etc.) ────────
     # Only translate the KEYS (display labels), not the values
     def replace_module_dict(m: re.Match) -> str:
-        name = m.group("name")
         items_text = m.group("items")
         new_items = items_text
 

@@ -54,7 +54,6 @@ def main():
 
         def fix_match(m):
             key      = m.group(1)
-            gap      = m.group(2)
             tail     = m.group(3)
 
             # Reconstruct the full English string
