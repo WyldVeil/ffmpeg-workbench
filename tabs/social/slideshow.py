@@ -46,7 +46,7 @@ from tabs import common
 from tabs.base_tab import CLR, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker, RangePicker
 from tabs.kit.widgets import ColourButton
-from tabs.widgets import EncoderPanel, SaveRow, scroll_body
+from tabs.widgets import output_section, scroll_body
 
 RANDOM = "random"
 SAME = "(as the slideshow)"  # a slide's choice that follows the slideshow's
@@ -410,12 +410,9 @@ class SlideshowMakerTab(BaseTab):
             add_tooltip(cb, tip)
 
     def _build_output(self, body):
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest)
-        self.out_row.pack(fill="x", pady=px(8, 0))
+        self.encoder, self.out_row = output_section(
+            body, t("common.output_file"), ("h264", "hevc", "av1", "vp9"), suggest=self._suggest
+        )
         self.btn_render = self.make_render_btn(body, "🎞  CREATE SLIDESHOW", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

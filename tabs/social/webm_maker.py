@@ -24,7 +24,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.kit.widgets import ChoiceBox
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, save_section, scroll_body
 
 logger = logging.getLogger("crossfader.social.webm_maker")
 
@@ -135,18 +135,10 @@ class WebMTab(BaseTab):
 
     def _build_output(self, outer):
         """Where the result goes, the buttons, progress and the log."""
-        out_lf = tk.LabelFrame(outer, text=t("section.output"), padx=px(14), pady=px(8))
-        out_lf.pack(fill="x", padx=px(18), pady=px(2, 6))
-        self.out_var = tk.StringVar()
-        self.out_row = SaveRow(
-            out_lf,
-            t("webm_maker.save_as"),
-            self.out_var,
-            kind="video",
-            ext=".webm",
-            suggest=self._suggest_out,
+        self.out_row = save_section(
+            outer, t("webm_maker.save_as"), ext=".webm", suggest=self._suggest_out
         )
-        self.out_row.pack(fill="x")
+        self.out_var = self.out_row.var
 
         render_row = tk.Frame(outer)
         render_row.pack(pady=px(8))

@@ -20,7 +20,7 @@ from core.ops.shared import strip_audio_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, save_section, scroll_body
 
 MODES = {
     "replace": "Replace the soundtrack",
@@ -90,14 +90,11 @@ class AudioReplacerTab(BaseTab):
         tk.Checkbutton(opt, text="Fade in and out (1 s)", variable=self.fade_var).grid(
             row=4, column=0, sticky="w"
         )
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(
-            out_lf,
+        self.out_row = save_section(
+            body,
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.src_row.path, "new_audio"),
         )
-        self.out_row.pack(fill="x")
         self.btn_render = self.make_render_btn(body, "🎼  APPLY", self._render, width=20)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

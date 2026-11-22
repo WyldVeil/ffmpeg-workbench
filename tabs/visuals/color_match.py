@@ -25,7 +25,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 
 class ColorMatchTab(BaseTab):
@@ -41,7 +41,13 @@ class ColorMatchTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.colour_match"), t("color_match.subtitle"), icon="🎨")
         body = scroll_body(self)
+        self._build_inputs(body)
+        self._build_match_options(body)
+        self._build_stats(body)
+        self._build_output(body)
 
+    def _build_inputs(self, body):
+        """The clip to fix and the reference to match, and the before/after view."""
         inp = tk.LabelFrame(body, text=f"  {t('section.input_clips')}  ", padx=px(12), pady=px(8))
         inp.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.src_row = FileRow(inp, "Clip to fix:", self.src_var, on_change=self._inputs_changed)
@@ -60,6 +66,8 @@ class ColorMatchTab(BaseTab):
         self.compare = CompareView(body, 400, 225, after_label="Matched")
         self.compare.pack(pady=px(6))
 
+    def _build_match_options(self, body):
+        """Strength, channels and contrast."""
         opts = tk.LabelFrame(
             body, text=f"  {t('color_match.match_options_section')}  ", padx=px(12), pady=px(8)
         )
@@ -97,6 +105,8 @@ class ColorMatchTab(BaseTab):
             r1, text="Match contrast too", variable=self.contrast_var, command=self._update_filter
         ).pack(side="left", padx=px(16, 0))
 
+    def _build_stats(self, body):
+        """What the analysis found, and the Analyse button."""
         stats_lf = tk.LabelFrame(
             body, text=f"  {t('color_match.statistics_section')}  ", padx=px(12), pady=px(6)
         )
@@ -115,18 +125,14 @@ class ColorMatchTab(BaseTab):
         )
         self.btn_analyse.pack(anchor="w", pady=px(6, 0))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(
-            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
-        )
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "dnxhr"),
             suggest=lambda: self.suggest_output(self.src_row.path, "matched"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = self.make_render_btn(
             body, t("color_match.apply_button"), self._render, width=26

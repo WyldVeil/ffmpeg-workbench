@@ -23,7 +23,7 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ChoiceBox
-from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
+from tabs.widgets import FileRow, FramePreview, save_section, scroll_body
 
 DITHERS = {
     "sierra2_4a": "Sierra (smooth, recommended)",
@@ -177,16 +177,10 @@ class GIFMakerTab(BaseTab):
         self.format = ChoiceBox(opt, ANIM_FORMATS, AnimFormat.GIF, width=16)
         self.form_row(opt, 4, "Format:", self.format, label_width=12, pady=2)
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(
-            out_lf,
-            t("common.output_file"),
-            kind="image",
-            ext=".gif",
-            suggest=self._suggest,
+        self.out_row = save_section(
+            body, t("common.output_file"), kind="image", ext=".gif", suggest=self._suggest
         )
-        self.out_row.pack(fill="x")
+        out_lf = self.out_row.master
         self.size_lbl = tk.Label(out_lf, text="", fg=CLR["accent"])
         self.size_lbl.pack(anchor="w")
 

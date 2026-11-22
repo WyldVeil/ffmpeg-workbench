@@ -29,7 +29,7 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ColourButton
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
+from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
 STYLES = {
     "lower_third": "Lower third (sliding bar)",
@@ -137,16 +137,12 @@ class TitlesGeneratorTab(BaseTab):
         self.cards_frame = tk.Frame(body)
         self.cards_frame.pack(fill="x", padx=px(20))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "titled"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(
             body, t("titles.render_button"), self._render, width=26
         )

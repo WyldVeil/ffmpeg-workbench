@@ -530,43 +530,13 @@ class EncoderPanel(tk.Frame):
         self._hw_var = tk.StringVar(value=t_or("encoder.hw_auto", "Auto (use GPU if available)"))
         self._ten_bit = tk.BooleanVar(value=False)
 
-        def lbl(text):
-            return tk.Label(self, text=text, bg=clr["bg"], fg=clr["fg"], font=(UI_FONT, 9))
-
-        lbl(t_or("encoder.codec", "Codec")).grid(
-            row=0, column=0, sticky="w", padx=px(0, 6), pady=px(2)
-        )
-        cb = ttk.Combobox(
-            self,
-            textvariable=self._codec_var,
-            state="readonly",
-            width=30,
-            values=[v for _, v in self._codecs],
-        )
-        cb.grid(row=0, column=1, sticky="w", pady=px(2))
-        lbl(t_or("encoder.quality", "Quality")).grid(row=0, column=2, sticky="w", padx=px(14, 6))
-        qb = ttk.Combobox(
-            self,
-            textvariable=self._quality_var,
-            state="readonly",
-            width=11,
-            values=[v for _, v in _QUALITY_LABELS],
-        )
-        qb.grid(row=0, column=3, sticky="w")
-        lbl(t_or("encoder.speed", "Speed")).grid(
-            row=1, column=0, sticky="w", padx=px(0, 6), pady=px(2)
-        )
-        sb = ttk.Combobox(
-            self,
-            textvariable=self._speed_var,
-            state="readonly",
-            width=30,
-            values=[v for _, v in _SPEED_LABELS],
-        )
-        sb.grid(row=1, column=1, sticky="w", pady=px(2))
-        lbl(t_or("encoder.hardware", "Encoder")).grid(row=1, column=2, sticky="w", padx=px(14, 6))
-        self._hw_box = ttk.Combobox(self, textvariable=self._hw_var, state="readonly", width=26)
-        self._hw_box.grid(row=1, column=3, sticky="w")
+        codec = [v for _, v in self._codecs]
+        self._choice(0, 0, t_or("encoder.codec", "Codec"), self._codec_var, codec, 30)
+        quality = [v for _, v in _QUALITY_LABELS]
+        self._choice(0, 2, t_or("encoder.quality", "Quality"), self._quality_var, quality, 11)
+        speed = [v for _, v in _SPEED_LABELS]
+        self._choice(1, 0, t_or("encoder.speed", "Speed"), self._speed_var, speed, 30)
+        self._hw_box = self._choice(1, 2, t_or("encoder.hardware", "Encoder"), self._hw_var, [], 26)
         if show_ten_bit:
             tk.Checkbutton(
                 self,
@@ -580,8 +550,6 @@ class EncoderPanel(tk.Frame):
             ).grid(row=2, column=1, columnspan=3, sticky="w")
         self._status = tk.Label(self, text="", bg=clr["bg"], fg=clr["fgdim"], font=(UI_FONT, 8))
         self._status.grid(row=3, column=0, columnspan=4, sticky="w", pady=px(2, 0))
-        for w in (cb, qb, sb, self._hw_box):
-            w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self._hw_choices = [
             ("auto", self._hw_var.get()),
             ("off", t_or("encoder.hw_off", "Software (best quality per MB)")),
@@ -589,6 +557,22 @@ class EncoderPanel(tk.Frame):
         self._hw_box.config(values=[v for _, v in self._hw_choices])
         tasks.submit(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
         self._changed(notify=False)  # the owner is still being built: don't call back into it yet
+
+    def _choice(self, row, col, label, var, values, width):
+        """A label and its drop-down at (*row*, *col*); a change updates the encoder."""
+        clr = _clr()
+        first = col == 0
+        tk.Label(self, text=label, bg=clr["bg"], fg=clr["fg"], font=(UI_FONT, 9)).grid(
+            row=row,
+            column=col,
+            sticky="w",
+            padx=px(0, 6) if first else px(14, 6),
+            pady=px(2) if first else 0,
+        )
+        box = ttk.Combobox(self, textvariable=var, state="readonly", width=width, values=values)
+        box.grid(row=row, column=col + 1, sticky="w", pady=px(2) if first else 0)
+        box.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+        return box
 
     def _hw_detected(self, kinds) -> None:
         if not self.winfo_exists():
@@ -693,6 +677,24 @@ class FramePicker(tk.Toplevel):
         )
         self.slider.pack(fill="x", padx=px(12))
         framestep.slider(self.slider, lambda: self._fps)
+        self._build_controls()
+        self.bind("<Return>", lambda _e: self._use())
+        self.bind("<Escape>", lambda _e: self.destroy())
+        try:
+            start = ff.parse_time(var.get()) if var.get().strip() else 0.0
+        except ValueError:
+            start = 0.0
+        start = min(float(self.slider.cget("to")), max(0.0, framestep.snap(start, self._fps)))
+        self.preview.load(path, dur, start)
+        self.pos.set(start)
+        self._moved()
+        self.slider.focus_set()
+        with contextlib.suppress(tk.TclError):
+            self.grab_set()
+
+    def _build_controls(self):
+        """Step buttons, the time, Cancel and Use, and the frame-step keys."""
+        clr = _clr()
         bar = tk.Frame(self, bg=clr["bg"])
         bar.pack(fill="x", padx=px(12), pady=px(6))
         for label, frames, seconds in (("◀◀", 0, -1), ("◀", -1, 0), ("▶", 1, 0), ("▶▶", 0, 1)):
@@ -732,19 +734,6 @@ class FramePicker(tk.Toplevel):
             ("<colon>", 0, 1),
         ):
             self.bind(key, lambda _e, f=frames, s=seconds: framestep.step(self.slider, f, s))
-        self.bind("<Return>", lambda _e: self._use())
-        self.bind("<Escape>", lambda _e: self.destroy())
-        try:
-            start = ff.parse_time(var.get()) if var.get().strip() else 0.0
-        except ValueError:
-            start = 0.0
-        start = min(float(self.slider.cget("to")), max(0.0, framestep.snap(start, self._fps)))
-        self.preview.load(path, dur, start)
-        self.pos.set(start)
-        self._moved()
-        self.slider.focus_set()
-        with contextlib.suppress(tk.TclError):
-            self.grab_set()
 
     def _moved(self):
         at = framestep.snap(float(self.pos.get()), self._fps)
@@ -754,3 +743,52 @@ class FramePicker(tk.Toplevel):
     def _use(self):
         self._var.set(self._fmt(framestep.snap(float(self.pos.get()), self._fps)))
         self.destroy()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  The Output section at the foot of a page
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def output_box(parent: tk.Misc) -> tk.LabelFrame:
+    """The page's "Output" box, packed; output_section / save_section fill it
+    the usual way, a page with output options of its own fills it itself."""
+    frame = tk.LabelFrame(
+        parent, text=f"  {t_or('section.output', 'Output')}  ", padx=px(12), pady=px(8)
+    )
+    frame.pack(fill="x", padx=px(20), pady=px(6))
+    return frame
+
+
+def output_section(
+    parent: tk.Misc,
+    label: str,
+    codecs: tuple[str, ...],
+    *,
+    show_ten_bit: bool = True,
+    kind: str = "video",
+    ext: str | Callable[[], str] = ".mp4",
+    suggest: Callable[[], str] | None = None,
+) -> tuple[EncoderPanel, SaveRow]:
+    """The "Output" box: an encoder choice (*codecs*) above where the result
+    is saved.  The box itself is ``row.master``, for pages that add to it."""
+    frame = output_box(parent)
+    encoder = EncoderPanel(frame, codecs=codecs, show_ten_bit=show_ten_bit)
+    encoder.pack(anchor="w")
+    row = SaveRow(frame, label, kind=kind, ext=ext, suggest=suggest)
+    row.pack(fill="x", pady=px(8, 0))
+    return encoder, row
+
+
+def save_section(
+    parent: tk.Misc,
+    label: str,
+    *,
+    kind: str = "video",
+    ext: str | Callable[[], str] = ".mp4",
+    suggest: Callable[[], str] | None = None,
+) -> SaveRow:
+    """The "Output" box for a page with no encoder: just where the result is saved."""
+    row = SaveRow(output_box(parent), label, kind=kind, ext=ext, suggest=suggest)
+    row.pack(fill="x")
+    return row

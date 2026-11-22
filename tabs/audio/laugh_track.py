@@ -20,7 +20,7 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, output_box
 
 
 def _fmt(seconds):
@@ -385,10 +385,7 @@ class LaughTrackRemoverTab(BaseTab):
 
     def _build_output(self):
         """Output."""
-        out_lf = tk.LabelFrame(
-            self, text=t("section.output"), padx=px(15), pady=px(8), font=(UI_FONT, 9, "bold")
-        )
-        out_lf.pack(fill="x", padx=px(20), pady=px(4))
+        out_lf = output_box(self)
 
         self._out_var = tk.StringVar()
         SaveRow(

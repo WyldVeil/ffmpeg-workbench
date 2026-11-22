@@ -29,7 +29,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 ASSUME = {
     "": "From the file",
@@ -149,21 +149,17 @@ class HdrToSdrTab(BaseTab):
         self.form_row(opt, 4, "Input:", ab, pady=(6, 0))
         ab.bind("<<ComboboxSelected>>", lambda _e: self._changed())
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
-        self.encoder.pack(anchor="w")
-        tk.Label(
-            out_lf,
-            text="Tip: HEVC or AV1 with 10-bit gives the smoothest skies and shadows.",
-            fg=CLR["fgdim"],
-        ).pack(anchor="w", pady=px(2, 0))
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "sdr", ".mp4"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
+        tk.Label(
+            self.out_row.master,
+            text="Tip: HEVC or AV1 with 10-bit gives the smoothest skies and shadows.",
+            fg=CLR["fgdim"],
+        ).pack(anchor="w", pady=px(2, 0), before=self.out_row)
         self.btn_render = self.make_render_btn(body, "🌗  CONVERT TO SDR", self._render, width=24)
         self.btn_render.pack(pady=px(8))
 

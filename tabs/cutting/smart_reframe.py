@@ -26,7 +26,7 @@ from core.ops.shared import RenderJob, frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 RATIOS = {
     "9:16": ("9:16 - Shorts, Reels, TikTok", (9, 16), (1080, 1920)),
@@ -100,16 +100,12 @@ class SmartReframeTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "reframed"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(body, "🎯  REFRAME", self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)

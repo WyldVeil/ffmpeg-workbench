@@ -18,7 +18,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 GROUPS = [
     ("Light", ("exposure", "contrast", "brightness", "gamma")),
@@ -87,18 +87,12 @@ class ColorCorrectorTab(BaseTab):
         grid.columnconfigure(0, weight=1)
         grid.columnconfigure(1, weight=1)
 
-        enc_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        enc_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(
-            enc_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
-        )
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            enc_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "dnxhr"),
             suggest=lambda: self.suggest_output(self.src_row.path, "graded"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = self.make_render_btn(
             body, t("color_correct.render_grade"), self._render, width=24

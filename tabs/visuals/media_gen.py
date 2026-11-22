@@ -20,7 +20,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.widgets import ColourButton
-from tabs.widgets import SaveRow, scroll_body
+from tabs.widgets import save_section, scroll_body
 
 PATTERNS = {
     "smpte_hd": "SMPTE HD colour bars",
@@ -81,6 +81,13 @@ class MediaGeneratorTab(BaseTab):
             icon="🎨",
         )
         body = scroll_body(self)
+        self._build_generate_options(body)
+        self._build_output(body)
+        self._pattern_changed()
+        self._audio_changed()
+
+    def _build_generate_options(self, body):
+        """Pattern, size, rate, length and sound."""
         f = tk.LabelFrame(body, text="  What to generate  ", padx=px(12), pady=px(8))
         f.pack(fill="x", padx=px(20), pady=px(10, 4))
 
@@ -140,10 +147,10 @@ class MediaGeneratorTab(BaseTab):
         )
         self.hint.grid(row=5, column=0, columnspan=3, sticky="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest_name)
-        self.out_row.pack(fill="x")
+    def _build_output(self, body):
+        """Where it goes (the extension picks the format), the button and the log."""
+        self.out_row = save_section(body, t("common.output_file"), suggest=self._suggest_name)
+        out_lf = self.out_row.master
         tk.Label(
             out_lf,
             text="  ℹ  .mp4/.mkv = H.264, .mov = ProRes, .webm = VP9; "
@@ -155,8 +162,6 @@ class MediaGeneratorTab(BaseTab):
         self.btn_render = self.make_render_btn(body, t("mgen.btn_generate"), self._render, width=24)
         self.btn_render.pack(pady=px(10))
         self.console = self.make_console_block(body, height=6)
-        self._pattern_changed()
-        self._audio_changed()
 
     # ── helpers ──────────────────────────────────────────────────────────────
 

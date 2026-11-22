@@ -16,7 +16,7 @@ from core.ops import batch as batch_ops
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
-from tabs.widgets import FolderRow
+from tabs.widgets import FolderRow, output_box
 
 logger = logging.getLogger("crossfader.system.batch")
 
@@ -166,8 +166,7 @@ class BatchTab(BaseTab):
 
     def _build_output_folder(self):
         """Output folder."""
-        out_lf = tk.LabelFrame(self, text=t("section.output"), padx=px(14), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(4))
+        out_lf = output_box(self)
 
         self._out_var = tk.StringVar()
         FolderRow(out_lf, t("common.output_folder"), self._out_var).pack(fill="x", pady=px(4))

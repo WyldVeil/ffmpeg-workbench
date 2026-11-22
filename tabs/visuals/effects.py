@@ -275,35 +275,15 @@ class SpecialEffectsTab(BaseTab):
     # ── Intro 1: Fade-In from Static Frame ───────────────────────────────
 
     def _build_intro_fadein(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text="  Fade-In  ")
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.fade_in_from_static_frame"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._fi_src, self._fi_out = self._effect_page(
+            nb,
+            "  Fade-In  ",
+            t("effects.fade_in_from_static_frame"),
             "A still frame from the start of your video fades out over the live "
             "footage, so you see the image dissolve into the actual video. "
             "No frames are lost. The tool automatically finds the first "
             "non-black frame for you.",
-        )
-
-        self._fi_src = tk.StringVar()
-        self._fi_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._fi_src,
-            on_change=partial(self._suggest_out, self._fi_out, "_fadein"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._fi_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_fadein",
         )
 
         opts = _lf(inner, "Options")
@@ -381,34 +361,14 @@ class SpecialEffectsTab(BaseTab):
     # ── Intro 2: Zoom Burst ───────────────────────────────────────────────
 
     def _build_intro_zoomburst(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.zoom_burst"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.zoom_burst_in"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._zb_src, self._zb_out = self._effect_page(
+            nb,
+            t("effects.zoom_burst"),
+            t("effects.zoom_burst_in"),
             "The video starts massively zoomed-in and rapidly pulls back to "
             "full frame, like a camera snap-zoom. Great for high-energy openers. "
             "Uses zoompan filter; original video is untouched after the burst ends.",
-        )
-
-        self._zb_src = tk.StringVar()
-        self._zb_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._zb_src,
-            on_change=partial(self._suggest_out, self._zb_out, "_zoomburst"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._zb_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_zoomburst",
         )
 
         opts = _lf(inner, "Options")
@@ -454,33 +414,13 @@ class SpecialEffectsTab(BaseTab):
     # ── Intro 3: Slide In ─────────────────────────────────────────────────
 
     def _build_intro_slidein(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.slide_in"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.slide_in_2"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._sl_src, self._sl_out = self._effect_page(
+            nb,
+            t("effects.slide_in"),
+            t("effects.slide_in_2"),
             "The video frame slides onto a black background from any edge. "
             "After the animation the video plays normally at full size.",
-        )
-
-        self._sl_src = tk.StringVar()
-        self._sl_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._sl_src,
-            on_change=partial(self._suggest_out, self._sl_out, "_slidein"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._sl_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_slidein",
         )
 
         opts = _lf(inner, "Options")
@@ -534,34 +474,14 @@ class SpecialEffectsTab(BaseTab):
     # ── Intro 4: Spin In ──────────────────────────────────────────────────
 
     def _build_intro_spin(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.spin_in"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.spin_in_2"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._sp_src, self._sp_out = self._effect_page(
+            nb,
+            t("effects.spin_in"),
+            t("effects.spin_in_2"),
             "The video rotates in from a small, spinning state and expands "
             "to fill the frame. A popular dramatic opener. "
             "Achieved via rotate + scale expressions on the first N frames.",
-        )
-
-        self._sp_src = tk.StringVar()
-        self._sp_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._sp_src,
-            on_change=partial(self._suggest_out, self._sp_out, "_spinin"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._sp_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_spinin",
         )
 
         opts = _lf(inner, "Options")
@@ -604,34 +524,14 @@ class SpecialEffectsTab(BaseTab):
     # ── Intro 5: Split Open ───────────────────────────────────────────────
 
     def _build_intro_splitopen(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.split_open"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.split_open_2"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._spo_src, self._spo_out = self._effect_page(
+            nb,
+            t("effects.split_open"),
+            t("effects.split_open_2"),
             "The screen is split horizontally. Top half slides up and bottom half "
             "slides down, revealing the video. The cinematic curtain reveal. "
             "Achieved with two crop+overlay layers animating in opposite directions.",
-        )
-
-        self._spo_src = tk.StringVar()
-        self._spo_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._spo_src,
-            on_change=partial(self._suggest_out, self._spo_out, "_splitopen"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._spo_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_splitopen",
         )
 
         opts = _lf(inner, "Options")
@@ -687,33 +587,13 @@ class SpecialEffectsTab(BaseTab):
         self._build_outro_irisclose(outro_nb)
 
     def _build_outro_fadeout(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.fade_out"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.fade_to_black"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._fo_src, self._fo_out = self._effect_page(
+            nb,
+            t("effects.fade_out"),
+            t("effects.fade_to_black"),
             "The last N seconds of your video fade smoothly to black. "
             "Audio fades out in parallel. Clean and professional.",
-        )
-
-        self._fo_src = tk.StringVar()
-        self._fo_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._fo_src,
-            on_change=partial(self._suggest_out, self._fo_out, "_fadeout"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._fo_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_fadeout",
         )
 
         opts = _lf(inner, "Options")
@@ -753,33 +633,13 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_outro_freezezoom(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.freeze_zoom_out"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.freeze_frame_zoom_out"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._fz_src, self._fz_out = self._effect_page(
+            nb,
+            t("effects.freeze_zoom_out"),
+            t("effects.freeze_frame_zoom_out"),
             "The last frame of the video is frozen, then slowly zooms out and "
             "fades to black. A classic cinematic ending.",
-        )
-
-        self._fz_src = tk.StringVar()
-        self._fz_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._fz_src,
-            on_change=partial(self._suggest_out, self._fz_out, "_freezezoom"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._fz_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_freezezoom",
         )
 
         opts = _lf(inner, "Options")
@@ -827,33 +687,13 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_outro_irisclose(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.iris_close"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.iris_vignette_close"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._ir_src, self._ir_out = self._effect_page(
+            nb,
+            t("effects.iris_close"),
+            t("effects.iris_vignette_close"),
             "A black oval vignette closes in from the edges to the centre "
             "like a classic iris wipe, beloved in cinema and vintage content.",
-        )
-
-        self._ir_src = tk.StringVar()
-        self._ir_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._ir_src,
-            on_change=partial(self._suggest_out, self._ir_out, "_irisclose"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._ir_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_irisclose",
         )
 
         opts = _lf(inner, "Options")
@@ -904,34 +744,14 @@ class SpecialEffectsTab(BaseTab):
         self._build_ov_progressbar(ov_nb)
 
     def _build_ov_emoji(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.emoji_burst"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.emoji_text_burst"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._em_src, self._em_out = self._effect_page(
+            nb,
+            t("effects.emoji_burst"),
+            t("effects.emoji_text_burst"),
             "Slam a large emoji or short text onto the video at a specific "
             "timestamp with a pop-in scale animation. "
             "Set the position (% of frame), appear time, and hold duration.",
-        )
-
-        self._em_src = tk.StringVar()
-        self._em_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._em_src,
-            on_change=partial(self._suggest_out, self._em_out, "_emoji"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._em_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_emoji",
         )
 
         opts = _lf(inner, "Emoji / Text Options")
@@ -944,7 +764,11 @@ class SpecialEffectsTab(BaseTab):
         self._em_start = tk.StringVar(value="3.0")
         self._em_hold = tk.StringVar(value="2.0")
         self._em_crf = tk.StringVar(value="18")
+        self._build_emoji_text_row(opts)
+        self._build_emoji_timing(inner, opts)
 
+    def _build_emoji_text_row(self, opts):
+        """The emoji or text, its size, and where it goes on the frame."""
         r0 = tk.Frame(opts, bg=CLR["bg"])
         r0.pack(anchor="w", pady=px(3))
         tk.Label(r0, text=t("effects.text_emoji"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
@@ -996,6 +820,8 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
 
+    def _build_emoji_timing(self, inner, opts):
+        """When it appears, how long it stays, quality, and the button."""
         _spin(
             opts,
             "Appear at (s):",
@@ -1051,34 +877,14 @@ class SpecialEffectsTab(BaseTab):
         tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_emoji")
 
     def _build_ov_lowerthird(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.lower_third"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.lower_third_banner"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._lt_src, self._lt_out = self._effect_page(
+            nb,
+            t("effects.lower_third"),
+            t("effects.lower_third_banner"),
             "A professional name/title bar that slides up from the bottom. "
             "Used for speaker IDs, location captions, product names, "
             "and news-style graphics.",
-        )
-
-        self._lt_src = tk.StringVar()
-        self._lt_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._lt_src,
-            on_change=partial(self._suggest_out, self._lt_out, "_lt"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._lt_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_lt",
         )
 
         opts = _lf(inner, "Banner Options")
@@ -1175,34 +981,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_ov_subscribe(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.subscribe_bump"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.subscribe_like_reminder"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._sub_src, self._sub_out = self._effect_page(
+            nb,
+            t("effects.subscribe_bump"),
+            t("effects.subscribe_like_reminder"),
             "Burns a customisable call-to-action reminder onto your video. "
             '"Like & Subscribe!", "Follow for more", etc. '
             "Animates in with a bounce and fades out cleanly.",
-        )
-
-        self._sub_src = tk.StringVar()
-        self._sub_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._sub_src,
-            on_change=partial(self._suggest_out, self._sub_out, "_subscribe"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._sub_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_subscribe",
         )
 
         opts = _lf(inner, "Options")
@@ -1291,34 +1077,14 @@ class SpecialEffectsTab(BaseTab):
         tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_subscribe")
 
     def _build_ov_countdown(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text="  Countdown  ")
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.countdown_timer_overlay"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._cd_src, self._cd_out = self._effect_page(
+            nb,
+            "  Countdown  ",
+            t("effects.countdown_timer_overlay"),
             "Burns a live countdown clock onto the video starting at "
             "your chosen value. Great for reaction videos, cooking timers, "
             "challenges, and live event coverage.",
-        )
-
-        self._cd_src = tk.StringVar()
-        self._cd_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._cd_src,
-            on_change=partial(self._suggest_out, self._cd_out, "_countdown"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._cd_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_countdown",
         )
 
         opts = _lf(inner, "Countdown Options")
@@ -1378,34 +1144,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_ov_progressbar(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.progress_bar"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.video_progress_bar"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._pb_src, self._pb_out = self._effect_page(
+            nb,
+            t("effects.progress_bar"),
+            t("effects.video_progress_bar"),
             "Adds a YouTube-style thin progress bar at the top or bottom that "
             "fills from left to right as the video plays. "
             "Viewers love knowing how far through the video they are.",
-        )
-
-        self._pb_src = tk.StringVar()
-        self._pb_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._pb_src,
-            on_change=partial(self._suggest_out, self._pb_out, "_progress"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._pb_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_progress",
         )
 
         opts = _lf(inner, "Bar Options")
@@ -1475,35 +1221,15 @@ class SpecialEffectsTab(BaseTab):
         self._build_gl_lightleak(gl_nb)
 
     def _build_gl_rgb(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text="  RGB Glitch  ")
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.rgb_chromatic_aberration_glitch"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._rgb_src, self._rgb_out = self._effect_page(
+            nb,
+            "  RGB Glitch  ",
+            t("effects.rgb_chromatic_aberration_glitch"),
             "Splits the Red, Green, and Blue channels and offsets them "
             "horizontally to create the classic chromatic aberration / "
             "cyberpunk glitch look seen everywhere on YouTube. "
             "Apply to a section or the entire video.",
-        )
-
-        self._rgb_src = tk.StringVar()
-        self._rgb_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._rgb_src,
-            on_change=partial(self._suggest_out, self._rgb_out, "_rgb"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._rgb_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_rgb",
         )
 
         opts = _lf(inner, "Options")
@@ -1584,34 +1310,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_gl_vhs(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.vhs_retro"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.vhs_retro_effect"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._vhs_src, self._vhs_out = self._effect_page(
+            nb,
+            t("effects.vhs_retro"),
+            t("effects.vhs_retro_effect"),
             "Simulates a degraded VHS tape: colour bleed, noise, "
             "scanlines, and edge distortion. Popular for nostalgia, "
             "horror, lo-fi, and vaporwave aesthetics.",
-        )
-
-        self._vhs_src = tk.StringVar()
-        self._vhs_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._vhs_src,
-            on_change=partial(self._suggest_out, self._vhs_out, "_vhs"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._vhs_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_vhs",
         )
 
         opts = _lf(inner, "Options")
@@ -1661,34 +1367,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_gl_grain(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.film_grain"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.film_grain_cinematic_noise"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._gr_src, self._gr_out = self._effect_page(
+            nb,
+            t("effects.film_grain"),
+            t("effects.film_grain_cinematic_noise"),
             "Adds organic, temporal film grain. Used by cinematographers to "
             "add texture, hide compression artefacts, and give footage a "
             "cinematic / analogue feel.",
-        )
-
-        self._gr_src = tk.StringVar()
-        self._gr_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._gr_src,
-            on_change=partial(self._suggest_out, self._gr_out, "_grain"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._gr_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_grain",
         )
 
         opts = _lf(inner, "Options")
@@ -1731,33 +1417,13 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_gl_vignette(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text="  Vignette  ")
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.cinematic_vignette"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._vi_src, self._vi_out = self._effect_page(
+            nb,
+            "  Vignette  ",
+            t("effects.cinematic_vignette"),
             "Darkens the edges of the frame, drawing the eye to the centre. "
             "One of the most universally used effects in cinema and YouTube.",
-        )
-
-        self._vi_src = tk.StringVar()
-        self._vi_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._vi_src,
-            on_change=partial(self._suggest_out, self._vi_out, "_vignette"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._vi_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_vignette",
         )
 
         opts = _lf(inner, "Options")
@@ -1796,34 +1462,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_gl_lightleak(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.light_leak"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.light_leak_lens_flare"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._ll_src, self._ll_out = self._effect_page(
+            nb,
+            t("effects.light_leak"),
+            t("effects.light_leak_lens_flare"),
             "Simulates a burst of warm light sweeping across the frame, "
             "as if a lens flare or light leak was caught on a film camera. "
             "Great for transitions and dream-like sequences.",
-        )
-
-        self._ll_src = tk.StringVar()
-        self._ll_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._ll_src,
-            on_change=partial(self._suggest_out, self._ll_out, "_lightleak"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._ll_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_lightleak",
         )
 
         opts = _lf(inner, "Options")
@@ -1897,34 +1543,14 @@ class SpecialEffectsTab(BaseTab):
         self._build_mo_whippan(mo_nb)
 
     def _build_mo_shake(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.camera_shake"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.camera_shake_2"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._sh_src, self._sh_out = self._effect_page(
+            nb,
+            t("effects.camera_shake"),
+            t("effects.camera_shake_2"),
             "Simulates an unstabilised handheld camera. Apply to impact moments, "
             "action sequences, or jump scares. Amplitude controls jitter size. "
             "Frame edges are cropped slightly to hide the shake border.",
-        )
-
-        self._sh_src = tk.StringVar()
-        self._sh_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._sh_src,
-            on_change=partial(self._suggest_out, self._sh_out, "_shake"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._sh_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_shake",
         )
 
         opts = _lf(inner, "Options")
@@ -2017,34 +1643,14 @@ class SpecialEffectsTab(BaseTab):
         tasks.submit(partial(_probe_length_and_size, src), on_done=_start, name="render_shake")
 
     def _build_mo_zoompunch(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.zoom_punch"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.zoom_punch_impact_zoom"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._zp_src, self._zp_out = self._effect_page(
+            nb,
+            t("effects.zoom_punch"),
+            t("effects.zoom_punch_impact_zoom"),
             "A sudden very fast zoom-in at a specific timestamp, synced to an "
             "impact, beat drop, or punchline. A favourite for meme edits, "
             "gaming highlights, and react content.",
-        )
-
-        self._zp_src = tk.StringVar()
-        self._zp_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._zp_src,
-            on_change=partial(self._suggest_out, self._zp_out, "_zoompunch"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._zp_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_zoompunch",
         )
 
         opts = _lf(inner, "Options")
@@ -2108,34 +1714,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_mo_kenburns(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text="  Ken Burns  ")
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.ken_burns_pan_zoom"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._kb_src, self._kb_out = self._effect_page(
+            nb,
+            "  Ken Burns  ",
+            t("effects.ken_burns_pan_zoom"),
             "A slow, cinematic pan and zoom across the entire video. "
             "Named after the documentary filmmaker. Ideal for drone footage, "
             "landscape shots, interview B-roll, and still photo slideshows.",
-        )
-
-        self._kb_src = tk.StringVar()
-        self._kb_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._kb_src,
-            on_change=partial(self._suggest_out, self._kb_out, "_kenburns"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._kb_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_kenburns",
         )
 
         opts = _lf(inner, "Options")
@@ -2196,35 +1782,15 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_mo_whippan(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.whip_pan_blur"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.whip_pan_motion_blur"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._wp_src, self._wp_out = self._effect_page(
+            nb,
+            t("effects.whip_pan_blur"),
+            t("effects.whip_pan_motion_blur"),
             "Adds an extreme horizontal or vertical motion blur over a short "
             "window, simulating a fast camera whip pan. "
             "Perfect for transitions between scenes, used on YouTube by "
             "MrBeast, MKBHD, Linus Tech Tips, and almost every vlogger.",
-        )
-
-        self._wp_src = tk.StringVar()
-        self._wp_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._wp_src,
-            on_change=partial(self._suggest_out, self._wp_out, "_whippan"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._wp_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_whippan",
         )
 
         opts = _lf(inner, "Options")
@@ -2291,34 +1857,14 @@ class SpecialEffectsTab(BaseTab):
         self._build_br_watermark(br_nb)
 
     def _build_br_meme(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.meme_caption"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.impact_meme_caption"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._mc_src, self._mc_out = self._effect_page(
+            nb,
+            t("effects.meme_caption"),
+            t("effects.impact_meme_caption"),
             "Burns large white Impact-style text with black outline onto the "
             "video: top caption, bottom caption, or both. The classic meme "
             "format used on every reaction and highlight channel.",
-        )
-
-        self._mc_src = tk.StringVar()
-        self._mc_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._mc_src,
-            on_change=partial(self._suggest_out, self._mc_out, "_meme"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._mc_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_meme",
         )
 
         opts = _lf(inner, "Caption Options")
@@ -2436,34 +1982,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_br_cinebars(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.cinematic_bars"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.cinematic_black_bars"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._cb_src, self._cb_out = self._effect_page(
+            nb,
+            t("effects.cinematic_bars"),
+            t("effects.cinematic_black_bars"),
             "Adds letterbox bars to simulate a 2.39:1 or 2.35:1 anamorphic "
             "widescreen cinema aspect ratio. Optionally animate them sliding "
             "in from the edges for a dramatic reveal.",
-        )
-
-        self._cb_src = tk.StringVar()
-        self._cb_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._cb_src,
-            on_change=partial(self._suggest_out, self._cb_out, "_cinebars"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._cb_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_cinebars",
         )
 
         opts = _lf(inner, "Options")
@@ -2536,34 +2062,14 @@ class SpecialEffectsTab(BaseTab):
         )
 
     def _build_br_watermark(self, nb):
-        f = ttk.Frame(nb)
-        nb.add(f, text=t("effects.social_watermark"))
-        inner = scroll_body(f)
-
-        tk.Label(
-            inner,
-            text=t("effects.social_media_watermark"),
-            font=(UI_FONT, 12, "bold"),
-            bg=CLR["bg"],
-            fg=CLR["accent"],
-        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
-        _hint(
-            inner,
+        inner, self._wm_src, self._wm_out = self._effect_page(
+            nb,
+            t("effects.social_watermark"),
+            t("effects.social_media_watermark"),
             "Burns a persistent channel handle / watermark onto the entire "
             "video. Supports @ prefixes, emojis, and custom positioning. "
             "Essential for short-form content repurposed across platforms.",
-        )
-
-        self._wm_src = tk.StringVar()
-        self._wm_out = tk.StringVar()
-        FileRow(
-            inner,
-            t("common.source_video"),
-            self._wm_src,
-            on_change=partial(self._suggest_out, self._wm_out, "_watermark"),
-        ).pack(fill="x", padx=px(18), pady=px(12, 4))
-        SaveRow(inner, t("common.output_file"), self._wm_out).pack(
-            fill="x", padx=px(18), pady=px(4)
+            "_watermark",
         )
 
         opts = _lf(inner, "Watermark Options")
@@ -2660,6 +2166,24 @@ class SpecialEffectsTab(BaseTab):
     # ═════════════════════════════════════════════════════════════════════
     #  Shared helpers used by all render methods
     # ═════════════════════════════════════════════════════════════════════
+
+    def _effect_page(self, nb, tab, title, hint, suffix):
+        """One effect's tab: its title and what it does, the source video and
+        where the result goes (suggested from the source with *suffix*).
+        Returns (the frame to add options to, source var, output var)."""
+        f = ttk.Frame(nb)
+        nb.add(f, text=tab)
+        inner = scroll_body(f)
+        tk.Label(
+            inner, text=title, font=(UI_FONT, 12, "bold"), bg=CLR["bg"], fg=CLR["accent"]
+        ).pack(anchor="w", padx=px(18), pady=px(14, 2))
+        _hint(inner, hint)
+        src, out = tk.StringVar(), tk.StringVar()
+        FileRow(
+            inner, t("common.source_video"), src, on_change=partial(self._suggest_out, out, suffix)
+        ).pack(fill="x", padx=px(18), pady=px(12, 4))
+        SaveRow(inner, t("common.output_file"), out).pack(fill="x", padx=px(18), pady=px(4))
+        return inner, src, out
 
     @staticmethod
     def _suggest_out(out_var: tk.StringVar, suffix: str, src: str) -> None:

@@ -20,7 +20,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.widgets import ColourButton
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 BACKGROUNDS = {
     "crop": "Fill the frame (crop the edges)",
@@ -140,16 +140,13 @@ class ShortifierTab(BaseTab):
 
     def _build_output(self, body):
         """Encoder, where the result goes, the button and the log."""
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"), show_ten_bit=False)
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1"),
+            show_ten_bit=False,
             suggest=lambda: self.suggest_output(self.src_row.path, self._key()),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(body, "📱  SHORTIFY", self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

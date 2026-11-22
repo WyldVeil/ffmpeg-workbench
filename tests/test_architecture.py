@@ -548,6 +548,19 @@ def test_scrolling_areas_come_from_the_kit():
     assert not hits, f"use scroll_body: {hits}"
 
 
+def test_output_boxes_come_from_the_kit():
+    """A page's Output box is tabs.widgets.output_section (encoder + save
+    row), save_section (save row) or output_box (the box, for pages with
+    output options of their own): one look, one translated title."""
+    built = re.compile(r"LabelFrame\([^)]*text=(\"  Output  \"|t\(\"section\.output\"\))")
+    hits = [
+        rel
+        for rel, path in _py_files("tabs", "shell")
+        if rel != "tabs/widgets.py" and built.search(open(path, encoding="utf-8").read())
+    ]
+    assert not hits, f"use output_section / save_section / output_box: {hits}"
+
+
 #: a variable holding where an output goes (out_var, _out_var, out_dir_var, out_folder_var, ...)
 OUTPUT_VAR = re.compile(r"(^|_)(out(_dir|_folder)?|dir|folder)_var$")
 
@@ -609,12 +622,12 @@ def test_the_whole_engine_is_type_checked_strictly():
     assert {"core", "shell", "tabs/kit"} <= set(config["strict"])
 
 
-MAX_FUNCTION_LINES = 120
+MAX_FUNCTION_LINES = 80
 
 
 def test_no_function_is_longer_than_a_screen_or_two():
-    """A function over 120 lines does too many things: split it into steps with
-    names (ruff's PLR0915 also caps it at 50 statements)."""
+    """A function over 80 lines does too many things: split it into steps with
+    names (ruff's PLR0915 also caps it at 35 statements)."""
     long: list[str] = []
     for rel, path in _py_files("main.py", "core", "shell", "tabs", "scripts", "devtools"):
         with open(path, encoding="utf-8") as fh:

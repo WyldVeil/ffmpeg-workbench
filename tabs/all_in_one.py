@@ -854,7 +854,12 @@ class AllInOneTab(BaseTab):
     def _build_bottom(self):
         bottom = tk.Frame(self, bg=CLR["panel"])
         bottom.pack(side="bottom", fill="x")
+        self._build_command_view(bottom)
+        self._build_actions(bottom)
+        self._rebuild_cmd()  # the first command
 
+    def _build_command_view(self, bottom):
+        """The FFmpeg command: its heading, Copy and Reset, and the editable text."""
         # ── Command label + copy button ────────────────────────────────────
         cmd_hdr = tk.Frame(bottom, bg=CLR["panel"])
         cmd_hdr.pack(fill="x", padx=px(12), pady=px(8, 2))
@@ -898,6 +903,8 @@ class AllInOneTab(BaseTab):
         self._cmd_text.bind("<<Modified>>", self._on_cmd_modified)
         cmd_sb_x.pack(side="bottom", fill="x")
 
+    def _build_actions(self, bottom):
+        """Render, Stop and the other buttons, and the log."""
         # ── Action buttons ────────────────────────────────────────────────
         btn_row = tk.Frame(bottom, bg=CLR["panel"])
         btn_row.pack(fill="x", padx=px(12), pady=px(4, 10))
@@ -941,9 +948,6 @@ class AllInOneTab(BaseTab):
         self.console = self.make_console_block(
             bottom, height=5, bg=CLR["panel"], fill="x", expand=False, padx=px(12), pady=px(0, 8)
         )
-
-        # Initial command render
-        self._rebuild_cmd()
 
     # ─────────────────────────────────────────────────────────────────────
     #  Command builder  ← the heart of the tab

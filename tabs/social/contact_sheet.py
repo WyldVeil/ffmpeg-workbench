@@ -39,7 +39,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.widgets import ChoiceBox, ColourButton
-from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
+from tabs.widgets import FileRow, FramePreview, SaveRow, output_box, scroll_body
 
 GRIDS = ((3, 3), (4, 4), (4, 5), (5, 6), (6, 8), (8, 10))
 SAMPLING = {cs.Sampling.EVEN: "Evenly through the video", cs.Sampling.SCENES: "At shot changes"}
@@ -261,8 +261,7 @@ class ContactSheetTab(BaseTab):
         self.text_btn.grid(row=5, column=0, columnspan=2, sticky="w", pady=px(4, 0))
 
     def _build_output(self, body):
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(8))
+        out_lf = output_box(body)
         self.out_row = SaveRow(
             out_lf, t("common.output_file"), kind="image", ext=".png", suggest=self._suggest
         )

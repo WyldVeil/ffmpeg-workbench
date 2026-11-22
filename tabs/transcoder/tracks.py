@@ -21,7 +21,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit import dialogs
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, output_box, scroll_body
 
 CONTAINERS = {
     "mkv": "MKV - holds everything",
@@ -129,8 +129,7 @@ class TracksRemuxTab(BaseTab):
             side="left"
         )
 
-        opt = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        opt.pack(fill="x", padx=px(20), pady=px(6))
+        opt = output_box(body)
         r1 = tk.Frame(opt)
         r1.pack(fill="x")
         tk.Label(r1, text="Container:").pack(side="left")

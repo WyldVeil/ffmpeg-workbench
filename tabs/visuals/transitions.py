@@ -24,7 +24,7 @@ from core.ops import crossfader as xf
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 FAMILIES = {
     "Dissolves": [
@@ -115,7 +115,12 @@ class TransitionStudioTab(BaseTab):
         self.src_row = self.a_row
         self.b_row = FileRow(body, "Second clip (B):", label_width=16)
         self.b_row.pack(fill="x", padx=px(20), pady=px(2))
+        self._build_transition_options(body)
+        self._build_output(body)
+        self._family_changed()
 
+    def _build_transition_options(self, body):
+        """Which transition, its length, the sound under it, and a preview."""
         opt = tk.LabelFrame(body, text="  Transition  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         top = tk.Frame(opt)
@@ -164,22 +169,19 @@ class TransitionStudioTab(BaseTab):
         )
         self.btn_preview.pack(anchor="w", pady=px(4))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.a_row.path, "transition"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(
             body, "🎬  RENDER TRANSITION", self._render, width=24
         )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
-        self._family_changed()
 
     def _family_changed(self):
         self.trans_list.delete(0, "end")

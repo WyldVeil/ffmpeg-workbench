@@ -26,7 +26,7 @@ from core.ops.voice_isolation import denoise_filter, models_dir
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, save_section, scroll_body
 
 MODELS = {  # file: label (signal / noise the model was trained for)
     "sh.rnnn": "Speech, recorded in a room - best for talking",
@@ -138,15 +138,12 @@ class VoiceIsolationTab(BaseTab):
 
     def _build_output(self, body):
         """Where the result goes, the button and the log."""
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(
-            out_lf,
+        self.out_row = save_section(
+            body,
             t("common.output_file"),
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "clean"),
         )
-        self.out_row.pack(fill="x")
         self.btn_render = self.make_render_btn(body, "🎤  CLEAN UP", self._render, width=20)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

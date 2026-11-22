@@ -19,7 +19,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 ZOOM_MODES = {
     "Auto zoom to hide borders (recommended)": 1,
@@ -157,18 +157,12 @@ class DeshakerTab(BaseTab):
             variable=self.compare_var,
         ).grid(row=8, column=0, columnspan=3, sticky="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(
-            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
-        )
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "dnxhr"),
             suggest=lambda: self.suggest_output(self.src_row.path, "stabilised"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = self.make_render_btn(
             body, t("deshaker.stabilise_button"), self._render, width=28

@@ -21,7 +21,7 @@ from core.ops.sharpen import sharpen_chain
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 METHODS = {
     "cas": "Smart sharpen (CAS) - recommended",
@@ -99,16 +99,12 @@ class SharpenTab(BaseTab):
                 relief="flat",
                 command=partial(self._preset, val),
             ).pack(side="left", padx=px(2))
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "sharp"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(body, "🔪  SHARPEN", self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

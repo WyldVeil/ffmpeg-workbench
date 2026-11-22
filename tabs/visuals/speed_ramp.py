@@ -25,7 +25,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 MIN_SPEED, MAX_SPEED = 0.1, 16.0
 SLOWMO = {
@@ -67,8 +67,8 @@ class SpeedRamperTab(BaseTab):
 
     def _build_ui(self):
         body = self._build_header()
-        out_lf = self._build_ramp_points(body)
-        self._build_out(body, out_lf)
+        self._build_ramp_points(body)
+        self._build_out(body)
 
     def _preset(self, value):
         self.speed_var.set(value)
@@ -197,21 +197,13 @@ class SpeedRamperTab(BaseTab):
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"], font=(MONO_FONT, 10))
         self.result_lbl.pack(anchor="w", pady=px(4, 0))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(
-            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
-        )
-        return out_lf
-
-    def _build_out(self, body, out_lf):
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+    def _build_out(self, body):
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "dnxhr"),
             suggest=lambda: self.suggest_output(self.src_row.path, "speed"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(
             body, t("speed_ramp.apply_button"), self._render, width=28
         )

@@ -20,7 +20,7 @@ from core.ops import codec as co
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, save_section, scroll_body
 
 CONTAINERS = ("auto", "mp4", "mkv", "mov", "webm")
 
@@ -81,14 +81,11 @@ class CodecCruncherTab(BaseTab):
             ac, text="Keep every audio track and the subtitles", variable=self.keep_all
         ).pack(side="left", padx=px(12))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(
-            out_lf,
+        self.out_row = save_section(
+            body,
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.src_row.path, "encoded", self._ext()),
         )
-        self.out_row.pack(fill="x")
         self.out_var = self.out_row.var
         self.btn_render = self.make_render_btn(body, t("codec.btn_encode"), self._render, width=28)
         self.btn_render.pack(pady=px(8))

@@ -11,6 +11,7 @@ Outputs (in dist/):
   Linux   : ffmpeg-workbench-<ver>-linux-x64.tar.gz     (with install.sh)
             FFmpeg_Workbench-<ver>-x86_64.AppImage       (if appimagetool is installed)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,7 +43,7 @@ def run(cmd: list, **kw) -> None:
 
 def write_windows_version_info() -> None:
     """Version resource for the .exe (shown in Explorer's Properties)."""
-    nums = [int(x) for x in (APP_VERSION.split(".") + ["0", "0", "0"])[:3]] + [0]
+    nums = [int(x) for x in ([*APP_VERSION.split("."), "0", "0", "0"])[:3]] + [0]
     text = f"""VSVersionInfo(
   ffi=FixedFileInfo(filevers={tuple(nums)}, prodvers={tuple(nums)}, mask=0x3f, flags=0x0,
                     OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
@@ -65,12 +66,25 @@ def write_windows_version_info() -> None:
 def freeze() -> str:
     if IS_WIN:
         write_windows_version_info()
-    run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-         "--distpath", DIST, "--workpath", os.path.join(ROOT, "build", "pyinstaller"),
-         os.path.join(ROOT, "packaging", "app.spec")])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--distpath",
+            DIST,
+            "--workpath",
+            os.path.join(ROOT, "build", "pyinstaller"),
+            os.path.join(ROOT, "packaging", "app.spec"),
+        ]
+    )
     out = os.path.join(DIST, NAME)
     bundle_python_libs(out)
-    shutil.copy2(os.path.join(ROOT, "AGENTS.md"), os.path.join(out, "AGENTS.md"))   # next to the program too
+    shutil.copy2(
+        os.path.join(ROOT, "AGENTS.md"), os.path.join(out, "AGENTS.md")
+    )  # next to the program too
     if not IS_WIN:
         bundle_libgomp(os.path.join(out, "_internal", "bin", PLAT, "whisper"))
     # PyInstaller copies data files without the executable bit on POSIX.
@@ -91,9 +105,23 @@ def bundle_python_libs(app_dir: str) -> None:
     --generate-hashes``) rather than frozen into the archive, so the
     LGPL-3.0 edge-tts stays replaceable by the user."""
     target = os.path.join(app_dir, "_internal", "libs")
-    run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
-         "--target", target, "--require-hashes", "--only-binary=:all:", "--no-deps",
-         "-r", os.path.join(ROOT, "packaging", "bundled-libs.txt")])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "--target",
+            target,
+            "--require-hashes",
+            "--only-binary=:all:",
+            "--no-deps",
+            "-r",
+            os.path.join(ROOT, "packaging", "bundled-libs.txt"),
+        ]
+    )
 
 
 def bundle_libgomp(whisper_dir: str) -> None:
@@ -112,8 +140,12 @@ def bundle_libgomp(whisper_dir: str) -> None:
                 break
     except OSError:
         pass
-    for cand in (found, "/usr/lib/x86_64-linux-gnu/libgomp.so.1", "/usr/lib/libgomp.so.1",
-                 "/usr/lib64/libgomp.so.1"):
+    for cand in (
+        found,
+        "/usr/lib/x86_64-linux-gnu/libgomp.so.1",
+        "/usr/lib/libgomp.so.1",
+        "/usr/lib64/libgomp.so.1",
+    ):
         if cand and os.path.isfile(cand):
             shutil.copy2(os.path.realpath(cand), os.path.join(whisper_dir, "libgomp.so.1"))
             print("bundled", cand)
@@ -147,11 +179,21 @@ def package_windows(app_dir: str) -> None:
                 full = os.path.join(dirpath, f)
                 zf.write(full, os.path.join(NAME, os.path.relpath(full, app_dir)))
     print("built", zip_path)
-    iscc = shutil.which("ISCC") or shutil.which("iscc") or \
-        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    iscc = (
+        shutil.which("ISCC")
+        or shutil.which("iscc")
+        or r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    )
     if os.path.isfile(iscc) or shutil.which(str(iscc)):
-        run([iscc, f"/DAppVersion={APP_VERSION}", f"/DSourceDir={app_dir}", f"/DOutputDir={DIST}",
-             os.path.join(ROOT, "packaging", "windows", "installer.iss")])
+        run(
+            [
+                iscc,
+                f"/DAppVersion={APP_VERSION}",
+                f"/DSourceDir={app_dir}",
+                f"/DOutputDir={DIST}",
+                os.path.join(ROOT, "packaging", "windows", "installer.iss"),
+            ]
+        )
     else:
         print("Inno Setup not found - skipping the installer (zip only).")
 
@@ -165,7 +207,9 @@ def package_linux(app_dir: str) -> None:
     shutil.copytree(app_dir, os.path.join(stage, NAME), symlinks=True)
     for f in ("install.sh", f"{APP_ID}.desktop", f"{APP_ID}.metainfo.xml"):
         shutil.copy2(os.path.join(linux, f), stage)
-    shutil.copy2(os.path.join(ROOT, "assets", "icons", "app.svg"), os.path.join(stage, f"{APP_ID}.svg"))
+    shutil.copy2(
+        os.path.join(ROOT, "assets", "icons", "app.svg"), os.path.join(stage, f"{APP_ID}.svg")
+    )
     os.chmod(os.path.join(stage, "install.sh"), 0o755)
     tar_path = stage + ".tar.gz"
     with tarfile.open(tar_path, "w:gz") as tf:
@@ -183,12 +227,19 @@ def package_linux(app_dir: str) -> None:
     shutil.copytree(app_dir, os.path.join(appdir, "usr", "lib", NAME), symlinks=True)
     shutil.copy2(os.path.join(linux, "AppRun"), os.path.join(appdir, "AppRun"))
     os.chmod(os.path.join(appdir, "AppRun"), 0o755)
-    shutil.copy2(os.path.join(linux, f"{APP_ID}.desktop"), os.path.join(appdir, f"{APP_ID}.desktop"))
-    shutil.copy2(os.path.join(ROOT, "assets", "icons", "app_256.png"), os.path.join(appdir, f"{APP_ID}.png"))
+    shutil.copy2(
+        os.path.join(linux, f"{APP_ID}.desktop"), os.path.join(appdir, f"{APP_ID}.desktop")
+    )
+    shutil.copy2(
+        os.path.join(ROOT, "assets", "icons", "app_256.png"), os.path.join(appdir, f"{APP_ID}.png")
+    )
     for size in (16, 32, 48, 64, 128, 256, 512):
         d = os.path.join(appdir, "usr", "share", "icons", "hicolor", f"{size}x{size}", "apps")
         os.makedirs(d, exist_ok=True)
-        shutil.copy2(os.path.join(ROOT, "assets", "icons", f"app_{size}.png"), os.path.join(d, f"{APP_ID}.png"))
+        shutil.copy2(
+            os.path.join(ROOT, "assets", "icons", f"app_{size}.png"),
+            os.path.join(d, f"{APP_ID}.png"),
+        )
     meta = os.path.join(appdir, "usr", "share", "metainfo")
     os.makedirs(meta, exist_ok=True)
     shutil.copy2(os.path.join(linux, f"{APP_ID}.metainfo.xml"), meta)
@@ -203,7 +254,9 @@ def main() -> int:
     ap.add_argument("--skip-test", action="store_true")
     args = ap.parse_args()
     if not args.skip_fetch:
-        run([sys.executable, os.path.join(ROOT, "scripts", "fetch_binaries.py"), "--platform", PLAT])
+        run(
+            [sys.executable, os.path.join(ROOT, "scripts", "fetch_binaries.py"), "--platform", PLAT]
+        )
     os.makedirs(DIST, exist_ok=True)
     app_dir = freeze()
     if not args.skip_test:

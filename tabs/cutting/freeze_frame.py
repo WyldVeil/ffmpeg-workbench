@@ -22,7 +22,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.time_fields import MomentPicker
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
+from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
 MODES = [
     ("insert", "Insert a freeze", "Pause the picture at the chosen moment, then carry on."),
@@ -117,18 +117,14 @@ class FreezeFrameTab(BaseTab):
         self.caption_var = tk.StringVar()
         tk.Entry(r3, textvariable=self.caption_var, width=40).pack(side="left", padx=px(4))
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "freeze"),
         )
 
     def _build_render(self, body):
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(body, "⏸  CREATE", self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

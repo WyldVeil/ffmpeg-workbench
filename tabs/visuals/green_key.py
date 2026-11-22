@@ -29,7 +29,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.widgets import ColourButton
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 METHODS = {
     "chroma": "Chroma key (green / blue screens)",
@@ -56,8 +56,8 @@ class GreenKeyerTab(BaseTab):
 
     def _build_ui(self):
         body, opts = self._build_header()
-        out_lf = self._build_output(body, opts)
-        self._build_encoder(body, out_lf)
+        self._build_output(body, opts)
+        self._build_encoder(body)
 
     def _build_header(self):
         self.make_header(self, t("tab.green_screen_keyer"), t("green_key.subtitle"), icon="🟩")
@@ -175,27 +175,19 @@ class GreenKeyerTab(BaseTab):
             command=self._schedule,
         ).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        return out_lf
-
-    def _build_encoder(self, body, out_lf):
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(
-            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
+    def _build_encoder(self, body):
+        self.encoder, self.out_row = output_section(
+            body,
+            t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "dnxhr"),
+            suggest=lambda: self._suggest(self.src_row.path),
         )
-        self.encoder.pack(anchor="w")
-        self.alpha_note = tk.Label(
-            out_lf,
+        self.alpha_note = tk.Label(  # shown under the save row for transparent output
+            self.out_row.master,
             text="Transparent output: save as .mov (ProRes 4444) or .webm (VP9 with alpha).",
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         )
-        self.out_row = SaveRow(
-            out_lf,
-            t("common.output_file"),
-            suggest=lambda: self._suggest(self.src_row.path),
-        )
-        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = self.make_render_btn(
             body, t("green_key.composite_button"), self._render, width=28

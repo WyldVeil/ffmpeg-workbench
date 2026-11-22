@@ -45,7 +45,14 @@ class VideoScopesTab(BaseTab):
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        self._build_scope_picker(body)
+        self._build_views(body)
+        self._build_scope_video(body)
+        self.console = self.make_console_block(body, height=5)
+        self._scope_changed()
 
+    def _build_scope_picker(self, body):
+        """Which scope, and what it shows."""
         pick = tk.Frame(body, bg=CLR["bg"])
         pick.pack(fill="x", padx=px(20), pady=px(4))
         tk.Label(pick, text="Scope:", bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10, "bold")).pack(
@@ -75,6 +82,8 @@ class VideoScopesTab(BaseTab):
         )
         self.help_lbl.pack(anchor="w", padx=px(24))
 
+    def _build_views(self, body):
+        """The picture beside its scope, and a slider through the video."""
         views = tk.Frame(body, bg=CLR["bg"])
         views.pack(pady=px(6))
         self.picture = FramePreview(views, 400, 225, show_time=False)
@@ -95,6 +104,8 @@ class VideoScopesTab(BaseTab):
             bar, text="Save snapshot…", relief="flat", cursor="hand2", command=self._snapshot
         ).pack(side="left")
 
+    def _build_scope_video(self, body):
+        """Render the scope as a video: layout, encoder and where it goes."""
         vid = tk.LabelFrame(
             body, text=f"  {t('scopes.scope_video_section')}  ", padx=px(12), pady=px(8)
         )
@@ -128,9 +139,6 @@ class VideoScopesTab(BaseTab):
             command=self._render_video,
         )
         self.btn_vid.pack(pady=px(6))
-
-        self.console = self.make_console_block(body, height=5)
-        self._scope_changed()
 
     # ── Behaviour ────────────────────────────────────────────────────────────
 

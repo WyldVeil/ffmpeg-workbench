@@ -31,7 +31,7 @@ from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 SIZES = [
     ("8K (7680×4320)", 7680, 4320),
@@ -161,16 +161,12 @@ class ResolutionScalerTab(BaseTab):
 
     def _build_output(self, body):
         """Encoder, where the result goes, the button and the log."""
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "ffv1"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "ffv1"),
             suggest=lambda: self.suggest_output(self.src_row.path, self._suffix()),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
         self.btn_render = self.make_render_btn(body, "📐  SCALE VIDEO", self._render, width=26)
         self.btn_render.pack(pady=px(8))
@@ -363,16 +359,12 @@ class FPSInterpolatorTab(BaseTab):
 
     def _build_output(self, body):
         """Encoder, where the result goes, the button and the log."""
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "interp"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.out_var = self.out_row.var
         self.btn_render = self.make_render_btn(body, "🎞  CHANGE FRAME RATE", self._render, width=26)
         self.btn_render.pack(pady=px(8))

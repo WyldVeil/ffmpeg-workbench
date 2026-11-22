@@ -22,7 +22,7 @@ from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 
 class SilenceTab(BaseTab):
@@ -70,17 +70,13 @@ class SilenceTab(BaseTab):
             )
         self.report = tk.Label(body, text="", fg=CLR["accent"], font=(MONO_FONT, 10))
         self.report.pack(anchor="w", padx=px(24), pady=px(4))
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1"),
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "tight"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
         row = tk.Frame(body)
         row.pack(pady=px(8))
         self.btn_analyse = tk.Button(

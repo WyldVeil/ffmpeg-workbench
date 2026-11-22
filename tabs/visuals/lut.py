@@ -20,7 +20,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 _CUSTOM = "Use a LUT file…"
 
@@ -136,7 +136,12 @@ class LUTApplicatorTab(BaseTab):
     def _build_ui(self):
         self.make_header(self, t("tab.lut_applicator"), t("lut.subtitle"), icon="🎨")
         body = scroll_body(self)
+        self._build_look_picker(body)
+        self._build_lut_options(body)
+        self._build_output(body)
 
+    def _build_look_picker(self, body):
+        """The video and the look: a built-in one or a LUT file."""
         pick = tk.LabelFrame(body, text=f"  {t('section.input_files')}  ", padx=px(12), pady=px(8))
         pick.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.src_row = FileRow(
@@ -173,6 +178,8 @@ class LUTApplicatorTab(BaseTab):
         self.compare = CompareView(body, 400, 225, after_label="With LUT")
         self.compare.pack(pady=px(6))
 
+    def _build_lut_options(self, body):
+        """Intensity and interpolation."""
         opts = tk.LabelFrame(
             body, text=f"  {t('lut.application_section')}  ", padx=px(12), pady=px(8)
         )
@@ -204,18 +211,14 @@ class LUTApplicatorTab(BaseTab):
             side="left"
         )
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(
-            out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores", "dnxhr")
-        )
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(
-            out_lf,
+    def _build_output(self, body):
+        """Encoder, where the result goes, the button and the log."""
+        self.encoder, self.out_row = output_section(
+            body,
             t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores", "dnxhr"),
             suggest=lambda: self.suggest_output(self.src_row.path, "graded"),
         )
-        self.out_row.pack(fill="x", pady=px(8, 0))
 
         self.btn_render = self.make_render_btn(body, t("lut.apply_button"), self._render, width=28)
         self.btn_render.pack(pady=px(8))

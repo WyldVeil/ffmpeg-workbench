@@ -19,7 +19,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, save_section, scroll_body
 
 
 class AudioExtractorTab(BaseTab):
@@ -65,10 +65,7 @@ class AudioExtractorTab(BaseTab):
             text="Normalise loudness to -16 LUFS (two-pass, re-encodes)",
             variable=self.norm_var,
         ).grid(row=3, column=1, sticky="w")
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(out_lf, t("common.output_file"), kind="audio", ext=".m4a")
-        self.out_row.pack(fill="x")
+        self.out_row = save_section(body, t("common.output_file"), kind="audio", ext=".m4a")
         self.btn_render = self.make_render_btn(body, "🎵  EXTRACT", self._render, width=20)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

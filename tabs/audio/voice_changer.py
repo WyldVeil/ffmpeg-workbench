@@ -19,7 +19,7 @@ from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, save_section, scroll_body
 
 
 class VoiceChangerTab(BaseTab):
@@ -70,15 +70,13 @@ class VoiceChangerTab(BaseTab):
         tk.Button(
             opt, text="▶ Preview 12 s", relief="flat", cursor="hand2", command=self._preview
         ).grid(row=0, column=1, padx=px(12))
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(
-            out_lf,
+        self.out_row = save_section(
+            body,
             t("common.output_file"),
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "voice"),
         )
-        self.out_row.pack(fill="x")
+        out_lf = self.out_row.master
         tk.Label(
             out_lf,
             text="  ℹ  Save as .mp3/.wav/.flac/.m4a for audio only, or a video type to keep "

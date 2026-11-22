@@ -29,7 +29,7 @@ from core.tools import ToolId
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.contracts import TakesSubtitles
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, SaveRow, output_box, scroll_body
 
 FORMATS = {
     "srt": "SubRip (.srt) - works everywhere",
@@ -209,8 +209,7 @@ class AutoSubsTab(BaseTab):
         self.track_box = ttk.Combobox(eng, textvariable=self.track_var, state="readonly", width=40)
         self.form_row(eng, 6, "Audio track:", self.track_box, label_width=18)
 
-        out = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out.pack(fill="x", padx=px(20), pady=px(6))
+        out = output_box(body)
         self.fmt_var = tk.StringVar(value=FORMATS["srt"])
         fr = tk.Frame(out)
         fr.pack(fill="x")

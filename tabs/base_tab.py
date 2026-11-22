@@ -557,7 +557,15 @@ class VideoTimeline(tk.Frame):
             # Selection highlight
             c.create_rectangle(xs, cy - px(5), xe, cy + px(5), fill="#1A5A98", outline="")
 
-        # Tick marks + time labels
+        self._draw_ticks(w, cy)
+        self._draw_playhead(self._t2x(self._playhead, w), cy)
+        if self._show_handles:
+            self._draw_handles(xs, xe, cy, hr)
+        self._update_labels()
+
+    def _draw_ticks(self, w, cy):
+        """Tick marks with their times under the track."""
+        c = self._canvas
         num_ticks = min(20, max(5, w // px(80)))
         for i in range(num_ticks + 1):
             frac = i / num_ticks
@@ -566,8 +574,9 @@ class VideoTimeline(tk.Frame):
             tick_t = self._duration * frac
             c.create_text(tx, cy + px(23), text=_fmt_tl(tick_t), fill="#555555", font=(UI_FONT, 7))
 
-        # Playhead
-        xp = self._t2x(self._playhead, w)
+    def _draw_playhead(self, xp, cy):
+        """The yellow playhead line with its marker on top."""
+        c = self._canvas
         c.create_line(xp, cy - px(20), xp, cy + px(20), fill="#FFEB3B", width=px(2))
         c.create_polygon(
             xp - px(6),
@@ -581,42 +590,40 @@ class VideoTimeline(tk.Frame):
             width=px(1),
         )
 
-        if self._show_handles:
-            # Start handle (green)
-            c.create_oval(
-                xs - hr, cy - hr, xs + hr, cy + hr, fill="#4CAF50", outline="white", width=px(2)
-            )
-            c.create_text(
-                xs,
-                cy - px(20),
-                text=f"IN {_fmt_tl(self._start)}",
-                fill="#4CAF50",
-                font=(MONO_FONT, 8, "bold"),
-            )
+    def _draw_handles(self, xs, xe, cy, hr):
+        """IN (green) and OUT (red) handles with their times, and the selection's length."""
+        c = self._canvas
+        c.create_oval(
+            xs - hr, cy - hr, xs + hr, cy + hr, fill="#4CAF50", outline="white", width=px(2)
+        )
+        c.create_text(
+            xs,
+            cy - px(20),
+            text=f"IN {_fmt_tl(self._start)}",
+            fill="#4CAF50",
+            font=(MONO_FONT, 8, "bold"),
+        )
+        c.create_oval(
+            xe - hr, cy - hr, xe + hr, cy + hr, fill="#F44336", outline="white", width=px(2)
+        )
+        c.create_text(
+            xe,
+            cy + px(34),
+            text=f"OUT {_fmt_tl(self._end)}",
+            fill="#F44336",
+            font=(MONO_FONT, 8, "bold"),
+        )
+        sel = max(0.0, self._end - self._start)
+        c.create_text(
+            (xs + xe) // 2,
+            px(12),
+            text=f"Selection: {_fmt_tl(sel)}",
+            fill="white",
+            font=(UI_FONT, 9, "bold"),
+        )
 
-            # End handle (red)
-            c.create_oval(
-                xe - hr, cy - hr, xe + hr, cy + hr, fill="#F44336", outline="white", width=px(2)
-            )
-            c.create_text(
-                xe,
-                cy + px(34),
-                text=f"OUT {_fmt_tl(self._end)}",
-                fill="#F44336",
-                font=(MONO_FONT, 8, "bold"),
-            )
-
-            # Selection duration
-            sel = max(0.0, self._end - self._start)
-            c.create_text(
-                (xs + xe) // 2,
-                px(12),
-                text=f"Selection: {_fmt_tl(sel)}",
-                fill="white",
-                font=(UI_FONT, 9, "bold"),
-            )
-
-        # Update info labels
+    def _update_labels(self):
+        """The playhead time, and the selection under the timeline."""
         self._pos_lbl.config(text=_fmt_tl(self._playhead))
         if self._show_handles:
             sel = max(0.0, self._end - self._start)

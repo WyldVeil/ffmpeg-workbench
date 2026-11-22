@@ -415,8 +415,12 @@ def system_files() -> list:
                 )
     with open(os.path.join(icons, "app.svg"), "rb") as fh:
         files.append((fh.read(), f"usr/share/icons/hicolor/scalable/apps/{APP_ID}.svg", 0o644))
-    with open(os.path.join(ROOT, "packaging", "linux", f"{APP_ID}.metainfo.xml"), encoding="utf-8") as fh:
-        metainfo = fh.read().replace("@REPO_URL@", REPO_URL)  # the repository is named once, in core
+    with open(
+        os.path.join(ROOT, "packaging", "linux", f"{APP_ID}.metainfo.xml"), encoding="utf-8"
+    ) as fh:
+        metainfo = fh.read().replace(
+            "@REPO_URL@", REPO_URL
+        )  # the repository is named once, in core
     files.append((metainfo.encode(), f"usr/share/metainfo/{APP_ID}.metainfo.xml", 0o644))
     return files
 
@@ -541,9 +545,7 @@ def _tarball(distro: str, extras: dict, deps: str) -> str:
         _add_bytes(
             tf,
             f"{prefix}/install.sh",
-            INSTALL_SH.format(
-                v=APP_VERSION, pkg=PKG, deps=deps
-            ).encode(),
+            INSTALL_SH.format(v=APP_VERSION, pkg=PKG, deps=deps).encode(),
             0o755,
         )
         _add_bytes(
@@ -657,7 +659,8 @@ def build_windows(python_embed: str, iscc: str) -> str:
         )
     check_no_build_paths(stage)
     iss = os.path.join(ROOT, "packaging", "windows", "release.iss")
-    argv = shlex.split(iscc) + [
+    argv = [
+        *shlex.split(iscc),
         f"/DAppVersion={APP_VERSION}",
         f"/DRepoUrl={REPO_URL}",
         f"/DStageDir={_win_path(stage)}",

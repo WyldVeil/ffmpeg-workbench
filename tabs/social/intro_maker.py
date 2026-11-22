@@ -32,7 +32,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.widgets import ColourButton
-from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
 BACKGROUNDS = {
     "solid": "Solid colour",
@@ -299,14 +299,14 @@ class IntroMakerTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "vp9", "prores"))
-        self.encoder.pack(anchor="w")
-        self.out_row = SaveRow(out_lf, t("common.output_file"), suggest=self._suggest)
+        self.encoder, self.out_row = output_section(
+            body,
+            t("common.output_file"),
+            ("h264", "hevc", "av1", "vp9", "prores"),
+            suggest=self._suggest,
+        )
 
     def _build_render(self, body):
-        self.out_row.pack(fill="x", pady=px(8, 0))
         self.btn_render = self.make_render_btn(body, "🎬  CREATE", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)

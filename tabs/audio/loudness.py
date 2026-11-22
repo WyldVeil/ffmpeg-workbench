@@ -22,7 +22,7 @@ from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs.widgets import FileRow, SaveRow, scroll_body
+from tabs.widgets import FileRow, save_section, scroll_body
 
 
 class LoudnessNormTab(BaseTab):
@@ -77,15 +77,12 @@ class LoudnessNormTab(BaseTab):
             body, text="", fg=CLR["accent"], font=(MONO_FONT, 10), justify="left"
         )
         self.report.pack(anchor="w", padx=px(24), pady=px(4))
-        out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
-        out_lf.pack(fill="x", padx=px(20), pady=px(6))
-        self.out_row = SaveRow(
-            out_lf,
+        self.out_row = save_section(
+            body,
             t("common.output_file"),
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "normalised"),
         )
-        self.out_row.pack(fill="x")
         row = tk.Frame(body)
         row.pack(pady=px(8))
         self.btn_analyse = tk.Button(
