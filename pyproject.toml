@@ -31,16 +31,14 @@ target-version = "py311"
 
 [tool.ruff.lint]
 # The rule set the books recommend (Robust Python ch. 20, Effective Python items 85/123,
-# Fluent Python ch. 6/9). Each "DEBT" entry below is existing code still to be fixed;
-# entries are removed as the code is cleaned up, never added (docs/knowledge/adoption-ledger.md).
+# Fluent Python ch. 6/9). No rule is set aside as debt: every function stays under complexity 15
+# and 8 parameters (spec dataclasses group the rest).  Keep it that way - fix the code, don't add an ignore.
 select = ["E", "F", "W", "I", "B", "BLE", "SIM", "RUF", "UP", "SLF", "S110", "PLR0913", "C90", "TID"]
 ignore = [
     "E501",     # long lines: readability call, not enforced
     "RUF001", "RUF002", "RUF003",  # typographic characters (× – … ‘ ’) are intentional UI text
     "SIM108",   # ternaries are not always clearer
     "SIM102",   # "if X: if not ask(...): return" reads better than one long condition
-    # ── DEBT ──
-    "C901",      # 5 functions over the complexity limit (the next to split)
 ]
 
 [tool.ruff.format]
@@ -51,7 +49,7 @@ ignore = [
                                                                # report it, and open scratch files briefly
 
 [tool.ruff.lint.mccabe]
-max-complexity = 25
+max-complexity = 15
 
 [tool.ruff.lint.pylint]
 max-args = 8
