@@ -12,6 +12,7 @@ import contextlib
 import os
 import time
 import tkinter as tk
+from dataclasses import dataclass
 from tkinter import messagebox, scrolledtext, ttk
 
 from core import ffmpeg as ff
@@ -71,38 +72,33 @@ def progress_text(task) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@dataclass
 class Job:
     """Settings model for one encode job created in the editor panel."""
 
-    def __init__(self):
-        self.src = ""
-        self.out = ""
-        self.vcodec = "libx264"
-        self.crf = "18"
-        self.preset = "fast"
-        self.resolution = "Source"
-        self.fps = "Source"
-        self.acodec = "aac"
-        self.abitrate = "192k"
-        self.extra_vf = ""
-        self.extra_args = ""
+    src: str = ""
+    out: str = ""
+    vcodec: str = "libx264"
+    crf: str = "18"
+    preset: str = "fast"
+    resolution: str = "Source"
+    fps: str = "Source"
+    acodec: str = "aac"
+    abitrate: str = "192k"
+    extra_vf: str = ""
+    extra_args: str = ""
 
-    def build_cmd(self, ffmpeg):
-        """Argument list for this job; ValueError with a readable reason when
-        the choices can't work together."""
-        from tabs.transcoder.presets import split_args
-        from tabs.transcoder.scaler import rate_fraction
-
-        ext = os.path.splitext(self.out)[1].lower().lstrip(".")
+    def _check(self, ext: str) -> None:
         if ext not in OK_VIDEO.get(self.vcodec, (ext,)):
-            raise ValueError(
-                f"{self.vcodec} can't be saved as .{ext} - use "
-                + " / ".join("." + e for e in OK_VIDEO[self.vcodec])
-                + "."
-            )
+            fits = " / ".join("." + e for e in OK_VIDEO[self.vcodec])
+            raise ValueError(f"{self.vcodec} can't be saved as .{ext} - use {fits}.")
         if self.acodec not in ("none", "copy") and ext not in OK_AUDIO.get(self.acodec, (ext,)):
             raise ValueError(f"{self.acodec} audio can't go into .{ext}.")
-        filters = []
+
+    def _filters(self) -> list[str]:
+        from tabs.transcoder.scaler import rate_fraction
+
+        filters: list[str] = []
         if self.resolution != "Source":
             w, h = (int(x) for x in self.resolution.split("x"))
             filters.append(
@@ -118,6 +114,53 @@ class Job:
             raise ValueError(
                 "The video can't be resized or filtered while it is copied - choose a codec."
             )
+        return filters
+
+    def _video_args(self, ext: str) -> list[str]:
+        v = self.vcodec
+        if v in ("libx264", "libx265"):
+            args = ["-crf", self.crf, "-preset", self.preset, "-pix_fmt", "yuv420p"]
+            if v == "libx265":
+                args += [
+                    "-x265-params",
+                    "log-level=error",
+                    *(["-tag:v", "hvc1"] if ext in ("mp4", "mov") else []),
+                ]
+            return ["-c:v", v, *args]
+        rest = {
+            "libvpx-vp9": [
+                "-crf",
+                self.crf,
+                "-b:v",
+                "0",
+                "-row-mt",
+                "1",
+                "-deadline",
+                "good",
+                "-cpu-used",
+                "2",
+            ],
+            "libvpx": ["-crf", self.crf, "-b:v", "20M", "-deadline", "good", "-cpu-used", "2"],
+            "prores_ks": ["-profile:v", "3", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"],
+            "dnxhd": ["-profile:v", "dnxhr_hq", "-pix_fmt", "yuv422p"],
+        }
+        return ["-c:v", v, *rest.get(v, [])]
+
+    def _audio_args(self) -> list[str]:
+        if self.acodec == "none":
+            return ["-an"]
+        if self.acodec in ("copy", "flac", "pcm_s16le"):
+            return ["-c:a", self.acodec]
+        return ["-c:a", self.acodec, "-b:a", self.abitrate]
+
+    def build_cmd(self, ffmpeg: str) -> list[str]:
+        """Argument list for this job; ValueError with a readable reason when
+        the choices can't work together."""
+        from tabs.transcoder.presets import split_args
+
+        ext = os.path.splitext(self.out)[1].lower().lstrip(".")
+        self._check(ext)
+        filters = self._filters()
         cmd = [
             ffmpeg,
             "-hide_banner",
@@ -130,50 +173,14 @@ class Job:
             "-map",
             "0:a?",
         ]
-        if filters:
-            cmd += ["-vf", ",".join(filters)]
-        v = self.vcodec
-        cmd += ["-c:v", v]
-        if v in ("libx264", "libx265"):
-            cmd += ["-crf", self.crf, "-preset", self.preset, "-pix_fmt", "yuv420p"]
-            if v == "libx265":
-                cmd += ["-x265-params", "log-level=error"] + (
-                    ["-tag:v", "hvc1"] if ext in ("mp4", "mov") else []
-                )
-        elif v == "libvpx-vp9":
-            cmd += [
-                "-crf",
-                self.crf,
-                "-b:v",
-                "0",
-                "-row-mt",
-                "1",
-                "-deadline",
-                "good",
-                "-cpu-used",
-                "2",
-            ]
-        elif v == "libvpx":
-            cmd += ["-crf", self.crf, "-b:v", "20M", "-deadline", "good", "-cpu-used", "2"]
-        elif v == "prores_ks":
-            cmd += ["-profile:v", "3", "-vendor", "apl0", "-pix_fmt", "yuv422p10le"]
-        elif v == "dnxhd":
-            cmd += ["-profile:v", "dnxhr_hq", "-pix_fmt", "yuv422p"]
-        if self.acodec == "none":
-            cmd += ["-an"]
-        elif self.acodec == "copy":
-            cmd += ["-c:a", "copy"]
-        elif self.acodec in ("flac", "pcm_s16le"):
-            cmd += ["-c:a", self.acodec]
-        else:
-            cmd += ["-c:a", self.acodec, "-b:a", self.abitrate]
+        cmd += ["-vf", ",".join(filters)] if filters else []
+        cmd += [*self._video_args(ext), *self._audio_args()]
         if self.extra_args.strip():
             try:
                 cmd += split_args(self.extra_args)
             except ValueError as exc:
                 raise ValueError(f"The extra arguments have an unclosed quote ({exc}).") from None
-        if ext in ("mp4", "mov", "m4v"):
-            cmd += ["-movflags", "+faststart"]
+        cmd += ["-movflags", "+faststart"] if ext in ("mp4", "mov", "m4v") else []
         return [*cmd, self.out]
 
 
