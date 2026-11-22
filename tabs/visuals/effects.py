@@ -38,7 +38,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit.time_fields import frame_button, seconds_text
-from tabs.widgets import FileRow, SaveRow
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.visuals.effects")
 
@@ -73,22 +73,6 @@ def _probe_length_and_size(src):
 # ─────────────────────────────────────────────────────────────────────────────
 #  Reusable sub-widget builders
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-def _make_scrollable(parent):
-    """Return (canvas, inner_frame) - a vertically scrollable container."""
-    canvas = tk.Canvas(parent, highlightthickness=0, bg=CLR["bg"])
-    sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-    inner = tk.Frame(canvas, bg=CLR["bg"])
-    canvas.create_window((0, 0), window=inner, anchor="nw")
-    inner.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
-    )
-    canvas.configure(yscrollcommand=sb.set)
-    sb.pack(side="right", fill="y")
-    canvas.pack(side="left", fill="both", expand=True)
-    return canvas, inner
 
 
 def _lf(parent, title, **kw):
@@ -293,7 +277,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_intro_fadein(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text="  Fade-In  ")
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -399,7 +383,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_intro_zoomburst(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.zoom_burst"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -472,7 +456,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_intro_slidein(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.slide_in"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -552,7 +536,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_intro_spin(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.spin_in"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -622,7 +606,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_intro_splitopen(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.split_open"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -705,7 +689,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_outro_fadeout(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.fade_out"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -771,7 +755,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_outro_freezezoom(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.freeze_zoom_out"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -845,7 +829,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_outro_irisclose(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.iris_close"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -922,7 +906,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_ov_emoji(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.emoji_burst"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1069,7 +1053,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_ov_lowerthird(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.lower_third"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1193,7 +1177,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_ov_subscribe(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.subscribe_bump"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1309,7 +1293,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_ov_countdown(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text="  Countdown  ")
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1396,7 +1380,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_ov_progressbar(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.progress_bar"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1493,7 +1477,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_rgb(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text="  RGB Glitch  ")
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1602,7 +1586,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_vhs(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.vhs_retro"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1679,7 +1663,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_grain(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.film_grain"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1749,7 +1733,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_vignette(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text="  Vignette  ")
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1814,7 +1798,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_lightleak(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.light_leak"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -1915,7 +1899,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_mo_shake(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.camera_shake"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -2035,7 +2019,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_mo_zoompunch(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.zoom_punch"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -2126,7 +2110,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_mo_kenburns(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text="  Ken Burns  ")
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -2214,7 +2198,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_mo_whippan(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.whip_pan_blur"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -2309,7 +2293,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_br_meme(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.meme_caption"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -2454,7 +2438,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_br_cinebars(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.cinematic_bars"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,
@@ -2554,7 +2538,7 @@ class SpecialEffectsTab(BaseTab):
     def _build_br_watermark(self, nb):
         f = ttk.Frame(nb)
         nb.add(f, text=t("effects.social_watermark"))
-        _, inner = _make_scrollable(f)
+        inner = scroll_body(f)
 
         tk.Label(
             inner,

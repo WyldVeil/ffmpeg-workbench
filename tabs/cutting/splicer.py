@@ -6,7 +6,7 @@ stitches the chosen segments together into a single output file.
 
 import os
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
 from core import concat
 from core import encoders as enc
@@ -18,7 +18,7 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, scroll_body
 
 
 def _tr(key, fallback):
@@ -76,17 +76,7 @@ class SplicerTab(BaseTab):
             )
 
         # Scrollable segment rows
-        self.seg_canvas = tk.Canvas(list_outer, height=px(280), highlightthickness=0)
-        seg_sb = ttk.Scrollbar(list_outer, orient="vertical", command=self.seg_canvas.yview)
-        self.seg_frame = tk.Frame(self.seg_canvas)
-        self.seg_canvas.create_window((0, 0), window=self.seg_frame, anchor="nw")
-        self.seg_canvas.configure(yscrollcommand=seg_sb.set)
-        self.seg_frame.bind(
-            "<Configure>",
-            lambda e: self.seg_canvas.configure(scrollregion=self.seg_canvas.bbox("all")),
-        )
-        self.seg_canvas.pack(side="left", fill="both", expand=True)
-        seg_sb.pack(side="right", fill="y")
+        self.seg_frame = scroll_body(list_outer, height=280)
 
         # Timeline
         tl_frame = tk.LabelFrame(

@@ -535,6 +535,19 @@ def test_colours_are_picked_with_the_kit():
     assert not hits, f"use ColourButton: {hits}"
 
 
+def test_scrolling_areas_come_from_the_kit():
+    """A scrolling page body or list is tabs.widgets.scroll_body (canvas,
+    scrollbar, inner frame sized to the width, optional height and resize
+    hook), not a canvas with a frame window wired by hand."""
+    hits = [
+        rel
+        for rel, path in _py_files("tabs", "shell")
+        if rel != "tabs/widgets.py"
+        and "create_window((0, 0), window=" in open(path, encoding="utf-8").read()
+    ]
+    assert not hits, f"use scroll_body: {hits}"
+
+
 #: a variable holding where an output goes (out_var, _out_var, out_dir_var, out_folder_var, ...)
 OUTPUT_VAR = re.compile(r"(^|_)(out(_dir|_folder)?|dir|folder)_var$")
 

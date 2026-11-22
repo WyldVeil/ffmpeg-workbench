@@ -24,7 +24,7 @@ from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, scroll_body
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
 EQ_BANDS = [
@@ -133,17 +133,7 @@ class AudioDynamicsTab(BaseTab):
     def _build_scrollable_chain(self):
         """Scrollable chain."""
         # ── Scrollable chain ─────────────────────────────────────────────
-        canvas = tk.Canvas(self, highlightthickness=0)
-        sb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas)
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.configure(yscrollcommand=sb.set)
-
-        # No mousewheel binding here - main.py's _global_mousewheel handles it.
-        canvas.pack(side="left", fill="both", expand=True, padx=px(16, 0))
-        sb.pack(side="right", fill="y")
-        return inner
+        return scroll_body(self)
 
     def _build_1_noise_gate(self, inner):
         """1. Noise Gate."""

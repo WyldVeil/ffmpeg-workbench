@@ -446,19 +446,32 @@ class FolderRow(FileRow):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def scroll_body(parent) -> tk.Frame:
+def scroll_body(
+    parent, *, height: int | None = None, on_resize: Callable[[int], object] | None = None
+) -> tk.Frame:
     """Fill *parent* with a vertically scrolling area and return the inner
     frame to build into.  The mouse wheel works over any child (the app's
-    global wheel handler scrolls the nearest canvas with a scroll command)."""
+    global wheel handler scrolls the nearest canvas with a scroll command).
+
+    *height* makes it a list of that height (filling the width only);
+    *on_resize(width)* is told when the visible width changes (to reflow)."""
     clr = _clr()
     outer = tk.Frame(parent, bg=clr["bg"])
-    outer.pack(fill="both", expand=True)
+    outer.pack(fill="x" if height else "both", expand=not height)
     canvas = tk.Canvas(outer, bg=clr["bg"], highlightthickness=0, yscrollincrement=px(20))
+    if height:
+        canvas.configure(height=px(height))
     vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
     inner = tk.Frame(canvas, bg=clr["bg"])
     win = canvas.create_window((0, 0), window=inner, anchor="nw")
     inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+
+    def resized(e: tk.Event) -> None:
+        canvas.itemconfigure(win, width=e.width)
+        if on_resize is not None:
+            on_resize(e.width)
+
+    canvas.bind("<Configure>", resized)
     canvas.configure(yscrollcommand=vsb.set)
     vsb.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)

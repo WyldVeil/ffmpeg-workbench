@@ -29,6 +29,7 @@ from core.scaling import px
 from core.tools import Category, ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit import labels
+from tabs.widgets import scroll_body
 
 logger = logging.getLogger("crossfader.system.home")
 
@@ -104,32 +105,8 @@ class HomeTab(BaseTab):
         back.bind("<Button-1>", lambda _e: self._go(ToolId.START))
 
         # Scrollable content
-        outer = tk.Frame(self, bg=CLR["bg"])
-        outer.pack(fill="both", expand=True)
-
-        canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0)
-        from tkinter import ttk
-
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        body = tk.Frame(canvas, bg=CLR["bg"])
-        body_win = canvas.create_window((0, 0), window=body, anchor="nw")
-        self._scroll_canvas = canvas
+        body = scroll_body(self, on_resize=lambda _w: self._render_sections())
         self._scroll_body = body
-
-        def _on_body_configure(_e):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        body.bind("<Configure>", _on_body_configure)
-
-        def _on_canvas_configure(e):
-            canvas.itemconfig(body_win, width=e.width)
-            self._render_sections()
-
-        canvas.bind("<Configure>", _on_canvas_configure)
 
         self._sections_frame = body
         self._render_sections()

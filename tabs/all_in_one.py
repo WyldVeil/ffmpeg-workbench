@@ -38,6 +38,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
+from tabs.widgets import scroll_body
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
 
@@ -266,16 +267,7 @@ class AllInOneTab(BaseTab):
         self._build_io(io_frame)
 
         # ── Scrollable section area ────────────────────────────────────────
-        self._canvas = tk.Canvas(self, highlightthickness=0, bg=CLR["bg"])
-        _sb = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
-        self._scroll_inner = tk.Frame(self._canvas, bg=CLR["bg"])
-        self._canvas.create_window((0, 0), window=self._scroll_inner, anchor="nw")
-        self._scroll_inner.bind(
-            "<Configure>", lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all"))
-        )
-        self._canvas.configure(yscrollcommand=_sb.set)
-        _sb.pack(side="right", fill="y")
-        self._canvas.pack(side="left", fill="both", expand=True)
+        self._scroll_inner = scroll_body(self)
 
         self._build_sections(self._scroll_inner)
 

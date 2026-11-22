@@ -22,6 +22,7 @@ from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
 from tabs.kit import dialogs
+from tabs.widgets import scroll_body
 
 
 class MIDIfierTab(BaseTab):
@@ -52,17 +53,7 @@ class MIDIfierTab(BaseTab):
             self, t("tab.midifier"), subtitle=t("midifier.subtitle"), icon="\U0001f3b9"
         )
 
-        # Scrollable body
-        outer = tk.Frame(self, bg=CLR["bg"])
-        outer.pack(fill="both", expand=True)
-        canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0, bd=0)
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        self._inner = tk.Frame(canvas, bg=CLR["bg"])
-        self._inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self._inner, anchor="nw")
-        canvas.configure(yscrollcommand=vsb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        vsb.pack(side="right", fill="y")
+        self._inner = scroll_body(self)
 
     def _build_dependencies_status(self):
         """Dependencies status."""

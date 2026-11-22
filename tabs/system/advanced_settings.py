@@ -38,7 +38,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.stars import set_star_count, set_star_speed
 from tabs.kit.widgets import ColourButton, normal_colour
-from tabs.widgets import FolderRow
+from tabs.widgets import FolderRow, scroll_body
 
 logger = logging.getLogger("crossfader.system.advanced_settings")
 
@@ -284,17 +284,7 @@ class AdvancedSettingsTab(BaseTab):
 
         f = ttk.Frame(nb)
         nb.add(f, text="  Network  ")
-        outer = tk.Frame(f, bg=CLR["bg"])
-        outer.pack(fill="both", expand=True)
-        canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0)
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        body = tk.Frame(canvas, bg=CLR["bg"])
-        win = canvas.create_window((0, 0), window=body, anchor="nw")
-        body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        body = scroll_body(f)
         self._net_vars = {}
         form = _NetForm(body, _net.get(), self._net_vars)
         for build in (
@@ -992,19 +982,9 @@ class AdvancedSettingsTab(BaseTab):
         self._skin_var = tk.StringVar(value=current_skin)
 
         # Scrollable card grid
-        scroll_canvas = tk.Canvas(f, highlightthickness=0)
-        scroll_canvas.pack(fill="both", expand=True, padx=px(8), pady=px(8))
-        vsb = ttk.Scrollbar(f, orient="vertical", command=scroll_canvas.yview)
-        vsb.place(relx=1.0, rely=0, relheight=1.0, anchor="ne")
-        scroll_canvas.configure(yscrollcommand=vsb.set)
-
-        grid_host = tk.Frame(scroll_canvas)
-        scroll_canvas.create_window((0, 0), window=grid_host, anchor="nw")
-
-        def _on_resize(evt):
-            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
-
-        grid_host.bind("<Configure>", _on_resize)
+        holder = tk.Frame(f)
+        holder.pack(fill="both", expand=True, padx=px(8), pady=px(8))
+        grid_host = scroll_body(holder)
 
         # Theme cards (exclude "Custom" - it lives in the Custom tab)
         theme_names = [n for n in SKINS if n != "Custom"]
@@ -1220,24 +1200,7 @@ class AdvancedSettingsTab(BaseTab):
         wrapper = tk.Frame(f)
         wrapper.pack(fill="both", expand=True, padx=px(12))
 
-        canvas = tk.Canvas(wrapper, highlightthickness=0)
-        vsb = ttk.Scrollbar(wrapper, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        inner = tk.Frame(canvas)
-        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
-
-        def _on_inner_configure(evt):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        inner.bind("<Configure>", _on_inner_configure)
-
-        def _resize_inner(evt):
-            canvas.itemconfig(win_id, width=evt.width)
-
-        canvas.bind("<Configure>", _resize_inner)
+        inner = scroll_body(wrapper)
 
         # Load current custom colors
         current_custom = get_skin("Custom")

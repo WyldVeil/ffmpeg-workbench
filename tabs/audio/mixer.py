@@ -27,7 +27,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, scroll_body
 
 MAX_TRACKS = 8
 
@@ -158,16 +158,7 @@ class AudioMixerTab(BaseTab):
             ).pack(side="left", padx=px(1))
 
         # Scrollable track rows
-        track_canvas = tk.Canvas(self, height=px(300), highlightthickness=0)
-        track_sb = ttk.Scrollbar(self, orient="vertical", command=track_canvas.yview)
-        self.track_frame = tk.Frame(track_canvas)
-        track_canvas.create_window((0, 0), window=self.track_frame, anchor="nw")
-        self.track_frame.bind(
-            "<Configure>", lambda e: track_canvas.configure(scrollregion=track_canvas.bbox("all"))
-        )
-        track_canvas.configure(yscrollcommand=track_sb.set)
-        track_canvas.pack(side="left", fill="both", expand=True, padx=px(16, 0))
-        track_sb.pack(side="right", fill="y")
+        self.track_frame = scroll_body(self, height=300)
 
         # Add track button - must exist before _add_track() is called
         add_row = tk.Frame(self)

@@ -33,6 +33,7 @@ from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox
+from tabs.widgets import scroll_body
 
 logger = logging.getLogger("crossfader.audio.exporter")
 
@@ -77,18 +78,7 @@ class AudioExporterTab(BaseTab):
             self, t("tab.audio_converter"), subtitle=t("exporter.subtitle"), icon="\U0001f4be"
         )  # floppy disk
 
-        # Scrollable body
-        outer = tk.Frame(self, bg=CLR["bg"])
-        outer.pack(fill="both", expand=True)
-
-        canvas = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0, bd=0)
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        self._inner = tk.Frame(canvas, bg=CLR["bg"])
-        self._inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self._inner, anchor="nw")
-        canvas.configure(yscrollcommand=vsb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        vsb.pack(side="right", fill="y")
+        self._inner = scroll_body(self)
 
         self._build_source_section()
         self._build_source_info_section()

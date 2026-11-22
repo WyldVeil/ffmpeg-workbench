@@ -21,7 +21,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, scroll_body
 
 RESOLUTIONS = ["Source", "3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "640x360"]
 
@@ -169,16 +169,7 @@ class EncodeQueueTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(anchor="w", padx=px(8), pady=px(6, 2))
 
-        scroll_canvas = tk.Canvas(parent, highlightthickness=0)
-        sb = ttk.Scrollbar(parent, orient="vertical", command=scroll_canvas.yview)
-        self.editor_frame = tk.Frame(scroll_canvas)
-        scroll_canvas.create_window((0, 0), window=self.editor_frame, anchor="nw")
-        self.editor_frame.bind(
-            "<Configure>", lambda e: scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
-        )
-        scroll_canvas.configure(yscrollcommand=sb.set)
-        scroll_canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        self.editor_frame = scroll_body(parent)
 
         ef = self.editor_frame
 

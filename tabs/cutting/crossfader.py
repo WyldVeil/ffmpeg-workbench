@@ -40,7 +40,7 @@ from core.ops.crossfader import (
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
-from tabs.widgets import EncoderPanel, SaveRow
+from tabs.widgets import EncoderPanel, SaveRow, scroll_body
 
 #: every transition (core/ops/transitions.py), by its name
 TRANSITIONS = list(tr.LABELS)
@@ -104,17 +104,7 @@ class CrossfaderTab(BaseTab):
         self.make_header(
             self, t("tab.crossfader"), t("crossfader.join_clips_with_smooth_transitions"), icon="✦"
         )
-        body_canvas = tk.Canvas(self, highlightthickness=0, bg=CLR["bg"])
-        body_sb = ttk.Scrollbar(self, orient="vertical", command=body_canvas.yview)
-        self._inner = tk.Frame(body_canvas, bg=CLR["bg"])
-        win = body_canvas.create_window((0, 0), window=self._inner, anchor="nw")
-        self._inner.bind(
-            "<Configure>", lambda e: body_canvas.configure(scrollregion=body_canvas.bbox("all"))
-        )
-        body_canvas.bind("<Configure>", lambda e: body_canvas.itemconfigure(win, width=e.width))
-        body_canvas.configure(yscrollcommand=body_sb.set)
-        body_sb.pack(side="right", fill="y")
-        body_canvas.pack(side="left", fill="both", expand=True)
+        self._inner = scroll_body(self)
 
         self._build_clips_section(self._inner)
         self._build_transition_section(self._inner)

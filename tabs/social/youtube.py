@@ -44,7 +44,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
 from tabs.kit.widgets import ChoiceBox
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.social.youtube")
 
@@ -93,6 +93,31 @@ def _history_file() -> str:
     from core.paths import config_dir
 
     return os.path.join(config_dir(), "download_history.json")
+
+
+def _labeled_entry(parent_row, lbl, var, width=32, show=None):
+    """A right-aligned label and a flat entry on their own row (returned)."""
+    r = tk.Frame(parent_row, bg=CLR["bg"])
+    r.pack(fill="x", pady=px(3))
+    tk.Label(
+        r, text=lbl, font=(UI_FONT, 9), width=14, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]
+    ).pack(side="left")
+    kw = {"show": show} if show else {}
+    tk.Entry(
+        r,
+        textvariable=var,
+        width=width,
+        relief="flat",
+        font=(UI_FONT, 9),
+        bg=CLR["input_bg"],
+        fg=CLR["input_fg"],
+        insertbackground=CLR["accent"],
+        highlightthickness=px(1),
+        highlightbackground=CLR["border"],
+        highlightcolor=CLR["accent"],
+        **kw,
+    ).pack(side="left", padx=px(6))
+    return r
 
 
 class YouTubeDownloaderTab(BaseTab):
@@ -167,32 +192,7 @@ class YouTubeDownloaderTab(BaseTab):
             pady=px(6),
         )
         self._poll_route_banner()
-        # Outer scrollable frame
-        outer = tk.Frame(self, bg=CLR["bg"])
-        outer.pack(fill="both", expand=True)
-        self._outer_frame = outer
-
-        canvas_scroll = tk.Canvas(outer, bg=CLR["bg"], highlightthickness=0)
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas_scroll.yview)
-        canvas_scroll.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        canvas_scroll.pack(side="left", fill="both", expand=True)
-
-        self._scroll_frame = tk.Frame(canvas_scroll, bg=CLR["bg"])
-        self._scroll_win = canvas_scroll.create_window(
-            (0, 0), window=self._scroll_frame, anchor="nw"
-        )
-
-        def _on_configure(event):
-            canvas_scroll.configure(scrollregion=canvas_scroll.bbox("all"))
-            canvas_scroll.itemconfig(self._scroll_win, width=canvas_scroll.winfo_width())
-
-        self._scroll_frame.bind("<Configure>", _on_configure)
-        canvas_scroll.bind(
-            "<Configure>", lambda e: canvas_scroll.itemconfig(self._scroll_win, width=e.width)
-        )
-
-        root = self._scroll_frame
+        root = scroll_body(self)
 
         # 1. Header
         self.make_header(
@@ -422,7 +422,10 @@ class YouTubeDownloaderTab(BaseTab):
         self._thumb_canvas.create_text(
             px(128), px(72), text="...", fill=CLR["fgdim"], font=(UI_FONT, 13)
         )
+        self._build_video_facts(info_lf)
 
+    def _build_video_facts(self, info_lf):
+        """Title, duration, channel, views, the live badge and Save thumbnail."""
         meta_right = tk.Frame(info_lf, bg=CLR["bg"])
         meta_right.pack(side="left", fill="both", expand=True, anchor="n")
 
@@ -834,7 +837,11 @@ class YouTubeDownloaderTab(BaseTab):
             activebackground=CLR["bg"],
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(10))
+        self._build_subs_format(parent)
+        self._build_metadata_options(parent)
 
+    def _build_subs_format(self, parent):
+        """Subtitle file format, and embedding or burning them in."""
         r3 = tk.Frame(parent, bg=CLR["bg"])
         r3.pack(fill="x", pady=px(4))
         tk.Label(
@@ -875,6 +882,8 @@ class YouTubeDownloaderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
+    def _build_metadata_options(self, parent):
+        """Metadata and chapters written into the file."""
         # Metadata & Chapters (Upgraded features)
         tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(8))
         tk.Label(
@@ -976,28 +985,6 @@ class YouTubeDownloaderTab(BaseTab):
         ).pack(side="left", padx=px(4))
 
     def _build_auth_tab(self, parent):
-        def _labeled_entry(parent_row, lbl, var, width=32, show=None):
-            r = tk.Frame(parent_row, bg=CLR["bg"])
-            r.pack(fill="x", pady=px(3))
-            tk.Label(
-                r, text=lbl, font=(UI_FONT, 9), width=14, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]
-            ).pack(side="left")
-            kw = {"show": show} if show else {}
-            tk.Entry(
-                r,
-                textvariable=var,
-                width=width,
-                relief="flat",
-                font=(UI_FONT, 9),
-                bg=CLR["input_bg"],
-                fg=CLR["input_fg"],
-                insertbackground=CLR["accent"],
-                highlightthickness=px(1),
-                highlightbackground=CLR["border"],
-                highlightcolor=CLR["accent"],
-                **kw,
-            ).pack(side="left", padx=px(6))
-            return r
 
         self._cookies_var = tk.StringVar()
         self._username_var = tk.StringVar()
@@ -1007,30 +994,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._custom_args_var = tk.StringVar()
 
         # Cookies file row
-        cookies_row = tk.Frame(parent, bg=CLR["bg"])
-        cookies_row.pack(fill="x", pady=px(3))
-        tk.Label(
-            cookies_row,
-            text=t("youtube.cookies_txt"),
-            font=(UI_FONT, 9),
-            width=14,
-            anchor="e",
-            bg=CLR["bg"],
-            fg=CLR["fgdim"],
-        ).pack(side="left")
-        tk.Entry(
-            cookies_row,
-            textvariable=self._cookies_var,
-            width=28,
-            relief="flat",
-            font=(UI_FONT, 9),
-            bg=CLR["input_bg"],
-            fg=CLR["input_fg"],
-            insertbackground=CLR["accent"],
-            highlightthickness=px(1),
-            highlightbackground=CLR["border"],
-            highlightcolor=CLR["accent"],
-        ).pack(side="left", padx=px(6))
+        cookies_row = _labeled_entry(parent, t("youtube.cookies_txt"), self._cookies_var, width=28)
         tk.Button(
             cookies_row,
             text=t("btn.browse"),
@@ -1110,7 +1074,11 @@ class YouTubeDownloaderTab(BaseTab):
 
         right_f = tk.Frame(trim_lf, bg=CLR["bg"])
         right_f.pack(side="right", fill="y", padx=px(16, 0))
+        self._build_trim_controls(left_f)
+        self._build_chapter_list(right_f)
 
+    def _build_trim_controls(self, left_f):
+        """Download only a section: on/off and its start and end."""
         # Trim controls
         trim_row = tk.Frame(left_f, bg=CLR["bg"])
         trim_row.pack(fill="x")
@@ -1143,6 +1111,8 @@ class YouTubeDownloaderTab(BaseTab):
             trim_row, text=t("youtube.hh_mm_ss"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left", padx=px(4, 0))
 
+    def _build_chapter_list(self, right_f):
+        """The video's chapters, to pick a section from."""
         # Chapters listbox
         tk.Label(
             right_f,
@@ -1263,8 +1233,11 @@ class YouTubeDownloaderTab(BaseTab):
             bd=px(1),
             relief="solid",
         )
-        # Do NOT pack yet - hidden by default
+        self._build_batch_urls()
+        self._build_batch_queue()
 
+    def _build_batch_urls(self):
+        """The pasted list of links and the buttons that fill the queue."""
         # URL textarea
         url_area_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
         url_area_f.pack(fill="x", pady=px(0, 6))
@@ -1316,6 +1289,8 @@ class YouTubeDownloaderTab(BaseTab):
             command=self._batch_clear,
         ).pack(side="left")
 
+    def _build_batch_queue(self):
+        """The queue (title, link, status) and Download all / Stop."""
         # Queue treeview
         tree_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
         tree_f.pack(fill="both", expand=True)
@@ -1656,6 +1631,19 @@ class YouTubeDownloaderTab(BaseTab):
         self._populate_chapters(info.get("chapters") or [])
         self._populate_subtitle_langs(info)
 
+        self._suggest_out(title)
+
+        if dur:
+            self._end_var.set(_fmt_dur(dur))
+
+        thumb_url = info.get("thumbnail")
+        if thumb_url:
+            tasks.submit(partial(self._load_thumbnail, thumb_url))
+
+        self.log_tagged(self.console, f"✔ {title}  [{_fmt_dur(dur)}]", "success")
+
+    def _suggest_out(self, title):
+        """Name the download after the video (or the playlist pattern)."""
         # Auto-suggest output filename. Refresh on every fetch unless the
         # user has manually edited the field since our last suggestion -
         # otherwise the first download's name would stick for every URL
@@ -1670,15 +1658,6 @@ class YouTubeDownloaderTab(BaseTab):
                 new_out = os.path.join(dl_dir, safe.strip("_") + ".mp4")
             self._out_var.set(new_out)
             self._last_auto_out = new_out
-
-        if dur:
-            self._end_var.set(_fmt_dur(dur))
-
-        thumb_url = info.get("thumbnail")
-        if thumb_url:
-            tasks.submit(partial(self._load_thumbnail, thumb_url))
-
-        self.log_tagged(self.console, f"✔ {title}  [{_fmt_dur(dur)}]", "success")
 
     def _populate_formats(self, formats: list):
         if not formats:

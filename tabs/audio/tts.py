@@ -28,7 +28,7 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ChoiceBox
-from tabs.widgets import SaveRow
+from tabs.widgets import SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.audio.tts")
 
@@ -140,16 +140,7 @@ class TTSVoiceOverTab(BaseTab):
         self._build_engine_banner()
 
         # ── Scrollable body ───────────────────────────────────────────────
-        body_canvas = tk.Canvas(self, highlightthickness=0)
-        body_sb = ttk.Scrollbar(self, orient="vertical", command=body_canvas.yview)
-        inner = tk.Frame(body_canvas)
-        body_canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind(
-            "<Configure>", lambda e: body_canvas.configure(scrollregion=body_canvas.bbox("all"))
-        )
-        body_canvas.configure(yscrollcommand=body_sb.set)
-        body_sb.pack(side="right", fill="y")
-        body_canvas.pack(side="left", fill="both", expand=True)
+        inner = scroll_body(self)
 
         self._build_text_section(inner)
         self._build_voice_section(inner)
