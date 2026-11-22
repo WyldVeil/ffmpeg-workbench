@@ -277,7 +277,9 @@ def test_splitter_renumbers_clips(ui, media):
     tab = ui.open("Manual Multi-Splitter")
     tab.load_file(media["h264"])
     ui.pump(0.3)
-    for a, b in ((0.0, 1.0), (2.0, 3.0)):
+    for r in list(tab.split_rows):                  # the tab is reused between tests
+        tab._remove_row(r["frame"])
+    for a, b in ((5.0, 5.5), (0.0, 1.0), (2.0, 3.0)):
         tab._timeline.set_range(a, b)
         tab._add_row()
     tab._remove_row(tab.split_rows[0]["frame"])
