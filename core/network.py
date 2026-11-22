@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import socket
 import ssl
 import time
@@ -36,7 +37,7 @@ from http.client import HTTPResponse
 from typing import Any
 from urllib.parse import quote, urlsplit
 
-from core import errors, sysproxy
+from core import errors, proc, sysproxy
 from core import settings as _settings
 
 #: The network.* settings, with saved values over the defaults (values checked where read)
@@ -802,3 +803,22 @@ def fresh_circuit(proxy: str, attempt: int) -> str:
 def looks_blocked(lines: Iterable[str]) -> bool:
     text = "\n".join(lines).lower()
     return any(m in text for m in BLOCK_MARKERS)
+
+
+def local_addresses() -> list[str]:
+    """IPv4/IPv6 addresses of this computer's network connections."""
+    out: list[str] = []
+    try:
+        if os.name == "nt":
+            text = proc.run(["ipconfig"], timeout=5).stdout
+            out = re.findall(r"IPv4[^:]*:\s*([0-9.]+)", text)
+        else:
+            text = proc.run(["ip", "-o", "addr", "show", "scope", "global"], timeout=5).stdout
+            out = [m.split("/")[0] for m in re.findall(r"inet6?\s+(\S+)", text)]
+    except proc.ProcessError:
+        pass
+    if not out:
+        with contextlib.suppress(OSError):
+            found = {str(a[4][0]) for a in socket.getaddrinfo(socket.gethostname(), None)}
+            out = sorted(a for a in found if not a.startswith(("127.", "::1")))
+    return out

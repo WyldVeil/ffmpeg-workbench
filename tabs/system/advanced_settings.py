@@ -23,6 +23,7 @@ from core.hardware import (
     open_in_explorer,
 )
 from core.i18n import LANGUAGE_NAMES, SUPPORTED_LANGUAGES, get_language, set_language, t
+from core.network import local_addresses
 from core.scaling import px, scale_drawing
 from core.settings import load_settings, update
 from core.skins import (
@@ -632,7 +633,7 @@ class AdvancedSettingsTab(BaseTab):
                 addresses = ttk.Combobox(g, textvariable=var(key), width=width, values=[""])
                 addresses.grid(row=i, column=1, sticky="w", padx=px(4))
                 tasks.submit(
-                    _local_addresses,
+                    local_addresses,
                     name="LocalAddresses",  # asks `ip`: not on the UI thread
                     on_done=lambda found, cb=addresses: cb.config(values=["", *found]),
                 )
@@ -1678,27 +1679,3 @@ class AdvancedSettingsTab(BaseTab):
         nb, page = getattr(self, "system_info_page", (None, None))
         if nb is not None:
             nb.select(page)
-
-
-def _local_addresses() -> list:
-    """IPv4/IPv6 addresses of this computer's network connections."""
-    import re as _re
-    import socket as _socket
-
-    from core import proc as _proc
-
-    out = []
-    try:
-        if os.name == "nt":
-            text = _proc.run(["ipconfig"], timeout=5).stdout
-            out = _re.findall(r"IPv4[^:]*:\s*([0-9.]+)", text)
-        else:
-            text = _proc.run(["ip", "-o", "addr", "show", "scope", "global"], timeout=5).stdout
-            out = [m.split("/")[0] for m in _re.findall(r"inet6?\s+(\S+)", text)]
-    except _proc.ProcessError:
-        pass
-    if not out:
-        with contextlib.suppress(OSError):
-            found = {str(a[4][0]) for a in _socket.getaddrinfo(_socket.gethostname(), None)}
-            out = sorted(a for a in found if not a.startswith(("127.", "::1")))
-    return out
