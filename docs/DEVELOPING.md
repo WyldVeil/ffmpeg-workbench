@@ -92,11 +92,11 @@ the final video chain. It's empty except with VAAPI.
 ### `core.filters`
 ```python
 from core import filters as fl
-fl.subtitles_filter(srt_path, force_style=fl.ass_style(font="Inter", size=28))
+fl.subtitles_filter(srt_path, force_style=fl.AssStyle(font="Inter", size=28).force_style())
 fl.lut3d_filter(cube_path);  fl.movie_source(png_path)
-fl.drawtext_filter(textfile=fl.drawtext_text_file(user_text), font="Montserrat-Bold",
-                   fontsize=48, x="(w-text_w)/2", y="h-th-40", box=True,
-                   enable=fl.enable_between(1.0, 4.0))
+fl.DrawText(textfile=fl.drawtext_text_file(user_text), font="Montserrat-Bold",
+            fontsize=48, x="(w-text_w)/2", y="h-th-40", box=True,
+            enable=fl.enable_between(1.0, 4.0)).filter()
 fl.filter_value(any_text)   # escape any value for a filter option
 fl.filter_path(path)        # escape a path for a filter option
 fl.write_concat_list(paths, list_path)          # -f concat -safe 0 -i list_path

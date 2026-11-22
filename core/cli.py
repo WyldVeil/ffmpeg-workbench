@@ -130,6 +130,75 @@ class Ctx:
             raise CliError("FFmpeg failed:\n" + "\n".join(res.log_tail[-8:]))
         return res
 
+    def render_chain(
+        self,
+        src: str,
+        info: ff.MediaInfo,
+        out: str,
+        chain: str,
+        *,
+        pre: Sequence[str] | None = None,
+        audio: Sequence[str] | None = None,
+        extra: Sequence[str] | None = None,
+        duration: float | None = None,
+    ) -> None:
+        """ffmpeg -i src -vf <chain> <encoder> <audio> out (atomically)."""
+        container = container_of(out)
+        ve = venc(self, container)
+        part = part_of(out)
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            *(pre or []),
+            *ve.pre_input,
+            "-i",
+            src,
+            "-map",
+            "0:v:0",
+            *ve.vf_args(chain or None),
+        ]
+        cmd += list(audio if audio is not None else keep_audio(info, container))
+        cmd += [*(extra or []), *ve.args, "-map_metadata", "0", part]
+        self.run(cmd, duration or info.duration)
+        finish(part, out)
+
+    def render_graph(
+        self,
+        inputs: Sequence[str],
+        info: ff.MediaInfo,
+        out: str,
+        graph: str,
+        *,
+        has_audio: bool,
+        pre: Sequence[str] | None = None,
+        duration: float | None = None,
+        input_opts: Mapping[int, Sequence[str]] | None = None,
+    ) -> None:
+        """ffmpeg <inputs> -filter_complex <graph> (-> [v], and [a] when *has_audio*)
+        <encoder> out (atomically); *input_opts* go before input n's ``-i``."""
+        from core import encoders as enc
+
+        container = container_of(out)
+        ve = venc(self, container)
+        part = part_of(out)
+        cmd = [ff.ffmpeg_path(), "-y", *(pre or []), *ve.pre_input]
+        for i, path in enumerate(inputs):
+            cmd += [*list((input_opts or {}).get(i, [])), "-i", path]
+        if ve.filter_suffix:
+            graph += f";[v]{ve.filter_suffix}[venc]"
+        cmd += ["-filter_complex", graph, "-map", "[venc]" if ve.filter_suffix else "[v]"]
+        cmd += (
+            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
+            if has_audio
+            else ["-an"]
+        )
+        cmd += [*ve.args]
+        if duration:
+            cmd += ["-t", f"{duration:.3f}"]
+        cmd += [part]
+        self.run(cmd, duration or info.duration)
+        finish(part, out)
+
 
 def _same(a: str, b: str) -> bool:
     try:
@@ -208,75 +277,6 @@ def keep_audio(info: ff.MediaInfo, container: str, filters: str = "") -> list[st
     from core.ops.shared import keep_audio_args
 
     return keep_audio_args(info, container, filters=filters)
-
-
-def render_chain(
-    ctx: Ctx,
-    src: str,
-    info: ff.MediaInfo,
-    out: str,
-    chain: str,
-    *,
-    pre: Sequence[str] | None = None,
-    audio: Sequence[str] | None = None,
-    extra: Sequence[str] | None = None,
-    duration: float | None = None,
-) -> None:
-    """ffmpeg -i src -vf <chain> <encoder> <audio> out (atomically)."""
-    container = container_of(out)
-    ve = venc(ctx, container)
-    part = part_of(out)
-    cmd = [
-        ff.ffmpeg_path(),
-        "-y",
-        *(pre or []),
-        *ve.pre_input,
-        "-i",
-        src,
-        "-map",
-        "0:v:0",
-        *ve.vf_args(chain or None),
-    ]
-    cmd += list(audio if audio is not None else keep_audio(info, container))
-    cmd += [*(extra or []), *ve.args, "-map_metadata", "0", part]
-    ctx.run(cmd, duration or info.duration)
-    finish(part, out)
-
-
-def render_graph(
-    ctx: Ctx,
-    inputs: Sequence[str],
-    info: ff.MediaInfo,
-    out: str,
-    graph: str,
-    *,
-    has_audio: bool,
-    pre: Sequence[str] | None = None,
-    duration: float | None = None,
-    input_opts: Mapping[int, Sequence[str]] | None = None,
-) -> None:
-    from core import encoders as enc
-
-    container = container_of(out)
-    ve = venc(ctx, container)
-    part = part_of(out)
-    cmd = [ff.ffmpeg_path(), "-y", *(pre or []), *ve.pre_input]
-    for i, path in enumerate(inputs):
-        cmd += [*list((input_opts or {}).get(i, [])), "-i", path]
-    if ve.filter_suffix:
-        graph += f";[v]{ve.filter_suffix}[venc]"
-    cmd += ["-filter_complex", graph, "-map", "[venc]" if ve.filter_suffix else "[v]"]
-    cmd += (
-        ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-        if has_audio
-        else ["-an"]
-    )
-    cmd += [*ve.args]
-    if duration:
-        cmd += ["-t", f"{duration:.3f}"]
-    cmd += [part]
-    ctx.run(cmd, duration or info.duration)
-    finish(part, out)
 
 
 def result(out: str, **extra: Any) -> Result:
@@ -436,8 +436,8 @@ def op_trim(ctx: Ctx) -> Result:
         )
         finish(part, out)
     else:
-        render_chain(
-            ctx, src, info, out, "", pre=["-ss", f"{a:.3f}", "-to", f"{b:.3f}"], duration=b - a
+        ctx.render_chain(
+            src, info, out, "", pre=["-ss", f"{a:.3f}", "-to", f"{b:.3f}"], duration=b - a
         )
     return result(out)
 
@@ -552,7 +552,7 @@ def op_rotate(ctx: Ctx) -> Result:
         )
         finish(part, out)
     else:
-        render_chain(ctx, src, info, out, rf.reencode_chain(ctx.args.degrees, h, v))
+        ctx.render_chain(src, info, out, rf.reencode_chain(ctx.args.degrees, h, v))
     return result(out)
 
 
@@ -591,7 +591,7 @@ def op_crop(ctx: Ctx) -> Result:
     else:
         raise CliError("Give --rect, --aspect or --auto.")
     out = output_path(ctx, [src], "cropped")
-    render_chain(ctx, src, info, out, f"crop={cw // 2 * 2}:{ch // 2 * 2}:{x}:{y},setsar=1")
+    ctx.render_chain(src, info, out, f"crop={cw // 2 * 2}:{ch // 2 * 2}:{x}:{y},setsar=1")
     return result(out, crop=[x, y, cw, ch])
 
 
@@ -619,8 +619,8 @@ def op_speed(ctx: Ctx) -> Result:
     container = container_of(out)
     audio = keep_audio(info, container, filters=atempo_chain(f)) if info.has_audio else ["-an"]
     if info.has_video:
-        render_chain(
-            ctx, src, info, out, f"setpts=PTS/{f:g}", audio=audio, duration=info.duration / f
+        ctx.render_chain(
+            src, info, out, f"setpts=PTS/{f:g}", audio=audio, duration=info.duration / f
         )
     else:
         part = part_of(out)
@@ -649,7 +649,7 @@ def op_reverse(ctx: Ctx) -> Result:
         )
     out = output_path(ctx, [src], "reversed")
     audio = keep_audio(info, container_of(out), filters="areverse") if info.has_audio else ["-an"]
-    render_chain(ctx, src, info, out, "reverse", audio=audio)
+    ctx.render_chain(src, info, out, "reverse", audio=audio)
     return result(out)
 
 
@@ -694,8 +694,8 @@ def op_remove_silence(ctx: Ctx) -> Result:
     out = output_path(ctx, [src], "nosilence")
     graph = sl.cut_graph(zones, info.has_video, info.has_audio)
     if info.has_video:
-        render_graph(
-            ctx, [src], info, out, graph, has_audio=True, duration=sum(b - a for a, b in zones)
+        ctx.render_graph(
+            [src], info, out, graph, has_audio=True, duration=sum(b - a for a, b in zones)
         )
     else:
         part = part_of(out)
@@ -908,8 +908,7 @@ def op_scale(ctx: Ctx) -> Result:
     except ValueError as exc:
         raise CliError(str(exc)) from None
     out = output_path(ctx, [src], "scaled")
-    render_chain(
-        ctx,
+    ctx.render_chain(
         src,
         info,
         out,
@@ -953,7 +952,7 @@ def op_framerate(ctx: Ctx) -> Result:
             if factor > 1
             else keep_audio(info, container_of(out))
         )
-    render_chain(ctx, src, info, out, chain, audio=audio, duration=info.duration * factor)
+    ctx.render_chain(src, info, out, chain, audio=audio, duration=info.duration * factor)
     return result(out)
 
 
@@ -1203,8 +1202,7 @@ def op_hdr_to_sdr(ctx: Ctx) -> Result:
         out_fmt="yuv420p10le" if ten else "yuv420p",
         assume=ctx.args.assume or "",
     )
-    render_chain(
-        ctx,
+    ctx.render_chain(
         src,
         info,
         out,
@@ -1385,7 +1383,7 @@ def op_subtitles(ctx: Ctx) -> Result:
     out = output_path(ctx, [src], "subtitled")
     from core import filters as fl
 
-    render_chain(ctx, src, info, out, fl.subtitles_filter(base + ".srt"))
+    ctx.render_chain(src, info, out, fl.subtitles_filter(base + ".srt"))
     return result(out)
 
 
@@ -1409,7 +1407,7 @@ def op_burn_subs(ctx: Ctx) -> Result:
     if not os.path.isfile(ctx.args.subs):
         raise CliError(f"Subtitle file not found: {ctx.args.subs}")
     out = output_path(ctx, [src], "subtitled")
-    render_chain(ctx, src, info, out, fl.subtitles_filter(ctx.args.subs))
+    ctx.render_chain(src, info, out, fl.subtitles_filter(ctx.args.subs))
     return result(out)
 
 
@@ -1480,8 +1478,7 @@ def op_shorts(ctx: Ctx) -> Result:
     graph = sh.reframe_graph(tw, th, ctx.args.background, ctx.args.anchor)
     out = output_path(ctx, [src], ctx.args.platform)
     dur = min(info.duration, limit) if limit else info.duration
-    render_graph(
-        ctx,
+    ctx.render_graph(
         [src],
         info,
         out,
@@ -1590,15 +1587,14 @@ def _logo_options(p: argparse.ArgumentParser) -> None:
     options=_logo_options,
 )
 def op_logo(ctx: Ctx) -> Result:
-    from core.ops.image_watermark import logo_graph
+    from core.ops.image_watermark import Logo, logo_graph
 
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
     probe(ctx.args.logo)
     w, h = info.require_video().display_size
-    graph = logo_graph(
-        w // 2 * 2, h // 2 * 2, pct=ctx.args.size, opacity=ctx.args.opacity, place=ctx.args.position
-    )
+    spec = Logo(pct=ctx.args.size, opacity=ctx.args.opacity, place=ctx.args.position)
+    graph = logo_graph(w // 2 * 2, h // 2 * 2, spec)
     out = output_path(ctx, [src], "logo")
     container = container_of(out)
     ve = venc(ctx, container)
@@ -1681,8 +1677,7 @@ def op_collage(ctx: Ctx) -> Result:
     timing = grid.Timing(total, loop=loop, end=ctx.args.end, audio=ctx.args.audio)
     graph, has_a = grid.collage_filter(clips, canvas, timing)
     out = output_path(ctx, paths, "collage", ".mp4")
-    render_graph(
-        ctx,
+    ctx.render_graph(
         paths,
         infos[0],
         out,
@@ -1739,8 +1734,7 @@ def op_blur_region(ctx: Ctx) -> Result:
         )
     W, H = info.require_video().display_size
     out = output_path(ctx, [src], "blurred")
-    render_graph(
-        ctx,
+    ctx.render_graph(
         [src],
         info,
         out,
@@ -1770,7 +1764,7 @@ def _chain_op(
         src = ctx.args.inputs[0]
         info = probe(src, video=True)
         out = output_path(ctx, [src], suffix)
-        render_chain(ctx, src, info, out, build(ctx.args))
+        ctx.render_chain(src, info, out, build(ctx.args))
         return result(out)
 
     operation(name, summary, "Visuals", options=options)(run)

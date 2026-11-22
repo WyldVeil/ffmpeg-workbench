@@ -613,7 +613,7 @@ class ThumbnailMakerTab(BaseTab):
                 "top-right": ("w-text_w-w*0.04", "h*0.05"),
             }.get(self._text_pos.get(), ("(w-text_w)/2", "(h-text_h)/2"))
             parts.append(
-                fl.drawtext_filter(
+                fl.DrawText(
                     textfile=textfile,
                     font="impact",
                     fontsize=self._text_size.get() or "64",
@@ -622,7 +622,7 @@ class ThumbnailMakerTab(BaseTab):
                     y=y,
                     borderw=4 if self._text_stroke.get() else 0,
                     bordercolor="black",
-                )
+                ).filter()
             )
 
         return parts

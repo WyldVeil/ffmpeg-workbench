@@ -1293,7 +1293,7 @@ class AllInOneTab(BaseTab):
             except ValueError:
                 notes.append("text times are not valid times")
             vf.append(
-                _fl.drawtext_filter(
+                _fl.DrawText(
                     textfile=textfile,
                     font="sans bold",
                     fontsize=(self._text_size.get() or "42").strip(),
@@ -1302,7 +1302,7 @@ class AllInOneTab(BaseTab):
                     x=x,
                     y=y,
                     enable=enable,
-                )
+                ).filter()
             )
 
         # ── Fades (output time) ───────────────────────────────────────────

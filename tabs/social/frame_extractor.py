@@ -464,7 +464,7 @@ class FrameExtractorTab(BaseTab):
         chain = [f"select='{times_select(times, self._fps())}'", f"scale={tile_w}:-2"]
         if self.stamp_var.get():
             chain.append(
-                fl.drawtext_filter(
+                fl.DrawText(
                     textfile=fl.drawtext_text_file("%{pts:hms}", work),
                     font="mono",
                     fontsize=max(12, tile_w // 18),
@@ -475,7 +475,7 @@ class FrameExtractorTab(BaseTab):
                     x="w-text_w-6",
                     y="h-text_h-6",
                     expansion="normal",
-                )
+                ).filter()
             )
         pad = 6
         chain.append(f"tile={cols}x{rows}:padding={pad}:margin={pad}:color=0x181818")
@@ -487,14 +487,14 @@ class FrameExtractorTab(BaseTab):
         )
         chain.append(f"pad=iw:ih+{head}:0:{head}:color=0x181818")
         chain.append(
-            fl.drawtext_filter(
+            fl.DrawText(
                 textfile=fl.drawtext_text_file(title, work),
                 font="sans",
                 fontsize=int(head * 0.5),
                 fontcolor="white",
                 x="12",
                 y=f"({head}-text_h)/2",
-            )
+            ).filter()
         )
         cmd = [
             ff.ffmpeg_path(),

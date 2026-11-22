@@ -1230,7 +1230,7 @@ class SpecialEffectsTab(BaseTab):
             # Pop-in: over the first 0.2 s the emoji grows from nothing to full size
             scale_expr = f"if(lt(t-{start},0.2),max(1,{size}*(t-{start})/0.2),{size})"
 
-            filter_str = fl.drawtext_filter(
+            filter_str = fl.DrawText(
                 textfile=fl.drawtext_text_file(text),
                 font="emoji",
                 fontsize=scale_expr,
@@ -1241,7 +1241,7 @@ class SpecialEffectsTab(BaseTab):
                 shadowy=3,
                 shadowcolor="black@0.7",
                 enable=f"between(t,{start},{end})",
-            )
+            ).filter()
 
             cmd = [
                 _ffmpeg(),
@@ -1353,7 +1353,7 @@ class SpecialEffectsTab(BaseTab):
         from core.paths import temp_dir
 
         tmp = temp_dir("lowerthird_")
-        title = fl.drawtext_filter(
+        title = fl.DrawText(
             textfile=fl.drawtext_text_file(self._lt_title.get(), tmp),
             font="sans bold",
             fontsize=int(bar_h * 0.42),
@@ -1361,8 +1361,8 @@ class SpecialEffectsTab(BaseTab):
             x=str(int(w * 0.03)),
             y=f"{slide}+{int(bar_h * 0.1)}",
             enable=enable,
-        )
-        sub = fl.drawtext_filter(
+        ).filter()
+        sub = fl.DrawText(
             textfile=fl.drawtext_text_file(self._lt_subtitle.get(), tmp),
             font="sans",
             fontsize=int(bar_h * 0.26),
@@ -1370,7 +1370,7 @@ class SpecialEffectsTab(BaseTab):
             x=str(int(w * 0.03)),
             y=f"{slide}+{int(bar_h * 0.6)}",
             enable=enable,
-        )
+        ).filter()
         graph = (
             f"color=c=0x{colour}@0.85:s={w}x{bar_h}:r={fps},format=rgba[bar];"
             f"[0:v][bar]overlay=x=0:y='{slide}':enable='{enable}':shortest=1,"
@@ -1480,7 +1480,7 @@ class SpecialEffectsTab(BaseTab):
             }
             x_expr, y_expr = pos_map.get(pos, pos_map["Bottom Centre"])
 
-            filter_str = fl.drawtext_filter(
+            filter_str = fl.DrawText(
                 textfile=fl.drawtext_text_file(text),
                 font="sans bold",
                 fontsize=size,
@@ -1494,7 +1494,7 @@ class SpecialEffectsTab(BaseTab):
                 boxcolor="black@0.45",
                 boxborderw=8,
                 enable=f"between(t,{start},{end})",
-            )
+            ).filter()
 
             cmd = [
                 _ffmpeg(),
@@ -2714,7 +2714,7 @@ class SpecialEffectsTab(BaseTab):
         for caption, y in ((top, "20"), (bot, "h-text_h-20")):
             if caption.strip():
                 filters.append(
-                    fl.drawtext_filter(
+                    fl.DrawText(
                         textfile=fl.drawtext_text_file(caption),
                         font="impact",
                         fontsize=size,
@@ -2724,7 +2724,7 @@ class SpecialEffectsTab(BaseTab):
                         borderw=4,
                         bordercolor="black",
                         enable=enable,
-                    )
+                    ).filter()
                 )
 
         if not filters:
@@ -2945,7 +2945,7 @@ class SpecialEffectsTab(BaseTab):
         }
         x_e, y_e = pos_map.get(pos, pos_map["Bottom Right"])
 
-        filter_str = fl.drawtext_filter(
+        filter_str = fl.DrawText(
             textfile=fl.drawtext_text_file(text),
             font="sans bold",
             fontsize=size,
@@ -2955,7 +2955,7 @@ class SpecialEffectsTab(BaseTab):
             shadowx=2,
             shadowy=2,
             shadowcolor=f"black@{min(alpha + 0.2, 1.0)}",
-        )
+        ).filter()
 
         cmd = [
             _ffmpeg(),

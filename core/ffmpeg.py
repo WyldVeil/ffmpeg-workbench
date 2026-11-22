@@ -731,6 +731,121 @@ def _parse_progress_block(
     return p
 
 
+class _Reader:
+    """Splits a running program's output into log lines and FFmpeg ``-progress``
+    blocks, keeping the last *tail* lines and passing both on to the callbacks."""
+
+    def __init__(
+        self,
+        tail: int,
+        duration: float | None,
+        on_line: Callable[[str], None] | None,
+        on_progress: Callable[[Progress], None] | None,
+    ):
+        self.lines: deque[str] = deque(maxlen=tail)
+        self.duration = duration
+        self.started = time.monotonic()
+        self._on_line, self._on_progress = on_line, on_progress
+        self._block: dict[str, str] = {}
+
+    def emit(self, text: str) -> None:
+        self.lines.append(text)
+        if self._on_line:
+            try:
+                self._on_line(text)
+            except Exception:  # a bug in the caller's callback: log, keep running
+                logger.exception("on_line callback failed")
+
+    def progress(self, p: Progress) -> None:
+        if self._on_progress:
+            try:
+                self._on_progress(p)
+            except Exception:
+                logger.exception("on_progress callback failed")
+
+    def _progress_line(self, text: str) -> bool:
+        key, sep, val = text.partition("=")
+        # per-stream keys (stream_0_0_q, stream_0_1_psnr_y...) come once per output stream in every
+        # block: as log lines they'd flood the console and push real errors out of the log tail
+        if not sep or (key not in _PROGRESS_KEYS and not key.startswith("stream_")):
+            return False
+        self._block[key] = val.strip()
+        if key == "progress":
+            self.progress(_parse_progress_block(dict(self._block), self.duration, self.started))
+            self._block.clear()
+        return True
+
+    def _piece(self, raw: bytes, is_progress_stream: bool) -> None:
+        piece = raw.decode("utf-8", "replace").strip()
+        if piece and not (is_progress_stream and self._progress_line(piece)):
+            self.emit(piece)
+
+    def pump(self, stream: IO[bytes], is_progress_stream: bool) -> None:
+        """Read *stream* to its end.  Splits on BOTH \\r and \\n: tools that redraw
+        one status line with \\r (yt-dlp, ffmpeg -stats) would otherwise only be
+        seen when a \\n finally arrives."""
+        buf = b""
+        reader = getattr(stream, "read1", None) or stream.read
+        try:
+            while chunk := reader(65536):
+                parts = _LINE_SPLIT.split(buf + chunk)
+                buf = parts.pop()
+                for raw in parts:
+                    self._piece(raw, is_progress_stream)
+            if buf:
+                self._piece(buf, is_progress_stream)
+        except (ValueError, OSError):
+            pass
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                logger.debug("_pump: best-effort step failed", exc_info=True)
+
+
+def _expected_duration(argv: list[str], duration: float | None) -> float | None:
+    if duration is not None or not argv or not is_ffmpeg(argv[0]):
+        return duration
+    try:
+        return guess_output_duration(argv)
+    except Exception:
+        logger.debug("run: best-effort step failed", exc_info=True)
+        return None
+
+
+def _wait(
+    child: proc.Popen[Any],
+    result: RunResult,
+    reader: _Reader,
+    cancel: Callable[[], bool] | None,
+    timeout: float | None,
+) -> None:
+    """Wait for *child*, killing it when *cancel()* says so or *timeout* passes."""
+    while True:
+        try:
+            child.wait(timeout=0.2)
+            return
+        except proc.TimeoutExpired:
+            pass
+        if cancel is not None and _asked_to_stop(cancel):
+            result.cancelled = True
+            kill_tree(child)
+            return
+        if timeout is not None and time.monotonic() - reader.started > timeout:
+            result.timed_out = True
+            reader.emit(f"Timed out after {timeout:.0f} s")
+            kill_tree(child)
+            return
+
+
+def _asked_to_stop(cancel: Callable[[], bool]) -> bool:
+    try:
+        return bool(cancel())
+    except Exception:
+        logger.exception("cancel callback failed")
+        return False
+
+
 def run(
     cmd: Sequence[str],
     *,
@@ -740,7 +855,6 @@ def run(
     cancel: Callable[[], bool] | None = None,
     timeout: float | None = None,
     cwd: str | None = None,
-    env: Mapping[str, str] | None = None,
     tail: int = 200,
 ) -> RunResult:
     """Run *cmd* to completion, streaming its log and progress.
@@ -753,122 +867,33 @@ def run(
     * *cancel()* is polled; when it returns True the process tree is killed.
     * Never raises for a failing command - inspect ``RunResult``.
     """
-    started = time.monotonic()
     argv = prepare_ffmpeg_cmd(cmd)
     ffmpeg_mode = bool(argv) and is_ffmpeg(argv[0])
-    if ffmpeg_mode and duration is None:
-        try:
-            duration = guess_output_duration(argv)
-        except Exception:
-            logger.debug("run: best-effort step failed", exc_info=True)
-            duration = None
     progress_on_stderr = ffmpeg_mode and "pipe:2" in argv
-
-    lines: deque[str] = deque(maxlen=tail)
+    reader = _Reader(tail, _expected_duration(argv, duration), on_line, on_progress)
     result = RunResult(returncode=-1)
     try:
-        child = proc.spawn(argv, stdout=proc.PIPE, stderr=proc.PIPE, cwd=cwd, env=env)
-    except errors.ProgramNotFound:
-        lines.append(f"Program not found: {argv[0] if argv else '?'}")
-        result.returncode = 127
-        result.log_tail = list(lines)
-        return result
+        child = proc.spawn(argv, stdout=proc.PIPE, stderr=proc.PIPE, cwd=cwd)
     except errors.ProcessError as exc:
-        lines.append(f"Could not start {argv[0] if argv else '?'}: {exc}")
-        result.returncode = 126
-        result.log_tail = list(lines)
+        missing = isinstance(exc, errors.ProgramNotFound)
+        name = argv[0] if argv else "?"
+        reader.lines.append(
+            f"Program not found: {name}" if missing else f"Could not start {name}: {exc}"
+        )
+        result.returncode = 127 if missing else 126
+        result.log_tail = list(reader.lines)
         return result
-
-    block: dict[str, str] = {}
-
-    def _emit_line(text: str) -> None:
-        lines.append(text)
-        if on_line:
-            try:
-                on_line(text)
-            except Exception:  # a bug in the caller's callback: log, keep running
-                logger.exception("on_line callback failed")
-
-    def _handle_progress_line(text: str) -> bool:
-        key, sep, val = text.partition("=")
-        # per-stream keys (stream_0_0_q, stream_0_1_psnr_y...) come once per output stream in every
-        # block: as log lines they'd flood the console and push real errors out of the log tail
-        if not sep or (key not in _PROGRESS_KEYS and not key.startswith("stream_")):
-            return False
-        block[key] = val.strip()
-        if key == "progress":
-            if on_progress:
-                try:
-                    on_progress(_parse_progress_block(dict(block), duration, started))
-                except Exception:
-                    logger.exception("on_progress callback failed")
-            block.clear()
-        return True
-
-    def _handle_raw(raw: bytes, is_progress_stream: bool) -> None:
-        piece = raw.decode("utf-8", "replace").strip()
-        if not piece:
-            return
-        if is_progress_stream and _handle_progress_line(piece):
-            return
-        _emit_line(piece)
-
-    def _pump(stream: IO[bytes], is_progress_stream: bool) -> None:
-        # Read whatever is available and split on BOTH \r and \n: tools that
-        # redraw one status line with \r (yt-dlp, ffmpeg -stats) would
-        # otherwise only be seen when a \n finally arrives.
-        buf = b""
-        reader = getattr(stream, "read1", None) or stream.read
-        try:
-            while True:
-                chunk = reader(65536)
-                if not chunk:
-                    break
-                buf += chunk
-                parts = _LINE_SPLIT.split(buf)
-                buf = parts.pop()
-                for raw in parts:
-                    _handle_raw(raw, is_progress_stream)
-            if buf:
-                _handle_raw(buf, is_progress_stream)
-        except (ValueError, OSError):
-            pass
-        finally:
-            try:
-                stream.close()
-            except Exception:
-                logger.debug("_pump: best-effort step failed", exc_info=True)
 
     assert child.stderr is not None and child.stdout is not None  # both are pipes (above)
     err_thread = tasks.start_service(
-        partial(_pump, child.stderr, progress_on_stderr), name="ffmpeg-stderr"
+        partial(reader.pump, child.stderr, progress_on_stderr), name="ffmpeg-stderr"
     )
     out_thread = tasks.start_service(
-        partial(_pump, child.stdout, ffmpeg_mode and not progress_on_stderr), name="ffmpeg-stdout"
+        partial(reader.pump, child.stdout, ffmpeg_mode and not progress_on_stderr),
+        name="ffmpeg-stdout",
     )
-
     try:
-        while True:
-            try:
-                child.wait(timeout=0.2)
-                break
-            except proc.TimeoutExpired:
-                pass
-            if cancel is not None:
-                try:
-                    stop = bool(cancel())
-                except Exception:
-                    logger.exception("cancel callback failed")
-                    stop = False
-                if stop:
-                    result.cancelled = True
-                    kill_tree(child)
-                    break
-            if timeout is not None and time.monotonic() - started > timeout:
-                result.timed_out = True
-                _emit_line(f"Timed out after {timeout:.0f} s")
-                kill_tree(child)
-                break
+        _wait(child, result, reader, cancel, timeout)
     finally:
         out_thread.join(timeout=5)
         err_thread.join(timeout=5)
@@ -876,20 +901,15 @@ def run(
 
     rc = child.returncode if child.returncode is not None else -1
     result.returncode = rc if not result.cancelled else (rc if rc != 0 else -1)
-    result.log_tail = list(lines)
-    result.elapsed = time.monotonic() - started
-    if on_progress and result.returncode == 0 and not result.cancelled:
-        try:
-            on_progress(
-                Progress(
-                    out_time=duration or 0.0,
-                    fraction=1.0 if duration else None,
-                    elapsed=result.elapsed,
-                    done=True,
-                )
+    result.log_tail = list(reader.lines)
+    result.elapsed = time.monotonic() - reader.started
+    if result.returncode == 0 and not result.cancelled:
+        d = reader.duration
+        reader.progress(
+            Progress(
+                out_time=d or 0.0, fraction=1.0 if d else None, elapsed=result.elapsed, done=True
             )
-        except Exception:
-            logger.exception("on_progress callback failed")
+        )
     return result
 
 

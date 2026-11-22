@@ -134,7 +134,7 @@ def countdown_source(w: int, h: int, rate: str, dur: float, textfile: str | None
         "if(lt(abs(ld(0)-H*0.42),2)+lt(abs(ld(0)-H*0.34),1.5)+lt(abs(X-W/2),1)+lt(abs(Y-H/2),1),"
         "225,if(lt(ld(0),H*0.42)*lt(ld(1),mod(T,1)*2*PI),150,70))'"
     )
-    number = fl.drawtext_filter(
+    number = fl.DrawText(
         textfile=textfile,
         font="sans bold",
         fontsize=int(h * 0.36),
@@ -143,7 +143,7 @@ def countdown_source(w: int, h: int, rate: str, dur: float, textfile: str | None
         y="(h-text_h)/2",
         expansion="normal",
         enable=f"lt(t,{cut:.4f})",
-    )
+    ).filter()
     return (
         f"color=c=black:size={hw}x{hh}:rate={rate}:duration={n},format=gray,{sweep},"
         f"scale={w}:{h}:flags=bicubic,format=yuv420p,{number},"

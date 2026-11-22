@@ -26,6 +26,7 @@ import logging
 import os
 import sys
 import threading
+from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import Any
@@ -391,6 +392,193 @@ def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, str | No
     return _SOFTWARE.get(codec, codec), None
 
 
+@dataclass(frozen=True, slots=True)
+class Rate:
+    """Average-bitrate mode instead of constant quality: *bitrate* (e.g. "4M"),
+    optionally capped at *maxrate*, with a keyframe every *gop_seconds* at *fps*."""
+
+    bitrate: str
+    maxrate: str | None = None
+    gop_seconds: float | None = None
+    fps: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _Settings:
+    """What every encoder family's arguments are made from."""
+
+    codec: str
+    q: int  # index into QUALITIES
+    speed: str
+    ten_bit: bool
+    bitrate: str | None
+
+    def pix(self, eight: str, ten: str) -> str:
+        return ten if self.ten_bit else eight
+
+    def quality(self, table: str, flag: str = "-crf", *after: str) -> list[str]:
+        """The bitrate when one was asked for, else *flag* with the quality value."""
+        if self.bitrate:
+            return ["-b:v", self.bitrate]
+        return [flag, str(_Q[table][self.q]), *after]
+
+
+_Family = Callable[[VideoEncode, _Settings], list[str]]
+
+
+def _x264(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "yuv420p10le")
+    return ["-preset", _X26X_PRESET[s.speed], *s.quality("libx264")]
+
+
+def _x265(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "yuv420p10le")
+    return [
+        "-preset",
+        _X26X_PRESET[s.speed],
+        *s.quality("libx265"),
+        "-x265-params",
+        "log-level=error",
+    ]
+
+
+def _svt_av1(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "yuv420p10le")
+    return ["-preset", str(_SVT_PRESET[s.speed]), *s.quality("libsvtav1")]
+
+
+def _aom_av1(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "yuv420p10le")
+    return [
+        "-cpu-used",
+        str(_AOM_CPU[s.speed]),
+        "-row-mt",
+        "1",
+        *s.quality("libaom-av1", "-crf", "-b:v", "0"),
+    ]
+
+
+def _rav1e(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "yuv420p10le")
+    speed = {"fastest": 10, "fast": 8, "balanced": 6, "slow": 4, "slowest": 2}[s.speed]
+    return ["-speed", str(speed), *s.quality("librav1e", "-qp")]
+
+
+def _vp9(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "yuv420p10le")
+    cpu = str(_VPX_CPU[s.speed])
+    return [
+        "-deadline",
+        "good",
+        "-cpu-used",
+        cpu,
+        "-row-mt",
+        "1",
+        *s.quality("libvpx-vp9", "-crf", "-b:v", "0"),
+    ]
+
+
+def _vp8(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = "yuv420p"
+    cpu = str(_VPX_CPU[s.speed])
+    return ["-deadline", "good", "-cpu-used", cpu, *s.quality("libvpx", "-crf", "-b:v", "20M")]
+
+
+def _prores(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = "yuv422p10le"
+    return ["-profile:v", str(_PRORES_PROFILE[QUALITIES[s.q]]), "-vendor", "apl0"]
+
+
+def _dnxhr(ve: VideoEncode, s: _Settings) -> list[str]:
+    prof, ve.pix_fmt = _DNXHR_PROFILE[QUALITIES[s.q]]
+    return ["-profile:v", prof]
+
+
+def _ffv1(ve: VideoEncode, _s: _Settings) -> list[str]:
+    ve.pix_fmt = ""
+    return ["-level", "3", "-g", "1", "-slicecrc", "1"]
+
+
+def _mpeg4(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = "yuvj420p" if ve.encoder == "mjpeg" else "yuv420p"
+    return s.quality(ve.encoder, "-q:v")
+
+
+def _nvenc(ve: VideoEncode, s: _Settings) -> list[str]:
+    table = {"h264": "nvenc", "hevc": "nvenc_hevc", "av1": "nvenc_av1"}[s.codec]
+    ve.pix_fmt = s.pix("yuv420p", "p010le") if s.codec != "h264" else "yuv420p"
+    a = ["-preset", _NVENC_PRESET[s.speed], "-tune", "hq", "-spatial-aq", "1", "-rc", "vbr"]
+    a += s.quality(table, "-cq", "-b:v", "0")
+    if s.speed in ("slow", "slowest") and s.codec != "av1":
+        a += ["-multipass", "qres" if s.speed == "slow" else "fullres"]
+    return a
+
+
+def _qsv(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("nv12", "p010le")
+    return ["-preset", _QSV_PRESET[s.speed], *s.quality("qsv", "-global_quality")]
+
+
+def _vaapi(ve: VideoEncode, s: _Settings) -> list[str]:
+    node = _VAAPI_DEVICE.get(_ffmpeg()) or (_vaapi_nodes() or ["/dev/dri/renderD128"])[0]
+    ve.pre_input = ["-vaapi_device", node]
+    ve.filter_suffix = "format=p010,hwupload" if s.ten_bit else "format=nv12,hwupload"
+    ve.pix_fmt = ""
+    return ["-rc_mode", "VBR" if s.bitrate else "CQP", *s.quality("vaapi", "-qp")]
+
+
+def _amf(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("nv12", "p010le")
+    a = ["-quality", _AMF_QUALITY[s.speed]]
+    if s.bitrate:
+        return [*a, "-rc", "vbr_peak", "-b:v", s.bitrate]
+    qp = str(_Q["amf"][s.q])
+    return [
+        *a,
+        "-rc",
+        "cqp",
+        "-qp_i",
+        qp,
+        "-qp_p",
+        qp,
+        *(["-qp_b", qp] if s.codec == "h264" else []),
+    ]
+
+
+def _videotoolbox(ve: VideoEncode, s: _Settings) -> list[str]:
+    ve.pix_fmt = s.pix("yuv420p", "p010le")
+    return [*s.quality("videotoolbox", "-q:v"), "-allow_sw", "1"]
+
+
+def _any(_ve: VideoEncode, s: _Settings) -> list[str]:
+    return ["-b:v", s.bitrate] if s.bitrate else []
+
+
+#: Each encoder's own arguments: by encoder name, then by hardware family
+_BY_ENCODER: dict[str, _Family] = {
+    "libx264": _x264,
+    "libx265": _x265,
+    "libsvtav1": _svt_av1,
+    "libaom-av1": _aom_av1,
+    "librav1e": _rav1e,
+    "libvpx-vp9": _vp9,
+    "libvpx": _vp8,
+    "prores_ks": _prores,
+    "dnxhd": _dnxhr,
+    "ffv1": _ffv1,
+    "mpeg4": _mpeg4,
+    "mjpeg": _mpeg4,
+}
+_BY_HARDWARE: dict[str, _Family] = {
+    "nvenc": _nvenc,
+    "qsv": _qsv,
+    "vaapi": _vaapi,
+    "amf": _amf,
+    "videotoolbox": _videotoolbox,
+}
+_INTRA_ONLY = ("prores_ks", "dnxhd", "ffv1")  # no bitrate cap, no keyframe interval
+
+
 def video(
     codec: str = "h264",
     quality: str = "high",
@@ -399,118 +587,31 @@ def video(
     hw: str = "auto",
     ten_bit: bool = False,
     container: str = "mp4",
-    bitrate: str | None = None,
-    maxrate: str | None = None,
-    gop_seconds: float | None = None,
-    fps: float | None = None,
+    rate: Rate | None = None,
 ) -> VideoEncode:
     """Build arguments for encoding video.
 
     *quality* uses :data:`QUALITIES` (legacy labels such as ``"High"`` are
-    accepted).  When *bitrate* is given (e.g. ``"4M"``) the encoder runs in
-    average-bitrate mode instead of constant quality (for size targets use
-    :func:`two_pass_args` with software encoders).
+    accepted).  With a *rate* the encoder runs in average-bitrate mode instead
+    of constant quality (for size targets use :func:`two_pass_args` with
+    software encoders).
     """
-    q = QUALITIES.index(quality_key(quality))
-    speed = speed if speed in SPEEDS else "balanced"
+    settings = _Settings(
+        codec=codec,
+        q=QUALITIES.index(quality_key(quality)),
+        speed=speed if speed in SPEEDS else "balanced",
+        ten_bit=ten_bit,
+        bitrate=rate.bitrate if rate else None,
+    )
     encoder, kind = choose_encoder(codec, hw)
     ve = VideoEncode(encoder=encoder, codec=codec, hw=kind)
-    a = ["-c:v", encoder]
-
-    def pix(eight: str, ten: str) -> str:
-        return ten if ten_bit else eight
-
-    if encoder == "libx264":
-        ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += ["-preset", _X26X_PRESET[speed]]
-        a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libx264"][q])]
-    elif encoder == "libx265":
-        ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += ["-preset", _X26X_PRESET[speed]]
-        a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libx265"][q])]
-        a += ["-x265-params", "log-level=error"]
-    elif encoder == "libsvtav1":
-        ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += ["-preset", str(_SVT_PRESET[speed])]
-        a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libsvtav1"][q])]
-    elif encoder == "libaom-av1":
-        ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += ["-cpu-used", str(_AOM_CPU[speed]), "-row-mt", "1"]
-        a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libaom-av1"][q]), "-b:v", "0"]
-    elif encoder == "librav1e":
-        ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += [
-            "-speed",
-            str({"fastest": 10, "fast": 8, "balanced": 6, "slow": 4, "slowest": 2}[speed]),
-        ]
-        a += ["-b:v", bitrate] if bitrate else ["-qp", str(_Q["librav1e"][q])]
-    elif encoder == "libvpx-vp9":
-        ve.pix_fmt = pix("yuv420p", "yuv420p10le")
-        a += ["-deadline", "good", "-cpu-used", str(_VPX_CPU[speed]), "-row-mt", "1"]
-        a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libvpx-vp9"][q]), "-b:v", "0"]
-    elif encoder == "libvpx":
-        ve.pix_fmt = "yuv420p"
-        a += ["-deadline", "good", "-cpu-used", str(_VPX_CPU[speed])]
-        a += ["-b:v", bitrate] if bitrate else ["-crf", str(_Q["libvpx"][q]), "-b:v", "20M"]
-    elif kind == "nvenc":
-        table = {"h264": "nvenc", "hevc": "nvenc_hevc", "av1": "nvenc_av1"}[codec]
-        ve.pix_fmt = pix("yuv420p", "p010le") if codec != "h264" else "yuv420p"
-        a += ["-preset", _NVENC_PRESET[speed], "-tune", "hq", "-spatial-aq", "1"]
-        if bitrate:
-            a += ["-rc", "vbr", "-b:v", bitrate]
-        else:
-            a += ["-rc", "vbr", "-cq", str(_Q[table][q]), "-b:v", "0"]
-        if speed in ("slow", "slowest") and codec != "av1":
-            a += ["-multipass", "qres" if speed == "slow" else "fullres"]
-    elif kind == "qsv":
-        ve.pix_fmt = pix("nv12", "p010le")
-        a += ["-preset", _QSV_PRESET[speed]]
-        a += ["-b:v", bitrate] if bitrate else ["-global_quality", str(_Q["qsv"][q])]
-    elif kind == "vaapi":
-        node = _VAAPI_DEVICE.get(_ffmpeg()) or (_vaapi_nodes() or ["/dev/dri/renderD128"])[0]
-        ve.pre_input = ["-vaapi_device", node]
-        ve.filter_suffix = "format=p010,hwupload" if ten_bit else "format=nv12,hwupload"
-        ve.pix_fmt = ""
-        if bitrate:
-            a += ["-rc_mode", "VBR", "-b:v", bitrate]
-        else:
-            a += ["-rc_mode", "CQP", "-qp", str(_Q["vaapi"][q])]
-    elif kind == "amf":
-        ve.pix_fmt = pix("nv12", "p010le")
-        a += ["-quality", _AMF_QUALITY[speed]]
-        if bitrate:
-            a += ["-rc", "vbr_peak", "-b:v", bitrate]
-        else:
-            qp = str(_Q["amf"][q])
-            a += ["-rc", "cqp", "-qp_i", qp, "-qp_p", qp]
-            if codec == "h264":
-                a += ["-qp_b", qp]
-    elif kind == "videotoolbox":
-        ve.pix_fmt = pix("yuv420p", "p010le")
-        a += ["-b:v", bitrate] if bitrate else ["-q:v", str(_Q["videotoolbox"][q])]
-        a += ["-allow_sw", "1"]
-    elif encoder == "prores_ks":
-        prof = _PRORES_PROFILE[QUALITIES[q]]
-        ve.pix_fmt = "yuv422p10le"
-        a += ["-profile:v", str(prof), "-vendor", "apl0"]
-    elif encoder == "dnxhd":
-        prof, pf = _DNXHR_PROFILE[QUALITIES[q]]
-        ve.pix_fmt = pf
-        a += ["-profile:v", prof]
-    elif encoder == "ffv1":
-        ve.pix_fmt = ""
-        a += ["-level", "3", "-g", "1", "-slicecrc", "1"]
-    elif encoder in ("mpeg4", "mjpeg"):
-        ve.pix_fmt = "yuvj420p" if encoder == "mjpeg" else "yuv420p"
-        a += ["-b:v", bitrate] if bitrate else ["-q:v", str(_Q[encoder][q])]
-    else:
-        if bitrate:
-            a += ["-b:v", bitrate]
-
-    if maxrate and encoder not in ("prores_ks", "dnxhd", "ffv1"):
-        a += ["-maxrate", maxrate, "-bufsize", _double_rate(maxrate)]
-    if gop_seconds and fps and encoder not in ("prores_ks", "dnxhd", "ffv1"):
-        a += ["-g", str(max(1, round(gop_seconds * fps)))]
+    family = _BY_ENCODER.get(encoder) or _BY_HARDWARE.get(kind or "") or _any
+    a = ["-c:v", encoder, *family(ve, settings)]
+    if rate and encoder not in _INTRA_ONLY:
+        if rate.maxrate:
+            a += ["-maxrate", rate.maxrate, "-bufsize", _double_rate(rate.maxrate)]
+        if rate.gop_seconds and rate.fps:
+            a += ["-g", str(max(1, round(rate.gop_seconds * rate.fps)))]
     if ve.pix_fmt:
         a += ["-pix_fmt", ve.pix_fmt]
     a += container_video_args(container, codec)

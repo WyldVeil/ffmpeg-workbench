@@ -6,6 +6,8 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 POSITIONS = {
     "tl": ("Top left", "M", "M"),
     "tc": ("Top centre", "(W-w)/2", "M"),
@@ -20,20 +22,26 @@ POSITIONS = {
 }
 
 
-def logo_graph(
-    video_w: int,
-    video_h: int,
-    *,
-    pct: float,
-    opacity: float,
-    place: str,
-    margin_pct: float = 3.0,
-    custom: tuple[float, float] = (50.0, 50.0),
-    window: tuple[float, float] | None = None,
-    fade: float = 0.0,
-    logo_input: str = "[1:v]",
-) -> str:
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Logo:
+    """How the logo sits on the video: *pct* of the video's width, *opacity*
+    0..1, *place* a key of POSITIONS (*custom* x/y % for "custom"), shown only
+    within *window* (seconds) with *fade* seconds in and out."""
+
+    pct: float
+    opacity: float = 1.0
+    place: str = "br"
+    margin_pct: float = 3.0
+    custom: tuple[float, float] = (50.0, 50.0)
+    window: tuple[float, float] | None = None
+    fade: float = 0.0
+
+
+def logo_graph(video_w: int, video_h: int, logo_spec: Logo, logo_input: str = "[1:v]") -> str:
     """filter_complex: [0:v] + logo -> [v]."""
+    pct, opacity, place = logo_spec.pct, logo_spec.opacity, logo_spec.place
+    margin_pct, custom = logo_spec.margin_pct, logo_spec.custom
+    window, fade = logo_spec.window, logo_spec.fade
     lw = max(2, int(video_w * pct / 100) // 2 * 2)
     m = int(min(video_w, video_h) * margin_pct / 100)
     _label, x, y = POSITIONS.get(place, POSITIONS["br"])

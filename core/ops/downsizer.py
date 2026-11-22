@@ -162,10 +162,12 @@ def encode_to_size(
             hw="auto" if fast else "off",
             ten_bit=ten_bit,
             container=container,
-            bitrate=f"{kbps}k",
-            maxrate=f"{int(kbps * 1.5)}k" if fast else None,
-            gop_seconds=4,
-            fps=p.fps,
+            rate=enc.Rate(
+                f"{kbps}k",
+                maxrate=f"{int(kbps * 1.5)}k" if fast else None,
+                gop_seconds=4,
+                fps=p.fps,
+            ),
         )
 
     if audio_mode == "none" or not info.has_audio:

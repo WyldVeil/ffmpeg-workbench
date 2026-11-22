@@ -54,7 +54,7 @@ def nasty_dir(tmp_path):
 def test_subtitles_filter_with_hostile_path(media, nasty_dir, outdir):
     srt = nasty_dir / NASTY.replace("\\", "_")
     shutil.copy(media["srt"], srt)
-    vf = fl.subtitles_filter(str(srt), force_style=fl.ass_style(font="Inter", size=28))
+    vf = fl.subtitles_filter(str(srt), force_style=fl.AssStyle(font="Inter", size=28).force_style())
     out = str(outdir / "subbed.mp4")
     res = ff.run(
         [
@@ -128,12 +128,12 @@ def test_preview_with_a_still_image_later_in_the_video(media, nasty_dir, at):
 def test_drawtext_textfile_and_inline(text, media, outdir, tmp_path):
     tf = fl.drawtext_text_file(text, directory=str(tmp_path))
     for vf in (
-        fl.drawtext_filter(
+        fl.DrawText(
             textfile=tf, font="sans", fontsize=36, box=True, enable=fl.enable_between(0.5, 1.5)
-        ),
-        fl.drawtext_filter(
+        ).filter(),
+        fl.DrawText(
             text=text, font="sans bold", fontsize="h/12", borderw=2, alpha="if(lt(t,1),t,1)"
-        ),
+        ).filter(),
     ):
         out = str(outdir / "dt.mp4")
         res = ff.run(

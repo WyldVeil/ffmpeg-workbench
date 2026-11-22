@@ -11,7 +11,7 @@ FFmpeg parses a filtergraph in two levels before a filter sees its options:
 A file path or free text placed into a filter therefore needs escaping for
 both levels.  :func:`filter_value` does exactly that, and the higher-level
 helpers (:func:`subtitles_filter`, :func:`lut3d_filter`, :func:`movie_source`,
-:func:`drawtext_filter`) build complete, correctly escaped filters.  Since the
+:class:`DrawText`) build complete, correctly escaped filters.  Since the
 app always passes argv lists (never a shell), no shell quoting is needed.
 
 Other helpers:
@@ -28,6 +28,7 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 
 from core import proc as _proc
 
@@ -136,27 +137,29 @@ def amovie_source(path: str, *, loop: int = 0) -> str:
     return s
 
 
-def ass_style(
-    *,
-    font: str = "Arial",
-    size: int = 24,
-    primary: str = "&H00FFFFFF",
-    outline_colour: str = "&H00000000",
-    outline: float = 2.0,
-    shadow: float = 0.0,
-    bold: bool = False,
-    alignment: int = 2,
-    margin_v: int = 20,
-    back_colour: str = "&H80000000",
-    border_style: int = 1,
-) -> str:
-    """Build a ``force_style`` value for the subtitles filter."""
-    return (
-        f"FontName={font},FontSize={int(size)},PrimaryColour={primary},"
-        f"OutlineColour={outline_colour},BackColour={back_colour},"
-        f"BorderStyle={int(border_style)},Outline={outline:g},Shadow={shadow:g},"
-        f"Bold={-1 if bold else 0},Alignment={int(alignment)},MarginV={int(margin_v)}"
-    )
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AssStyle:
+    """A subtitle style for the subtitles filter's ``force_style``."""
+
+    font: str = "Arial"
+    size: int = 24
+    primary: str = "&H00FFFFFF"
+    outline_colour: str = "&H00000000"
+    outline: float = 2.0
+    shadow: float = 0.0
+    bold: bool = False
+    alignment: int = 2
+    margin_v: int = 20
+    back_colour: str = "&H80000000"
+    border_style: int = 1
+
+    def force_style(self) -> str:
+        return (
+            f"FontName={self.font},FontSize={int(self.size)},PrimaryColour={self.primary},"
+            f"OutlineColour={self.outline_colour},BackColour={self.back_colour},"
+            f"BorderStyle={int(self.border_style)},Outline={self.outline:g},Shadow={self.shadow:g},"
+            f"Bold={-1 if self.bold else 0},Alignment={int(self.alignment)},MarginV={int(self.margin_v)}"
+        )
 
 
 def hex_to_ass_colour(hex_colour: str, alpha: int = 0) -> str:
@@ -178,70 +181,78 @@ def drawtext_text_file(text: str, directory: str | None = None) -> str:
     return path
 
 
-def drawtext_filter(
-    *,
-    text: str | None = None,
-    textfile: str | None = None,
-    fontfile: str | None = None,
-    font: str | None = None,
-    fontsize: str | int = 48,
-    fontcolor: str = "white",
-    x: str = "(w-text_w)/2",
-    y: str = "(h-text_h)/2",
-    box: bool = False,
-    boxcolor: str = "black@0.5",
-    boxborderw: int = 10,
-    borderw: int = 0,
-    bordercolor: str = "black",
-    shadowx: int = 0,
-    shadowy: int = 0,
-    shadowcolor: str = "black",
-    alpha: str | None = None,
-    enable: str | None = None,
-    expansion: str = "none",
-    extra: Sequence[str] = (),
-) -> str:
-    """A fully escaped ``drawtext`` filter.
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DrawText:
+    """A ``drawtext`` filter: :meth:`filter` gives it fully escaped.
 
     Prefer *textfile* (see :func:`drawtext_text_file`) for user text; *text*
     is escaped for literal display (``expansion=none`` by default so ``%``
     is not interpreted).  *x*, *y*, *alpha*, *enable* and *fontsize* are
     expressions and are escaped at the filtergraph level only.
     """
-    if textfile is None and text is None:
-        raise ValueError("text or textfile required")
-    opts: list[str] = []
-    if fontfile is None and font:
-        fontfile = find_font(font)
-    if fontfile:
-        opts.append(f"fontfile={filter_path(fontfile)}")
-    if textfile is not None:
-        opts.append(f"textfile={filter_path(textfile)}")
-    else:
-        opts.append(f"text={filter_value(text or '')}")
-    opts.append(f"expansion={expansion}")
-    opts += [
-        f"fontsize={_expr(str(fontsize))}",
-        f"fontcolor={filter_value(fontcolor)}",
-        f"x={_expr(x)}",
-        f"y={_expr(y)}",
-    ]
-    if box:
-        opts += ["box=1", f"boxcolor={filter_value(boxcolor)}", f"boxborderw={int(boxborderw)}"]
-    if borderw:
-        opts += [f"borderw={int(borderw)}", f"bordercolor={filter_value(bordercolor)}"]
-    if shadowx or shadowy:
+
+    text: str | None = None
+    textfile: str | None = None
+    fontfile: str | None = None
+    font: str | None = None
+    fontsize: str | int = 48
+    fontcolor: str = "white"
+    x: str = "(w-text_w)/2"
+    y: str = "(h-text_h)/2"
+    box: bool = False
+    boxcolor: str = "black@0.5"
+    boxborderw: int = 10
+    borderw: int = 0
+    bordercolor: str = "black"
+    shadowx: int = 0
+    shadowy: int = 0
+    shadowcolor: str = "black"
+    alpha: str | None = None
+    enable: str | None = None
+    expansion: str = "none"
+    extra: Sequence[str] = ()
+
+    def filter(self) -> str:
+        if self.textfile is None and self.text is None:
+            raise ValueError("text or textfile required")
+        fontfile = self.fontfile or (find_font(self.font) if self.font else None)
+        opts: list[str] = []
+        if fontfile:
+            opts.append(f"fontfile={filter_path(fontfile)}")
+        if self.textfile is not None:
+            opts.append(f"textfile={filter_path(self.textfile)}")
+        else:
+            opts.append(f"text={filter_value(self.text or '')}")
+        opts.append(f"expansion={self.expansion}")
         opts += [
-            f"shadowx={int(shadowx)}",
-            f"shadowy={int(shadowy)}",
-            f"shadowcolor={filter_value(shadowcolor)}",
+            f"fontsize={_expr(str(self.fontsize))}",
+            f"fontcolor={filter_value(self.fontcolor)}",
+            f"x={_expr(self.x)}",
+            f"y={_expr(self.y)}",
         ]
-    if alpha is not None:
-        opts.append(f"alpha={_expr(alpha)}")
-    if enable is not None:
-        opts.append(f"enable={_expr(enable)}")
-    opts += list(extra)
-    return "drawtext=" + ":".join(opts)
+        if self.box:
+            opts += [
+                "box=1",
+                f"boxcolor={filter_value(self.boxcolor)}",
+                f"boxborderw={int(self.boxborderw)}",
+            ]
+        if self.borderw:
+            opts += [
+                f"borderw={int(self.borderw)}",
+                f"bordercolor={filter_value(self.bordercolor)}",
+            ]
+        if self.shadowx or self.shadowy:
+            opts += [
+                f"shadowx={int(self.shadowx)}",
+                f"shadowy={int(self.shadowy)}",
+                f"shadowcolor={filter_value(self.shadowcolor)}",
+            ]
+        if self.alpha is not None:
+            opts.append(f"alpha={_expr(self.alpha)}")
+        if self.enable is not None:
+            opts.append(f"enable={_expr(self.enable)}")
+        opts += list(self.extra)
+        return "drawtext=" + ":".join(opts)
 
 
 def _expr(expr: str) -> str:
