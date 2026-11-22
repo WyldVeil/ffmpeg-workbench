@@ -12,6 +12,7 @@ import os
 import tkinter as tk
 from functools import partial
 from tkinter import messagebox, scrolledtext, ttk
+from typing import Any
 
 from core import proc as _proc
 from core import settings, sysinfo, tasks
@@ -36,6 +37,47 @@ from tabs.kit import dialogs
 from tabs.kit.stars import set_star_count, set_star_speed
 
 logger = logging.getLogger("crossfader.system.advanced_settings")
+
+
+class _NetForm:
+    """What every section of the Network tab builds with: the scrolling body,
+    the saved settings, one Tk variable per setting (kept in *variables*)."""
+
+    def __init__(self, body: tk.Frame, cfg: dict[str, Any], variables: dict[str, tk.Variable]):
+        self.body, self.cfg, self.variables = body, cfg, variables
+
+    def var(self, key: str) -> tk.Variable:
+        from core import network as _net
+
+        default = _net.DEFAULTS[key]
+        v: tk.Variable = (
+            tk.BooleanVar(value=bool(self.cfg.get(key, default)))
+            if isinstance(default, bool)
+            else tk.StringVar(value=str(self.cfg.get(key, default) or ""))
+        )
+        self.variables[key] = v
+        return v
+
+    def text_var(self, key: str) -> tk.StringVar:
+        v = self.var(key)
+        assert isinstance(v, tk.StringVar), key
+        return v
+
+    def section(self, title: str) -> tk.LabelFrame:
+        lf = tk.LabelFrame(self.body, text=f"  {title}  ", padx=px(12), pady=px(8))
+        lf.pack(fill="x", padx=px(20), pady=px(6))
+        return lf
+
+    def hint(self, parent: tk.Misc, text: str) -> None:
+        tk.Label(
+            parent,
+            text=text,
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
+            justify="left",
+            anchor="w",
+            wraplength=px(760),
+        ).pack(anchor="w", fill="x")
 
 
 class AdvancedSettingsTab(BaseTab):
@@ -258,7 +300,6 @@ class AdvancedSettingsTab(BaseTab):
     # ─── Networking ───────────────────────────────────────────────────────────
     def _build_networking_tab(self, nb):
         from core import network as _net
-        from core import sysproxy
 
         f = ttk.Frame(nb)
         nb.add(f, text="  Network  ")
@@ -273,39 +314,23 @@ class AdvancedSettingsTab(BaseTab):
         win = canvas.create_window((0, 0), window=body, anchor="nw")
         body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
-        cfg = _net.get()
         self._net_vars = {}
+        form = _NetForm(body, _net.get(), self._net_vars)
+        for build in (
+            self._net_now,
+            self._net_situations,
+            self._net_own_proxy,
+            self._net_certificates,
+            self._net_mirrors,
+            self._net_details,
+        ):
+            build(form)
 
-        def text_var(key: str) -> tk.StringVar:
-            v = var(key)
-            assert isinstance(v, tk.StringVar), key
-            return v
+    def _net_now(self, form: _NetForm) -> None:
+        from core import sysproxy
 
-        def var(key):
-            default = _net.DEFAULTS[key]
-            v = (
-                tk.BooleanVar(value=bool(cfg.get(key, default)))
-                if isinstance(default, bool)
-                else tk.StringVar(value=str(cfg.get(key, default) or ""))
-            )
-            self._net_vars[key] = v
-            return v
-
-        def section(title):
-            lf = tk.LabelFrame(body, text=f"  {title}  ", padx=px(12), pady=px(8))
-            lf.pack(fill="x", padx=px(20), pady=px(6))
-            return lf
-
-        def hint(parent, text):
-            tk.Label(
-                parent,
-                text=text,
-                fg=CLR["fgdim"],
-                font=(UI_FONT, 8),
-                justify="left",
-                anchor="w",
-                wraplength=px(760),
-            ).pack(anchor="w", fill="x")
+        section = form.section
+        body = form.body
 
         # ── What happens now ─────────────────────────────────────────────────
         now = section("Right now")
@@ -339,6 +364,12 @@ class AdvancedSettingsTab(BaseTab):
         special = sysproxy.special_system()
         if special:
             self._build_tor_system_section(body, special)
+
+    def _net_situations(self, form: _NetForm) -> None:
+        from core import network as _net
+
+        section = form.section
+        cfg = form.cfg
 
         # ── Situations ───────────────────────────────────────────────────────
         sit = section("How should the app connect?")
@@ -447,6 +478,11 @@ class AdvancedSettingsTab(BaseTab):
         self._net_found_frame = tk.Frame(sit)
         self._net_found_frame.pack(anchor="w", padx=px(24, 0))
 
+    def _net_own_proxy(self, form: _NetForm) -> None:
+        section = form.section
+        hint = form.hint
+        var = form.var
+
         # ── Own proxy ────────────────────────────────────────────────────────
         own = section("Your own proxy")
         var("network.mode")
@@ -501,6 +537,12 @@ class AdvancedSettingsTab(BaseTab):
                 "write", lambda *_a: self._net_situation_var.set("custom")
             )
 
+    def _net_certificates(self, form: _NetForm) -> None:
+        section = form.section
+        hint = form.hint
+        var = form.var
+        text_var = form.text_var
+
         # ── Certificates ─────────────────────────────────────────────────────
         cert = section("Security certificates")
         tk.Checkbutton(
@@ -534,6 +576,11 @@ class AdvancedSettingsTab(BaseTab):
             "certificate. It is usually installed on the computer already; if not, ask IT for the file.",
         )
 
+    def _net_mirrors(self, form: _NetForm) -> None:
+        section = form.section
+        hint = form.hint
+        var = form.var
+
         # ── Mirrors ──────────────────────────────────────────────────────────
         mir = section("Mirrors (when download sites are blocked)")
         g = tk.Frame(mir)
@@ -553,6 +600,13 @@ class AdvancedSettingsTab(BaseTab):
             mir,
             "Downloads are checked against fixed SHA-256 sums, so a mirror can't swap the files.",
         )
+
+    def _net_details(self, form: _NetForm) -> None:
+        from core import network as _net
+
+        section = form.section
+        hint = form.hint
+        var = form.var
 
         # ── Connection details ───────────────────────────────────────────────
         con = section("Connection details")
