@@ -54,10 +54,10 @@ def filter_chain(c: Cleanup) -> str | None:
     return ",".join(filters) if filters else None
 
 
-def preview_cmd(ffplay: str, src: str, af: str, title: str) -> list[str]:
+def preview_cmd(src: str, af: str, title: str) -> list[str]:
     """The first 30 s through the chain, in a small player window."""
     return [
-        ffplay,
+        ff.ffplay_path(),
         "-i",
         src,
         "-af",

@@ -13,6 +13,7 @@ import os
 from dataclasses import dataclass
 from enum import StrEnum
 
+from core import APP_NAME
 from core import ffmpeg as ff
 from core.filters import subtitles_filter
 from core.ytdlp import base_argv
@@ -235,3 +236,14 @@ def encode_cmd(inp: str, out: str, e: Encode, sub_path: str = "") -> list[str]:
     cmd += audio_args(e.acodec, e.abitrate, e.sample_rate)
     cmd += ["-movflags", "+faststart"] if e.container == "mp4" else []
     return [*cmd, out, "-y"]
+
+
+def stream_preview_cmd(stream_url: str) -> list[str]:
+    """Play a resolved stream in a player window (closes at the end)."""
+    return [
+        ff.ffplay_path(),
+        "-autoexit",
+        "-window_title",
+        f"Video Preview - {APP_NAME}",
+        stream_url,
+    ]

@@ -18,8 +18,8 @@ import os
 import shutil
 import sys
 
+from core import APP_NAME, settings
 from core import proc as _proc
-from core import settings
 
 logger = logging.getLogger("crossfader.notify")
 
@@ -54,7 +54,7 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
             _proc.spawn(
                 [
                     "notify-send",
-                    "--app-name=FFmpeg Workbench",
+                    f"--app-name={APP_NAME}",
                     f"--urgency={urgency}",
                     f"--icon={icon}",
                     title,

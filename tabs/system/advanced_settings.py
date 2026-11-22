@@ -14,10 +14,11 @@ from functools import partial
 from tkinter import messagebox, scrolledtext, ttk
 from typing import Any
 
+from core import ffmpeg as ff
 from core import proc as _proc
 from core import settings, sysinfo, tasks
 from core.hardware import (
-    get_binary_path,
+    binaries_dir,
     get_local_version,
     open_in_explorer,
 )
@@ -187,7 +188,7 @@ class AdvancedSettingsTab(BaseTab):
         self.after(0, lambda: self.online_ver_lbl.config(text=where))
 
     def _open_bin(self):
-        bin_dir = os.path.dirname(get_binary_path("ffmpeg"))
+        bin_dir = binaries_dir()
         if not open_in_explorer(bin_dir):
             messagebox.showinfo("Bin folder", bin_dir)
 
@@ -1625,14 +1626,14 @@ class AdvancedSettingsTab(BaseTab):
         tk.Button(
             btn_row,
             text=t("advanced_settings.paste_version"),
-            command=lambda: self.dev_cmd_var.set('"{}" -version'.format(get_binary_path("ffmpeg"))),
+            command=lambda: self.dev_cmd_var.set(ff.example_cmd("version")),
             bg=CLR["panel"],
             fg=CLR["fg"],
         ).pack(side="left", padx=px(4))
         tk.Button(
             btn_row,
             text=t("advanced_settings.paste_codecs"),
-            command=lambda: self.dev_cmd_var.set('"{}" -codecs'.format(get_binary_path("ffmpeg"))),
+            command=lambda: self.dev_cmd_var.set(ff.example_cmd("codecs")),
             bg=CLR["panel"],
             fg=CLR["fg"],
         ).pack(side="left", padx=px(4))

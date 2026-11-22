@@ -23,7 +23,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import tempfile
 import time
 import tkinter as tk
@@ -36,7 +35,6 @@ from core import proc as _proc
 from core import tasks
 from core import ytdlp as ytdlp_core
 from core.errors import ToolError
-from core.hardware import get_binary_path
 from core.i18n import t
 from core.ops import youtube as yto
 from core.queue_manager import Hooks
@@ -1957,19 +1955,8 @@ class YouTubeDownloaderTab(BaseTab):
                     )
                     return
                 stream_url = lines[0]
-                try:
-                    ffplay = get_binary_path("ffplay")
-                except Exception:
-                    logger.debug("_worker: best-effort step failed", exc_info=True)
-                    ffplay = shutil.which("ffplay") or "ffplay"
                 self.preview_proc = _proc.spawn(
-                    [
-                        ffplay,
-                        "-autoexit",
-                        "-window_title",
-                        "Video Preview - FFmpeg Workbench",
-                        stream_url,
-                    ],
+                    yto.stream_preview_cmd(stream_url),
                     env=_net.subprocess_env(),
                 )
                 self.after(0, lambda: self.log_tagged(self.console, "▶ Playing in ffplay.", "info"))

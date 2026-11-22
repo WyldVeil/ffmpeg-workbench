@@ -1075,6 +1075,16 @@ def format_cmd_lines(cmd: Sequence[str]) -> str:
     return " \\\n".join(lines)
 
 
+def listen_cmd(path: str) -> list[str]:
+    """Play *path*'s sound with no window; ends by itself."""
+    return [ffplay_path(), "-nodisp", "-autoexit", "-loglevel", "quiet", path]
+
+
+def example_cmd(kind: str) -> str:
+    """A command to paste into the developer console: "version" or "codecs"."""
+    return format_cmd([ffmpeg_path(), {"version": "-version", "codecs": "-codecs"}[kind]])
+
+
 def format_cmd(cmd: Sequence[str]) -> str:
     """Render argv as a copy-pasteable shell command for the current OS."""
     if _IS_WIN:

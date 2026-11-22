@@ -17,10 +17,10 @@ import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
+from core import ffmpeg as ff
 from core import proc as _proc
 from core import tasks
 from core import tts as tts_core
-from core.hardware import get_binary_path
 from core.i18n import t
 from core.ops import voiceover as vo
 from core.scaling import px
@@ -815,14 +815,7 @@ class TTSVoiceOverTab(BaseTab):
         if not self._player_path or not os.path.exists(self._player_path):
             return
         self._player_stop()
-        cmd = [
-            get_binary_path("ffplay"),
-            "-nodisp",
-            "-autoexit",
-            "-loglevel",
-            "quiet",
-            self._player_path,
-        ]
+        cmd = ff.listen_cmd(self._player_path)
         try:
             self._player_proc = _proc.spawn(cmd)
         except _proc.ProcessError as e:

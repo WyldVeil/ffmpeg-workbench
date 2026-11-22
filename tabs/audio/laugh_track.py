@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import proc as _proc
-from core.hardware import detect_gpu, get_binary_path
+from core.hardware import detect_gpu
 from core.i18n import t
 from core.ops import laugh_track as lt
 from core.queue_manager import Hooks
@@ -613,9 +613,7 @@ class LaughTrackRemoverTab(BaseTab):
         af = self._build_af()
         if not af:
             return
-        cmd = lt.preview_cmd(
-            get_binary_path("ffplay"), self.file_path, af, t("laugh_track.ffmpeg_preview")
-        )
+        cmd = lt.preview_cmd(self.file_path, af, t("laugh_track.ffmpeg_preview"))
         self.preview_proc = _proc.spawn(cmd)
 
     def _render(self):

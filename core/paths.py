@@ -33,12 +33,12 @@ import os
 import sys
 import tempfile
 
+from core import APP_NAME, APP_SLUG
+
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-#: Folder name on Windows / macOS.
-APP_DIR_NAME = "FFmpeg Workbench"
-#: Folder name on Linux (XDG convention: lowercase, no spaces).
-APP_SLUG = "ffmpeg-workbench"
+#: Folder name on Windows / macOS (on Linux, APP_SLUG: lowercase, no spaces, as XDG expects).
+APP_DIR_NAME = APP_NAME
 
 
 _IS_WIN = sys.platform.startswith("win")

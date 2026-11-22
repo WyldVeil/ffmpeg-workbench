@@ -236,6 +236,11 @@ def get_audio_bitrate_kbps(file_path: str) -> float:
     return 0.0
 
 
+def binaries_dir() -> str:
+    """The folder FFmpeg is run from (bundled or the user's own copy)."""
+    return os.path.dirname(get_binary_path("ffmpeg"))
+
+
 def launch_preview(file_path: str, start_time: float = 0) -> _proc.Popen[bytes] | None:
     """Open *file_path* in ffplay at *start_time* (tracked, killable)."""
     if not file_path or not os.path.exists(file_path):

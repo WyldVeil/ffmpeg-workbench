@@ -16,7 +16,6 @@ video-with-audio) file and re-save it with full control over:
   • ReplayGain tagging
 """
 
-import json
 import logging
 import os
 import tkinter as tk
@@ -25,9 +24,7 @@ from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core import proc as _proc
 from core import tasks
-from core.hardware import get_binary_path
 from core.i18n import t
 from core.ops import audio_export as ae
 from core.queue_manager import Hooks
@@ -70,7 +67,6 @@ class AudioExporterTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.file_path = ""
-        self._src_info = {}  # ffprobe metadata cache
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────────
@@ -726,41 +722,17 @@ class AudioExporterTab(BaseTab):
             self.out_var.set(p)
 
     def _probe_source(self, path):
-        """Run ffprobe in background to populate source info."""
+        """Read the source in the background and show what it is."""
 
         def _do():
-            ffprobe = get_binary_path("ffprobe.exe")
-            cmd = [
-                ffprobe,
-                "-v",
-                "quiet",
-                "-print_format",
-                "json",
-                "-show_format",
-                "-show_streams",
-                path,
-            ]
-            try:
-                r = _proc.run(cmd, timeout=60)
-                data = json.loads(r.stdout)
-            except Exception:
-                logger.debug("_do: best-effort step failed", exc_info=True)
+            info = ff.try_probe(path)
+            if info is None:
                 self.after(
                     0,
                     lambda: self._info_lbl.config(text="  Could not read file info", fg=CLR["red"]),
                 )
                 return
-
-            self._src_info = data
-            fmt_info = data.get("format", {})
-            # Find first audio stream
-            audio_stream = None
-            for s in data.get("streams", []):
-                if s.get("codec_type") == "audio":
-                    audio_stream = s
-                    break
-
-            if not audio_stream:
+            if not info.audio_streams:
                 self.after(
                     0,
                     lambda: self._info_lbl.config(
@@ -768,52 +740,22 @@ class AudioExporterTab(BaseTab):
                     ),
                 )
                 return
-
-            codec = audio_stream.get("codec_long_name", audio_stream.get("codec_name", "?"))
-            sr = audio_stream.get("sample_rate", "?")
-            ch = audio_stream.get("channels", "?")
-            ch_layout = audio_stream.get("channel_layout", "")
-            bits = audio_stream.get("bits_per_raw_sample", audio_stream.get("bits_per_sample", ""))
-            duration = fmt_info.get("duration", "?")
-            bitrate = fmt_info.get("bit_rate", "?")
-            size = fmt_info.get("size", "?")
-
-            try:
-                dur_f = float(duration)
-                dur_str = (
-                    f"{int(dur_f // 3600):02d}:{int((dur_f % 3600) // 60):02d}:{dur_f % 60:05.2f}"
-                )
-            except (ValueError, TypeError):
-                dur_str = str(duration)
-
-            try:
-                br_str = f"{int(bitrate) // 1000}k"
-            except (ValueError, TypeError):
-                br_str = str(bitrate)
-
-            try:
-                sz_mb = int(size) / (1024 * 1024)
-                sz_str = f"{sz_mb:.2f} MB"
-            except (ValueError, TypeError):
-                sz_str = str(size)
-
-            bits_str = f"  |  Depth: {bits}-bit" if bits else ""
-            ch_str = f"{ch}ch" + (f" ({ch_layout})" if ch_layout else "")
-
-            info = (
-                f"  Codec: {codec}  |  {sr} Hz  |  {ch_str}{bits_str}\n"
-                f"  Duration: {dur_str}  |  Bitrate: {br_str}  |  "
-                f"Size: {sz_str}"
+            a = info.audio_streams[0]
+            bits = a.bits_per_raw_sample or a.raw.get("bits_per_sample", 0)
+            ch = f"{a.channels}ch" + (f" ({a.channel_layout})" if a.channel_layout else "")
+            text = (
+                f"  Codec: {a.codec_long or a.codec or '?'}  |  {a.sample_rate or '?'} Hz  |  {ch}"
+                + (f"  |  Depth: {bits}-bit" if bits else "")
+                + f"\n  Duration: {ff.format_time(info.duration)}  |  "
+                f"Bitrate: {info.bit_rate // 1000}k  |  Size: {info.size / (1024 * 1024):.2f} MB"
             )
-
-            # Auto-populate metadata fields from source tags
-            tags = {**fmt_info.get("tags", {}), **audio_stream.get("tags", {})}
+            # fill empty metadata fields from the source's tags
+            tags = {**info.tags, **a.tags}
             for key, var in self.meta_vars.items():
                 val = tags.get(key, tags.get(key.upper(), ""))
                 if val and not var.get():
                     self.after(0, lambda v=var, x=val: v.set(str(x)))
-
-            self.after(0, lambda: self._info_lbl.config(text=info, fg=CLR["accent"]))
+            self.after(0, lambda: self._info_lbl.config(text=text, fg=CLR["accent"]))
             self.after(
                 0,
                 lambda: self.log_tagged(self.console, f"Loaded: {os.path.basename(path)}", "info"),
