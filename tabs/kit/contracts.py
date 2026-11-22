@@ -66,6 +66,13 @@ class AcceptsFiles(Protocol):
 
 
 @runtime_checkable
+class TakesSubtitles(Protocol):
+    """Can be handed a video and a subtitle file for it (Auto Subtitles -> Hard Subber)."""
+
+    def take_subtitles(self, video: str, subtitles: str) -> None: ...
+
+
+@runtime_checkable
 class Previewing(Protocol):
     """Runs a preview player that must stop when the page is left."""
 

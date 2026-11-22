@@ -12,88 +12,16 @@ Produces a high-quality MIDI re-render of any song.
 
 import os
 import tkinter as tk
-from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import midi, tasks
 from core.i18n import t
-from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
-from core.queue_manager import TaskContext
+from core.ops import midify as md
+from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
 from tabs.kit import dialogs
-
-
-@dataclass(frozen=True)
-class _Settings:
-    threshold: float
-    min_dur: float
-    gain: float
-    rate: int
-    program: int
-
-
-@dataclass(frozen=True)
-class _Midify:
-    """Find the notes (unless it's MIDI already), play them with FluidSynth, encode."""
-
-    src: str
-    out: str
-    is_midi: bool
-    save_midi: bool
-    fluidsynth: str
-    soundfont: str
-    length: float | None
-    settings: _Settings
-
-    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
-        job = ctx.tempdir()
-        midi_path = self.src if self.is_midi else self._transcribe(ctx, job)
-        ctx.log(f"Stage 2/3: playing it with {os.path.basename(self.soundfont)}…")
-        wav = os.path.join(job, "rendered.wav")
-        s = self.settings
-        ctx.span(0.5, 0.8).run(
-            midi.render_cmd(
-                self.fluidsynth, self.soundfont, midi_path, wav, rate=s.rate, gain=s.gain
-            )
-        )
-        if not os.path.isfile(wav) or os.path.getsize(wav) < 1000:
-            raise RuntimeError("FluidSynth produced no audio.")
-        ctx.log("Stage 3/3: encoding…")
-        cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", wav]
-        if self.length:  # FluidSynth adds a few seconds of release tail
-            cmd += [
-                "-t",
-                f"{self.length + 1.0:.3f}",
-                "-af",
-                f"afade=t=out:st={self.length:.3f}:d=1",
-            ]
-        mp3 = self.out.lower().endswith(".mp3")
-        cmd += ["-c:a", "libmp3lame", "-b:a", "256k"] if mp3 else audio_encoder_args(self.out)
-        ctx.span(0.8, 1.0).run([*cmd, ctx.output(self.out)], duration=self.length)
-        return 0
-
-    def _transcribe(self, ctx: TaskContext, job: str) -> str:
-        """Stage 1: the notes, as a MIDI file in *job* (and next to the output when asked)."""
-        ctx.log("Stage 1/3: finding the notes…")
-        with open(os.path.join(job, "graph.txt"), "w", encoding="utf-8") as fh:
-            fh.write(midi.analysis_graph())
-        ctx.span(0.0, 0.5).run(
-            midi.analysis_cmd(self.src, "graph.txt"), duration=self.length, cwd=job
-        )
-        s = self.settings
-        notes = midi.transcribe(midi.read_levels(job), threshold=s.threshold, min_dur=s.min_dur)
-        if not notes:
-            raise RuntimeError("No notes were found - try a lower note threshold.")
-        midi_path = os.path.join(job, "transcription.mid")
-        midi.write_midi(midi_path, notes, program=s.program)
-        ctx.log(f"  {len(notes)} notes")
-        if self.save_midi:
-            final_mid = os.path.splitext(self.out)[0] + ".mid"
-            midi.write_midi(ctx.output(final_mid), notes, program=s.program)
-            ctx.log(f"  MIDI saved: {os.path.basename(final_mid)}")
-        return midi_path
 
 
 class MIDIfierTab(BaseTab):
@@ -502,7 +430,7 @@ class MIDIfierTab(BaseTab):
         fs_exe, sf2 = player
         length = info.duration if info else None
 
-        job = _Midify(
+        job = md.MidifyJob(
             src,
             out,
             is_midi,
@@ -510,7 +438,7 @@ class MIDIfierTab(BaseTab):
             fs_exe,
             sf2,
             length,
-            _Settings(threshold, min_dur, gain, rate, program),
+            md.Settings(threshold, min_dur, gain, rate, program),
         )
 
         self.log_tagged(self.console, t("midifier.starting"), "info")

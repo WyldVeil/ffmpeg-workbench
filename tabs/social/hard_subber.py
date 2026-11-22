@@ -119,6 +119,11 @@ class HardSubberTab(BaseTab):
         self._job = None
         self._build_ui()
 
+    def take_subtitles(self, video: str, subtitles: str) -> None:
+        """Burn *subtitles* into *video* (handed over by Auto Subtitles)."""
+        self.src_var.set(video)
+        self.sub_row.set(subtitles)
+
     def _build_ui(self):
         body, r0, st = self._build_header()
         out_lf = self._build_output(body, r0, st)

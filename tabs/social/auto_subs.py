@@ -22,11 +22,13 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import tasks, whisper
 from core.i18n import t
+from core.ops import subtitles as subs_ops
 from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from core.tools import ToolId
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.contracts import TakesSubtitles
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
 FORMATS = {
@@ -34,13 +36,6 @@ FORMATS = {
     "vtt": "WebVTT (.vtt) - web players",
     "both": "Both .srt and .vtt",
     "txt": "Plain transcript (.txt)",
-}
-SOFT_SUB_CODEC = {
-    "mp4": "mov_text",
-    "m4v": "mov_text",
-    "mov": "mov_text",
-    "mkv": "srt",
-    "webm": "webvtt",
 }
 
 
@@ -443,12 +438,9 @@ class AutoSubsTab(BaseTab):
         subs, src = self._last_subs, self.src_row.path
         if not subs or not os.path.isfile(subs):
             return
-        from tabs.social.hard_subber import HardSubberTab
-
         page = self.goto_tool(ToolId.HARD_SUBBER)
-        if isinstance(page, HardSubberTab):
-            page.src_var.set(src)
-            page.sub_row.set(subs)
+        if isinstance(page, TakesSubtitles):
+            page.take_subtitles(src, subs)
 
     def _mux(self):
         subs, src = self._last_subs, self.src_row.path
@@ -456,9 +448,7 @@ class AutoSubsTab(BaseTab):
         if info is None or not subs:
             return
         container = common.container_of(src)
-        codec = SOFT_SUB_CODEC.get(container)
-        ext = os.path.splitext(src)[1] if codec else ".mkv"
-        codec = codec or "srt"
+        ext = os.path.splitext(src)[1] if container in subs_ops.SOFT_SUB_CODEC else ".mkv"
         out = self.confirm_output(
             self.suggest_output(src, "subtitled", ext), [src, subs], default_ext=ext
         )
@@ -466,27 +456,7 @@ class AutoSubsTab(BaseTab):
             return
         lang = _iso639_2(getattr(self, "_last_lang", "") or "")
         n = len([st for st in info.streams if st.type == "subtitle"])  # new track goes after these
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-i",
-            src,
-            "-i",
-            subs,
-            "-map",
-            "0",
-            "-map",
-            "1:0",
-            "-c",
-            "copy",
-            f"-c:s:{n}",
-            codec,
-            f"-metadata:s:s:{n}",
-            f"language={lang}",
-            f"-disposition:s:{n}",
-            "default",
-            out,
-        ]
+        cmd = subs_ops.add_track_cmd(src, subs, out, lang, after=n)
         self.run_ffmpeg(
             cmd,
             self.console,
