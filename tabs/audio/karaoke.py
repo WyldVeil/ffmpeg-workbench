@@ -12,16 +12,15 @@ Turns any music video into a singalong karaoke track in three steps:
        • ass= filter burns the karaoke subtitles at the bottom of the frame
 """
 
+import os
+import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
-from core import dialogs
-import threading
-import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from core import dialogs
 from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -65,7 +64,7 @@ def _ass_time(seconds: float) -> str:
     s   = (total_cs // 100) % 60
     m   = (total_cs // 6000) % 60
     h   = total_cs // 360000
-    return "{:d}:{:02d}:{:02d}.{:02d}".format(h, m, s, cs)
+    return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
 
 
 def _build_ass(segments, path, font_size, primary, secondary,
@@ -84,8 +83,8 @@ def _build_ass(segments, path, font_size, primary, secondary,
         "[Script Info]\n"
         "ScriptType: v4.00+\n"
         "Collisions: Normal\n"
-        "PlayResX: {rx}\n"
-        "PlayResY: {ry}\n"
+        f"PlayResX: {res_x}\n"
+        f"PlayResY: {res_y}\n"
         "Timer: 100.0\n"
         "\n"
         "[V4+ Styles]\n"
@@ -94,13 +93,13 @@ def _build_ass(segments, path, font_size, primary, secondary,
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
         # Bold=-1 (yes), Alignment=2 (bottom-centre), Outline=3, Shadow=1
-        "Style: Karaoke,Montserrat,{fs},{pri},{sec},&H00000000,&H80000000,"
+        f"Style: Karaoke,Montserrat,{font_size},{primary},{secondary},&H00000000,&H80000000,"
         "-1,0,0,0,100,100,0,0,1,3,1,2,10,10,40,1\n"
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, "
         "MarginL, MarginR, MarginV, Effect, Text\n"
-    ).format(rx=res_x, ry=res_y, fs=font_size, pri=primary, sec=secondary)
+    )
 
     dialogue_lines = []
 
@@ -116,8 +115,7 @@ def _build_ass(segments, path, font_size, primary, secondary,
             t0, t1 = seg["start"], seg["end"]
             dur_cs = max(1, int(round((t1 - t0) * 100)))
             dialogue_lines.append(
-                "Dialogue: 0,{s},{e},Karaoke,,0,0,0,,{{\\kf{d}}}{t}\n".format(
-                    s=_ass_time(t0), e=_ass_time(t1), d=dur_cs, t=text)
+                f"Dialogue: 0,{_ass_time(t0)},{_ass_time(t1)},Karaoke,,0,0,0,,{{\\kf{dur_cs}}}{text}\n"
             )
             continue
 
@@ -137,19 +135,15 @@ def _build_ass(segments, path, font_size, primary, secondary,
             # sync (no extra space - the word already carries its own).
             gap_cs = max(0, int(round((w_start - prev_end) * 100)))
             if gap_cs > 0:
-                parts.append("{{\\kf{}}}".format(gap_cs))
+                parts.append(f"{{\\kf{gap_cs}}}")
 
             dur_cs = max(1, int(round((w_end - w_start) * 100)))
-            parts.append("{{\\kf{}}}{}".format(dur_cs, word_text))
+            parts.append(f"{{\\kf{dur_cs}}}{word_text}")
             prev_end = w_end
 
         text_body = "".join(parts)
         dialogue_lines.append(
-            "Dialogue: 0,{s},{e},Karaoke,,0,0,0,,{t}\n".format(
-                s=_ass_time(seg_start),
-                e=_ass_time(seg_end),
-                t=text_body,
-            )
+            f"Dialogue: 0,{_ass_time(seg_start)},{_ass_time(seg_end)},Karaoke,,0,0,0,,{text_body}\n"
         )
 
     with open(path, "w", encoding="utf-8") as fh:
@@ -363,7 +357,7 @@ class KaraokeTab(BaseTab):
                                           f"first use.", fg=CLR["fgdim"])
 
     def _install_whisper(self):
-        from core import whisper, ui
+        from core import ui, whisper
         key = MODELS.get(self._model_var.get(), "base")
         self._log(f"Downloading {whisper.MODELS[key].label}…")
         ui.run_in_thread(whisper.download_model, key, on_done=lambda _p: (self._log("✅  Model ready."),
@@ -449,6 +443,7 @@ class KaraokeTab(BaseTab):
     # ─── Background worker (queue job) ───────────────────────────────────────
     def _worker(self, src, out, cfg, ctx):
         import os
+
         from core import ass as ass_mod
         from core import ffmpeg as ff
         from core import whisper

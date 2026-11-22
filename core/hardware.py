@@ -27,7 +27,6 @@ import platform
 import shutil
 import subprocess
 import sys
-from typing import Optional
 
 # ── Platform constants ────────────────────────────────────────────────────────
 _IS_WIN = platform.system() == "Windows"
@@ -45,7 +44,7 @@ _EXE = ".exe" if _IS_WIN else ""
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Global cache to prevent redundant, slow hardware polling
-_CACHED_GPU: Optional[str] = None
+_CACHED_GPU: str | None = None
 
 
 # ── Binary path resolution ────────────────────────────────────────────────────
@@ -64,7 +63,7 @@ def platform_tag() -> str:
     return f"{osname}-{arch}"
 
 
-def user_tools_dir() -> Optional[str]:
+def user_tools_dir() -> str | None:
     """Per-user folder for tools the app downloads or updates itself."""
     try:
         from core.paths import data_dir
@@ -111,7 +110,7 @@ def _is_executable(path: str) -> bool:
     return os.path.isfile(path) and (_IS_WIN or os.access(path, os.X_OK))
 
 
-def _check_settings_override(name: str) -> Optional[str]:
+def _check_settings_override(name: str) -> str | None:
     """Return a user-chosen binary from settings, or None.
 
     ``ffmpeg_path_override`` may point at the ffmpeg executable itself or at
@@ -140,7 +139,7 @@ def _binary_source_pref() -> str:
     return pref if pref in ("auto", "bundled", "system") else "auto"
 
 
-def find_binary(name: str) -> Optional[str]:
+def find_binary(name: str) -> str | None:
     """Locate *name* (``"ffmpeg"``, ``"ffprobe"``, ``"yt-dlp"`` …).
 
     Priority: explicit settings override → bundled ``bin/`` folders →
@@ -230,7 +229,7 @@ def get_audio_bitrate_kbps(file_path: str) -> float:
     return 0.0
 
 
-def launch_preview(file_path: str, start_time: float = 0) -> Optional[subprocess.Popen]:
+def launch_preview(file_path: str, start_time: float = 0) -> subprocess.Popen | None:
     """Open *file_path* in ffplay at *start_time* (tracked, killable)."""
     if not file_path or not os.path.exists(file_path):
         return None

@@ -118,6 +118,7 @@ def test_hlg_and_untagged(ui, hlg, media, outdir):
 @pytest.mark.ffmpeg
 def test_cli_uses_the_same_conversion(capsys, hdr10, outdir):
     import json as _json
+
     from core import cli
     assert cli.main(["hdr-to-sdr", hdr10, "--gpu", "off", "-o", str(outdir / "c.mkv"), "--json"]) == 0
     res = _json.loads(capsys.readouterr().out.strip().splitlines()[-1])

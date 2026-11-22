@@ -14,13 +14,12 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, remux
 from core import ffmpeg as ff
-from core import remux
 from core.i18n import t
+from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
-from core.scaling import px
 
 CONTAINERS = {"mkv": "MKV - holds everything", "mp4": "MP4 - plays everywhere", "mov": "MOV - Apple / editing",
               "webm": "WebM - web"}

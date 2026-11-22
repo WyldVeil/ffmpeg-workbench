@@ -13,15 +13,15 @@ import os
 import shlex
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk, scrolledtext
+from tkinter import messagebox, scrolledtext, ttk
 
 from core import dialogs
 from core import ffmpeg as ff
 from core import filters as fl
-from core.paths import config_dir
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core.i18n import t
+from core.paths import config_dir
 from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 #: where presets were kept before 2.0 (inside the program folder - read once, never written)
 LEGACY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "encode_presets.json")

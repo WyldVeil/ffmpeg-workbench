@@ -5,27 +5,37 @@ System information, FFmpeg management, app preferences, skins, and
 developer tools.  All settings I/O is delegated to core.settings -
 no duplicated load/save logic.
 """
-import tkinter as tk
-from tkinter import messagebox, ttk, scrolledtext
-from core import dialogs
-import subprocess
-import threading
+import json
 import os
 import platform
-import json
+import subprocess
+import threading
+import tkinter as tk
+from tkinter import messagebox, scrolledtext, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.skins import (SKINS, save_skin_name, apply_skin, load_skin_name,
-                        set_star_speed, set_star_count, get_skin, save_custom_color, _CUSTOM_DEFAULTS)
+from core import dialogs
 from core.hardware import (
-    get_binary_path, get_local_version,
-    detect_gpu, CREATE_NO_WINDOW,
+    CREATE_NO_WINDOW,
+    detect_gpu,
+    get_binary_path,
+    get_local_version,
     open_in_explorer,
 )
-from core.settings import load_settings, update
-from core.i18n import SUPPORTED_LANGUAGES, LANGUAGE_NAMES, get_language, set_language
-from core.i18n import t
+from core.i18n import LANGUAGE_NAMES, SUPPORTED_LANGUAGES, get_language, set_language, t
 from core.scaling import px, scale_drawing
+from core.settings import load_settings, update
+from core.skins import (
+    _CUSTOM_DEFAULTS,
+    SKINS,
+    apply_skin,
+    get_skin,
+    load_skin_name,
+    save_custom_color,
+    save_skin_name,
+    set_star_count,
+    set_star_speed,
+)
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 
 class AdvancedSettingsTab(BaseTab):
@@ -702,7 +712,7 @@ class AdvancedSettingsTab(BaseTab):
         grid_host.bind("<Configure>", _on_resize)
 
         # Theme cards (exclude "Custom" - it lives in the Custom tab)
-        theme_names = [n for n in SKINS.keys() if n != "Custom"]
+        theme_names = [n for n in SKINS if n != "Custom"]
         COLS = 3
         self._skin_previews = {}
 
@@ -1033,7 +1043,7 @@ class AdvancedSettingsTab(BaseTab):
                 app._btn_refs,
             )
             self._skin_status.config(
-                text="✅  '{}' applied live!".format(name),
+                text=f"✅  '{name}' applied live!",
                 fg=CLR["accent"])
         except Exception:
             self._skin_status.config(
@@ -1181,7 +1191,7 @@ class AdvancedSettingsTab(BaseTab):
         def sep(title=""):
             lines.append("")
             if title:
-                lines.append("──── {} ".format(title) + "─" * max(0, 46 - len(title)))
+                lines.append(f"──── {title} " + "─" * max(0, 46 - len(title)))
             else:
                 lines.append("─" * 52)
 
@@ -1198,10 +1208,9 @@ class AdvancedSettingsTab(BaseTab):
 
         # ── OS ────────────────────────────────────────────────────────────
         sep("OPERATING SYSTEM")
-        lines.append("  Platform:     {} {}".format(
-            platform.system(), platform.release()))
-        lines.append("  Version:      {}".format(platform.version()[:70]))
-        lines.append("  Architecture: {}".format(platform.machine()))
+        lines.append(f"  Platform:     {platform.system()} {platform.release()}")
+        lines.append(f"  Version:      {platform.version()[:70]}")
+        lines.append(f"  Architecture: {platform.machine()}")
         if is_win:
             try:
                 reg = ps(
@@ -1214,17 +1223,15 @@ class AdvancedSettingsTab(BaseTab):
                 build_num = int(rv.get("CurrentBuildNumber", 0) or 0)
                 if build_num >= 22000 and "Windows 10" in product:
                     product = product.replace("Windows 10", "Windows 11")
-                lines.append("  Edition:      {} {}".format(
-                    product, disp_ver).strip())
-                lines.append("  Build:        {}  ({})".format(
-                    build_num, disp_ver))
+                lines.append(f"  Edition:      {product} {disp_ver}".strip())
+                lines.append(f"  Build:        {build_num}  ({disp_ver})")
                 uptime_s = ps(
                     "(Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime"
                     " | Select-Object -ExpandProperty TotalSeconds")
                 if uptime_s:
                     secs = int(float(uptime_s))
                     h, m = divmod(secs // 60, 60)
-                    lines.append("  Uptime:       {}h {}m".format(h, m))
+                    lines.append(f"  Uptime:       {h}h {m}m")
             except Exception:
                 pass
 
@@ -1236,26 +1243,24 @@ class AdvancedSettingsTab(BaseTab):
                 cores   = ps("(Get-CimInstance Win32_Processor).NumberOfCores")
                 threads = ps("(Get-CimInstance Win32_Processor).NumberOfLogicalProcessors")
                 mhz     = ps("(Get-CimInstance Win32_Processor).MaxClockSpeed")
-                lines.append("  Model:        {}".format(name))
-                lines.append("  Cores:        {}  /  Threads: {}".format(
-                    cores, threads))
+                lines.append(f"  Model:        {name}")
+                lines.append(f"  Cores:        {cores}  /  Threads: {threads}")
                 if mhz:
                     try:
-                        lines.append("  Base clock:   {:.2f} GHz  ({} MHz)".format(
-                            float(mhz) / 1000, mhz))
+                        lines.append(f"  Base clock:   {float(mhz) / 1000:.2f} GHz  ({mhz} MHz)")
                     except ValueError:
-                        lines.append("  Base clock:   {} MHz".format(mhz))
+                        lines.append(f"  Base clock:   {mhz} MHz")
                 load = ps("(Get-CimInstance Win32_Processor).LoadPercentage")
                 if load:
-                    lines.append("  Current load: {}%".format(load))
+                    lines.append(f"  Current load: {load}%")
             else:
                 r = subprocess.run(["lscpu"], capture_output=True, text=True)
                 for line in r.stdout.splitlines():
                     for key in ("Model name", "CPU(s)", "Thread(s)", "MHz"):
                         if line.strip().startswith(key):
-                            lines.append("  {}".format(line.strip()))
+                            lines.append(f"  {line.strip()}")
         except Exception as exc:
-            lines.append("  (CPU error: {})".format(exc))
+            lines.append(f"  (CPU error: {exc})")
 
         # ── RAM ───────────────────────────────────────────────────────────
         sep("MEMORY (RAM)")
@@ -1267,17 +1272,16 @@ class AdvancedSettingsTab(BaseTab):
                 free_kb  = int(free)
                 used_kb  = total_kb - free_kb
                 pct      = used_kb / total_kb * 100 if total_kb else 0
-                lines.append("  Total:        {:.1f} GB".format(total_kb / 1024 / 1024))
-                lines.append("  Used:         {:.1f} GB  ({:.0f}%)".format(
-                    used_kb / 1024 / 1024, pct))
-                lines.append("  Free:         {:.1f} GB".format(free_kb / 1024 / 1024))
+                lines.append(f"  Total:        {total_kb / 1024 / 1024:.1f} GB")
+                lines.append(f"  Used:         {used_kb / 1024 / 1024:.1f} GB  ({pct:.0f}%)")
+                lines.append(f"  Free:         {free_kb / 1024 / 1024:.1f} GB")
                 try:
                     sticks = ps(
                         'Get-CimInstance Win32_PhysicalMemory | '
                         'ForEach-Object { "$($_.Capacity/1GB)GB $($_.Speed)MHz $($_.Manufacturer)" }')
                     if sticks:
                         for stick in sticks.splitlines()[:4]:
-                            lines.append("  Stick:        {}".format(stick.strip()))
+                            lines.append(f"  Stick:        {stick.strip()}")
                 except Exception:
                     pass
             else:
@@ -1285,10 +1289,9 @@ class AdvancedSettingsTab(BaseTab):
                 for line in r.stdout.splitlines():
                     if line.startswith("Mem"):
                         p = line.split()
-                        lines.append("  Total: {}  Used: {}  Free: {}".format(
-                            p[1], p[2], p[3]))
+                        lines.append(f"  Total: {p[1]}  Used: {p[2]}  Free: {p[3]}")
         except Exception as exc:
-            lines.append("  (RAM error: {})".format(exc))
+            lines.append(f"  (RAM error: {exc})")
 
         # ── Disk ──────────────────────────────────────────────────────────
         sep("DISK / STORAGE")
@@ -1301,8 +1304,7 @@ class AdvancedSettingsTab(BaseTab):
                     for d in drives_raw.splitlines():
                         parts = d.strip().split("|")
                         if len(parts) >= 2:
-                            lines.append("  Drive:        {}  ({})".format(
-                                parts[0], parts[1]))
+                            lines.append(f"  Drive:        {parts[0]}  ({parts[1]})")
                 vols = ps(
                     'Get-PSDrive -PSProvider FileSystem | '
                     'Where-Object { $_.Used -ne $null } | '
@@ -1312,21 +1314,20 @@ class AdvancedSettingsTab(BaseTab):
                     for v in vols.splitlines():
                         p = v.strip().split("|")
                         if len(p) >= 4:
-                            lines.append("  {:<5} {:<14} {:<14} {}".format(
-                                p[0], p[1], p[2], p[3]))
+                            lines.append(f"  {p[0]:<5} {p[1]:<14} {p[2]:<14} {p[3]}")
             else:
                 r = subprocess.run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs"],
                            capture_output=True, text=True)
                 for line in r.stdout.splitlines()[1:6]:
-                    lines.append("  {}".format(line))
+                    lines.append(f"  {line}")
         except Exception as exc:
-            lines.append("  (Disk error: {})".format(exc))
+            lines.append(f"  (Disk error: {exc})")
 
         # ── GPU ───────────────────────────────────────────────────────────
         sep("GRAPHICS (GPU)")
         try:
             hw_accel = detect_gpu().upper()
-            lines.append("  HW accel:     {}".format(hw_accel))
+            lines.append(f"  HW accel:     {hw_accel}")
             if is_win:
                 gpus = ps(
                     'Get-CimInstance Win32_VideoController | '
@@ -1335,9 +1336,9 @@ class AdvancedSettingsTab(BaseTab):
                     for g in gpus.splitlines():
                         p = g.strip().split("|")
                         if p[0]:
-                            lines.append("  GPU:          {}".format(p[0]))
+                            lines.append(f"  GPU:          {p[0]}")
                             if len(p) > 1 and p[1]:
-                                lines.append("  Driver:       {}".format(p[1]))
+                                lines.append(f"  Driver:       {p[1]}")
 
                 vram_mb = None
                 if hw_accel == "NVIDIA":
@@ -1365,12 +1366,11 @@ class AdvancedSettingsTab(BaseTab):
 
                 if vram_mb and vram_mb > 0:
                     if vram_mb >= 1024:
-                        lines.append("  VRAM:         {:.0f} GB  ({} MB)".format(
-                            vram_mb / 1024, vram_mb))
+                        lines.append(f"  VRAM:         {vram_mb / 1024:.0f} GB  ({vram_mb} MB)")
                     else:
-                        lines.append("  VRAM:         {} MB".format(vram_mb))
+                        lines.append(f"  VRAM:         {vram_mb} MB")
         except Exception as exc:
-            lines.append("  (GPU error: {})".format(exc))
+            lines.append(f"  (GPU error: {exc})")
 
         # ── Network ───────────────────────────────────────────────────────
         sep("NETWORK")
@@ -1388,26 +1388,25 @@ class AdvancedSettingsTab(BaseTab):
             else:
                 lines.append("  Proxy:        none set in the app (system settings apply)")
         except Exception as exc:
-            lines.append("  (Network settings unavailable: {})".format(exc))
+            lines.append(f"  (Network settings unavailable: {exc})")
 
         # ── Python & App ──────────────────────────────────────────────────
         sep("PYTHON & APPLICATION")
         import sys
+
         from core import APP_VERSION
-        lines.append("  Python:       {}  ({})".format(
-            platform.python_version(), sys.executable[:60]))
-        lines.append("  tkinter:      {}".format(tk.TkVersion))
-        lines.append("  App version:  {}".format(APP_VERSION))
-        lines.append("  App root:     {}".format(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        lines.append(f"  Python:       {platform.python_version()}  ({sys.executable[:60]})")
+        lines.append(f"  tkinter:      {tk.TkVersion}")
+        lines.append(f"  App version:  {APP_VERSION}")
+        lines.append(f"  App root:     {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
 
         # ── FFmpeg ────────────────────────────────────────────────────────
         sep("FFMPEG")
         ffmpeg   = get_binary_path("ffmpeg")
         local_v  = get_local_version()
-        lines.append("  Binary:       {}".format(ffmpeg))
-        lines.append("  Exists:       {}".format(os.path.exists(ffmpeg)))
-        lines.append("  Version:      {}".format(local_v))
+        lines.append(f"  Binary:       {ffmpeg}")
+        lines.append(f"  Exists:       {os.path.exists(ffmpeg)}")
+        lines.append(f"  Version:      {local_v}")
         try:
             r = subprocess.run([ffmpeg, "-codecs"],
                        capture_output=True, text=True,
@@ -1415,9 +1414,9 @@ class AdvancedSettingsTab(BaseTab):
             hw = [l.strip() for l in r.stdout.split("\n")
                   if any(x in l for x in
                          ["nvenc", "amf", "qsv", "videotoolbox"])]
-            lines.append("  HW codecs:    {} found".format(len(hw)))
+            lines.append(f"  HW codecs:    {len(hw)} found")
             for h in hw[:8]:
-                lines.append("    {}".format(h[:70]))
+                lines.append(f"    {h[:70]}")
         except Exception:
             lines.append("  Could not query codecs.")
 
@@ -1475,7 +1474,7 @@ class AdvancedSettingsTab(BaseTab):
         cmd_str = self.dev_cmd_var.get().strip()
         if not cmd_str:
             return
-        self.dev_console.insert(tk.END, "$ {}\n".format(cmd_str))
+        self.dev_console.insert(tk.END, f"$ {cmd_str}\n")
         self.dev_console.see(tk.END)
 
         def _work():
@@ -1494,7 +1493,7 @@ class AdvancedSettingsTab(BaseTab):
             proc.stdout.close()
             proc.wait()
             self.after(0, lambda: self.dev_console.insert(
-                tk.END, "\n[Exited {}]\n".format(proc.returncode)))
+                tk.END, f"\n[Exited {proc.returncode}]\n"))
 
         threading.Thread(target=_work, daemon=True).start()
 

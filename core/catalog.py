@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 AIO = "All-in-One Builder"
 
@@ -439,5 +438,5 @@ def suggest(info, limit: int = 8) -> list:
     return out[:limit]
 
 
-def goal(key: str) -> Optional[Goal]:
+def goal(key: str) -> Goal | None:
     return next((g for g in GOALS if g.key == key), None)

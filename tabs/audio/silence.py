@@ -47,7 +47,8 @@ def keep_zones(silences, duration: float, padding: float, fps: float = 0.0, min_
     if duration - pos > min_keep:
         zones.append((pos, duration))
     if fps:
-        snap = lambda x: round(x * fps) / fps  # noqa: E731
+        def snap(x):
+            return round(x * fps) / fps
         zones = [(snap(a), snap(b)) for a, b in zones if snap(b) > snap(a)]
     merged = []
     for a, b in zones:

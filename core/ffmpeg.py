@@ -28,8 +28,9 @@ import sys
 import threading
 import time
 from collections import OrderedDict, deque
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Optional, Sequence
+from typing import Any
 
 from core.hardware import CREATE_NO_WINDOW, get_binary_path
 from core.procenv import child_env
@@ -235,12 +236,12 @@ class MediaInfo:
         return [s for s in self.streams if s.type == "subtitle"]
 
     @property
-    def video(self) -> Optional[Stream]:
+    def video(self) -> Stream | None:
         vs = self.video_streams
         return vs[0] if vs else None
 
     @property
-    def audio(self) -> Optional[Stream]:
+    def audio(self) -> Stream | None:
         a = self.audio_streams
         return a[0] if a else None
 
@@ -372,7 +373,7 @@ def parse_probe_json(path: str, data: dict) -> MediaInfo:
     )
 
 
-_PROBE_CACHE: "OrderedDict[tuple, MediaInfo]" = OrderedDict()
+_PROBE_CACHE: OrderedDict[tuple, MediaInfo] = OrderedDict()
 _PROBE_LOCK = threading.Lock()
 _PROBE_CACHE_MAX = 256
 
@@ -428,7 +429,7 @@ def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaI
     return info
 
 
-def try_probe(path: str, **kw) -> Optional[MediaInfo]:
+def try_probe(path: str, **kw) -> MediaInfo | None:
     """Like :func:`probe` but returns None instead of raising."""
     try:
         return probe(path, **kw)
@@ -445,7 +446,7 @@ def duration_of(path: str) -> float:
 #  Process management
 # ─────────────────────────────────────────────────────────────────────────────
 
-_ACTIVE: "set[subprocess.Popen]" = set()
+_ACTIVE: set[subprocess.Popen] = set()
 _ACTIVE_LOCK = threading.Lock()
 
 
@@ -533,17 +534,17 @@ def active_count() -> int:
 @dataclass
 class Progress:
     out_time: float = 0.0             # seconds of output written so far
-    fraction: Optional[float] = None  # 0..1 when the expected duration is known
-    speed: Optional[float] = None     # x realtime
-    fps: Optional[float] = None
-    frame: Optional[int] = None
-    size: Optional[int] = None        # bytes written
-    eta: Optional[float] = None       # seconds remaining
+    fraction: float | None = None  # 0..1 when the expected duration is known
+    speed: float | None = None     # x realtime
+    fps: float | None = None
+    frame: int | None = None
+    size: int | None = None        # bytes written
+    eta: float | None = None       # seconds remaining
     elapsed: float = 0.0
     done: bool = False
 
     @property
-    def percent(self) -> Optional[float]:
+    def percent(self) -> float | None:
         return None if self.fraction is None else self.fraction * 100.0
 
 
@@ -645,7 +646,7 @@ _INPUT_OPTS_WITH_VALUE = {
 }
 
 
-def guess_output_duration(cmd: Sequence[str]) -> Optional[float]:
+def guess_output_duration(cmd: Sequence[str]) -> float | None:
     """Best-effort expected duration of an FFmpeg command's output, used for
     percentage progress when the caller did not supply one."""
     args = [str(c) for c in cmd[1:]]
@@ -708,7 +709,7 @@ _PROGRESS_KEYS = {"frame", "fps", "bitrate", "total_size", "out_time_us",
                   "speed", "progress"}
 
 
-def _parse_progress_block(block: dict, duration: Optional[float],
+def _parse_progress_block(block: dict, duration: float | None,
                           started: float) -> Progress:
     p = Progress(elapsed=time.monotonic() - started)
     us = block.get("out_time_us") or block.get("out_time_ms")
@@ -737,13 +738,13 @@ def _parse_progress_block(block: dict, duration: Optional[float],
 
 
 def run(cmd: Sequence[str], *,
-        duration: Optional[float] = None,
-        on_line: Optional[Callable[[str], None]] = None,
-        on_progress: Optional[Callable[[Progress], None]] = None,
-        cancel: Optional[Callable[[], bool]] = None,
-        timeout: Optional[float] = None,
-        cwd: Optional[str] = None,
-        env: Optional[dict] = None,
+        duration: float | None = None,
+        on_line: Callable[[str], None] | None = None,
+        on_progress: Callable[[Progress], None] | None = None,
+        cancel: Callable[[], bool] | None = None,
+        timeout: float | None = None,
+        cwd: str | None = None,
+        env: dict | None = None,
         tail: int = 200) -> RunResult:
     """Run *cmd* to completion, streaming its log and progress.
 
@@ -916,7 +917,7 @@ def capture(cmd: Sequence[str], *, timeout: float = 60.0,
 
 def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
                    vf: str = "", keep_time: bool = False,
-                   timeout: float = 20.0) -> Optional[bytes]:
+                   timeout: float = 20.0) -> bytes | None:
     """Return one frame of *path* at *at* seconds as PNG bytes (or None).
 
     Input-side seeking with decoding is frame-accurate in modern FFmpeg.
@@ -949,7 +950,7 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
     return r.stdout
 
 
-_FILTERS: Optional[frozenset] = None
+_FILTERS: frozenset | None = None
 
 
 def has_filter(name: str) -> bool:
@@ -969,7 +970,7 @@ def has_filter(name: str) -> bool:
     return name in _FILTERS
 
 
-def version_of(binary: Optional[str] = None) -> str:
+def version_of(binary: str | None = None) -> str:
     """Version string of an FFmpeg-family binary (``"9.0.2"``, ``"N-12345-g…"``),
     ``"Missing"`` or ``"Unknown"``."""
     binary = binary or ffmpeg_path()

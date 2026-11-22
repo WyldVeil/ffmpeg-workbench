@@ -8,19 +8,18 @@ Advanced mode features:
   • Custom output folder + filename template ({date}, {time}, {counter} tokens)
   • Auto-stop after configurable duration (adds -t to FFmpeg)
 """
-import tkinter as tk
-from typing import Optional
-from tkinter import messagebox, ttk
-from core import dialogs
 import ctypes
 import ctypes.wintypes
 import os
 import sys
 import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from core import dialogs
 from core.i18n import t
 from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -361,7 +360,7 @@ class ScreenRecorderTab(BaseTab):
         tk.Label(aud_f, text=t("screen_recorder.source_1"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=0, column=0, sticky="e", pady=px(4))
         self.cb_audio1 = ttk.Combobox(aud_f, textvariable=self.audio_src1_var, width=28, state="readonly")
         self.cb_audio1.grid(row=0, column=1, padx=px(5), sticky="w")
-        
+
         tk.Label(aud_f, text=t("screen_recorder.source_2"), bg=CLR["bg"], fg=CLR["fg"]).grid(row=0, column=2, sticky="e", padx=px(15, 0))
         self.cb_audio2 = ttk.Combobox(aud_f, textvariable=self.audio_src2_var, width=28, state="readonly")
         self.cb_audio2.grid(row=0, column=3, padx=px(5), sticky="w")
@@ -616,7 +615,7 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Express Mode logic
     # ─────────────────────────────────────────────────────────────────────────
-    def _wayland_check(self) -> Optional[str]:
+    def _wayland_check(self) -> str | None:
         """On Wayland: the external recorder to use, '' to fall back to X11
         capture after warning, or None when the user cancelled."""
         from core import recorder

@@ -27,8 +27,8 @@ import base64
 import os
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable, Optional
 
 from core import encoders
 from core import ffmpeg as ff
@@ -56,22 +56,22 @@ class FramePreview(tk.Frame):
     """In-app still-frame viewer for a video file."""
 
     def __init__(self, parent, width: int = 480, height: int = 270,
-                 show_time: bool = True, on_click: Optional[Callable[[], None]] = None):
+                 show_time: bool = True, on_click: Callable[[], None] | None = None):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self._pw, self._ph = px(width), px(height)      # design px -> screen px
-        self._path: Optional[str] = None
+        self._path: str | None = None
         self._duration = 0.0
-        self._photo: Optional[tk.PhotoImage] = None
+        self._photo: tk.PhotoImage | None = None
         self._lock = threading.Lock()
-        self._wanted: Optional[float] = None       # newest requested time
+        self._wanted: float | None = None       # newest requested time
         self._busy = False
-        self._shown_t: Optional[float] = None
+        self._shown_t: float | None = None
         self._last_at = 0.0
         self._vf = ""                               # optional preview filter
         self._keep_time = False
         self._gen = 0                               # bumps on every load()
-        self.after_draw: Optional[Callable[[], None]] = None   # called after each new frame
+        self.after_draw: Callable[[], None] | None = None   # called after each new frame
         self.canvas = tk.Canvas(self, width=self._pw, height=self._ph, bg="#000000",
                                 highlightthickness=px(1), highlightbackground=clr["border"],
                                 cursor="hand2" if on_click else "")
@@ -87,7 +87,7 @@ class FramePreview(tk.Frame):
 
     # ── public ───────────────────────────────────────────────────────────────
 
-    def load(self, path: Optional[str], duration: Optional[float] = None,
+    def load(self, path: str | None, duration: float | None = None,
              at: float = 0.0) -> None:
         """Set the source file and show the frame at *at* seconds."""
         self._gen += 1
@@ -139,7 +139,7 @@ class FramePreview(tk.Frame):
         return self._last_at
 
     @property
-    def path(self) -> Optional[str]:
+    def path(self) -> str | None:
         return self._path
 
     # ── internals ────────────────────────────────────────────────────────────
@@ -168,11 +168,11 @@ class FramePreview(tk.Frame):
             png = ff.grab_frame_png(path or "", at, width=self._pw, height=self._ph, vf=vf, keep_time=keep)
             self._deliver(gen, at, png)
 
-    def _deliver(self, gen: int, at: float, png: Optional[bytes]) -> None:
+    def _deliver(self, gen: int, at: float, png: bytes | None) -> None:
         from core import ui
         ui.call_soon(self._apply, gen, at, png)
 
-    def _apply(self, gen: int, at: float, png: Optional[bytes]) -> None:
+    def _apply(self, gen: int, at: float, png: bytes | None) -> None:
         if gen != self._gen or not self.winfo_exists():
             return
         if png is None:
@@ -192,7 +192,7 @@ class FramePreview(tk.Frame):
         if self.after_draw is not None:
             self.after_draw()
 
-    def image_box(self) -> Optional[tuple]:
+    def image_box(self) -> tuple | None:
         """(x0, y0, width, height) of the frame on the canvas, None before one is shown."""
         if self._photo is None:
             return None
@@ -236,7 +236,7 @@ class CompareView(tk.Frame):
         self._time.pack(side="right")
         self._duration = 0.0
 
-    def load(self, path: Optional[str], at: Optional[float] = None) -> None:
+    def load(self, path: str | None, at: float | None = None) -> None:
         info = ff.try_probe(path) if path else None
         self._duration = info.duration if info else 0.0
         pos = at if at is not None else self._duration * 0.25
@@ -272,11 +272,11 @@ class FileRow(tk.Frame):
     browsed ones.  *on_change(path)* fires (debounced) when the entry holds
     an existing file (any text for save rows)."""
 
-    def __init__(self, parent, label: str, var: Optional[tk.StringVar] = None, *,
+    def __init__(self, parent, label: str, var: tk.StringVar | None = None, *,
                  kind: str = "video", save: bool = False, ext: str = ".mp4",
                  width: int = 56, label_width: int = 16,
-                 on_change: Optional[Callable[[str], None]] = None,
-                 suggest: Optional[Callable[[], str]] = None):
+                 on_change: Callable[[str], None] | None = None,
+                 suggest: Callable[[], str] | None = None):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self.var = var if var is not None else tk.StringVar()
@@ -374,7 +374,7 @@ class EncoderPanel(tk.Frame):
     def __init__(self, parent, *, codecs=("h264", "hevc", "av1", "vp9"),
                  default_codec: str = "h264", default_quality: str = "high",
                  default_speed: str = "balanced", show_ten_bit: bool = True,
-                 on_change: Optional[Callable[[], None]] = None):
+                 on_change: Callable[[], None] | None = None):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self._on_change = on_change
@@ -481,7 +481,7 @@ class EncoderPanel(tk.Frame):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def here_button(parent, var: tk.StringVar, get_pos: Callable[[], float],
-                on_set: Optional[Callable[[], None]] = None,
+                on_set: Callable[[], None] | None = None,
                 tip: str = "Use the frame shown in the preview") -> tk.Button:
     """A small ◉ button that puts the preview's position (to the millisecond,
     so frame-exact after , and . stepping) into the time field *var*."""
@@ -565,7 +565,7 @@ class FramePicker(tk.Toplevel):
         self.destroy()
 
 
-def pick_button(parent, var: tk.StringVar, get_path: Callable[[], Optional[str]],
+def pick_button(parent, var: tk.StringVar, get_path: Callable[[], str | None],
                 fmt: Callable[[float], str] = ff.format_time) -> tk.Button:
     """A 🎞 button that opens a :class:`FramePicker` for the time field *var*."""
     from tabs.base_tab import add_tooltip
@@ -583,7 +583,7 @@ def pick_button(parent, var: tk.StringVar, get_path: Callable[[], Optional[str]]
     return btn
 
 
-def add_pickers(root, variables, get_path: Callable[[], Optional[str]],
+def add_pickers(root, variables, get_path: Callable[[], str | None],
                 fmt: Callable[[float], str] = ff.format_time) -> int:
     """Put a 🎞 button right after the entry of each time field in *variables*
     (looked up under *root*).  Returns how many were added."""

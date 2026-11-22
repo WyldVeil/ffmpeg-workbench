@@ -53,11 +53,11 @@ def px(value: int, /) -> int: ...
 @overload
 def px(value: float, /) -> float: ...
 @overload
-def px(value: "tuple | list", /) -> "tuple[int, ...]": ...
+def px(value: tuple | list, /) -> tuple[int, ...]: ...
 @overload
-def px(a: int, b: int, /) -> "tuple[int, int]": ...
+def px(a: int, b: int, /) -> tuple[int, int]: ...
 @overload
-def px(a: int, b: int, c: int, d: int, /) -> "tuple[int, int, int, int]": ...
+def px(a: int, b: int, c: int, d: int, /) -> tuple[int, int, int, int]: ...
 
 
 def px(*values):  # type: ignore[misc]
@@ -199,7 +199,7 @@ def xft_dpi() -> float | None:
             lib.XCloseDisplay(dpy)
         value = float(raw.decode("ascii", "replace")) if raw else 0.0
         return value if value > 0 else None
-    except Exception:                     # noqa: BLE001 - detection must never stop startup
+    except Exception:
         _log.debug("could not read Xft.dpi", exc_info=True)
         return None
 
@@ -282,7 +282,7 @@ def apply(root) -> float:
             # happened, then stop passing the file on to programs we start.
             try:
                 tk_call("font", "measure", "TkDefaultFont", "M")
-            except Exception:                     # noqa: BLE001
+            except Exception:
                 pass
             _restore_xenvironment()
     set_factor(value)
@@ -296,7 +296,7 @@ def _undo_tk_font_doubling(tk_call) -> None:
     here, so put them back to their normal point sizes."""
     try:
         factor_ = int(tk_call("::tk::FontScalingFactor"))
-    except Exception:                         # noqa: BLE001 - Tk 8.6 has no such command
+    except Exception:
         return
     if factor_ <= 1:
         return
@@ -307,7 +307,7 @@ def _undo_tk_font_doubling(tk_call) -> None:
         try:
             size = int(tk_call("font", "configure", name, "-size"))
             tk_call("font", "configure", name, "-size", round(size / factor_))
-        except Exception:                     # noqa: BLE001
+        except Exception:
             continue
 
 

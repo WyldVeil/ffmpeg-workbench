@@ -20,7 +20,6 @@ import os
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import messagebox, ttk
-from typing import Optional
 
 from core import dialogs
 from core import encoders as enc
@@ -75,7 +74,7 @@ class Clip:
     summary: str = ""
 
     @classmethod
-    def from_info(cls, info: ff.MediaInfo) -> "Clip":
+    def from_info(cls, info: ff.MediaInfo) -> Clip:
         v = info.video
         if v is None:
             raise ValueError(_tr("crossfader.no_video_stream", "No video stream in this file."))
@@ -105,7 +104,7 @@ def segment_lengths(clips: list, T: float, freeze: bool) -> list:
     return out
 
 
-def validate(clips: list, T: float, freeze: bool) -> Optional[str]:
+def validate(clips: list, T: float, freeze: bool) -> str | None:
     """Return a user-facing problem description, or None when renderable."""
     if len(clips) < 2:
         return _tr("crossfader.need_two", "Add at least two clips.")
@@ -131,8 +130,8 @@ def total_duration(clips: list, T: float, freeze: bool) -> float:
 
 def build_command(clips: list, out: str, *, T: float, transitions: list,
                   freeze: bool = False, audio_mode: str = "normal",
-                  audio_curve: str = "tri", venc: Optional[enc.VideoEncode] = None,
-                  size: Optional[tuple] = None, extra_output_args: Optional[list] = None
+                  audio_curve: str = "tri", venc: enc.VideoEncode | None = None,
+                  size: tuple | None = None, extra_output_args: list | None = None
                   ) -> tuple[list, float]:
     """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
     n = len(clips)
@@ -514,7 +513,7 @@ class CrossfaderTab(BaseTab):
             return [r["trans_var"].get() for r in rows[1:]]
         return [self.trans_type_var.get()] * max(0, len(rows) - 1)
 
-    def _duration(self) -> Optional[float]:
+    def _duration(self) -> float | None:
         try:
             return float(str(self.trans_dur_var.get()).replace(",", "."))
         except ValueError:

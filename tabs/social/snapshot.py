@@ -27,12 +27,12 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core import hdr
-from core.hardware import CREATE_NO_WINDOW
+from core.hardware import CREATE_NO_WINDOW, reveal_file
 from core.i18n import t
 from core.procenv import child_env
 from core.scaling import px
 from tabs import framestep
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip, reveal_file
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
 SIZES = {"own": "The video's own size", "half": "Half size", "double": "Double size (upscaled)"}
@@ -160,7 +160,7 @@ class SnapshotTab(BaseTab):
                          icon="📷")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), kind="video",
-                               on_change=lambda p: None if self.load_file(p) else None)
+                               on_change=self._loaded_from_row)
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self.info_lbl.pack(anchor="w", padx=px(24))
@@ -281,6 +281,9 @@ class SnapshotTab(BaseTab):
         self._saved = ""
 
     # ── Loading ───────────────────────────────────────────────────────
+    def _loaded_from_row(self, path: str) -> None:
+        self.load_file(path)
+
     def load_file(self, path) -> bool:
         info = ff.try_probe(path) if path else None
         if info is None or not info.has_video or info.is_image:

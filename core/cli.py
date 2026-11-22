@@ -24,8 +24,8 @@ import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from fractions import Fraction
-from typing import Callable, Optional
 
 from core import ffmpeg as ff
 
@@ -73,8 +73,8 @@ class Ctx:
     def log(self, text: str):
         print(text, file=sys.stderr, flush=True)
 
-    def run(self, cmd: list, duration: Optional[float] = None, lo: float = 0.0, hi: float = 1.0,
-            lines: Optional[list] = None):
+    def run(self, cmd: list, duration: float | None = None, lo: float = 0.0, hi: float = 1.0,
+            lines: list | None = None):
         """Run one FFmpeg command; progress to stderr.  *lines*, when given,
         receives every log line (for detectors whose output can be long)."""
         def prog(p):
@@ -100,7 +100,7 @@ def _same(a: str, b: str) -> bool:
         return os.path.abspath(a) == os.path.abspath(b)
 
 
-def output_path(ctx: Ctx, inputs: list, suffix: str, ext: Optional[str] = None) -> str:
+def output_path(ctx: Ctx, inputs: list, suffix: str, ext: str | None = None) -> str:
     """The output file: -o, or '<first input> (suffix).ext' next to it."""
     args = ctx.args
     if args.output:
@@ -165,8 +165,8 @@ def keep_audio(info, container: str, filters: str = "") -> list:
     return common.keep_audio_args(info, container, filters=filters)
 
 
-def render_chain(ctx: Ctx, src: str, info, out: str, chain: str, *, pre: Optional[list] = None,
-                 audio: Optional[list] = None, extra: Optional[list] = None, duration: Optional[float] = None):
+def render_chain(ctx: Ctx, src: str, info, out: str, chain: str, *, pre: list | None = None,
+                 audio: list | None = None, extra: list | None = None, duration: float | None = None):
     """ffmpeg -i src -vf <chain> <encoder> <audio> out (atomically)."""
     container = container_of(out)
     ve = venc(ctx, container)
@@ -178,8 +178,8 @@ def render_chain(ctx: Ctx, src: str, info, out: str, chain: str, *, pre: Optiona
     finish(part, out)
 
 
-def render_graph(ctx: Ctx, inputs: list, info, out: str, graph: str, *, has_audio: bool, pre: Optional[list] = None,
-                 duration: Optional[float] = None, input_opts: Optional[dict] = None):
+def render_graph(ctx: Ctx, inputs: list, info, out: str, graph: str, *, has_audio: bool, pre: list | None = None,
+                 duration: float | None = None, input_opts: dict | None = None):
     from core import encoders as enc
     container = container_of(out)
     ve = venc(ctx, container)
@@ -215,7 +215,7 @@ def result(out: str, **extra) -> dict:
     return d
 
 
-def time_value(text: Optional[str], default: Optional[float] = None) -> Optional[float]:
+def time_value(text: str | None, default: float | None = None) -> float | None:
     if text in (None, ""):
         return default
     try:
@@ -1179,7 +1179,7 @@ def tools_catalogue(parser: argparse.ArgumentParser) -> list:
     return out
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     as_json = getattr(args, "json", False)

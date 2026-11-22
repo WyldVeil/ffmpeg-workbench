@@ -18,18 +18,19 @@ if __name__ == "__main__" and (sys.argv[1:2] == ["--cli"] or os.path.splitext(
     from core.cli import entry
     sys.exit(entry(sys.argv[1:]))
 
-import tkinter as tk
-from tkinter import messagebox, ttk
 import ctypes
-import subprocess
-import threading
 import platform
 import re
+import subprocess
+import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
 
 from core import APP_NAME, APP_VERSION
-from core.state import state as _app_state
-from core.i18n import t, init as _i18n_init
+from core.i18n import init as _i18n_init
+from core.i18n import t
 from core.scaling import px
+from core.state import state as _app_state
 
 # Initialise i18n before any UI is constructed
 _i18n_init()
@@ -44,11 +45,17 @@ except Exception:
     pass
 
 # ── Skin engine ───────────────────────────────────────────────────────────────
-from core.skins import (apply_skin, apply_default_options,
-                         load_skin_name, get_skin, UI_FONT, MONO_FONT)
+from core.skins import (
+    MONO_FONT,
+    UI_FONT,
+    apply_default_options,
+    apply_skin,
+    get_skin,
+    load_skin_name,
+)
 
 # ── Tab registry (single source of truth for all tool tabs) ──────────────────
-from tabs.registry import TOOLS, PINNED, HIDDEN
+from tabs.registry import HIDDEN, PINNED, TOOLS
 
 # ── Sidebar width ─────────────────────────────────────────────────────────────
 SB_WIDTH = 272
@@ -98,10 +105,10 @@ class PlaceholderTab(ttk.Frame):
     """Shown for any tab whose module or class failed to load."""
     def __init__(self, parent, title, error=""):
         super().__init__(parent)
-        tk.Label(self, text="\u26a0  {}".format(title),
+        tk.Label(self, text=f"\u26a0  {title}",
                  font=(UI_FONT, 20, "bold"), fg="#C0392B").pack(pady=px(120, 10))
-        msg = ("This tool could not be loaded:\n{}\n\nThe full details were written "
-               "to the log file (Help \u203a Open log folder).").format(error) if error \
+        msg = (f"This tool could not be loaded:\n{error}\n\nThe full details were written "
+               "to the log file (Help \u203a Open log folder).") if error \
             else t("app.under_construction")
         tk.Label(self, text=msg, font=(UI_FONT, 11), fg="#808080",
                  wraplength=px(700), justify="center").pack()
@@ -124,7 +131,9 @@ class App(tk.Tk):
 
         # Thread-safe UI dispatch, logging and crash reporting come first so
         # that everything constructed below can rely on them.
-        from core import encoders as _encoders, logs as _logs, ui as _ui
+        from core import encoders as _encoders
+        from core import logs as _logs
+        from core import ui as _ui
         _ui.install(self)
         _logs.setup(debug="--debug" in sys.argv)
         _logs.install_excepthooks(self)
@@ -319,7 +328,7 @@ class App(tk.Tk):
 
         # System Updates Section (Right Side)
         tk.Frame(inner, bg=BDR, width=px(1)).pack(side="right", fill="y", pady=px(5), padx=px(10))
-        
+
         # FFmpeg Status (Clickable for global updates)
         self._status_ffmpeg = tk.Label(inner, text=t("app.status.ffmpeg_checking"),
                                         bg=SB, fg=FDM, font=(UI_FONT, 8, "bold"), cursor="hand2")
@@ -364,7 +373,10 @@ class App(tk.Tk):
         A short C-major arpeggio (C5→E5→G5→C6) followed by a sustained dyad,
         rendered as a 44.1 kHz 16-bit mono WAV in memory and played asynchronously.
         """
-        import wave, struct, math, io
+        import io
+        import math
+        import struct
+        import wave
         RATE = 44100
 
         def _note(freq, dur, vol=0.28):
@@ -509,9 +521,8 @@ class App(tk.Tk):
         if self._ytdlp_path and not updater.is_app_managed(self._ytdlp_path):
             if not messagebox.askyesno(
                     t("msg.ytdlp_update_title"),
-                    "This yt-dlp ({p}) was installed by your system.\n\nDownload the latest official "
-                    "yt-dlp for this app instead? (Your system copy is left untouched.)".format(
-                        p=self._ytdlp_path), parent=self):
+                    f"This yt-dlp ({self._ytdlp_path}) was installed by your system.\n\nDownload the latest official "
+                    "yt-dlp for this app instead? (Your system copy is left untouched.)", parent=self):
                 return
         elif not messagebox.askyesno(t("msg.ytdlp_update_title"), t("msg.ytdlp_update_confirm"), parent=self):
             return
@@ -521,8 +532,8 @@ class App(tk.Tk):
         def _task():
             ok = updater.install_ytdlp(lambda msg: self._ui(self.set_status, msg))
             if ok:
-                from core.hardware import find_binary
                 from core.ffmpeg import capture
+                from core.hardware import find_binary
                 path = find_binary("yt-dlp")
                 try:
                     ver = capture([path, "--version"], timeout=60).stdout.strip()
@@ -1021,7 +1032,7 @@ class App(tk.Tk):
                 accepted = bool(insp.load_file(paths[0]))
         if accepted:
             self.title(f"{APP_NAME}  \u00b7  {_tab_label(self.current_page)}  \u00b7  {os.path.basename(paths[0])}")
-            self.set_status("Loaded: {}".format(os.path.basename(paths[0])), color=self._skin_data["green"])
+            self.set_status(f"Loaded: {os.path.basename(paths[0])}", color=self._skin_data["green"])
         return accepted
 
     def _menu_open_output_folder(self):
@@ -1332,7 +1343,7 @@ class App(tk.Tk):
 
                 btn = tk.Button(
                     row_f,
-                    text="    {}".format(_tab_label(name)),
+                    text=f"    {_tab_label(name)}",
                     font=(UI_FONT, 9),
                     bg=SB_BG, fg=skin["sb_btn"],
                     relief="flat", anchor="w",
@@ -1364,7 +1375,7 @@ class App(tk.Tk):
         tk.Frame(footer, bg=BORDER, height=px(1)).pack(fill="x")
         fi = tk.Frame(footer, bg=SB_BG)
         fi.pack(fill="x", padx=px(14), pady=px(7))
-        tk.Label(fi, text="v{}".format(APP_VERSION),
+        tk.Label(fi, text=f"v{APP_VERSION}",
                  bg=SB_BG, fg="#343434",
                  font=(UI_FONT, 8)).pack(side="left")
         self.debug_cb = tk.Checkbutton(
@@ -1455,7 +1466,7 @@ class App(tk.Tk):
     # ─────────────────────────────────────────────────────────────────────────
     def log_debug(self, message):
         if self.debug_mode.get():
-            print("[DEBUG] {}".format(message))
+            print(f"[DEBUG] {message}")
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Navigation
@@ -1581,7 +1592,7 @@ class App(tk.Tk):
         """
         # Attributes that hold ffplay preview handles
         PREVIEW_ATTRS = ("preview_proc",)
-        
+
         # Attributes that hold interactive recording handles (screen recorder,
         # live-stream capture). We only kill these when the app closes, allowing
         # them to continue in the background if the user switches tabs.
@@ -1618,8 +1629,8 @@ class App(tk.Tk):
         import logging
         self._dnd_ok = False
         try:
-            from core import deps as _deps      # noqa: F401 - puts the bundled libs/ folder on sys.path
             from tkinterdnd2 import DND_FILES, TkinterDnD
+
             TkinterDnD._require(self)
             for widget in (self, self.content_container, self._content_area):
                 widget.drop_target_register(DND_FILES)
@@ -1715,6 +1726,7 @@ class App(tk.Tk):
 def _self_test(app) -> int:
     """Smoke-test an installation: tools resolve and run, every tool page loads."""
     import tempfile
+
     from core import ffmpeg as _ff
     from core.hardware import find_binary
     problems = []

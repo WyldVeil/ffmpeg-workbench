@@ -3,18 +3,18 @@ tab_splicer.py  ─  The Splicer
 Lets the user pick in/out points from multiple source videos and
 stitches the chosen segments together into a single output file.
 """
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
-from core import dialogs
-import os
-from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_video_duration
-from core.i18n import t
-from core import concat
+
+from core import concat, dialogs
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.hardware import get_video_duration
+from core.i18n import t
 from core.scaling import px
 from tabs import framestep
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline
 
 
 def _tr(key, fallback):
@@ -273,8 +273,8 @@ class SplicerTab(BaseTab):
                     return
                 self.reencode_var.set(True)
             else:
-                from tabs.cutting.trimmer import keyframe_at_or_before
                 from core.paths import temp_dir
+                from tabs.cutting.trimmer import keyframe_at_or_before
                 ins, outs = [], []
                 for p in pieces:
                     k = keyframe_at_or_before(p.path, p.start)

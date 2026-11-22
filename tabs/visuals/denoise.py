@@ -14,13 +14,13 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from core import filters as fl
 from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
-from core.scaling import px
 
 METHODS = {"fast": "Fast - spatial + temporal (hqdn3d)", "nlm": "Best quality - non-local means",
            "temporal": "Temporal - static / tripod shots (atadenoise)", "grain": "Film grain - frequency domain"}

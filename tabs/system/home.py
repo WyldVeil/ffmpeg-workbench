@@ -18,16 +18,16 @@ sidebar - it's reachable as the launch page and via the persistent
 
 import tkinter as tk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT
 from core import settings as _settings
 from core.scaling import px
+from tabs.base_tab import CLR, UI_FONT, BaseTab
 
 
 # Categories that are valid favourite/jump targets. We re-import lazily
 # inside _build_ui to avoid circular imports - registry.py imports nearly
 # every tab class, and tabs.system imports from this file.
 def _registry():
-    from tabs.registry import TOOLS, PINNED
+    from tabs.registry import PINNED, TOOLS
     return TOOLS, PINNED
 
 

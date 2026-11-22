@@ -24,16 +24,16 @@ Sections (all optional, all combinable):
   ⚙   Encode          - codec, CRF, preset, audio bitrate
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox
-from core import dialogs
 import os
 import shlex
 import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from core import dialogs
 from core.i18n import t
 from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
 
@@ -371,7 +371,7 @@ class AllInOneTab(BaseTab):
         self._duration = dur
         self._sample_rate = info.audio.sample_rate if info is not None and info.audio else 0
         self.after(0, lambda: self._dur_lbl.config(
-            text="{:.2f}s".format(dur) if dur else ""))
+            text=f"{dur:.2f}s" if dur else ""))
         self.after(0, self._rebuild_cmd)
 
     def _browse_out(self):
@@ -603,7 +603,7 @@ class AllInOneTab(BaseTab):
                 bg=CLR["bg"], fg=CLR["fg"],
                 highlightthickness=0,
                 command=lambda v, var=var: (var.set(
-                    "{:.2f}".format(float(v))), self._rebuild_cmd()),
+                    f"{float(v):.2f}"), self._rebuild_cmd()),
             )
             sc.pack(side="left", padx=px(6))
             _lbl(r, "", dim=True).pack(side="left")  # spacer
@@ -1202,11 +1202,10 @@ class AllInOneTab(BaseTab):
             p = parts[i]
             if p.startswith("-") and i + 1 < len(parts) and parts[i + 1] not in takes_val:
                 # flag + value on same continuation line
-                lines.append("  {} {}".format(
-                    shlex.quote(p), shlex.quote(parts[i + 1])))
+                lines.append(f"  {shlex.quote(p)} {shlex.quote(parts[i + 1])}")
                 i += 2
             else:
-                lines.append("  {}".format(shlex.quote(p)))
+                lines.append(f"  {shlex.quote(p)}")
                 i += 1
 
         return " \\\n".join(lines)
@@ -1271,7 +1270,7 @@ class AllInOneTab(BaseTab):
 
         # Turn on the STOP button
         self._btn_stop.config(state="normal")
-        
+
         # A little wrapper to re-disable the STOP button when FFmpeg finishes
         def _on_done_wrapper(rc):
             self._btn_stop.config(state="disabled")
@@ -1320,7 +1319,7 @@ class AllInOneTab(BaseTab):
                 f.write("@echo off\nchcp 65001 >nul\n")
                 f.write(_sp.list2cmdline(argv).replace("%", "%%") + "\n")
                 f.write("pause\n")
-            self.log(self.console, "✅  Saved: {}".format(p))
+            self.log(self.console, f"✅  Saved: {p}")
         except OSError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)
 
@@ -1336,6 +1335,6 @@ class AllInOneTab(BaseTab):
                 f.write("#!/usr/bin/env bash\nset -euo pipefail\n")
                 f.write(shlex.join(argv) + "\n")
             os.chmod(p, 0o755)
-            self.log(self.console, "✅  Saved: {}".format(p))
+            self.log(self.console, f"✅  Saved: {p}")
         except OSError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)

@@ -27,7 +27,6 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
-from typing import Optional
 
 from core import ffmpeg as ff
 from core.hardware import CREATE_NO_WINDOW
@@ -47,7 +46,7 @@ def session() -> str:
     return "x11"
 
 
-def wayland_tool() -> Optional[str]:
+def wayland_tool() -> str | None:
     """A screen recorder that works on Wayland, if one is installed."""
     for name in ("gpu-screen-recorder", "wf-recorder"):
         path = shutil.which(name)
@@ -126,7 +125,7 @@ def audio_sources() -> list:
     return out
 
 
-def system_sound_source(sources: list) -> Optional[str]:
+def system_sound_source(sources: list) -> str | None:
     """Best guess at 'the computer's own sound' among *sources*."""
     for sid, label in sources:
         low = (sid + " " + label).lower()
@@ -147,7 +146,7 @@ def audio_input(source: str) -> list:
 
 # ── Capture commands ──────────────────────────────────────────────────────────
 
-def screen_input(fps: str = "30", *, region: Optional[tuple] = None, cursor: bool = True,
+def screen_input(fps: str = "30", *, region: tuple | None = None, cursor: bool = True,
                  window_title: str = "") -> list:
     """FFmpeg input arguments for the screen (Windows / macOS / X11)."""
     if IS_WIN:
@@ -172,8 +171,8 @@ def screen_input(fps: str = "30", *, region: Optional[tuple] = None, cursor: boo
 
 
 def ffmpeg_command(video_in: list, audio_sources_: list, out: str, video_args: list, *,
-                   audio_codec: str = "aac", region_crop: Optional[tuple] = None,
-                   seconds: Optional[int] = None, pre_input: Optional[list] = None,
+                   audio_codec: str = "aac", region_crop: tuple | None = None,
+                   seconds: int | None = None, pre_input: list | None = None,
                    vf_suffix: str = "") -> list:
     cmd = [ff.ffmpeg_path(), "-hide_banner", "-y", *(pre_input or []), *video_in]
     for src in audio_sources_:
@@ -210,7 +209,7 @@ def ffmpeg_command(video_in: list, audio_sources_: list, out: str, video_args: l
 
 
 def wayland_command(tool: str, out: str, *, fps: str = "60", audio: tuple = ("output",),
-                    seconds: Optional[int] = None) -> list:
+                    seconds: int | None = None) -> list:
     """Command for gpu-screen-recorder / wf-recorder (audio: 'output' and/or 'input')."""
     name = os.path.basename(tool)
     if name.startswith("gpu-screen-recorder"):
@@ -233,7 +232,7 @@ def wayland_command(tool: str, out: str, *, fps: str = "60", audio: tuple = ("ou
 class Recording:
     """One running recorder process."""
 
-    def __init__(self, cmd: list, out: str, *, on_exit=None, seconds: Optional[int] = None):
+    def __init__(self, cmd: list, out: str, *, on_exit=None, seconds: int | None = None):
         self.cmd, self.out, self.on_exit = cmd, out, on_exit
         self.tail = deque(maxlen=60)
         self.started = time.monotonic()

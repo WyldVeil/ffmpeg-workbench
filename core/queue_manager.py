@@ -35,7 +35,7 @@ import shutil
 import threading
 import time
 import uuid
-from typing import Callable, List, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 from core import ffmpeg as ff
 
@@ -60,14 +60,14 @@ class RenderTask:
         self.atomic_output = atomic_output
         self.status = PENDING
         self.progress = ""            # latest log line
-        self.fraction: Optional[float] = None
-        self.eta: Optional[float] = None
-        self.speed: Optional[float] = None
+        self.fraction: float | None = None
+        self.eta: float | None = None
+        self.speed: float | None = None
         self.error = ""
         self.log_tail: list = []
         self.created_at = time.time()
-        self.started_at: Optional[float] = None
-        self.finished_at: Optional[float] = None
+        self.started_at: float | None = None
+        self.finished_at: float | None = None
         self.returncode = 0
         self.on_start = on_start
         self.on_progress = on_progress
@@ -98,7 +98,7 @@ class RenderTask:
 class TaskContext:
     """Helper handed to 3-argument ``worker_fn(progress_cb, cancel_fn, ctx)``."""
 
-    def __init__(self, manager: "RenderQueueManager", task: RenderTask,
+    def __init__(self, manager: RenderQueueManager, task: RenderTask,
                  progress_cb: Callable[[str], None]):
         self._m = manager
         self.task = task
@@ -111,11 +111,11 @@ class TaskContext:
     def cancelled(self) -> bool:
         return self.task.cancelled
 
-    def progress(self, fraction: Optional[float]) -> None:
+    def progress(self, fraction: float | None) -> None:
         """Report overall progress 0..1 for this task."""
         self._m._set_fraction(self.task, fraction)
 
-    def span(self, start: float, end: float) -> "TaskContext":
+    def span(self, start: float, end: float) -> TaskContext:
         """Map the next :meth:`run`'s 0..1 progress onto *start*..*end*."""
         self._span = (max(0.0, start), min(1.0, end))
         return self
@@ -126,7 +126,7 @@ class TaskContext:
         self.task._tempdirs.append(d)
         return d
 
-    def output(self, path: Optional[str] = None) -> str:
+    def output(self, path: str | None = None) -> str:
         """A temporary ``.part`` file to write a final output to.  It replaces
         *path* (default: the task's output) only if the job succeeds, so a
         failed or cancelled job never leaves a broken file behind."""
@@ -136,8 +136,8 @@ class TaskContext:
         self.task._parts.append((part, final))
         return part
 
-    def run(self, cmd: Sequence[str], *, duration: Optional[float] = None,
-            check: bool = True, cwd: Optional[str] = None, tail: int = 200) -> ff.RunResult:
+    def run(self, cmd: Sequence[str], *, duration: float | None = None,
+            check: bool = True, cwd: str | None = None, tail: int = 200) -> ff.RunResult:
         """Run one command for this task.  Raises :class:`ff.CancelledError`
         or :class:`ff.CommandError` (when *check*) so multi-step jobs can
         simply call ``ctx.run`` repeatedly."""
@@ -161,11 +161,11 @@ class TaskContext:
 
 
 class RenderQueueManager:
-    _instance: Optional["RenderQueueManager"] = None
+    _instance: RenderQueueManager | None = None
     _instance_lock = threading.Lock()
 
     @classmethod
-    def get_instance(cls) -> "RenderQueueManager":
+    def get_instance(cls) -> RenderQueueManager:
         if cls._instance is None:
             with cls._instance_lock:
                 if cls._instance is None:
@@ -173,12 +173,12 @@ class RenderQueueManager:
         return cls._instance
 
     def __init__(self):
-        self._tasks: List[RenderTask] = []
+        self._tasks: list[RenderTask] = []
         self._lock = threading.RLock()
         self._work = threading.Condition(self._lock)
-        self._update_callbacks: List[Callable] = []
+        self._update_callbacks: list[Callable] = []
         self._tk_root = None
-        self._workers: List[threading.Thread] = []
+        self._workers: list[threading.Thread] = []
         self._last_ui_update = 0.0
         self._ensure_workers()
 
@@ -210,7 +210,7 @@ class RenderQueueManager:
 
     def enqueue(self, name: str, output_path: str = "", *, cmd=None, cmds=None,
                 worker_fn=None, on_start=None, on_progress=None, on_complete=None,
-                expected_duration: Optional[float] = None, inputs: Sequence[str] = (),
+                expected_duration: float | None = None, inputs: Sequence[str] = (),
                 atomic_output: bool = True) -> str:
         if cmd is not None:
             cmds_arg = [[str(c) for c in cmd]]
@@ -233,7 +233,7 @@ class RenderQueueManager:
         _log.info("queued %s [%s] -> %s", task.name, task.id, task.output_path or "-")
         return task.id
 
-    def get_task(self, task_id: str) -> Optional[RenderTask]:
+    def get_task(self, task_id: str) -> RenderTask | None:
         with self._lock:
             return next((t for t in self._tasks if t.id == task_id), None)
 
@@ -261,7 +261,7 @@ class RenderQueueManager:
             self.cancel(tid)
         return len(ids)
 
-    def retry(self, task_id: str) -> Optional[str]:
+    def retry(self, task_id: str) -> str | None:
         task = self.get_task(task_id)
         if task is None or task.status not in (FAILED, CANCELLED):
             return None
@@ -275,11 +275,11 @@ class RenderQueueManager:
             self._tasks = [t for t in self._tasks if t.status in (PENDING, ACTIVE)]
         self._fire_update(force=True)
 
-    def get_all_tasks(self) -> List[RenderTask]:
+    def get_all_tasks(self) -> list[RenderTask]:
         with self._lock:
             return list(self._tasks)
 
-    def active_tasks(self) -> List[RenderTask]:
+    def active_tasks(self) -> list[RenderTask]:
         with self._lock:
             return [t for t in self._tasks if t.status in (PENDING, ACTIVE)]
 
@@ -292,7 +292,7 @@ class RenderQueueManager:
             failed = sum(1 for t in self._tasks if t.status in (FAILED, CANCELLED))
         return active, pending, done, failed
 
-    def overall_progress(self) -> Optional[float]:
+    def overall_progress(self) -> float | None:
         """Mean fraction of active tasks (None when nothing reports progress)."""
         with self._lock:
             fr = [t.fraction for t in self._tasks if t.status == ACTIVE and t.fraction is not None]
@@ -309,14 +309,14 @@ class RenderQueueManager:
         for cb in list(self._update_callbacks):
             ui.call_soon(_safe_call, cb)
 
-    def _dispatch(self, fn: Optional[Callable], *args) -> None:
+    def _dispatch(self, fn: Callable | None, *args) -> None:
         if fn is None:
             return
         from core import ui
         ui.call_soon(_safe_call, fn, *args)
 
-    def _set_fraction(self, task: RenderTask, fraction: Optional[float],
-                      prog: Optional[ff.Progress] = None) -> None:
+    def _set_fraction(self, task: RenderTask, fraction: float | None,
+                      prog: ff.Progress | None = None) -> None:
         if fraction is not None:
             task.fraction = max(task.fraction or 0.0, min(1.0, fraction))
         if prog is not None:

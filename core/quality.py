@@ -18,7 +18,6 @@ import math
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from core import ffmpeg as ff
 
@@ -50,7 +49,7 @@ def _rate(info: ff.MediaInfo) -> str:
 
 def build(ref: str, dist: str, ref_info: ff.MediaInfo, dist_info: ff.MediaInfo, *,
           metrics=METRICS, model: str = "hd", skip_ref: float = 0.0, skip_dist: float = 0.0,
-          seconds: Optional[float] = None, subsample: int = 1, threads: Optional[int] = None) -> tuple:
+          seconds: float | None = None, subsample: int = 1, threads: int | None = None) -> tuple:
     """(argv, {metric: log file name}).  *skip_ref* / *skip_dist*: seconds to
     skip at the start of the original / the copy, to line them up when one of
     them was trimmed."""

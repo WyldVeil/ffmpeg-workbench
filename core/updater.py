@@ -15,11 +15,11 @@ import hashlib
 import json
 import logging
 import os
-import sys
 import re
 import ssl
 import subprocess
-from typing import Callable, Optional
+import sys
+from collections.abc import Callable
 
 from core.hardware import CREATE_NO_WINDOW, find_binary, platform_tag, user_tools_dir
 
@@ -116,7 +116,7 @@ def _sums(text: str) -> dict:
 # it changes only with app releases (a newer FFmpeg can change or drop options
 # the tools rely on).  There is deliberately no in-app FFmpeg updater.
 
-def is_app_managed(path: Optional[str]) -> bool:
+def is_app_managed(path: str | None) -> bool:
     """True if *path* is the FFmpeg shipped with the app."""
     if not path:
         return True
@@ -129,7 +129,7 @@ def is_app_managed(path: Optional[str]) -> bool:
     return any(p.startswith(r + os.sep) for r in roots)
 
 
-def latest_ytdlp_release(force: bool = False) -> Optional[str]:
+def latest_ytdlp_release(force: bool = False) -> str | None:
     """Newest yt-dlp version (automatic checks respect 'check for updates')."""
     if _offline() or (not force and not _checks_enabled()):
         return None

@@ -13,10 +13,10 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs import common
-from tabs.widgets import EncoderPanel, FileRow, scroll_body
 from core.scaling import px
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, scroll_body
 
 ZOOM_MODES = {
     "Auto zoom to hide borders (recommended)": 1,

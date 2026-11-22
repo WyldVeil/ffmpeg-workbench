@@ -360,8 +360,8 @@ def test_tails_wrap_mirrors_tails_launcher(monkeypatch):
     argv = tails.wrap(["/opt/yt-dlp", "--version"])
     assert argv[:6] == ["sudo", "-n", "ip", "netns", "exec", "clearnet"]
     assert argv[argv.index("bwrap") - 5:argv.index("bwrap")] == ["sudo", "-u", "amnesia", "-H", "--"]
-    assert ["--bind", "/etc/resolv-over-clearnet.conf", "/etc/resolv.conf"] == \
-        argv[argv.index("/etc/resolv-over-clearnet.conf") - 1:argv.index("/etc/resolv-over-clearnet.conf") + 2]
+    assert argv[argv.index("/etc/resolv-over-clearnet.conf") - 1:argv.index("/etc/resolv-over-clearnet.conf") + 2] == \
+        ["--bind", "/etc/resolv-over-clearnet.conf", "/etc/resolv.conf"]
     assert argv[-2:] == ["/opt/yt-dlp", "--version"]
     monkeypatch.setattr(sp, "special_system", lambda: "")
     assert tails.problems() == ["This is only for Tails."]

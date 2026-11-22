@@ -44,7 +44,8 @@ def streams(path):
 
 
 def test_container_rules():
-    tr = lambda kind, codec: remux.Track(0, 0, kind, codec)          # noqa: E731
+    def tr(kind, codec):
+        return remux.Track(0, 0, kind, codec)
     assert remux.problems([tr("subtitle", "hdmv_pgs_subtitle")], "mp4")[0][1].endswith("(use MKV to keep them)")
     assert "converted" in remux.problems([tr("subtitle", "ass")], "mp4")[0][1]
     assert "can't go into MP4" in remux.problems([tr("audio", "pcm_s24le")], "mp4")[0][1]

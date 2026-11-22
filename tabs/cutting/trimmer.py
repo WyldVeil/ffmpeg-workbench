@@ -4,21 +4,25 @@ Precise clip trimmer with a visual dual-handle canvas timeline,
 inline ffplay preview, and lossless or re-encoded export.
 """
 
+import os
+import subprocess
 import tkinter as tk
 from tkinter import messagebox
-from core import dialogs
-import subprocess
-import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT, add_tooltip
-from core.hardware import (    get_binary_path, launch_preview, CREATE_NO_WINDOW,
-)
-from core.i18n import t
+from core import dialogs
 from core import ffmpeg as ff
 from core import ui as _ui
-from tabs.widgets import FramePreview
+from core.hardware import (
+    CREATE_NO_WINDOW,
+    get_binary_path,
+    launch_preview,
+)
+from core.i18n import t
 from core.scaling import px
 from tabs import framestep
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
+from tabs.widgets import FramePreview
+
 
 def fmt_time(seconds):
     """Seconds -> MM:SS.mmm (or HH:MM:SS.mmm)."""
@@ -64,12 +68,12 @@ class TrimmerTab(BaseTab):
         self.file_path    = ""
         self.duration     = 0.0
         self.preview_proc = None
-        
+
         # StringVars to hold human-readable times
         self._start_var   = tk.StringVar(value="00:00.00")
         self._end_var     = tk.StringVar(value="00:00.00")
         self._scrub       = tk.DoubleVar(value=0.0)
-        
+
         self._copy_mode   = tk.BooleanVar(value=True)
         self._crf_var     = tk.StringVar(value="18")
         self._dragging    = None
@@ -132,7 +136,7 @@ class TrimmerTab(BaseTab):
         self._start_ent.pack(side="left", padx=px(6))
         self._start_ent.bind("<Return>", self._apply_typed_times)
         self._start_ent.bind("<FocusOut>", self._apply_typed_times)
-        
+
         tk.Button(r1, text=t("trimmer.set_to_preview_start"), bg=CLR["panel"], fg="white",
                   command=lambda: self._start_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()).pack(side="left", padx=px(4))
         tk.Label(r1, text=t("trimmer.start_handle_hint"),
@@ -144,7 +148,7 @@ class TrimmerTab(BaseTab):
         self._end_ent.pack(side="left", padx=px(6))
         self._end_ent.bind("<Return>", self._apply_typed_times)
         self._end_ent.bind("<FocusOut>", self._apply_typed_times)
-        
+
         tk.Button(r2, text=t("trimmer.set_to_preview_end"), bg=CLR["panel"], fg="white",
                   command=lambda: self._end_var.set(fmt_time(self._scrub.get())) or self._apply_typed_times()).pack(side="left", padx=px(4))
         tk.Label(r2, text=t("trimmer.end_handle_hint"),
@@ -294,7 +298,7 @@ class TrimmerTab(BaseTab):
         c = self._canvas
         w = c.winfo_width(); h = c.winfo_height()
         if w < px(10): return
-        
+
         try:
             c.delete("all")
             c.create_rectangle(0, 0, w, h, fill="#0D0D0D", outline="")
@@ -305,16 +309,16 @@ class TrimmerTab(BaseTab):
             hr = px(self._HR)
             s_sec = self._tv(self._start_var, 0.0)
             e_sec = self._tv(self._end_var, self.duration)
-            
+
             xs = self._t2x(s_sec, w)
             xe = self._t2x(e_sec, w)
             xp = self._t2x(float(self._scrub.get()), w)
-            
+
             # Track
             c.create_rectangle(px(24), cy - px(4), w - px(24), cy + px(4), fill="#2A2A2A", outline="")
             # Selection
             c.create_rectangle(xs, cy - px(4), xe, cy + px(4), fill="#1A5A98", outline="")
-            
+
             # Tick marks
             for i in range(11):
                 tx = self._t2x(self.duration * i / 10, w)
@@ -322,26 +326,26 @@ class TrimmerTab(BaseTab):
                 tick_time = self.duration * i / 10
                 c.create_text(tx, cy + px(22), text=f"{int(tick_time//60):02d}:{int(tick_time%60):02d}",
                               fill="#444444", font=(UI_FONT, 7))
-                              
+
             # Playhead (Vertical line + Triangle)
             # Draw line slicing through the track
             c.create_line(xp, cy - px(18), xp, cy + px(18), fill="#FFEB3B", width=px(2))
             # Draw downward triangle on top
             c.create_polygon(xp - px(7), cy - px(18), xp + px(7), cy - px(18), xp, cy - px(8),
                              fill="#FFEB3B", outline="#000000", width=px(1))
-                             
+
             # Start handle (green)
             c.create_oval(xs - hr, cy - hr, xs + hr, cy + hr,
                           fill="#4CAF50", outline="white", width=px(2))
             c.create_text(xs, cy - px(20), text=f"START {fmt_time(s_sec)}",
                           fill="#4CAF50", font=(MONO_FONT, 8, "bold"))
-                          
+
             # End handle (red)
             c.create_oval(xe - hr, cy - hr, xe + hr, cy + hr,
                           fill="#F44336", outline="white", width=px(2))
             c.create_text(xe, cy + px(36), text=f"END {fmt_time(e_sec)}",
                           fill="#F44336", font=(MONO_FONT, 8, "bold"))
-                          
+
             # Selection duration header
             sel = max(0.0, e_sec - s_sec)
             c.create_text((xs+xe)//2, px(14), text=f"Clip Length: {fmt_time(sel)}",
@@ -351,19 +355,19 @@ class TrimmerTab(BaseTab):
 
     def _on_press(self, ev):
         w   = self._canvas.winfo_width()
-        
+
         s_sec = self._tv(self._start_var, 0.0)
         e_sec = self._tv(self._end_var, self.duration)
-        
+
         try:
             xs = self._t2x(s_sec, w)
             xe = self._t2x(e_sec, w)
             xp = self._t2x(float(self._scrub.get()), w)
         except (ValueError, tk.TclError):
             return
-            
+
         def near(a, b): return abs(a - b) < px(14)
-        
+
         if near(ev.x, xs):   self._dragging = "start"
         elif near(ev.x, xe): self._dragging = "end"
         elif near(ev.x, xp): self._dragging = "scrub"
@@ -376,10 +380,10 @@ class TrimmerTab(BaseTab):
         if not self._dragging: return
         w = self._canvas.winfo_width()
         t = self._x2t(ev.x, w)
-        
+
         s_sec = self._tv(self._start_var, 0.0)
         e_sec = self._tv(self._end_var, self.duration)
-        
+
         if self._dragging == "start":
             t = max(0.0, min(t, e_sec - 0.1))
             self._start_var.set(fmt_time(t))
@@ -391,7 +395,7 @@ class TrimmerTab(BaseTab):
             self._scrub.set(t)
             self._scrub_lbl.config(text=fmt_time(t))
         self._show_frame(t)
-            
+
         self._update_dur()
         self._draw()
 
@@ -438,11 +442,11 @@ class TrimmerTab(BaseTab):
         if self.preview_proc:
             try: self.preview_proc.terminate()
             except Exception: pass
-            
+
         ss = self._tv(self._start_var, 0.0)
         ee = self._tv(self._end_var, self.duration)
         dur = max(0.1, ee - ss)
-        
+
         ffplay = get_binary_path("ffplay.exe")
         cmd = [ffplay, "-ss", str(ss), "-i", self.file_path,
                "-t", str(dur), "-loop", "0",

@@ -52,7 +52,8 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
                              env=child_env(), stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif sys.platform == "darwin":
-            esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')  # noqa: E731
+            def esc(s):
+                return s.replace("\\", "\\\\").replace('"', '\\"')
             subprocess.Popen(["osascript", "-e",
                               f'display notification "{esc(body)}" with title "{esc(title)}"'],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

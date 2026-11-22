@@ -17,14 +17,13 @@ import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
 
 from core import ass
-from core import filters as fl
 from core import ffmpeg as ff
+from core import filters as fl
 from core.i18n import t
-from tabs import common
+from core.scaling import px
+from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
-from core.scaling import px
-from tabs import framestep
 
 POSITIONS = {"bottom": ("Bottom centre", 2), "top": ("Top centre", 8),
              "middle": ("Middle", 5), "bottom_left": ("Bottom left", 1),
@@ -44,7 +43,7 @@ def to_utf8_copy(path: str, folder: str) -> str:
             continue
     if text is None:
         try:
-            from charset_normalizer import from_bytes          # optional, better guesses
+            from charset_normalizer import from_bytes  # optional, better guesses
             best = from_bytes(raw).best()
             text = str(best) if best is not None else None
         except Exception:

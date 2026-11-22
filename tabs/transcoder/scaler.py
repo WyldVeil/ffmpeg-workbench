@@ -19,17 +19,16 @@ import math
 import os
 import tkinter as tk
 from fractions import Fraction
-from typing import Optional
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
 from core import upscale
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, scroll_body
-from core.scaling import px
 
 SIZES = [("8K (7680×4320)", 7680, 4320), ("4K UHD (3840×2160)", 3840, 2160), ("1440p (2560×1440)", 2560, 1440),
          ("1080p (1920×1080)", 1920, 1080), ("720p (1280×720)", 1280, 720), ("480p (854×480)", 854, 480),
@@ -62,7 +61,7 @@ def geometry(src: tuple, box: tuple, shape: str) -> tuple:
 
 
 def scale_chain(src: tuple, box: tuple, shape: str, method: str, *, sharpen: float = 0.0,
-                gpu: bool = False, pix_fmt: str = "yuv420p", tags: Optional[dict] = None) -> str:
+                gpu: bool = False, pix_fmt: str = "yuv420p", tags: dict | None = None) -> str:
     """Filter graph scaling *src* into *box*.  GPU methods (libplacebo, with
     or without an upscaling shader) process the brightness plane only, see
     core/upscale.py; they need ``-init_hw_device vulkan``."""

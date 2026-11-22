@@ -37,7 +37,8 @@ import tempfile
 import threading
 import time
 from collections import deque
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from typing import Any
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
@@ -119,7 +120,7 @@ RECORDER = _Recorder()
 
 
 class _RecordingPopen(_REAL_POPEN):  # type: ignore[misc, valid-type]
-    def __init__(self, args, *a, **kw):  # noqa: D401 - mirrors Popen
+    def __init__(self, args, *a, **kw):
         if isinstance(args, (list, tuple)):
             argv = [str(x) for x in args]
         else:
@@ -180,7 +181,8 @@ DIALOGS = _Dialogs()
 def _install_dialog_stubs() -> None:
     from tkinter import colorchooser, filedialog, messagebox, simpledialog
 
-    yes = lambda: DIALOGS.default_yes  # noqa: E731
+    def yes():
+        return DIALOGS.default_yes
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(messagebox, name, DIALOGS.make(name, lambda: "ok"))
     for name in ("askyesno", "askokcancel", "askretrycancel"):
@@ -233,10 +235,10 @@ def _isolate_settings(tmpdir: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Harness:
-    _instance: "Harness | None" = None
+    _instance: Harness | None = None
 
     @classmethod
-    def instance(cls) -> "Harness":
+    def instance(cls) -> Harness:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -248,7 +250,7 @@ class Harness:
         subprocess.Popen = _RecordingPopen  # type: ignore[misc]
         _install_dialog_stubs()
 
-        import main  # noqa: WPS433 - imported late on purpose
+        import main
 
         for noisy in ("_play_intro_sound", "_check_ffmpeg"):
             if hasattr(main.App, noisy):
@@ -270,7 +272,7 @@ class Harness:
         import logging
 
         class _Collect(logging.Handler):
-            def emit(handler, record):          # noqa: N805 - 'self' is the harness
+            def emit(handler, record):
                 if record.levelno >= logging.ERROR:
                     self.callback_errors.append(handler.format(record) + (
                         "\n" + logging.Formatter().formatException(record.exc_info) if record.exc_info else ""))

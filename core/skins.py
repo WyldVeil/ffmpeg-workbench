@@ -6,12 +6,13 @@ base_tab CLR palette.  Mystical skin gets animated star particles.
 
 Supports LIVE skin switching via apply_skin() - no restart needed.
 """
-import tkinter as tk
-from tkinter import ttk
-import os
 import json
+import os
 import random
 import sys
+import tkinter as tk
+from tkinter import ttk
+
 from core.scaling import px
 
 SKIN_FILE = os.path.join(
@@ -165,7 +166,8 @@ def get_skin(name: str) -> dict:
 def save_custom_color(color_key: str, value: str) -> None:
     """Persist a single custom-skin color to settings.json."""
     try:
-        from core.settings import load_settings as _ls, save_settings as _ss
+        from core.settings import load_settings as _ls
+        from core.settings import save_settings as _ss
         data = _ls()
         data[f"custom_color_{color_key}"] = value
         _ss(data)
@@ -567,7 +569,7 @@ def apply_skin(app: tk.Tk, sidebar_container: tk.Frame,
                content_container: tk.Frame,
                btn_refs: dict,
                inner_frame=None,
-               indicator_refs: dict = None,
+               indicator_refs: dict | None = None,
                *_ignored):
     """
     Apply the currently saved skin to the live app.

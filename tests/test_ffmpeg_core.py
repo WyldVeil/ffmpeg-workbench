@@ -5,7 +5,6 @@ import pytest
 
 from core import ffmpeg as ff
 
-
 # ── time helpers ─────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("text,expected", [

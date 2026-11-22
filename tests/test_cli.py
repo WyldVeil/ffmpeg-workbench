@@ -309,6 +309,7 @@ WHISPER_ASSETS = os.environ.get("CROSSFADER_TEST_WHISPER_DIR", "")
                     reason="set CROSSFADER_TEST_WHISPER_DIR (ggml-base-q5_1.bin + jfk.wav)")
 def test_subtitles_from_speech(capsys, outdir):
     import shutil
+
     from core import whisper
     shutil.copyfile(os.path.join(WHISPER_ASSETS, "ggml-base-q5_1.bin"), whisper.model_path("base"))
     with open(whisper.model_path("base") + ".ok", "w") as fh:

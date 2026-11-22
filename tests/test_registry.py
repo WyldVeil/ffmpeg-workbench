@@ -4,9 +4,9 @@ tests/test_registry.py  -  Structural tests for the tab registry.
 These tests verify the registry is internally consistent and complete
 without launching any GUI (no Tk required).
 """
-import sys
-import os
 import importlib
+import os
+import sys
 
 # Ensure project root is on path when running with pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_registry_imports():
     """Registry module imports without error."""
-    from tabs.registry import TOOLS, PINNED, HIDDEN
+    from tabs.registry import HIDDEN, PINNED, TOOLS
     assert TOOLS is not None
     assert PINNED is not None
     assert HIDDEN is not None
@@ -90,24 +90,11 @@ def test_sub_package_imports():
         assert mod is not None, f"Failed to import {pkg}"
 
 
-def test_compatibility_shims():
-    """Old tabs.tab_* import paths still resolve (backward compatibility)."""
-    shim_checks = [
-        ("tabs.tab_crossfader", "CrossfaderTab"),
-        ("tabs.tab_youtubedownloader", "YouTubeDownloaderTab"),
-        ("tabs.tab_resolutionscaler", "ResolutionScalerTab"),
-        ("tabs.tab_fpsinterpolator", "FPSInterpolatorTab"),
-        ("tabs.tab_screenrecorder", "ScreenRecorderTab"),
-        ("tabs.tab_allinone", "AllInOneTab"),
-    ]
-    for module_path, class_name in shim_checks:
-        mod = importlib.import_module(module_path)
-        assert hasattr(mod, class_name), f"{module_path} missing {class_name}"
-
-
 def test_registry_is_lazy():
     """Importing the registry must not import any tool module."""
-    import subprocess, sys, os
+    import os
+    import subprocess
+    import sys
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     code = ("import sys; sys.path.insert(0, %r); import tabs.registry as r; "
             "loaded = [m for m in sys.modules if m.startswith('tabs.') and m.count('.') >= 2]; "
@@ -117,7 +104,7 @@ def test_registry_is_lazy():
 
 
 def test_every_registered_tool_loads():
-    from tabs.registry import TOOLS, PINNED, HIDDEN
+    from tabs.registry import HIDDEN, PINNED, TOOLS
     specs = [PINNED[1], *HIDDEN.values(), *(c for items in TOOLS.values() for _, c in items)]
     for spec in specs:
         cls = spec.load()

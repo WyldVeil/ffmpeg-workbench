@@ -11,18 +11,19 @@ image suitable for YouTube/TikTok thumbnails.  Options for:
   • Batch: export a frame every N seconds for selection
 """
 
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
-from core import dialogs
-import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from tabs.widgets import FramePreview
-from core.hardware import (    launch_preview,
+from core import dialogs
+from core.hardware import (
+    launch_preview,
 )
 from core.i18n import t
 from core.scaling import px
 from tabs import framestep
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import FramePreview
 
 
 def _fmt(seconds):

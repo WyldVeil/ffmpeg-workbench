@@ -15,18 +15,18 @@ Features:
   • Import from existing SRT or plain-text chapter files
   • Validates YouTube's requirements (≥3 chapters, first at 0:00)
 """
-import tkinter as tk
-from tkinter import messagebox, ttk
-from core import dialogs
+import json
 import os
 import re
-import json
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from tabs.widgets import scroll_body
+from core import dialogs
 from core.i18n import t
 from core.scaling import px
 from tabs import framestep
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import scroll_body
 
 
 def _fmt_yt(secs: float) -> str:

@@ -7,19 +7,17 @@ Provides:
   • make_header, make_console, make_file_row, make_section,
     make_render_btn, make_labeled_entry - UI factory helpers
 """
-import tkinter as tk
-from tkinter import messagebox, ttk
-import subprocess  # noqa: F401 - re-exported for older tabs
 import threading
 import time
-import os  # noqa: F401 - re-exported for older tabs
+import tkinter as tk
+from tkinter import messagebox, ttk
 
 from core import dialogs, logs, outputs, ui
 from core import ffmpeg as ff
-from core.hardware import get_binary_path, CREATE_NO_WINDOW, open_in_explorer, reveal_file  # noqa: F401
-from core.skins import UI_FONT, MONO_FONT
+from core.hardware import open_in_explorer, reveal_file
 from core.i18n import t
 from core.scaling import px
+from core.skins import MONO_FONT, UI_FONT
 
 
 def _load_clr():

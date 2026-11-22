@@ -20,7 +20,6 @@ FSRCNNX was left out: it is GPL-3.0 licensed.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from core import filters as fl
 
@@ -40,7 +39,7 @@ def shader_dirs() -> list:
     return [os.path.join(d, "shaders") for d in bundled_bin_dirs()] + [os.path.join(APP_ROOT, "shaders")]
 
 
-def shader_path(key: str) -> Optional[str]:
+def shader_path(key: str) -> str | None:
     spec = SHADERS.get(key)
     if not spec:
         return None
@@ -60,8 +59,8 @@ def _tag(value: str, default: str = "unknown") -> str:
     return value if value and value not in ("unknown", "reserved") else default
 
 
-def plane_graph(size: tuple, *, shader: Optional[str] = None, deep: bool = False,
-                tags: Optional[dict] = None) -> str:
+def plane_graph(size: tuple, *, shader: str | None = None, deep: bool = False,
+                tags: dict | None = None) -> str:
     """A single-input/single-output filter graph (usable as -vf) scaling to
     *size*: brightness through libplacebo (with *shader*), colour through
     FFmpeg, then the source's colour *tags* (range, primaries, trc, space)

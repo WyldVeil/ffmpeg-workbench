@@ -9,8 +9,8 @@ resampled back to the source rate.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence
 
 from core import ffmpeg as ff
 
@@ -38,7 +38,7 @@ class Measurement:
 
 
 def measure_cmd(path: str, i: float, tp: float, lra: float, *, stream: int = 0,
-                start: float = 0.0, duration: Optional[float] = None) -> list:
+                start: float = 0.0, duration: float | None = None) -> list:
     cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin"]
     if start > 0:
         cmd += ["-ss", ff.ts(start)]
@@ -66,7 +66,7 @@ def parse_measurement(lines: Sequence[str]) -> Measurement:
                        num("target_offset"))
 
 
-def normalise_filter(i: float, tp: float, lra: float, m: Optional[Measurement],
+def normalise_filter(i: float, tp: float, lra: float, m: Measurement | None,
                      sample_rate: int = 48000) -> str:
     """Second-pass filter (or single-pass when *m* is None) + resample back.
 

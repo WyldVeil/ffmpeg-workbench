@@ -14,11 +14,10 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs import common
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 from core.scaling import px
-from tabs import framestep
+from tabs import common, framestep
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
 # key: (label, filter chain, display aspect (w/h) or None = same as video, help)
 SCOPES = {

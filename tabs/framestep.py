@@ -20,7 +20,7 @@ video, so stepping always lands exactly on a frame.
 from __future__ import annotations
 
 import weakref
-from typing import Callable, Optional, Union
+from collections.abc import Callable
 
 from core import ffmpeg as ff
 
@@ -28,12 +28,12 @@ DEFAULT_FPS = 30.0
 HINT = "Drag, or press , and . to step one frame (with Shift, one second)"
 TYPING_CLASSES = {"Entry", "TEntry", "Text", "Spinbox", "TSpinbox", "TCombobox", "Listbox"}
 
-_steppers: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+_steppers: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _order: list = []                      # weakrefs, in registration order
-_last: Optional["weakref.ref"] = None
+_last: weakref.ref | None = None
 
 
-def fps_of(path: Optional[str]) -> float:
+def fps_of(path: str | None) -> float:
     """The frame rate of *path* (probe results are cached), 30 if unknown."""
     if not path:
         return DEFAULT_FPS
@@ -47,7 +47,7 @@ def snap(t: float, fps: float, frames: int = 0) -> float:
     return (round(t * fps) + frames) / fps
 
 
-def register(widget, step: Callable[[int], None], fps: "FpsSource" = DEFAULT_FPS) -> None:
+def register(widget, step: Callable[[int], None], fps: FpsSource = DEFAULT_FPS) -> None:
     """*step(n)* moves the control *n* frames (negative = back); *fps* (as for
     :func:`slider`) turns Shift's one second into frames."""
     entry = (step, _fps_getter(fps))
@@ -66,7 +66,7 @@ def touch(widget) -> None:
     _last = weakref.ref(widget)
 
 
-FpsSource = Union[float, Callable[[], float], object]
+FpsSource = float | Callable[[], float] | object
 
 
 def _fps_getter(source: FpsSource) -> Callable[[], float]:
@@ -106,7 +106,7 @@ def _inside(widget, ancestor) -> bool:
 def _usable(widget, page) -> bool:
     try:
         return bool(widget.winfo_exists() and widget.winfo_viewable() and _inside(widget, page))
-    except Exception:                                   # noqa: BLE001 - a destroyed widget
+    except Exception:
         return False
 
 
@@ -125,11 +125,11 @@ def target(page):
     return None
 
 
-def on_key(app, event, direction: int, second: bool = False) -> Optional[str]:
+def on_key(app, event, direction: int, second: bool = False) -> str | None:
     """Key handler for the main window: , and . (*second*: with Shift)."""
     try:
         focus = app.focus_get()
-    except Exception:                                   # noqa: BLE001 - focus in a closed popup
+    except Exception:
         focus = None
     if focus is not None and focus.winfo_class() in TYPING_CLASSES:
         return None

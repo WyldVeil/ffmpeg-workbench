@@ -7,16 +7,17 @@ or export as standalone audio.
 Dependencies are auto-installed into  <project_root>/libs/  on first run.
 No manual pip install required.
 """
-import tkinter as tk
-from tkinter import messagebox, ttk
-from core import dialogs
 import os
 import sys
 import tempfile
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from core import dialogs
 from core.hardware import get_binary_path
 from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 # ── Engines (core/tts.py): online neural voices + the OS's own offline voice ──
@@ -483,7 +484,7 @@ class TTSVoiceOverTab(BaseTab):
         p = dialogs.askopenfilename(
             filetypes=[(t("tts.text_files"), "*.txt *.srt *.md"), ("All", t("ducker.item_2"))])
         if p:
-            with open(p, "r", encoding="utf-8", errors="replace") as f:
+            with open(p, encoding="utf-8", errors="replace") as f:
                 self.text_box.delete("1.0", "end")
                 self.text_box.insert("1.0", f.read())
             self._update_stats()

@@ -286,7 +286,6 @@ class AutoSubsTab(BaseTab):
                 self.log_tagged(self.console, "Saved: " + ", ".join(outputs), "success")
             self.show_result(rc, outputs[0])
 
-        from core.queue_manager import RenderQueueManager  # noqa: F401 - ensures queue exists
         tid = self.enqueue_render("Auto-Subtitles", outputs[0], worker_fn=work,
                                   on_progress=lambda _t, line: self.log(self.console, line),
                                   on_complete=on_complete, expected_duration=duration,

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Optional
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -109,7 +108,7 @@ def first_frame_side_data(path: str) -> list:
         return []
 
 
-def inspect(info: ff.MediaInfo, path: Optional[str] = None) -> HdrInfo:
+def inspect(info: ff.MediaInfo, path: str | None = None) -> HdrInfo:
     v = info.video
     out = HdrInfo()
     if v is None:

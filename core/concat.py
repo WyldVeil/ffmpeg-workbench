@@ -15,8 +15,8 @@ Two strategies:
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence
 
 from core import encoders as enc
 from core import ffmpeg as ff
@@ -29,7 +29,7 @@ class Piece:
     path: str
     info: ff.MediaInfo
     start: float = 0.0
-    end: Optional[float] = None
+    end: float | None = None
 
     @property
     def length(self) -> float:
@@ -38,7 +38,7 @@ class Piece:
         return max(0.0, end - self.start)
 
     @classmethod
-    def of(cls, path: str, start: float = 0.0, end: Optional[float] = None) -> "Piece":
+    def of(cls, path: str, start: float = 0.0, end: float | None = None) -> Piece:
         return cls(path, ff.probe(path), start, end)
 
 
@@ -95,8 +95,8 @@ def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
 
 
 def copy_join_command(paths: Sequence[str], out: str, list_path: str,
-                      inpoints: Optional[Sequence[Optional[float]]] = None,
-                      outpoints: Optional[Sequence[Optional[float]]] = None) -> list:
+                      inpoints: Sequence[float | None] | None = None,
+                      outpoints: Sequence[float | None] | None = None) -> list:
     fl.write_concat_list(paths, list_path, inpoints=inpoints, outpoints=outpoints)
     container = os.path.splitext(out)[1].lstrip(".").lower()
     cmd = [ff.ffmpeg_path(), "-y", "-f", "concat", "-safe", "0", "-i", list_path,
@@ -129,8 +129,8 @@ def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple:
     return size[0], size[1], fps
 
 
-def filter_join_command(pieces: Sequence[Piece], out: str, *, size: Optional[tuple] = None,
-                        fps: Optional[str] = None, venc: Optional[enc.VideoEncode] = None,
+def filter_join_command(pieces: Sequence[Piece], out: str, *, size: tuple | None = None,
+                        fps: str | None = None, venc: enc.VideoEncode | None = None,
                         audio: bool = True, audio_codec: str = "aac",
                         audio_bitrate: str = "192k") -> tuple:
     """Single-pass normalising join.  Returns (argv, expected_seconds)."""

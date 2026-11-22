@@ -2,8 +2,8 @@
 tests/test_webm_maker_logic.py — unit tests for pure helpers in webm_maker.py
 (no GUI required — Tkinter is never imported).
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -86,7 +86,7 @@ def test_effective_vp9_deadline_good_and_best_unchanged():
 # ─── Simple mode (spec 2026-05-10) ───────────────────────────────────────────
 
 def test_lookup_threshold_map_boundaries():
-    from tabs.social.webm_maker import _lookup_threshold_map, _AUDIO_MAP_6MB
+    from tabs.social.webm_maker import _AUDIO_MAP_6MB, _lookup_threshold_map
     assert _lookup_threshold_map(10, _AUDIO_MAP_6MB) == 128
     assert _lookup_threshold_map(15, _AUDIO_MAP_6MB) == 128      # key is inclusive
     assert _lookup_threshold_map(15.01, _AUDIO_MAP_6MB) == 120
@@ -123,8 +123,12 @@ def test_simple_fps_cap_never_exceeds_source():
 
 
 def test_simple_budget_fits_the_cap_and_never_upscales():
-    from tabs.social.webm_maker import (_simple_compute_settings, _PROFILE_SIZE_BYTES,
-                                        _VIDEO_BITRATE_FLOOR, _RESOLUTION_TABLE)
+    from tabs.social.webm_maker import (
+        _PROFILE_SIZE_BYTES,
+        _RESOLUTION_TABLE,
+        _VIDEO_BITRATE_FLOOR,
+        _simple_compute_settings,
+    )
     for profile, size in _PROFILE_SIZE_BYTES.items():
         for dur in (5, 30, 90, 119):
             st = _simple_compute_settings(profile, dur, 1920, 1080, 30, False)

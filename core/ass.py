@@ -13,8 +13,8 @@ set to the video size, so 1 unit = 1 pixel.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable, Optional
 
 ZWSP = "​"
 
@@ -151,7 +151,7 @@ class Script:
         return path
 
 
-def fonts_dir() -> Optional[str]:
+def fonts_dir() -> str | None:
     """Folder of bundled fonts handed to libass (``fontsdir=``)."""
     from core.filters import _bundled_font_dir
     d = _bundled_font_dir()

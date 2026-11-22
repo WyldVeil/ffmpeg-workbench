@@ -111,7 +111,7 @@ def test_auto_layout_choices():
     assert grid.best_layout([9 / 16] * 3, 1920, 1080).kind == "grid 3×1"            # portrait clips side by side
     lay = grid.best_layout([16 / 9, 9 / 16, 4 / 3], 1920, 1080, gap=4)
     for x, y, w, h in lay.rects:
-        assert 0 <= x and 0 <= y and x + w <= 1920 + 2 and y + h <= 1080 + 2 and w % 2 == 0 and h % 2 == 0
+        assert x >= 0 and y >= 0 and x + w <= 1920 + 2 and y + h <= 1080 + 2 and w % 2 == 0 and h % 2 == 0
 
 
 @pytest.mark.gui
@@ -190,6 +190,7 @@ def test_collage_end_behaviours(ui, outdir, tmp_path, end, expect_left_after):
 def test_auto_layout_any_canvas_any_clips(seed):
     """Random canvas sizes and clip shapes: rectangles stay inside, never overlap, even sizes."""
     import random
+
     from core import grid
     rnd = random.Random(seed)
     W, H = rnd.randrange(200, 8192, 2), rnd.randrange(200, 8192, 2)

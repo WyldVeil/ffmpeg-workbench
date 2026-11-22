@@ -28,7 +28,6 @@ import ssl
 import time
 import urllib.error
 import urllib.request
-from typing import Optional
 from urllib.parse import quote, urlsplit
 
 from core import settings as _settings
@@ -151,7 +150,7 @@ def apply_preset(preset_id):
     return p
 
 
-def mode(cfg: Optional[dict] = None) -> str:
+def mode(cfg: dict | None = None) -> str:
     cfg = cfg if cfg is not None else get()
     m = (cfg.get("network.mode") or "auto").lower()
     if m == "auto" and cfg.get("network.proxy_enabled") and cfg.get("network.proxy_port"):
@@ -159,11 +158,11 @@ def mode(cfg: Optional[dict] = None) -> str:
     return m if m in ("auto", "direct", "manual", "offline") else "auto"
 
 
-def is_offline(cfg: Optional[dict] = None) -> bool:
+def is_offline(cfg: dict | None = None) -> bool:
     return os.environ.get("CROSSFADER_NO_NETWORK") == "1" or mode(cfg) == "offline"
 
 
-def check_online(cfg: Optional[dict] = None) -> None:
+def check_online(cfg: dict | None = None) -> None:
     if is_offline(cfg):
         raise OfflineError("Offline mode is on (Settings → Network), so nothing was downloaded.")
 
@@ -192,7 +191,7 @@ def _effective(cfg: dict) -> dict:
 
 # ── Proxy decisions ───────────────────────────────────────────────────────────
 
-def proxy_url(cfg: Optional[dict] = None) -> Optional[str]:
+def proxy_url(cfg: dict | None = None) -> str | None:
     """The manual proxy "scheme://[user:pass@]host:port", or None."""
     cfg = _effective(cfg if cfg is not None else get())
     if mode(cfg) != "manual":
@@ -212,12 +211,12 @@ def proxy_url(cfg: Optional[dict] = None) -> Optional[str]:
     return f"{scheme}://{auth}{host}:{port}"
 
 
-def strict(cfg: Optional[dict] = None) -> bool:
+def strict(cfg: dict | None = None) -> bool:
     cfg = _effective(cfg if cfg is not None else get())
     return bool(cfg.get("network.strict")) and mode(cfg) == "manual"
 
 
-def proxies_for(url: str, cfg: Optional[dict] = None) -> list:
+def proxies_for(url: str, cfg: dict | None = None) -> list:
     """Proxies to try for *url*, best first (``direct://`` = no proxy)."""
     cfg = _effective(cfg if cfg is not None else get())
     m = mode(cfg)
@@ -236,7 +235,7 @@ def proxies_for(url: str, cfg: Optional[dict] = None) -> list:
     return sysproxy.proxies_for(url)
 
 
-def describe(cfg: Optional[dict] = None, url: str = "https://www.youtube.com/") -> str:
+def describe(cfg: dict | None = None, url: str = "https://www.youtube.com/") -> str:
     """One line for the UI: what happens to a connection right now."""
     cfg = cfg if cfg is not None else get()
     special = sysproxy.special_system()
@@ -275,7 +274,7 @@ LINUX_CA_BUNDLES = (
 )
 
 
-def system_ca_file() -> Optional[str]:
+def system_ca_file() -> str | None:
     """The distribution's certificate bundle (Linux/BSD), honouring SSL_CERT_FILE."""
     env = os.environ.get("SSL_CERT_FILE")
     if env and os.path.isfile(env):
@@ -296,7 +295,7 @@ def _truststore():
         return None
 
 
-def ssl_context(cfg: Optional[dict] = None) -> ssl.SSLContext:
+def ssl_context(cfg: dict | None = None) -> ssl.SSLContext:
     """TLS settings for the app's own downloads."""
     cfg = cfg if cfg is not None else get()
     if cfg.get("network.verify_ssl", True) is False:
@@ -338,7 +337,7 @@ def ssl_context(cfg: Optional[dict] = None) -> ssl.SSLContext:
     return ctx
 
 
-def ca_bundle_for_tools(cfg: Optional[dict] = None) -> Optional[str]:
+def ca_bundle_for_tools(cfg: dict | None = None) -> str | None:
     """A certificate file for command-line tools (yt-dlp, curl...): the system's
     bundle plus the extra certificate, or None to leave them as they are."""
     cfg = cfg if cfg is not None else get()
@@ -459,7 +458,7 @@ def urlopen(url, timeout=None, headers=None, cfg=None, data=None):
     raise last if last else OSError("No route")
 
 
-def mirror_url(url: str, cfg: Optional[dict] = None) -> str:
+def mirror_url(url: str, cfg: dict | None = None) -> str:
     """Rewrite a Hugging Face / GitHub download link to the configured mirror."""
     cfg = cfg if cfg is not None else get()
     hf = (cfg.get("network.hf_mirror") or "").strip().rstrip("/")
@@ -474,7 +473,7 @@ def mirror_url(url: str, cfg: Optional[dict] = None) -> str:
 
 # ── Command-line tools (yt-dlp and the Deno it starts) ────────────────────────
 
-def wrapper_prefix(cfg: Optional[dict] = None) -> list:
+def wrapper_prefix(cfg: dict | None = None) -> list:
     """Command to put in front of network tools (split tunnelling etc.)."""
     cfg = cfg if cfg is not None else get()
     text = (cfg.get("network.wrapper") or "").strip()
@@ -486,7 +485,7 @@ def wrapper_prefix(cfg: Optional[dict] = None) -> list:
     return list(lex)
 
 
-def tool_proxy(url: str = "https://www.youtube.com/", cfg: Optional[dict] = None) -> Optional[str]:
+def tool_proxy(url: str = "https://www.youtube.com/", cfg: dict | None = None) -> str | None:
     """The single proxy a command-line tool should use for *url*: '' = direct,
     None = leave the tool's own defaults."""
     cfg = cfg if cfg is not None else get()
@@ -629,7 +628,7 @@ def find_local_proxies(timeout: float = 0.25) -> list:
                 s.sendall(b"\x05\x01\x00")                 # SOCKS5 greeting, "no authentication"
                 try:
                     reply = s.recv(2)
-                except (socket.timeout, OSError):
+                except (TimeoutError, OSError):
                     reply = b""
             if reply[:1] == b"\x05":
                 found.append((port, "socks5h", label))
@@ -639,7 +638,7 @@ def find_local_proxies(timeout: float = 0.25) -> list:
                 s.sendall(b"OPTIONS * HTTP/1.0\r\n\r\n")
                 try:
                     reply = s.recv(12)
-                except (socket.timeout, OSError):
+                except (TimeoutError, OSError):
                     reply = b""
             if reply.startswith(b"HTTP/"):
                 found.append((port, "http", label))
@@ -654,7 +653,7 @@ BLOCK_MARKERS = ("confirm you", "not a bot", "http error 403", "http error 429",
                  "precondition check failed", "unable to download api page", "sign in to confirm")
 
 
-def tor_retries(cfg: Optional[dict] = None) -> int:
+def tor_retries(cfg: dict | None = None) -> int:
     """How many fresh circuits to try (Settings → Network; 0 = off)."""
     cfg = cfg if cfg is not None else get()
     try:
@@ -663,7 +662,7 @@ def tor_retries(cfg: Optional[dict] = None) -> int:
         return 12
 
 
-def tor_like_proxy(cmd: list) -> Optional[str]:
+def tor_like_proxy(cmd: list) -> str | None:
     """The SOCKS proxy in a yt-dlp command when it points at a Tor on this
     computer (where new SOCKS credentials mean a new circuit), else None."""
     proxy = None

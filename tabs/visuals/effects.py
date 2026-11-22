@@ -18,20 +18,20 @@ shortened unless the user explicitly chooses to trim - intro and outro
 effects overlay onto the existing video so no content is lost.
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox
-from core import dialogs
 import os
 import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT
-from core.hardware import (    get_binary_path,
-)
-from core.i18n import t
+from core import dialogs
 from core import ffmpeg as ff
 from core import filters as fl
+from core.hardware import (
+    get_binary_path,
+)
+from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, UI_FONT, BaseTab
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Shared helpers
@@ -148,7 +148,7 @@ def _console_block(parent, height=7):
 
 def _lf(parent, title, **kw):
     return tk.LabelFrame(
-        parent, text="  {}  ".format(title),
+        parent, text=f"  {title}  ",
         bg=CLR["bg"], fg=CLR["fg"],
         font=(UI_FONT, 9, "bold"),
         padx=px(14), pady=px(10),
@@ -250,7 +250,7 @@ class SpecialEffectsTab(BaseTab):
                 val = float(str(var.get()).replace(",", "."))
             except ValueError:
                 raise ValueError(f"'{label}' must be a number.")
-        if lo is not None and val < lo or hi is not None and val > hi:
+        if (lo is not None and val < lo) or (hi is not None and val > hi):
             raise ValueError(f"'{label}' must be between {lo} and {hi}.")
         return val
 
@@ -739,8 +739,8 @@ class SpecialEffectsTab(BaseTab):
 
         cmd = [
             _ffmpeg(), "-y", "-i", src,
-            "-vf", "fade=type=out:st={st}:d={dur}".format(st=start, dur=dur),
-            "-af", "afade=type=out:st={st}:d={dur}".format(st=start, dur=dur),
+            "-vf", f"fade=type=out:st={start}:d={dur}",
+            "-af", f"afade=type=out:st={start}:d={dur}",
             "-c:v", "libx264", "-crf", crf, "-preset", "fast",
             "-movflags", "+faststart",
             out,
@@ -1263,15 +1263,14 @@ class SpecialEffectsTab(BaseTab):
         # drawtext with a time-based expression that counts down
         filter_str = (
             "drawtext="
-            "text='%{{eif\\:{count_from}-(t-{st})\\:d}}':"
-            "fontsize={sz}:"
+            f"text='%{{eif\\:{count_from}-(t-{start})\\:d}}':"
+            f"fontsize={size}:"
             "fontcolor=white:"
             "x=(w-text_w)/2:y=(h-text_h)/2:"
             "shadowcolor=black@0.8:shadowx=4:shadowy=4:"
             "box=1:boxcolor=black@0.5:boxborderw=12:"
-            "enable='between(t,{st},{en})'"
-        ).format(
-            count_from=count_from, st=start, en=end, sz=size)
+            f"enable='between(t,{start},{end})'"
+        )
 
         cmd = [
             _ffmpeg(), "-y", "-i", src,
@@ -1434,7 +1433,7 @@ class SpecialEffectsTab(BaseTab):
         total    = _probe_duration(src)
         end      = total if whole else (start + float(dur_str))
 
-        enable = "between(t,{st},{en})".format(st=start, en=end)
+        enable = f"between(t,{start},{end})"
 
         # Split channels, offset R right, B left, keep G centre
         # Then blend with addition
@@ -1443,15 +1442,15 @@ class SpecialEffectsTab(BaseTab):
             "[r0]geq=r='r(X,Y)':g=0:b=0[r];"
             "[g0]geq=r=0:g='g(X,Y)':b=0[g];"
             "[b0]geq=r=0:g=0:b='b(X,Y)'[b];"
-            "[r]pad=iw+{off}:ih:0:0:color=black[rp];"
-            "[b]pad=iw+{off}:ih:{off}:0:color=black[bp];"
-            "[g]pad=iw+{off}:ih:{half}:0:color=black[gp];"
+            f"[r]pad=iw+{offset}:ih:0:0:color=black[rp];"
+            f"[b]pad=iw+{offset}:ih:{offset}:0:color=black[bp];"
+            f"[g]pad=iw+{offset}:ih:{offset // 2}:0:color=black[gp];"
             "[rp][gp]blend=all_mode=addition[rg];"
             "[rg][bp]blend=all_mode=addition,"
-            "crop=iw-{off}:ih:0:0"
+            f"crop=iw-{offset}:ih:0:0"
             "[glitch];"
-            "[0:v][glitch]overlay=0:0:enable='{en}'[v]"
-        ).format(off=offset, half=offset // 2, en=enable)
+            f"[0:v][glitch]overlay=0:0:enable='{enable}'[v]"
+        )
 
         cmd = [
             _ffmpeg(), "-y", "-i", src,
@@ -1530,19 +1529,17 @@ class SpecialEffectsTab(BaseTab):
         filter_str = (
             # Chroma blur simulates colour bleed
             "split=2[main][cb];"
-            "[cb]hue=s=1.3,boxblur=luma_radius={cb}:chroma_radius={cb}[cblur];"
+            f"[cb]hue=s=1.3,boxblur=luma_radius={chroma_blur}:chroma_radius={chroma_blur}[cblur];"
             "[main][cblur]blend=all_mode=overlay:all_opacity=0.3[blended];"
             # Luma softness
-            "[blended]unsharp=3:3:-{lu}[soft];"
+            f"[blended]unsharp=3:3:-{luma_blur}[soft];"
             # Noise (grain)
-            "[soft]noise=alls={ns}:allf=t[noisy];"
+            f"[soft]noise=alls={noise}:allf=t[noisy];"
             # Scanlines
             "[noisy]drawgrid="
             "width=0:height=2:thickness=1:"
-            "color=black@{sa}[v]"
-        ).format(
-            cb=chroma_blur, lu=luma_blur,
-            ns=noise, sa=scan_alpha)
+            f"color=black@{scan_alpha}[v]"
+        )
 
         cmd = [
             _ffmpeg(), "-y", "-i", src,
@@ -1612,7 +1609,7 @@ class SpecialEffectsTab(BaseTab):
         crf = self._gr_crf.get()
         cmd = [
             _ffmpeg(), "-y", "-i", src,
-            "-vf", "noise=alls={amt}:allf=t+u".format(amt=amount),
+            "-vf", f"noise=alls={amount}:allf=t+u",
             "-c:v", "libx264", "-crf", crf, "-preset", "fast",
             "-c:a", "copy",
             "-movflags", "+faststart",
@@ -1671,7 +1668,7 @@ class SpecialEffectsTab(BaseTab):
         crf   = self._vi_crf.get()
         cmd   = [
             _ffmpeg(), "-y", "-i", src,
-            "-vf", "vignette=angle={a}".format(a=angle),
+            "-vf", f"vignette=angle={angle}",
             "-c:v", "libx264", "-crf", crf, "-preset", "fast",
             "-c:a", "copy",
             "-movflags", "+faststart",
@@ -1835,7 +1832,7 @@ class SpecialEffectsTab(BaseTab):
             total   = _probe_duration(src)
             whole   = (dur_str.lower() == "whole video")
             end     = total if whole else (start + float(dur_str))
-            enable  = "between(t,{st},{en})".format(st=start, en=end)
+            enable  = f"between(t,{start},{end})"
 
             # Use crop to hide black edges introduced by the translate
             w, h = _probe_wh(src)
@@ -1843,15 +1840,10 @@ class SpecialEffectsTab(BaseTab):
             ch   = h - amp * 2
 
             filter_str = (
-                "crop={cw}:{ch}:"
-                "x='if({en},{amp}+{amp}*sin(t*{f1}),{amp})':"
-                "y='if({en},{amp}+{amp}*cos(t*{f2}),{amp})',"
-                "scale={w}:{h},setsar=1,format=yuv420p"
-            ).format(
-                cw=cw, ch=ch, amp=amp,
-                f1=freq1, f2=freq2,
-                w=w, h=h,
-                en=enable,
+                f"crop={cw}:{ch}:"
+                f"x='if({enable},{amp}+{amp}*sin(t*{freq1}),{amp})':"
+                f"y='if({enable},{amp}+{amp}*cos(t*{freq2}),{amp})',"
+                f"scale={w}:{h},setsar=1,format=yuv420p"
             )
 
             cmd = [
@@ -2166,7 +2158,7 @@ class SpecialEffectsTab(BaseTab):
         total  = _probe_duration(src)
         whole  = (dur_s.lower() == "whole video")
         end    = total if whole else (start + float(dur_s))
-        enable = "between(t,{st},{en})".format(st=start, en=end)
+        enable = f"between(t,{start},{end})"
 
         filters = []
         for caption, y in ((top, "20"), (bot, "h-text_h-20")):
@@ -2343,10 +2335,10 @@ class SpecialEffectsTab(BaseTab):
         margin = 24
 
         pos_map = {
-            "Bottom Right": ("w-text_w-{m}".format(m=margin),
-                             "h-text_h-{m}".format(m=margin)),
-            "Bottom Left":  (str(margin), "h-text_h-{m}".format(m=margin)),
-            "Top Right":    ("w-text_w-{m}".format(m=margin), str(margin)),
+            "Bottom Right": (f"w-text_w-{margin}",
+                             f"h-text_h-{margin}"),
+            "Bottom Left":  (str(margin), f"h-text_h-{margin}"),
+            "Top Right":    (f"w-text_w-{margin}", str(margin)),
             "Top Left":     (str(margin), str(margin)),
             "Centre":       ("(w-text_w)/2", "(h-text_h)/2"),
         }

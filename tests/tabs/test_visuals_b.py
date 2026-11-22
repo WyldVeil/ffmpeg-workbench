@@ -8,7 +8,6 @@ import pytest
 from core import ffmpeg as ff
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
 
-
 # ── pure helpers ─────────────────────────────────────────────────────────────
 
 def test_colour_chain_neutral_and_curves():

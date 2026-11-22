@@ -28,7 +28,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from typing import Optional
 
 from core import sysproxy
 
@@ -37,14 +36,14 @@ NETNS_PATH = f"/run/netns/{NETNS}"
 RESOLV = "/etc/resolv-over-clearnet.conf"
 USER = "amnesia"
 
-_remembered: Optional[bytearray] = None
+_remembered: bytearray | None = None
 
 
 def is_tails() -> bool:
     return sysproxy.special_system() == "tails"
 
 
-def _sudo(args: list, password: Optional[str] = None, timeout: float = 20) -> subprocess.CompletedProcess:
+def _sudo(args: list, password: str | None = None, timeout: float = 20) -> subprocess.CompletedProcess:
     cmd = ["sudo", "-S", "-p", "", *args] if password is not None else ["sudo", "-n", *args]
     return subprocess.run(cmd, input=(password + "\n") if password is not None else None, capture_output=True,
                           text=True, timeout=timeout, stdin=None if password is not None else subprocess.DEVNULL)

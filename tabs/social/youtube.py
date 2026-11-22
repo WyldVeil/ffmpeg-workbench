@@ -31,13 +31,12 @@ import tkinter as tk
 import webbrowser
 from datetime import datetime
 from tkinter import messagebox, ttk
-from core import dialogs
 
+from core import dialogs
 from core.hardware import CREATE_NO_WINDOW, get_binary_path
-from tabs.base_tab import BaseTab, CLR, MONO_FONT, UI_FONT
 from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Module-level helpers
@@ -140,7 +139,7 @@ class YouTubeDownloaderTab(BaseTab):
     def _load_history(self):
         try:
             if os.path.isfile(_HISTORY_FILE):
-                with open(_HISTORY_FILE, "r", encoding="utf-8") as f:
+                with open(_HISTORY_FILE, encoding="utf-8") as f:
                     self._history = json.load(f)
         except Exception:
             self._history = []
@@ -719,7 +718,7 @@ class YouTubeDownloaderTab(BaseTab):
         tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(8))
         tk.Label(parent, text=t("youtube.metadata_extra"), font=(UI_FONT, 9, "bold"),
                  bg=CLR["bg"], fg=CLR["fg"]).pack(anchor="w", pady=px(0, 4))
-                 
+
         meta_r = tk.Frame(parent, bg=CLR["bg"])
         meta_r.pack(fill="x")
         self._embed_chapters_var = tk.BooleanVar(value=True)
@@ -728,7 +727,7 @@ class YouTubeDownloaderTab(BaseTab):
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
         ).pack(side="left")
-        
+
         self._embed_metadata_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             meta_r, text=t("youtube.embed_video_metadata"), variable=self._embed_metadata_var,
@@ -833,13 +832,13 @@ class YouTubeDownloaderTab(BaseTab):
                  font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w", padx=px(20))
 
         tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
-        
+
         # Advanced: Aria2c & Custom arguments
         aria_row = tk.Frame(parent, bg=CLR["bg"])
         aria_row.pack(fill="x", pady=px(3))
         self._use_aria2c_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            aria_row, text=t("youtube.use_aria2c_fast_external_downloader_requires_ari"), 
+            aria_row, text=t("youtube.use_aria2c_fast_external_downloader_requires_ari"),
             variable=self._use_aria2c_var,
             font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"],
             activebackground=CLR["bg"], selectcolor=CLR["panel"]
@@ -1127,7 +1126,7 @@ class YouTubeDownloaderTab(BaseTab):
                 r = subprocess.run([p, "--version"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
                 ver = r.stdout.strip()
                 self.log_tagged(self.console, f"✔ yt-dlp found (v{ver}).", "success")
-                
+
                 # Safely pass it to the Main UI's status bar!
                 try:
                     self.winfo_toplevel().set_ytdlp_status(ver, p)
@@ -1242,6 +1241,7 @@ class YouTubeDownloaderTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Fetch video info first.", parent=self)
             return
         import subprocess
+
         from core import ffmpeg as ff
         codec = ["-c:v", "mjpeg", "-q:v", "2"] if p.lower().endswith((".jpg", ".jpeg")) else ["-c:v", "png"]
         res = subprocess.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0",
@@ -1389,7 +1389,7 @@ class YouTubeDownloaderTab(BaseTab):
     def _populate_formats(self, formats: list):
         if not formats:
             return
-            
+
         vfmts = sorted(
             [f for f in formats
              if (f.get("vcodec") or "none") != "none" and f.get("height")],
@@ -1457,6 +1457,7 @@ class YouTubeDownloaderTab(BaseTab):
         and let FFmpeg decode it - Tk shows PNG natively, so no Pillow needed."""
         import base64
         import subprocess
+
         from core import ffmpeg as ff
         from core import network as _net
         try:
@@ -1653,6 +1654,7 @@ class YouTubeDownloaderTab(BaseTab):
     def _run_ytdlp_once(self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False):
         """(returncode, last output lines)"""
         from collections import deque
+
         from core import network as _net
         from core.ytdlp import redact
         tail = deque(maxlen=40)
@@ -1768,17 +1770,17 @@ class YouTubeDownloaderTab(BaseTab):
         proxy = self._proxy_var.get().strip()
         if proxy:
             args += ["--proxy", proxy]
-            
+
         # Advanced Networking
         if self._use_aria2c_var.get():
             args += ["--downloader", "aria2c", "--downloader-args", "aria2c:-x 16 -s 16 -k 1M"]
-            
+
         # Metadata
         if self._embed_chapters_var.get():
             args += ["--embed-chapters"]
         if self._embed_metadata_var.get():
             args += ["--embed-metadata"]
-            
+
         # SponsorBlock
         sb_cats = [k for k, v in self._sb_vars.items() if v.get()]
         if sb_cats:
@@ -1787,12 +1789,12 @@ class YouTubeDownloaderTab(BaseTab):
                 args += ["--sponsorblock-mark", cat_str]
             else:
                 args += ["--sponsorblock-remove", cat_str]
-                
-        # Custom arguments 
+
+        # Custom arguments
         custom_args = self._custom_args_var.get().strip()
         if custom_args:
             args += shlex.split(custom_args)
-            
+
         return args
 
     def _build_trim_args(self) -> list | None:
@@ -2067,7 +2069,7 @@ class YouTubeDownloaderTab(BaseTab):
         sub_fmt = self._sub_fmt_var.get()
         tmp_dir = tempfile.mkdtemp(prefix="cf_subs_")
         tmp_base = os.path.join(tmp_dir, "sub")
-        
+
         from core import network as _net
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
         cmd = _yt(ytdlp) + [playlist_flag, "--write-sub",

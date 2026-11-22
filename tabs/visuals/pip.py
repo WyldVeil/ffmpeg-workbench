@@ -12,7 +12,6 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import colorchooser, messagebox, ttk
-from typing import Optional
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -44,7 +43,7 @@ class PipSpec:
     radius: int = 0
     opacity: float = 1.0
     start: float = 0.0
-    end: Optional[float] = None
+    end: float | None = None
     anim: str = "none"
     anim_dur: float = 0.5
 

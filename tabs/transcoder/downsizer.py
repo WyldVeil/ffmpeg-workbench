@@ -20,17 +20,16 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from dataclasses import dataclass
-from typing import Optional
 from tkinter import messagebox, ttk
 
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, add_pickers, scroll_body
-from core.scaling import px
 
 TARGETS = [("8 MB", 8), ("10 MB - Discord", 10), ("18 MB - safe for email", 18), ("25 MB", 25),
            ("50 MB - Discord Nitro Basic", 50), ("100 MB", 100), ("500 MB - Discord Nitro", 500),
@@ -310,7 +309,7 @@ class UniversalDownsizerTab(BaseTab):
 
 
 def encode_to_size(src: str, final: str, info, p: Plan, target: int, *, codec: str = "h264", fast: bool = False,
-                   audio_mode: str = "auto", start: float = 0.0, end: Optional[float] = None, tmp: str,
+                   audio_mode: str = "auto", start: float = 0.0, end: float | None = None, tmp: str,
                    run, log=print) -> int:
     """Encode *src* into *final* under *target* bytes following plan *p*:
     two-pass on the CPU (or the GPU when *fast*), then re-encode at a lower

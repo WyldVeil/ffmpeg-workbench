@@ -424,7 +424,7 @@ def install_ffmpeg(info: dict, plat: str, archive: str, out: str) -> list:
         base = os.path.basename(name)
         stem, ext = os.path.splitext(base)
         parent = os.path.basename(os.path.dirname(name))
-        if parent == "bin" and (stem in wanted_bins and ext in ("", ".exe") or ext == ".dll"):
+        if parent == "bin" and ((stem in wanted_bins and ext in ("", ".exe")) or ext == ".dll"):
             _write(os.path.join(root, "bin", base), read(), executable=True)
             placed.append(base)
         elif parent == "lib":

@@ -13,15 +13,14 @@ Chain (applied in order):
 Each stage can be bypassed independently.
 Preview by exporting a short clip with the chain applied.
 """
+import os
 import tkinter as tk
 from tkinter import ttk
-from core import dialogs
-import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from core import dialogs
 from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
 EQ_BANDS = [

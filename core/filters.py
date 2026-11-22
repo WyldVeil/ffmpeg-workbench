@@ -27,7 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Iterable, Optional, Sequence  # noqa: F401
+from collections.abc import Iterable, Sequence
 
 _IS_WIN = sys.platform.startswith("win")
 
@@ -69,8 +69,8 @@ def filter_path(path: str) -> str:
     return filter_value(p)
 
 
-def subtitles_filter(path: str, *, force_style: str = "", stream_index: Optional[int] = None,
-                     fonts_dir: Optional[str] = None, charenc: Optional[str] = None) -> str:
+def subtitles_filter(path: str, *, force_style: str = "", stream_index: int | None = None,
+                     fonts_dir: str | None = None, charenc: str | None = None) -> str:
     """``subtitles=`` filter for an external subtitle file (SRT/ASS/VTT) or
     for a subtitle stream of a media file (*stream_index*)."""
     ext = os.path.splitext(path)[1].lower()
@@ -146,7 +146,7 @@ def hex_to_ass_colour(hex_colour: str, alpha: int = 0) -> str:
     return f"&H{alpha:02X}{b}{g}{r}".upper()
 
 
-def drawtext_text_file(text: str, directory: Optional[str] = None) -> str:
+def drawtext_text_file(text: str, directory: str | None = None) -> str:
     """Write *text* to a UTF-8 file for ``drawtext=textfile=`` and return its
     path.  Using a file sidesteps every text-escaping pitfall (quotes, colons,
     percent signs, backslashes, emoji, newlines)."""
@@ -156,14 +156,14 @@ def drawtext_text_file(text: str, directory: Optional[str] = None) -> str:
     return path
 
 
-def drawtext_filter(*, text: Optional[str] = None, textfile: Optional[str] = None,
-                    fontfile: Optional[str] = None, font: Optional[str] = None,
+def drawtext_filter(*, text: str | None = None, textfile: str | None = None,
+                    fontfile: str | None = None, font: str | None = None,
                     fontsize: str | int = 48, fontcolor: str = "white",
                     x: str = "(w-text_w)/2", y: str = "(h-text_h)/2",
                     box: bool = False, boxcolor: str = "black@0.5", boxborderw: int = 10,
                     borderw: int = 0, bordercolor: str = "black",
                     shadowx: int = 0, shadowy: int = 0, shadowcolor: str = "black",
-                    alpha: Optional[str] = None, enable: Optional[str] = None,
+                    alpha: str | None = None, enable: str | None = None,
                     expansion: str = "none", extra: Sequence[str] = ()) -> str:
     """A fully escaped ``drawtext`` filter.
 
@@ -222,10 +222,10 @@ def concat_line(path: str) -> str:
     return "file '" + p.replace("'", "'\\''") + "'"
 
 
-def write_concat_list(paths: Iterable[str], list_path: Optional[str] = None, *,
-                      durations: Optional[Sequence[Optional[float]]] = None,
-                      inpoints: Optional[Sequence[Optional[float]]] = None,
-                      outpoints: Optional[Sequence[Optional[float]]] = None) -> str:
+def write_concat_list(paths: Iterable[str], list_path: str | None = None, *,
+                      durations: Sequence[float | None] | None = None,
+                      inpoints: Sequence[float | None] | None = None,
+                      outpoints: Sequence[float | None] | None = None) -> str:
     """Write a concat-demuxer list (use with ``-f concat -safe 0 -i LIST``)."""
     if list_path is None:
         fd, list_path = tempfile.mkstemp(prefix="concat_", suffix=".txt")
@@ -254,7 +254,7 @@ def _meta_escape(value: str) -> str:
 
 
 def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (),
-                     tags: Optional[dict] = None) -> str:
+                     tags: dict | None = None) -> str:
     """Write an FFMETADATA1 file.  *chapters* is a sequence of
     ``(start_seconds, end_seconds, title)``; use with
     ``-i META -map_metadata 1 -map_chapters 1``."""
@@ -331,7 +331,7 @@ def _norm(name: str) -> str:
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
-def _fc_match(pattern: str) -> Optional[str]:
+def _fc_match(pattern: str) -> str | None:
     """fontconfig lookup that only accepts a REAL match for *pattern*
     (fc-match otherwise returns a generic fallback for anything)."""
     if _IS_WIN or not shutil.which("fc-match"):
@@ -349,7 +349,7 @@ def _fc_match(pattern: str) -> Optional[str]:
     return parts[0] if any(wanted and (wanted in n or n in wanted) for n in names if n) else None
 
 
-def _system_file(name: str) -> Optional[str]:
+def _system_file(name: str) -> str | None:
     wanted = _norm(name.split(":")[0]) + ("bold" if ":bold" in name else "")
     for d in _system_font_dirs():
         if not d or not os.path.isdir(d):
@@ -362,7 +362,7 @@ def _system_file(name: str) -> Optional[str]:
     return None
 
 
-def find_font(name: str = "sans") -> Optional[str]:
+def find_font(name: str = "sans") -> str | None:
     """Return a font file for *name*: a bundled font (``"Montserrat-Bold"``),
     a family (``"Arial"``), an alias (``"sans bold"``) or a path.  Tries the
     exact font first (bundled, then system), then metric-compatible and

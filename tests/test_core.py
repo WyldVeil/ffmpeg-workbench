@@ -1,8 +1,8 @@
 """
 tests/test_core.py  -  Tests for core utilities (no GUI required).
 """
-import sys
 import os
+import sys
 
 import pytest
 
@@ -61,6 +61,7 @@ def test_mystical_star_canvas_stays_behind_the_ui():
 def test_deps_import_has_no_side_effects(tmp_path, monkeypatch):
     import importlib
     import sys
+
     import core.deps as deps
     made = []
     monkeypatch.setattr("os.makedirs", lambda *a, **k: made.append(a))

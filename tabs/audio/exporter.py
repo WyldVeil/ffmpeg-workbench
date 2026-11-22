@@ -15,21 +15,20 @@ video-with-audio) file and re-save it with full control over:
   • Max file-size targeting (auto-calculates bitrate)
   • ReplayGain tagging
 """
-import tkinter as tk
-from tkinter import messagebox, ttk
-from core import dialogs
 import json
 import math
 import os
 import subprocess
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path, CREATE_NO_WINDOW
+from core import dialogs
 from core import ffmpeg as ff
+from core.hardware import CREATE_NO_WINDOW, get_binary_path
 from core.i18n import t
-from tabs import common
 from core.scaling import px
-
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ── Format definitions ───────────────────────────────────────────────────────
 #  key: (extension, codec_args, supports_bitrate, supports_vbr, supports_bit_depth)

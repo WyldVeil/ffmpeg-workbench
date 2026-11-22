@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
 
@@ -52,7 +52,7 @@ LANGUAGES = [
 _PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)%")
 
 
-def cli_path() -> Optional[str]:
+def cli_path() -> str | None:
     from core.hardware import find_binary
     return find_binary("whisper-cli")
 
@@ -74,7 +74,7 @@ def is_installed(key: str) -> bool:
     return os.path.isfile(path) and os.path.isfile(path + ".ok")
 
 
-def adopt_file(key: str, path: Optional[str] = None) -> bool:
+def adopt_file(key: str, path: str | None = None) -> bool:
     """Install model *key* from a file the person copied in by hand (offline
     machines): accepted only if its SHA-256 matches the pinned one."""
     m = MODELS[key]
@@ -97,10 +97,10 @@ def adopt_file(key: str, path: Optional[str] = None) -> bool:
     return True
 
 
-def download_model(key: str, progress: Optional[Callable[[float], None]] = None,
-                   cancelled: Optional[Callable[[], bool]] = None) -> str:
+def download_model(key: str, progress: Callable[[float], None] | None = None,
+                   cancelled: Callable[[], bool] | None = None) -> str:
     """Download and verify model *key*; returns its path.  Raises RuntimeError."""
-    from core.updater import _open, _offline
+    from core.updater import _offline, _open
     m = MODELS[key]
     dest = model_path(key)
     if is_installed(key) or adopt_file(key):
@@ -166,13 +166,13 @@ def transcribe_cmd(audio_wav: str, model: str, out_base: str, *, language: str =
     return cmd
 
 
-def parse_progress(line: str) -> Optional[float]:
+def parse_progress(line: str) -> float | None:
     m = _PROGRESS_RE.search(line or "")
     return int(m.group(1)) / 100 if m else None
 
 
 def audio_extract_cmd(src: str, wav: str, *, start: float = 0.0,
-                      duration: Optional[float] = None, stream: int = 0) -> list:
+                      duration: float | None = None, stream: int = 0) -> list:
     """16 kHz mono PCM, the format whisper.cpp reads."""
     from core import ffmpeg as ff
     cmd = [ff.ffmpeg_path(), "-y"]

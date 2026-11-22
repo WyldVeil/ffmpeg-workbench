@@ -39,8 +39,8 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Mapping, Optional
 from urllib.parse import urlsplit
 
 DIRECT = "direct://"
@@ -75,7 +75,7 @@ def _hide_auth(url: str) -> str:
     return re.sub(r"//[^/@]+@", "//•••@", url)
 
 
-def _run(cmd: list, timeout: float = 4.0) -> Optional[str]:
+def _run(cmd: list, timeout: float = 4.0) -> str | None:
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, errors="replace",
                            stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW)
@@ -195,7 +195,7 @@ def parse_gsettings(text: str) -> SystemProxy:
     return sp
 
 
-def parse_kioslaverc(text: str, env: Optional[Mapping[str, str]] = None) -> SystemProxy:
+def parse_kioslaverc(text: str, env: Mapping[str, str] | None = None) -> SystemProxy:
     """KDE ``kioslaverc`` [Proxy Settings] (Plasma 5 and 6)."""
     env = os.environ if env is None else env
     assert env is not None
@@ -231,7 +231,7 @@ def parse_kioslaverc(text: str, env: Optional[Mapping[str, str]] = None) -> Syst
     return sp
 
 
-def from_environment(env: Optional[Mapping[str, str]] = None) -> SystemProxy:
+def from_environment(env: Mapping[str, str] | None = None) -> SystemProxy:
     env = os.environ if env is None else env
     assert env is not None
 
@@ -372,7 +372,7 @@ def _mac() -> SystemProxy:
     return parse_scutil(out) if out else SystemProxy()
 
 
-def portal_lookup(url: str) -> Optional[list]:
+def portal_lookup(url: str) -> list | None:
     """Ask the desktop portal (GNOME, KDE, Flatpak...) - None when there is no portal."""
     gdbus = shutil.which("gdbus")
     if not gdbus or not os.environ.get("DBUS_SESSION_BUS_ADDRESS", "x"):
@@ -386,7 +386,7 @@ def portal_lookup(url: str) -> Optional[list]:
     return [DIRECT if p.startswith("direct") else normalise_proxy(p) for p in found] or None
 
 
-def libproxy_lookup(url: str) -> Optional[list]:
+def libproxy_lookup(url: str) -> list | None:
     tool = shutil.which("proxy")
     if not tool:
         return None
@@ -516,7 +516,7 @@ console.log(String(__f(__job)));
 _pac_cache: dict = {}
 
 
-def _deno() -> Optional[str]:
+def _deno() -> str | None:
     try:
         from core.hardware import find_binary
         return find_binary("deno")
@@ -533,7 +533,7 @@ def _my_ip() -> str:
         return "127.0.0.1"
 
 
-def _resolve(host: str) -> Optional[str]:
+def _resolve(host: str) -> str | None:
     try:
         return socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
     except (OSError, IndexError, UnicodeError):

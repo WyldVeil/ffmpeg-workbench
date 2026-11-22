@@ -242,7 +242,8 @@ class ManualCropTab(BaseTab):
         s, ox, oy = self._view()
         x, y, w, h = self.rect()
         x1, y1, x2, y2 = ox + x * s, oy + y * s, ox + (x + w) * s, oy + (y + h) * s
-        near = lambda a, b: abs(a - b) < px(10)  # noqa: E731
+        def near(a, b):
+            return abs(a - b) < px(10)
         corners = {"tl": (x1, y1), "tr": (x2, y1), "bl": (x1, y2), "br": (x2, y2)}
         kind = next((k for k, (cx, cy) in corners.items() if near(ev.x, cx) and near(ev.y, cy)), None)
         if kind is None and x1 < ev.x < x2 and y1 < ev.y < y2:

@@ -211,6 +211,7 @@ def test_frame_pickers_next_to_time_fields(ui, tool, expected):
 @pytest.mark.ffmpeg
 def test_frame_picker_fills_the_field(ui, media):
     import tkinter as tk
+
     from tabs.widgets import FramePicker
     var = tk.StringVar(value="1.0")
     picker = FramePicker(ui.app, media["h264"], var)

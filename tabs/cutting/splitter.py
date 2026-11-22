@@ -2,20 +2,19 @@
 tab_multisplitter.py  ─  Manual Multi-Splitter
 Extract multiple different segments from a single video into separate files.
 """
-import tkinter as tk
-from tkinter import messagebox
-from core import dialogs
 import os
 import re
+import tkinter as tk
+from tkinter import messagebox
 
-from tabs.base_tab import BaseTab, VideoTimeline, CLR, UI_FONT, MONO_FONT, add_tooltip
-from core.hardware import get_video_duration
-from core.i18n import t
+from core import dialogs, outputs
 from core import encoders as enc
 from core import ffmpeg as ff
-from core import outputs
+from core.hardware import get_video_duration
+from core.i18n import t
 from core.scaling import px
 from tabs import framestep
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, add_tooltip
 
 
 def _tr(key, fallback):
@@ -84,7 +83,7 @@ class MultiSplitterTab(BaseTab):
         # Splits Container
         self.splits_container = tk.LabelFrame(self, text=t("splitter.split_regions_section"), bg=CLR["bg"], fg=CLR["fgdim"], padx=px(10), pady=px(10))
         self.splits_container.pack(fill="both", expand=True, padx=px(20), pady=px(10))
-        
+
         btn_f = tk.Frame(self.splits_container, bg=CLR["bg"])
         btn_f.pack(fill="x", pady=px(0, 10))
         tk.Button(btn_f, text=t("splitter.add_split_button"), command=self._add_row, bg=CLR["panel"], fg=CLR["fg"]).pack(side="left")
@@ -140,7 +139,7 @@ class MultiSplitterTab(BaseTab):
 
         num = tk.Label(row, text=f"Clip {idx}:", bg=CLR["bg"], fg=CLR["accent"], width=6)
         num.pack(side="left")
-        
+
         tk.Label(row, text=t("splitter.start_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left", padx=px(10,2))
         start_var = tk.StringVar(value=_ts(start) if self.duration > 0 else "00:00:00")
         tk.Entry(row, textvariable=start_var, width=13, bg=CLR["input_bg"], fg=CLR["input_fg"]).pack(side="left")

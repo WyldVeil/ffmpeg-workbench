@@ -44,8 +44,8 @@ def test_inspector_shows_streams_and_preview(tkroot, media):
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 def test_inspector_diagnostics(tkroot, media, tmp_path):
-    from tabs.system.media_inspector import MediaInspectorTab, diagnose
     from core import ffmpeg as ff
+    from tabs.system.media_inspector import MediaInspectorTab, diagnose
     notes = dict((m, lvl) for lvl, m in diagnose(ff.probe(media["vertical_noaudio"])))
     assert any("No audio" in m for m in notes)
     tab = MediaInspectorTab(tkroot)
@@ -76,8 +76,8 @@ def test_frame_preview_coalesces_requests(tkroot, media):
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 def test_encoder_panel_builds_working_args(tkroot, outdir):
-    from tabs.widgets import EncoderPanel
     from core import ffmpeg as ff
+    from tabs.widgets import EncoderPanel
     panel = EncoderPanel(tkroot)
     panel.pack()
     _pump(tkroot, 0.5)

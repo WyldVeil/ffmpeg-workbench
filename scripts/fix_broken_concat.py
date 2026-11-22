@@ -3,8 +3,8 @@ fix_broken_concat.py  --  Fix implicit string concatenations broken by
 i18n_audit_fix.py.  Pattern:   t("key")   "remaining tail"
 becomes a single t() call with the full combined string as the value.
 """
-import re
 import json
+import re
 from pathlib import Path
 
 ROOT       = Path(__file__).parent.parent

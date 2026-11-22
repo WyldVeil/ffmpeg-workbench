@@ -20,7 +20,6 @@ from __future__ import annotations
 import itertools
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -28,7 +27,7 @@ class Layout:
     rects: list             # [(x, y, w, h)] per clip, in clip order
     kind: str               # "grid CxR", "rows a-b-c", "columns a-b"
     coverage: float         # share of the canvas showing picture (0..1)
-    crop: Optional[list] = None   # per clip: (cw, ch) to crop to after scaling (fill mode), else None
+    crop: list | None = None   # per clip: (cw, ch) to crop to after scaling (fill mode), else None
     balance: float = 0.0    # log of the geometric mean of the visible clip areas
     rows: int = 1
     cols: int = 1
@@ -155,7 +154,7 @@ def best_layout(aspects: list, W: int, H: int, *, gap: int = 0, mode: str = "fit
         b, c, first = lay.score()
         return (b, c, -(lay.rows if landscape else lay.cols), first)
 
-    best: Optional[Layout] = None
+    best: Layout | None = None
     for cols in range(1, n + 1):
         lay = uniform(aspects, W, H, cols, gap, fill)
         if best is None or key(lay) > key(best):
@@ -184,7 +183,7 @@ class Clip:
     has_audio: bool = False
 
 
-def _place(label: str, rect: tuple, crop: Optional[tuple], fps: str) -> str:
+def _place(label: str, rect: tuple, crop: tuple | None, fps: str) -> str:
     """Scale (and crop for 'fill') one clip branch to its rectangle."""
     x, y, w, h = rect
     if crop:
@@ -196,7 +195,7 @@ def _place(label: str, rect: tuple, crop: Optional[tuple], fps: str) -> str:
 
 def collage_filter(clips: list, W: int, H: int, *, fps: str = "30", gap: int = 0, mode: str = "fit",
                    bg: str = "black", total: float, loop: bool = True, end: str = "hold",
-                   audio: str = "first", layouts: Optional[dict] = None) -> tuple:
+                   audio: str = "first", layouts: dict | None = None) -> tuple:
     """filter_complex for the collage -> (graph, has_audio).
 
     *end* (when not looping): 'hold' (last frame stays), 'background', or

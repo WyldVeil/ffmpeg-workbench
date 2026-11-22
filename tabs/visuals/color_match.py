@@ -19,10 +19,10 @@ from tkinter import messagebox
 
 from core import ffmpeg as ff
 from core.i18n import t
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
-from tabs import common
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 from core.scaling import px
+from tabs import common
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 _SQ = [i * i for i in range(256)]
 _SAMPLE_W, _SAMPLE_H = 160, 90

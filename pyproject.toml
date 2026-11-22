@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "wyldveil-media-editor"
 version = "1.2.4"
 description = "WyldVeil's Media Editor: video and audio toolkit powered by FFmpeg"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "tkinterdnd2>=0.7.0",
 ]
@@ -27,8 +27,28 @@ python_files = ["test_*.py"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
-ignore = ["E501"]
+# The rule set the books recommend (Robust Python ch. 20, Effective Python items 85/123,
+# Fluent Python ch. 6/9). Each "DEBT" entry below is existing code still to be fixed;
+# entries are removed as the code is cleaned up, never added (docs/knowledge/adoption-ledger.md).
+select = ["E", "F", "W", "I", "B", "BLE", "SIM", "RUF", "UP", "SLF", "S110", "PLR0913", "C90", "TID"]
+ignore = [
+    "E501",     # long lines: readability call, not enforced
+    "RUF001", "RUF002", "RUF003",  # typographic characters (× – … ‘ ’) are intentional UI text
+    "SIM108",   # ternaries are not always clearer
+    # ── DEBT ──
+    "SLF001",   # private attribute access across objects (phase 4: capability Protocols)
+    "BLE001", "S110", "SIM105",    # broad / silent excepts (phase 7)
+    "C901", "PLR0913",             # complexity / long signatures (phases 4-6)
+    "E701", "E702",                # several statements on one line
+    "RUF005", "RUF046", "B905", "SIM115", "E402", "SIM114", "B007", "E741", "RUF059",
+    "RUF007", "UP031", "RUF015", "SIM102", "B904", "RUF012", "SIM401",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.pylint]
+max-args = 8

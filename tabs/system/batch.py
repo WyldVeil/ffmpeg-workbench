@@ -4,17 +4,16 @@ Apply the same FFmpeg operation to an entire folder of videos at once.
 Supports: re-encode, resize, extract audio, convert format.
 Progress is shown per-file in the console.
 """
-import tkinter as tk
-from tkinter import messagebox, ttk
-from core import dialogs
 import os
 import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from core import dialogs
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # (id, label) - looked up by position, so translations can never mix them up
 OPERATION_LIST = [

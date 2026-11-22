@@ -13,9 +13,9 @@ Language is persisted in settings.json under the "language" key.
 An empty string or missing key triggers auto-detection from the OS locale.
 """
 
-import os
 import json
 import locale as _locale
+import os
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _LOCALE_DIR = os.path.join(

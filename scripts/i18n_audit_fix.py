@@ -9,9 +9,9 @@ Run:
 After running, execute translate_missing.py to fill in all other languages.
 """
 
-import re
-import json
 import argparse
+import json
+import re
 from pathlib import Path
 
 ROOT       = Path(__file__).parent.parent
@@ -51,9 +51,8 @@ SKIP_EXACT = {
     "SMPTE",
     "EQ", "LUT",
     "W:", "H:", "X:", "Y:", "#",
-    "→", "←", "▶", "⏸", "⏭", "⏹",
+    "▶", "⏸", "⏭", "⏹",
     "In:", "Out:",   # waveform labels that are very short
-    "dB",
     "RGB", "YUV",
     "HQDN3D", "NLMeans",
     "arnndn", "anlmdn", "afftdn",
@@ -70,10 +69,7 @@ def should_skip(s: str) -> bool:
         return True
     if len(s) < 3:
         return True
-    for pat in SKIP_PATTERNS:
-        if pat.search(s):
-            return True
-    return False
+    return any(pat.search(s) for pat in SKIP_PATTERNS)
 
 
 def make_key(module: str, text: str) -> str:

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 from core import ffmpeg as ff
 
@@ -217,7 +216,7 @@ def stream_notes(path: str, limit: int = 4 << 20) -> list:
     return out
 
 
-def free_output(src: str, folder: Optional[str] = None) -> str:
+def free_output(src: str, folder: str | None = None) -> str:
     base, ext = os.path.splitext(os.path.basename(src))
     path = os.path.join(folder or os.path.dirname(src), f"{base} (clean){ext}")
     n = 2

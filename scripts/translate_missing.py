@@ -9,11 +9,11 @@ Usage:
 Requires:  pip install deep-translator
 """
 
+import argparse
 import json
 import re
 import sys
 import time
-import argparse
 from pathlib import Path
 
 try:

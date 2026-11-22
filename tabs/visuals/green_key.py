@@ -22,10 +22,10 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
-from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs import common
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 from core.scaling import px
+from tabs import common
+from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
 
 METHODS = {
     "chroma": "Chroma key (green / blue screens)",

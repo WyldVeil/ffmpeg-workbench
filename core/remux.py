@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 from core import ffmpeg as ff
 
@@ -149,7 +148,7 @@ def _droppable(t: Track, container: str) -> bool:
 
 
 def remux_command(inputs: list, tracks: list, out: str, *, keep_chapters: bool = True,
-                  title: Optional[str] = None, keep_tags: bool = True) -> tuple:
+                  title: str | None = None, keep_tags: bool = True) -> tuple:
     """(argv, [notes]) copying *tracks* (in order) from *inputs* into *out*."""
     container = os.path.splitext(out)[1].lstrip(".").lower()
     container = {"m4v": "mp4", "mka": "mkv", "mks": "mkv"}.get(container, container)

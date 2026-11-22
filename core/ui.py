@@ -17,13 +17,14 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 _log = logging.getLogger("crossfader.ui")
 
-_q: "queue.SimpleQueue[tuple]" = queue.SimpleQueue()
+_q: queue.SimpleQueue[tuple] = queue.SimpleQueue()
 _root = None
-_main_ident: Optional[int] = None
+_main_ident: int | None = None
 _POLL_MS = 15
 _BATCH = 400
 
@@ -89,16 +90,16 @@ def call_soon(fn: Callable, *args: Any, **kwargs: Any) -> None:
 
 
 def run_in_thread(fn: Callable, *args: Any,
-                  on_done: Optional[Callable[[Any], None]] = None,
-                  on_error: Optional[Callable[[BaseException], None]] = None,
-                  name: Optional[str] = None, **kwargs: Any) -> threading.Thread:
+                  on_done: Callable[[Any], None] | None = None,
+                  on_error: Callable[[BaseException], None] | None = None,
+                  name: str | None = None, **kwargs: Any) -> threading.Thread:
     """Run ``fn(*args, **kwargs)`` in a daemon thread; deliver the result to
     *on_done* (or the exception to *on_error*) on the Tk thread."""
 
     def _worker():
         try:
             result = fn(*args, **kwargs)
-        except BaseException as exc:  # noqa: BLE001 - forwarded to the UI
+        except BaseException as exc:
             _log.exception("background task %s failed", name or getattr(fn, "__name__", fn))
             if on_error is not None:
                 call_soon(on_error, exc)

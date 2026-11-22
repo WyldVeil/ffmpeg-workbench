@@ -26,7 +26,6 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
 
 from core.hardware import CREATE_NO_WINDOW
 
@@ -119,7 +118,7 @@ def _ffmpeg() -> str:
     return get_binary_path("ffmpeg")
 
 
-def _cache_file() -> Optional[str]:
+def _cache_file() -> str | None:
     try:
         from core.paths import cache_dir
         return os.path.join(cache_dir(), "encoders.json")
@@ -135,7 +134,7 @@ def _binary_key(ff: str) -> str:
         return ff
 
 
-def _load_disk_cache(ff: str) -> Optional[dict]:
+def _load_disk_cache(ff: str) -> dict | None:
     path = _cache_file()
     if not path or not os.path.isfile(path):
         return None
@@ -165,7 +164,7 @@ def _save_disk_cache(ff: str, entry: dict) -> None:
         pass
 
 
-def list_encoders(ffmpeg: Optional[str] = None) -> set:
+def list_encoders(ffmpeg: str | None = None) -> set:
     """Names of every encoder compiled into *ffmpeg* (cached)."""
     ff = ffmpeg or _ffmpeg()
     with _lock:
@@ -239,7 +238,7 @@ def _platform_kinds() -> tuple:
     return ("nvenc", "vaapi", "qsv", "amf")
 
 
-def hw_available(refresh: bool = False, ffmpeg: Optional[str] = None) -> dict:
+def hw_available(refresh: bool = False, ffmpeg: str | None = None) -> dict:
     """Return ``{kind: bool}`` for each hardware encoder family that applies to
     this platform, after a functional test.  Cached in memory and on disk."""
     ff = ffmpeg or _ffmpeg()
@@ -272,7 +271,7 @@ def detect_in_background() -> threading.Thread:
     return t
 
 
-def preferred_hw() -> Optional[str]:
+def preferred_hw() -> str | None:
     """The hardware family to use when the user setting is ``auto``."""
     kinds = working_hw_kinds()
     for k in ("nvenc", "videotoolbox", "qsv", "amf", "vaapi"):
@@ -304,17 +303,17 @@ class VideoEncode:
     """
     encoder: str
     codec: str
-    hw: Optional[str] = None
+    hw: str | None = None
     pre_input: list = field(default_factory=list)
     args: list = field(default_factory=list)
     filter_suffix: str = ""
     pix_fmt: str = ""
 
-    def vf(self, chain: Optional[str] = None) -> Optional[str]:
+    def vf(self, chain: str | None = None) -> str | None:
         parts = [p for p in ((chain or "").strip(","), self.filter_suffix) if p]
         return ",".join(parts) if parts else None
 
-    def vf_args(self, chain: Optional[str] = None) -> list:
+    def vf_args(self, chain: str | None = None) -> list:
         v = self.vf(chain)
         return ["-vf", v] if v else []
 
@@ -323,7 +322,7 @@ class VideoEncode:
         return f"{self.encoder} ({HW_LABELS[self.hw]})" if self.hw else self.encoder
 
 
-def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, Optional[str]]:
+def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, str | None]:
     """Return ``(encoder_name, hw_kind_or_None)`` for *codec*.
 
     *hw*: ``"auto"`` (user setting, then best working GPU), ``"off"``, or a
@@ -332,7 +331,7 @@ def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, Optional
     """
     codec = codec.lower()
     mode = _setting_hw_mode() if hw == "auto" else hw
-    kind: Optional[str] = None
+    kind: str | None = None
     if mode == "auto":
         kind = preferred_hw()
     elif mode in HW_KINDS:
@@ -347,8 +346,8 @@ def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, Optional
 
 def video(codec: str = "h264", quality: str = "high", *, speed: str = "balanced",
           hw: str = "auto", ten_bit: bool = False, container: str = "mp4",
-          bitrate: Optional[str] = None, maxrate: Optional[str] = None,
-          gop_seconds: Optional[float] = None, fps: Optional[float] = None) -> VideoEncode:
+          bitrate: str | None = None, maxrate: str | None = None,
+          gop_seconds: float | None = None, fps: float | None = None) -> VideoEncode:
     """Build arguments for encoding video.
 
     *quality* uses :data:`QUALITIES` (legacy labels such as ``"High"`` are
@@ -537,7 +536,7 @@ _PROBED_AUDIO = {"aac": "aac", "mp3": "mp3", "opus": "opus", "vorbis": "vorbis",
                  "pcm_s16le": "pcm16", "pcm_s24le": "pcm24"}
 
 
-def audio_key_from_probe(codec_name: str) -> Optional[str]:
+def audio_key_from_probe(codec_name: str) -> str | None:
     return _PROBED_AUDIO.get((codec_name or "").lower())
 
 
@@ -556,9 +555,9 @@ def default_audio_for(container: str) -> str:
     return allowed[0] if allowed else "aac"
 
 
-def audio(codec: str = "aac", bitrate: Optional[str] = "192k", *,
-          container: Optional[str] = None, channels: Optional[int] = None,
-          sample_rate: Optional[int] = None, vbr_quality: Optional[float] = None) -> list:
+def audio(codec: str = "aac", bitrate: str | None = "192k", *,
+          container: str | None = None, channels: int | None = None,
+          sample_rate: int | None = None, vbr_quality: float | None = None) -> list:
     """Arguments for encoding audio.
 
     *codec* is a key from :data:`AUDIO_ENCODERS` (``"aac"``, ``"opus"`` …) or

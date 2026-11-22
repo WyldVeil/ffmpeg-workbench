@@ -3,16 +3,16 @@ tab_batchjoiner.py  ─  Batch Joiner
 Drag-and-drop queue of video files, optionally re-encode to a uniform
 spec, then concatenate them all in order into a single output file.
 """
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
-from core import dialogs
-import os
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.i18n import t
-from core import concat
+
+from core import concat, dialogs
 from core import encoders as enc
 from core import ffmpeg as ff
+from core.i18n import t
 from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 
 def _tr(key, fallback):

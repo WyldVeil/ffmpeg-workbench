@@ -19,10 +19,10 @@ Usage (hard dependency - raises ImportError if it can't be loaded):
     ensure("edge-tts", import_name="edge_tts")
 """
 
-import sys
-import os
 import importlib
+import os
 import subprocess
+import sys
 import threading
 
 # ── Locate libs/ relative to this file ───────────────────────────────────────
@@ -35,7 +35,7 @@ def _user_libs_dir():
     under /opt or Program Files); one per Python version, because some
     packages contain compiled code."""
     try:
-        from core.paths import _base             # the path only - nothing is created here
+        from core.paths import _base  # the path only - nothing is created here
         base = _base("data")
     except Exception:
         base = os.path.join(os.path.expanduser("~"), ".local", "share", "wyldveil-media-editor")
@@ -75,7 +75,7 @@ def _pip_install(pip_name):
     Returns True on success, False on failure.  Completely silent - no
     console window on Windows.
     """
-    # CRITICAL FIX: If running as a compiled PyInstaller .exe, sys.executable 
+    # CRITICAL FIX: If running as a compiled PyInstaller .exe, sys.executable
     # points to the app itself! Do not attempt to pip install, or it will fork bomb.
     if getattr(sys, 'frozen', False):
         return False
@@ -98,7 +98,7 @@ def _pip_install(pip_name):
             [
                 sys.executable, "-m", "pip", "install",
                 pip_name,
-                "--target={}".format(target),
+                f"--target={target}",
                 "--quiet",
                 "--disable-pip-version-check",
                 "--no-warn-script-location",
@@ -166,12 +166,10 @@ def ensure(pip_name, import_name=None):
     if mod is None:
         name = import_name or pip_name.replace("-", "_")
         raise ImportError(
-            "Could not import '{}'. "
-            "Tried auto-installing '{}' into {} but failed. "
+            f"Could not import '{name}'. "
+            f"Tried auto-installing '{pip_name}' into {_LIBS_DIR} but failed. "
             "Check your internet connection or run:  "
-            "pip install {} --target=libs/".format(
-                name, pip_name, _LIBS_DIR, pip_name
-            )
+            f"pip install {pip_name} --target=libs/"
         )
     return mod
 

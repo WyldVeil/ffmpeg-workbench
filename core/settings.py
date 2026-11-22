@@ -24,7 +24,8 @@ import os
 import shutil
 import tempfile
 import threading
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from core.paths import APP_ROOT, config_dir
 
@@ -186,7 +187,7 @@ def get(key: str, fallback: Any = None) -> Any:
     return json.loads(json.dumps(val)) if isinstance(val, (dict, list)) else val
 
 
-def set(key: str, value: Any) -> bool:  # noqa: A001 - established public name
+def set(key: str, value: Any) -> bool:
     return update({key: value})
 
 

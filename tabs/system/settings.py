@@ -8,13 +8,12 @@ centralised core.settings module (no duplicated load/save logic).
 """
 import tkinter as tk
 from tkinter import ttk
+
 from core import dialogs
-
-
-from tabs.base_tab import BaseTab, CLR, UI_FONT
-from core.settings import load_settings, update
 from core.i18n import t
 from core.scaling import px
+from core.settings import load_settings, update
+from tabs.base_tab import CLR, UI_FONT, BaseTab
 
 
 class SettingsTab(BaseTab):

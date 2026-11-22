@@ -76,6 +76,23 @@ def ui(_harness):
         pytest.fail("Tk callback raised:\n" + "\n".join(errors))
 
 
+@pytest.fixture(autouse=True)
+def no_leftover_processes():
+    """Every child process a test starts must be finished (or killed) when it
+    ends - a leak here is a leak in the app (Effective Python item 72)."""
+    yield
+    import time
+
+    from core import ffmpeg as ff
+    deadline = time.monotonic() + 5
+    while ff.active_count() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    left = ff.active_count()
+    if left:
+        ff.kill_all()
+        pytest.fail(f"{left} child process(es) still running after the test")
+
+
 @pytest.fixture
 def outdir(tmp_path):
     d = tmp_path / "out"

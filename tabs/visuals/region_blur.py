@@ -11,7 +11,6 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import messagebox, ttk
-from typing import Optional
 
 from core import ffmpeg as ff
 from core.i18n import t
@@ -38,7 +37,7 @@ class Region:
     kind: str = "blur"
     strength: float = 0.6
     start: float = 0.0
-    end: Optional[float] = None
+    end: float | None = None
 
     def pixels(self, width: int, height: int) -> tuple:
         x = min(max(0, int(self.x * width) // 2 * 2), width - 4)

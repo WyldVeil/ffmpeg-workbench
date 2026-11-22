@@ -16,10 +16,10 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.scaling import px
+from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
-from tabs import common
-from core.scaling import px
 
 PATTERNS = {
     "smpte_hd": "SMPTE HD colour bars",

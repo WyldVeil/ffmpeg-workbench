@@ -7,18 +7,17 @@ this tab or any other tab in the app.
 Left panel  - queue treeview (all tasks, live-refreshed)
 Right panel - job settings editor for queueing new encode jobs from here
 """
-import tkinter as tk
-from tkinter import messagebox, ttk, scrolledtext
-from core import dialogs
 import os
 import time
+import tkinter as tk
+from tkinter import messagebox, scrolledtext, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import get_binary_path
+from core import dialogs
 from core import ffmpeg as ff
+from core.hardware import get_binary_path
 from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 VIDEO_CODECS = ["libx264", "libx265", "libvpx-vp9", "libvpx",
                 "prores_ks", "dnxhd", "copy"]

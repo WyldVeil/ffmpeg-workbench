@@ -4,10 +4,8 @@ import subprocess
 
 import pytest
 
-from core import catalog
+from core import catalog, settings
 from core import ffmpeg as ff
-from core import settings
-
 
 # ── catalogue ────────────────────────────────────────────────────────────────
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from core.paths import is_writable_dir, user_videos_dir
 
@@ -30,7 +30,7 @@ def _setting(key: str, default):
         return default
 
 
-def default_output_folder(src: Optional[str] = None) -> str:
+def default_output_folder(src: str | None = None) -> str:
     folder = str(_setting("default_output_folder", "") or "").strip()
     if folder and os.path.isdir(folder):
         return folder
@@ -58,8 +58,8 @@ def unique_path(path: str) -> str:
         n += 1
 
 
-def suggest_output(src: Optional[str], suffix: str = "edited", ext: Optional[str] = None,
-                   *, folder: Optional[str] = None, unique: bool = True) -> str:
+def suggest_output(src: str | None, suffix: str = "edited", ext: str | None = None,
+                   *, folder: str | None = None, unique: bool = True) -> str:
     """Suggest an output path derived from *src*.
 
     *ext* may be given with or without a dot; by default the source's
@@ -98,7 +98,7 @@ class OutputRejected(Exception):
 
 
 def resolve_output(out: str, inputs: Iterable[str] = (), *, default_ext: str = ".mp4",
-                   policy: Optional[str] = None, parent=None, ask=True) -> str:
+                   policy: str | None = None, parent=None, ask=True) -> str:
     """Validate and finalise an output path before rendering.
 
     Returns the path to use (possibly renamed), or raises

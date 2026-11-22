@@ -45,7 +45,7 @@ def system_engine() -> str | None:
     """Path or name of the offline engine, None when there is none."""
     if IS_WIN:
         return shutil.which("powershell") or os.path.join(
-            os.environ.get("SystemRoot", r"C:\Windows"), "System32", "WindowsPowerShell", "v1.0",
+            os.environ.get("SYSTEMROOT", r"C:\Windows"), "System32", "WindowsPowerShell", "v1.0",
             "powershell.exe")
     if IS_MAC:
         return shutil.which("say")
@@ -115,8 +115,9 @@ def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled
         raise TTSError("The online voice engine (edge-tts) is not available in this copy.")
     proxy = edge_proxy()
     try:                                          # the app's trust settings (company certificates...)
-        from core import network
         import edge_tts.communicate as _comm
+
+        from core import network
         _comm._SSL_CTX = network.ssl_context()
     except Exception:
         pass
@@ -186,7 +187,8 @@ def _system_synth(text, out_path, rate, pitch, volume, cancelled):
         with open(txt, "w", encoding="utf-8") as fh:
             fh.write(text)
         if IS_WIN:
-            q = lambda s: "'" + s.replace("'", "''") + "'"   # noqa: E731 - PowerShell literal
+            def q(s):
+                return "'" + s.replace("'", "''") + "'"
             ps = os.path.join(tmp, "speak.ps1")
             with open(ps, "w", encoding="utf-8-sig") as fh:
                 fh.write("Add-Type -AssemblyName System.Speech\n"

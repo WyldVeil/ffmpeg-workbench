@@ -5,15 +5,14 @@ in the main video track, using FFmpeg's sidechaincompress filter.
 
 Classic YouTube workflow: voice commentary ducks the background music.
 """
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
-from core import dialogs
-import os
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT
+from core import dialogs
 from core.i18n import t
 from core.scaling import px
-
+from tabs.base_tab import CLR, UI_FONT, BaseTab
 
 PRESETS = {
     t("ducker.gentle_podcast"):     dict(threshold=0.025, ratio=4,  attack=20, release=600),
@@ -115,7 +114,7 @@ class AudioDuckerTab(BaseTab):
         self._thresh_lbl = tk.Label(r2, text="0.015", width=6, fg=CLR["accent"])
         self._thresh_lbl.pack(side="left")
         self._threshold.trace_add("write", lambda *_: self._thresh_lbl.config(
-            text="{:.3f}".format(self._threshold.get())))
+            text=f"{self._threshold.get():.3f}"))
         tk.Label(r2, text=t("ducker.desc_sensitivity"),
                  fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left", padx=px(12))
 
@@ -302,13 +301,10 @@ class AudioDuckerTab(BaseTab):
         cmd += ["-filter_complex", ";".join(fc_parts), "-map", "0:v?", "-map", final_a, "-c:v", "copy",
                 "-c:a", "aac", "-b:a", "256k", "-t", f"{dur:.3f}", "-movflags", "+faststart", out]
 
-        self.log(self.console, "▶ Ducking music into: {}".format(
-            os.path.basename(src)))
+        self.log(self.console, f"▶ Ducking music into: {os.path.basename(src)}")
         self.log(self.console,
-                 "  Threshold={th}  Ratio={rt}:1  "
-                 "Attack={at}ms  Release={rl}ms  Music vol={mv:.0%}".format(
-                     th=threshold, rt=int(ratio),
-                     at=int(attack), rl=int(release), mv=music_vol))
+                 f"  Threshold={threshold}  Ratio={int(ratio)}:1  "
+                 f"Attack={int(attack)}ms  Release={int(release)}ms  Music vol={music_vol:.0%}")
 
         self.run_ffmpeg(
             cmd, self.console,

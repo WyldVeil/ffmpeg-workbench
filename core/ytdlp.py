@@ -12,12 +12,11 @@ Every invocation gets:
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from core.hardware import find_binary
 
 
-def ytdlp_path() -> Optional[str]:
+def ytdlp_path() -> str | None:
     return find_binary("yt-dlp")
 
 
@@ -33,7 +32,7 @@ def js_runtime_args() -> list:
     return []
 
 
-def base_argv(ytdlp: Optional[str] = None, *, network: bool = True,
+def base_argv(ytdlp: str | None = None, *, network: bool = True,
               url: str = "https://www.youtube.com/") -> list:
     """yt-dlp command prefix.  Raises OSError (offline mode, strict proxy not
     set up...) instead of quietly connecting some other way."""

@@ -11,8 +11,8 @@ from __future__ import annotations
 import os
 import time
 import tkinter as tk
+from collections.abc import Sequence
 from tkinter import messagebox
-from typing import Optional, Sequence
 
 from core import encoders as enc
 from core import ffmpeg as ff
@@ -23,7 +23,7 @@ def container_of(path: str) -> str:
     return os.path.splitext(path)[1].lower().lstrip(".") or "mp4"
 
 
-def keep_audio_args(info: Optional[ff.MediaInfo], container: str, *, index: int = 0,
+def keep_audio_args(info: ff.MediaInfo | None, container: str, *, index: int = 0,
                     filters: str = "") -> list:
     """Map all audio of input *index*: stream-copied when the container accepts
     the codec and no *filters* are applied, otherwise re-encoded."""
@@ -40,7 +40,7 @@ def keep_audio_args(info: Optional[ff.MediaInfo], container: str, *, index: int 
 
 
 def check_source(tab, path: str, *, need_video: bool = True,
-                 what: str = "") -> Optional[ff.MediaInfo]:
+                 what: str = "") -> ff.MediaInfo | None:
     """Probe *path*; explain the problem and return None when unusable."""
     label = what or t("common.source_video")
     if not path:
@@ -58,7 +58,7 @@ def check_source(tab, path: str, *, need_video: bool = True,
     return info
 
 
-def number(value, label: str, lo: Optional[float] = None, hi: Optional[float] = None) -> float:
+def number(value, label: str, lo: float | None = None, hi: float | None = None) -> float:
     """Parse a user number ('1,5' accepted); ValueError names the field."""
     try:
         val = float(str(value).strip().replace(",", "."))
@@ -88,8 +88,8 @@ def frame_rate(info: ff.MediaInfo) -> str:
 
 def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn,
            btn_label: str, name: str, chain: str = "", graph: str = "",
-           extra_inputs: Sequence[str] = (), audio: Optional[Sequence[str]] = None,
-           duration: Optional[float] = None, extra_args: Sequence[str] = (),
+           extra_inputs: Sequence[str] = (), audio: Sequence[str] | None = None,
+           duration: float | None = None, extra_args: Sequence[str] = (),
            inputs: Sequence[str] = (), on_done=None, pre_input: Sequence[str] = ()) -> None:
     """Queue ``ffmpeg -i src [extra inputs] <chain|graph> <audio> <encoder> out``.
 
@@ -123,7 +123,7 @@ def render(tab, *, src: str, info: ff.MediaInfo, out: str, encoder, console, btn
                    inputs=[src, *inputs], name=name)
 
 
-def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) -> Optional[str]:
+def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) -> str | None:
     """Final output path from *out_row* (suggested when empty), confirmed
     against overwriting; None if the user backed out."""
     out = out_row.path or tab.suggest_output(src, suffix, ".mp4")
@@ -134,7 +134,7 @@ def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) 
 
 
 def queue_job(tab, *, name: str, out: str, work, btn, btn_label: str, console,
-              duration: Optional[float] = None, inputs: Sequence[str] = (),
+              duration: float | None = None, inputs: Sequence[str] = (),
               on_start=None, on_done=None) -> str:
     """Queue a multi-step ``work(progress, cancelled, ctx)`` job.  While it
     runs, *btn* shows the progress and cancels the job when clicked;
@@ -221,7 +221,7 @@ def audio_encoder_args(out: str) -> list:
     }.get(ext, ["-c:a", "aac", "-b:a", "256k"])
 
 
-def audio_job_args(out: str, info: Optional[ff.MediaInfo], *, stream: int = 0) -> list:
+def audio_job_args(out: str, info: ff.MediaInfo | None, *, stream: int = 0) -> list:
     """Mapping + codecs when an audio tool writes *out*: audio-only files get
     just the processed track; video files keep the picture (copied) and
     subtitles where the container allows."""
@@ -238,9 +238,9 @@ def audio_job_args(out: str, info: Optional[ff.MediaInfo], *, stream: int = 0) -
 
 def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 12.0) -> None:
     """Render a short processed WAV in the background and play it."""
+    from core import ui
     from core.hardware import launch_preview
     from core.paths import temp_dir
-    from core import ui
     if not src or not os.path.isfile(src):
         messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=tab)
         return

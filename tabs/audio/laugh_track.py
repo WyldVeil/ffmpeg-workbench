@@ -5,19 +5,18 @@ Remove or reduce canned laugh tracks from sitcoms using either
 classic FFmpeg DSP filters, or state-of-the-art AI Stem Separation.
 """
 
+import os
+import shutil
+import subprocess
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
-from core import dialogs
-import subprocess
-import os
-import sys
-import shutil
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
-from core.hardware import (    get_binary_path, CREATE_NO_WINDOW, detect_gpu
-)
+from core import dialogs
+from core.hardware import CREATE_NO_WINDOW, detect_gpu, get_binary_path
 from core.i18n import t
 from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 
 def _fmt(seconds):
@@ -35,15 +34,15 @@ class LaughTrackRemoverTab(BaseTab):
         self.duration = 0.0
         self.preview_proc = None
         self._ai_cancel_fn = None   # set when AI task is running in the queue
-        
+
         # Determine paths
         self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         self.bin_dir = os.path.join(self.base_dir, 'bin')
         os.makedirs(self.bin_dir, exist_ok=True)
-        
+
         # We assume Windows for the standalone exe download in this implementation
         self.ai_binary = os.path.join(self.bin_dir, "audio-separator.exe")
-        
+
         self._build_ui()
         self._check_ai_tools()
 
@@ -90,16 +89,16 @@ class LaughTrackRemoverTab(BaseTab):
         # 1. Added "Experimental" to the label frame
         self.ai_lf = tk.LabelFrame(self.engine_container, text=f"  {t('laugh_track.ai_experimental_option')}  ",
                                    padx=px(15), pady=px(10), font=(UI_FONT, 9, "bold"), fg=CLR.get("accent", "#0078D7"))
-        
+
         self.ai_status_lbl = tk.Label(self.ai_lf, text=t("laugh_track.checking_for_ai_tools"), font=(UI_FONT, 10, "bold"))
         self.ai_status_lbl.pack(anchor="w", pady=px(0, 5))
 
         self.ai_instructions_f = tk.Frame(self.ai_lf)
-        
+
         # 2. Updated and expanded the instruction text
         # Dynamically detect hardware to provide the correct installation commands
         gpu_type = detect_gpu()
-        
+
         if gpu_type == "nvidia":
             install_cmds = (
                 "1. Install the Nvidia CUDA version of PyTorch (Run in terminal):\n"
@@ -132,7 +131,7 @@ class LaughTrackRemoverTab(BaseTab):
             "3. (Optional) For maximum stability, locate the generated 'audio-separator.exe'\n"
             "   and copy it directly into this application's /bin/ folder."
         )
-        
+
         # Create a container frame specifically for the text box and its scrollbar
         txt_container = tk.Frame(self.ai_instructions_f, bg=CLR.get("panel", "#222222"))
         txt_container.pack(anchor="w", pady=px(5))  # <-- Removed fill="x"
@@ -145,14 +144,14 @@ class LaughTrackRemoverTab(BaseTab):
         txt = tk.Text(txt_container, height=7, width=86, bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"),
                       font=(MONO_FONT, 9), relief="flat", yscrollcommand=txt_scroll.set)
         txt.insert("1.0", instr_text)
-        txt.config(state="disabled") 
+        txt.config(state="disabled")
         txt.pack(side="left")  # <-- Removed fill="both" and expand=True
 
         # Link the scrollbar to the text widget's vertical view
         txt_scroll.config(command=txt.yview)
 
-        tk.Button(self.ai_instructions_f, text=t("laugh_track.i_have_installed_the_tools_check_again"), 
-                  bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"), font=(UI_FONT, 9), cursor="hand2", 
+        tk.Button(self.ai_instructions_f, text=t("laugh_track.i_have_installed_the_tools_check_again"),
+                  bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"), font=(UI_FONT, 9), cursor="hand2",
                   command=self._check_ai_tools).pack(anchor="w", pady=px(5))
 
         self.ai_model_f = tk.Frame(self.ai_lf)
@@ -176,7 +175,7 @@ class LaughTrackRemoverTab(BaseTab):
         tk.Checkbutton(np_header, text=t("laugh_track.spectral_section"),
                        variable=self._use_profile, font=(UI_FONT, 10, "bold"),
                        command=self._toggle_sections).pack(side="left")
-        
+
         self._profile_f = tk.Frame(self.ffmpeg_lf)
         pr1 = tk.Frame(self._profile_f)
         pr1.pack(fill="x", pady=px(2))
@@ -310,7 +309,7 @@ class LaughTrackRemoverTab(BaseTab):
         if self._engine_var.get() == "ai":
             self.ffmpeg_lf.pack_forget()
             self.ai_lf.pack(fill="x", padx=px(20), pady=px(4))
-            self._btn_preview.config(state="disabled") 
+            self._btn_preview.config(state="disabled")
         else:
             self.ai_lf.pack_forget()
             self.ffmpeg_lf.pack(fill="x", padx=px(20), pady=px(4))
@@ -320,7 +319,7 @@ class LaughTrackRemoverTab(BaseTab):
         """Unpack all and repack in order to maintain layout integrity."""
         for f in [self._profile_f, self._center_f, self._eq_f, self._gate_f]:
             f.pack_forget()
-            
+
         for var, frame in [
             (self._use_profile, self._profile_f),
             (self._use_center,  self._center_f),
@@ -358,7 +357,7 @@ class LaughTrackRemoverTab(BaseTab):
         if os.name == "nt":
             localappdata = os.environ.get("LOCALAPPDATA", "")
             appdata = os.environ.get("APPDATA", "")
-            
+
             if localappdata:
                 search_dirs.extend(glob.glob(os.path.join(localappdata, "Packages", "PythonSoftware*", "LocalCache", "local-packages", "Python3*", "Scripts")))
             if appdata:
@@ -480,7 +479,7 @@ class LaughTrackRemoverTab(BaseTab):
         if not af:
             self._btn_run.config(state="normal")
             return
-            
+
         from core import ffmpeg as ff
         cmd = [ff.ffmpeg_path(), "-y", "-i", self.file_path, "-af", af]
         if self._export_mode.get() == "video":

@@ -7,7 +7,6 @@ import pytest
 
 from core import outputs, paths
 
-
 # ── paths ────────────────────────────────────────────────────────────────────
 
 def test_env_overrides_dirs(tmp_path, monkeypatch):
@@ -21,7 +20,7 @@ def test_env_overrides_dirs(tmp_path, monkeypatch):
 
 
 def test_xdg_layout_on_linux(tmp_path, monkeypatch):
-    if not os.name == "posix" or os.uname().sysname != "Linux":
+    if os.name != "posix" or os.uname().sysname != "Linux":
         pytest.skip("Linux only")
     for kind in ("CONFIG", "DATA", "CACHE", "LOG"):
         monkeypatch.delenv(f"CROSSFADER_{kind}_DIR", raising=False)

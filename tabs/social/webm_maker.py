@@ -6,18 +6,17 @@ budget, using proper two-pass bitrate targeting.
 Quality presets map to cpu-used + deadline settings for VP8/VP9.
 Resolution sliders lock to original aspect ratio if desired.
 """
-import tkinter as tk
-from tkinter import messagebox, ttk
-import os
 import math
+import os
+import tkinter as tk
 from dataclasses import dataclass
+from tkinter import messagebox, ttk
 
-from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from core import ffmpeg as ff
 from core.i18n import t
-from tabs.widgets import FileRow, scroll_body
 from core.scaling import px
-
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.widgets import FileRow, scroll_body
 
 # ─── Quality preset definitions ──────────────────────────────────────────────
 # Each entry: (label, vp9_cpu_used, vp9_deadline, vp8_cpu_used, crf_hint)

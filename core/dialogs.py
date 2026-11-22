@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import sys
 import threading
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 _IS_WIN = sys.platform.startswith("win")
 _IS_MAC = sys.platform == "darwin"
@@ -106,7 +106,7 @@ def _remember(kind: str, path: str) -> None:
 
 # ── native dialogs (Linux) ───────────────────────────────────────────────────
 
-def _native_tool() -> Optional[str]:
+def _native_tool() -> str | None:
     if _IS_WIN or _IS_MAC:
         return None
     if os.environ.get("CROSSFADER_NATIVE_DIALOGS", "1") == "0":
@@ -127,7 +127,7 @@ def _native_tool() -> Optional[str]:
     return None
 
 
-def _run_blocking_keep_ui(cmd: list, parent=None) -> Optional[str]:
+def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
     """Run *cmd* in a thread while the Tk event loop keeps running."""
     import tkinter as tk
     root = parent or tk._default_root  # type: ignore[attr-defined]
@@ -190,7 +190,7 @@ def _zenity_filters(kind: str) -> list:
     return out
 
 
-def _native_open(tool: str, kind: str, title: str, start: str, many: bool, parent) -> Optional[list]:
+def _native_open(tool: str, kind: str, title: str, start: str, many: bool, parent) -> list | None:
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getopenfilename", start + os.sep, _kdialog_filter(kind)]
         if many:
@@ -206,7 +206,7 @@ def _native_open(tool: str, kind: str, title: str, start: str, many: bool, paren
     return [p for p in out.splitlines() if p.strip()] if out else []
 
 
-def _native_save(tool: str, kind: str, title: str, start_path: str, parent) -> Optional[str]:
+def _native_save(tool: str, kind: str, title: str, start_path: str, parent) -> str | None:
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getsavefilename", start_path, _kdialog_filter(kind)]
     else:
@@ -215,7 +215,7 @@ def _native_save(tool: str, kind: str, title: str, start_path: str, parent) -> O
     return _run_blocking_keep_ui(cmd, parent)
 
 
-def _native_dir(tool: str, title: str, start: str, parent) -> Optional[str]:
+def _native_dir(tool: str, title: str, start: str, parent) -> str | None:
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getexistingdirectory", start]
     else:
@@ -226,7 +226,7 @@ def _native_dir(tool: str, title: str, start: str, parent) -> Optional[str]:
 # ── public API ───────────────────────────────────────────────────────────────
 
 def ask_open(kind: str = "media", *, title: str = "Open", parent=None,
-             initialdir: Optional[str] = None) -> str:
+             initialdir: str | None = None) -> str:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
@@ -244,7 +244,7 @@ def ask_open(kind: str = "media", *, title: str = "Open", parent=None,
 
 
 def ask_open_many(kind: str = "media", *, title: str = "Open", parent=None,
-                  initialdir: Optional[str] = None) -> list:
+                  initialdir: str | None = None) -> list:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
@@ -263,7 +263,7 @@ def ask_open_many(kind: str = "media", *, title: str = "Open", parent=None,
 
 
 def ask_save(default_name: str = "", *, kind: str = "video", defaultextension: str = ".mp4",
-             title: str = "Save as", parent=None, initialdir: Optional[str] = None) -> str:
+             title: str = "Save as", parent=None, initialdir: str | None = None) -> str:
     """Ask where to save.  The native/Tk dialog already confirms overwrites."""
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     if default_name and os.path.isabs(default_name):
@@ -291,7 +291,7 @@ def ask_save(default_name: str = "", *, kind: str = "video", defaultextension: s
 
 
 def ask_directory(*, title: str = "Choose folder", parent=None,
-                  initialdir: Optional[str] = None, kind: str = "folder") -> str:
+                  initialdir: str | None = None, kind: str = "folder") -> str:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
