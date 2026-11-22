@@ -13,9 +13,9 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops import audio_replace as ar
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -26,35 +26,6 @@ MODES = {
     "mix": "Mix with the original sound",
     "strip": "Remove all sound",
 }
-
-
-def replace_graph(
-    mode: str,
-    video_dur: float,
-    *,
-    offset: float = 0.0,
-    new_vol: float = 1.0,
-    orig_vol: float = 0.5,
-    loop: bool = False,
-    fade: float = 0.0,
-    has_orig: bool = True,
-) -> str:
-    """filter_complex with input 0 = video, 1 = new audio, output [a]."""
-    st = "aformat=sample_rates=48000:channel_layouts=stereo"
-    new = f"[1:a:0]{st},asetpts=PTS-STARTPTS"
-    if offset < 0:
-        new += f",atrim=start={-offset:.3f},asetpts=PTS-STARTPTS"
-    elif offset > 0:
-        new += f",adelay=delays={round(offset * 1000)}:all=1"
-    new += f",volume={new_vol:.3f},apad,atrim=duration={video_dur:.3f}"
-    if fade > 0:
-        new += f",afade=t=in:st={max(offset, 0):.3f}:d={fade:.2f},afade=t=out:st={max(video_dur - fade, 0):.3f}:d={fade:.2f}"
-    if mode == "mix" and has_orig:
-        return (
-            f"{new}[n];[0:a:0]{st},volume={orig_vol:.3f},apad,atrim=duration={video_dur:.3f}[o];"
-            f"[o][n]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[a]"
-        )
-    return f"{new}[a]"
 
 
 class AudioReplacerTab(BaseTab):
@@ -151,21 +122,8 @@ class AudioReplacerTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "new_audio", inputs=[self.audio_row.path])
         if not out:
             return
-        container = common.container_of(out)
         if mode == "strip":
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-i",
-                src,
-                "-map",
-                "0",
-                "-map",
-                "-0:a",
-                "-c",
-                "copy",
-                out,
-            ]
+            cmd = ar.strip_cmd(src, out)
         else:
             ainfo = common.check_source(
                 self, self.audio_row.path, need_video=False, what="New audio"
@@ -179,39 +137,15 @@ class AudioReplacerTab(BaseTab):
             except ValueError as exc:
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
                 return
-            graph = replace_graph(
-                mode,
-                info.duration,
+            r = ar.Replacement(
+                mix=mode == "mix",
                 offset=offset,
-                new_vol=float(self.new_vol.get()),
-                orig_vol=float(self.orig_vol.get()),
+                new_volume=float(self.new_vol.get()),
+                original_volume=float(self.orig_vol.get()),
                 loop=self.loop_var.get(),
                 fade=1.0 if self.fade_var.get() else 0.0,
-                has_orig=info.has_audio,
             )
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-i",
-                src,
-                *(["-stream_loop", "-1"] if self.loop_var.get() else []),
-                "-i",
-                self.audio_row.path,
-                "-filter_complex",
-                graph,
-                "-map",
-                "0:v",
-                "-c:v",
-                "copy",
-                "-map",
-                "[a]",
-                *enc.audio(enc.default_audio_for(container), container=container),
-                "-t",
-                f"{info.duration:.3f}",
-            ]
-            if container in ("mp4", "mov", "m4v"):
-                cmd += ["-movflags", "+faststart"]
-            cmd.append(out)
+            cmd = ar.replace_cmd(src, self.audio_row.path, out, info, r)
         self.run_ffmpeg(
             cmd,
             self.console,
