@@ -515,11 +515,15 @@ def _stage_windows(python_embed: str, python_dir: str, app_dir: str) -> None:
     ver = "".join(f for f in os.listdir(python_embed) if f.startswith("python3") and f.endswith(".dll")
                   and f != "python3.dll")[len("python"):-len(".dll")]
     subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                    "--target", os.path.join(app_dir, "libs"), "--platform", "win_amd64",
+                    "--target", os.path.join(app_dir, "libs"), "--platform", "win_amd64", "--no-compile",
                     "--python-version", f"{ver[0]}.{ver[1:]}", "--only-binary=:all:", "--no-deps",
                     "--require-hashes", "-r", os.path.join(ROOT, "packaging", "bundled-libs.txt")], check=True)
     # pip's console scripts start with the path of the Python that ran the build: not wanted
     shutil.rmtree(os.path.join(app_dir, "libs", "bin"), ignore_errors=True)
+    # compiled files record the folder they were compiled in (the build machine's): Windows makes its own
+    for folder, dirs, _files in os.walk(os.path.join(app_dir, "libs")):
+        for d in [d for d in dirs if d == "__pycache__"]:
+            shutil.rmtree(os.path.join(folder, d))
 
 
 # ── Portable ──────────────────────────────────────────────────────────────────
