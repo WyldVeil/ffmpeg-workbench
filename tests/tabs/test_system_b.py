@@ -109,8 +109,8 @@ def test_system_info_has_no_addresses(ui, monkeypatch):
     ui.reset()
     page = ui.open("Advanced Settings")
     area = tk.Text(page)
-    page._load_sysinfo(area)
-    ui.pump(1.0)
+    page._load_sysinfo(area)  # in the background, then shown
+    ui.wait_for(lambda: "PYTHON" in area.get("1.0", "end").upper(), timeout=60)
     text = area.get("1.0", "end")
     assert "PYTHON" in text.upper()
     assert not calls and "Public IP" not in text and "LAN IP" not in text

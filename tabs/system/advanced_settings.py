@@ -7,17 +7,15 @@ no duplicated load/save logic.
 """
 
 import contextlib
-import json
 import logging
 import os
-import platform
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, scrolledtext, ttk
 
 from core import proc as _proc
-from core import settings, tasks
+from core import settings, sysinfo, tasks
 from core.hardware import (
-    detect_gpu,
     get_binary_path,
     get_local_version,
     open_in_explorer,
@@ -1484,7 +1482,7 @@ class AdvancedSettingsTab(BaseTab):
             text=t("advanced_settings.refresh"),
             bg=CLR["panel"],
             fg=CLR["fg"],
-            command=lambda: tasks.submit(lambda: self._load_sysinfo(info_area)),
+            command=lambda: self._load_sysinfo(info_area),
         ).pack(side="right")
 
         info_area = scrolledtext.ScrolledText(
@@ -1497,273 +1495,22 @@ class AdvancedSettingsTab(BaseTab):
         )
         info_area.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
-        tasks.submit(lambda: self._load_sysinfo(info_area))
+        self._load_sysinfo(info_area)
 
-    def _load_sysinfo(self, area):
-        lines = []
-
-        def sep(title=""):
-            lines.append("")
-            if title:
-                lines.append(f"──── {title} " + "─" * max(0, 46 - len(title)))
-            else:
-                lines.append("─" * 52)
-
-        def ps(cmd):
-            """Run a PowerShell command, return stdout string."""
-            r = _proc.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], timeout=30
-            )
-            return r.stdout.strip()
-
-        is_win = platform.system() == "Windows"
-
-        # ── OS ────────────────────────────────────────────────────────────
-        sep("OPERATING SYSTEM")
-        lines.append(f"  Platform:     {platform.system()} {platform.release()}")
-        lines.append(f"  Version:      {platform.version()[:70]}")
-        lines.append(f"  Architecture: {platform.machine()}")
-        if is_win:
-            try:
-                reg = ps(
-                    "Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT"
-                    "\\CurrentVersion' | Select-Object ProductName, "
-                    "DisplayVersion, CurrentBuildNumber | ConvertTo-Json"
-                )
-                rv = json.loads(reg)
-                product = rv.get("ProductName", "")
-                disp_ver = rv.get("DisplayVersion", "")
-                build_num = int(rv.get("CurrentBuildNumber", 0) or 0)
-                if build_num >= 22000 and "Windows 10" in product:
-                    product = product.replace("Windows 10", "Windows 11")
-                lines.append(f"  Edition:      {product} {disp_ver}".strip())
-                lines.append(f"  Build:        {build_num}  ({disp_ver})")
-                uptime_s = ps(
-                    "(Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime"
-                    " | Select-Object -ExpandProperty TotalSeconds"
-                )
-                if uptime_s:
-                    secs = int(float(uptime_s))
-                    h, m = divmod(secs // 60, 60)
-                    lines.append(f"  Uptime:       {h}h {m}m")
-            except Exception:
-                logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-
-        # ── CPU ───────────────────────────────────────────────────────────
-        sep("PROCESSOR (CPU)")
-        try:
-            if is_win:
-                name = ps("(Get-CimInstance Win32_Processor).Name")
-                cores = ps("(Get-CimInstance Win32_Processor).NumberOfCores")
-                threads = ps("(Get-CimInstance Win32_Processor).NumberOfLogicalProcessors")
-                mhz = ps("(Get-CimInstance Win32_Processor).MaxClockSpeed")
-                lines.append(f"  Model:        {name}")
-                lines.append(f"  Cores:        {cores}  /  Threads: {threads}")
-                if mhz:
-                    try:
-                        lines.append(f"  Base clock:   {float(mhz) / 1000:.2f} GHz  ({mhz} MHz)")
-                    except ValueError:
-                        lines.append(f"  Base clock:   {mhz} MHz")
-                load = ps("(Get-CimInstance Win32_Processor).LoadPercentage")
-                if load:
-                    lines.append(f"  Current load: {load}%")
-            else:
-                r = _proc.run(["lscpu"], timeout=30)
-                for line in r.stdout.splitlines():
-                    for key in ("Model name", "CPU(s)", "Thread(s)", "MHz"):
-                        if line.strip().startswith(key):
-                            lines.append(f"  {line.strip()}")
-        except Exception as exc:
-            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            lines.append(f"  (CPU error: {exc})")
-
-        # ── RAM ───────────────────────────────────────────────────────────
-        sep("MEMORY (RAM)")
-        try:
-            if is_win:
-                total = ps("(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize")
-                free = ps("(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory")
-                total_kb = int(total)
-                free_kb = int(free)
-                used_kb = total_kb - free_kb
-                pct = used_kb / total_kb * 100 if total_kb else 0
-                lines.append(f"  Total:        {total_kb / 1024 / 1024:.1f} GB")
-                lines.append(f"  Used:         {used_kb / 1024 / 1024:.1f} GB  ({pct:.0f}%)")
-                lines.append(f"  Free:         {free_kb / 1024 / 1024:.1f} GB")
-                try:
-                    sticks = ps(
-                        "Get-CimInstance Win32_PhysicalMemory | "
-                        'ForEach-Object { "$($_.Capacity/1GB)GB $($_.Speed)MHz $($_.Manufacturer)" }'
-                    )
-                    if sticks:
-                        for stick in sticks.splitlines()[:4]:
-                            lines.append(f"  Stick:        {stick.strip()}")
-                except Exception:
-                    logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            else:
-                r = _proc.run(["free", "-h"], timeout=30)
-                for line in r.stdout.splitlines():
-                    if line.startswith("Mem"):
-                        p = line.split()
-                        lines.append(f"  Total: {p[1]}  Used: {p[2]}  Free: {p[3]}")
-        except Exception as exc:
-            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            lines.append(f"  (RAM error: {exc})")
-
-        # ── Disk ──────────────────────────────────────────────────────────
-        sep("DISK / STORAGE")
-        try:
-            if is_win:
-                drives_raw = ps(
-                    "Get-CimInstance Win32_DiskDrive | "
-                    'ForEach-Object { "$($_.Model)|$([math]::Round($_.Size/1GB))GB|$($_.MediaType)" }'
-                )
-                if drives_raw:
-                    for d in drives_raw.splitlines():
-                        parts = d.strip().split("|")
-                        if len(parts) >= 2:
-                            lines.append(f"  Drive:        {parts[0]}  ({parts[1]})")
-                vols = ps(
-                    "Get-PSDrive -PSProvider FileSystem | "
-                    "Where-Object { $_.Used -ne $null } | "
-                    'ForEach-Object { "$($_.Name):|$([math]::Round(($_.Used+$_.Free)/1GB,0))GB total'
-                    '|$([math]::Round($_.Used/1GB,1))GB used|$([math]::Round($_.Free/1GB,1))GB free" }'
-                )
-                if vols:
-                    for v in vols.splitlines():
-                        p = v.strip().split("|")
-                        if len(p) >= 4:
-                            lines.append(f"  {p[0]:<5} {p[1]:<14} {p[2]:<14} {p[3]}")
-            else:
-                r = _proc.run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs"], timeout=30)
-                for line in r.stdout.splitlines()[1:6]:
-                    lines.append(f"  {line}")
-        except Exception as exc:
-            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            lines.append(f"  (Disk error: {exc})")
-
-        # ── GPU ───────────────────────────────────────────────────────────
-        sep("GRAPHICS (GPU)")
-        try:
-            hw_accel = detect_gpu().upper()
-            lines.append(f"  HW accel:     {hw_accel}")
-            if is_win:
-                gpus = ps(
-                    "Get-CimInstance Win32_VideoController | "
-                    'ForEach-Object { "$($_.Name)|$($_.DriverVersion)" }'
-                )
-                if gpus:
-                    for g in gpus.splitlines():
-                        p = g.strip().split("|")
-                        if p[0]:
-                            lines.append(f"  GPU:          {p[0]}")
-                            if len(p) > 1 and p[1]:
-                                lines.append(f"  Driver:       {p[1]}")
-
-                vram_mb = None
-                if hw_accel == "NVIDIA":
-                    try:
-                        r = _proc.run(
-                            [
-                                "nvidia-smi",
-                                "--query-gpu=memory.total",
-                                "--format=csv,noheader,nounits",
-                            ],
-                            timeout=30,
-                        )
-                        vram_mb = int(r.stdout.strip().splitlines()[0].strip())
-                    except Exception:
-                        logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-
-                if vram_mb is None:
-                    try:
-                        reg_vram = ps(
-                            "$key = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class"
-                            "\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000'; "
-                            "(Get-ItemProperty -Path $key -ErrorAction SilentlyContinue)"
-                            '."HardwareInformation.MemorySize"'
-                        )
-                        if reg_vram and reg_vram.strip():
-                            vram_mb = int(reg_vram.strip()) // (1024 * 1024)
-                    except Exception:
-                        logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-
-                if vram_mb and vram_mb > 0:
-                    if vram_mb >= 1024:
-                        lines.append(f"  VRAM:         {vram_mb / 1024:.0f} GB  ({vram_mb} MB)")
-                    else:
-                        lines.append(f"  VRAM:         {vram_mb} MB")
-        except Exception as exc:
-            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            lines.append(f"  (GPU error: {exc})")
-
-        # ── Network ───────────────────────────────────────────────────────
-        sep("NETWORK")
-        # No addresses here: this text gets pasted into bug reports, and looking up
-        # the public IP would contact a third party behind the user's back (and
-        # around their proxy/Tor settings).
-        try:
-            from core import network
-
-            cfg = network.get()
-            if cfg.get("network.offline"):
-                lines.append("  Mode:         offline (no network use)")
-            elif network.proxy_url(cfg):
-                scheme = (network.proxy_url(cfg) or "").split("://", 1)[0]
-                lines.append(f"  Proxy:        {scheme} proxy configured in the app")
-            else:
-                lines.append("  Proxy:        none set in the app (system settings apply)")
-        except Exception as exc:
-            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            lines.append(f"  (Network settings unavailable: {exc})")
-
-        # ── Python & App ──────────────────────────────────────────────────
-        sep("PYTHON & APPLICATION")
-        import sys
-
-        from core import APP_VERSION
-
-        lines.append(f"  Python:       {platform.python_version()}  ({sys.executable[:60]})")
-        lines.append(f"  tkinter:      {tk.TkVersion}")
-        lines.append(f"  App version:  {APP_VERSION}")
-        lines.append(
-            f"  App root:     {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}"
+    def _load_sysinfo(self, area: tk.Text) -> None:
+        """Read the System Info report in the background, then show it in *area*."""
+        tasks.submit(
+            partial(sysinfo.report, str(tk.TkVersion)),
+            on_done=partial(self._show_sysinfo, area),
+            name="SystemInfo",
         )
 
-        # ── FFmpeg ────────────────────────────────────────────────────────
-        sep("FFMPEG")
-        ffmpeg = get_binary_path("ffmpeg")
-        local_v = get_local_version()
-        lines.append(f"  Binary:       {ffmpeg}")
-        lines.append(f"  Exists:       {os.path.exists(ffmpeg)}")
-        lines.append(f"  Version:      {local_v}")
-        try:
-            r = _proc.run([ffmpeg, "-codecs"], timeout=30)
-            hw = [
-                ln.strip()
-                for ln in r.stdout.split("\n")
-                if any(x in ln for x in ["nvenc", "amf", "qsv", "videotoolbox"])
-            ]
-            lines.append(f"  HW codecs:    {len(hw)} found")
-            for h in hw[:8]:
-                lines.append(f"    {h[:70]}")
-        except Exception:
-            logger.debug("_load_sysinfo: best-effort step failed", exc_info=True)
-            lines.append("  Could not query codecs.")
-
-        sep()
-        lines.append("  ← Refresh to update live stats")
-
-        text = "\n".join(lines)
-        self.after(
-            0,
-            lambda: [
-                area.config(state="normal"),
-                area.delete("1.0", tk.END),
-                area.insert(tk.END, text),
-                area.config(state="disabled"),
-            ],
-        )
+    @staticmethod
+    def _show_sysinfo(area: tk.Text, text: str) -> None:
+        area.config(state="normal")
+        area.delete("1.0", tk.END)
+        area.insert(tk.END, text)
+        area.config(state="disabled")
 
     # ─── Developer ────────────────────────────────────────────────────────────
     def _build_dev_tab(self, nb):
