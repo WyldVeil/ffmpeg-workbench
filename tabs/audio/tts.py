@@ -174,7 +174,9 @@ class TTSVoiceOverTab(BaseTab):
         self.text_box.configure(yscrollcommand=txt_sb.set)
         self.text_box.pack(side="left", fill="both", expand=True)
         txt_sb.pack(side="right", fill="y")
-        self.text_box.bind("<KeyRelease>", lambda e: self._update_stats())
+        # Every change counts (typing, any paste, drag and drop, a loaded file),
+        # not just key presses
+        self.text_box.bind("<<Modified>>", self._text_modified)
 
         # Placeholder hint
         self.text_box.insert("1.0",
@@ -484,6 +486,11 @@ class TTSVoiceOverTab(BaseTab):
             with open(p, "r", encoding="utf-8", errors="replace") as f:
                 self.text_box.delete("1.0", "end")
                 self.text_box.insert("1.0", f.read())
+            self._update_stats()
+
+    def _text_modified(self, _event=None):
+        if self.text_box.edit_modified():
+            self.text_box.edit_modified(False)
             self._update_stats()
 
     def _update_stats(self):

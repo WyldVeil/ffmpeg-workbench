@@ -60,6 +60,12 @@ class AutoCropperTab(BaseTab):
         self.result_lbl.pack(anchor="w", padx=px(24))
         self.compare = CompareView(body, 400, 225, after_label="Cropped")
         self.compare.pack(pady=px(4))
+        # Before: the bars that go are shaded and the picture that stays is outlined.
+        # Cropped: drawn on the page colour, not black, so the frame is visibly
+        # shorter than before (on black it looked just like the bars).
+        self.compare.view_before.after_draw = self._draw_bars
+        self.compare.view_after.after_draw = self._outline_result
+        self.compare.view_after.canvas.configure(bg=CLR["bg"])
         self.btn_detect = tk.Button(body, text="🔍 Detect again", relief="flat", command=self._detect)
         self.btn_detect.pack()
 
@@ -101,15 +107,48 @@ class AutoCropperTab(BaseTab):
                 self.box = None
                 self.result_lbl.config(text="No black bars found - nothing to crop.")
                 self.compare.set_filter("")
+                self._draw_bars()
                 return
             self.box = box
             x, y, bw, bh = box
             self.result_lbl.config(text=f"Picture is {bw}×{bh} at ({x}, {y}) inside {w}×{h}.")
             self.compare.set_filter(f"crop={bw}:{bh}:{x}:{y}")
+            self._draw_bars()
 
         from core import ui
         ui.run_in_thread(detect_bars, path, info.duration, on_done=done,
                          on_error=lambda _e: done(None), name="AutoCrop")
+
+    def _draw_bars(self):
+        view = self.compare.view_before
+        c = view.canvas
+        c.delete("bars")
+        shown = view.image_box()
+        if shown is None or self.box is None or self._info is None or not self._info.has_video:
+            return
+        ix, iy, iw, ih = shown
+        vw, vh = self._info.video.display_size
+        sx, sy = iw / max(1, vw), ih / max(1, vh)
+        x, y, bw, bh = self.box
+        kx0, ky0, kx1, ky1 = ix + x * sx, iy + y * sy, ix + (x + bw) * sx, iy + (y + bh) * sy
+        for box in ((ix, iy, ix + iw, ky0), (ix, ky1, ix + iw, iy + ih),
+                    (ix, ky0, kx0, ky1), (kx1, ky0, ix + iw, ky1)):
+            if box[2] - box[0] >= 2 and box[3] - box[1] >= 2:
+                c.create_rectangle(*box, fill=CLR["red"], stipple="gray25", outline="", tags="bars")
+                if box[3] - box[1] >= px(14) and box[2] - box[0] >= px(90):
+                    c.create_text((box[0] + box[2]) / 2, (box[1] + box[3]) / 2, text="removed",
+                                  fill="#FFFFFF", font=(UI_FONT, 8, "bold"), tags="bars")
+        c.create_rectangle(kx0, ky0, kx1, ky1, outline=CLR["accent"], width=px(2), dash=px(4, 3),
+                           tags="bars")
+
+    def _outline_result(self):
+        view = self.compare.view_after
+        view.canvas.delete("edge")
+        shown = view.image_box()
+        if shown is not None:
+            x, y, w, h = shown
+            view.canvas.create_rectangle(x, y, x + w, y + h, outline=CLR["accent"], width=px(1),
+                                         tags="edge")
 
     def _render(self):
         src = self.src_row.path

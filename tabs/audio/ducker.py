@@ -41,14 +41,19 @@ class AudioDuckerTab(BaseTab):
         tk.Label(hdr_inner,
                  text=t("ducker.desc_header"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+                 fg=CLR["fgdim"], anchor="w").pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
+
+        # The bold labels on the left share one width: wide enough for the
+        # longest of them (in any language), so none is cut off
+        lw = 2 + max(len(t(k)) for k in ("common.source_video", "ducker.lbl_bg_music",
+                                         "common.preset", "common.output_file"))
 
         # ── Source video ──────────────────────────────────────────────────────
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(16), pady=px(8))
         tk.Label(sf, text=t("common.source_video"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
+                 font=(UI_FONT, 10, "bold"), width=lw, anchor="e").pack(side="left")
         self._src_var = tk.StringVar()
         tk.Entry(sf, textvariable=self._src_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(sf, text=t("btn.browse"), command=self._browse_src,
@@ -58,7 +63,7 @@ class AudioDuckerTab(BaseTab):
         mf = tk.Frame(self)
         mf.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mf, text=t("ducker.lbl_bg_music"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
+                 font=(UI_FONT, 10, "bold"), width=lw, anchor="e").pack(side="left")
         self._music_var = tk.StringVar()
         tk.Entry(mf, textvariable=self._music_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(mf, text=t("btn.browse"), command=self._browse_music,
@@ -68,7 +73,7 @@ class AudioDuckerTab(BaseTab):
         pf = tk.Frame(self)
         pf.pack(fill="x", padx=px(16), pady=px(6))
         tk.Label(pf, text=t("common.preset"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
+                 font=(UI_FONT, 10, "bold"), width=lw, anchor="e").pack(side="left")
         self._preset_var = tk.StringVar(value="Standard (YouTube)")
         preset_cb = ttk.Combobox(pf, textvariable=self._preset_var,
                                   values=list(PRESETS.keys()),
@@ -160,7 +165,7 @@ class AudioDuckerTab(BaseTab):
         of = tk.Frame(self)
         of.pack(fill="x", padx=px(16), pady=px(6))
         tk.Label(of, text=t("common.output_file"),
-                 font=(UI_FONT, 10, "bold"), width=18, anchor="e").pack(side="left")
+                 font=(UI_FONT, 10, "bold"), width=lw, anchor="e").pack(side="left")
         self._out_var = tk.StringVar()
         tk.Entry(of, textvariable=self._out_var, width=58, relief="flat").pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out,

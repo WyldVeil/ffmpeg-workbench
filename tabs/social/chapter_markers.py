@@ -23,6 +23,7 @@ import re
 import json
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from tabs.widgets import scroll_body
 from core.i18n import t
 from core.scaling import px
 
@@ -112,8 +113,10 @@ class ChapterMarkersTab(BaseTab):
                  text=t("chapter_markers.subtitle"),
                  bg=CLR["panel"], fg=CLR["fgdim"]).pack(side="left")
 
+        body = scroll_body(self)
+
         # ── Source video ──────────────────────────────────────────────────
-        sf = tk.Frame(self); sf.pack(pady=px(10))
+        sf = tk.Frame(body); sf.pack(pady=px(10))
         tk.Label(sf, text=t("common.source_video"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.src_var = tk.StringVar()
         tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(side="left", padx=px(8))
@@ -123,7 +126,7 @@ class ChapterMarkersTab(BaseTab):
         self.dur_lbl.pack(side="left", padx=px(8))
 
         # ── Timeline scrubber ─────────────────────────────────────────────
-        scrub_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10))
+        scrub_lf = tk.LabelFrame(body, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10))
         scrub_lf.pack(fill="x", padx=px(16), pady=px(6))
 
         self.timeline = tk.Scale(scrub_lf, from_=0, to=100,
@@ -152,7 +155,7 @@ class ChapterMarkersTab(BaseTab):
                       command=lambda p=pct: self._jump_pct(p)).pack(side="left", padx=px(1))
 
         # ── Mark + name ───────────────────────────────────────────────────
-        mark_row = tk.Frame(self); mark_row.pack(fill="x", padx=px(16), pady=px(4))
+        mark_row = tk.Frame(body); mark_row.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mark_row, text=t("chapter_markers.chapter_title_label")).pack(side="left")
         self.new_title_var = tk.StringVar(value="Chapter")
         title_entry = tk.Entry(mark_row, textvariable=self.new_title_var, width=30, relief="flat")
@@ -168,7 +171,7 @@ class ChapterMarkersTab(BaseTab):
                   command=lambda: self._add_chapter(0.0, "Intro")).pack(side="left", padx=px(4))
 
         # Auto-number
-        auto_row = tk.Frame(self); auto_row.pack(anchor="w", padx=px(16), pady=px(2))
+        auto_row = tk.Frame(body); auto_row.pack(anchor="w", padx=px(16), pady=px(2))
         self.autonumber_var = tk.BooleanVar(value=True)
         tk.Checkbutton(auto_row,
                        text=t("chapter_markers.auto_number_checkbox"),
@@ -177,21 +180,25 @@ class ChapterMarkersTab(BaseTab):
         tk.Entry(auto_row, textvariable=self.prefix_var, width=12, relief="flat").pack(side="left", padx=px(6))
 
         # ── Chapter list ──────────────────────────────────────────────────
-        list_hdr = tk.Frame(self); list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
+        list_hdr = tk.Frame(body); list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
         tk.Label(list_hdr, text=t("chapter_markers.chapter_list"), font=(UI_FONT, 9, "bold"),
                  fg=CLR["fgdim"]).pack(side="left")
         self.count_lbl = tk.Label(list_hdr, text=t("chapter_markers.0_chapters"),
                                    fg=CLR["fgdim"], font=(UI_FONT, 9))
         self.count_lbl.pack(side="left", padx=px(10))
 
+        # The list with its scrollbar and buttons is one row; everything else
+        # goes below it at full width
+        list_row = tk.Frame(body)
+        list_row.pack(fill="x")
         cols = ("timestamp", "title")
-        self.tree = ttk.Treeview(self, columns=cols, show="headings",
+        self.tree = ttk.Treeview(list_row, columns=cols, show="headings",
                                   selectmode="browse", height=8)
         self.tree.heading("timestamp", text=t("chapter_markers.timestamp_col"))
         self.tree.heading("title",     text=t("chapter_markers.title_col"))
         self.tree.column("timestamp", width=px(120), anchor="center")
         self.tree.column("title",     width=px(500))
-        tree_sb = ttk.Scrollbar(self, command=self.tree.yview)
+        tree_sb = ttk.Scrollbar(list_row, command=self.tree.yview)
         self.tree.config(yscrollcommand=tree_sb.set)
         self.tree.pack(side="left", fill="both", expand=False,
                        padx=px(16, 0), pady=px(4))
@@ -200,7 +207,7 @@ class ChapterMarkersTab(BaseTab):
         self.tree.bind("<Delete>", lambda e: self._remove_selected())
 
         # List action buttons
-        list_btns = tk.Frame(self)
+        list_btns = tk.Frame(list_row)
         list_btns.pack(side="left", padx=px(8), anchor="n", pady=px(4))
         for txt, cmd, bg in [
             ("✏  Edit Title",                            self._edit_selected,  "#3A3A3A"),
@@ -215,15 +222,14 @@ class ChapterMarkersTab(BaseTab):
 
         # ── Preview pane ──────────────────────────────────────────────────
         # (rest of the UI continues below the side-by-side)
-        self.tree.pack_configure(side="left", expand=True)
 
         # ── Validation ────────────────────────────────────────────────────
-        self.valid_lbl = tk.Label(self, text="", font=(UI_FONT, 9),
-                                   fg=CLR["fgdim"])
+        self.valid_lbl = tk.Label(body, text="", font=(UI_FONT, 9),
+                                   fg=CLR["fgdim"], justify="left", anchor="w")
         self.valid_lbl.pack(anchor="w", padx=px(16))
 
         # ── Export ────────────────────────────────────────────────────────
-        export_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8))
+        export_lf = tk.LabelFrame(body, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8))
         export_lf.pack(fill="x", padx=px(16), pady=px(6))
 
         exp_row = tk.Frame(export_lf); exp_row.pack(fill="x")
@@ -240,7 +246,7 @@ class ChapterMarkersTab(BaseTab):
                       command=cmd).pack(side="left", padx=px(4))
 
         # Output preview
-        preview_lf = tk.LabelFrame(self, text=f"  {t('chapter_markers.preview_section')}  ",
+        preview_lf = tk.LabelFrame(body, text=f"  {t('chapter_markers.preview_section')}  ",
                                     padx=px(10), pady=px(6))
         preview_lf.pack(fill="x", padx=px(16), pady=px(4))
         self.preview_text = tk.Text(preview_lf, height=8,
@@ -317,7 +323,7 @@ class ChapterMarkersTab(BaseTab):
         if not issues:
             self.valid_lbl.config(text=t("chapter_markers.valid_for_youtube_chapters"), fg=CLR["green"])
         else:
-            self.valid_lbl.config(text="⚠  " + "  ".join(issues), fg=CLR["orange"])
+            self.valid_lbl.config(text="\n".join("⚠  " + i for i in issues), fg=CLR["orange"])
 
     def _update_preview(self):
         self.preview_text.config(state="normal")

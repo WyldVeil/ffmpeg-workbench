@@ -37,6 +37,27 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{m}m {s:02d}s"
 
 
+def progress_text(task) -> str:
+    """What the Progress column shows: a bar and percentage while it runs (the
+    raw FFmpeg log line it used to show meant nothing to most people)."""
+    status = task.status
+    if status == "pending":
+        return "Waiting"
+    if status == "done":
+        return "▰" * 10 + "  Finished"
+    if status == "cancelled":
+        return "Cancelled"
+    if status == "failed":
+        return "Failed - " + (task.error.splitlines()[0][:60] if task.error else "see the log")
+    if task.fraction is None:
+        return "Working…"
+    filled = int(round(task.fraction * 10))
+    text = "▰" * filled + "▱" * (10 - filled) + f"  {task.fraction * 100:.0f}%"
+    if task.eta is not None and task.fraction < 1:
+        text += f" · {_fmt_elapsed(task.eta)} left"
+    return text
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Job  -  settings model for encoding jobs added through the editor panel
 # ─────────────────────────────────────────────────────────────────────────────
@@ -152,7 +173,7 @@ class EncodeQueueTab(BaseTab):
         tk.Label(hdr_inner,
                  text=t("encode_queue.subtitle"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+                 fg=CLR["fgdim"], anchor="w").pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Paned layout
@@ -326,7 +347,7 @@ class EncodeQueueTab(BaseTab):
                 end = task.finished_at or time.time()
                 elapsed = _fmt_elapsed(end - task.started_at)
 
-            progress = task.progress[:60] if task.progress else ""
+            progress = progress_text(task)
             out_name = os.path.basename(task.output_path) if task.output_path else "-"
 
             self.tree.insert(

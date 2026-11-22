@@ -35,7 +35,7 @@ class BatchJoinerTab(BaseTab):
                  bg=CLR["panel"], fg=CLR["accent"]).pack(side="left")
         tk.Label(hdr_inner, text=t("batch_joiner.desc"),
                  font=(UI_FONT, 10), bg=CLR["panel"],
-                 fg=CLR["fgdim"]).pack(side="left", padx=px(16, 0))
+                 fg=CLR["fgdim"], anchor="w").pack(side="left", fill="x", expand=True, padx=px(16, 0))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # File list
