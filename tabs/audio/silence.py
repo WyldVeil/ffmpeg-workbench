@@ -16,6 +16,7 @@ from tkinter import messagebox
 
 from core import encoders as enc
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -168,10 +169,8 @@ class SilenceTab(BaseTab):
             self.report.config(text=f"{len(zones)} parts kept · {ff.format_time(kept)} of "
                                     f"{ff.format_time(info.duration)} · removes {ff.format_time(info.duration - kept)}")
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, on_error=lambda e: (self.btn_analyse.config(
-            state="normal", text="🔍  ANALYSE"), messagebox.showerror(t("common.error"), str(e), parent=self)),
-            name="SilenceDetect")
+        tasks.submit(work, on_done=done, on_error=lambda e: (self.btn_analyse.config(
+            state="normal", text="🔍  ANALYSE"), messagebox.showerror(t("common.error"), str(e), parent=self)), name="SilenceDetect")
 
     def _render(self):
         src = self.src_row.path

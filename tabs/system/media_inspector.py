@@ -12,9 +12,10 @@ from __future__ import annotations
 import json
 import os
 import tkinter as tk
+from functools import partial
 from tkinter import ttk
 
-from core import dialogs
+from core import dialogs, tasks
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
@@ -193,24 +194,33 @@ class MediaInspectorTab(BaseTab):
             self.load_file(path)
 
     def load_file(self, path: str) -> bool:
-        """Public entry point (also used by drag-and-drop and Open Recent)."""
+        """Public entry point (also used by drag-and-drop and Open Recent).
+        ffprobe runs in the background; the page fills in when it answers."""
         self.file_path = path
         self.src_var.set(path)
-        try:
-            info = ff.probe(path, use_cache=False)
-        except ff.ProbeError as exc:
-            self.info = None
-            self.summary_lbl.config(text=_tr("inspector.unreadable", "Not a readable media file:")
-                                    + f" {exc}", fg=CLR["red"])
-            self._fill_notes([])
-            for txt in (self.format_txt, self.chapters_txt, self.tags_txt, self.json_txt):
-                self._set_text(txt, "")
-            self.tree.delete(*self.tree.get_children())
-            self.preview.clear()
-            return False
+        self.info = None
+        self.summary_lbl.config(text=_tr("inspector.reading", "Reading..."), fg=CLR["fgdim"])
+        tasks.submit(partial(ff.probe, path, use_cache=False), on_done=partial(self._probed, path),
+                     on_error=partial(self._unreadable, path), name="Inspect")
+        return True
+
+    def _probed(self, path: str, info: ff.MediaInfo) -> None:
+        if path != self.file_path:                       # another file was opened meanwhile
+            return
         self.info = info
         self._populate(info)
-        return True
+
+    def _unreadable(self, path: str, exc: BaseException) -> None:
+        if path != self.file_path:
+            return
+        self.info = None
+        self.summary_lbl.config(text=_tr("inspector.unreadable", "Not a readable media file:")
+                                + f" {exc}", fg=CLR["red"])
+        self._fill_notes([])
+        for txt in (self.format_txt, self.chapters_txt, self.tags_txt, self.json_txt):
+            self._set_text(txt, "")
+        self.tree.delete(*self.tree.get_children())
+        self.preview.clear()
 
     def _set_text(self, widget: tk.Text, text: str) -> None:
         widget.configure(state="normal")

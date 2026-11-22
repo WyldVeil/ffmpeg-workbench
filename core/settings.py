@@ -6,11 +6,13 @@ to the program, which may be read-only.  Writes are atomic (temp file +
 fsync + os.replace, with a ``.bak`` of the previous version) and serialised by
 a process-wide lock, and reads are cached until the file changes on disk.
 
-Prefer the merge-style API so a component only writes the keys it owns::
+Every setting is declared once, with its type, at the bottom of this file;
+read and write it through that declaration::
 
     from core import settings
-    settings.get("default_crf", "18")
-    settings.set("language", "de_DE")
+    settings.DEFAULT_CRF.get()                 # "18" - always a str
+    settings.AUTO_OPEN_OUTPUT.get()            # always a bool, whatever the file holds
+    settings.LANGUAGE.set("de_DE")             # checked; InputError if it can't be stored
     settings.update({"network.proxy_enabled": True, "network.proxy_port": "8080"})
 
 ``load_settings()`` / ``save_settings(dict)`` remain for older callers.
@@ -24,43 +26,17 @@ import os
 import shutil
 import tempfile
 import threading
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any, Final, Generic, TypeVar
 
+from core.errors import InputError
 from core.paths import APP_ROOT, config_dir
 
 _log = logging.getLogger("crossfader.settings")
 
 SETTINGS_FILE = os.path.join(config_dir(), "settings.json")
 
-_DEFAULTS: dict = {
-    # rendering
-    "default_crf": "18",
-    "default_preset": "fast",
-    "default_audio_bitrate": "192k",
-    "hw_encode": "auto",                 # auto | off | nvenc | qsv | vaapi | amf | videotoolbox
-    "overwrite_policy": "ask",           # ask | rename | overwrite
-    "default_output_folder": "",
-    "auto_open_output": False,
-    "notify_on_complete": True,
-    "max_parallel_jobs": 1,
-    # tools
-    "ffmpeg_path_override": "",
-    "binary_source": "auto",             # auto | bundled | system
-    "check_updates": True,
-    # interface
-    "theme": "Classic",
-    "ui_scale": "auto",                  # auto | 1.0 | 1.25 | 1.5 | 1.75 | 2.0
-    "native_dialogs": True,
-    "play_startup_sound": True,
-    "star_speed": 1.0,
-    "star_count": 55,
-    "language": "",
-    "favourite_tabs": [],
-    "recent_files": [],
-    "recent_tools": [],
-    "start_page": "start",               # start | home | last
-}
 
 _lock = threading.RLock()
 _cache: dict | None = None
@@ -155,9 +131,15 @@ def _current() -> dict:
 
 
 def load_settings() -> dict:
-    """A copy of all settings (defaults filled in).  Never raises."""
+    """A copy of all settings (defaults filled in, declared keys checked and
+    converted to their types).  Never raises."""
     with _lock:
-        return json.loads(json.dumps(_current()))
+        data = json.loads(json.dumps(_current()))
+    for key, value in data.items():
+        setting = REGISTRY.get(key)
+        if setting is not None:
+            data[key] = setting.read(value)
+    return data
 
 
 def save_settings(data: dict) -> bool:
@@ -182,8 +164,15 @@ def update(changes: dict) -> bool:
 
 
 def get(key: str, fallback: Any = None) -> Any:
+    """The value stored for *key* (prefer the typed ``SETTING.get()``).  For a
+    declared key the stored value is checked and converted like ``get()`` would."""
     with _lock:
-        val = _current().get(key, fallback)
+        data = _current()
+        present = key in data
+        val = data.get(key, fallback)
+    setting = REGISTRY.get(key)
+    if setting is not None and present:
+        return setting.read(val)
     return json.loads(json.dumps(val)) if isinstance(val, (dict, list)) else val
 
 
@@ -216,3 +205,171 @@ def transaction() -> Iterator[dict]:
 
 def defaults() -> dict:
     return dict(_DEFAULTS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Typed settings
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Robust Python ch. 9-10 and Effective Python item 51: settings are data that
+# came from outside the program (a JSON file a person can edit), so they are
+# checked once, at the boundary, and everything past it gets the right type.
+# Each setting is declared exactly once below - its key, its default (which
+# also fixes its type) and, where it has one, the values it may take:
+#
+#     if settings.AUTO_OPEN_OUTPUT.get(): ...          # a bool, whatever the file says
+#     settings.HW_ENCODE.set("nvenc")                  # checked: InputError if not a choice
+#
+# A typo in a key is an AttributeError at import, not a silent default, and
+# tests/test_settings_keys.py fails if code reads a key nobody declared.
+
+T = TypeVar("T", bool, int, float, str, list)
+
+_TRUE: Final = frozenset({"1", "true", "yes", "on"})
+_FALSE: Final = frozenset({"0", "false", "no", "off", ""})
+
+
+def _as_bool(raw: object) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return raw != 0
+    text = str(raw).strip().lower()
+    if text in _TRUE:
+        return True
+    if text in _FALSE:
+        return False
+    raise ValueError(f"not a yes/no value: {raw!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class Setting(Generic[T]):
+    """One setting.  ``default`` also fixes the type every read returns."""
+    key: str
+    default: T
+    choices: tuple[T, ...] = ()
+
+    def coerce(self, raw: object) -> T:
+        """*raw* as this setting's type; raises ValueError when it can't be."""
+        d: object = self.default
+        if isinstance(d, bool):
+            value: object = _as_bool(raw)
+        elif isinstance(d, (int, float)):
+            try:
+                if isinstance(raw, bool):
+                    raise TypeError
+                number = float(raw)                      # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                raise ValueError(f"{self.key}: expected a number, got {raw!r}") from None
+            value = int(number) if isinstance(d, int) else number
+        elif isinstance(d, str):
+            if raw is None or isinstance(raw, (dict, list)):
+                raise ValueError(f"{self.key}: expected text, got {raw!r}")
+            value = str(raw)
+        elif isinstance(raw, list):
+            value = json.loads(json.dumps(raw))          # a private copy
+        else:
+            raise ValueError(f"{self.key}: expected a list, got {raw!r}")
+        if self.choices and value not in self.choices:
+            raise ValueError(f"{self.key}: {value!r} is not one of {self.choices}")
+        return value  # type: ignore[return-value]
+
+    def read(self, raw: object) -> T:
+        """Like :meth:`coerce`, but an unusable stored value means the default
+        (logged once per key: a hand-edited file must never stop the app)."""
+        try:
+            return self.coerce(raw)
+        except (TypeError, ValueError) as exc:
+            if self.key not in _complained:
+                _complained[self.key] = None
+                _log.warning("settings.json: %s - using the default %r", exc, self.default)
+            return self.coerce(self.default)
+
+    def get(self) -> T:
+        with _lock:
+            raw = _current().get(self.key, self.default)
+        return self.read(raw)
+
+    def set(self, value: T) -> bool:
+        try:
+            checked = self.coerce(value)
+        except (TypeError, ValueError) as exc:
+            raise InputError(str(exc)) from exc
+        return update({self.key: checked})
+
+
+_complained: dict[str, None] = {}               # keys already warned about (``set`` is taken here)
+
+# rendering
+DEFAULT_CRF: Final = Setting("default_crf", "18")
+DEFAULT_PRESET: Final = Setting("default_preset", "fast")
+DEFAULT_AUDIO_BITRATE: Final = Setting("default_audio_bitrate", "192k")
+HW_ENCODE: Final = Setting("hw_encode", "auto", ("auto", "off", "nvenc", "qsv", "vaapi", "amf", "videotoolbox"))
+OVERWRITE_POLICY: Final = Setting("overwrite_policy", "ask", ("ask", "rename", "overwrite"))
+DEFAULT_OUTPUT_FOLDER: Final = Setting("default_output_folder", "")
+AUTO_OPEN_OUTPUT: Final = Setting("auto_open_output", False)
+NOTIFY_ON_COMPLETE: Final = Setting("notify_on_complete", True)
+MAX_PARALLEL_JOBS: Final = Setting("max_parallel_jobs", 1, (1, 2, 3, 4))
+# tools
+FFMPEG_PATH_OVERRIDE: Final = Setting("ffmpeg_path_override", "")
+BINARY_SOURCE: Final = Setting("binary_source", "auto", ("auto", "bundled", "system"))
+CHECK_UPDATES: Final = Setting("check_updates", True)
+# interface
+THEME: Final = Setting("theme", "Classic")
+UI_SCALE: Final = Setting("ui_scale", "auto")          # "auto" or a factor such as "1.5"
+NATIVE_DIALOGS: Final = Setting("native_dialogs", True)
+PLAY_STARTUP_SOUND: Final = Setting("play_startup_sound", True)
+STAR_SPEED: Final = Setting("star_speed", 1.0)
+STAR_COUNT: Final = Setting("star_count", 55)
+LANGUAGE: Final = Setting("language", "")
+FAVOURITE_TABS: Final = Setting[list]("favourite_tabs", [])
+RECENT_FILES: Final = Setting[list]("recent_files", [])
+RECENT_TOOLS: Final = Setting[list]("recent_tools", [])
+START_PAGE: Final = Setting("start_page", "start", ("start", "home", "last"))
+
+# network (core/network.py explains each)
+NETWORK: Final[tuple[Setting[Any], ...]] = (
+    Setting("network.mode", "auto", ("auto", "direct", "manual", "offline")),
+    Setting("network.strict", False),
+    Setting("network.proxy_enabled", False),
+    Setting("network.proxy_scheme", "http", ("http", "https", "socks4", "socks4a", "socks5", "socks5h")),
+    Setting("network.proxy_host", "127.0.0.1"),
+    Setting("network.proxy_port", ""),
+    Setting("network.proxy_user", ""),
+    Setting("network.proxy_pass", ""),
+    Setting("network.no_proxy", "localhost,127.0.0.1,::1"),
+    Setting("network.bandwidth_limit", ""),
+    Setting("network.connect_timeout", "15"),
+    Setting("network.socket_timeout", "60"),
+    Setting("network.user_agent", ""),
+    Setting("network.ip_version", "auto", ("auto", "ipv4", "ipv6")),
+    Setting("network.source_address", ""),
+    Setting("network.verify_ssl", True),
+    Setting("network.system_certs", True),
+    Setting("network.extra_ca", ""),
+    Setting("network.allow_http", True),
+    Setting("network.hf_mirror", ""),
+    Setting("network.github_mirror", ""),
+    Setting("network.wrapper", ""),
+    Setting("network.tor_retries", "12"),
+)
+
+#: Keys made at run time from a fixed prefix (``last_dir.video``...).
+FAMILIES: Final[tuple[str, ...]] = ("last_dir.", "custom_color_")
+
+REGISTRY: Final[Mapping[str, Setting[Any]]] = {
+    s.key: s for s in (
+        DEFAULT_CRF, DEFAULT_PRESET, DEFAULT_AUDIO_BITRATE, HW_ENCODE, OVERWRITE_POLICY, DEFAULT_OUTPUT_FOLDER,
+        AUTO_OPEN_OUTPUT, NOTIFY_ON_COMPLETE, MAX_PARALLEL_JOBS, FFMPEG_PATH_OVERRIDE, BINARY_SOURCE,
+        CHECK_UPDATES, THEME, UI_SCALE, NATIVE_DIALOGS, PLAY_STARTUP_SOUND, STAR_SPEED, STAR_COUNT, LANGUAGE,
+        FAVOURITE_TABS, RECENT_FILES, RECENT_TOOLS, START_PAGE, *NETWORK,
+    )
+}
+
+
+def is_declared(key: str) -> bool:
+    return key in REGISTRY or key.startswith(FAMILIES)
+
+
+#: Defaults of the settings that live at the top level (network.* has its own merge rules).
+_DEFAULTS: Final[dict[str, Any]] = {k: v.default for k, v in REGISTRY.items() if not k.startswith("network.")}

@@ -17,11 +17,11 @@ right everywhere:
 from __future__ import annotations
 
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
+from core import capabilities, hdr, tasks
 from core import ffmpeg as ff
-from core import filters as fl
-from core import hdr
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -44,10 +44,21 @@ def subtitle_args(info: ff.MediaInfo, container: str) -> list:
     return maps + (["-c:s", target] if maps else [])
 
 
+
+_NO_GPU = "(no Vulkan graphics driver found - GPU mode unavailable)"
+
+
+def _inspect(path: str) -> tuple[ff.MediaInfo | None, hdr.HdrInfo]:
+    """Worker: what kind of HDR (if any) *path* holds."""
+    info = ff.try_probe(path)
+    found = hdr.inspect(info, path) if info is not None and info.has_video else hdr.HdrInfo()
+    return info, found
+
 class HdrToSdrTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self._info = None
+        self._inspecting: str | None = None      # the file being read in the background
         self._hdr = hdr.HdrInfo()
         self._job = None
         self._build_ui()
@@ -66,16 +77,22 @@ class HdrToSdrTab(BaseTab):
 
         opt = tk.LabelFrame(body, text="  Conversion  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.gpu_ok = fl.vulkan_ok()
+        known = capabilities.peek("vulkan")              # None: still being checked (never block the window)
+        self.gpu_ok = bool(known)
         self.engine_var = tk.StringVar(value="gpu" if self.gpu_ok else "cpu")
-        tk.Radiobutton(opt, text="GPU - best quality, understands Dolby Vision", variable=self.engine_var,
-                       value="gpu", command=self._changed,
-                       state="normal" if self.gpu_ok else "disabled").grid(row=0, column=0, columnspan=2, sticky="w")
+        self.gpu_radio = tk.Radiobutton(opt, text="GPU - best quality, understands Dolby Vision",
+                                        variable=self.engine_var, value="gpu", command=self._changed,
+                                        state="normal" if self.gpu_ok else "disabled")
+        self.gpu_radio.grid(row=0, column=0, columnspan=2, sticky="w")
         tk.Radiobutton(opt, text="CPU - works on any computer", variable=self.engine_var, value="cpu",
                        command=self._changed).grid(row=1, column=0, columnspan=2, sticky="w")
-        if not self.gpu_ok:
-            tk.Label(opt, text="(no Vulkan graphics driver found - GPU mode unavailable)", fg=CLR["fgdim"]).grid(
-                row=0, column=2, sticky="w")
+        self.gpu_note = tk.Label(opt, text="", fg=CLR["fgdim"])
+        self.gpu_note.grid(row=0, column=2, sticky="w")
+        if known is None:
+            self.gpu_note.config(text="(checking the graphics driver...)")
+            capabilities.on_ready("vulkan", self._gpu_known)
+        elif not known:
+            self.gpu_note.config(text=_NO_GPU)
         tk.Label(opt, text="Tone curve:").grid(row=2, column=0, sticky="w", pady=px(8, 0))
         self.curve_var = tk.StringVar(value=hdr.CURVES["bt2390"][0])
         cb = ttk.Combobox(opt, textvariable=self.curve_var, values=[v[0] for v in hdr.CURVES.values()],
@@ -112,6 +129,14 @@ class HdrToSdrTab(BaseTab):
         csb.pack(side="right", fill="y")
         self._changed()
 
+    def _gpu_known(self, ok: bool) -> None:
+        self.gpu_ok = bool(ok)
+        self.gpu_radio.config(state="normal" if ok else "disabled")
+        self.gpu_note.config(text="" if ok else _NO_GPU)
+        if ok:
+            self.engine_var.set("gpu")                   # the default whenever the GPU works
+        self._changed()
+
     # ── State ─────────────────────────────────────────────────────────
     def load_file(self, path) -> bool:
         self.src_row.set(path)
@@ -132,9 +157,14 @@ class HdrToSdrTab(BaseTab):
                              adaptive=bool(self.adaptive_var.get()), assume=self._assume())
 
     def _source_changed(self, path):
-        self._info = ff.try_probe(path)
-        self._hdr = hdr.inspect(self._info, path) if self._info is not None and self._info.has_video \
-            else hdr.HdrInfo()
+        self._info, self._hdr, self._inspecting = None, hdr.HdrInfo(), path     # nothing stale meanwhile
+        self.kind_lbl.config(text="Reading the file...", fg=CLR["fgdim"])
+        tasks.submit(partial(_inspect, path), on_done=lambda res: self._inspected(path, *res), name="HdrInspect")
+
+    def _inspected(self, path: str, info: ff.MediaInfo | None, found: hdr.HdrInfo) -> None:
+        if path != self.src_row.path:                    # another file was chosen meanwhile
+            return
+        self._info, self._hdr, self._inspecting = info, found, None
         if self._info is None or not self._info.has_video:
             self.kind_lbl.config(text="Can't read this file as video.", fg=CLR["red"])
         elif self._hdr.is_hdr:
@@ -169,6 +199,9 @@ class HdrToSdrTab(BaseTab):
     # ── Render ────────────────────────────────────────────────────────
     def _render(self):
         src = self.src_row.path
+        if self._inspecting:
+            messagebox.showinfo("HDR to SDR", "Still reading the file - try again in a moment.", parent=self)
+            return
         info = common.check_source(self, src)
         if info is None:
             return

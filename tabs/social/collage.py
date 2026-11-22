@@ -23,13 +23,13 @@ from core import dialogs, grid
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
+from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel
 
 
 def _fmt(seconds):
-    m, s = divmod(max(0, seconds), 60)
-    return f"{int(m):02d}:{s:05.2f}"
+    return f"{Timecode.of(seconds):.2}"
 
 
 LAYOUTS = {   # stable ids; labels are what the user sees
@@ -212,9 +212,9 @@ class VideoCollageTab(BaseTab):
         self._out_var = tk.StringVar()
         tk.Entry(of, textvariable=self._out_var, width=55).pack(side="left", padx=px(8))
         tk.Button(of, text=t("common.save_as"), command=self._browse_out, relief="flat").pack(side="left")
-        self._btn_run = tk.Button(self, text=t("collage.build_collage"), font=(UI_FONT, 12, "bold"),
+        self.btn_render = tk.Button(self, text=t("collage.build_collage"), font=(UI_FONT, 12, "bold"),
                                   bg=CLR["green"], fg="white", width=26, cursor="hand2", command=self._render)
-        self._btn_run.pack(pady=px(6))
+        self.btn_render.pack(pady=px(6))
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(2, 10))
         self.console, csb = self.make_console(cf, height=4)
@@ -422,7 +422,7 @@ class VideoCollageTab(BaseTab):
         cmd += [*venc.args, "-t", f"{total:.3f}", out]
         what = spec["label"] if not spec.get("auto") else self._layout([c["aspect"] for c in clips]).describe()
         self.log(self.console, f"{len(clips)} clips · {what} · {W}×{H} · {_fmt(total)}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self._btn_run,
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label=t("collage.build_collage"), duration=total, output=out, inputs=paths,
                         name="Collage")
 

@@ -46,7 +46,7 @@ tools_tree = Tree(bin_src, prefix=os.path.join("bin", PLAT), typecode="DATA")
 
 # tkinterdnd2 ships its own PyInstaller hook (collects only this platform's tkdnd).
 
-hiddenimports = (collect_submodules("tabs") + collect_submodules("core")
+hiddenimports = (collect_submodules("tabs") + collect_submodules("core") + collect_submodules("shell")
                  + ["tkinterdnd2"])
 
 a = Analysis(

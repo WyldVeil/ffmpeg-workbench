@@ -15,10 +15,10 @@ Optional rumble filter, preview, audio-only or video output.
 from __future__ import annotations
 
 import os
-import subprocess
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from core import capabilities
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
@@ -36,7 +36,6 @@ MODELS = {   # file: label (signal / noise the model was trained for)
     "mp.rnnn": "Any sound, general background noise",
 }
 _CUSTOM = "Custom model (.rnnn file)…"
-_ANLMDN_OK = None
 
 
 def models_dir() -> str:
@@ -44,16 +43,8 @@ def models_dir() -> str:
 
 
 def anlmdn_works() -> bool:
-    """anlmdn crashes (heap corruption) in some FFmpeg builds: test it once."""
-    global _ANLMDN_OK
-    if _ANLMDN_OK is None:
-        try:
-            r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi",
-                            "-i", "anoisesrc=d=1:c=pink", "-af", "anlmdn", "-f", "null", "-"], timeout=30)
-            _ANLMDN_OK = r.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            _ANLMDN_OK = False
-    return _ANLMDN_OK
+    """anlmdn crashes (heap corruption) in some FFmpeg builds: it is tested once (core.capabilities)."""
+    return bool(capabilities.get("anlmdn"))
 
 
 def denoise_filter(method: str, *, model: str = "", blend: float = 0.0, floor_db: float = -30,
@@ -85,10 +76,16 @@ class VoiceIsolationTab(BaseTab):
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value="neural")
         methods = [("neural", "Neural network (RNNoise) - recommended"), ("fft", "Spectral noise reduction (FFT)")]
-        if anlmdn_works():
-            methods.append(("nlm", "Non-local means"))
-        for key, label in methods:
-            tk.Radiobutton(opt, text=label, value=key, variable=self.method_var).pack(anchor="w")
+        methods.append(("nlm", "Non-local means"))
+        radios = {key: tk.Radiobutton(opt, text=label, value=key, variable=self.method_var) for key, label in methods}
+        for key, radio in radios.items():
+            if key != "nlm" or capabilities.peek("anlmdn", False):
+                radio.pack(anchor="w")
+        if capabilities.peek("anlmdn") is None:          # not known yet: offer it once the self-test passes
+            def _offer(ok: bool) -> None:
+                if ok:
+                    radios["nlm"].pack(anchor="w", after=radios["fft"])
+            capabilities.on_ready("anlmdn", _offer)
         mr = tk.Frame(opt)
         mr.pack(fill="x", pady=px(4))
         tk.Label(mr, text="Model:").pack(side="left")

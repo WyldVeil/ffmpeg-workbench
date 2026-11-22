@@ -30,37 +30,14 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote, urlsplit
 
+from core import errors, sysproxy
 from core import settings as _settings
-from core import sysproxy
 
 DIRECT = sysproxy.DIRECT
 
 # ── Settings ──────────────────────────────────────────────────────────────────
-DEFAULTS = {
-    "network.mode":            "auto",          # auto | direct | manual | offline
-    "network.strict":          False,           # never connect without the proxy
-    "network.proxy_enabled":   False,           # legacy: True = manual mode
-    "network.proxy_scheme":    "http",          # http, https, socks4, socks4a, socks5, socks5h
-    "network.proxy_host":      "127.0.0.1",
-    "network.proxy_port":      "",
-    "network.proxy_user":      "",
-    "network.proxy_pass":      "",
-    "network.no_proxy":        "localhost,127.0.0.1,::1",
-    "network.bandwidth_limit": "",              # e.g. "1M", "500K"
-    "network.connect_timeout": "15",
-    "network.socket_timeout":  "60",
-    "network.user_agent":      "",
-    "network.ip_version":      "auto",          # auto, ipv4, ipv6
-    "network.source_address":  "",              # send from this local address (choose the connection)
-    "network.verify_ssl":      True,
-    "network.system_certs":    True,            # trust the operating system's certificates
-    "network.extra_ca":        "",              # an extra certificate file (PEM) to trust
-    "network.allow_http":      True,
-    "network.hf_mirror":       "",              # e.g. https://hf-mirror.com
-    "network.github_mirror":   "",              # prefix put before github.com download links
-    "network.wrapper":         "",              # e.g. "mullvad-exclude", "proxychains4 -q"
-    "network.tor_retries":     "12",            # fresh Tor circuits to try when a site blocks an exit
-}
+#: Every network setting and its default (declared, with its type, in core.settings).
+DEFAULTS = {s.key: s.default for s in _settings.NETWORK}
 
 
 def _manual(scheme: str, port: str, strict: bool = False, host: str = "127.0.0.1") -> dict:
@@ -110,11 +87,11 @@ LOCAL_PORTS = {7890: "Clash / Mihomo", 7897: "Clash Verge", 7891: "Clash (SOCKS)
                6152: "Surge", 9050: "Tor", 9150: "Tor Browser"}
 
 
-class OfflineError(OSError):
+class OfflineError(errors.OfflineError):
     """The app is set to work offline."""
 
 
-class SocksUnavailable(OSError):
+class SocksUnavailable(errors.NetworkError):
     """A SOCKS proxy is configured but SOCKS support is missing."""
 
 

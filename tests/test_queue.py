@@ -16,7 +16,8 @@ def q():
     from core import ui
     from core.queue_manager import RenderQueueManager
     root = tk.Tk()
-    ui.install(root, poll_ms=5)
+    hosting = ui.hosted_by(root, poll_ms=5)
+    hosting.__enter__()                # left in pump_until's teardown below
     mgr = RenderQueueManager.get_instance()
     mgr.cancel_all()
     mgr.clear_finished()
@@ -34,8 +35,8 @@ def q():
     yield mgr
     mgr.cancel_all()
     pump_until(lambda: not mgr.active_tasks(), 20)
+    hosting.__exit__(None, None, None)
     root.destroy()
-    ui._root = None
 
 
 def _lavfi(seconds, out, preset="ultrafast"):

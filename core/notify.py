@@ -10,8 +10,10 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import subprocess
 import sys
+
+from core import proc as _proc
+from core import settings
 
 _log = logging.getLogger("crossfader.notify")
 
@@ -19,11 +21,7 @@ _log = logging.getLogger("crossfader.notify")
 def _enabled() -> bool:
     if os.environ.get("CROSSFADER_NO_NOTIFY") == "1":
         return False
-    try:
-        from core.settings import get
-        return bool(get("notify_on_complete", True))
-    except Exception:
-        return True
+    return settings.NOTIFY_ON_COMPLETE.get()
 
 
 def _root():
@@ -47,16 +45,13 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
         from core.procenv import child_env
         icon = resource_path("assets", "icons", "app_128.png")
         if sys.platform.startswith("linux") and shutil.which("notify-send"):
-            subprocess.Popen(["notify-send", "--app-name=WyldVeil Media Editor", f"--urgency={urgency}",
-                              f"--icon={icon}", title, body],
-                             env=child_env(), stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _proc.spawn(["notify-send", "--app-name=WyldVeil Media Editor", f"--urgency={urgency}",
+                              f"--icon={icon}", title, body], stdin=_proc.DEVNULL, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL, env=child_env())
         elif sys.platform == "darwin":
             def esc(s):
                 return s.replace("\\", "\\\\").replace('"', '\\"')
-            subprocess.Popen(["osascript", "-e",
-                              f'display notification "{esc(body)}" with title "{esc(title)}"'],
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _proc.spawn(["osascript", "-e",
+                              f'display notification "{esc(body)}" with title "{esc(title)}"'], stdin=_proc.DEVNULL, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL)
         elif sys.platform.startswith("win"):
             root = _root()
             if root is not None:

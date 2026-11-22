@@ -51,7 +51,7 @@ DESCRIPTION = ("A free video and audio toolkit: cut, join, convert, compress, su
                "recognition), upscale, colour-grade, stabilise, clean up sound, download, record the\n"
                "screen and much more. Bundles FFmpeg 9, yt-dlp, whisper.cpp and Deno.")
 APP_FILES = ["main.py", "pyproject.toml", "skin.zip", "AGENTS.md", "README.md", "THIRD_PARTY_NOTICES.md",
-             "CHANGELOG.md", "core", "tabs", "assets", "locale"]
+             "CHANGELOG.md", "core", "shell", "tabs", "assets", "locale"]
 SKIP = ("__pycache__", ".pyc", ".pyo", ".part", "settings.json", "skin.json")
 MTIME = int(time.time())
 #: Releases up to 1.16.0 used another numbering; with epoch 1, package managers treat 1.2.0 and later as

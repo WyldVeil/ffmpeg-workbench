@@ -5,15 +5,14 @@ inline ffplay preview, and lossless or re-encoded export.
 """
 
 import os
-import subprocess
 import tkinter as tk
 from tkinter import messagebox
 
 from core import dialogs
 from core import ffmpeg as ff
+from core import proc as _proc
 from core import ui as _ui
 from core.hardware import (
-    CREATE_NO_WINDOW,
     get_binary_path,
     launch_preview,
 )
@@ -21,6 +20,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
+from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
 
 
@@ -80,6 +80,19 @@ class TrimmerTab(BaseTab):
         self._build_ui()
 
     # ─────────────────────────────────────────────────────────────────────
+
+    # ── Contracts (tabs/kit/contracts.py) ─────────────────────────────────
+    def transport(self) -> Transport | None:
+        return ScrubTransport(self._scrub, lambda: self.duration)
+
+    def mark_in(self) -> None:
+        self._start_var.set(fmt_time(self._scrub.get()))
+        self._apply_typed_times()
+
+    def mark_out(self) -> None:
+        self._end_var.set(fmt_time(self._scrub.get()))
+        self._apply_typed_times()
+
     def _build_ui(self):
         hdr = tk.Frame(self, bg=CLR["panel"])
         hdr.pack(fill="x")
@@ -194,13 +207,13 @@ class TrimmerTab(BaseTab):
                   width=28, command=self._preview_selection)
         prev_btn.pack(side="left", padx=px(8))
         add_tooltip(prev_btn, "Preview the selected region in ffplay (Space)")
-        self._btn_trim = tk.Button(bf, text=t("trimmer.export_button"),
+        self.btn_render = tk.Button(bf, text=t("trimmer.export_button"),
                                    font=(UI_FONT, 12, "bold"),
                                    bg=CLR["green"], fg="black",
                                    height=2, width=28,
                                    command=self._run_trim)
-        self._btn_trim.pack(side="left", padx=px(8))
-        add_tooltip(self._btn_trim, "Export the trimmed clip (Ctrl+S)")
+        self.btn_render.pack(side="left", padx=px(8))
+        add_tooltip(self.btn_render, "Export the trimmed clip (Ctrl+S)")
 
         # Console
         cf = tk.Frame(self); cf.pack(fill="both", expand=True, padx=px(20), pady=px(4))
@@ -452,7 +465,7 @@ class TrimmerTab(BaseTab):
                "-t", str(dur), "-loop", "0",
                "-window_title", f"Trim Preview  {fmt_time(ss)} – {fmt_time(ee)}",
                "-x", "800", "-y", "450", "-loglevel", "quiet"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+        self.preview_proc = _proc.spawn(cmd)
 
     # ─── Trim / Export ────────────────────────────────────────────────────
     def _run_trim(self):
@@ -521,5 +534,5 @@ class TrimmerTab(BaseTab):
                    "-map_metadata", "0", "-map_chapters", "-1", out]
             self.log(self.console, f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_trim, btn_label=t("trimmer.export_button"),
+                        btn=self.btn_render, btn_label=t("trimmer.export_button"),
                         duration=dur, output=out, inputs=[self.file_path], name="Quick Trimmer")

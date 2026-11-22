@@ -45,17 +45,17 @@ def test_settings_roundtrip(tmp_path, monkeypatch):
 
 @pytest.mark.gui
 def test_mystical_star_canvas_stays_behind_the_ui():
-    from core import skins
+    from tabs.kit import theme
     from tests.gui_harness import Harness
     app = Harness.instance().app
-    skins._start_stars(app, {"sb_bg": "#101018"})
+    theme.start_stars(app, {"sb_bg": "#101018"})
     try:
-        canvas = skins._star_canvas
+        canvas = theme._star_canvas
         if canvas is not None and canvas.master is app:
             stack = app.tk.splitlist(app.tk.call("winfo", "children", app._w))
             assert stack[0] == str(canvas)            # lowest in stacking order, under every panel
     finally:
-        skins._stop_stars()
+        theme.stop_stars()
 
 
 def test_deps_import_has_no_side_effects(tmp_path, monkeypatch):

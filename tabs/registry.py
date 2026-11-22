@@ -1,34 +1,41 @@
 """
-tabs/registry.py  -  Single source of truth for which tools appear where.
+tabs/registry.py  -  which page class builds each tool.
 
-Tools are registered as :class:`LazyTab` stand-ins: a tool's module is only
-imported the first time its page is opened.  That keeps start-up fast and
-means one broken or half-edited tool can never stop the app (or another
-tool) from loading - the shell shows an error page for that tool instead.
+core/tools.py says what tools exist (their ids, names, sections and words);
+this file says, for each :class:`~core.tools.ToolId`, which tab class builds
+its page.  Pages are :class:`LazyTab` stand-ins: a tool's module is imported
+the first time its page is opened, which keeps start-up fast and means one
+broken tool can never stop the app (or another tool) from loading - the
+shell shows an error page for that tool instead.
 
-Usage in main.py:
-    from tabs.registry import TOOLS, PINNED, HIDDEN
-    tab = TOOLS["…"][0][1](parent)          # imports + instantiates on demand
+    page = PAGES[ToolId.QUICK_TRIMMER](parent)     # imports + builds on demand
 """
+from __future__ import annotations
+
 import importlib
+from collections.abc import Mapping
+from typing import Any, Final
+
+from core.tools import Category, ToolId, sidebar, spec
 
 
 class LazyTab:
     """Callable stand-in for a tab class that imports it on first use."""
 
-    def __init__(self, module: str, cls: str):
+    def __init__(self, module: str, cls: str) -> None:
         self.module = module
         self.cls_name = cls
         self.__name__ = cls
-        self._cls = None
+        self._cls: type[Any] | None = None
 
-    def load(self):
+    def load(self) -> type[Any]:
         """Import and return the real tab class (raises on import errors)."""
-        if self._cls is None:
-            self._cls = getattr(importlib.import_module(self.module), self.cls_name)
-        return self._cls
+        cls = self._cls
+        if cls is None:
+            cls = self._cls = getattr(importlib.import_module(self.module), self.cls_name)
+        return cls
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.load()(*args, **kwargs)
 
     def __repr__(self) -> str:
@@ -39,109 +46,100 @@ def _lazy(module: str, cls: str) -> LazyTab:
     return LazyTab(module, cls)
 
 
-# ── Pinned tool (always visible at top of sidebar, outside categories) ────────
-PINNED = ("All-in-One Builder", _lazy("tabs.all_in_one", "AllInOneTab"))
-
-# ── Hidden tools (accessible programmatically, not shown in sidebar nav) ──────
-HIDDEN = {
-    "Settings": _lazy("tabs.system.settings", "SettingsTab"),
-    "Home":     _lazy("tabs.system.home", "HomeTab"),
-    "Start":    _lazy("tabs.system.start", "StartTab"),
+PAGES: Final[Mapping[ToolId, LazyTab]] = {
+    ToolId.ALL_IN_ONE_BUILDER: _lazy("tabs.all_in_one", "AllInOneTab"),
+    ToolId.CROSSFADER: _lazy("tabs.cutting.crossfader", "CrossfaderTab"),
+    ToolId.QUICK_TRIMMER: _lazy("tabs.cutting.trimmer", "TrimmerTab"),
+    ToolId.MANUAL_MULTI_SPLITTER: _lazy("tabs.cutting.splitter", "MultiSplitterTab"),
+    ToolId.SPLICER: _lazy("tabs.cutting.splicer", "SplicerTab"),
+    ToolId.BATCH_JOINER: _lazy("tabs.cutting.batch_joiner", "BatchJoinerTab"),
+    ToolId.ROTATE_AND_FLIP: _lazy("tabs.cutting.rotate_flip", "RotateFlipTab"),
+    ToolId.SIDE_BY_SIDE: _lazy("tabs.cutting.side_by_side", "SideBySideTab"),
+    ToolId.BEAT_SYNC_CUTTER: _lazy("tabs.cutting.beat_sync", "BeatSyncCutterTab"),
+    ToolId.SMART_REFRAME: _lazy("tabs.cutting.smart_reframe", "SmartReframeTab"),
+    ToolId.MANUAL_CROP: _lazy("tabs.cutting.crop", "ManualCropTab"),
+    ToolId.VIDEO_REVERSER: _lazy("tabs.cutting.reverser", "ReverserTab"),
+    ToolId.FREEZE_FRAME: _lazy("tabs.cutting.freeze_frame", "FreezeFrameTab"),
+    ToolId.CLIP_LOOPER: _lazy("tabs.cutting.clip_looper", "ClipLooperTab"),
+    ToolId.MULTI_CLIP_SEQUENCER: _lazy("tabs.cutting.sequencer", "SequencerTab"),
+    ToolId.SCENE_DETECTOR: _lazy("tabs.cutting.scene_detect", "SceneDetectTab"),
+    ToolId.SHORTIFIER: _lazy("tabs.social.shortifier", "ShortifierTab"),
+    ToolId.AUTO_CROPPER: _lazy("tabs.social.auto_cropper", "AutoCropperTab"),
+    ToolId.PRO_GIF_MAKER: _lazy("tabs.social.gif_maker", "GIFMakerTab"),
+    ToolId.WEBM_MAKER: _lazy("tabs.social.webm_maker", "WebMTab"),
+    ToolId.WATERMARKER: _lazy("tabs.social.watermark", "TextBurnerTab"),
+    ToolId.IMAGE_WATERMARK: _lazy("tabs.social.image_watermark", "ImageWatermarkTab"),
+    ToolId.HARD_SUBBER: _lazy("tabs.social.hard_subber", "HardSubberTab"),
+    ToolId.AUTO_SUBTITLES: _lazy("tabs.social.auto_subs", "AutoSubsTab"),
+    ToolId.ANIMATED_TITLES: _lazy("tabs.social.titles", "TitlesGeneratorTab"),
+    ToolId.FRAME_EXTRACTOR: _lazy("tabs.social.frame_extractor", "FrameExtractorTab"),
+    ToolId.SNAPSHOT: _lazy("tabs.social.snapshot", "SnapshotTab"),
+    ToolId.INTRO_OUTRO_MAKER: _lazy("tabs.social.intro_maker", "IntroMakerTab"),
+    ToolId.SLIDESHOW_MAKER: _lazy("tabs.social.slideshow", "SlideshowMakerTab"),
+    ToolId.CHAPTER_MARKERS: _lazy("tabs.social.chapter_markers", "ChapterMarkersTab"),
+    ToolId.THUMBNAIL_MAKER: _lazy("tabs.social.thumbnail", "ThumbnailMakerTab"),
+    ToolId.VIDEO_COLLAGE: _lazy("tabs.social.collage", "VideoCollageTab"),
+    ToolId.VIDEO_DOWNLOADER: _lazy("tabs.social.youtube", "YouTubeDownloaderTab"),
+    ToolId.SILENCE_REMOVER: _lazy("tabs.audio.silence", "SilenceTab"),
+    ToolId.AUDIO_EXTRACTOR: _lazy("tabs.audio.extractor", "AudioExtractorTab"),
+    ToolId.AUDIO_REPLACER: _lazy("tabs.audio.replacer", "AudioReplacerTab"),
+    ToolId.LOUDNESS_NORMALIZER: _lazy("tabs.audio.loudness", "LoudnessNormTab"),
+    ToolId.AUDIO_SYNC_SHIFTER: _lazy("tabs.audio.sync", "AudioSyncTab"),
+    ToolId.MUTER: _lazy("tabs.audio.muter", "MuterTab"),
+    ToolId.AUDIO_DYNAMICS: _lazy("tabs.audio.dynamics", "AudioDynamicsTab"),
+    ToolId.AUDIO_MIXER: _lazy("tabs.audio.mixer", "AudioMixerTab"),
+    ToolId.VOICE_ISOLATION: _lazy("tabs.audio.voice_isolation", "VoiceIsolationTab"),
+    ToolId.VOICE_CHANGER: _lazy("tabs.audio.voice_changer", "VoiceChangerTab"),
+    ToolId.TTS_VOICE_OVER: _lazy("tabs.audio.tts", "TTSVoiceOverTab"),
+    ToolId.WAVEFORM_EDITOR: _lazy("tabs.audio.waveform", "WaveformEditorTab"),
+    ToolId.LAUGH_TRACK_REMOVER: _lazy("tabs.audio.laugh_track", "LaughTrackRemoverTab"),
+    ToolId.MUSIC_DUCKER: _lazy("tabs.audio.ducker", "AudioDuckerTab"),
+    ToolId.KARAOKE_GENERATOR: _lazy("tabs.audio.karaoke", "KaraokeTab"),
+    ToolId.AUDIO_CONVERTER: _lazy("tabs.audio.exporter", "AudioExporterTab"),
+    ToolId.MIDIFIER: _lazy("tabs.audio.midifier", "MIDIfierTab"),
+    ToolId.UNIVERSAL_DOWNSIZER: _lazy("tabs.transcoder.downsizer", "UniversalDownsizerTab"),
+    ToolId.PROXY_GENERATOR: _lazy("tabs.transcoder.proxy", "ProxyGenTab"),
+    ToolId.CODEC_CRUNCHER: _lazy("tabs.transcoder.codec", "CodecCruncherTab"),
+    ToolId.HDR_TO_SDR: _lazy("tabs.transcoder.hdr", "HdrToSdrTab"),
+    ToolId.TRACKS_AND_REMUX: _lazy("tabs.transcoder.tracks", "TracksRemuxTab"),
+    ToolId.COMPARE_AND_QUALITY: _lazy("tabs.transcoder.compare", "CompareQualityTab"),
+    ToolId.FORMAT_CONVERTER: _lazy("tabs.transcoder.converter", "FormatConverterTab"),
+    ToolId.RESOLUTION_SCALER: _lazy("tabs.transcoder.scaler", "ResolutionScalerTab"),
+    ToolId.FRAMERATE_INTERPOLATOR: _lazy("tabs.transcoder.scaler", "FPSInterpolatorTab"),
+    ToolId.ENCODE_QUEUE: _lazy("tabs.transcoder.encode_queue", "EncodeQueueTab"),
+    ToolId.PRESET_MANAGER: _lazy("tabs.transcoder.presets", "PresetManagerTab"),
+    ToolId.MEDIA_GENERATOR: _lazy("tabs.visuals.media_gen", "MediaGeneratorTab"),
+    ToolId.SPECIAL_EFFECTS: _lazy("tabs.visuals.effects", "SpecialEffectsTab"),
+    ToolId.LUT_APPLICATOR: _lazy("tabs.visuals.lut", "LUTApplicatorTab"),
+    ToolId.BASIC_COLOR_CORRECTOR: _lazy("tabs.visuals.color_correct", "ColorCorrectorTab"),
+    ToolId.COLOUR_MATCH: _lazy("tabs.visuals.color_match", "ColorMatchTab"),
+    ToolId.VIDEO_SCOPES: _lazy("tabs.visuals.scopes", "VideoScopesTab"),
+    ToolId.SPEED_RAMPER: _lazy("tabs.visuals.speed_ramp", "SpeedRamperTab"),
+    ToolId.DESHAKER: _lazy("tabs.visuals.deshaker", "DeshakerTab"),
+    ToolId.GREEN_SCREEN_KEYER: _lazy("tabs.visuals.green_key", "GreenKeyerTab"),
+    ToolId.DENOISE: _lazy("tabs.visuals.denoise", "DenoiseTab"),
+    ToolId.DEINTERLACE: _lazy("tabs.visuals.deinterlace", "DeinterlaceTab"),
+    ToolId.SHARPEN: _lazy("tabs.visuals.sharpen", "SharpenTab"),
+    ToolId.PICTURE_IN_PICTURE: _lazy("tabs.visuals.pip", "PIPTab"),
+    ToolId.PRIVACY_BLUR: _lazy("tabs.visuals.region_blur", "RegionBlurTab"),
+    ToolId.ANIMATED_ZOOM: _lazy("tabs.visuals.zoom", "AnimatedZoomTab"),
+    ToolId.TRANSITION_STUDIO: _lazy("tabs.visuals.transitions", "TransitionStudioTab"),
+    ToolId.MEDIA_INSPECTOR: _lazy("tabs.system.media_inspector", "MediaInspectorTab"),
+    ToolId.METADATA_CLEANER: _lazy("tabs.system.metadata_cleaner", "MetadataCleanerTab"),
+    ToolId.SCREEN_RECORDER: _lazy("tabs.system.screen_recorder", "ScreenRecorderTab"),
+    ToolId.BATCH_PROCESSOR: _lazy("tabs.system.batch", "BatchTab"),
+    ToolId.ADVANCED_SETTINGS: _lazy("tabs.system.advanced_settings", "AdvancedSettingsTab"),
+    ToolId.SETTINGS: _lazy("tabs.system.settings", "SettingsTab"),
+    ToolId.HOME: _lazy("tabs.system.home", "HomeTab"),
+    ToolId.START: _lazy("tabs.system.start", "StartTab"),
 }
 
-# ── Main tool registry (sidebar category → [(display_name, TabClass), ...]) ──
-TOOLS = {
-    "✂  CUTTING ROOM": [
-        ("Crossfader",            _lazy("tabs.cutting.crossfader", "CrossfaderTab")),
-        ("Quick Trimmer",         _lazy("tabs.cutting.trimmer", "TrimmerTab")),
-        ("Manual Multi-Splitter", _lazy("tabs.cutting.splitter", "MultiSplitterTab")),
-        ("The Splicer",           _lazy("tabs.cutting.splicer", "SplicerTab")),
-        ("Batch Joiner",          _lazy("tabs.cutting.batch_joiner", "BatchJoinerTab")),
-        ("Rotate & Flip",         _lazy("tabs.cutting.rotate_flip", "RotateFlipTab")),
-        ("Side-by-Side",          _lazy("tabs.cutting.side_by_side", "SideBySideTab")),
-        ("Beat Sync Cutter",      _lazy("tabs.cutting.beat_sync", "BeatSyncCutterTab")),
-        ("Smart Reframe",         _lazy("tabs.cutting.smart_reframe", "SmartReframeTab")),
-        ("Manual Crop",           _lazy("tabs.cutting.crop", "ManualCropTab")),
-        ("Video Reverser",        _lazy("tabs.cutting.reverser", "ReverserTab")),
-        ("Freeze Frame",          _lazy("tabs.cutting.freeze_frame", "FreezeFrameTab")),
-        ("Clip Looper",           _lazy("tabs.cutting.clip_looper", "ClipLooperTab")),
-        ("Multi-Clip Sequencer",  _lazy("tabs.cutting.sequencer", "SequencerTab")),
-        ("Scene Detector",        _lazy("tabs.cutting.scene_detect", "SceneDetectTab")),
-    ],
-    "📱  SOCIAL & FORMAT": [
-        ("The Shortifier",     _lazy("tabs.social.shortifier", "ShortifierTab")),
-        ("Auto-Cropper",       _lazy("tabs.social.auto_cropper", "AutoCropperTab")),
-        ("Pro GIF Maker",      _lazy("tabs.social.gif_maker", "GIFMakerTab")),
-        ("WebM Maker",         _lazy("tabs.social.webm_maker", "WebMTab")),
-        ("Watermarker",        _lazy("tabs.social.watermark", "TextBurnerTab")),
-        ("Image Watermark",    _lazy("tabs.social.image_watermark", "ImageWatermarkTab")),
-        ("Hard-Subber",        _lazy("tabs.social.hard_subber", "HardSubberTab")),
-        ("Auto-Subtitles",     _lazy("tabs.social.auto_subs", "AutoSubsTab")),
-        ("Animated Titles",    _lazy("tabs.social.titles", "TitlesGeneratorTab")),
-        ("Frame Extractor",    _lazy("tabs.social.frame_extractor", "FrameExtractorTab")),
-        ("Snapshot",           _lazy("tabs.social.snapshot", "SnapshotTab")),
-        ("Intro/Outro Maker",  _lazy("tabs.social.intro_maker", "IntroMakerTab")),
-        ("Slideshow Maker",    _lazy("tabs.social.slideshow", "SlideshowMakerTab")),
-        ("Chapter Markers",    _lazy("tabs.social.chapter_markers", "ChapterMarkersTab")),
-        ("Thumbnail Maker",    _lazy("tabs.social.thumbnail", "ThumbnailMakerTab")),
-        ("Video Collage",      _lazy("tabs.social.collage", "VideoCollageTab")),
-        ("Video Downloader",   _lazy("tabs.social.youtube", "YouTubeDownloaderTab")),
-    ],
-    "🔊  AUDIO ENGINEERING": [
-        ("Silence Remover",     _lazy("tabs.audio.silence", "SilenceTab")),
-        ("Audio Extractor",     _lazy("tabs.audio.extractor", "AudioExtractorTab")),
-        ("Audio Replacer",      _lazy("tabs.audio.replacer", "AudioReplacerTab")),
-        ("Loudness Normalizer", _lazy("tabs.audio.loudness", "LoudnessNormTab")),
-        ("Audio Sync Shifter",  _lazy("tabs.audio.sync", "AudioSyncTab")),
-        ("The Muter",           _lazy("tabs.audio.muter", "MuterTab")),
-        ("Audio Dynamics",      _lazy("tabs.audio.dynamics", "AudioDynamicsTab")),
-        ("Audio Mixer",         _lazy("tabs.audio.mixer", "AudioMixerTab")),
-        ("Voice Isolation",     _lazy("tabs.audio.voice_isolation", "VoiceIsolationTab")),
-        ("Voice Changer",       _lazy("tabs.audio.voice_changer", "VoiceChangerTab")),
-        ("TTS Voice-Over",      _lazy("tabs.audio.tts", "TTSVoiceOverTab")),
-        ("Waveform Editor",     _lazy("tabs.audio.waveform", "WaveformEditorTab")),
-        ("Laugh Track Remover", _lazy("tabs.audio.laugh_track", "LaughTrackRemoverTab")),
-        ("Music Ducker",        _lazy("tabs.audio.ducker", "AudioDuckerTab")),
-        ("Karaoke Generator",   _lazy("tabs.audio.karaoke", "KaraokeTab")),
-        ("Audio Converter",     _lazy("tabs.audio.exporter", "AudioExporterTab")),
-        ("MIDIfier",            _lazy("tabs.audio.midifier", "MIDIfierTab")),
-    ],
-    "⚙  TRANSCODER": [
-        ("Universal Downsizer",    _lazy("tabs.transcoder.downsizer", "UniversalDownsizerTab")),
-        ("Proxy Generator",        _lazy("tabs.transcoder.proxy", "ProxyGenTab")),
-        ("Codec Cruncher",         _lazy("tabs.transcoder.codec", "CodecCruncherTab")),
-        ("HDR to SDR",             _lazy("tabs.transcoder.hdr", "HdrToSdrTab")),
-        ("Tracks & Remux",         _lazy("tabs.transcoder.tracks", "TracksRemuxTab")),
-        ("Compare & Quality",      _lazy("tabs.transcoder.compare", "CompareQualityTab")),
-        ("Format Converter",       _lazy("tabs.transcoder.converter", "FormatConverterTab")),
-        ("Resolution Scaler",      _lazy("tabs.transcoder.scaler", "ResolutionScalerTab")),
-        ("Framerate Interpolator", _lazy("tabs.transcoder.scaler", "FPSInterpolatorTab")),
-        ("Encode Queue",           _lazy("tabs.transcoder.encode_queue", "EncodeQueueTab")),
-        ("Preset Manager",         _lazy("tabs.transcoder.presets", "PresetManagerTab")),
-    ],
-    "🎨  COLOR & VISUALS": [
-        ("Media Generator",       _lazy("tabs.visuals.media_gen", "MediaGeneratorTab")),
-        ("Special Effects",       _lazy("tabs.visuals.effects", "SpecialEffectsTab")),
-        ("LUT Applicator",        _lazy("tabs.visuals.lut", "LUTApplicatorTab")),
-        ("Basic Color Corrector", _lazy("tabs.visuals.color_correct", "ColorCorrectorTab")),
-        ("Colour Match",          _lazy("tabs.visuals.color_match", "ColorMatchTab")),
-        ("Video Scopes",          _lazy("tabs.visuals.scopes", "VideoScopesTab")),
-        ("Speed Ramper",          _lazy("tabs.visuals.speed_ramp", "SpeedRamperTab")),
-        ("Deshaker",              _lazy("tabs.visuals.deshaker", "DeshakerTab")),
-        ("Green Screen Keyer",    _lazy("tabs.visuals.green_key", "GreenKeyerTab")),
-        ("Denoise",               _lazy("tabs.visuals.denoise", "DenoiseTab")),
-        ("Deinterlace",           _lazy("tabs.visuals.deinterlace", "DeinterlaceTab")),
-        ("Sharpen",               _lazy("tabs.visuals.sharpen", "SharpenTab")),
-        ("Picture-in-Picture",    _lazy("tabs.visuals.pip", "PIPTab")),
-        ("Privacy Blur",          _lazy("tabs.visuals.region_blur", "RegionBlurTab")),
-        ("Animated Zoom",         _lazy("tabs.visuals.zoom", "AnimatedZoomTab")),
-        ("Transition Studio",     _lazy("tabs.visuals.transitions", "TransitionStudioTab")),
-    ],
-    "🛠  SYSTEM": [
-        ("Media Inspector",   _lazy("tabs.system.media_inspector", "MediaInspectorTab")),
-        ("Metadata Cleaner",  _lazy("tabs.system.metadata_cleaner", "MetadataCleanerTab")),
-        ("Screen Recorder",   _lazy("tabs.system.screen_recorder", "ScreenRecorderTab")),
-        ("Batch Processor",   _lazy("tabs.system.batch", "BatchTab")),
-        ("Advanced Settings", _lazy("tabs.system.advanced_settings", "AdvancedSettingsTab")),
-    ],
+
+# ── Name-keyed views, for code that still addresses pages by English name ────
+#: sidebar heading -> [(name, page class)]
+TOOLS: Final[dict[str, list[tuple[str, LazyTab]]]] = {
+    cat.value: [(s.name, PAGES[s.id]) for s in sidebar(cat)]
+    for cat in Category if cat not in (Category.PINNED, Category.HIDDEN)
 }
+PINNED: Final[tuple[str, LazyTab]] = (spec(ToolId.ALL_IN_ONE_BUILDER).name, PAGES[ToolId.ALL_IN_ONE_BUILDER])
+HIDDEN: Final[dict[str, LazyTab]] = {s.name: PAGES[s.id] for s in sidebar(Category.HIDDEN)}

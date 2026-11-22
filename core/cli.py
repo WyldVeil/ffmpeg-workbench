@@ -28,12 +28,14 @@ from collections.abc import Callable
 from fractions import Fraction
 
 from core import ffmpeg as ff
+from core import proc as _proc
+from core.errors import InputError
 
 OPERATIONS: dict = {}          # name -> (summary, category, configure(parser), run(args) -> dict)
 
 
-class CliError(Exception):
-    pass
+class CliError(InputError):
+    """A command-line request that can't be done; the message says why."""
 
 
 def operation(name: str, summary: str, category: str):
@@ -1127,8 +1129,7 @@ def op_download(ctx):
             "bv*+ba/b"
         argv += ["-f", fmt, "--merge-output-format", ctx.args.format]
     argv += ["--no-overwrites", "--no-playlist", "--print", "after_move:filepath", "-o", template, ctx.args.url]
-    import subprocess
-    r = subprocess.run(argv, capture_output=True, text=True, env=network.subprocess_env(url=ctx.args.url))
+    r = _proc.run(argv, timeout=None, env=network.subprocess_env(url=ctx.args.url))
     if r.returncode != 0:
         raise CliError("Download failed:\n" + "\n".join((r.stderr or r.stdout).strip().splitlines()[-6:]))
     path = (r.stdout.strip().splitlines() or [""])[-1]

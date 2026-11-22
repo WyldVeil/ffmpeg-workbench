@@ -16,7 +16,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core import ui
+from core import tasks
 from core.hardware import launch_preview
 from core.i18n import t
 from core.scaling import px
@@ -180,7 +180,7 @@ class TransitionStudioTab(BaseTab):
             self.btn_preview.config(state="normal", text="▶  Preview the cut")
             messagebox.showerror(t("common.error"), f"The preview could not be made:\n{exc}", parent=self)
 
-        ui.run_in_thread(make, on_done=done, on_error=failed, name="TransitionPreview")
+        tasks.submit(make, on_done=done, on_error=failed, name="TransitionPreview")
 
     def destroy(self):
         if self._preview_dir:

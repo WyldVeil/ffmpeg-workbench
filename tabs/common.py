@@ -12,10 +12,12 @@ import os
 import time
 import tkinter as tk
 from collections.abc import Sequence
+from functools import partial
 from tkinter import messagebox
 
 from core import encoders as enc
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 
 
@@ -238,7 +240,6 @@ def audio_job_args(out: str, info: ff.MediaInfo | None, *, stream: int = 0) -> l
 
 def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 12.0) -> None:
     """Render a short processed WAV in the background and play it."""
-    from core import ui
     from core.hardware import launch_preview
     from core.paths import temp_dir
     if not src or not os.path.isfile(src):
@@ -258,4 +259,4 @@ def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 1
             messagebox.showinfo(t("common.warning"), f"No player available - the preview is at\n{wav}",
                                 parent=tab)
 
-    ui.run_in_thread(ff.capture, cmd, timeout=120, on_done=done, name="AudioPreview")
+    tasks.submit(partial(ff.capture, cmd, timeout=120), on_done=done, name="AudioPreview")

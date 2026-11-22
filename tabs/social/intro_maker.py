@@ -19,7 +19,7 @@ import os
 import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
 
-from core import ass, concat
+from core import ass, concat, tasks
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.i18n import t
@@ -355,8 +355,7 @@ class IntroMakerTab(BaseTab):
             self.canvas.delete("all")
             self.canvas.create_image(px(192), px(108), image=self._photo)
 
-        from core import ui
-        ui.run_in_thread(work_fn, on_done=show, name="IntroPreview")
+        tasks.submit(work_fn, on_done=show, name="IntroPreview")
 
     # ── render ───────────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs, midi
+from core import dialogs, midi, tasks
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
@@ -28,7 +28,7 @@ class MIDIfierTab(BaseTab):
         self._fs_path = None   # resolved fluidsynth path
         self._sf2_path = None  # resolved soundfont path
         self._build_ui()
-        self.run_in_thread(self._check_deps)
+        tasks.submit(self._check_deps)
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
@@ -193,11 +193,11 @@ class MIDIfierTab(BaseTab):
         # ── Run button ───────────────────────────────────────────────────
         btn_f = tk.Frame(self._inner, bg=CLR["bg"])
         btn_f.pack(fill="x", pady=px(12, 6))
-        self.btn_run = self.make_render_btn(
+        self.btn_render = self.make_render_btn(
             btn_f, t("midifier.run_btn"),
             self._run, color=CLR["green"], width=30)
-        self.btn_run.pack(pady=px(4))
-        add_tooltip(self.btn_run, t("midifier.run_tooltip"))
+        self.btn_render.pack(pady=px(4))
+        add_tooltip(self.btn_render, t("midifier.run_tooltip"))
 
         # ── Console ──────────────────────────────────────────────────────
         cf = tk.Frame(self._inner, bg=CLR["bg"])
@@ -261,7 +261,7 @@ class MIDIfierTab(BaseTab):
                                     filetypes=[("SoundFont", "*.sf2 *.sf3"), ("All files", "*.*")])
         if p:
             self._sf2_path = p
-            self.run_in_thread(self._check_deps)
+            tasks.submit(self._check_deps)
 
     # ── Main pipeline ────────────────────────────────────────────────────
 
@@ -344,6 +344,6 @@ class MIDIfierTab(BaseTab):
             return 0
 
         self.log_tagged(self.console, t("midifier.starting"), "info")
-        common.queue_job(self, name="MIDIfier", out=out, work=work, btn=self.btn_run,
+        common.queue_job(self, name="MIDIfier", out=out, work=work, btn=self.btn_render,
                          btn_label=t("midifier.run_btn"), console=self.console, duration=length,
                          inputs=[src])

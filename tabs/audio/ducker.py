@@ -171,13 +171,13 @@ class AudioDuckerTab(BaseTab):
                   cursor="hand2", relief="flat").pack(side="left")
 
         # ── Render button ──────────────────────────────────────────────────────
-        self._btn_render = tk.Button(
+        self.btn_render = tk.Button(
             self, text=t("ducker.btn_duck_render"),
             font=(UI_FONT, 12, "bold"),
             bg=CLR["green"], fg="black",
             height=2, width=30,
             command=self._render)
-        self._btn_render.pack(pady=px(10))
+        self.btn_render.pack(pady=px(10))
 
         # ── Console ───────────────────────────────────────────────────────────
         cf = tk.Frame(self)
@@ -309,7 +309,7 @@ class AudioDuckerTab(BaseTab):
         self.run_ffmpeg(
             cmd, self.console,
             on_done=lambda rc: self.show_result(rc, out),
-            btn=self._btn_render,
+            btn=self.btn_render,
             btn_label=t("ducker.btn_duck_render"),
             duration=dur, output=out, inputs=[src, music], name="Music Ducker",
         )

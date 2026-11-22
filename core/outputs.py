@@ -19,19 +19,13 @@ import os
 import re
 from collections.abc import Iterable
 
+from core import settings
+from core.errors import OutputError
 from core.paths import is_writable_dir, user_videos_dir
 
 
-def _setting(key: str, default):
-    try:
-        from core.settings import get
-        return get(key, default)
-    except Exception:
-        return default
-
-
 def default_output_folder(src: str | None = None) -> str:
-    folder = str(_setting("default_output_folder", "") or "").strip()
+    folder = settings.DEFAULT_OUTPUT_FOLDER.get().strip()
     if folder and os.path.isdir(folder):
         return folder
     if src:
@@ -93,7 +87,7 @@ def ensure_extension(path: str, default_ext: str = ".mp4") -> str:
     return path
 
 
-class OutputRejected(Exception):
+class OutputRejected(OutputError):
     """Raised by :func:`resolve_output` when the user cancels or the path is unusable."""
 
 
@@ -125,7 +119,7 @@ def resolve_output(out: str, inputs: Iterable[str] = (), *, default_ext: str = "
         raise OutputRejected(f"The output path is a folder:\n{out}")
     if not os.path.exists(out):
         return out
-    policy = policy or str(_setting("overwrite_policy", "ask") or "ask")
+    policy = policy or settings.OVERWRITE_POLICY.get()
     if policy == "overwrite":
         return out
     if policy == "rename" or not ask:

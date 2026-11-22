@@ -19,7 +19,7 @@ py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "tabs*"]
+include = ["core*", "shell*", "tabs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

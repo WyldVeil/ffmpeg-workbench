@@ -20,14 +20,15 @@ switched off or tuned:
 from __future__ import annotations
 
 import os
-import subprocess
 import tkinter as tk
+from functools import partial
 from tkinter import ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core import hdr
-from core.hardware import CREATE_NO_WINDOW, reveal_file
+from core import hdr, tasks
+from core import proc as _proc
+from core.hardware import reveal_file
 from core.i18n import t
 from core.procenv import child_env
 from core.scaling import px
@@ -147,7 +148,7 @@ class SnapshotTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.file_path = ""
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._fps = framestep.DEFAULT_FPS
         self._bars = None
         self._job = None
@@ -297,6 +298,7 @@ class SnapshotTab(BaseTab):
         self._fps = framestep.fps_of(path)
         self._bars = None
         v = info.video
+        assert v is not None                                    # has_video was checked above
         frames = max(1, int(round(info.duration * self._fps)))
         self.info_lbl.config(text=f"{info.summary()}  ·  {frames:,} frames", fg=CLR["fgdim"])
         self._checks["HDR to normal colours"].config(state="normal" if info.is_hdr else "disabled")
@@ -371,7 +373,10 @@ class SnapshotTab(BaseTab):
         return next((k for k, v in table.items() if v == var.get()), next(iter(table)))
 
     def chain(self) -> str:
-        return build_chain(self._info, accurate=self.accurate_var.get(), square_pixels=self.square_var.get(),
+        info = self._info
+        if info is None:
+            return ""
+        return build_chain(info, accurate=self.accurate_var.get(), square_pixels=self.square_var.get(),
                            tonemap=self.tonemap_var.get(), deinterlace=self.deint_var.get(),
                            crop=self._bars if self.crop_var.get() else None,
                            size=self._key(SIZES, self.size_var), sharpen=self._key(SHARPEN, self.sharpen_var),
@@ -379,7 +384,7 @@ class SnapshotTab(BaseTab):
                            brightness=round(self.brightness_var.get(), 2),
                            contrast=round(self.contrast_var.get(), 2),
                            saturation=round(self.saturation_var.get(), 2),
-                           deep=self.deep_var.get(), gpu=self.tonemap_var.get() and self._info.is_hdr
+                           deep=self.deep_var.get(), gpu=self.tonemap_var.get() and info.is_hdr
                            and fl.vulkan_ok())
 
     def _options_changed(self):
@@ -403,20 +408,20 @@ class SnapshotTab(BaseTab):
         self.size_lbl.config(text=f"{w}×{h} PNG, {bits}")
 
     def _detect_bars(self):
-        from core import ui
         from tabs.social.auto_cropper import detect_bars
         path, info = self.file_path, self._info
+        if info is None or info.video is None:
+            return
+        v = info.video
 
         def done(box):
             if path != self.file_path:
                 return
-            v = info.video
             self._bars = box if box and (box[2], box[3]) != (v.width, v.height) else ()
             self._options_changed()
 
         self.size_lbl.config(text="Looking for black bars…")
-        ui.run_in_thread(detect_bars, path, info.duration, on_done=done, on_error=lambda _e: done(None),
-                         name="SnapshotBars")
+        tasks.submit(partial(detect_bars, path, info.duration), on_done=done, on_error=lambda _e: done(None), name="SnapshotBars")
 
     # ── Saving ────────────────────────────────────────────────────────
     def _save_as(self):
@@ -452,8 +457,7 @@ class SnapshotTab(BaseTab):
         self.btn_render.config(state="disabled")
 
         def work():
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=180,
-                               stdin=subprocess.DEVNULL, env=child_env(), creationflags=CREATE_NO_WINDOW)
+            r = _proc.run(cmd, timeout=180, env=child_env())
             if r.returncode != 0 or not os.path.isfile(out):
                 raise RuntimeError((r.stderr or "FFmpeg failed").strip().splitlines()[-1][:200])
             return out
@@ -470,8 +474,7 @@ class SnapshotTab(BaseTab):
             self.btn_render.config(state="normal")
             self.result_lbl.config(text=f"Couldn't save: {exc}", fg=CLR["red"])
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, on_error=failed, name="Snapshot")
+        tasks.submit(work, on_done=done, on_error=failed, name="Snapshot")
 
     def _reveal(self):
         if self._saved and os.path.isfile(self._saved):

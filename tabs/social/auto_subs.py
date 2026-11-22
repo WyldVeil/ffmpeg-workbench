@@ -13,12 +13,14 @@ import os
 import re
 import shutil
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core import whisper
+from core import tasks, whisper
 from core.i18n import t
 from core.scaling import px
+from core.tools import ToolId
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -93,10 +95,10 @@ class AutoSubsTab(BaseTab):
                                suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(6, 0))
 
-        self.btn_run = tk.Button(body, text="🗣  GENERATE SUBTITLES", font=(UI_FONT, 12, "bold"),
+        self.btn_render = tk.Button(body, text="🗣  GENERATE SUBTITLES", font=(UI_FONT, 12, "bold"),
                                  bg="#00695C", fg="white", width=26, cursor="hand2",
                                  command=self._run)
-        self.btn_run.pack(pady=px(8))
+        self.btn_render.pack(pady=px(8))
         after = tk.Frame(body)
         after.pack(pady=px(0, 6))
         self.burn_btn = tk.Button(after, text="🔥 Burn into the video…", relief="flat",
@@ -166,9 +168,7 @@ class AutoSubsTab(BaseTab):
             messagebox.showerror(t("common.error"), f"Could not download the model:\n{exc}",
                                  parent=self)
 
-        from core import ui
-        ui.run_in_thread(whisper.download_model, key, progress, on_done=done, on_error=failed,
-                         name="WhisperModelDownload")
+        tasks.submit(partial(whisper.download_model, key, progress), on_done=done, on_error=failed, name="WhisperModelDownload")
 
     # ── source ───────────────────────────────────────────────────────────────
 
@@ -273,7 +273,7 @@ class AutoSubsTab(BaseTab):
             return 0
 
         def on_complete(tid, rc):
-            self.btn_run.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
+            self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
             self._fill_models(key)
             task = self.task(tid)
             self._last_task = task
@@ -290,7 +290,7 @@ class AutoSubsTab(BaseTab):
                                   on_progress=lambda _t, line: self.log(self.console, line),
                                   on_complete=on_complete, expected_duration=duration,
                                   inputs=[src])
-        self.btn_run.config(text=f"✖ {t('btn.cancel')}", command=lambda: self.cancel_render(tid))
+        self.btn_render.config(text=f"✖ {t('btn.cancel')}", command=lambda: self.cancel_render(tid))
         self.log(self.console, f"Transcribing with {whisper.MODELS[key].label} "
                                f"({'auto language' if lang == 'auto' else lang})…")
 
@@ -300,8 +300,9 @@ class AutoSubsTab(BaseTab):
         subs, src = self._last_subs, self.src_row.path
         if not subs or not os.path.isfile(subs):
             return
-        page = self.goto_tool("Hard-Subber")
-        if page is not None:
+        from tabs.social.hard_subber import HardSubberTab
+        page = self.goto_tool(ToolId.HARD_SUBBER)
+        if isinstance(page, HardSubberTab):
             page.src_var.set(src)
             page.sub_row.set(subs)
 

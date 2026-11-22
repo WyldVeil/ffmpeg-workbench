@@ -16,22 +16,24 @@ sidebar - it's reachable as the launch page and via the persistent
 "🏠 Home" button on the content header bar (see main.py).
 """
 
+from __future__ import annotations
+
 import tkinter as tk
+from collections.abc import Callable, Sequence
 
 from core import settings as _settings
+from core import tools
 from core.scaling import px
+from core.tools import Category, ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import labels
 
-
-# Categories that are valid favourite/jump targets. We re-import lazily
-# inside _build_ui to avoid circular imports - registry.py imports nearly
-# every tab class, and tabs.system imports from this file.
-def _registry():
-    from tabs.registry import PINNED, TOOLS
-    return TOOLS, PINNED
-
-
-_FAV_KEY = "favourite_tabs"
+#: Shown at the top, one click from the launch screen: (tool, card text).
+_QUICK: tuple[tuple[ToolId, str], ...] = (
+    (ToolId.ALL_IN_ONE_BUILDER, "⚡ " + tools.spec(ToolId.ALL_IN_ONE_BUILDER).name),
+    (ToolId.ADVANCED_SETTINGS, "⚙  Advanced Settings"),
+)
+Card = ToolId | tuple[ToolId, str]
 
 
 class HomeTab(BaseTab):
@@ -47,7 +49,7 @@ class HomeTab(BaseTab):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self._navigate = None  # set by main.py after construction
+        self._navigate: Callable[[ToolId], object] | None = None
         self._sections_frame = None
         self._fav_section_frame = None
         self._build_ui()
@@ -55,35 +57,25 @@ class HomeTab(BaseTab):
         self.bind("<Configure>", self._on_resize, add=True)
 
     # ── Public hook used by main.py ──────────────────────────────────────────
-    def set_navigator(self, fn):
-        """fn(name: str) -> None  - called when a card is clicked."""
-        self._navigate = fn
+    def set_navigator(self, navigate: Callable[[ToolId], object]) -> None:
+        """*navigate(tool)* opens a tool (set by the window)."""
+        self._navigate = navigate
 
-    # ── Favourites helpers ───────────────────────────────────────────────────
-    def _favourites(self):
-        favs = _settings.get(_FAV_KEY, []) or []
-        return [f for f in favs if isinstance(f, str)]
+    def _go(self, tool: ToolId) -> None:
+        if self._navigate is not None:
+            self._navigate(tool)
 
-    def _save_favourites(self, favs):
-        # Dedup while preserving order.
-        seen = set()
-        clean = []
-        for f in favs:
-            if f and f not in seen:
-                seen.add(f)
-                clean.append(f)
-        _settings.set(_FAV_KEY, clean)
+    # ── Favourites (stored as tool ids; names from older versions still read) ─
+    def _favourites(self) -> list[ToolId]:
+        return tools.parse_all(_settings.FAVOURITE_TABS.get())
 
-    def _is_fav(self, name):
-        return name in self._favourites()
+    def _is_fav(self, tool: ToolId) -> bool:
+        return tool in self._favourites()
 
-    def _toggle_fav(self, name):
+    def _toggle_fav(self, tool: ToolId) -> None:
         favs = self._favourites()
-        if name in favs:
-            favs = [f for f in favs if f != name]
-        else:
-            favs.append(name)
-        self._save_favourites(favs)
+        favs = [f for f in favs if f is not tool] if tool in favs else [*favs, tool]
+        _settings.FAVOURITE_TABS.set([f.value for f in favs])
         self._refresh()
 
     # ── UI build ─────────────────────────────────────────────────────────────
@@ -110,7 +102,7 @@ class HomeTab(BaseTab):
             bg=CLR["panel"], fg=CLR["accent"], anchor="w", cursor="hand2",
         )
         back.pack(side="top", anchor="w", pady=px(8, 0))
-        back.bind("<Button-1>", lambda _e: self._navigate and self._navigate("Start"))
+        back.bind("<Button-1>", lambda _e: self._go(ToolId.START))
         tk.Frame(self, bg=CLR["border"], height=px(1)).pack(fill="x")
 
         # Scrollable content
@@ -160,61 +152,27 @@ class HomeTab(BaseTab):
             except Exception:
                 pass
 
-        TOOLS, PINNED = _registry()
-
-        # Build a name → class lookup so favourites can resolve to a target.
-        all_tabs = []
-        for items in TOOLS.values():
-            for name, cls in items:
-                all_tabs.append((name, cls))
-        # All-in-One pinned tab: the actual sidebar key includes a "⚡ "
-        # prefix, but from the user's perspective it's just the tab name.
-        # We use the same display name here so favourites match what they
-        # see in the sidebar.
-        if PINNED:
-            aio_name, aio_cls = PINNED
-            sidebar_key = "⚡ " + aio_name
-            all_tabs.append((sidebar_key, aio_cls))
-
-        valid_names = {n for n, _ in all_tabs}
-
-        # 1. Favourites section
-        favs = [f for f in self._favourites() if f in valid_names]
+        # 1. Favourites
+        favs = self._favourites()
         if favs:
-            self._render_section_header(body, "⭐  Favourites",
-                                        accent=CLR["orange"])
+            self._render_section_header(body, "⭐  Favourites", accent=CLR["orange"])
             self._render_grid(body, favs)
             tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
-        # 2. Quick Tools row at the top: All-in-One Builder + Advanced
-        # Settings, both pinned for fast access. Advanced Settings is
-        # also a member of the SYSTEM category but we render it up here
-        # instead so it's one click from the launch screen.
-        quick_items = []
-        if PINNED:
-            aio_sidebar_key = "⚡ " + PINNED[0]
-            quick_items.append((aio_sidebar_key, aio_sidebar_key))
-        # Cog-iconned Advanced Settings card. Navigation target stays
-        # "Advanced Settings" so the existing show_page route keeps
-        # working untouched.
-        if "Advanced Settings" in valid_names:
-            quick_items.append(("Advanced Settings",
-                                "⚙  Advanced Settings"))
+        # 2. Quick tools: the All-in-One Builder and Advanced Settings
+        self._render_section_header(body, "⚡  Quick Tools", accent=CLR["accent"])
+        self._render_grid(body, list(_QUICK))
+        tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
-        if quick_items:
-            self._render_section_header(body, "⚡  Quick Tools",
-                                        accent=CLR["accent"])
-            self._render_grid(body, quick_items)
-            tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
-
-        # 3. Each TOOLS category. Skip the items already shown up top so
-        # they don't render twice.
-        skip = {"Advanced Settings"}
-        for category, items in TOOLS.items():
-            visible = [n for n, _ in items if n not in skip]
+        # 3. Each sidebar section (without what is already shown above)
+        quick = {tool for tool, _text in _QUICK}
+        for category in Category:
+            if category in (Category.PINNED, Category.HIDDEN):
+                continue
+            visible = [s.id for s in tools.sidebar(category) if s.id not in quick]
             if not visible:
                 continue
-            self._render_section_header(body, category)
+            self._render_section_header(body, category.value)
             self._render_grid(body, visible)
             tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
@@ -232,12 +190,8 @@ class HomeTab(BaseTab):
         rule = tk.Frame(parent, bg=CLR["border"], height=px(1))
         rule.pack(fill="x", padx=px(20))
 
-    def _render_grid(self, parent, items):
-        """
-        items may be either a list of names (strings) or a list of
-        (name, display) tuples. The name is the navigation target and
-        favourite key; display is the rendered card label.
-        """
+    def _render_grid(self, parent, items: Sequence[Card]) -> None:
+        """Cards for *items*: tools, or (tool, card text) pairs."""
         if not items:
             return
         grid = tk.Frame(parent, bg=CLR["bg"])
@@ -252,12 +206,9 @@ class HomeTab(BaseTab):
         cols = max(self._MIN_COLS, min(self._MAX_COLS, max(1, avail // col_w)))
 
         for i, item in enumerate(items):
-            if isinstance(item, tuple):
-                name, display = item
-            else:
-                name, display = item, item
+            tool, display = item if isinstance(item, tuple) else (item, labels.tool(item))
             r, c = divmod(i, cols)
-            self._build_card(grid, name, display).grid(
+            self._build_card(grid, tool, display).grid(
                 row=r, column=c,
                 padx=px(self._GRID_PAD_X), pady=px(self._GRID_PAD_Y),
                 sticky="nsew",
@@ -265,11 +216,9 @@ class HomeTab(BaseTab):
         for c in range(cols):
             grid.grid_columnconfigure(c, weight=1, uniform="cards")
 
-    def _build_card(self, parent, name, display=None):
-        """A single tab card: clickable body + star toggle on the right."""
-        if display is None:
-            display = name
-        is_fav = self._is_fav(name)
+    def _build_card(self, parent: tk.Misc, tool: ToolId, display: str) -> tk.Frame:
+        """A single tool card: clickable body + star toggle on the right."""
+        is_fav = self._is_fav(tool)
         card = tk.Frame(
             parent, bg=CLR["panel"],
             highlightthickness=px(1),
@@ -302,12 +251,11 @@ class HomeTab(BaseTab):
 
         # Click handlers - star toggles favourite (no navigation), the rest
         # of the card body navigates.
-        def on_navigate(_e=None, n=name):
-            if self._navigate:
-                self._navigate(n)
+        def on_navigate(_e: object = None) -> None:
+            self._go(tool)
 
-        def on_toggle(_e=None, n=name):
-            self._toggle_fav(n)
+        def on_toggle(_e: object = None) -> str:
+            self._toggle_fav(tool)
             return "break"  # prevent the click from also bubbling to body
 
         for w in (card, name_lbl):

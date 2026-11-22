@@ -21,14 +21,15 @@ from core.hardware import (
 )
 from core.i18n import t
 from core.scaling import px
+from core.timecode import Timecode
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.contracts import ScrubTransport, Transport
 from tabs.widgets import FramePreview
 
 
 def _fmt(seconds):
-    m, s = divmod(max(0, seconds), 60)
-    return f"{int(m):02d}:{s:05.2f}"
+    return f"{Timecode.of(seconds):.2}"
 
 
 PRESETS = {           # stable id: (label, (width, height)); (0, 0) = original size
@@ -49,6 +50,10 @@ class ThumbnailMakerTab(BaseTab):
         self.preview_proc = None
         self._build_ui()
         self._watch_look()
+
+
+    def transport(self) -> Transport | None:            # tabs/kit/contracts.py
+        return ScrubTransport(self._scrub, lambda: self.duration)
 
     def _build_ui(self):
         self.make_header(self, t("tab.thumbnail_maker"),
@@ -232,11 +237,11 @@ class ThumbnailMakerTab(BaseTab):
         # ── Run ───────────────────────────────────────────────────────────
         bf = tk.Frame(self)
         bf.pack(pady=px(8))
-        self._btn_run = tk.Button(
+        self.btn_render = tk.Button(
             bf, text="🖼  " + t("tab.thumbnail_maker"), font=(UI_FONT, 12, "bold"),
             bg=CLR["green"], fg="white", height=2, width=26,
             cursor="hand2", command=self._render)
-        self._btn_run.pack()
+        self.btn_render.pack()
 
         # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
@@ -351,7 +356,7 @@ class ThumbnailMakerTab(BaseTab):
                    *self._get_format_args(), pattern]
             self.log(self.console, f"Batch export: every {interval:g}s → {out_dir}")
             self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out_dir),
-                            btn=self._btn_run, btn_label="🖼  EXPORT THUMBNAIL", duration=self.duration,
+                            btn=self.btn_render, btn_label="🖼  EXPORT THUMBNAIL", duration=self.duration,
                             output=out_dir, inputs=[src], name="Thumbnails")
             return
         out = self._out_var.get().strip() or self.suggest_output(src, "thumb", ext)
@@ -373,7 +378,7 @@ class ThumbnailMakerTab(BaseTab):
         cmd += self._get_format_args() + ["-update", "1", out]
         self.log(self.console, f"Extracting frame at {_fmt(pos)}")
         self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out),
-                        btn=self._btn_run, btn_label="🖼  EXPORT THUMBNAIL", duration=0.1,
+                        btn=self.btn_render, btn_label="🖼  EXPORT THUMBNAIL", duration=0.1,
                         output=out, inputs=[src], name="Thumbnail")
 
     def _build_vf(self):

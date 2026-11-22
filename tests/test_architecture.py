@@ -8,6 +8,8 @@ has been fixed but is still listed - remove it, so it can't come back.
    pages in tabs/, main).
 2. PROCESSES: only core's process modules start processes (subprocess).
 3. THREADS: background work goes through the task service, not threading.Thread.
+4. LAYERS: core <- tabs <- shell.  Tool pages (tabs/) never import the window
+   (shell/, main): they reach it through the Shell protocol in tabs/kit.
 """
 from __future__ import annotations
 
@@ -56,52 +58,10 @@ ENGINE_EXCEPTIONS: dict[str, set[str]] = {
     "core/logs.py": {'tkinter'},
     "core/notify.py": {'tkinter'},
     "core/outputs.py": {'tkinter'},
-    "core/skins.py": {'tkinter', 'tabs'},
     "core/ui.py": {'tkinter'},
 }
-PROCESS_EXCEPTIONS: set[str] = {
-    "core/cli.py",
-    "core/deps.py",
-    "core/dialogs.py",
-    "core/encoders.py",
-    "core/ffmpeg.py",
-    "core/filters.py",
-    "core/hardware.py",
-    "core/notify.py",
-    "core/recorder.py",
-    "core/scaling.py",
-    "core/sysproxy.py",
-    "core/tails.py",
-    "core/tts.py",
-    "core/updater.py",
-    "main.py",
-    "tabs/all_in_one.py",
-    "tabs/audio/exporter.py",
-    "tabs/audio/laugh_track.py",
-    "tabs/audio/voice_isolation.py",
-    "tabs/cutting/smart_reframe.py",
-    "tabs/cutting/trimmer.py",
-    "tabs/social/snapshot.py",
-    "tabs/social/youtube.py",
-    "tabs/system/advanced_settings.py",
-}
-THREAD_EXCEPTIONS: set[str] = {
-    "core/dialogs.py",
-    "core/encoders.py",
-    "core/ffmpeg.py",
-    "core/queue_manager.py",
-    "core/recorder.py",
-    "core/ui.py",
-    "main.py",
-    "tabs/all_in_one.py",
-    "tabs/base_tab.py",
-    "tabs/cutting/crop.py",
-    "tabs/social/youtube.py",
-    "tabs/system/advanced_settings.py",
-    "tabs/system/screen_recorder.py",
-    "tabs/visuals/effects.py",
-    "tabs/widgets.py",
-}
+PROCESS_EXCEPTIONS: set[str] = set()                     # every program starts through core.proc
+THREAD_EXCEPTIONS: set[str] = set()                      # every thread starts through core.tasks
 
 
 def _engine_breaks() -> dict[str, set[str]]:
@@ -160,3 +120,9 @@ def test_threads_start_only_in_core_tasks():
     assert users <= THREAD_EXCEPTIONS, f"use core.tasks, not threading.Thread: {sorted(users - THREAD_EXCEPTIONS)}"
     fixed = THREAD_EXCEPTIONS - users
     assert not fixed, f"fixed - remove from THREAD_EXCEPTIONS: {sorted(fixed)}"
+
+
+def test_tool_pages_never_import_the_window():
+    breaks = {rel: bad for rel, path in _py_files("tabs")
+              if (bad := {_top(m) for m in _imports(path) if _top(m) in ("shell", "main")})}
+    assert not breaks, f"tabs/ must not import the window (use tabs.kit.contracts.Shell): {breaks}"

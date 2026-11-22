@@ -5,6 +5,8 @@ import types
 
 import pytest
 
+from core.tools import ToolId
+
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
@@ -12,13 +14,14 @@ def test_open_paths_routes_to_tool_or_inspector(ui, media):
     app = ui.app
     app.show_page("Home")
     assert app.open_paths([media["hevc10"]])
-    assert app.current_page == "Media Inspector"
-    insp = app.pages["Media Inspector"]
+    assert app.current_page is ToolId.MEDIA_INSPECTOR
+    insp = app.page(ToolId.MEDIA_INSPECTOR)
+    ui.wait_for(lambda: insp.info is not None)
     assert insp.info is not None and insp.info.video.codec == "hevc"
     app.show_page("Quick Trimmer")
     assert app.open_paths([media["h264"]])
-    assert app.current_page == "Quick Trimmer"
-    assert app.pages["Quick Trimmer"].file_path.endswith("h264_720p30_aac.mp4")
+    assert app.current_page is ToolId.QUICK_TRIMMER
+    assert app.page(ToolId.QUICK_TRIMMER).file_path.endswith("h264_720p30_aac.mp4")
     assert "WyldVeil" in app.title()
 
 
@@ -27,12 +30,12 @@ def test_open_paths_routes_to_tool_or_inspector(ui, media):
 def test_drop_event_with_spaces_and_uri(ui, media):
     app = ui.app
     app.show_page("Crossfader")
-    tab = app.pages["Crossfader"]
+    tab = app.page(ToolId.CROSSFADER)
     for r in tab.clip_rows:
         r["var"].set("")
         r["clip"] = None
     data = "{%s} file://%s" % (media["nasty"], media["h264_b"])
-    app._on_drop(types.SimpleNamespace(data=data, action="copy"))
+    app.files._dropped(types.SimpleNamespace(data=data, action="copy"))
     ui.pump(0.3)
     paths = [r["var"].get() for r in tab.clip_rows if r["var"].get()]
     assert paths == [media["nasty"], media["h264_b"]]
@@ -41,7 +44,7 @@ def test_drop_event_with_spaces_and_uri(ui, media):
 @pytest.mark.gui
 def test_sidebar_search_matches_translated_and_english(ui):
     app = ui.app
-    rows = dict(app._tool_rows)
+    rows = dict(app.sidebar._rows)
     assert any("crossfader" in key for key in rows)
     assert any("media inspector" in key for key in rows)
 
@@ -60,10 +63,10 @@ def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
     destroyed = []
     monkeypatch.setattr(ui.app, "destroy", lambda: destroyed.append(True))
     ui.dialogs.default_yes = False
-    ui.app._on_closing()                     # user says "no" -> nothing happens
+    ui.app.quit_app()                     # user says "no" -> nothing happens
     assert not destroyed and q.get_task(tid).status == "active"
     ui.dialogs.default_yes = True
-    ui.app._on_closing()
+    ui.app.quit_app()
     assert destroyed
     ui.wait_for(lambda: q.get_task(tid).status == "cancelled", 15)
     time.sleep(0.2)
@@ -74,12 +77,11 @@ def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
 def test_every_tool_opens(ui):
     """Each tool in the sidebar builds without errors - in any order, after other tools
     (shared widgets cache things between tools, e.g. the GPU encoder probe)."""
-    from tabs.registry import PINNED, TOOLS
-    names = [n for items in TOOLS.values() for n, _c in items] + ["⚡ " + PINNED[0], "Start", "Home", "Settings"]
     failed = []
-    for name in names:
+    for tool in ToolId:
+        name = tool.value
         try:
-            ui.open(name)
+            ui.open(tool)
         except Exception as exc:                       # PlaceholderTab -> RuntimeError
             failed.append(f"{name}: {exc}")
         ui.pump(0.05)
@@ -130,7 +132,7 @@ def test_skin_options_reach_new_widgets(ui):
     """Tk option names are case-sensitive: misspelt entries (TroughColor, SelectBackground...) were
     silently ignored, leaving sliders without a visible trough and hover colours wrong."""
     import tkinter as tk
-    skin = ui.app._skin_data
+    skin = ui.app.skin
     top = tk.Toplevel(ui.app)
     try:
         entry, scale, button, radio = tk.Entry(top), tk.Scale(top), tk.Button(top), tk.Radiobutton(top)
@@ -220,16 +222,18 @@ def _page_canvas(ui, name):
 def test_wheel_units_follow_the_wheel():
     """Down is positive (scrolls down), on X11 buttons and on <MouseWheel> deltas alike;
     small touchpad steps add up to whole notches."""
-    import main
-    app = types.SimpleNamespace(_wheel_carry=0)
+    from shell import wheel
+    carry = [0]
 
-    def units(num="??", delta=0):
-        return main.App._wheel_units(app, types.SimpleNamespace(num=num, delta=delta))
+    def units(num=0, delta=0):
+        steps, carry[0] = wheel.units(num, delta, carry[0])
+        return steps
 
-    assert units(num=4) == -main.WHEEL_UNITS and units(num=5) == main.WHEEL_UNITS
-    assert units(delta=120) == -main.WHEEL_UNITS and units(delta=-240) == 2 * main.WHEEL_UNITS
-    assert [units(delta=-40) for _ in range(3)] == [0, 0, main.WHEEL_UNITS]
-    assert units(delta=60) == 0 and units(delta=-120) == main.WHEEL_UNITS   # a turn back starts afresh
+    n = wheel.UNITS_PER_NOTCH
+    assert units(num=4) == -n and units(num=5) == n
+    assert units(delta=120) == -n and units(delta=-240) == 2 * n
+    assert [units(delta=-40) for _ in range(3)] == [0, 0, n]
+    assert units(delta=60) == 0 and units(delta=-120) == n   # a turn back starts afresh
 
 
 @pytest.mark.gui
@@ -241,7 +245,7 @@ def test_wheel_scrolls_sidebar_and_pages_the_way_it_turns(ui):
     styles = [(dict(delta=-120), dict(delta=120))]
     if _x11_buttons():
         styles.append((dict(button=5), dict(button=4)))
-    for canvas in (ui.app._sidebar_canvas, page):
+    for canvas in (ui.app.sidebar.canvas, page):
         for down, up in styles:
             canvas.yview_moveto(0)
             _wheel(ui, canvas, **down)
@@ -309,7 +313,7 @@ def test_wheel_in_a_window_over_the_sidebar_scrolls_that_window(ui):
     import tkinter as tk
 
     from tabs.widgets import scroll_body
-    sidebar = ui.app._sidebar_canvas
+    sidebar = ui.app.sidebar.canvas
     sidebar.yview_moveto(0)
     sx, sy = sidebar.winfo_rootx(), sidebar.winfo_rooty()
     top = tk.Toplevel(ui.app)
@@ -334,7 +338,7 @@ def test_mouse_side_buttons_do_not_scroll_on_tk9(ui):
     if tk.TkVersion < 9:
         pytest.skip("Tk 8.6 uses buttons 4/5 for the wheel")
     page = _page_canvas(ui, "Universal Downsizer")
-    for canvas in (ui.app._sidebar_canvas, page):
+    for canvas in (ui.app.sidebar.canvas, page):
         canvas.yview_moveto(0)
         _wheel(ui, canvas, button=5)
         assert canvas.yview()[0] == 0

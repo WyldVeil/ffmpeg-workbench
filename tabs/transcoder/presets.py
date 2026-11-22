@@ -348,11 +348,11 @@ class PresetManagerTab(BaseTab):
         tk.Entry(run_row2, textvariable=self.run_out_var, width=36, relief="flat").pack(side="left", padx=px(4))
         tk.Button(run_row2, text="…", command=self._browse_run_out, width=2, cursor="hand2", relief="flat").pack(side="left")
 
-        self.btn_run = tk.Button(run_lf, text=t("presets.run_now_button"),
+        self.btn_render = tk.Button(run_lf, text=t("presets.run_now_button"),
                                   bg=CLR["green"], fg="white",
                                   font=(UI_FONT, 11, "bold"), height=2,
                                   command=self._quick_run)
-        self.btn_run.pack(pady=px(4), fill="x")
+        self.btn_render.pack(pady=px(4), fill="x")
 
         # Console
         self.console = scrolledtext.ScrolledText(
@@ -581,7 +581,7 @@ class PresetManagerTab(BaseTab):
             return
         self.console.insert(tk.END, f"\n▶ Running preset: {p['name']}\n$ {' '.join(map(_quote, cmd))}\n\n")
         self.console.see(tk.END)
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_run,
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label=t("presets.run_now_button"), duration=ff.duration_of(src) or None,
                         output=out, inputs=[src], name=f"Preset: {p['name']}")
 

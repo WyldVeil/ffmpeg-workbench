@@ -21,9 +21,10 @@ Usage (hard dependency - raises ImportError if it can't be loaded):
 
 import importlib
 import os
-import subprocess
 import sys
 import threading
+
+from core import proc as _proc
 
 # ── Locate libs/ relative to this file ───────────────────────────────────────
 _HERE     = os.path.dirname(os.path.abspath(__file__))
@@ -80,8 +81,6 @@ def _pip_install(pip_name):
     if getattr(sys, 'frozen', False):
         return False
 
-    import platform
-    creationflags = 0x08000000 if platform.system() == "Windows" else 0
     # Pass user network settings (proxy, etc.) through to pip via env vars.
     try:
         from core import network as _net
@@ -94,20 +93,14 @@ def _pip_install(pip_name):
     except OSError:
         return False
     try:
-        result = subprocess.run(
-            [
+        result = _proc.run([
                 sys.executable, "-m", "pip", "install",
                 pip_name,
                 f"--target={target}",
                 "--quiet",
                 "--disable-pip-version-check",
                 "--no-warn-script-location",
-            ],
-            capture_output=True,
-            creationflags=creationflags,
-            timeout=120,
-            env=env,
-        )
+            ], timeout=120, text=False, env=env)
         if result.returncode == 0:
             _ensure_libs_on_path()
         return result.returncode == 0

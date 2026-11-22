@@ -10,14 +10,17 @@ main thread drains every few milliseconds.
     from core import ui
     ui.install(root)                      # once, in App.__init__
     ui.call_soon(label.config, text="Done")   # from any thread
-    ui.run_in_thread(work, on_done=show)  # run work() in a thread, show(result) on Tk
+
+Background work itself goes through core.tasks.submit, which delivers its
+result here.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import queue
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 _log = logging.getLogger("crossfader.ui")
@@ -40,6 +43,21 @@ def install(root, poll_ms: int = 15) -> None:
 
 def installed() -> bool:
     return _root is not None
+
+
+@contextlib.contextmanager
+def hosted_by(root: Any, poll_ms: int = 15) -> Iterator[None]:
+    """Hand UI calls to *root* for a while (a throwaway window in a test); the
+    window that had them before gets them back afterwards."""
+    global _root, _main_ident, _POLL_MS
+    previous = (_root, _main_ident, _POLL_MS)
+    install(root, poll_ms)
+    try:
+        yield
+    finally:
+        _root, _main_ident, _POLL_MS = previous
+        if _root is not None:
+            _root.after(_POLL_MS, _drain)            # its drain loop moved to *root*: restart it
 
 
 def on_main_thread() -> bool:
@@ -87,30 +105,6 @@ def call_soon(fn: Callable, *args: Any, **kwargs: Any) -> None:
         _log.warning("ui.call_soon before install(); dropping %r", fn)
         return
     _q.put((fn, args, kwargs))
-
-
-def run_in_thread(fn: Callable, *args: Any,
-                  on_done: Callable[[Any], None] | None = None,
-                  on_error: Callable[[BaseException], None] | None = None,
-                  name: str | None = None, **kwargs: Any) -> threading.Thread:
-    """Run ``fn(*args, **kwargs)`` in a daemon thread; deliver the result to
-    *on_done* (or the exception to *on_error*) on the Tk thread."""
-
-    def _worker():
-        try:
-            result = fn(*args, **kwargs)
-        except BaseException as exc:
-            _log.exception("background task %s failed", name or getattr(fn, "__name__", fn))
-            if on_error is not None:
-                call_soon(on_error, exc)
-            return
-        if on_done is not None:
-            call_soon(on_done, result)
-
-    t = threading.Thread(target=_worker, name=name or f"bg-{getattr(fn, '__name__', 'task')}",
-                         daemon=True)
-    t.start()
-    return t
 
 
 def debounce(widget, delay_ms: int, fn: Callable[[], None]) -> Callable[[], None]:

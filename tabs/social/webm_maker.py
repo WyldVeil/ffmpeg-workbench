@@ -10,9 +10,11 @@ import math
 import os
 import tkinter as tk
 from dataclasses import dataclass
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -578,9 +580,7 @@ class WebMTab(BaseTab):
 
     def _source_changed(self, path):
         """Re-probe on every change (browse, typing, paste, drag-and-drop, recent files)."""
-        from core import ui
-        ui.run_in_thread(ff.try_probe, path, on_done=lambda info: self._apply_probe(path, info),
-                         name="WebMProbe")
+        tasks.submit(partial(ff.try_probe, path), on_done=lambda info: self._apply_probe(path, info), name="WebMProbe")
 
     def _apply_probe(self, path, info):
         if path != self.src_row.path:

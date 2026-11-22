@@ -17,12 +17,14 @@ import os
 import shutil
 import tempfile
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox
 
 from core import ffmpeg as ff
-from core import ui
+from core import tasks
 from core.i18n import t
 from core.scaling import px
+from core.timecode import Timecode
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow
@@ -32,11 +34,7 @@ COLOURS = {"mute": "red", "boost": "green", "duck": "orange"}
 
 
 def _fmt(seconds):
-    m, s = divmod(max(0.0, seconds), 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
-    return f"{int(m):02d}:{s:05.2f}"
+    return f"{Timecode.of(seconds):.2}"
 
 
 def peaks_cmd(src: str, slice_samples: int, out_txt: str, stream: int = 0) -> list:
@@ -169,10 +167,10 @@ class WaveformEditorTab(BaseTab):
                                suggest=lambda: self._suggest())
         self.out_row.pack(fill="x", padx=px(20))
         self._out_var = self.out_row.var
-        self._btn_run = tk.Button(self, text=t("waveform.apply_button"), font=(UI_FONT, 12, "bold"),
+        self.btn_render = tk.Button(self, text=t("waveform.apply_button"), font=(UI_FONT, 12, "bold"),
                                   bg=CLR["green"], fg="white", height=2, width=26, cursor="hand2",
                                   command=self._render)
-        self._btn_run.pack(pady=px(8))
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(self)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(4, 10))
         self.console, csb = self.make_console(cf, height=5)
@@ -201,8 +199,7 @@ class WaveformEditorTab(BaseTab):
         self._view = (0.0, 0.0)
         self._info_lbl.config(text="Reading the file…")
         self._draw()
-        ui.run_in_thread(self._analyse, path, on_done=lambda res: self._loaded(my_id, res),
-                         on_error=lambda e: self._failed(my_id, e), name="Waveform")
+        tasks.submit(partial(self._analyse, path), on_done=lambda res: self._loaded(my_id, res), on_error=lambda e: self._failed(my_id, e), name="Waveform")
 
     @staticmethod
     def _analyse(path):
@@ -443,6 +440,6 @@ class WaveformEditorTab(BaseTab):
                 cmd += ["-movflags", "+faststart"]
         cmd.append(out)
         self.log(self.console, f"Applying {len(self._regions)} region(s)…")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self._btn_run,
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label=t("waveform.apply_button"), duration=self.duration or None, output=out,
                         inputs=[src], name="Waveform Editor")

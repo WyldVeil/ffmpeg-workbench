@@ -8,14 +8,12 @@ no duplicated load/save logic.
 import json
 import os
 import platform
-import subprocess
-import threading
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-from core import dialogs
+from core import dialogs, settings, tasks
+from core import proc as _proc
 from core.hardware import (
-    CREATE_NO_WINDOW,
     detect_gpu,
     get_binary_path,
     get_local_version,
@@ -27,15 +25,13 @@ from core.settings import load_settings, update
 from core.skins import (
     _CUSTOM_DEFAULTS,
     SKINS,
-    apply_skin,
     get_skin,
     load_skin_name,
     save_custom_color,
     save_skin_name,
-    set_star_count,
-    set_star_speed,
 )
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.theme import set_star_count, set_star_speed
 
 
 class AdvancedSettingsTab(BaseTab):
@@ -112,7 +108,7 @@ class AdvancedSettingsTab(BaseTab):
             f, height=8, bg=CLR["console_bg"], fg="#00FF88", font=(MONO_FONT, 9))
         self.upd_console.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
-        threading.Thread(target=self._check_versions, daemon=True).start()
+        tasks.submit(self._check_versions)
 
     def _check_versions(self):
         from core import updater
@@ -397,8 +393,10 @@ class AdvancedSettingsTab(BaseTab):
         for i, (label, key, width) in enumerate(rows):
             tk.Label(g, text=label).grid(row=i, column=0, sticky="w", pady=px(2))
             if key == "network.source_address":
-                ttk.Combobox(g, textvariable=var(key), width=width, values=[""] + _local_addresses()).grid(
-                    row=i, column=1, sticky="w", padx=px(4))
+                addresses = ttk.Combobox(g, textvariable=var(key), width=width, values=[""])
+                addresses.grid(row=i, column=1, sticky="w", padx=px(4))
+                tasks.submit(_local_addresses, name="LocalAddresses",            # asks `ip`: not on the UI thread
+                             on_done=lambda found, cb=addresses: cb.config(values=["", *found]))
             elif key == "network.wrapper":
                 ttk.Combobox(g, textvariable=var(key), width=width,
                              values=["", "mullvad-exclude", "proxychains4 -q", "torsocks"]).grid(
@@ -458,12 +456,10 @@ class AdvancedSettingsTab(BaseTab):
             except tk.TclError:
                 pass
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, on_error=lambda e: None, name="NetDescribe")
+        tasks.submit(work, on_done=done, on_error=lambda e: None, name="NetDescribe")
 
     def _net_find_local(self):
         from core import network as _net
-        from core import ui
         self._net_found_lbl.config(text="Looking…")
         for w in self._net_found_frame.winfo_children():
             w.destroy()
@@ -477,8 +473,7 @@ class AdvancedSettingsTab(BaseTab):
                 tk.Button(self._net_found_frame, text=f"Use {label} - {scheme} 127.0.0.1:{port}", relief="flat",
                           command=lambda p=port, sc=scheme: self._net_use_local(sc, p)).pack(anchor="w")
 
-        ui.run_in_thread(_net.find_local_proxies, on_done=done,
-                         on_error=lambda e: self._net_found_lbl.config(text=str(e)), name="ProxyProbe")
+        tasks.submit(_net.find_local_proxies, on_done=done, on_error=lambda e: self._net_found_lbl.config(text=str(e)), name="ProxyProbe")
 
     def _net_use_local(self, scheme, port):
         self._net_vars["network.mode"].set("manual")
@@ -611,7 +606,7 @@ class AdvancedSettingsTab(BaseTab):
                 else ("Connection failed: " + msg),
                 fg=colour))
 
-        threading.Thread(target=_work, daemon=True).start()
+        tasks.submit(_work)
 
     def _net_reset_field(self, key):
         from core import network as _net
@@ -795,8 +790,7 @@ class AdvancedSettingsTab(BaseTab):
         tk.Label(speed_row, text="Slow", font=(UI_FONT, 8),
                  fg=CLR["fgdim"]).pack(side="left")
 
-        from core.settings import get as _cfg_get
-        saved_speed = float(_cfg_get("star_speed", 1.0))
+        saved_speed = settings.STAR_SPEED.get()
         self._star_speed_var = tk.DoubleVar(value=saved_speed)
 
         speed_slider = tk.Scale(
@@ -831,7 +825,7 @@ class AdvancedSettingsTab(BaseTab):
         tk.Label(density_row, text="Few", font=(UI_FONT, 8),
                  fg=CLR["fgdim"]).pack(side="left")
 
-        saved_count = int(_cfg_get("star_count", 55))
+        saved_count = settings.STAR_COUNT.get()
         self._star_count_var = tk.IntVar(value=saved_count)
 
         density_slider = tk.Scale(
@@ -1034,21 +1028,12 @@ class AdvancedSettingsTab(BaseTab):
         """Save and apply the selected skin live, immediately."""
         save_skin_name(name)
         self._update_star_speed_visibility(name)
-        try:
-            app = self.winfo_toplevel()
-            apply_skin(
-                app,
-                app.sidebar_container,
-                app.content_container,
-                app._btn_refs,
-            )
-            self._skin_status.config(
-                text=f"✅  '{name}' applied live!",
-                fg=CLR["accent"])
-        except Exception:
-            self._skin_status.config(
-                text=t("advanced_settings.saved_reopen_to_see_full_effect"),
-                fg=CLR["green"])
+        shell = self.shell()
+        if shell is not None:
+            shell.apply_theme(name)
+            self._skin_status.config(text=f"✅  '{name}' applied live!", fg=CLR["accent"])
+        else:
+            self._skin_status.config(text=t("advanced_settings.saved_reopen_to_see_full_effect"), fg=CLR["green"])
 
     def _apply_skin(self):
         self._on_skin_select(self._skin_var.get())
@@ -1079,8 +1064,7 @@ class AdvancedSettingsTab(BaseTab):
             self._star_speed_lbl.config(text=self._speed_label(mult))
         except Exception:
             pass
-        from core.settings import set as _cfg_set
-        _cfg_set("star_speed", mult)
+        settings.STAR_SPEED.set(float(mult))
 
     def _on_star_count_change(self, value):
         count = int(float(value))
@@ -1089,18 +1073,11 @@ class AdvancedSettingsTab(BaseTab):
             self._star_count_lbl.config(text=f"{count} stars")
         except Exception:
             pass
-        from core.settings import set as _cfg_set
-        _cfg_set("star_count", count)
-        # Restart stars so density takes effect immediately
-        try:
-            from core.skins import _start_stars, get_skin, load_skin_name
-            app = self.winfo_toplevel()
-            skin_name = load_skin_name()
-            if get_skin(skin_name).get("stars"):
-                _start_stars(app, get_skin(skin_name),
-                             getattr(app, "_inner", None))
-        except Exception:
-            pass
+        settings.STAR_COUNT.set(count)
+        # restart the stars so the new density shows at once
+        shell = self.shell()
+        if shell is not None and get_skin(load_skin_name()).get("stars"):
+            shell.apply_theme(load_skin_name())
 
     # ─── Language ─────────────────────────────────────────────────────────────
     def _build_language_tab(self, nb):
@@ -1171,9 +1148,7 @@ class AdvancedSettingsTab(BaseTab):
                  font=(UI_FONT, 12, "bold")).pack(side="left")
         tk.Button(hdr2, text=t("advanced_settings.refresh"),
                   bg=CLR["panel"], fg=CLR["fg"],
-                  command=lambda: threading.Thread(
-                      target=lambda: self._load_sysinfo(info_area),
-                      daemon=True).start()
+                  command=lambda: tasks.submit(lambda: self._load_sysinfo(info_area))
                   ).pack(side="right")
 
         info_area = scrolledtext.ScrolledText(
@@ -1181,9 +1156,7 @@ class AdvancedSettingsTab(BaseTab):
             font=(MONO_FONT, 10), insertbackground="#00FF88")
         info_area.pack(fill="both", expand=True, padx=px(20), pady=px(8))
 
-        threading.Thread(
-            target=lambda: self._load_sysinfo(info_area),
-            daemon=True).start()
+        tasks.submit(lambda: self._load_sysinfo(info_area))
 
     def _load_sysinfo(self, area):
         lines = []
@@ -1197,11 +1170,8 @@ class AdvancedSettingsTab(BaseTab):
 
         def ps(cmd):
             """Run a PowerShell command, return stdout string."""
-            r = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive",
-                 "-Command", cmd],
-                capture_output=True, text=True,
-                creationflags=CREATE_NO_WINDOW)
+            r = _proc.run(["powershell", "-NoProfile", "-NonInteractive",
+                 "-Command", cmd], timeout=30)
             return r.stdout.strip()
 
         is_win = platform.system() == "Windows"
@@ -1254,7 +1224,7 @@ class AdvancedSettingsTab(BaseTab):
                 if load:
                     lines.append(f"  Current load: {load}%")
             else:
-                r = subprocess.run(["lscpu"], capture_output=True, text=True)
+                r = _proc.run(["lscpu"], timeout=30)
                 for line in r.stdout.splitlines():
                     for key in ("Model name", "CPU(s)", "Thread(s)", "MHz"):
                         if line.strip().startswith(key):
@@ -1285,7 +1255,7 @@ class AdvancedSettingsTab(BaseTab):
                 except Exception:
                     pass
             else:
-                r = subprocess.run(["free", "-h"], capture_output=True, text=True)
+                r = _proc.run(["free", "-h"], timeout=30)
                 for line in r.stdout.splitlines():
                     if line.startswith("Mem"):
                         p = line.split()
@@ -1316,8 +1286,7 @@ class AdvancedSettingsTab(BaseTab):
                         if len(p) >= 4:
                             lines.append(f"  {p[0]:<5} {p[1]:<14} {p[2]:<14} {p[3]}")
             else:
-                r = subprocess.run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs"],
-                           capture_output=True, text=True)
+                r = _proc.run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs"], timeout=30)
                 for line in r.stdout.splitlines()[1:6]:
                     lines.append(f"  {line}")
         except Exception as exc:
@@ -1343,11 +1312,8 @@ class AdvancedSettingsTab(BaseTab):
                 vram_mb = None
                 if hw_accel == "NVIDIA":
                     try:
-                        r = subprocess.run(
-                            ["nvidia-smi", "--query-gpu=memory.total",
-                             "--format=csv,noheader,nounits"],
-                            capture_output=True, text=True,
-                            creationflags=CREATE_NO_WINDOW)
+                        r = _proc.run(["nvidia-smi", "--query-gpu=memory.total",
+                             "--format=csv,noheader,nounits"], timeout=30)
                         vram_mb = int(r.stdout.strip().splitlines()[0].strip())
                     except Exception:
                         pass
@@ -1408,9 +1374,7 @@ class AdvancedSettingsTab(BaseTab):
         lines.append(f"  Exists:       {os.path.exists(ffmpeg)}")
         lines.append(f"  Version:      {local_v}")
         try:
-            r = subprocess.run([ffmpeg, "-codecs"],
-                       capture_output=True, text=True,
-                       creationflags=CREATE_NO_WINDOW)
+            r = _proc.run([ffmpeg, "-codecs"], timeout=30)
             hw = [l.strip() for l in r.stdout.split("\n")
                   if any(x in l for x in
                          ["nvenc", "amf", "qsv", "videotoolbox"])]
@@ -1483,9 +1447,7 @@ class AdvancedSettingsTab(BaseTab):
                 parts = shlex.split(cmd_str)
             except Exception:
                 parts = cmd_str.split()
-            proc = subprocess.Popen(
-                parts, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, creationflags=CREATE_NO_WINDOW)
+            proc = _proc.spawn(parts, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True)
             for line in iter(proc.stdout.readline, ""):
                 self.after(0, lambda l=line: [
                     self.dev_console.insert(tk.END, l),
@@ -1495,7 +1457,7 @@ class AdvancedSettingsTab(BaseTab):
             self.after(0, lambda: self.dev_console.insert(
                 tk.END, f"\n[Exited {proc.returncode}]\n"))
 
-        threading.Thread(target=_work, daemon=True).start()
+        tasks.submit(_work)
 
     def show_system_info(self) -> None:
         nb, page = getattr(self, "system_info_page", (None, None))
@@ -1507,18 +1469,17 @@ def _local_addresses() -> list:
     """IPv4/IPv6 addresses of this computer's network connections."""
     import re as _re
     import socket as _socket
-    import subprocess as _sp
+
+    from core import proc as _proc
     out = []
     try:
         if os.name == "nt":
-            text = _sp.run(["ipconfig"], capture_output=True, text=True, timeout=5,
-                           creationflags=CREATE_NO_WINDOW).stdout
+            text = _proc.run(["ipconfig"], timeout=5).stdout
             out = _re.findall(r"IPv4[^:]*:\s*([0-9.]+)", text)
         else:
-            text = _sp.run(["ip", "-o", "addr", "show", "scope", "global"], capture_output=True, text=True,
-                           timeout=5).stdout
+            text = _proc.run(["ip", "-o", "addr", "show", "scope", "global"], timeout=5).stdout
             out = [m.split("/")[0] for m in _re.findall(r"inet6?\s+(\S+)", text)]
-    except (OSError, _sp.SubprocessError):
+    except _proc.ProcessError:
         pass
     if not out:
         try:

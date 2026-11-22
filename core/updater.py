@@ -17,11 +17,12 @@ import logging
 import os
 import re
 import ssl
-import subprocess
 import sys
 from collections.abc import Callable
 
-from core.hardware import CREATE_NO_WINDOW, find_binary, platform_tag, user_tools_dir
+from core import proc as _proc
+from core import settings
+from core.hardware import find_binary, platform_tag, user_tools_dir
 
 _log = logging.getLogger("crossfader.updater")
 Log = Callable[[str], None]
@@ -47,11 +48,7 @@ def _checks_enabled() -> bool:
     """Automatic update checks: not offline and not switched off."""
     if _offline():
         return False
-    try:
-        from core.settings import get
-        return bool(get("check_updates", True))
-    except Exception:
-        return True
+    return settings.CHECK_UPDATES.get()
 
 
 def _open(url: str, timeout: float = 30.0):
@@ -172,8 +169,7 @@ def install_ytdlp(log: Log) -> bool:
         _download(assets[asset], tmp, sums[asset], log)
         if os.name != "nt":
             os.chmod(tmp, 0o755)
-        r = subprocess.run([tmp, "--version"], capture_output=True, text=True, timeout=60,
-                           creationflags=CREATE_NO_WINDOW)
+        r = _proc.run([tmp, "--version"], timeout=60)
         if r.returncode != 0:
             os.remove(tmp)
             log("The downloaded yt-dlp does not run - keeping the current one.")
@@ -199,10 +195,9 @@ def tool_versions() -> dict:
         ver = "Missing"
         if path:
             try:
-                r = subprocess.run([path, *args], capture_output=True, text=True, timeout=30,
-                                   creationflags=CREATE_NO_WINDOW)
+                r = _proc.run([path, *args], timeout=30)
                 ver = (r.stdout.strip().splitlines() or ["?"])[0]
-            except (OSError, subprocess.TimeoutExpired):
+            except _proc.ProcessError:
                 ver = "Unknown"
         out[tool] = (path, ver)
     return out

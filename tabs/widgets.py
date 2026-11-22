@@ -30,7 +30,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
-from core import encoders
+from core import encoders, tasks
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
@@ -119,7 +119,7 @@ class FramePreview(tk.Frame):
             if self._busy:
                 return
             self._busy = True
-        threading.Thread(target=self._worker, daemon=True, name="FramePreview").start()
+        tasks.submit(self._worker, name="FramePreview", pool="preview")
 
     def clear(self) -> None:
         self.load(None)
@@ -415,8 +415,7 @@ class EncoderPanel(tk.Frame):
         self._hw_choices = [("auto", self._hw_var.get()),
                             ("off", _tr("encoder.hw_off", "Software (best quality per MB)"))]
         self._hw_box.config(values=[v for _, v in self._hw_choices])
-        from core import ui
-        ui.run_in_thread(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
+        tasks.submit(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
         self._changed(notify=False)        # the owner is still being built: don't call back into it yet
 
     def _hw_detected(self, kinds) -> None:

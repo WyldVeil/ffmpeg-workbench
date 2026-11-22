@@ -22,12 +22,13 @@ from __future__ import annotations
 import glob
 import json
 import os
-import subprocess
 import sys
 import threading
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 
-from core.hardware import CREATE_NO_WINDOW
+from core import proc as _proc
+from core import settings, tasks
 
 # ── Vocabularies ─────────────────────────────────────────────────────────────
 
@@ -172,10 +173,7 @@ def list_encoders(ffmpeg: str | None = None) -> set:
             return _ENCODERS[ff]
     names: set = set()
     try:
-        r = subprocess.run([ff, "-hide_banner", "-encoders"], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace",
-                           timeout=15, stdin=subprocess.DEVNULL,
-                           creationflags=CREATE_NO_WINDOW)
+        r = _proc.run([ff, "-hide_banner", "-encoders"], timeout=15)
         started = False
         for line in r.stdout.splitlines():
             if line.strip().startswith("------"):
@@ -185,7 +183,7 @@ def list_encoders(ffmpeg: str | None = None) -> set:
                 parts = line.split()
                 if len(parts) >= 2 and len(parts[0]) == 6:
                     names.add(parts[1])
-    except (OSError, subprocess.TimeoutExpired):
+    except _proc.ProcessError:
         pass
     with _lock:
         _ENCODERS[ff] = names
@@ -218,10 +216,8 @@ def _hw_test(ff: str, kind: str) -> bool:
         attempts.append((None, base + src + ["-pix_fmt", "yuv420p"] + tail))
     for node, cmd in attempts:
         try:
-            r = subprocess.run(cmd, capture_output=True, timeout=20,
-                               stdin=subprocess.DEVNULL,
-                               creationflags=CREATE_NO_WINDOW)
-        except (OSError, subprocess.TimeoutExpired):
+            r = _proc.run(cmd, timeout=20, text=False)
+        except _proc.ProcessError:
             continue
         if r.returncode == 0:
             if node:
@@ -264,11 +260,9 @@ def working_hw_kinds() -> list:
     return [k for k, ok in hw_available().items() if ok]
 
 
-def detect_in_background() -> threading.Thread:
+def detect_in_background() -> Future[dict[str, bool]]:
     """Warm the encoder caches without blocking the UI."""
-    t = threading.Thread(target=hw_available, name="EncoderProbe", daemon=True)
-    t.start()
-    return t
+    return tasks.submit(hw_available, name="EncoderProbe")
 
 
 def preferred_hw() -> str | None:
@@ -281,11 +275,7 @@ def preferred_hw() -> str | None:
 
 
 def _setting_hw_mode() -> str:
-    try:
-        from core.settings import get
-        mode = str(get("hw_encode", "auto") or "auto").lower()
-    except Exception:
-        mode = "auto"
+    mode = settings.HW_ENCODE.get()
     return mode if mode in ("auto", "off") + HW_KINDS else "auto"
 
 

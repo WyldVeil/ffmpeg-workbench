@@ -1,5 +1,5 @@
 {
-  "include": ["core", "tabs", "tests", "scripts", "main.py"],
+  "include": ["core", "shell", "tabs", "tests", "scripts", "devtools", "main.py"],
   "exclude": ["**/__pycache__", ".venv", "build", "dist", "libs", "bin"],
   "extraPaths": ["."],
   "venvPath": ".",

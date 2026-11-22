@@ -15,6 +15,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline
+from tabs.kit.contracts import Transport
 
 
 def _tr(key, fallback):
@@ -30,6 +31,17 @@ class SplicerTab(BaseTab):
         self._build_ui()
 
     # ─── UI ───────────────────────────────────────────────────────────────────
+
+    # ── Contracts (tabs/kit/contracts.py): the playhead is the timeline's ──
+    def transport(self) -> Transport | None:
+        return self._timeline
+
+    def mark_in(self) -> None:
+        self._timeline.mark_in()
+
+    def mark_out(self) -> None:
+        self._timeline.mark_out()
+
     def _build_ui(self):
         # Header
         hdr = tk.Frame(self, bg=CLR["panel"])

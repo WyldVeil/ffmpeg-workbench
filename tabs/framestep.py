@@ -23,6 +23,7 @@ import weakref
 from collections.abc import Callable
 
 from core import ffmpeg as ff
+from tabs.kit.contracts import Shell
 
 DEFAULT_FPS = 30.0
 HINT = "Drag, or press , and . to step one frame (with Shift, one second)"
@@ -135,7 +136,7 @@ def on_key(app, event, direction: int, second: bool = False) -> str | None:
         return None
     if focus is not None and focus.winfo_toplevel() is not app:
         return None                                     # a dialog has the keyboard
-    page = getattr(app, "pages", {}).get(getattr(app, "current_page", None))
+    page = app.current() if isinstance(app, Shell) else None
     widget = target(page) if page is not None else None
     if widget is None:
         return None

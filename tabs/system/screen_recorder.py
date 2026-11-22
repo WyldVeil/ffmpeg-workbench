@@ -16,7 +16,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -379,7 +379,7 @@ class ScreenRecorderTab(BaseTab):
 
         # Start the background scan for audio hardware
         self.cb_audio1.set("Loading devices...")
-        threading.Thread(target=self._load_audio_devices, daemon=True).start()
+        tasks.submit(self._load_audio_devices)
 
         # ── OBS Feature 1 – Global Hotkey ─────────────────────────────────────
         hotkey_f = tk.LabelFrame(self.tab_studio, text=f" {t('screen_recorder.hotkey_section')} ",
@@ -576,7 +576,7 @@ class ScreenRecorderTab(BaseTab):
                     self.after(0, self._hotkey_triggered)
             user32.UnregisterHotKey(None, 9901)
 
-        threading.Thread(target=_listen, daemon=True, name="Hotkey").start()
+        tasks.start_service(_listen, name="Hotkey")
         ready.wait(2)
         if not result.get("ok"):
             self._hotkey_active = False
@@ -804,10 +804,10 @@ class ScreenRecorderTab(BaseTab):
             return
         self.btn_stop.config(state="disabled")
         self.log(self.console, t("log.screen_recorder.stopping_flushing_file_headers"))
-        threading.Thread(target=rec.stop, daemon=True, name="RecorderStop").start()
+        tasks.submit(rec.stop, name="RecorderStop")
 
-    def on_close(self):
-        """Called when the tab is destroyed / app exits: finish the file properly."""
+    def on_app_closing(self) -> None:
+        """The app is quitting: finish the recording's file properly."""
         self._stop_hotkey_listener()
         rec = self.record_proc
         if rec is not None and rec.running():

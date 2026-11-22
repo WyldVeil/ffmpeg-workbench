@@ -20,23 +20,24 @@ The module has no Tk dependency and is safe to use from worker threads.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
-import signal
-import subprocess
 import sys
 import threading
 import time
 from collections import OrderedDict, deque
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from functools import partial
+from typing import Any, Literal, overload
 
-from core.hardware import CREATE_NO_WINDOW, get_binary_path
-from core.procenv import child_env
+from core import errors, proc, tasks
+from core.hardware import get_binary_path
+from core.timecode import Timecode
 
 _IS_WIN = sys.platform.startswith("win")
-_CREATE_NEW_PROCESS_GROUP = 0x00000200 if _IS_WIN else 0
+_log = logging.getLogger("crossfader.ffmpeg")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -66,48 +67,18 @@ def is_ffmpeg(argv0: str) -> bool:
 #  Time helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-_TIME_RE = re.compile(r"^\s*(?:(\d+):)?(?:(\d+):)?(\d+(?:[.,]\d*)?)\s*$")
-
-
 def parse_time(value: Any) -> float:
     """Parse ``"1:02:03.5"``, ``"02:03"``, ``"75.5"``, ``"75,5"`` or a number
     into seconds.  Raises ``ValueError`` on anything else (including negative
-    values)."""
-    if isinstance(value, (int, float)):
-        if value < 0:
-            raise ValueError(f"negative time: {value}")
-        return float(value)
-    text = str(value).strip()
-    if not text:
-        raise ValueError("empty time")
-    m = _TIME_RE.match(text)
-    if not m:
-        raise ValueError(f"not a time: {value!r}")
-    a, b, c = m.groups()
-    secs = float(c.replace(",", "."))
-    if a is not None and b is not None:          # H:M:S
-        return int(a) * 3600 + int(b) * 60 + secs
-    if a is not None:                            # M:S
-        return int(a) * 60 + secs
-    return secs
+    values).  See :class:`core.timecode.Timecode`."""
+    return Timecode.parse(value).seconds
 
 
 def format_time(seconds: float, *, ms: bool = True, always_hours: bool = False,
                 ms_digits: int = 3) -> str:
     """``83.25 -> "01:23.250"`` (or ``"00:01:23.250"`` with *always_hours*)."""
-    if seconds is None or seconds != seconds or seconds < 0:   # None / NaN / negative
-        seconds = 0.0
-    total_ms = int(round(seconds * 1000))
-    h, rem = divmod(total_ms, 3_600_000)
-    m, rem = divmod(rem, 60_000)
-    s, msec = divmod(rem, 1000)
-    frac = ""
-    if ms:
-        digits = max(1, min(3, ms_digits))
-        frac = "." + f"{msec:03d}"[:digits]
-    if h or always_hours:
-        return f"{h:02d}:{m:02d}:{s:02d}{frac}"
-    return f"{m:02d}:{s:02d}{frac}"
+    spec = ("H" if always_hours else "") + (f".{max(1, min(3, ms_digits))}" if ms else ".0")
+    return format(Timecode.of(seconds), spec)
 
 
 def ts(seconds: float) -> str:
@@ -119,8 +90,7 @@ def ts(seconds: float) -> str:
 #  Probing
 # ─────────────────────────────────────────────────────────────────────────────
 
-class ProbeError(RuntimeError):
-    pass
+ProbeError = errors.ProbeError                      # raised by probe(); part of core.errors
 
 
 def _f(value: Any, default: float = 0.0) -> float:
@@ -153,8 +123,9 @@ def _rate(value: Any) -> float:
     return _f(text)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Stream:
+    """One stream of a probed file.  Frozen: probe() results are cached and shared."""
     index: int
     type: str                       # video | audio | subtitle | data | attachment
     codec: str = ""
@@ -186,8 +157,8 @@ class Stream:
     forced: bool = False
     attached_pic: bool = False
     rotation: int = 0               # clockwise display rotation: 0/90/180/270
-    tags: dict = field(default_factory=dict)
-    raw: dict = field(default_factory=dict)
+    tags: Mapping[str, Any] = field(default_factory=dict)
+    raw: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def is_hdr(self) -> bool:
@@ -208,8 +179,10 @@ class Stream:
         return self.width, self.height
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class MediaInfo:
+    """What ffprobe says about a file.  Frozen: probe() caches and shares it,
+    so nobody may change it (Robust Python ch. 10; Fluent Python ch. 5)."""
     path: str
     format_name: str = ""
     format_long: str = ""
@@ -217,23 +190,23 @@ class MediaInfo:
     size: int = 0
     bit_rate: int = 0
     start_time: float = 0.0
-    streams: list = field(default_factory=list)
-    chapters: list = field(default_factory=list)
-    tags: dict = field(default_factory=dict)
-    raw: dict = field(default_factory=dict)
+    streams: tuple[Stream, ...] = ()
+    chapters: tuple[Mapping[str, Any], ...] = ()
+    tags: Mapping[str, Any] = field(default_factory=dict)
+    raw: Mapping[str, Any] = field(default_factory=dict)
 
     # ── stream shortcuts ────────────────────────────────────────────────────
     @property
-    def video_streams(self) -> list:
-        return [s for s in self.streams if s.type == "video" and not s.attached_pic]
+    def video_streams(self) -> tuple[Stream, ...]:
+        return tuple(s for s in self.streams if s.type == "video" and not s.attached_pic)
 
     @property
-    def audio_streams(self) -> list:
-        return [s for s in self.streams if s.type == "audio"]
+    def audio_streams(self) -> tuple[Stream, ...]:
+        return tuple(s for s in self.streams if s.type == "audio")
 
     @property
-    def subtitle_streams(self) -> list:
-        return [s for s in self.streams if s.type == "subtitle"]
+    def subtitle_streams(self) -> tuple[Stream, ...]:
+        return tuple(s for s in self.streams if s.type == "subtitle")
 
     @property
     def video(self) -> Stream | None:
@@ -354,7 +327,7 @@ def _parse_stream(d: dict) -> Stream:
 
 def parse_probe_json(path: str, data: dict) -> MediaInfo:
     fmt = data.get("format") or {}
-    streams = [_parse_stream(s) for s in data.get("streams") or []]
+    streams = tuple(_parse_stream(s) for s in data.get("streams") or [])
     duration = _f(fmt.get("duration"))
     if not duration:
         duration = max((s.duration for s in streams), default=0.0)
@@ -367,7 +340,7 @@ def parse_probe_json(path: str, data: dict) -> MediaInfo:
         bit_rate=_i(fmt.get("bit_rate")),
         start_time=_f(fmt.get("start_time")),
         streams=streams,
-        chapters=list(data.get("chapters") or []),
+        chapters=tuple(data.get("chapters") or ()),
         tags={str(k).lower(): v for k, v in (fmt.get("tags") or {}).items()},
         raw=data,
     )
@@ -400,20 +373,17 @@ def probe(path: str, *, use_cache: bool = True, timeout: float = 30.0) -> MediaI
            "-show_format", "-show_streams", "-show_chapters",
            "-of", "json", path]
     try:
-        r = subprocess.run(cmd, capture_output=True, timeout=timeout,
-                           stdin=subprocess.DEVNULL, env=child_env(),
-                           creationflags=CREATE_NO_WINDOW)
-    except FileNotFoundError as exc:
+        r = proc.run(cmd, timeout=timeout)
+    except errors.ProgramNotFound as exc:
         raise ProbeError("ffprobe was not found - install FFmpeg or set its "
                          "location in Advanced Settings") from exc
-    except subprocess.TimeoutExpired as exc:
+    except errors.ProcessTimeout as exc:
         raise ProbeError(f"ffprobe timed out on {os.path.basename(path)}") from exc
-    except OSError as exc:
+    except errors.ProcessError as exc:
         raise ProbeError(str(exc)) from exc
-    out = r.stdout.decode("utf-8", "replace")
-    if r.returncode != 0:
-        err = r.stderr.decode("utf-8", "replace").strip()
-        raise ProbeError(err.splitlines()[-1] if err else f"ffprobe exited {r.returncode}")
+    out = str(r.stdout)
+    if not r.ok:
+        raise ProbeError(r.last_error_line())
     try:
         data = json.loads(out or "{}")
     except json.JSONDecodeError as exc:
@@ -446,85 +416,10 @@ def duration_of(path: str) -> float:
 #  Process management
 # ─────────────────────────────────────────────────────────────────────────────
 
-_ACTIVE: set[subprocess.Popen] = set()
-_ACTIVE_LOCK = threading.Lock()
-
-
-def popen(cmd: Sequence[str], **kwargs) -> subprocess.Popen:
-    """``subprocess.Popen`` with sane defaults for a GUI app: no console window
-    on Windows, its own process group (so the whole tree can be stopped),
-    stdin closed unless requested, and registration for :func:`kill_all`."""
-    kwargs.setdefault("stdin", subprocess.DEVNULL)
-    if kwargs.get("env") is None:
-        kwargs["env"] = child_env()
-    if _IS_WIN:
-        kwargs["creationflags"] = (kwargs.get("creationflags", 0)
-                                   | CREATE_NO_WINDOW | _CREATE_NEW_PROCESS_GROUP)
-    else:
-        kwargs.setdefault("start_new_session", True)
-    proc = subprocess.Popen([str(c) for c in cmd], **kwargs)
-    with _ACTIVE_LOCK:
-        _ACTIVE.add(proc)
-    return proc
-
-
-def _forget(proc: subprocess.Popen) -> None:
-    with _ACTIVE_LOCK:
-        _ACTIVE.discard(proc)
-
-
-def kill_tree(proc: subprocess.Popen, grace: float = 3.0) -> None:
-    """Stop *proc* and every child it started.  Polite first, then forceful."""
-    if proc is None or proc.poll() is not None:
-        _forget(proc)
-        return
-    try:
-        if _IS_WIN:
-            # Targeted tree kill of this PID only (never "/IM ffmpeg.exe").
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                           capture_output=True, timeout=10,
-                           creationflags=CREATE_NO_WINDOW)
-        else:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError, OSError):
-                proc.terminate()
-        try:
-            proc.wait(timeout=grace)
-        except subprocess.TimeoutExpired:
-            if _IS_WIN:
-                proc.kill()
-            else:
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, PermissionError, OSError):
-                    proc.kill()
-            proc.wait(timeout=5)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-    finally:
-        _forget(proc)
-
-
-def kill_all() -> int:
-    """Stop every process started through :func:`popen`.  Returns the count."""
-    with _ACTIVE_LOCK:
-        procs = list(_ACTIVE)
-    n = 0
-    for p in procs:
-        if p.poll() is None:
-            kill_tree(p, grace=2.0)
-            n += 1
-        _forget(p)
-    return n
-
-
-def active_count() -> int:
-    with _ACTIVE_LOCK:
-        return sum(1 for p in _ACTIVE if p.poll() is None)
+# The process registry lives in core.proc (the only place that starts programs).
+kill_tree = proc.kill_tree
+kill_all = proc.kill_all
+active_count = proc.active_count
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -569,11 +464,11 @@ class RunResult:
         return summarize_error(self.log_tail, self.returncode)
 
 
-class CancelledError(RuntimeError):
+class CancelledError(errors.Cancelled, RuntimeError):
     """Raised by :func:`check` when a job is cancelled."""
 
 
-class CommandError(RuntimeError):
+class CommandError(errors.CommandError):
     """Raised by :func:`check` when a command fails."""
 
     def __init__(self, result: RunResult, cmd: Sequence[str]):
@@ -769,14 +664,13 @@ def run(cmd: Sequence[str], *,
     lines: deque = deque(maxlen=tail)
     result = RunResult(returncode=-1)
     try:
-        proc = popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                     cwd=cwd, env=env)
-    except FileNotFoundError:
+        child = proc.spawn(argv, stdout=proc.PIPE, stderr=proc.PIPE, cwd=cwd, env=env)
+    except errors.ProgramNotFound:
         lines.append(f"Program not found: {argv[0] if argv else '?'}")
         result.returncode = 127
         result.log_tail = list(lines)
         return result
-    except OSError as exc:
+    except errors.ProcessError as exc:
         lines.append(f"Could not start {argv[0] if argv else '?'}: {exc}")
         result.returncode = 126
         result.log_tail = list(lines)
@@ -789,8 +683,8 @@ def run(cmd: Sequence[str], *,
         if on_line:
             try:
                 on_line(text)
-            except Exception:
-                pass
+            except Exception:                     # a bug in the caller's callback: log, keep running
+                _log.exception("on_line callback failed")
 
     def _handle_progress_line(text: str) -> bool:
         key, sep, val = text.partition("=")
@@ -804,7 +698,7 @@ def run(cmd: Sequence[str], *,
                 try:
                     on_progress(_parse_progress_block(dict(block), duration, started))
                 except Exception:
-                    pass
+                    _log.exception("on_progress callback failed")
             block.clear()
         return True
 
@@ -842,41 +736,39 @@ def run(cmd: Sequence[str], *,
             except Exception:
                 pass
 
-    err_thread = threading.Thread(
-        target=_pump, args=(proc.stderr, progress_on_stderr), daemon=True)
-    err_thread.start()
-    out_thread = threading.Thread(
-        target=_pump, args=(proc.stdout, ffmpeg_mode and not progress_on_stderr),
-        daemon=True)
-    out_thread.start()
+    err_thread = tasks.start_service(partial(_pump, child.stderr, progress_on_stderr),
+                                     name="ffmpeg-stderr")
+    out_thread = tasks.start_service(partial(_pump, child.stdout, ffmpeg_mode and not progress_on_stderr),
+                                     name="ffmpeg-stdout")
 
     try:
         while True:
             try:
-                proc.wait(timeout=0.2)
+                child.wait(timeout=0.2)
                 break
-            except subprocess.TimeoutExpired:
+            except proc.TimeoutExpired:
                 pass
             if cancel is not None:
                 try:
                     stop = bool(cancel())
                 except Exception:
+                    _log.exception("cancel callback failed")
                     stop = False
                 if stop:
                     result.cancelled = True
-                    kill_tree(proc)
+                    kill_tree(child)
                     break
             if timeout is not None and time.monotonic() - started > timeout:
                 result.timed_out = True
                 _emit_line(f"Timed out after {timeout:.0f} s")
-                kill_tree(proc)
+                kill_tree(child)
                 break
     finally:
         out_thread.join(timeout=5)
         err_thread.join(timeout=5)
-        _forget(proc)
+        proc.forget(child)
 
-    rc = proc.returncode if proc.returncode is not None else -1
+    rc = child.returncode if child.returncode is not None else -1
     result.returncode = rc if not result.cancelled else (rc if rc != 0 else -1)
     result.log_tail = list(lines)
     result.elapsed = time.monotonic() - started
@@ -886,7 +778,7 @@ def run(cmd: Sequence[str], *,
                                  fraction=1.0 if duration else None,
                                  elapsed=result.elapsed, done=True))
         except Exception:
-            pass
+            _log.exception("on_progress callback failed")
     return result
 
 
@@ -901,18 +793,19 @@ def check(cmd: Sequence[str], **kwargs) -> RunResult:
     return res
 
 
-def capture(cmd: Sequence[str], *, timeout: float = 60.0,
-            text: bool = True) -> subprocess.CompletedProcess:
-    """Run a short command and capture stdout/stderr (no window, no stdin)."""
-    argv = [str(c) for c in cmd]
+@overload
+def capture(cmd: Sequence[str], *, timeout: float | None = ..., text: Literal[True] = ...
+            ) -> proc.ProcResult[str]: ...
+@overload
+def capture(cmd: Sequence[str], *, timeout: float | None = ..., text: Literal[False]
+            ) -> proc.ProcResult[bytes]: ...
+
+
+def capture(cmd: Sequence[str], *, timeout: float | None = 60.0, text: bool = True) -> proc.ProcResult[Any]:
+    """Run a short command and collect its output (see :func:`core.proc.run`)."""
     if text:
-        return subprocess.run(argv, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace",
-                              timeout=timeout, stdin=subprocess.DEVNULL, env=child_env(),
-                              creationflags=CREATE_NO_WINDOW)
-    return subprocess.run(argv, capture_output=True, timeout=timeout,
-                          stdin=subprocess.DEVNULL, env=child_env(),
-                          creationflags=CREATE_NO_WINDOW)
+        return proc.run(cmd, timeout=timeout)
+    return proc.run(cmd, timeout=timeout, text=False)
 
 
 def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
@@ -927,47 +820,34 @@ def grab_frame_png(path: str, at: float, *, width: int = 0, height: int = 0,
     filters - subtitles, titles, ``enable=`` ranges - see the real time.
     *width*/*height* bound the size (aspect preserved, even dimensions).
     """
-    vf = [vf] if vf else []
+    chain: list[str] = [vf] if vf else []
     if width or height:
         w = width or -2
         h = height or -2
-        vf.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2")
-    gpu = any("libplacebo" in f or "_vulkan" in f for f in vf)      # GPU filters need a Vulkan device
+        chain.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2")
+    # 8-bit RGB: a 10-bit source would otherwise give a 16-bit PNG, ~4x bigger and ~3x
+    # slower for Tk to decode on the UI thread (High Performance Python findings, R5)
+    chain.append("format=rgb24")
+    gpu = any("libplacebo" in f or "_vulkan" in f for f in chain)      # GPU filters need a Vulkan device
     cmd = [ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
            *(["-copyts"] if keep_time else []), *(["-init_hw_device", "vulkan"] if gpu else []),
            "-ss", ts(max(0.0, at)), "-i", path, "-frames:v", "1", "-an", "-sn", "-dn"]
-    if vf:
-        cmd += ["-vf", ",".join(vf)]
+    cmd += ["-vf", ",".join(chain)]
     cmd += ["-f", "image2pipe", "-c:v", "png", "-"]
     try:
-        r = subprocess.run(cmd, capture_output=True, timeout=timeout,
-                           stdin=subprocess.DEVNULL, env=child_env(),
-                           creationflags=CREATE_NO_WINDOW)
-    except (OSError, subprocess.TimeoutExpired):
+        r = proc.run(cmd, timeout=timeout, text=False)
+    except errors.ProcessError:
         return None
-    if r.returncode != 0 or not r.stdout.startswith(b"\x89PNG"):
+    frame = r.stdout
+    if not r.ok or not isinstance(frame, bytes) or not frame.startswith(b"\x89PNG"):
         return None
-    return r.stdout
-
-
-_FILTERS: frozenset | None = None
+    return frame
 
 
 def has_filter(name: str) -> bool:
-    """True if the FFmpeg in use was built with filter *name* (cached)."""
-    global _FILTERS
-    if _FILTERS is None:
-        try:
-            out = capture([ffmpeg_path(), "-hide_banner", "-filters"], timeout=20).stdout
-        except (OSError, subprocess.SubprocessError):
-            out = ""
-        names = set()
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) >= 3 and len(parts[0]) <= 4 and "->" in parts[2]:
-                names.add(parts[1])
-        _FILTERS = frozenset(names)
-    return name in _FILTERS
+    """True if the FFmpeg in use was built with filter *name* (see core.capabilities)."""
+    from core import capabilities
+    return name in capabilities.get("filters")
 
 
 def version_of(binary: str | None = None) -> str:
@@ -976,9 +856,9 @@ def version_of(binary: str | None = None) -> str:
     binary = binary or ffmpeg_path()
     try:
         r = capture([binary, "-version"], timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
+    except errors.ProcessError:
         return "Missing"
-    first = (r.stdout or "").splitlines()[:1]
+    first = str(r.stdout or "").splitlines()[:1]
     m = re.search(r"version\s+(\S+)", first[0]) if first else None
     if not m:
         return "Unknown"
@@ -990,6 +870,6 @@ def version_of(binary: str | None = None) -> str:
 def format_cmd(cmd: Sequence[str]) -> str:
     """Render argv as a copy-pasteable shell command for the current OS."""
     if _IS_WIN:
-        return subprocess.list2cmdline([str(c) for c in cmd])
+        return proc.list2cmdline([str(c) for c in cmd])
     import shlex
     return " ".join(shlex.quote(str(c)) for c in cmd)

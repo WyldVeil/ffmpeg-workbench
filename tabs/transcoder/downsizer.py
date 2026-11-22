@@ -187,9 +187,9 @@ class UniversalDownsizerTab(BaseTab):
                                suggest=lambda: self.suggest_output(self.src_row.path, "small", ".mp4"))
         self.out_row.pack(fill="x")
         self._out_var = self.out_row.var
-        self._btn_render = tk.Button(body, text=t("downsizer.render_button"), font=(UI_FONT, 12, "bold"),
+        self.btn_render = tk.Button(body, text=t("downsizer.render_button"), font=(UI_FONT, 12, "bold"),
                                      bg=CLR["green"], fg="white", width=30, cursor="hand2", command=self._start_render)
-        self._btn_render.pack(pady=px(8))
+        self.btn_render.pack(pady=px(8))
         cf = tk.Frame(body)
         cf.pack(fill="both", expand=True, padx=px(20), pady=px(0, 10))
         self.console, csb = self.make_console(cf, height=7)
@@ -303,7 +303,7 @@ class UniversalDownsizerTab(BaseTab):
                                   audio_mode=audio_mode, start=start, end=end, tmp=ctx.tempdir(),
                                   run=runner, log=ctx.log)
 
-        common.queue_job(self, name="Downsizer", out=out, work=work, btn=self._btn_render,
+        common.queue_job(self, name="Downsizer", out=out, work=work, btn=self.btn_render,
                          btn_label=t("downsizer.render_button"), console=self.console, duration=length,
                          inputs=[src])
 

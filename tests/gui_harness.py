@@ -250,13 +250,12 @@ class Harness:
         subprocess.Popen = _RecordingPopen  # type: ignore[misc]
         _install_dialog_stubs()
 
-        import main
-
-        for noisy in ("_play_intro_sound", "_check_ffmpeg"):
-            if hasattr(main.App, noisy):
-                setattr(main.App, noisy, lambda self, *a, **k: None)
-        self.main = main
-        self.app = main.App()
+        from core import i18n
+        from shell import chime
+        from shell.app import App
+        chime.play = lambda: None                   # no start-up sound in tests
+        i18n.init()
+        self.app = App()
         # Surface Tk callback exceptions instead of printing and continuing.
         self.callback_errors: list[str] = []
 
@@ -338,30 +337,19 @@ class Harness:
     # ── navigation ───────────────────────────────────────────────────────────
 
     def page_names(self) -> list[str]:
-        """Every page key the running app can show (as registered by main.py)."""
-        keys = list(getattr(self.app, "_tab_classes", {}) or {})
-        if keys:
-            return keys
-        from tabs.registry import HIDDEN, PINNED, TOOLS
-        names = [PINNED[0]]
-        for items in TOOLS.values():
-            names += [n for n, _ in items]
-        names += list(HIDDEN)
-        return names
+        """The English name of every page the app can show (core/tools.py)."""
+        from core import tools
+        return [s.name for s in tools.SPECS]
 
-    def open(self, name: str):
-        if name not in getattr(self.app, "_tab_classes", {name: None}):
-            # accept display names that differ only by a decorative prefix
-            for key in getattr(self.app, "_tab_classes", {}):
-                if key.endswith(name) or name.endswith(key):
-                    name = key
-                    break
-        self.app.show_page(name)
+    def open(self, name: str) -> Any:
+        """Open a page by its English name (or ToolId) and return it (typed Any:
+        each test knows which page it opened)."""
+        from shell.pages import ErrorPage
+        page = self.app.show_page(name)
         self.pump(0.15)
-        page = self.app.pages.get(name)
         if page is None:
             raise KeyError(name)
-        if type(page).__name__ == "PlaceholderTab":
+        if isinstance(page, ErrorPage):
             raise RuntimeError(f"tab {name!r} failed to construct")
         return page
 

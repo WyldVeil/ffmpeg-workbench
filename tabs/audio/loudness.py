@@ -10,10 +10,12 @@ the current loudness.
 from __future__ import annotations
 
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import loudness as ln
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -112,9 +114,7 @@ class LoudnessNormTab(BaseTab):
             self.btn_analyse.config(state="normal", text="📏  ANALYSE")
             messagebox.showerror(t("common.error"), f"Measurement failed:\n{exc}", parent=self)
 
-        from core import ui
-        ui.run_in_thread(ln.measure, src, -16, -1.5, 11, stream=stream, on_done=done, on_error=failed,
-                         name="LoudnessMeasure")
+        tasks.submit(partial(ln.measure, src, -16, -1.5, 11, stream=stream), on_done=done, on_error=failed, name="LoudnessMeasure")
 
     def _render(self):
         src = self.src_row.path

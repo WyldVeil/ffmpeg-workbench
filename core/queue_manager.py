@@ -36,12 +36,29 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Sequence
+from enum import StrEnum
 
 from core import ffmpeg as ff
+from core import settings, tasks
 
 _log = logging.getLogger("crossfader.queue")
 
-PENDING, ACTIVE, DONE, FAILED, CANCELLED = "pending", "active", "done", "failed", "cancelled"
+class TaskStatus(StrEnum):
+    """Where a job is in its life.  A StrEnum, so it still compares equal to
+    the plain strings older code (and the saved queue) use."""
+    PENDING = "pending"
+    ACTIVE = "active"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+    @property
+    def finished(self) -> bool:
+        return self in (TaskStatus.DONE, TaskStatus.FAILED, TaskStatus.CANCELLED)
+
+
+PENDING, ACTIVE, DONE, FAILED, CANCELLED = (TaskStatus.PENDING, TaskStatus.ACTIVE, TaskStatus.DONE,
+                                            TaskStatus.FAILED, TaskStatus.CANCELLED)
 
 
 class RenderTask:
@@ -58,7 +75,7 @@ class RenderTask:
         self.inputs = list(inputs or ())
         self.expected_duration = expected_duration
         self.atomic_output = atomic_output
-        self.status = PENDING
+        self.status: TaskStatus = TaskStatus.PENDING
         self.progress = ""            # latest log line
         self.fraction: float | None = None
         self.eta: float | None = None
@@ -178,27 +195,21 @@ class RenderQueueManager:
         self._work = threading.Condition(self._lock)
         self._update_callbacks: list[Callable] = []
         self._tk_root = None
-        self._workers: list[threading.Thread] = []
+        self._workers: list[tasks.Service] = []
         self._last_ui_update = 0.0
         self._ensure_workers()
 
     # ── configuration ────────────────────────────────────────────────────────
 
     def _parallel(self) -> int:
-        try:
-            from core.settings import get
-            return max(1, min(4, int(get("max_parallel_jobs", 1) or 1)))
-        except Exception:
-            return 1
+        return settings.MAX_PARALLEL_JOBS.get()
 
     def _ensure_workers(self) -> None:
         with self._lock:
             self._workers = [w for w in self._workers if w.is_alive()]
             while len(self._workers) < self._parallel():
-                w = threading.Thread(target=self._run_worker, daemon=True,
-                                     name=f"RenderQueueWorker-{len(self._workers) + 1}")
-                self._workers.append(w)
-                w.start()
+                self._workers.append(tasks.start_service(
+                    self._run_worker, name=f"RenderQueueWorker-{len(self._workers) + 1}"))
 
     def set_tk_root(self, root) -> None:
         self._tk_root = root

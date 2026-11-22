@@ -18,13 +18,13 @@ video-with-audio) file and re-save it with full control over:
 import json
 import math
 import os
-import subprocess
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, tasks
 from core import ffmpeg as ff
-from core.hardware import CREATE_NO_WINDOW, get_binary_path
+from core import proc as _proc
+from core.hardware import get_binary_path
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -546,10 +546,10 @@ class AudioExporterTab(BaseTab):
         # Export button
         btn_row = tk.Frame(self._inner, bg=CLR["bg"])
         btn_row.pack(fill="x", pady=px(12, 6))
-        self.btn_export = self.make_render_btn(btn_row, t("exporter.export_btn"),
+        self.btn_render = self.make_render_btn(btn_row, t("exporter.export_btn"),
                                                 self._export, color=CLR["green"],
                                                 width=30)
-        self.btn_export.pack(pady=px(4))
+        self.btn_render.pack(pady=px(4))
 
     # ── Console ──────────────────────────────────────────────────────────────
 
@@ -593,8 +593,7 @@ class AudioExporterTab(BaseTab):
             cmd = [ffprobe, "-v", "quiet", "-print_format", "json",
                    "-show_format", "-show_streams", path]
             try:
-                r = subprocess.run(cmd, capture_output=True, text=True,
-                                   creationflags=CREATE_NO_WINDOW)
+                r = _proc.run(cmd, timeout=60)
                 data = json.loads(r.stdout)
             except Exception:
                 self.after(0, lambda: self._info_lbl.config(
@@ -663,7 +662,7 @@ class AudioExporterTab(BaseTab):
             self.after(0, lambda: self.log_tagged(
                 self.console, f"Loaded: {os.path.basename(path)}", "info"))
 
-        self.run_in_thread(_do)
+        tasks.submit(_do)
 
     def _on_format_change(self, *_):
         """Reconfigure quality section when format changes."""
@@ -936,7 +935,7 @@ class AudioExporterTab(BaseTab):
                 self.open_path(os.path.dirname(out))
 
         self.log_tagged(self.console, f"Exporting: {os.path.basename(src)} -> {cfg['fmt']}", "info")
-        common.queue_job(self, name="Audio Converter", out=out, work=work, btn=self.btn_export,
+        common.queue_job(self, name="Audio Converter", out=out, work=work, btn=self.btn_render,
                          btn_label=t("exporter.export_btn"), console=self.console, duration=length,
                          inputs=[src], on_done=opened)
 

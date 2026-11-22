@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 
+from core import proc as _proc
 from core import sysproxy
 
 NETNS = "clearnet"
@@ -43,10 +43,9 @@ def is_tails() -> bool:
     return sysproxy.special_system() == "tails"
 
 
-def _sudo(args: list, password: str | None = None, timeout: float = 20) -> subprocess.CompletedProcess:
+def _sudo(args: list, password: str | None = None, timeout: float = 20) -> _proc.ProcResult[str]:
     cmd = ["sudo", "-S", "-p", "", *args] if password is not None else ["sudo", "-n", *args]
-    return subprocess.run(cmd, input=(password + "\n") if password is not None else None, capture_output=True,
-                          text=True, timeout=timeout, stdin=None if password is not None else subprocess.DEVNULL)
+    return _proc.run(cmd, timeout=timeout, input=(password + "\n") if password is not None else None)
 
 
 def sudo_state() -> str:
@@ -55,7 +54,7 @@ def sudo_state() -> str:
         return "denied"
     try:
         r = _sudo(["-v"])
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, _proc.ProcessError):
         return "denied"
     if r.returncode == 0:
         return "ok"
@@ -90,7 +89,7 @@ def enable(password: str, remember: bool = False) -> tuple:
         return False, "\n".join(issues)
     try:
         r = _sudo(["-v"], password=password)
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, _proc.ProcessError) as exc:
         return False, f"sudo could not run: {exc}"
     if r.returncode != 0:
         return False, "That administration password was not accepted."
@@ -109,8 +108,8 @@ def disable() -> None:
             _remembered[i] = 0
     _remembered = None
     try:
-        subprocess.run(["sudo", "-K"], capture_output=True, timeout=10)     # forget sudo's cached login
-    except (OSError, subprocess.SubprocessError):
+        _proc.run(["sudo", "-K"], timeout=10, text=False)     # forget sudo's cached login
+    except (OSError, _proc.ProcessError):
         pass
 
 
@@ -124,7 +123,7 @@ def _refresh() -> None:
     if _remembered is not None and sudo_state() != "ok":
         try:
             _sudo(["-v"], password=_remembered.decode("utf-8"))
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, _proc.ProcessError):
             pass
 
 

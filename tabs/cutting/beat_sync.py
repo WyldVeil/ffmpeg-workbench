@@ -27,6 +27,7 @@ from tkinter import messagebox, ttk
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -304,8 +305,7 @@ class BeatSyncCutterTab(BaseTab):
         def failed(exc):
             self.bpm_lbl.config(text=f"Beat detection failed: {exc}")
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, on_error=failed, name="BeatDetect")
+        tasks.submit(work, on_done=done, on_error=failed, name="BeatDetect")
 
     def _pick_beats(self):
         self._job = None

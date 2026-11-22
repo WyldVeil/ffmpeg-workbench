@@ -15,11 +15,19 @@ def tkroot():
 
     from core import ui
     root = tk.Tk()
-    ui.install(root, poll_ms=5)
-    yield root
+    with ui.hosted_by(root, poll_ms=5):
+        yield root
     root.destroy()
-    ui._root = None
 
+
+
+def _wait(root, ready, seconds: float = 10.0) -> None:
+    """Pump the event loop until *ready()* (the probe answers in the background)."""
+    import time
+    deadline = time.monotonic() + seconds
+    while not ready():
+        assert time.monotonic() < deadline, "timed out waiting for the page"
+        _pump(root, 0.05)
 
 @pytest.mark.gui
 @pytest.mark.ffmpeg
@@ -28,6 +36,7 @@ def test_inspector_shows_streams_and_preview(tkroot, media):
     tab = MediaInspectorTab(tkroot)
     tab.pack(fill="both", expand=True)
     assert tab.load_file(media["hevc10"])
+    _wait(tkroot, lambda: tab.info is not None)
     rows = [tab.tree.item(i, "values") for i in tab.tree.get_children()]
     assert any(r[1] == "video" and "hevc" in r[2] for r in rows)
     assert any(r[1] == "audio" and "opus" in r[2] for r in rows)
@@ -51,9 +60,11 @@ def test_inspector_diagnostics(tkroot, media, tmp_path):
     tab = MediaInspectorTab(tkroot)
     junk = tmp_path / "junk.mp4"
     junk.write_bytes(b"nope" * 50)
-    assert tab.load_file(str(junk)) is False
-    assert "Not a readable" in tab.summary_lbl.cget("text")
+    tab.load_file(str(junk))
+    _wait(tkroot, lambda: "Not a readable" in tab.summary_lbl.cget("text"))
+    assert tab.info is None
     assert tab.load_file(media["mp3"])            # audio-only: no crash, no picture
+    _wait(tkroot, lambda: tab.info is not None)
     _pump(tkroot, 0.3)
 
 

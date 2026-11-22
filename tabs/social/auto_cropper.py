@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import re
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox
 
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -115,9 +117,7 @@ class AutoCropperTab(BaseTab):
             self.compare.set_filter(f"crop={bw}:{bh}:{x}:{y}")
             self._draw_bars()
 
-        from core import ui
-        ui.run_in_thread(detect_bars, path, info.duration, on_done=done,
-                         on_error=lambda _e: done(None), name="AutoCrop")
+        tasks.submit(partial(detect_bars, path, info.duration), on_done=done, on_error=lambda _e: done(None), name="AutoCrop")
 
     def _draw_bars(self):
         view = self.compare.view_before

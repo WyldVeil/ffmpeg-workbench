@@ -16,6 +16,8 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from core.timecode import Timecode
+
 ZWSP = "​"
 
 
@@ -46,11 +48,7 @@ def alpha_tag(alpha: float) -> str:
 
 def ts(seconds: float) -> str:
     """Seconds -> ASS time 'H:MM:SS.cc'."""
-    cs = max(0, int(round(seconds * 100)))
-    h, rem = divmod(cs, 360000)
-    m, rem = divmod(rem, 6000)
-    s, c = divmod(rem, 100)
-    return f"{h}:{m:02d}:{s:02d}.{c:02d}"
+    return f"{Timecode.of(seconds):ass}"
 
 
 def rect(w: float, h: float) -> str:

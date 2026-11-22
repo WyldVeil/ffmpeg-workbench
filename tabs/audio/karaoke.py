@@ -15,9 +15,10 @@ Turns any music video into a singalong karaoke track in three steps:
 import os
 import threading
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -357,12 +358,11 @@ class KaraokeTab(BaseTab):
                                           f"first use.", fg=CLR["fgdim"])
 
     def _install_whisper(self):
-        from core import ui, whisper
+        from core import whisper
         key = MODELS.get(self._model_var.get(), "base")
         self._log(f"Downloading {whisper.MODELS[key].label}…")
-        ui.run_in_thread(whisper.download_model, key, on_done=lambda _p: (self._log("✅  Model ready."),
-                                                                           self._check_whisper()),
-                         on_error=lambda e: self._log(f"❌  Download failed: {e}"), name="KaraokeModel")
+        tasks.submit(partial(whisper.download_model, key), on_done=lambda _p: (self._log("✅  Model ready."),
+                                                                           self._check_whisper()), on_error=lambda e: self._log(f"❌  Download failed: {e}"), name="KaraokeModel")
 
     def _browse_src(self):
         p = dialogs.askopenfilename(

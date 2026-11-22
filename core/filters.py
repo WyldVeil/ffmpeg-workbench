@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from collections.abc import Iterable, Sequence
+
+from core import proc as _proc
 
 _IS_WIN = sys.platform.startswith("win")
 
@@ -337,9 +338,8 @@ def _fc_match(pattern: str) -> str | None:
     if _IS_WIN or not shutil.which("fc-match"):
         return None
     try:
-        r = subprocess.run(["fc-match", "-f", "%{file}\t%{family}\t%{fullname}", pattern],
-                           capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.TimeoutExpired):
+        r = _proc.run(["fc-match", "-f", "%{file}\t%{family}\t%{fullname}", pattern], timeout=5)
+    except _proc.ProcessError:
         return None
     parts = r.stdout.split("\t")
     if len(parts) < 2 or not os.path.isfile(parts[0]):
@@ -418,21 +418,7 @@ def hdr_to_sdr_chain(*, method: str = "hable", peak_nits: float = 100.0, out_fmt
             f"tonemap=tonemap={method}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={out_fmt},{STRIP_HDR}")
 
 
-_VULKAN_OK = None
-
-
 def vulkan_ok() -> bool:
-    """True when FFmpeg's libplacebo filter runs on a Vulkan GPU here (tested once)."""
-    global _VULKAN_OK
-    if _VULKAN_OK is None:
-        _VULKAN_OK = False
-        try:
-            from core import ffmpeg as ff
-            if ff.has_filter("libplacebo"):
-                r = ff.capture([ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error",
-                                "-init_hw_device", "vulkan", "-f", "lavfi", "-i", "color=s=64x64:d=0.1",
-                                "-vf", "libplacebo=w=128:h=128:format=yuv420p", "-f", "null", "-"], timeout=30)
-                _VULKAN_OK = r.returncode == 0
-        except Exception:
-            _VULKAN_OK = False
-    return _VULKAN_OK
+    """True when FFmpeg's libplacebo filter runs on a Vulkan GPU here (see core.capabilities)."""
+    from core import capabilities
+    return bool(capabilities.get("vulkan"))

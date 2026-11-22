@@ -25,8 +25,9 @@ platforms it is defined as 0 so it can be passed safely without guards.
 import os
 import platform
 import shutil
-import subprocess
 import sys
+
+from core import proc as _proc
 
 # ── Platform constants ────────────────────────────────────────────────────────
 _IS_WIN = platform.system() == "Windows"
@@ -117,11 +118,8 @@ def _check_settings_override(name: str) -> str | None:
     the folder containing it; sibling tools (ffprobe/ffplay) are looked up
     next to it.
     """
-    try:
-        from core.settings import load_settings
-        override = str(load_settings().get("ffmpeg_path_override", "") or "").strip()
-    except Exception:
-        return None
+    from core import settings
+    override = settings.FFMPEG_PATH_OVERRIDE.get().strip()
     if not override:
         return None
     folder = override if os.path.isdir(override) else os.path.dirname(override)
@@ -131,12 +129,8 @@ def _check_settings_override(name: str) -> str | None:
 
 def _binary_source_pref() -> str:
     """'auto' (bundled, then system), 'bundled' or 'system'."""
-    try:
-        from core.settings import load_settings
-        pref = str(load_settings().get("binary_source", "auto") or "auto").lower()
-    except Exception:
-        pref = "auto"
-    return pref if pref in ("auto", "bundled", "system") else "auto"
+    from core import settings
+    return settings.BINARY_SOURCE.get()
 
 
 def find_binary(name: str) -> str | None:
@@ -229,20 +223,20 @@ def get_audio_bitrate_kbps(file_path: str) -> float:
     return 0.0
 
 
-def launch_preview(file_path: str, start_time: float = 0) -> subprocess.Popen | None:
+def launch_preview(file_path: str, start_time: float = 0) -> _proc.Popen[bytes] | None:
     """Open *file_path* in ffplay at *start_time* (tracked, killable)."""
     if not file_path or not os.path.exists(file_path):
         return None
     ffplay = get_binary_path("ffplay")
     if not os.path.isfile(ffplay):
         return None
-    from core.ffmpeg import popen, ts
+    from core.ffmpeg import ts
     cmd = [ffplay, "-hide_banner", "-loglevel", "error", "-ss", ts(start_time),
            "-window_title", f"Preview — {os.path.basename(file_path)}  (Space: pause, Q: close)",
            "-x", "960", "-y", "540", "-autoexit", file_path]
     try:
-        return popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError:
+        return _proc.spawn(cmd, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL)
+    except _proc.ProcessError:
         return None
 
 
@@ -261,9 +255,7 @@ def get_local_version() -> str:
 def _spawn(cmd: list) -> bool:
     try:
         from core.procenv import child_env
-        subprocess.Popen(cmd, env=child_env(), stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         creationflags=CREATE_NO_WINDOW, start_new_session=not _IS_WIN)
+        _proc.spawn(cmd, stdin=_proc.DEVNULL, stdout=_proc.DEVNULL, stderr=_proc.DEVNULL, env=child_env())
         return True
     except OSError:
         return False

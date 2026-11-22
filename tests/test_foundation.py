@@ -79,7 +79,8 @@ def test_unique_path(tmp_path):
 
 
 def test_suggest_output(tmp_path, monkeypatch):
-    monkeypatch.setattr(outputs, "_setting", lambda k, d: d)
+    from core import settings
+    monkeypatch.setattr(settings, "_current", lambda: dict(settings._DEFAULTS))   # the defaults, not this computer's
     src = tmp_path / "holiday video.mov"
     src.write_bytes(b"x")
     s = outputs.suggest_output(str(src), "trimmed", "mp4")
@@ -119,35 +120,35 @@ def test_call_soon_from_threads_runs_on_main_thread():
     from core import ui
     root = tk.Tk()
     try:
-        ui.install(root, poll_ms=5)
-        main = threading.get_ident()
-        seen = []
+        with ui.hosted_by(root, poll_ms=5):
+            main = threading.get_ident()
+            seen = []
 
-        def worker(i):
-            ui.call_soon(lambda: seen.append((i, threading.get_ident() == main)))
+            def worker(i):
+                ui.call_soon(lambda: seen.append((i, threading.get_ident() == main)))
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        deadline = time.monotonic() + 3
-        while len(seen) < 20 and time.monotonic() < deadline:
-            root.update()
-            time.sleep(0.005)
-        assert len(seen) == 20 and all(ok for _, ok in seen)
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            deadline = time.monotonic() + 3
+            while len(seen) < 20 and time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.005)
+            assert len(seen) == 20 and all(ok for _, ok in seen)
 
-        results = []
-        ui.run_in_thread(lambda: 6 * 7, on_done=results.append)
-        ui.run_in_thread(lambda: 1 / 0, on_error=lambda e: results.append(type(e).__name__))
-        deadline = time.monotonic() + 3
-        while len(results) < 2 and time.monotonic() < deadline:
-            root.update()
-            time.sleep(0.005)
-        assert sorted(map(str, results)) == ["42", "ZeroDivisionError"]
+            results = []
+            from core import tasks
+            tasks.submit(lambda: 6 * 7, on_done=results.append)
+            tasks.submit(lambda: 1 / 0, on_error=lambda e: results.append(type(e).__name__))
+            deadline = time.monotonic() + 3
+            while len(results) < 2 and time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.005)
+            assert sorted(map(str, results)) == ["42", "ZeroDivisionError"]
     finally:
         root.destroy()
-        ui._root = None
 
 
 # ── logging ──────────────────────────────────────────────────────────────────

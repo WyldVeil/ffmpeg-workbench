@@ -13,8 +13,10 @@ from core import ffmpeg as ff
 from core.hardware import get_video_duration
 from core.i18n import t
 from core.scaling import px
+from core.timecode import Timecode
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, add_tooltip
+from tabs.kit.contracts import Transport
 
 
 def _tr(key, fallback):
@@ -24,10 +26,7 @@ def _tr(key, fallback):
 
 def _ts(seconds):
     """HH:MM:SS.mmm - exact enough for any frame."""
-    ms = int(round(max(0.0, seconds) * 1000))
-    h, rest = divmod(ms, 3_600_000)
-    m, rest = divmod(rest, 60_000)
-    return f"{h:02d}:{m:02d}:{rest // 1000:02d}.{rest % 1000:03d}"
+    return f"{Timecode.of(seconds):H.3}"
 
 
 def _fmt(seconds):
@@ -46,6 +45,17 @@ class MultiSplitterTab(BaseTab):
         self.duration = 0.0
         self.split_rows = []
         self._build_ui()
+
+
+    # ── Contracts (tabs/kit/contracts.py): the playhead is the timeline's ──
+    def transport(self) -> Transport | None:
+        return self._timeline
+
+    def mark_in(self) -> None:
+        self._timeline.mark_in()
+
+    def mark_out(self) -> None:
+        self._timeline.mark_out()
 
     def _build_ui(self):
         self.make_header(self, t("tab.manual_multi_splitter"),

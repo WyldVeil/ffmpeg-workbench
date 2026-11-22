@@ -23,19 +23,21 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import tempfile
-import threading
 import time
 import tkinter as tk
 import webbrowser
 from datetime import datetime
+from functools import partial
 from tkinter import messagebox, ttk
 
-from core import dialogs
-from core.hardware import CREATE_NO_WINDOW, get_binary_path
+from core import dialogs, tasks
+from core import proc as _proc
+from core.errors import ToolError
+from core.hardware import get_binary_path
 from core.i18n import t
 from core.scaling import px
+from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,10 +76,7 @@ def _ffmpeg_exe() -> str:
 
 
 def _fmt_dur(seconds) -> str:
-    s = max(0, int(seconds or 0))
-    h, r = divmod(s, 3600)
-    m, sec = divmod(r, 60)
-    return f"{h:02d}:{m:02d}:{sec:02d}"
+    return f"{Timecode.of(seconds):H.0}"
 
 
 def _parse_time(t: str) -> float:
@@ -105,6 +104,21 @@ _FFMPEG_TIME_RE = re.compile(r'time=(\d+):(\d+):([\d.]+)')
 # ─────────────────────────────────────────────────────────────────────────────
 #  Main Tab Class
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _ytdlp_version(ytdlp: str) -> str:
+    """Worker: the installed yt-dlp's version."""
+    return _proc.run([ytdlp, "--version"], timeout=30).stdout.strip()
+
+
+def _fetch_info(ytdlp: str, url: str, *, playlist: bool) -> dict:
+    """Worker: ask yt-dlp about *url* (no Tk here - the caller read the settings)."""
+    from core import network as _net
+    cmd = _yt(ytdlp, url) + ["--yes-playlist" if playlist else "--no-playlist", "-J", url]
+    r = _proc.run(cmd, timeout=45, env=_net.subprocess_env(url=url))
+    if not r.ok:
+        raise ToolError("yt-dlp error:\n" + (r.stderr or r.stdout or "")[:600])
+    return json.loads(r.stdout)
 
 class YouTubeDownloaderTab(BaseTab):
 
@@ -1121,19 +1135,9 @@ class YouTubeDownloaderTab(BaseTab):
     def _check_ytdlp(self):
         p = _find_ytdlp()
         if p:
-            # Query the exact version directly from the CLI
-            try:
-                r = subprocess.run([p, "--version"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-                ver = r.stdout.strip()
-                self.log_tagged(self.console, f"✔ yt-dlp found (v{ver}).", "success")
-
-                # Safely pass it to the Main UI's status bar!
-                try:
-                    self.winfo_toplevel().set_ytdlp_status(ver, p)
-                except Exception:
-                    pass
-            except Exception:
-                self.log_tagged(self.console, "✔ yt-dlp found.", "success")
+            tasks.submit(partial(_ytdlp_version, p), on_done=partial(self._ytdlp_found, p),
+                         on_error=lambda _e: self.log_tagged(self.console, "✔ yt-dlp found.", "success"),
+                         name="yt-dlp version")
         else:
             self.log_tagged(
                 self.console,
@@ -1142,6 +1146,16 @@ class YouTubeDownloaderTab(BaseTab):
                 "   • Download yt-dlp.exe → place in bin/ next to ffmpeg.exe\n"
                 "   • https://github.com/yt-dlp/yt-dlp/releases\n",
                 "warn")
+
+    def on_app_closing(self) -> None:
+        """The app is quitting: stop a live-stream recording (the file is kept)."""
+        _proc.kill_tree(self._record_proc)
+
+    def _ytdlp_found(self, path: str, version: str) -> None:
+        self.log_tagged(self.console, f"✔ yt-dlp found (v{version}).", "success")
+        setter = getattr(self.winfo_toplevel(), "set_ytdlp_status", None)   # the main window's status bar
+        if setter is not None:
+            setter(version, path)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Event handlers - simple
@@ -1240,13 +1254,11 @@ class YouTubeDownloaderTab(BaseTab):
         if not data:
             messagebox.showwarning(t("common.warning"), "Fetch video info first.", parent=self)
             return
-        import subprocess
 
         from core import ffmpeg as ff
         codec = ["-c:v", "mjpeg", "-q:v", "2"] if p.lower().endswith((".jpg", ".jpeg")) else ["-c:v", "png"]
-        res = subprocess.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0",
-                              "-frames:v", "1", *codec, "-update", "1", p], input=data, capture_output=True,
-                             timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        res = _proc.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0",
+                              "-frames:v", "1", *codec, "-update", "1", p], timeout=30, text=False, input=data)
         if res.returncode == 0 and os.path.isfile(p):
             self.log_tagged(self.console, f"✔ Thumbnail saved: {p}", "success")
         else:
@@ -1300,36 +1312,22 @@ class YouTubeDownloaderTab(BaseTab):
             return
         self._btn_fetch.config(state="disabled", text=t("youtube.fetching"))
         self.log(self.console, f"↳ Fetching info: {url}")
-        threading.Thread(
-            target=self._fetch_worker, args=(url, ytdlp), daemon=True).start()
+        tasks.submit(partial(_fetch_info, ytdlp, url, playlist=bool(self._playlist_var.get())),
+                     on_done=self._fetched, on_error=self._fetch_failed, name="yt-dlp info")
 
-    def _fetch_worker(self, url: str, ytdlp: str):
-        try:
-            from core import network as _net
-            # Check playlist flag dynamically
-            playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-            cmd = _yt(ytdlp, url) + [playlist_flag, "-J", url]
-            r = subprocess.run(
-                cmd,
-                capture_output=True, text=True, timeout=45,
-                creationflags=CREATE_NO_WINDOW,
-                env=_net.subprocess_env(url=url))
-            if r.returncode != 0:
-                snippet = (r.stderr or r.stdout or "")[:600]
-                self.after(0, lambda s=snippet: self.log_tagged(
-                    self.console, f"⚠ yt-dlp error:\n{s}", "error"))
-                return
-            info = json.loads(r.stdout)
-            self.after(0, lambda i=info: self._populate_info(i))
-        except subprocess.TimeoutExpired:
-            self.after(0, lambda: self.log_tagged(
-                self.console, "⚠ Timed out fetching video info.", "error"))
-        except Exception as exc:
-            self.after(0, lambda e=exc: self.log_tagged(
-                self.console, f"⚠ Fetch error: {e}", "error"))
-        finally:
-            self.after(0, lambda: self._btn_fetch.config(
-                state="normal", text=t("youtube.fetch_info")))
+    def _fetched(self, info: dict) -> None:
+        self._btn_fetch.config(state="normal", text=t("youtube.fetch_info"))
+        self._populate_info(info)
+
+    def _fetch_failed(self, exc: BaseException) -> None:
+        self._btn_fetch.config(state="normal", text=t("youtube.fetch_info"))
+        if isinstance(exc, _proc.ProcessTimeout):
+            msg = "⚠ Timed out fetching video info."
+        elif isinstance(exc, ToolError):
+            msg = f"⚠ {exc}"
+        else:
+            msg = f"⚠ Fetch error: {exc}"
+        self.log_tagged(self.console, msg, "error")
 
     def _populate_info(self, info: dict):
         self._video_info = info
@@ -1380,8 +1378,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         thumb_url = info.get("thumbnail")
         if thumb_url:
-            threading.Thread(
-                target=self._load_thumbnail, args=(thumb_url,), daemon=True).start()
+            tasks.submit(partial(self._load_thumbnail, thumb_url))
 
         self.log_tagged(self.console,
             f"✔ {title}  [{_fmt_dur(dur)}]", "success")
@@ -1456,7 +1453,6 @@ class YouTubeDownloaderTab(BaseTab):
         """Worker thread: fetch the thumbnail (through the app's network settings)
         and let FFmpeg decode it - Tk shows PNG natively, so no Pillow needed."""
         import base64
-        import subprocess
 
         from core import ffmpeg as ff
         from core import network as _net
@@ -1465,11 +1461,9 @@ class YouTubeDownloaderTab(BaseTab):
                 data = resp.read()
             self._thumb_bytes = data
             tw, th = px(256), px(144)                     # the thumbnail box, in screen pixels
-            res = subprocess.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+            res = _proc.run([ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
                                   "-frames:v", "1", "-vf", f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
-                                  f"pad={tw}:{th}:-1:-1:color=black", "-f", "image2pipe", "-c:v", "png", "pipe:1"],
-                                 input=data, capture_output=True, timeout=20,
-                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                  f"pad={tw}:{th}:-1:-1:color=black", "-f", "image2pipe", "-c:v", "png", "pipe:1"], timeout=20, text=False, input=data)
             if res.returncode != 0 or not res.stdout:
                 raise RuntimeError((res.stderr or b"").decode("utf-8", "replace").strip()[-80:] or "decode failed")
             png = base64.b64encode(res.stdout).decode("ascii")
@@ -1520,13 +1514,9 @@ class YouTubeDownloaderTab(BaseTab):
                         self.console, "▶ Preview isn't possible through a SOCKS/Tor proxy (the player can't use "
                         "one and would connect around it). Download the video instead.", "warn"))
                     return
-                r = subprocess.run(
-                    _yt(ytdlp, url) + [playlist_flag, "-g",
+                r = _proc.run(_yt(ytdlp, url) + [playlist_flag, "-g",
                      "-f", "best[height<=720][ext=mp4]/best[height<=720]/best",
-                     url],
-                    capture_output=True, text=True, timeout=25,
-                    creationflags=CREATE_NO_WINDOW,
-                    env=_net.subprocess_env(url=url))
+                     url], timeout=25, env=_net.subprocess_env(url=url))
                 lines = [l.strip() for l in r.stdout.splitlines() if l.strip()]
                 if not lines:
                     self.after(0, lambda: self.log_tagged(
@@ -1538,12 +1528,10 @@ class YouTubeDownloaderTab(BaseTab):
                     ffplay = get_binary_path("ffplay")
                 except Exception:
                     ffplay = shutil.which("ffplay") or "ffplay"
-                from core import ffmpeg as _ff
-                self.preview_proc = _ff.popen(
+                self.preview_proc = _proc.spawn(
                     [ffplay, "-autoexit",
                      "-window_title", "Video Preview - Quintessential Video Editor",
                      stream_url],
-                    creationflags=CREATE_NO_WINDOW,
                     env=_net.subprocess_env())
                 self.after(0, lambda: self.log_tagged(
                     self.console, "▶ Playing in ffplay.", "info"))
@@ -1554,7 +1542,7 @@ class YouTubeDownloaderTab(BaseTab):
                 self.after(0, lambda: self._btn_preview.config(
                     state="normal", text=t("youtube.preview")))
 
-        threading.Thread(target=_worker, daemon=True).start()
+        tasks.submit(_worker)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Live recording
@@ -1586,10 +1574,8 @@ class YouTubeDownloaderTab(BaseTab):
 
         def _worker():
             try:
-                from core import ffmpeg as _ff
-                self._record_proc = _ff.popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, creationflags=CREATE_NO_WINDOW,
+                self._record_proc = _proc.spawn(
+                    cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1,
                     env=_net.subprocess_env())
                 for line in iter(self._record_proc.stdout.readline, ""):
                     stripped = line.rstrip()
@@ -1610,7 +1596,7 @@ class YouTubeDownloaderTab(BaseTab):
                     state="normal", text=t("youtube.record")))
                 self._record_proc = None
 
-        threading.Thread(target=_worker, daemon=True).start()
+        tasks.start_service(_worker, name='worker')
 
     # ─────────────────────────────────────────────────────────────────────────
     #  yt-dlp streaming subprocess
@@ -1661,10 +1647,8 @@ class YouTubeDownloaderTab(BaseTab):
         prefix = "BATCH CMD: " if batch else "CMD: "
         self.after(0, lambda: self.log(self.console, prefix + " ".join(str(c) for c in redact(cmd))))
         try:
-            from core import ffmpeg as _ff
-            proc = _ff.popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                             errors="replace", bufsize=1, creationflags=CREATE_NO_WINDOW,
-                             env=_net.subprocess_env(url=url))
+            proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1,
+                               env=_net.subprocess_env(url=url))
             self._active_proc = proc
             for line in iter(proc.stdout.readline, ""):
                 stripped = line.rstrip()
@@ -1932,17 +1916,11 @@ class YouTubeDownloaderTab(BaseTab):
         self._prog_status_var.set("Starting…")
 
         if mode == "audio":
-            threading.Thread(
-                target=self._run_audio_only,
-                args=(url, out, ytdlp, trim_args), daemon=True).start()
+            tasks.submit(partial(self._run_audio_only, url, out, ytdlp, trim_args))
         elif mode == "encode":
-            threading.Thread(
-                target=self._run_reencode,
-                args=(url, out, ytdlp, trim_args), daemon=True).start()
+            tasks.submit(partial(self._run_reencode, url, out, ytdlp, trim_args))
         else:
-            threading.Thread(
-                target=self._run_direct_copy,
-                args=(url, out, ytdlp, trim_args), daemon=True).start()
+            tasks.submit(partial(self._run_direct_copy, url, out, ytdlp, trim_args))
 
     # ── Direct copy ──────────────────────────────────────────────────────────
 
@@ -2053,9 +2031,7 @@ class YouTubeDownloaderTab(BaseTab):
                 sub_path = self._download_sub_for_burn(url, ytdlp)
 
             enc_cmd = self._build_encode_cmd(tmp, out, sub_path=sub_path)
-            threading.Thread(
-                target=self._run_ffmpeg_encode,
-                args=(enc_cmd, tmp, out), daemon=True).start()
+            tasks.submit(partial(self._run_ffmpeg_encode, enc_cmd, tmp, out))
 
         self._stream_ytdlp(
             cmd,
@@ -2080,9 +2056,7 @@ class YouTubeDownloaderTab(BaseTab):
         if self._sub_auto_var.get():
             cmd.insert(-3, "--write-auto-sub")
         try:
-            subprocess.run(cmd, capture_output=True, timeout=30,
-                           creationflags=CREATE_NO_WINDOW,
-                           env=_net.subprocess_env())
+            _proc.run(cmd, timeout=30, text=False, env=_net.subprocess_env())
         except Exception:
             pass
         # Find the downloaded sub file
@@ -2097,10 +2071,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         def _worker(progress_cb, cancel_fn):
             try:
-                from core import ffmpeg as _ff
-                proc = _ff.popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, creationflags=CREATE_NO_WINDOW)
+                proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1)
                 self._active_proc = proc
                 for line in iter(proc.stdout.readline, ""):
                     if cancel_fn():
@@ -2202,8 +2173,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._cancel_requested = False
         self._btn_dl_all.config(state="disabled")
         self._btn_stop_batch.config(state="normal")
-        threading.Thread(
-            target=self._batch_worker, args=(items, ytdlp), daemon=True).start()
+        tasks.submit(partial(self._batch_worker, items, ytdlp))
 
     def _batch_worker(self, items, ytdlp: str):
         for item in items:
@@ -2223,10 +2193,7 @@ class YouTubeDownloaderTab(BaseTab):
             title = "-"
             try:
                 from core import network as _net
-                r = subprocess.run(
-                    _yt(ytdlp, url) + ["--no-playlist", "--get-title", url],
-                    capture_output=True, text=True, timeout=20,
-                    creationflags=CREATE_NO_WINDOW, env=_net.subprocess_env(url=url))
+                r = _proc.run(_yt(ytdlp, url) + ["--no-playlist", "--get-title", url], timeout=20, env=_net.subprocess_env(url=url))
                 if r.returncode == 0:
                     title = r.stdout.strip().splitlines()[0][:60]
             except Exception:

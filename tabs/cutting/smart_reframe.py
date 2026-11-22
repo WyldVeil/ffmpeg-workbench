@@ -16,12 +16,12 @@ window follows the action.
 from __future__ import annotations
 
 import os
-import subprocess
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
+from core import proc as _proc
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -274,7 +274,7 @@ class SmartReframeTab(BaseTab):
                "-an", "-sn", "-vf", f"fps={RATE},scale={GRID_W * 2}:{GRID_H * 2}:flags=area,format=gray,"
                f"tblend=all_mode=difference,scale={GRID_W}:{GRID_H}:flags=area",
                "-f", "rawvideo", "-pix_fmt", "gray", "-"]
-        proc = ff.popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        proc = _proc.spawn(cmd, stdout=_proc.PIPE, stderr=_proc.DEVNULL)
         size = GRID_W * GRID_H
         frames, buf = [], b""
         expected = max(1, int(duration * RATE))

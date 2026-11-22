@@ -32,6 +32,8 @@ import os
 import sys
 from typing import overload
 
+from core import proc as _proc
+
 _log = logging.getLogger("crossfader.scaling")
 
 BASE_DPI = 96.0
@@ -113,10 +115,10 @@ def _is_x11() -> bool:
 
 def _requested_scale() -> float | None:
     """The ``ui_scale`` setting, when it is a number rather than "auto"."""
+    from core import settings
     try:
-        from core import settings as _settings
-        value = float(_settings.get("ui_scale", "auto"))
-    except (TypeError, ValueError, ImportError):
+        value = float(settings.UI_SCALE.get())
+    except ValueError:                       # "auto"
         return None
     return value if MIN_FACTOR <= value <= MAX_FACTOR else None
 
@@ -134,10 +136,9 @@ def _env_scale() -> float | None:
 
 
 def _run_quiet(cmd: list) -> str:
-    import subprocess
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
+        return _proc.run(cmd, timeout=3).stdout.strip()
+    except (OSError, _proc.ProcessError):
         return ""
 
 

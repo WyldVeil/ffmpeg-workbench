@@ -194,11 +194,8 @@ def set_language(code: str) -> None:
     """Persist *code* to settings and reload. Takes effect immediately for
     any t() calls made after this point; existing widgets are not updated
     (a restart is required to re-build all widgets in the new language)."""
-    try:
-        from core.settings import set as _cfg_set
-        _cfg_set("language", code)
-    except Exception:
-        pass
+    from core import settings
+    settings.LANGUAGE.set(code)
     load_language(code)
 
 
@@ -210,11 +207,8 @@ def init() -> None:
       2. OS system locale
       3. Fallback: en_US
     """
-    try:
-        from core.settings import get as _cfg_get
-        saved = _cfg_get("language", "")
-    except Exception:
-        saved = ""
+    from core import settings  # here, not at the top: settings is imported by i18n's users
+    saved = settings.LANGUAGE.get()
 
     if saved and saved in SUPPORTED_LANGUAGES:
         load_language(saved)
@@ -222,11 +216,7 @@ def init() -> None:
         detected = detect_system_language()
         load_language(detected)
         # Persist detected language so the user can see/change it in settings
-        try:
-            from core.settings import set as _cfg_set
-            _cfg_set("language", detected)
-        except Exception:
-            pass
+        settings.LANGUAGE.set(detected)
 
 
 def t(key: str, **kwargs) -> str:

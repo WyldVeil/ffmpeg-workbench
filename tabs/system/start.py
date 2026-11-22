@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from collections.abc import Callable
 
-from core import catalog
+from core import catalog, tools
 from core import settings as _settings
 from core.scaling import px
+from core.tools import ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.contracts import AcceptsFiles
 from tabs.widgets import scroll_body
 
 MAX_WIDTH = 1080
@@ -38,15 +41,10 @@ def _mix(a: str, b: str, amount: float) -> str:
     return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb))
 
 
-def nav_key(name: str) -> str:
-    """The shell's page name for tool *name* (the pinned builder has a prefix)."""
-    return "⚡ " + name if name == catalog.AIO else name
-
-
 class StartTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self._navigate = None
+        self._navigate: Callable[[ToolId], object] | None = None
         self._file: tuple | None = None        # (path, MediaInfo) to suggest tools for
         self._goal: str | None = None
         self._cols = 0
@@ -55,8 +53,8 @@ class StartTab(BaseTab):
         self._build_ui()
 
     # ── Hooks used by main.py ─────────────────────────────────────────────
-    def set_navigator(self, fn):
-        self._navigate = fn
+    def set_navigator(self, navigate: Callable[[ToolId], object]) -> None:
+        self._navigate = navigate
 
     def on_show(self):
         """Called each time the page is shown: recent lists may have changed."""
@@ -120,7 +118,7 @@ class StartTab(BaseTab):
         home = tk.Label(foot, text=f"🏠  Browse all {total} tools on Home  ›", font=(UI_FONT, 10, "bold"),
                         bg=CLR["bg"], fg=CLR["accent"], cursor="hand2")
         home.pack(side="left")
-        home.bind("<Button-1>", lambda _e: self._go("Home"))
+        home.bind("<Button-1>", lambda _e: self._go(ToolId.HOME))
         tk.Label(foot, text="Tip: drop files anywhere in the app. Ctrl+F searches the sidebar.",
                  font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="right")
 
@@ -139,24 +137,17 @@ class StartTab(BaseTab):
                 self._render_results()
 
     # ── Navigation ────────────────────────────────────────────────────────
-    def _go(self, page: str) -> None:
-        if self._navigate:
-            self._navigate(page)
+    def _go(self, tool: ToolId) -> object:
+        return self._navigate(tool) if self._navigate is not None else None
 
     def open_tool(self, name: str) -> None:
         """Open tool *name*; with a file chosen, load it there too."""
-        key = nav_key(name)
-        self._go(key)
-        if not self._file:
+        spec = tools.by_name(name)
+        if spec is None:
             return
-        app = self.winfo_toplevel()
-        page = getattr(app, "pages", {}).get(key)
-        if page is not None and hasattr(page, "load_file"):
-            try:
-                page.load_file(self._file[0])
-            except Exception:
-                import logging
-                logging.getLogger("crossfader.start").exception("load_file failed in %s", key)
+        page = self._go(spec.id)
+        if self._file and isinstance(page, AcceptsFiles):
+            page.load_file(self._file[0])
 
     # ── Search ────────────────────────────────────────────────────────────
     def _query(self) -> str:
@@ -275,29 +266,27 @@ class StartTab(BaseTab):
     def _render_recent(self):
         for w in self._recent.winfo_children():
             w.destroy()
-        names = {nav_key(n) for n in catalog.TOOLS}
-        tools = [n for n in (_settings.get("recent_tools", []) or []) if n in names][:4]
-        files = [p for p in (_settings.get("recent_files", []) or []) if isinstance(p, str) and os.path.isfile(p)][:3]
-        if not tools and not files:
+        recent = [t for t in tools.parse_all(_settings.RECENT_TOOLS.get()) if tools.spec(t).name in catalog.TOOLS][:4]
+        files = [p for p in _settings.RECENT_FILES.get() if isinstance(p, str) and os.path.isfile(p)][:3]
+        if not recent and not files:
             tk.Label(self._recent, text="New here?", font=(UI_FONT, 10, "bold"), bg=CLR["bg"],
                      fg=CLR["fg"]).pack(anchor="w")
             for line in ("Pick a goal below, or type what you", "want in the search box. Nothing is",
                          "uploaded - your files stay yours."):
                 tk.Label(self._recent, text=line, font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fgdim"]).pack(anchor="w")
             return
-        if tools:
+        if recent:
             tk.Label(self._recent, text="Recently used", font=(UI_FONT, 10, "bold"), bg=CLR["bg"],
                      fg=CLR["fg"]).pack(anchor="w")
-            for key in tools:
-                name = key.replace("⚡ ", "")
-                info = catalog.TOOLS.get(name)
-                lbl = tk.Label(self._recent, text=f"{info.icon if info else '•'}  {name}", font=(UI_FONT, 10),
+            for tid in recent:
+                spec = tools.spec(tid)
+                lbl = tk.Label(self._recent, text=f"{spec.icon or '•'}  {spec.name}", font=(UI_FONT, 10),
                                bg=CLR["bg"], fg=CLR["accent"], cursor="hand2")
                 lbl.pack(anchor="w", pady=px(1))
-                lbl.bind("<Button-1>", lambda _e, k=key: self._go(k))
+                lbl.bind("<Button-1>", lambda _e, k=tid: self._go(k))
         if files:
             tk.Label(self._recent, text="Recent files", font=(UI_FONT, 10, "bold"), bg=CLR["bg"],
-                     fg=CLR["fg"]).pack(anchor="w", pady=px(8 if tools else 0, 0))
+                     fg=CLR["fg"]).pack(anchor="w", pady=px(8 if recent else 0, 0))
             for p in files:
                 name = os.path.basename(p)
                 lbl = tk.Label(self._recent, text="📄  " + (name if len(name) <= 34 else name[:31] + "…"),
@@ -409,10 +398,11 @@ class StartTab(BaseTab):
         return self._wire(card, lambda: self.show_goal(g.key))
 
     def _tool_row(self, parent, name: str, reason: str = ""):
-        info = catalog.TOOLS.get(name, catalog.ToolInfo("•", ""))
+        info = catalog.TOOLS.get(name)
+        icon, about = (info.icon, info.blurb) if info is not None else ("•", "")
         card = self._card(parent)
         card._tool = name
-        tk.Label(card, text=info.icon, font=(UI_FONT, 17), bg=CLR["panel"], fg=CLR["fg"], width=2).pack(
+        tk.Label(card, text=icon, font=(UI_FONT, 17), bg=CLR["panel"], fg=CLR["fg"], width=2).pack(
             side="left", padx=px(12, 6), pady=px(8))
         tk.Label(card, text="Open ›", font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"]).pack(
             side="right", padx=px(12))
@@ -420,7 +410,7 @@ class StartTab(BaseTab):
         text.pack(side="left", fill="both", expand=True, pady=px(8))
         tk.Label(text, text=name, font=(UI_FONT, 10, "bold"), bg=CLR["panel"], fg=CLR["fg"], anchor="w").pack(
             anchor="w")
-        blurb = tk.Label(text, text=reason or info.blurb, font=(UI_FONT, 9), bg=CLR["panel"],
+        blurb = tk.Label(text, text=reason or about, font=(UI_FONT, 9), bg=CLR["panel"],
                          fg=CLR["orange"] if reason else CLR["fgdim"], anchor="w", justify="left", wraplength=px(360))
         blurb.pack(anchor="w", fill="x")
         self._wrap(text, blurb)

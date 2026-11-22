@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import threading
 from collections.abc import Sequence
+
+from core import proc as _proc
+from core import settings, tasks
 
 _IS_WIN = sys.platform.startswith("win")
 _IS_MAC = sys.platform == "darwin"
@@ -80,13 +82,9 @@ def is_kind(path: str, kind: str) -> bool:
 # ── remembered folders ───────────────────────────────────────────────────────
 
 def _last_dir(kind: str) -> str:
-    try:
-        from core.settings import get
-        d = get(f"last_dir.{kind}", "") or get("last_dir.any", "")
-        if d and os.path.isdir(d):
-            return d
-    except Exception:
-        pass
+    d = settings.get(f"last_dir.{kind}", "") or settings.get("last_dir.any", "")
+    if isinstance(d, str) and d and os.path.isdir(d):
+        return d
     return os.path.expanduser("~")
 
 
@@ -94,14 +92,7 @@ def _remember(kind: str, path: str) -> None:
     if not path:
         return
     folder = path if os.path.isdir(path) else os.path.dirname(path)
-    try:
-        from core.settings import load_settings, save_settings
-        data = load_settings()
-        data[f"last_dir.{kind}"] = folder
-        data["last_dir.any"] = folder
-        save_settings(data)
-    except Exception:
-        pass
+    settings.update({f"last_dir.{kind}": folder, "last_dir.any": folder})
 
 
 # ── native dialogs (Linux) ───────────────────────────────────────────────────
@@ -111,12 +102,8 @@ def _native_tool() -> str | None:
         return None
     if os.environ.get("CROSSFADER_NATIVE_DIALOGS", "1") == "0":
         return None
-    try:
-        from core.settings import get
-        if not get("native_dialogs", True):
-            return None
-    except Exception:
-        pass
+    if not settings.NATIVE_DIALOGS.get():
+        return None
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         return None
     desktop = (os.environ.get("XDG_CURRENT_DESKTOP", "") + os.environ.get("DESKTOP_SESSION", "")).lower()
@@ -139,8 +126,7 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
         # wait_variable(), not mainloop(), so cross-thread Tk calls fail.
         try:
             from core.procenv import child_env
-            r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                               env=child_env())
+            r = _proc.run(cmd, timeout=None, env=child_env())
             result["rc"], result["out"] = r.returncode, r.stdout
         except OSError as exc:
             result["rc"], result["out"] = -1, ""
@@ -159,7 +145,7 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
             else:
                 root.after(25, _poll)
 
-        threading.Thread(target=_worker, daemon=True).start()
+        tasks.submit(_worker)
         root.after(25, _poll)
         try:
             root.wait_variable(done)

@@ -11,11 +11,11 @@ from __future__ import annotations
 import base64
 import collections
 import re
-import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
@@ -194,7 +194,7 @@ class ManualCropTab(BaseTab):
             png = ff.grab_frame_png(path, at, width=w, height=h)
             self.call_ui(self._show_frame, gen, png)
 
-        threading.Thread(target=work, daemon=True, name="CropFrame").start()
+        tasks.submit(work, name="CropFrame", pool="preview")
 
     def _show_frame(self, gen, png):
         if gen != self._frame_gen or not png:
@@ -330,8 +330,7 @@ class ManualCropTab(BaseTab):
             self.log(self.console, f"Black bars detected: picture is {found[2]}×{found[3]} at "
                                    f"({found[0]},{found[1]}).")
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, on_error=lambda _e: done(None), name="CropDetect")
+        tasks.submit(work, on_done=done, on_error=lambda _e: done(None), name="CropDetect")
 
     def _render(self):
         src = self.src_row.path

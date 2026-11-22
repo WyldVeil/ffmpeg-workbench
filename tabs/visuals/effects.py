@@ -19,11 +19,10 @@ effects overlay onto the existing video so no content is lost.
 """
 
 import os
-import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, tasks
 from core import ffmpeg as ff
 from core import filters as fl
 from core.hardware import (
@@ -960,19 +959,21 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Please set an output path.")
             return
 
-        def _work():
-            try:
-                size  = int(self._em_size.get())
-                xpct  = float(self._em_x.get()) / 100.0
-                ypct  = float(self._em_y.get()) / 100.0
-                start = float(self._em_start.get())
-                hold  = float(self._em_hold.get())
-            except ValueError:
-                size, xpct, ypct, start, hold = 96, 0.5, 0.3, 3.0, 2.0
+        # read the settings here, on the UI thread; only the probe runs in the background
+        try:
+            size  = int(self._em_size.get())
+            xpct  = float(self._em_x.get()) / 100.0
+            ypct  = float(self._em_y.get()) / 100.0
+            start = float(self._em_start.get())
+            hold  = float(self._em_hold.get())
+        except ValueError:
+            size, xpct, ypct, start, hold = 96, 0.5, 0.3, 3.0, 2.0
 
-            text  = self._em_text.get()
-            crf   = self._em_crf.get()
-            w, h  = _probe_wh(src)
+        text  = self._em_text.get()
+        crf   = self._em_crf.get()
+
+        def _start(probed):
+            w, h = probed
             end   = start + hold
 
             # x/y as absolute pixels, centred on the chosen %
@@ -1004,7 +1005,7 @@ class SpecialEffectsTab(BaseTab):
                 btn_label="😂  BURN EMOJI ONTO VIDEO",
             )
 
-        threading.Thread(target=_work, daemon=True).start()
+        tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_emoji")
 
     def _build_ov_lowerthird(self, nb):
         f = ttk.Frame(nb)
@@ -1153,19 +1154,21 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Please set an output path.")
             return
 
-        def _work():
-            try:
-                size  = int(self._sub_size.get())
-                start = float(self._sub_start.get())
-                hold  = float(self._sub_hold.get())
-            except ValueError:
-                size, start, hold = 52, 5.0, 4.0
+        # read the settings here, on the UI thread; only the probe runs in the background
+        try:
+            size  = int(self._sub_size.get())
+            start = float(self._sub_start.get())
+            hold  = float(self._sub_hold.get())
+        except ValueError:
+            size, start, hold = 52, 5.0, 4.0
 
-            end     = start + hold
-            crf     = self._sub_crf.get()
-            text    = self._sub_text.get()
-            pos     = self._sub_pos.get()
-            w, h    = _probe_wh(src)
+        end     = start + hold
+        crf     = self._sub_crf.get()
+        text    = self._sub_text.get()
+        pos     = self._sub_pos.get()
+
+        def _start(probed):
+            w, h = probed
 
             pos_map = {
                 "Bottom Centre": ("(w-text_w)/2", "h-text_h-40"),
@@ -1197,7 +1200,7 @@ class SpecialEffectsTab(BaseTab):
                 btn_label="🔔  BURN SUBSCRIBE REMINDER",
             )
 
-        threading.Thread(target=_work, daemon=True).start()
+        tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_subscribe")
 
     def _build_ov_countdown(self, nb):
         f = ttk.Frame(nb)
@@ -1816,26 +1819,31 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Please set an output path.")
             return
 
-        def _work():
-            try:
-                amp   = int(self._sh_amp.get())
-                start = float(self._sh_start.get())
-            except ValueError:
-                amp, start = 10, 0.0
+        # read the settings here, on the UI thread; only the probe runs in the background
+        try:
+            amp   = int(self._sh_amp.get())
+            start = float(self._sh_start.get())
+        except ValueError:
+            amp, start = 10, 0.0
 
-            crf     = self._sh_crf.get()
-            speed_map = {"Slow": (7, 13), "Normal": (19, 31),
-                         "Fast": (37, 53), "Violent": (61, 79)}
-            freq1, freq2 = speed_map.get(self._sh_speed.get(), (19, 31))
+        crf     = self._sh_crf.get()
+        speed_map = {"Slow": (7, 13), "Normal": (19, 31),
+                     "Fast": (37, 53), "Violent": (61, 79)}
+        freq1, freq2 = speed_map.get(self._sh_speed.get(), (19, 31))
 
-            dur_str = self._sh_dur.get().strip()
-            total   = _probe_duration(src)
-            whole   = (dur_str.lower() == "whole video")
-            end     = total if whole else (start + float(dur_str))
+        dur_str = self._sh_dur.get().strip()
+        try:
+            span = None if dur_str.lower() == "whole video" else float(dur_str)
+        except ValueError:
+            messagebox.showwarning(t("common.warning"), f"Duration must be seconds or 'Whole video': {dur_str!r}")
+            return
+
+        def _start(probed):
+            total, (w, h) = probed
+            end     = total if span is None else start + span
             enable  = f"between(t,{start},{end})"
 
             # Use crop to hide black edges introduced by the translate
-            w, h = _probe_wh(src)
             cw   = w - amp * 2
             ch   = h - amp * 2
 
@@ -1862,7 +1870,7 @@ class SpecialEffectsTab(BaseTab):
                 btn_label="📳  APPLY CAMERA SHAKE",
             )
 
-        threading.Thread(target=_work, daemon=True).start()
+        tasks.submit(lambda: (_probe_duration(src), _probe_wh(src)), on_done=_start, name="render_shake")
 
     def _build_mo_zoompunch(self, nb):
         f = ttk.Frame(nb)

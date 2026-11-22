@@ -25,7 +25,7 @@ def _trim(ui, media, outdir, src, start, end, copy, name):
     tab._out_var.set(out)
     tab._start_var.set(start)
     tab._end_var.set(end)
-    ui.click_text(tab, tab._btn_trim.cget("text")[:6])
+    ui.click_text(tab, tab.btn_render.cget("text")[:6])
     ui.wait_idle(120)
     assert not ui.dialogs.errors(), ui.dialogs.errors()
     return tab, out

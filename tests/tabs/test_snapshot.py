@@ -187,10 +187,10 @@ def test_gif_maker_frame_steps_then_i_and_o(ui, media):
     framestep.touch(tab.slider)
     ui.pump(0.1)
     framestep.on_key(ui.app, None, 1, second=True)            # Shift+. : one second
-    ui.app._kb_set_in()                                         # i
+    ui.app.shortcuts.mark_in()                                         # i
     for _ in range(15):
         framestep.on_key(ui.app, None, 1)                       # .
-    ui.app._kb_set_out()                                        # o
+    ui.app.shortcuts.mark_out()                                        # o
     assert ff.parse_time(tab.start_var.get()) == pytest.approx(1.0)
     assert float(tab.dur_var.get()) == pytest.approx(0.5)
 
@@ -243,7 +243,7 @@ def test_i_and_o_use_the_frame_shown(ui, media, tool):
     framestep.on_key(ui.app, None, 1, second=True)
     for _ in range(6):
         framestep.on_key(ui.app, None, 1)
-    ui.app._kb_set_in()
+    ui.app.shortcuts.mark_in()
     ui.pump(0.2)
     after = {k: v.get() for k, v in vars(tab).items() if isinstance(v, __import__("tkinter").Variable)}
     changed = [k for k in after if after[k] != before.get(k)]

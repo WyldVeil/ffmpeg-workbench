@@ -19,10 +19,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: (page, program) pairs that still start a process on the UI thread
-TK_THREAD_SPAWNS_ALLOWED: set[tuple[str, str]] = {
-    ("Advanced Settings", "ip"), ("HDR to SDR", "ffmpeg"), ("HDR to SDR", "ffprobe"),
-    ("Media Inspector", "ffprobe"), ("Video Downloader", "yt-dlp"), ("Voice Isolation", "ffmpeg"),
-}
+TK_THREAD_SPAWNS_ALLOWED: set[tuple[str, str]] = set()      # none: probes run in core.tasks workers
 
 
 _SPAWN_SCAN = textwrap.dedent("""
@@ -80,9 +77,11 @@ _STARTUP = textwrap.dedent("""
     sys.path.insert(0, {root!r})
     from tests import gui_harness
     gui_harness.ensure_display()
-    import main
+    from core import i18n
+    from shell.app import App
+    i18n.init()
     t_import = time.perf_counter()
-    app = main.App()
+    app = App()
     app.update()
     t_paint = time.perf_counter()
     heavy = sorted(m for m in ("aiohttp", "edge_tts", "asyncio", "numpy", "PIL") if m in sys.modules)

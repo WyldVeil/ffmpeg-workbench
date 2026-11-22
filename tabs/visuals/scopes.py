@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
@@ -210,8 +211,7 @@ class VideoScopesTab(BaseTab):
                 self.log_tagged(self.console, "Snapshot failed: " + ff.summarize_error(
                     (res.stderr or "").splitlines(), res.returncode), "error")
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, name="ScopeSnapshot")
+        tasks.submit(work, on_done=done, name="ScopeSnapshot")
 
     def _render_video(self):
         src = self.src_row.path

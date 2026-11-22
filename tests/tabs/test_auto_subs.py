@@ -10,6 +10,7 @@ import pytest
 
 from core import ffmpeg as ff
 from core import whisper
+from core.tools import ToolId
 
 ASSETS = os.environ.get("CROSSFADER_TEST_WHISPER_DIR", "")
 
@@ -70,7 +71,7 @@ def test_transcribe_mux_and_burn(ui, outdir, media):
     assert subs and subs[0].codec == "mov_text" and subs[0].language == "eng"
     # hand-off to the Hard-Subber
     tab._burn()
-    hs = ui.app.pages.get("Hard-Subber")
+    hs = ui.app.page(ToolId.HARD_SUBBER)
     assert hs is not None and hs.sub_row.path == srt
 
 

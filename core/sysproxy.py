@@ -35,13 +35,14 @@ import os
 import re
 import shutil
 import socket
-import subprocess
 import sys
 import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
+
+from core import proc as _proc
 
 DIRECT = "direct://"
 IS_WIN = sys.platform == "win32"
@@ -77,9 +78,8 @@ def _hide_auth(url: str) -> str:
 
 def _run(cmd: list, timeout: float = 4.0) -> str | None:
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, errors="replace",
-                           stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW)
-    except (OSError, subprocess.SubprocessError):
+        r = _proc.run(cmd, timeout=timeout)
+    except (OSError, _proc.ProcessError):
         return None
     return r.stdout if r.returncode == 0 else None
 
@@ -557,11 +557,9 @@ def run_pac(pac_text: str, url: str, *, timeout: float = 10.0) -> list:
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(_PAC_RUNNER.replace("__PRELUDE__", json.dumps(_PAC_PRELUDE)))
         try:
-            r = subprocess.run([deno, "run", "--quiet", "--no-prompt", "--no-config", "--no-lock", "--no-remote",
-                                "--no-npm", script], input=json.dumps(job), capture_output=True, text=True,
-                               timeout=timeout, creationflags=_NO_WINDOW,
-                               env={**os.environ, "NO_COLOR": "1", "DENO_NO_UPDATE_CHECK": "1"})
-        except subprocess.TimeoutExpired:
+            r = _proc.run([deno, "run", "--quiet", "--no-prompt", "--no-config", "--no-lock", "--no-remote",
+                                "--no-npm", script], timeout=timeout, input=json.dumps(job), env={**os.environ, "NO_COLOR": "1", "DENO_NO_UPDATE_CHECK": "1"})
+        except _proc.ProcessTimeout:
             raise RuntimeError("The auto-config script took too long.") from None
     if r.returncode != 0:
         raise RuntimeError("The auto-config script failed: " + (r.stderr or "").strip().splitlines()[-1:][0]

@@ -6,6 +6,7 @@ import pytest
 
 from core import catalog, settings
 from core import ffmpeg as ff
+from core.tools import ToolId
 
 # ── catalogue ────────────────────────────────────────────────────────────────
 
@@ -58,13 +59,14 @@ def test_suggestions_follow_the_file(media, tmp_path):
 @pytest.mark.gui
 def test_opens_on_start_by_default(ui):
     app = ui.app
-    settings.set("start_page", "start")
-    assert app._first_page() == "Start"
-    settings.set("start_page", "home")
-    assert app._first_page() == "Home"
+    settings.START_PAGE.set("start")
+    assert app.first_page() is ToolId.START
+    settings.START_PAGE.set("home")
+    assert app.first_page() is ToolId.HOME
     ui.open("Denoise")
-    settings.set("start_page", "last")
-    assert app._first_page() == "Denoise"
+    settings.START_PAGE.set("last")
+    assert app.first_page() is ToolId.DENOISE
+    assert settings.RECENT_TOOLS.get()[0] == "denoise"          # stored by id, not by name
     settings.set("start_page", "start")
 
 
@@ -83,7 +85,7 @@ def test_goals_lead_to_tools(ui):
     assert [r._tool for r in rows] == list(catalog.goal("smaller").tools)
     rows[0].event_generate("<Button-1>")
     ui.pump(0.3)
-    assert ui.app.current_page == "Universal Downsizer"
+    assert ui.app.current_page is ToolId.UNIVERSAL_DOWNSIZER
 
 
 @pytest.mark.gui
@@ -95,7 +97,7 @@ def test_search_box(ui):
     assert rows and rows[0]._tool == "Universal Downsizer"
     page._search_enter()
     ui.pump(0.3)
-    assert ui.app.current_page == "Universal Downsizer"
+    assert ui.app.current_page is ToolId.UNIVERSAL_DOWNSIZER
     page = ui.open("Start")
     page.clear_search()
     assert page._query() == ""
@@ -110,16 +112,16 @@ def test_dropped_file_gets_suggestions_and_opens_in_the_tool(ui, media, tmp_path
     page = ui.open("Start")
     assert ui.app.open_paths([tagged])                       # what a drag-and-drop does
     ui.pump(0.3)
-    assert ui.app.current_page == "Start" and page._file[0] == tagged
+    assert ui.app.current_page is ToolId.START and page._file[0] == tagged
     rows = [w for grid in page._suggest_frame.winfo_children() for w in grid.winfo_children()
             if getattr(w, "_tool", None)]
     assert rows[0]._tool == "Metadata Cleaner"
     rows[0].event_generate("<Button-1>")
     ui.pump(0.4)
-    assert ui.app.current_page == "Metadata Cleaner"
-    assert tagged in ui.app.pages["Metadata Cleaner"].files      # the file came along
+    assert ui.app.current_page is ToolId.METADATA_CLEANER
+    assert tagged in ui.app.page(ToolId.METADATA_CLEANER).files      # the file came along
     page.clear_file()
-    ui.app.pages["Metadata Cleaner"]._clear()
+    ui.app.page(ToolId.METADATA_CLEANER)._clear()
 
 
 @pytest.mark.gui
@@ -134,7 +136,7 @@ def test_recent_tools_and_home_link(ui):
     assert links
     links[0].event_generate("<Button-1>")
     ui.pump(0.2)
-    assert ui.app.current_page == "Start"
+    assert ui.app.current_page is ToolId.START
 
 
 @pytest.mark.gui
@@ -150,8 +152,8 @@ def test_settings_choice_is_saved(ui):
 
 @pytest.mark.gui
 def test_top_bar_has_start_and_home(ui):
-    assert "Start" in ui.app._start_btn.cget("text") and "Home" in ui.app._home_btn.cget("text")
-    ui.app._start_btn.invoke()
+    assert "Start" in ui.app.start_button.cget("text") and "Home" in ui.app.home_button.cget("text")
+    ui.app.start_button.invoke()
     ui.pump(0.1)
-    assert ui.app.current_page == "Start"
+    assert ui.app.current_page is ToolId.START
     assert os.path.basename(__file__)

@@ -17,10 +17,12 @@ from __future__ import annotations
 import os
 import statistics
 import tkinter as tk
+from functools import partial
 from tkinter import colorchooser, messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -262,7 +264,6 @@ class GreenKeyerTab(BaseTab):
         if not path or not os.path.isfile(path):
             return
         at = (self._info.duration * 0.1) if self._info else 0.0
-        from core import ui
 
         def done(colour):
             if colour and (force or spill_type(colour)):
@@ -273,7 +274,7 @@ class GreenKeyerTab(BaseTab):
                                        "the eyedropper (click the Before image).")
             self._schedule()
 
-        ui.run_in_thread(sample_border_colour, path, at, on_done=done, name="KeySample")
+        tasks.submit(partial(sample_border_colour, path, at), on_done=done, name="KeySample")
 
     def _eyedropper(self, event):
         info, path = self._info, self.src_row.path
@@ -288,15 +289,13 @@ class GreenKeyerTab(BaseTab):
         if not (0 <= x < vw and 0 <= y < vh):
             return
         x, y = min(max(x, 2), vw - 3), min(max(y, 2), vh - 3)
-        from core import ui
 
         def done(colour):
             if colour:
                 self._set_key(colour)
                 self._schedule()
 
-        ui.run_in_thread(sample_point, path, self.compare.position, x, y, on_done=done,
-                         name="KeyEyedropper")
+        tasks.submit(partial(sample_point, path, self.compare.position, x, y), on_done=done, name="KeyEyedropper")
 
     def _set_key(self, colour):
         self.key_colour = colour

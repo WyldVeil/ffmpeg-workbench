@@ -7,17 +7,23 @@ Provides:
   • make_header, make_console, make_file_row, make_section,
     make_render_btn, make_labeled_entry - UI factory helpers
 """
-import threading
+from __future__ import annotations
+
 import time
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
+from typing import Any, Literal
 
-from core import dialogs, logs, outputs, ui
+from core import dialogs, logs, outputs, proc, settings, ui
 from core import ffmpeg as ff
 from core.hardware import open_in_explorer, reveal_file
 from core.i18n import t
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
+from core.timecode import Timecode
+from core.tools import ToolId
+from tabs.kit.contracts import Shell, Transport
 
 
 def _load_clr():
@@ -303,13 +309,7 @@ def add_tooltip(widget, text):
 
 def _fmt_tl(seconds):
     """Format seconds for timeline display."""
-    if seconds < 0:
-        seconds = 0
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
-    return f"{int(m):02d}:{s:05.2f}"
+    return f"{Timecode.of(seconds):.2}"
 
 
 class VideoTimeline(tk.Frame):
@@ -398,6 +398,31 @@ class VideoTimeline(tk.Frame):
     def set_playhead(self, t):
         self._playhead = max(0.0, min(t, self._duration))
         self._draw()
+
+    # ── Transport, MarksIn and MarksOut (tabs/kit/contracts.py) ────────────────────
+    @property
+    def position(self) -> float:
+        return self._playhead
+
+    @property
+    def duration(self) -> float:
+        return self._duration
+
+    def seek(self, seconds: float) -> None:
+        self.set_playhead(seconds)
+
+    def mark_in(self) -> None:
+        """Start of the range at the playhead (only a timeline with handles has a range)."""
+        if self._show_handles:
+            self._start = min(self._playhead, self._end)
+            self._draw()
+            self._fire_change()
+
+    def mark_out(self) -> None:
+        if self._show_handles:
+            self._end = max(self._playhead, self._start)
+            self._draw()
+            self._fire_change()
 
     # ── Coordinate helpers ────────────────────────────────────────────────
 
@@ -597,11 +622,39 @@ class BaseTab(ttk.Frame):
     #: Kinds of file this tab accepts by drag-and-drop (see core.dialogs).
     accepted_kinds = ("media",)
 
+    #: The page's main button (Render, Export...), set by the page: Ctrl+S presses it.
+    btn_render: tk.Button
+
     def __init__(self, parent):
         super().__init__(parent)
         self._render_thread = None      # last task id (kept for compatibility)
-        self.preview_proc   = None
+        self.preview_proc: proc.Popen[bytes] | None = None
         self._active_tasks: set = set()
+
+    def shell(self) -> Shell | None:
+        """The window this page lives in, when it is the app's (not in some tests)."""
+        top = self.winfo_toplevel()
+        return top if isinstance(top, Shell) else None
+
+    # ── What the window may ask of a page (tabs/kit/contracts.py) ────────────
+    def transport(self) -> Transport | None:
+        """The page's playhead, if it has one (override)."""
+        return None
+
+    def render(self) -> None:
+        """Ctrl+S: press the main button, when it can be pressed."""
+        btn: tk.Button | None = getattr(self, "btn_render", None)          # pages without one: nothing to press
+        if btn is not None and btn.winfo_exists() and str(btn.cget("state")) != "disabled":
+            btn.invoke()
+
+    def stop_preview(self) -> None:
+        """Stop the preview player this page started (leaving the page, Escape)."""
+        player, self.preview_proc = self.preview_proc, None
+        if player is not None:
+            proc.kill_tree(player)
+
+    def on_app_closing(self) -> None:
+        """Finish anything that must not be cut off when the app quits (override)."""
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
@@ -632,27 +685,20 @@ class BaseTab(ttk.Frame):
             return
         ui.call_soon(self._append, widget, msg, tag)
 
-    def log_debug(self, msg):
+    def log_debug(self, msg: str) -> None:
         logs.get("tab").debug(msg)
-        try:
-            app = self.winfo_toplevel()
-            if hasattr(app, "log_debug"):
-                app.log_debug(msg)
-        except tk.TclError:
-            pass
+        shell = self.shell()
+        if shell is not None:
+            shell.log_debug(msg)
 
     # ── Thread helpers ────────────────────────────────────────────────────────
-
-    def run_in_thread(self, func, *args, **kwargs):
-        t_ = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
-        t_.start()
-        return t_
 
     def call_ui(self, fn, *args, **kwargs):
         """Schedule *fn* on the Tk thread (safe from worker threads)."""
         ui.call_soon(fn, *args, **kwargs)
 
-    def after(self, ms, func=None, *args):
+    def after(self, ms: int | Literal["idle"], func: Callable[..., object] | None = None,  # type: ignore[override]
+              *args: Any) -> str:
         """Thread-safe ``after``: calls from worker threads (a common pattern in
         older tabs) are handed to the Tk thread instead of touching Tk directly,
         which fails before/around mainloop and can dead-lock."""
@@ -661,7 +707,7 @@ class BaseTab(ttk.Frame):
                 ui.call_soon(func, *args)
             else:
                 ui.call_soon(lambda: tk.Misc.after(self, ms, func, *args))
-            return None
+            return ""                                  # no id: it was handed to the UI thread
         return super().after(ms, func, *args)
 
     # ── Files ────────────────────────────────────────────────────────────────
@@ -717,13 +763,10 @@ class BaseTab(ttk.Frame):
             loaded = True
         return loaded
 
-    def goto_tool(self, page_name):
-        """Switch the main window to tool *page_name* and return it (or None)."""
-        app = self.winfo_toplevel()
-        if hasattr(app, "show_page"):
-            app.show_page(page_name)
-            return getattr(app, "pages", {}).get(page_name)
-        return None
+    def goto_tool(self, tool: ToolId | str) -> tk.Misc | None:
+        """Switch the window to *tool* (an id, or its English name) and return its page."""
+        shell = self.shell()
+        return shell.show_page(tool) if shell is not None else None
 
     # ── Queue bridge ──────────────────────────────────────────────────────────
 
@@ -776,7 +819,7 @@ class BaseTab(ttk.Frame):
         argument of the last command).  While the job runs, *btn* shows the
         progress and acts as a Cancel button.
         """
-        app = self.winfo_toplevel()
+        shell = self.shell()
         cmds = [list(map(str, c)) for c in cmds] if cmds else [list(map(str, cmd))]
         if output is None and cmds and cmds[-1] and ff.is_ffmpeg(cmds[-1][0]):
             last = cmds[-1][-1]
@@ -798,8 +841,8 @@ class BaseTab(ttk.Frame):
                            command=_cancel_click)
             except tk.TclError:
                 btn = None
-        if hasattr(app, "set_status"):
-            app.set_status(t("app.status.queued"))
+        if shell is not None:
+            shell.set_status(t("app.status.queued"))
 
         def _on_start(task_id):
             state["t0"] = time.time()
@@ -808,8 +851,8 @@ class BaseTab(ttk.Frame):
                     btn.config(text="✖ " + _cancel_label())
                 except tk.TclError:
                     pass
-            if hasattr(app, "set_status"):
-                app.set_status(t("app.status.processing"))
+            if shell is not None:
+                shell.set_status(t("app.status.processing"))
 
         def _cancel_label(pct=None):
             label = t("btn.cancel") if t("btn.cancel") != "btn.cancel" else "Cancel"
@@ -836,13 +879,13 @@ class BaseTab(ttk.Frame):
                     pass
             tk_task = self.task(task_id)
             status = tk_task.status if tk_task else ("done" if returncode == 0 else "failed")
-            if hasattr(app, "set_status"):
+            if shell is not None:
                 if status == "done":
-                    app.set_status(t("app.status.done", elapsed=elapsed_str))
+                    shell.set_status(t("app.status.done", elapsed=elapsed_str))
                 elif status == "cancelled":
-                    app.set_status(t("common.cancelled") if t("common.cancelled") != "common.cancelled" else "Cancelled")
+                    shell.set_status(t("common.cancelled") if t("common.cancelled") != "common.cancelled" else "Cancelled")
                 else:
-                    app.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
+                    shell.set_status(t("app.status.error_code", code=returncode), color=CLR["red"])
             if console is not None and tk_task is not None and status == "failed" and tk_task.error:
                 self.log_tagged(console, tk_task.error, "error")
             self._last_task = tk_task
@@ -867,12 +910,8 @@ class BaseTab(ttk.Frame):
             msg = "{}\n\n{}".format(t("common.complete"), out_path) if out_path else t("common.complete")
             messagebox.showinfo(t("common.done"), msg, parent=self)
             if out_path:
-                try:
-                    from core.settings import get
-                    if get("auto_open_output", False):
-                        reveal_file(out_path)
-                except Exception:
-                    pass
+                if settings.AUTO_OPEN_OUTPUT.get():
+                    reveal_file(out_path)
             return
         detail = (task.error if task is not None and task.error else
                   t("common.render_error_msg", code=returncode))

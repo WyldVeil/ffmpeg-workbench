@@ -133,11 +133,11 @@ class BatchTab(BaseTab):
 
         # ── Controls ─────────────────────────────────────────────────────
         ctrl_f = tk.Frame(self); ctrl_f.pack(pady=px(8))
-        self._btn_run = tk.Button(
+        self.btn_render = tk.Button(
             ctrl_f, text=t("batch.process_all_files"),
             font=(UI_FONT, 12, "bold"), bg=CLR["green"], fg="white",
             height=2, width=24, command=self._run)
-        self._btn_run.pack(side="left", padx=px(8))
+        self.btn_render.pack(side="left", padx=px(8))
         tk.Button(ctrl_f, text=t("batch.cancel"),
                   bg=CLR["red"], fg="white", width=10,
                   command=self._cancel).pack(side="left", padx=px(4))
@@ -282,7 +282,7 @@ class BatchTab(BaseTab):
             return 0
 
         self._batch_tid = common.queue_job(self, name=f"Batch: {len(files)} file(s)", out=out_dir, work=work,
-                                           btn=self._btn_run, btn_label=t("batch.process_all_files"),
+                                           btn=self.btn_render, btn_label=t("batch.process_all_files"),
                                            console=self.console, inputs=files)
 
 

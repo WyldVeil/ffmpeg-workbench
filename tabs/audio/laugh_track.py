@@ -7,24 +7,21 @@ classic FFmpeg DSP filters, or state-of-the-art AI Stem Separation.
 
 import os
 import shutil
-import subprocess
 import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import dialogs
-from core.hardware import CREATE_NO_WINDOW, detect_gpu, get_binary_path
+from core import proc as _proc
+from core.hardware import detect_gpu, get_binary_path
 from core.i18n import t
 from core.scaling import px
+from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 
 
 def _fmt(seconds):
-    m, s = divmod(max(0, seconds), 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
-    return f"{int(m):02d}:{s:05.2f}"
+    return f"{Timecode.of(seconds):.2}"
 
 
 class LaughTrackRemoverTab(BaseTab):
@@ -284,11 +281,11 @@ class LaughTrackRemoverTab(BaseTab):
         self._btn_preview = tk.Button(bf, text=t("laugh_track.preview_button"), bg=CLR.get("panel", "#222222"), fg=CLR.get("fg", "#FFFFFF"), width=18, cursor="hand2", command=self._preview_result)
         self._btn_preview.pack(side="left", padx=px(8))
 
-        self._btn_run = tk.Button(
+        self.btn_render = tk.Button(
             bf, text=t("laugh_track.remove_button"), font=(UI_FONT, 12, "bold"),
             bg=CLR.get("green", "#4CAF50"), fg="white", height=2, width=28,
             cursor="hand2", command=self._render)
-        self._btn_run.pack(side="left", padx=px(8))
+        self.btn_render.pack(side="left", padx=px(8))
 
         # ── Console ───────────────────────────────────────────────────────
         cf = tk.Frame(self)
@@ -439,7 +436,7 @@ class LaughTrackRemoverTab(BaseTab):
         if not af: return
         ffplay = get_binary_path("ffplay")
         cmd = [ffplay, "-i", self.file_path, "-af", af, "-t", "30", "-window_title", t("laugh_track.ffmpeg_preview"), "-x", "800", "-y", "450"]
-        self.preview_proc = subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
+        self.preview_proc = _proc.spawn(cmd)
 
     def _render(self):
         typed = self._src_var.get().strip()
@@ -455,7 +452,7 @@ class LaughTrackRemoverTab(BaseTab):
             return
         self._out_var.set(out)
 
-        self._btn_run.config(state="disabled")
+        self.btn_render.config(state="disabled")
 
         if self._engine_var.get() == "ffmpeg":
             self._render_ffmpeg(out)
@@ -466,7 +463,7 @@ class LaughTrackRemoverTab(BaseTab):
                 return self._render_ai(_out, ctx)
 
             def _done(_tid, rc):
-                self._btn_run.config(state="normal")
+                self.btn_render.config(state="normal")
                 self._last_task = self.task(_tid)
                 self.show_result(rc, _out)
 
@@ -477,7 +474,7 @@ class LaughTrackRemoverTab(BaseTab):
     def _render_ffmpeg(self, out):
         af = self._build_af()
         if not af:
-            self._btn_run.config(state="normal")
+            self.btn_render.config(state="normal")
             return
 
         from core import ffmpeg as ff
@@ -488,7 +485,7 @@ class LaughTrackRemoverTab(BaseTab):
             cmd += ["-map", "0:a:0", "-vn", "-c:a", "pcm_s16le"]
         cmd.append(out)
         self.log(self.console, f"Running FFmpeg engine with filters: {af}")
-        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self._btn_run,
+        self.run_ffmpeg(cmd, self.console, on_done=lambda rc: self.show_result(rc, out), btn=self.btn_render,
                         btn_label=t("laugh_track.remove_button"), duration=self.duration or None, output=out,
                         inputs=[self.file_path], name="Laugh Track")
 

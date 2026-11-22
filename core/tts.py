@@ -15,18 +15,18 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 
-from core.hardware import CREATE_NO_WINDOW
+from core import proc as _proc
+from core.errors import ToolError
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
 
 
-class TTSError(RuntimeError):
-    pass
+class TTSError(ToolError):
+    """A voice couldn't speak (missing engine, offline, bad text)."""
 
 
 def _edge():
@@ -154,15 +154,14 @@ def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled
 
 
 def _run(cmd, cancelled, timeout=600):
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
+    proc = _proc.spawn(cmd, stdin=_proc.DEVNULL, stdout=_proc.PIPE, stderr=_proc.PIPE)
     try:
         waited = 0.0
         while True:
             try:
                 out, err = proc.communicate(timeout=0.5)
                 break
-            except subprocess.TimeoutExpired:
+            except _proc.ProcessTimeout:
                 waited += 0.5
                 if (cancelled and cancelled()) or waited > timeout:
                     proc.kill()

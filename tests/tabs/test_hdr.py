@@ -72,7 +72,7 @@ def test_converts_and_leaves_no_hdr_metadata(ui, hdr10, outdir, engine, containe
     ui.reset()
     tab = ui.open("HDR to SDR")
     tab.load_file(hdr10)
-    ui.pump(0.3)
+    ui.wait_for(lambda: tab._inspecting is None, 30)
     assert "HDR10" in tab.kind_lbl.cget("text")
     tab.engine_var.set(engine)
     tab._changed()
@@ -100,7 +100,7 @@ def test_hlg_and_untagged(ui, hlg, media, outdir):
     tab = ui.open("HDR to SDR")
     tab.engine_var.set("cpu")
     tab.load_file(hlg)
-    ui.pump(0.3)
+    ui.wait_for(lambda: tab._inspecting is None, 30)
     assert "HLG" in tab.kind_lbl.cget("text")
     out = str(outdir / "hlg_sdr.mp4")
     tab.out_row.set(out)
@@ -110,6 +110,7 @@ def test_hlg_and_untagged(ui, hlg, media, outdir):
     # an SDR file: nothing to convert, explained
     ui.reset()
     tab.load_file(media["h264_b"])
+    ui.wait_for(lambda: tab._inspecting is None, 30)
     tab.out_row.set(str(outdir / "nope.mp4"))
     tab._render()
     assert ui.dialogs.warnings() and "isn't tagged as HDR" in ui.dialogs.warnings()[0][2]

@@ -21,6 +21,9 @@ from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 # ── Engines (core/tts.py): online neural voices + the OS's own offline voice ──
+from functools import partial
+
+from core import tasks
 from core import tts as tts_core
 from core.i18n import t
 
@@ -581,7 +584,6 @@ class TTSVoiceOverTab(BaseTab):
 
     def _synth_async(self, text, out_path, with_subs, on_ready):
         """Speak *text* in a worker thread, then call on_ready(path, srt) on the UI thread."""
-        from core import ui
         if not self._engine_var.get():
             self._on_tts_error("No voice engine is available.")
             return
@@ -591,8 +593,7 @@ class TTSVoiceOverTab(BaseTab):
             self._on_tts_done(out_path, srt)
             on_ready(out_path, srt)
 
-        ui.run_in_thread(tts_core.synthesize, text, out_path, subtitles=with_subs, **cfg,
-                         on_done=ready, on_error=lambda e: self._on_tts_error(str(e)), name="TTS")
+        tasks.submit(partial(tts_core.synthesize, text, out_path, subtitles=with_subs, **cfg), on_done=ready, on_error=lambda e: self._on_tts_error(str(e)), name="TTS")
 
     def _scratch(self, name):
         if not getattr(self, "_scratch_dir", None):

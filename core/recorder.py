@@ -21,15 +21,15 @@ import os
 import re
 import shutil
 import signal
-import subprocess
 import sys
-import threading
 import time
 from collections import deque
 from datetime import datetime
+from functools import partial
 
 from core import ffmpeg as ff
-from core.hardware import CREATE_NO_WINDOW
+from core import proc as _proc
+from core import tasks
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
@@ -108,19 +108,18 @@ def audio_sources() -> list:
         else:
             pactl = shutil.which("pactl")
             if pactl:
-                sink = subprocess.run([pactl, "get-default-sink"], capture_output=True, text=True,
-                                      timeout=5).stdout.strip()
+                sink = _proc.run([pactl, "get-default-sink"], timeout=5).stdout.strip()
                 if sink:
                     out.append((sink + ".monitor", "Computer sound (what you hear)"))
                 out.append(("default", "Default microphone"))
-                r = subprocess.run([pactl, "list", "short", "sources"], capture_output=True, text=True, timeout=5)
+                r = _proc.run([pactl, "list", "short", "sources"], timeout=5)
                 for line in r.stdout.splitlines():
                     parts = line.split("\t")
                     if len(parts) > 1 and parts[1] not in [x[0] for x in out]:
                         out.append((parts[1], parts[1]))
             else:
                 out.append(("default", "Default microphone"))
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, _proc.ProcessError):
         pass
     return out
 
@@ -221,9 +220,8 @@ def wayland_command(tool: str, out: str, *, fps: str = "60", audio: tuple = ("ou
     if "output" in audio:
         sink = ""
         try:
-            sink = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True,
-                                  timeout=5).stdout.strip()
-        except (OSError, subprocess.SubprocessError):
+            sink = _proc.run(["pactl", "get-default-sink"], timeout=5).stdout.strip()
+        except (OSError, _proc.ProcessError):
             pass
         cmd += [f"--audio={sink}.monitor"] if sink else ["--audio"]
     return cmd
@@ -239,16 +237,15 @@ class Recording:
         self.stopping = False
         self.seconds = seconds
         self.is_ffmpeg = os.path.basename(cmd[0]).lower().startswith("ffmpeg")
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT, text=True, errors="replace",
-                                     creationflags=CREATE_NO_WINDOW,
-                                     start_new_session=not IS_WIN)
-        threading.Thread(target=self._pump, daemon=True, name="RecorderLog").start()
+        self.proc = _proc.spawn(cmd, stdin=_proc.PIPE, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True)
+        tasks.start_service(self._pump, name="RecorderLog")
         if seconds and not self.is_ffmpeg:
-            threading.Timer(seconds, self.stop).start()
+            tasks.start_service(partial(self._stop_after, seconds), name="RecorderTimer")
 
     def _pump(self):
-        for line in iter(self.proc.stdout.readline, ""):
+        out = self.proc.stdout
+        assert out is not None, "spawned with stdout=PIPE"
+        for line in iter(out.readline, ""):
             line = line.rstrip()
             if line:
                 self.tail.append(line)
@@ -263,12 +260,19 @@ class Recording:
     def running(self) -> bool:
         return self.proc.poll() is None
 
+    def _stop_after(self, seconds: float) -> None:
+        """Timed recordings by tools without a duration option: stop at the time."""
+        try:
+            self.proc.wait(timeout=seconds)
+        except _proc.TimeoutExpired:
+            self.stop()
+
     def stop(self, timeout: float = 10.0) -> int:
         """Finish the file properly; kill only if the recorder doesn't react."""
         self.stopping = True
         if self.proc.poll() is None:
             try:
-                if self.is_ffmpeg:
+                if self.is_ffmpeg and self.proc.stdin is not None:
                     self.proc.stdin.write("q\n")
                     self.proc.stdin.flush()
                 elif IS_WIN:
@@ -279,7 +283,7 @@ class Recording:
                 pass
             try:
                 self.proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
+            except _proc.ProcessTimeout:
                 self.proc.kill()
                 self.proc.wait()
         return self.proc.returncode

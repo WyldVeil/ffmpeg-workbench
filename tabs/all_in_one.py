@@ -26,11 +26,11 @@ Sections (all optional, all combinable):
 
 import os
 import shlex
-import threading
 import tkinter as tk
+from functools import partial
 from tkinter import messagebox, ttk
 
-from core import dialogs
+from core import dialogs, tasks
 from core.i18n import t
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -345,8 +345,7 @@ class AllInOneTab(BaseTab):
         if not self._out_var.get():
             self._out_var.set(base + "_pipeline.mp4")
         # Load duration in background
-        threading.Thread(target=self._load_duration,
-                         args=(p,), daemon=True).start()
+        tasks.submit(partial(self._load_duration, p))
         self._rebuild_cmd()
 
     def _src_typed(self):
@@ -361,7 +360,7 @@ class AllInOneTab(BaseTab):
                 self._probed_path = p
                 if not self._out_var.get():
                     self._out_var.set(self.suggest_output(p, "pipeline"))
-                threading.Thread(target=self._load_duration, args=(p,), daemon=True).start()
+                tasks.submit(partial(self._load_duration, p))
         self._src_job = self.after(400, go)
 
     def _load_duration(self, path):
@@ -898,7 +897,7 @@ class AllInOneTab(BaseTab):
         btn_row = tk.Frame(bottom, bg=CLR["panel"])
         btn_row.pack(fill="x", padx=px(12), pady=px(4, 10))
 
-        self._btn_render = tk.Button(
+        self.btn_render = tk.Button(
             btn_row,
             text="▶  RENDER",
             font=(UI_FONT, 12, "bold"),
@@ -907,7 +906,7 @@ class AllInOneTab(BaseTab):
             cursor="hand2",
             command=self._render,
         )
-        self._btn_render.pack(side="left", padx=px(8))
+        self.btn_render.pack(side="left", padx=px(8))
 
         self._btn_stop = tk.Button(
             btn_row,
@@ -1286,7 +1285,7 @@ class AllInOneTab(BaseTab):
             cmd,
             self.console,
             on_done=_on_done_wrapper,
-            btn=self._btn_render,
+            btn=self.btn_render,
             btn_label="▶  RENDER",
             duration=getattr(self, "_expected_len", None),
             output=checked, inputs=[src], name="All-in-One",
@@ -1298,7 +1297,7 @@ class AllInOneTab(BaseTab):
 
         self.log(self.console, t("log.all_in_one.render_forcibly_stopped_by_user"))
         self._btn_stop.config(state="disabled")
-        self._btn_render.config(state="normal", text="▶  RENDER")
+        self.btn_render.config(state="normal", text="▶  RENDER")
 
     def _copy_cmd(self):
         raw = self._cmd_text.get("1.0", "end").strip()
@@ -1313,11 +1312,11 @@ class AllInOneTab(BaseTab):
         p = dialogs.ask_save("render.bat", kind="any", defaultextension=".bat", parent=self)
         if not p:
             return
-        import subprocess as _sp
+        from core import proc as _proc
         try:
             with open(p, "w", encoding="utf-8", newline="\r\n") as f:
                 f.write("@echo off\nchcp 65001 >nul\n")
-                f.write(_sp.list2cmdline(argv).replace("%", "%%") + "\n")
+                f.write(_proc.list2cmdline(argv).replace("%", "%%") + "\n")
                 f.write("pause\n")
             self.log(self.console, f"✅  Saved: {p}")
         except OSError as exc:

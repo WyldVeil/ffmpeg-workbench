@@ -18,6 +18,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from core import ffmpeg as ff
+from core import tasks
 from core.i18n import t
 from core.scaling import px
 from tabs import common
@@ -232,9 +233,7 @@ class ColorMatchTab(BaseTab):
             if then is not None:
                 then()
 
-        from core import ui
-        ui.run_in_thread(work, on_done=done, on_error=lambda exc: done(None, exc),
-                         name="ColourMatchAnalyse")
+        tasks.submit(work, on_done=done, on_error=lambda exc: done(None, exc), name="ColourMatchAnalyse")
 
     def _render(self):
         src = self.src_row.path
