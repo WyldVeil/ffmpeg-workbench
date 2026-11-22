@@ -255,6 +255,50 @@ def _droppable(t: Track, container: str) -> bool:
     return any("left out" in why or "can't go into" in why for _t, why in problems([t], container))
 
 
+def _input_args(inputs: Sequence[str], tracks: Sequence[Track]) -> list[str]:
+    """-i for every file; an added file's tracks are shifted by their delay."""
+    delays = {t.source: t.delay for t in tracks if t.source > 0}
+    args: list[str] = []
+    for n, path in enumerate(inputs):
+        if n > 0 and abs(delays.get(n, 0.0)) > 1e-6:
+            args += ["-itsoffset", f"{delays[n]:.3f}"]
+        args += ["-i", path]
+    return args
+
+
+def _subtitle_codec(t: Track, container: str) -> str | None:
+    """The text-subtitle format *container* needs, when *t* isn't in it already."""
+    if t.kind != "subtitle" or t.codec not in TEXT_SUBS:
+        return None
+    if container in ("mp4", "mov"):
+        return "mov_text" if t.codec != "mov_text" else None
+    if container == "webm":
+        return "webvtt" if t.codec != "webvtt" else None
+    return "srt" if container == "mkv" and t.codec == "mov_text" else None
+
+
+def _track_args(n: int, t: Track, container: str) -> list[str]:
+    """Output options for kept track number *n*: format, name, language, flags."""
+    args: list[str] = []
+    sub = _subtitle_codec(t, container)
+    if sub:
+        args += [f"-c:{n}", sub]
+    if t.kind == "video" and t.codec == "hevc" and container in ("mp4", "mov"):
+        args += [f"-tag:{n}", "hvc1"]  # Apple players need this tag for HEVC
+    if t.kind in ("audio", "subtitle", "video"):
+        flags = [f for f, on in (("default", t.default), ("forced", t.forced)) if on]
+        args += [
+            f"-metadata:s:{n}",
+            f"language={t.language or 'und'}",
+            f"-metadata:s:{n}",
+            f"title={t.title}",
+        ]
+        args += [f"-disposition:{n}", "+".join(flags) if flags else "0"]
+    elif t.kind == "cover":
+        args += [f"-disposition:{n}", "attached_pic"]
+    return args
+
+
 def remux_command(
     inputs: Sequence[str],
     tracks: Sequence[Track],
@@ -267,55 +311,21 @@ def remux_command(
     """(argv, [notes]) copying *tracks* (in order) from *inputs* into *out*."""
     container = os.path.splitext(out)[1].lstrip(".").lower()
     container = {"m4v": "mp4", "mka": "mkv", "mks": "mkv"}.get(container, container)
-    argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
-    delays = {t.source: t.delay for t in tracks if t.source > 0}
-    for n, path in enumerate(inputs):
-        if n > 0 and abs(delays.get(n, 0.0)) > 1e-6:
-            argv += ["-itsoffset", f"{delays[n]:.3f}"]
-        argv += ["-i", path]
-    notes: list[str] = []
-    kept: list[Track] = []
-    for t in tracks:
-        if not t.keep:
-            continue
-        if _droppable(t, container if container in VIDEO_OK else "mkv"):
-            notes.append(f"Left out: {t.describe()}")
-            continue
-        kept.append(t)
+    fits = container if container in VIDEO_OK else "mkv"
+    wanted = [t for t in tracks if t.keep]
+    kept = [t for t in wanted if not _droppable(t, fits)]
+    notes = [f"Left out: {t.describe()}" for t in wanted if _droppable(t, fits)]
     if not any(t.kind in ("video", "audio") for t in kept):
         raise ValueError("Keep at least one video or audio track.")
+    argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *_input_args(inputs, tracks)]
     for t in kept:
         argv += ["-map", f"{t.source}:{t.index}"]
-    argv += ["-c", "copy"]
-    argv += [
-        "-map_metadata",
-        "0" if keep_tags else "-1",
-        "-map_chapters",
-        "0" if keep_chapters else "-1",
-    ]
+    argv += ["-c", "copy", "-map_metadata", "0" if keep_tags else "-1"]
+    argv += ["-map_chapters", "0" if keep_chapters else "-1"]
     if title is not None:
         argv += ["-metadata", f"title={title}"]
     for n, t in enumerate(kept):
-        if t.kind == "subtitle" and t.codec in TEXT_SUBS:
-            if container in ("mp4", "mov") and t.codec != "mov_text":
-                argv += [f"-c:{n}", "mov_text"]
-            elif container == "webm" and t.codec != "webvtt":
-                argv += [f"-c:{n}", "webvtt"]
-            elif container == "mkv" and t.codec == "mov_text":
-                argv += [f"-c:{n}", "srt"]
-        if t.kind == "video" and t.codec == "hevc" and container in ("mp4", "mov"):
-            argv += [f"-tag:{n}", "hvc1"]  # Apple players need this tag for HEVC
-        if t.kind in ("audio", "subtitle", "video"):
-            argv += [
-                f"-metadata:s:{n}",
-                f"language={t.language or 'und'}",
-                f"-metadata:s:{n}",
-                f"title={t.title}",
-            ]
-            flags = [f for f, on in (("default", t.default), ("forced", t.forced)) if on]
-            argv += [f"-disposition:{n}", "+".join(flags) if flags else "0"]
-        elif t.kind == "cover":
-            argv += [f"-disposition:{n}", "attached_pic"]
+        argv += _track_args(n, t, container)
     if container in ("mp4", "mov"):
         argv += ["-movflags", "+faststart"]
     return [*argv, out], notes

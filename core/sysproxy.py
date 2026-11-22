@@ -46,6 +46,8 @@ from urllib.parse import urlsplit
 
 from core import proc as _proc
 
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
 logger = logging.getLogger("crossfader.sysproxy")
 
 DIRECT = "direct://"
@@ -301,49 +303,44 @@ def parse_pac_result(result: str) -> list[str]:
     return out or [DIRECT]
 
 
+_IP_PATTERN = re.compile(r"^\[?[0-9a-f:.]+\]?(/\d+)?$")
+_HOST_PORT = re.compile(r"^(.*):(\d+)$")
+
+
+def _matches(p: str, host: str, port: int | None, ip: IPAddress | None) -> bool:
+    """Does the no-proxy pattern *p* (stripped, lower case) cover *host*:*port*?"""
+    if p == "*":
+        return True
+    if p == "<local>":  # Windows: names without dots
+        return "." not in host and ip is None
+    if _IP_PATTERN.match(p) and ("/" in p or ip is not None):
+        try:
+            return ip is not None and ip in ipaddress.ip_network(p.strip("[]"), strict=False)
+        except ValueError:
+            return False
+    m = _HOST_PORT.match(p)
+    if m and not p.startswith("["):
+        p, pport = m.group(1), int(m.group(2))
+        if port is not None and pport != port:
+            return False
+    p = p.lstrip("*").lstrip(".")
+    if not p or host == p or host.endswith("." + p):
+        return True
+    return "*" in p and re.fullmatch(p.replace(".", r"\.").replace("*", ".*"), host) is not None
+
+
 def bypassed(url: str, patterns: Iterable[str]) -> bool:
     """no_proxy / exception-list matching: hosts, .domain, *.wildcards, CIDR,
     host:port, '*' (everything) and Windows' <local> (names without dots)."""
     parts = urlsplit(url)
     host = (parts.hostname or "").lower()
-    port = parts.port
     if not host:
         return False
     try:
-        ip = ipaddress.ip_address(host)
+        ip: IPAddress | None = ipaddress.ip_address(host)
     except ValueError:
         ip = None
-    for raw in patterns:
-        p = raw.strip().lower()
-        if not p:
-            continue
-        if p == "*":
-            return True
-        if p == "<local>":
-            if "." not in host and ip is None:
-                return True
-            continue
-        if re.match(r"^\[?[0-9a-f:.]+\]?(/\d+)?$", p) and ("/" in p or ip is not None):
-            try:
-                if ip is not None and ip in ipaddress.ip_network(p.strip("[]"), strict=False):
-                    return True
-            except ValueError:
-                pass
-            continue
-        pport = None
-        m = re.match(r"^(.*):(\d+)$", p)
-        if m and not p.startswith("["):
-            p, pport = m.group(1), int(m.group(2))
-        if pport is not None and port is not None and pport != port:
-            continue
-        p = p.lstrip("*").lstrip(".")
-        if not p:
-            return True
-        if host == p or host.endswith("." + p):
-            return True
-        if "*" in p and re.fullmatch(p.replace(".", r"\.").replace("*", ".*"), host):
-            return True
-    return False
+    return any(_matches(p, host, parts.port, ip) for raw in patterns if (p := raw.strip().lower()))
 
 
 def choose(sp: SystemProxy, url: str) -> list[str]:

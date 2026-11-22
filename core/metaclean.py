@@ -228,6 +228,52 @@ def _is_hdr(s: ff.Stream) -> bool:
     return (s.color_transfer or "") in ("smpte2084", "arib-std-b67")
 
 
+def _telemetry(s: ff.Stream) -> bool:
+    return (s.raw.get("codec_tag_string") or "").lower() in ("gpmd", "camm")
+
+
+def _kept(info: ff.MediaInfo, *, keep_subtitles: bool, keep_cover: bool) -> list[ff.Stream]:
+    """The streams to copy, in output order: picture and sound always, a cover
+    picture and subtitles when asked (never camera telemetry)."""
+
+    def wanted(s: ff.Stream) -> bool:
+        if s.type == "audio":
+            return True
+        if s.attached_pic:
+            return keep_cover
+        return s.type == "video" or (s.type == "subtitle" and keep_subtitles and not _telemetry(s))
+
+    return [s for s in info.streams if wanted(s)]
+
+
+def _fonts(info: ff.MediaInfo, kept: list[ff.Stream], ext: str) -> list[ff.Stream]:
+    """Font attachments styled (ASS) subtitles need - kept only in MKV."""
+    if ext != ".mkv" or not any(s.type == "subtitle" and s.codec in ("ass", "ssa") for s in kept):
+        return []
+    return [
+        s
+        for s in info.streams
+        if s.type == "attachment" and "font" in (s.tags.get("mimetype", "") + s.codec).lower()
+    ]
+
+
+def _deep(kept: list[ff.Stream]) -> tuple[list[str], list[str]]:
+    """Bitstream filters that drop the notes encoders write inside H.264/HEVC
+    (SEI); HDR HEVC keeps them, as they carry its brightness information."""
+    args: list[str] = []
+    notes: list[str] = []
+    for n, s in enumerate(x for x in kept if x.type == "video" and not x.attached_pic):
+        if s.codec == "h264":
+            args += [f"-bsf:v:{n}", "filter_units=remove_types=6"]
+        elif s.codec == "hevc" and not _is_hdr(s):
+            args += [f"-bsf:v:{n}", "filter_units=remove_types=39|40"]
+        elif s.codec == "hevc":
+            notes.append(
+                "HDR video: its stream notes were kept (they carry the brightness information)."
+            )
+    return args, notes
+
+
 def clean_command(
     info: ff.MediaInfo,
     src: str,
@@ -240,49 +286,14 @@ def clean_command(
     deep: bool = False,
 ) -> tuple[list[str], list[str]]:
     """(argv, notes) for a lossless copy without the metadata."""
-    notes: list[str] = []
-    argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", src]
-    kept: list[ff.Stream] = []  # streams in output order
-    for s in info.streams:
-        telemetry = (s.raw.get("codec_tag_string") or "").lower() in ("gpmd", "camm")
-        if s.type == "audio":
-            keep = True
-        elif s.attached_pic:
-            keep = keep_cover  # a cover picture
-        elif s.type == "video":
-            keep = True
-        else:
-            keep = s.type == "subtitle" and keep_subtitles and not telemetry
-        if keep:
-            kept.append(s)
     ext = os.path.splitext(out)[1].lower()
-    ass = any(s.type == "subtitle" and s.codec in ("ass", "ssa") for s in kept)
-    fonts = [
-        s
-        for s in info.streams
-        if s.type == "attachment"
-        and ass
-        and ext == ".mkv"
-        and "font" in (s.tags.get("mimetype", "") + s.codec).lower()
-    ]
-    for s in kept + fonts:
+    kept = _kept(info, keep_subtitles=keep_subtitles, keep_cover=keep_cover)
+    argv = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", src]
+    for s in kept + _fonts(info, kept, ext):
         argv += ["-map", f"0:{s.index}"]
-    argv += [
-        "-c",
-        "copy",
-        "-map_metadata",
-        "-1",
-        "-map_chapters",
-        "0" if keep_chapters else "-1",
-        "-fflags",
-        "+bitexact",
-        "-flags:v",
-        "+bitexact",
-        "-flags:a",
-        "+bitexact",
-    ]
-    if keep_chapters:
-        notes.append("Chapters kept (their titles too).")
+    argv += ["-c", "copy", "-map_metadata", "-1", "-map_chapters", "0" if keep_chapters else "-1"]
+    argv += ["-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact"]
+    notes = ["Chapters kept (their titles too)."] if keep_chapters else []
     for n, s in enumerate(kept):
         lang = (s.tags or {}).get("language", "")
         if keep_language and lang and lang != "und" and s.type in ("audio", "subtitle"):
@@ -290,23 +301,13 @@ def clean_command(
         if s.attached_pic:
             argv += [f"-disposition:{n}", "attached_pic"]
     if deep:
-        for n, s in enumerate(x for x in kept if x.type == "video" and not x.attached_pic):
-            if s.codec == "h264":
-                argv += [f"-bsf:v:{n}", "filter_units=remove_types=6"]
-            elif s.codec == "hevc" and not _is_hdr(s):
-                argv += [f"-bsf:v:{n}", "filter_units=remove_types=39|40"]
-            elif s.codec == "hevc":
-                notes.append(
-                    "HDR video: its stream notes were kept (they carry the brightness information)."
-                )
+        deep_args, deep_notes = _deep(kept)
+        argv += deep_args
+        notes += deep_notes
     for s in info.streams:
-        if s.type == "data" or (
-            s.type == "subtitle"
-            and (s.raw.get("codec_tag_string") or "").lower() in ("gpmd", "camm")
-        ):
-            notes.append(
-                f"Removed {TELEMETRY_TAGS.get((s.raw.get('codec_tag_string') or '').lower()) or 'a data track'}."
-            )
+        if s.type == "data" or (s.type == "subtitle" and _telemetry(s)):
+            tag = (s.raw.get("codec_tag_string") or "").lower()
+            notes.append(f"Removed {TELEMETRY_TAGS.get(tag) or 'a data track'}.")
     if ext in (".mp4", ".mov", ".m4v", ".m4a"):
         argv += ["-movflags", "+faststart"]
     return [*argv, out], notes

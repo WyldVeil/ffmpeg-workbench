@@ -619,13 +619,25 @@ _INPUT_OPTS_WITH_VALUE = {
 }
 
 
-def guess_output_duration(cmd: Sequence[str]) -> float | None:
-    """Best-effort expected duration of an FFmpeg command's output, used for
-    percentage progress when the caller did not supply one."""
-    args = [str(c) for c in cmd[1:]]
-    # Split into per-input option groups and the output option group.
-    inputs: list[tuple[str, dict[str, str]]] = []
-    opts: dict[str, str] = {}
+_LIVE_FORMATS = (
+    "lavfi",
+    "concat",
+    "image2",
+    "gdigrab",
+    "ddagrab",
+    "x11grab",
+    "dshow",
+    "avfoundation",
+    "pulse",
+    "alsa",
+)
+_Options = dict[str, str]
+
+
+def _option_groups(args: list[str]) -> tuple[list[tuple[str, _Options]], _Options]:
+    """Split a command's arguments into ([(input, its options)], output options)."""
+    inputs: list[tuple[str, _Options]] = []
+    opts: _Options = {}
     i = 0
     while i < len(args):
         a = args[i]
@@ -633,13 +645,35 @@ def guess_output_duration(cmd: Sequence[str]) -> float | None:
             inputs.append((args[i + 1], opts))
             opts = {}
             i += 2
-            continue
-        if a.startswith("-") and i + 1 < len(args) and a in _INPUT_OPTS_WITH_VALUE:
+        elif a.startswith("-") and i + 1 < len(args) and a in _INPUT_OPTS_WITH_VALUE:
             opts[a] = args[i + 1]
             i += 2
-            continue
-        i += 1
-    out_opts = opts
+        else:
+            i += 1
+    return inputs, opts
+
+
+def _input_span(path: str, in_opts: _Options, out_opts: _Options) -> float | None:
+    """How much of the input file *path* the command reads (None: unknown)."""
+    total = duration_of(path)
+    if not total:
+        return None
+    start = parse_time(in_opts.get("-ss", 0)) + parse_time(out_opts.get("-ss", 0))
+    remaining = max(0.0, total - start)
+    if "-t" in in_opts:
+        remaining = min(remaining, parse_time(in_opts["-t"]))
+    elif "-to" in in_opts:
+        remaining = min(
+            remaining, max(0.0, parse_time(in_opts["-to"]) - parse_time(in_opts.get("-ss", 0)))
+        )
+    return remaining or None
+
+
+def guess_output_duration(cmd: Sequence[str]) -> float | None:
+    """Best-effort expected duration of an FFmpeg command's output, used for
+    percentage progress when the caller did not supply one."""
+    args = [str(c) for c in cmd[1:]]
+    inputs, out_opts = _option_groups(args)
     try:
         if "-t" in out_opts:
             return parse_time(out_opts["-t"])
@@ -647,42 +681,13 @@ def guess_output_duration(cmd: Sequence[str]) -> float | None:
             return max(0.0, parse_time(out_opts["-to"]) - parse_time(out_opts.get("-ss", 0)))
     except ValueError:
         pass
-    if "-frames:v" in args or "-vframes" in args:
-        return None
-    if not inputs:
+    if "-frames:v" in args or "-vframes" in args or not inputs:
         return None
     path, in_opts = inputs[0]
-    if in_opts.get("-f") in (
-        "lavfi",
-        "concat",
-        "image2",
-        "gdigrab",
-        "ddagrab",
-        "x11grab",
-        "dshow",
-        "avfoundation",
-        "pulse",
-        "alsa",
-    ):
-        if "-t" in in_opts:
-            try:
-                return parse_time(in_opts["-t"])
-            except ValueError:
-                return None
-        return None
     try:
-        total = duration_of(path)
-        if not total:
-            return None
-        start = parse_time(in_opts.get("-ss", 0)) + parse_time(out_opts.get("-ss", 0))
-        remaining = max(0.0, total - start)
-        if "-t" in in_opts:
-            remaining = min(remaining, parse_time(in_opts["-t"]))
-        elif "-to" in in_opts:
-            remaining = min(
-                remaining, max(0.0, parse_time(in_opts["-to"]) - parse_time(in_opts.get("-ss", 0)))
-            )
-        return remaining or None
+        if in_opts.get("-f") in _LIVE_FORMATS:  # a generated or captured input: only -t says
+            return parse_time(in_opts["-t"]) if "-t" in in_opts else None
+        return _input_span(path, in_opts, out_opts)
     except ValueError:
         return None
 

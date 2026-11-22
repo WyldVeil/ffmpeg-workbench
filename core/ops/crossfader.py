@@ -114,6 +114,92 @@ class Crossfade:
     audio_curve: str = "tri"
 
 
+@dataclass(frozen=True, slots=True)
+class _Plan:
+    """What every part of the crossfade graph needs."""
+
+    clips: Sequence[Clip]
+    fade: Crossfade
+    width: int
+    height: int
+    pix: str
+    lengths: list[float]  # each clip's length as it enters the xfade chain
+
+
+def _silent_inputs(clips: Sequence[Clip]) -> tuple[list[str], dict[int, int]]:
+    """Silent tracks for clips without sound: (input args, {clip: its silent input})."""
+    args: list[str] = []
+    silent: dict[int, int] = {}
+    for i, c in enumerate(clips):
+        if not c.has_audio:
+            silent[i] = len(clips) + len(silent)
+            args += [
+                "-f",
+                "lavfi",
+                "-t",
+                ff.ts(c.duration),
+                "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=48000",
+            ]
+    return args, silent
+
+
+def _video_graph(p: _Plan, suffix: str) -> list[str]:
+    T, n, fps = p.fade.seconds, len(p.clips), p.clips[0].fps_str
+    graph: list[str] = []
+    for i, c in enumerate(p.clips):
+        chain = (
+            f"[{i}:v]setpts=PTS-STARTPTS,"
+            f"scale={p.width}:{p.height}:force_original_aspect_ratio=decrease,"
+            f"pad={p.width}:{p.height}:-1:-1:color=black,setsar=1,fps={fps},"
+            f"trim=duration={c.duration:.6f},setpts=PTS-STARTPTS,format={p.pix}"
+        )
+        if p.fade.freeze:
+            pads = [f"start_mode=clone:start_duration={T:.6f}"] if i > 0 else []
+            pads += [f"stop_mode=clone:stop_duration={T:.6f}"] if i < n - 1 else []
+            chain += ",tpad=" + ":".join(pads)
+        graph.append(chain + f",settb=AVTB[v{i}]")
+    last, offset = "[v0]", 0.0
+    for i in range(1, n):
+        offset += p.lengths[i - 1] - T
+        trans = p.fade.transitions[i - 1] if i - 1 < len(p.fade.transitions) else TRANS_DEFAULT
+        graph.append(
+            f"{last}[v{i}]xfade=transition={trans}:duration={T:.6f}:offset={offset:.6f}[x{i}]"
+        )
+        last = f"[x{i}]"
+    graph.append(f"{last}{suffix or 'null'}[vout]")
+    return graph
+
+
+def _audio_graph(p: _Plan, silent: dict[int, int]) -> list[str]:
+    T, n, curve = p.fade.seconds, len(p.clips), p.fade.audio_curve
+    graph: list[str] = []
+    for i, c in enumerate(p.clips):
+        src = f"[{silent[i]}:a]" if i in silent else f"[{i}:a]"
+        chain = (
+            f"{src}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"asetpts=PTS-STARTPTS,apad,atrim=duration={c.duration:.6f}"
+        )
+        if p.fade.freeze:
+            chain += f",adelay=delays={round(T * 1000)}:all=1" if i > 0 else ""
+            chain += f",apad=pad_dur={T:.6f}" if i < n - 1 else ""
+            chain += f",atrim=duration={p.lengths[i]:.6f}"
+        graph.append(chain + f",asetpts=PTS-STARTPTS[a{i}]")
+    last = "[a0]"
+    for i in range(1, n):
+        label = f"[ax{i}]" if i < n - 1 else "[aout]"
+        graph.append(f"{last}[a{i}]acrossfade=d={T:.6f}:c1={curve}:c2={curve}{label}")
+        last = label
+    return graph
+
+
+def _audio_encoding(out: str, audio_mode: str) -> list[str]:
+    container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
+    if container == "webm":
+        return enc.audio("opus", "256k" if audio_mode == "hq" else "192k", container=container)
+    return enc.audio("aac", "320k" if audio_mode == "hq" else "192k", container=container)
+
+
 def build_command(
     clips: Sequence[Clip],
     out: str,
@@ -123,102 +209,27 @@ def build_command(
     size: tuple[int, int] | None = None,
 ) -> tuple[list[str], float]:
     """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
-    T, transitions, freeze = fade.seconds, fade.transitions, fade.freeze
-    audio_mode, audio_curve = fade.audio_mode, fade.audio_curve
-    n = len(clips)
     if venc is None:
         venc = enc.video("h264", "high", hw="off", container=os.path.splitext(out)[1] or "mp4")
     W, H = size or (_even(clips[0].width), _even(clips[0].height))
-    fps = clips[0].fps_str
-    pix = venc.pix_fmt or "yuv420p"
-    lengths = segment_lengths(clips, T, freeze)
-    use_audio = audio_mode != "none" and any(c.has_audio for c in clips)
-
+    plan = _Plan(
+        clips,
+        fade,
+        W,
+        H,
+        venc.pix_fmt or "yuv420p",
+        segment_lengths(clips, fade.seconds, fade.freeze),
+    )
+    use_audio = fade.audio_mode != "none" and any(c.has_audio for c in clips)
     argv = [ff.ffmpeg_path(), "-y", *venc.pre_input]
     for c in clips:
         argv += ["-i", c.path]
-    silent_index: dict[int, int] = {}
+    graph = _video_graph(plan, venc.filter_suffix)
     if use_audio:
-        for i, c in enumerate(clips):
-            if not c.has_audio:
-                silent_index[i] = n + len(silent_index)
-                argv += [
-                    "-f",
-                    "lavfi",
-                    "-t",
-                    ff.ts(c.duration),
-                    "-i",
-                    "anullsrc=channel_layout=stereo:sample_rate=48000",
-                ]
-
-    graph: list[str] = []
-    for i, c in enumerate(clips):
-        chain = (
-            f"[{i}:v]setpts=PTS-STARTPTS,"
-            f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-            f"pad={W}:{H}:-1:-1:color=black,setsar=1,fps={fps},"
-            f"trim=duration={c.duration:.6f},setpts=PTS-STARTPTS,format={pix}"
-        )
-        if freeze:
-            pads: list[str] = []
-            if i > 0:
-                pads.append(f"start_mode=clone:start_duration={T:.6f}")
-            if i < n - 1:
-                pads.append(f"stop_mode=clone:stop_duration={T:.6f}")
-            chain += ",tpad=" + ":".join(pads)
-        graph.append(chain + f",settb=AVTB[v{i}]")
-
-    last = "[v0]"
-    offset = 0.0
-    for i in range(1, n):
-        offset += lengths[i - 1] - T
-        trans = transitions[i - 1] if i - 1 < len(transitions) else TRANS_DEFAULT
-        label = f"[x{i}]"
-        graph.append(
-            f"{last}[v{i}]xfade=transition={trans}:duration={T:.6f}:offset={offset:.6f}{label}"
-        )
-        last = label
-    if venc.filter_suffix:
-        graph.append(f"{last}{venc.filter_suffix}[vout]")
-    else:
-        graph.append(f"{last}null[vout]")
-
-    if use_audio:
-        for i, c in enumerate(clips):
-            src = f"[{silent_index[i]}:a]" if i in silent_index else f"[{i}:a]"
-            chain = (
-                f"{src}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                f"asetpts=PTS-STARTPTS,apad,atrim=duration={c.duration:.6f}"
-            )
-            if freeze:
-                if i > 0:
-                    chain += f",adelay=delays={round(T * 1000)}:all=1"
-                if i < n - 1:
-                    chain += f",apad=pad_dur={T:.6f}"
-                chain += f",atrim=duration={lengths[i]:.6f}"
-            graph.append(chain + f",asetpts=PTS-STARTPTS[a{i}]")
-        last = "[a0]"
-        for i in range(1, n):
-            label = f"[ax{i}]" if i < n - 1 else "[aout]"
-            graph.append(
-                f"{last}[a{i}]acrossfade=d={T:.6f}:c1={audio_curve}:c2={audio_curve}{label}"
-            )
-            last = label
-
+        silent_args, silent = _silent_inputs(clips)
+        argv += silent_args
+        graph += _audio_graph(plan, silent)
     argv += ["-filter_complex", ";".join(graph), "-map", "[vout]"]
-    if use_audio:
-        container = os.path.splitext(out)[1].lstrip(".").lower() or "mp4"
-        bitrate = "320k" if audio_mode == "hq" else "192k"
-        argv += [
-            "-map",
-            "[aout]",
-            *enc.audio(
-                "opus" if container == "webm" else "aac",
-                "256k" if (container == "webm" and audio_mode == "hq") else bitrate,
-                container=container,
-            ),
-        ]
-    else:
-        argv += ["-an"]
+    argv += ["-map", "[aout]", *_audio_encoding(out, fade.audio_mode)] if use_audio else ["-an"]
     argv += [*venc.args, "-map_metadata", "-1", "-sn", out]
-    return argv, total_duration(clips, T, freeze)
+    return argv, total_duration(clips, fade.seconds, fade.freeze)
