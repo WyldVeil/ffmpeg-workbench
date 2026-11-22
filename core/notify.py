@@ -54,7 +54,7 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
             _proc.spawn(
                 [
                     "notify-send",
-                    "--app-name=WyldVeil Media Editor",
+                    "--app-name=FFmpeg Workbench",
                     f"--urgency={urgency}",
                     f"--icon={icon}",
                     title,

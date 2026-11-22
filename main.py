@@ -1,5 +1,5 @@
 """
-main.py - WyldVeil's Media Editor: where it starts.
+main.py - FFmpeg Workbench: where it starts.
 
 ``main.py --cli ...`` (or an executable whose name ends in ``-cli``) runs the
 command line (core/cli.py) and never loads the window code; anything else
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     multiprocessing.freeze_support()  # PyInstaller on Windows
     from core import APP_NAME
 
-    parser = argparse.ArgumentParser(prog="wyldveil-media-editor", description=APP_NAME)
+    parser = argparse.ArgumentParser(prog="ffmpeg-workbench", description=APP_NAME)
     parser.add_argument("files", nargs="*", help="media files to open")
     parser.add_argument("--debug", action="store_true", help="verbose logging to the console")
     parser.add_argument("--self-test", action="store_true", help="check the installation and exit")

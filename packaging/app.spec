@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for WyldVeil's Media Editor (Windows and Linux).
+PyInstaller spec for FFmpeg Workbench (Windows and Linux).
 
 Build with ``python packaging/build.py`` (preferred), or directly:
 
@@ -21,7 +21,7 @@ from core.hardware import platform_tag  # noqa: E402
 
 IS_WIN = sys.platform.startswith("win")
 PLAT = platform_tag()
-NAME = "WyldVeilMediaEditor" if IS_WIN else "wyldveil-media-editor"
+NAME = "FFmpegWorkbench" if IS_WIN else "ffmpeg-workbench"
 
 datas = [
     (os.path.join(ROOT, "locale"), "locale"),
@@ -78,7 +78,7 @@ exe = EXE(
 )
 
 # Windows: the app above has no console, so commands typed in a terminal get a
-# companion with one - WyldVeilMediaEditor-cli.exe (same files; main.py sees
+# companion with one - FFmpegWorkbench-cli.exe (same files; main.py sees
 # the "-cli" name and runs the command line, see AGENTS.md).
 extra_exes = []
 if IS_WIN:

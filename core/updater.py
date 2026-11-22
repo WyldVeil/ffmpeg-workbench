@@ -66,11 +66,11 @@ def open_verified(url: str, timeout: float = 30.0) -> HTTPResponse:
         cfg = dict(network.get())
         cfg["network.verify_ssl"] = True
         return network.urlopen(
-            url, timeout=timeout, cfg=cfg, headers={"User-Agent": "WyldVeil-Media-Editor-updater"}
+            url, timeout=timeout, cfg=cfg, headers={"User-Agent": "FFmpeg-Workbench-updater"}
         )
     except ImportError:
         ctx = ssl.create_default_context()
-        req = urllib.request.Request(url, headers={"User-Agent": "WyldVeil-Media-Editor-updater"})
+        req = urllib.request.Request(url, headers={"User-Agent": "FFmpeg-Workbench-updater"})
         return urllib.request.urlopen(req, timeout=timeout, context=ctx)
 
 

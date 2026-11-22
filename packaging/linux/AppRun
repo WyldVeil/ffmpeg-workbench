@@ -1,5 +1,5 @@
 #!/bin/sh
-# AppImage entry point for WyldVeil's Media Editor.
+# AppImage entry point for FFmpeg Workbench.
 HERE="$(dirname "$(readlink -f "$0")")"
 export APPDIR="${APPDIR:-$HERE}"
-exec "$HERE/usr/lib/wyldveil-media-editor/wyldveil-media-editor" "$@"
+exec "$HERE/usr/lib/ffmpeg-workbench/ffmpeg-workbench" "$@"

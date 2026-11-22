@@ -49,7 +49,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCK = os.path.join(ROOT, "scripts", "binaries.lock.json")
 PLATFORMS = ("windows-x64", "linux-x64")
-UA = "binary-fetcher/1.0 (+https://github.com/WyldVeil/wyldveils-media-editor)"
+UA = "ffmpeg-workbench-binary-fetcher/1.0"
 
 # Which FFmpeg release line to track and which BtbN variant to use per platform.
 # Shared builds on both platforms: ffmpeg/ffprobe/ffplay share one set of

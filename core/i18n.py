@@ -1,5 +1,5 @@
 """
-core/i18n.py  -  Internationalisation engine for Quintessential Video Editor
+core/i18n.py  -  Internationalisation engine for FFmpeg Workbench
 
 Usage:
     from core.i18n import t, init, get_language, set_language, LANGUAGE_NAMES

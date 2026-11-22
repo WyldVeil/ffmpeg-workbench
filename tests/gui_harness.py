@@ -229,6 +229,7 @@ def _isolate_settings(tmpdir: str) -> None:
     os.environ["CROSSFADER_CONFIG_DIR"] = tmpdir
     os.environ["CROSSFADER_DATA_DIR"] = os.path.join(tmpdir, "data")
     os.environ["CROSSFADER_CACHE_DIR"] = os.path.join(tmpdir, "cache")
+    os.environ["CROSSFADER_LOG_DIR"] = os.path.join(tmpdir, "logs")
     os.environ.setdefault("CROSSFADER_NO_NETWORK", "1")
     os.environ.setdefault("CROSSFADER_NO_SOUND", "1")
     os.environ["CROSSFADER_NATIVE_DIALOGS"] = "0"  # use the (stubbed) Tk dialogs

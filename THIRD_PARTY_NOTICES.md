@@ -1,6 +1,6 @@
 # Third-party software
 
-WyldVeil's Media Editor runs several independent programs and ships some
+FFmpeg Workbench runs several independent programs and ships some
 third-party assets. Each one keeps its own licence. Nothing in the editor's
 own licence restricts the rights those licences give you.
 
@@ -49,7 +49,7 @@ CPython from python-build-standalone
 (https://github.com/astral-sh/python-build-standalone); its Tk was rebuilt from
 the official Tcl/Tk sources with anti-aliased font support
 (`packaging/linux/build-tk.sh`). The licence texts of everything built into it
-are in `/opt/wyldveils-media-editor/python/licenses/`.
+are in `/opt/ffmpeg-workbench/python/licenses/`.
 
 | Component | Licence |
 |-----------|---------|
@@ -63,7 +63,7 @@ are in `/opt/wyldveils-media-editor/python/licenses/`.
 | PyInstaller bootloader (only in builds made with `packaging/build.py`, not in the released packages) | GPL-2.0 with the PyInstaller bootloader exception, which allows use in any program |
 
 These packages are loaded at run time from the `libs` folder next to the app
-(`app\libs` on Windows, `/opt/wyldveils-media-editor/libs` on Linux) as plain
+(`app\libs` on Windows, `/opt/ffmpeg-workbench/libs` on Linux) as plain
 files. Their licence texts are in each package's `*.dist-info` folder there:
 
 | Component | Licence |

@@ -6,10 +6,10 @@ packaging/build.py - Build a release for the current platform.
     python packaging/build.py --skip-fetch # reuse bin/<platform>/ as is
 
 Outputs (in dist/):
-  Windows : WyldVeilMediaEditor-<ver>-windows-x64.zip
-            WyldVeilMediaEditor-<ver>-windows-x64-setup.exe   (if Inno Setup's ISCC is installed)
-  Linux   : wyldveil-media-editor-<ver>-linux-x64.tar.gz     (with install.sh)
-            WyldVeil_Media_Editor-<ver>-x86_64.AppImage       (if appimagetool is installed)
+  Windows : FFmpegWorkbench-<ver>-windows-x64.zip
+            FFmpegWorkbench-<ver>-windows-x64-setup.exe   (if Inno Setup's ISCC is installed)
+  Linux   : ffmpeg-workbench-<ver>-linux-x64.tar.gz     (with install.sh)
+            FFmpeg_Workbench-<ver>-x86_64.AppImage       (if appimagetool is installed)
 """
 from __future__ import annotations
 
@@ -30,9 +30,9 @@ from core.hardware import platform_tag  # noqa: E402
 
 IS_WIN = sys.platform.startswith("win")
 PLAT = platform_tag()
-NAME = "WyldVeilMediaEditor" if IS_WIN else "wyldveil-media-editor"
+NAME = "FFmpegWorkbench" if IS_WIN else "ffmpeg-workbench"
 DIST = os.path.join(ROOT, "dist")
-APP_ID = "io.github.wyldveil.MediaEditor"
+from core import APP_ID  # noqa: E402
 
 
 def run(cmd: list, **kw) -> None:
@@ -47,12 +47,12 @@ def write_windows_version_info() -> None:
   ffi=FixedFileInfo(filevers={tuple(nums)}, prodvers={tuple(nums)}, mask=0x3f, flags=0x0,
                     OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[StringFileInfo([StringTable('040904B0', [
-      StringStruct('CompanyName', 'WyldVeil'),
-      StringStruct('FileDescription', 'WyldVeil Media Editor'),
+      StringStruct('CompanyName', 'FFmpeg Workbench'),
+      StringStruct('FileDescription', 'FFmpeg Workbench'),
       StringStruct('FileVersion', '{APP_VERSION}'),
       StringStruct('InternalName', '{NAME}'),
       StringStruct('OriginalFilename', '{NAME}.exe'),
-      StringStruct('ProductName', 'WyldVeil Media Editor'),
+      StringStruct('ProductName', 'FFmpeg Workbench'),
       StringStruct('ProductVersion', '{APP_VERSION}')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])]
 )
@@ -192,7 +192,7 @@ def package_linux(app_dir: str) -> None:
     meta = os.path.join(appdir, "usr", "share", "metainfo")
     os.makedirs(meta, exist_ok=True)
     shutil.copy2(os.path.join(linux, f"{APP_ID}.metainfo.xml"), meta)
-    out = os.path.join(DIST, f"WyldVeil_Media_Editor-{APP_VERSION}-x86_64.AppImage")
+    out = os.path.join(DIST, f"FFmpeg_Workbench-{APP_VERSION}-x86_64.AppImage")
     run([tool, "--comp", "zstd", appdir, out], env=dict(os.environ, ARCH="x86_64"))
     print("built", out)
 

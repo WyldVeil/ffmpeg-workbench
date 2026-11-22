@@ -345,3 +345,21 @@ def test_drop_downs_are_read_by_value_not_by_label():
     assert not found, "Use a ChoiceBox (tabs/kit/widgets.py) or a lookup table:\n" + "\n".join(
         found
     )
+
+
+#: the only file that may name the GitHub account: where the repository lives
+ACCOUNT_ALLOWED = {"core/__init__.py"}
+
+
+def test_the_account_is_named_in_one_place():
+    """1.2.6 renamed the app to FFmpeg Workbench: the account the repository
+    lives under appears only in core/__init__.py (APP_URL, MAINTAINER)."""
+    from core import APP_URL
+
+    account = APP_URL.split("/")[3].lower()
+    found = []
+    for rel, path in _py_files("main.py", "core", "shell", "tabs", "scripts", "devtools"):
+        with open(path, encoding="utf-8") as fh:
+            if account in fh.read().lower() and rel not in ACCOUNT_ALLOWED:
+                found.append(rel)
+    assert not found, found

@@ -6,7 +6,7 @@ audio extraction, SponsorBlock, chapter-aware trimming, batch/playlist
 queue, subtitle download, live stream recording, cookies/auth, download
 history, format filtering, and complete FFmpeg encode settings.
 
-NOTE: yt-dlp is independent open-source software. WyldVeil Media Editor
+NOTE: yt-dlp is independent open-source software. FFmpeg Workbench
 merely launches yt-dlp as a subprocess; it does not host, distribute, or
 modify it. See the on-screen disclaimer in _build_disclaimer() for the
 legal terms presented to the user.
@@ -356,7 +356,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _build_disclaimer(self, root):
         """
-        Always-visible legal notice. Distances WyldVeil Media Editor from
+        Always-visible legal notice. Distances FFmpeg Workbench from
         the third-party yt-dlp tool and the platforms it interacts with,
         and shifts compliance/copyright responsibility onto the user.
 
@@ -387,11 +387,11 @@ class YouTubeDownloaderTab(BaseTab):
         body = (
             "This feature is a user-interface front-end for "
             "yt-dlp, an independent open-source command-line program "
-            "developed and maintained by third parties. WyldVeil Media "
-            "Editor is NOT affiliated with, endorsed by, or responsible "
+            "developed and maintained by third parties. FFmpeg "
+            "Workbench is NOT affiliated with, endorsed by, or responsible "
             "for yt-dlp, any website or platform yt-dlp may interact "
             "with, or any content downloaded through it. yt-dlp is "
-            "executed as a separate process; WyldVeil neither hosts nor "
+            "executed as a separate process; FFmpeg Workbench neither hosts nor "
             "modifies it.\n\n"
             "By using this feature you acknowledge and agree that:\n"
             "  •  You are solely responsible for complying with the "
@@ -410,7 +410,7 @@ class YouTubeDownloaderTab(BaseTab):
             "DRM where doing so is unlawful.\n"
             '  •  This software is provided "AS IS", WITHOUT WARRANTY '
             "OF ANY KIND, express or implied. To the maximum extent "
-            "permitted by law, WyldVeil and its contributors disclaim "
+            "permitted by law, the authors of FFmpeg Workbench disclaim "
             "all liability for any direct, indirect, incidental, "
             "special, consequential, or punitive damages arising out "
             "of or relating to your use of this feature, including "
@@ -2125,7 +2125,7 @@ class YouTubeDownloaderTab(BaseTab):
                         ffplay,
                         "-autoexit",
                         "-window_title",
-                        "Video Preview - Quintessential Video Editor",
+                        "Video Preview - FFmpeg Workbench",
                         stream_url,
                     ],
                     env=_net.subprocess_env(),

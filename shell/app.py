@@ -19,6 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from core import (
     APP_NAME,
+    APP_URL,
     APP_VERSION,
     capabilities,
     encoders,
@@ -56,7 +57,7 @@ logger = logging.getLogger("crossfader.shell")
 class App(tk.Tk):
     def __init__(self) -> None:
         _scaling.prepare()
-        super().__init__(className="wyldveil-media-editor")  # WM_CLASS: matches the .desktop file
+        super().__init__(className="ffmpeg-workbench")  # WM_CLASS: matches the .desktop file
         _scaling.apply(self)
         self._set_icons()
         # thread-safe UI calls, logging and crash reports first: everything below relies on them
@@ -326,7 +327,7 @@ class App(tk.Tk):
             f"{APP_NAME}  ·  version {APP_VERSION}\n\n"
             "A free, self-contained video and audio toolkit powered by FFmpeg.\n\n"
             f"{count} tools  ·  FFmpeg {version_of()}  ·  {platform.system()} {platform.machine()}\n\n"
-            "https://github.com/WyldVeil/wyldveils-media-editor\n"
+            f"{APP_URL}\n"
             "Third-party licences: see THIRD_PARTY_NOTICES.md",
             parent=self,
         )

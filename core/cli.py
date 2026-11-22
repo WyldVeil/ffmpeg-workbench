@@ -1,10 +1,10 @@
 """
 core/cli.py  -  Command line for scripts and AI assistants
 
-    wyldveil-media-editor --cli tools [--json]          what can be done
-    wyldveil-media-editor --cli info FILE [--json]      what a file contains
-    wyldveil-media-editor --cli paths [--json]          the bundled FFmpeg, yt-dlp...
-    wyldveil-media-editor --cli OPERATION INPUT... [options] [-o OUTPUT] [--json]
+    ffmpeg-workbench --cli tools [--json]          what can be done
+    ffmpeg-workbench --cli info FILE [--json]      what a file contains
+    ffmpeg-workbench --cli paths [--json]          the bundled FFmpeg, yt-dlp...
+    ffmpeg-workbench --cli OPERATION INPUT... [options] [-o OUTPUT] [--json]
 
 (From the source tree: ``python main.py --cli ...``.)
 
@@ -2042,7 +2042,7 @@ def op_download(ctx: Ctx) -> Result:
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        prog="wyldveil-media-editor --cli",
+        prog="ffmpeg-workbench --cli",
         description="Edit and convert video/audio from the command line (same engine as the "
         "app). Inputs are never changed; outputs never replace existing files "
         "unless --overwrite.",
@@ -2134,7 +2134,7 @@ def main(argv: list[str] | None = None) -> int:
                     current = op["category"]
                     print(f"\n{current}:")
                 print(f"  {op['name']:<16} {op['summary']}")
-            print("\nDetails: wyldveil-media-editor --cli OPERATION --help")
+            print("\nDetails: ffmpeg-workbench --cli OPERATION --help")
         return 0
     try:
         if args.command == "info":
@@ -2192,7 +2192,7 @@ def entry(argv: list[str]) -> int:
     """Called by main.py before any window code is imported."""
     _ensure_streams()
     os.environ.setdefault("CROSSFADER_NO_NOTIFY", "1")
-    while argv[:1] == ["--cli"]:  # wme-cli.bat adds it too; typing it again is harmless
+    while argv[:1] == ["--cli"]:  # ffw-cli.bat adds it too; typing it again is harmless
         argv = argv[1:]
     try:
         return main(argv)

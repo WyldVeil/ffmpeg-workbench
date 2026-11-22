@@ -3,16 +3,16 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wyldveil-media-editor"
-version = "1.2.5"
-description = "WyldVeil's Media Editor: video and audio toolkit powered by FFmpeg"
+name = "ffmpeg-workbench"
+version = "1.2.6"
+description = "FFmpeg Workbench: a video and audio toolkit powered by FFmpeg"
 requires-python = ">=3.11"
 dependencies = [
     "tkinterdnd2>=0.7.0",
 ]
 
 [project.scripts]
-wyldveil-media-editor = "main:main"
+ffmpeg-workbench = "main:main"
 
 [tool.setuptools]
 py-modules = ["main"]

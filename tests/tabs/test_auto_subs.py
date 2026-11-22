@@ -25,7 +25,7 @@ def test_commands_and_progress():
         translate=True,
         max_len=40,
         formats=("srt", "vtt"),
-        prompt="WyldVeil",
+        prompt="Workbench",
     )
     assert cmd[0].endswith(("whisper-cli", "whisper-cli.exe"))
     for flag in ("-osrt", "-ovtt", "-tr", "-sow", "--prompt"):

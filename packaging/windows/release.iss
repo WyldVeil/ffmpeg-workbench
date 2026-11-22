@@ -1,4 +1,4 @@
-; WyldVeil's Media Editor - Windows installer (Inno Setup 6.3+ / 7)
+; FFmpeg Workbench - Windows installer (Inno Setup 6.3+ / 7)
 ;
 ; Built by packaging/release.py, which stages an embeddable Python (with
 ; tkinter) in StageDir\python, the app with its bundled tools in StageDir\app,
@@ -12,7 +12,11 @@
 #ifndef StageDir
   #error StageDir must be defined
 #endif
-#define AppName "WyldVeil's Media Editor"
+#define AppName "FFmpeg Workbench"
+
+#ifndef RepoUrl
+  #define RepoUrl "https://github.com"
+#endif
 
 [Setup]
 ; Same AppId as earlier releases, so installing this upgrades them in place.
@@ -20,13 +24,13 @@ AppId={{B2F4C8E1-7A3D-4E9F-A1B6-2D5E8F3C7A9B}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=WyldVeil
-AppPublisherURL=https://github.com/WyldVeil/wyldveils-media-editor
-AppSupportURL=https://github.com/WyldVeil/wyldveils-media-editor/issues
-DefaultDirName={autopf}\WyldVeil Media Editor
+AppPublisher=FFmpeg Workbench
+AppPublisherURL={#RepoUrl}
+AppSupportURL={#RepoUrl}/issues
+DefaultDirName={autopf}\FFmpeg Workbench
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename=WyldVeils-Media-Editor_{#AppVersion}_Windows_Setup
+OutputBaseFilename=FFmpeg-Workbench_{#AppVersion}_Windows_Setup
 SetupIconFile={#StageDir}\app\assets\icons\app.ico
 UninstallDisplayIcon={app}\app\assets\icons\app.ico
 UninstallDisplayName={#AppName}
@@ -59,7 +63,7 @@ Type: filesandordirs; Name: "{app}\python"
 Source: "{#StageDir}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#StageDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#StageDir}\Launch.bat"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#StageDir}\wme-cli.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\ffw-cli.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\app\main.py"""; WorkingDir: "{app}"; IconFilename: "{app}\app\assets\icons\app.ico"

@@ -2,6 +2,13 @@
 
 ## 1.2.6
 
+### A new name: FFmpeg Workbench
+
+WyldVeil's Media Editor is now **FFmpeg Workbench** - same app, a plainer
+name for what it is, in a new repository. On the command line the program is
+`ffmpeg-workbench`; on Windows the helper is `ffw-cli.bat`. It installs as a
+new app, so remove 1.2.5 first if you have it.
+
 ### New
 
 - **Contact Sheet** (Social & Format): a grid of frames from a video with its

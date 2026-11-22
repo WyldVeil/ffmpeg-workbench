@@ -24,7 +24,7 @@ def test_open_paths_routes_to_tool_or_inspector(ui, media):
     assert app.open_paths([media["h264"]])
     assert app.current_page is ToolId.QUICK_TRIMMER
     assert app.page(ToolId.QUICK_TRIMMER).file_path.endswith("h264_720p30_aac.mp4")
-    assert "WyldVeil" in app.title()
+    assert "FFmpeg Workbench" in app.title()
 
 
 @pytest.mark.gui

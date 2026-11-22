@@ -1,10 +1,10 @@
 #!/bin/sh
-# Install WyldVeil's Media Editor for the current user (no root needed).
+# Install FFmpeg Workbench for the current user (no root needed).
 #   ./install.sh            install / update
 #   ./install.sh --uninstall
 set -eu
-APP=wyldveil-media-editor
-APP_ID=io.github.wyldveil.MediaEditor
+APP=ffmpeg-workbench
+APP_ID=io.github.ffmpeg_workbench.FFmpegWorkbench
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}"
 OPT="$HOME/.local/opt/$APP"

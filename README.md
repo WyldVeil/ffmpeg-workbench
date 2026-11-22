@@ -1,8 +1,10 @@
-# WyldVeil's Media Editor
+# FFmpeg Workbench
 
 [![Found it useful? Buy me a coffee](https://img.shields.io/badge/Found_it_useful%3F-Buy_me_a_coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/wyldveil)
 
-**81 video and audio tools in one free app.** Cut, join, convert, compress,
+*Called WyldVeil's Media Editor until version 1.2.5 - same app, new name.*
+
+**83 video and audio tools in one free app.** Cut, join, convert, compress,
 subtitle, upscale, fix the sound, clean up old footage and get videos ready for
 social media. Everything runs on your own computer.
 
@@ -14,15 +16,15 @@ suggests what you can do with it.
 
 ## Download
 
-Get the file for your system from the **[Releases page](https://github.com/WyldVeil/wyldveils-media-editor/releases/latest)**.
+Get the file for your system from the **[Releases page](https://github.com/WyldVeil/ffmpeg-workbench/releases/latest)**.
 
 **Portable: nothing to install.** Unpack it anywhere (your Documents, a USB
 stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.5_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.5-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.6_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.6-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +36,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.5_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `wyldveils-media-editor_1.2.5_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.5_ubuntu_amd64.deb` |
-| **Debian** | `wyldveils-media-editor_1.2.5_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.5_debian_amd64.deb` |
-| **Fedora** | `wyldveils-media-editor-1.2.5-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `wyldveils-media-editor-1.2.5-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.6_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `ffmpeg-workbench_1.2.6_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.6_ubuntu_amd64.deb` |
+| **Debian** | `ffmpeg-workbench_1.2.6_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.6_debian_amd64.deb` |
+| **Fedora** | `ffmpeg-workbench-1.2.6-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `ffmpeg-workbench-1.2.6-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -51,6 +53,23 @@ or drop in a file. Here, a phone clip contains a GPS location, so the first
 suggestion is to remove it before sharing.
 
 ![Suggestions for a dropped file](screenshots/start-suggestions.png)
+
+### Contact Sheet
+
+A whole film at a glance: a grid of frames with the file's details on top. Pick
+any grid, step through **other sets of frames** until you like them, take them at
+shot changes, leave out the titles and credits, and choose what the header and
+tiles show. A two-hour film takes seconds.
+
+![A contact sheet of Big Buck Bunny](screenshots/contact-sheet-example.jpg)
+
+### Slideshow Maker
+
+Photos, animated GIFs, video clips and title cards in one video, with 61
+transitions - including fading squares and a swirl - captions, and music that
+the slideshow fits itself to, with every change on the beat.
+
+![Fading squares, a swirl and a caption](screenshots/slideshow-transitions.jpg)
 
 ### Snapshot
 
@@ -126,7 +145,7 @@ Every tool has a screenshot in [Every tool, up close](#every-tool-up-close).
 | | |
 |---|---|
 | ✂ **Cutting room** | Quick Trimmer · Crossfader · Splicer · Batch Joiner · Multi-Splitter · Multi-Clip Sequencer · Scene Detector · Beat Sync Cutter · Smart Reframe · Side-by-Side · Manual Crop · Rotate & Flip · Video Reverser · Freeze Frame · Clip Looper |
-| 📱 **Social & format** | Shortifier (Shorts / TikTok / Reels) · Auto-Cropper · GIF Maker · WebM Maker · Watermarks · Auto-Subtitles · Hard-Subber · Animated Titles · Intro/Outro Maker · Slideshow Maker · Frame Extractor · Snapshot · Thumbnail Maker · Chapter Markers · Video Collage · Video Downloader |
+| 📱 **Social & format** | Shortifier (Shorts / TikTok / Reels) · Auto-Cropper · GIF Maker · WebM Maker · Watermarks · Auto-Subtitles · Hard-Subber · Animated Titles · Intro/Outro Maker · Slideshow Maker · Frame Extractor · Contact Sheet · Snapshot · Thumbnail Maker · Chapter Markers · Video Collage · Video Downloader |
 | 🔊 **Audio** | Loudness Normalizer · Voice Isolation · Silence Remover · Audio Mixer · Music Ducker · Audio Replacer · Audio Sync Shifter · The Muter · Audio Dynamics · Voice Changer · TTS Voice-Over · Waveform Editor · Laugh Track Remover · Karaoke Generator · Audio Converter · Audio Extractor · MIDIfier |
 | ⚙ **Transcoder** | Universal Downsizer · Codec Cruncher · HDR to SDR · Tracks & Remux · Compare & Quality · Format Converter · Resolution Scaler (with FSR/NIS/AI upscaling) · Framerate Interpolator · Proxy Generator · Encode Queue · Preset Manager |
 | 🎨 **Colour & visuals** | Basic Color Corrector · LUT Applicator · Colour Match · Video Scopes · Special Effects · Speed Ramper · Deshaker · Green Screen Keyer · Denoise · Sharpen · Deinterlace · Picture-in-Picture · Privacy Blur · Animated Zoom · Transition Studio · Media Generator |
@@ -236,7 +255,7 @@ Find every cut in a video, then split it or make chapters.
 </details>
 
 <details open>
-<summary><b>📱 Social & format</b> (17 tools)</summary>
+<summary><b>📱 Social & format</b> (18 tools)</summary>
 
 #### The Shortifier
 
@@ -298,6 +317,12 @@ Save stills from a video - one frame or many.
 
 ![Frame Extractor](screenshots/28_frame_extractor.png)
 
+#### Contact Sheet
+
+A grid of frames from a video with its details; step through other sets of frames.
+
+![Contact Sheet](screenshots/28b_contact_sheet.png)
+
 #### Snapshot
 
 Save any frame as a full-size, high-quality picture.
@@ -312,7 +337,7 @@ Title cards with animated text, on their own or added to a video.
 
 #### Slideshow Maker
 
-Photos to video with motion, transitions, captions and music.
+Photos, GIFs, video clips and title cards into one video: 61 transitions, captions, music.
 
 ![Slideshow Maker](screenshots/31_slideshow_maker.png)
 
@@ -673,13 +698,13 @@ Network, proxy, skins, updates and system information.
 Most of the app's work is available from a terminal without opening the window:
 
 ```sh
-wyldveils-media-editor --cli tools                          # what it can do
-wyldveils-media-editor --cli compress clip.mp4 --size 10MB  # make a video fit Discord
-wyldveils-media-editor --cli subtitles talk.mp4 --burn      # subtitles from speech, burned in
-wyldveils-media-editor --cli hdr-to-sdr IMG_2087.MOV
+ffmpeg-workbench --cli tools                          # what it can do
+ffmpeg-workbench --cli compress clip.mp4 --size 10MB  # make a video fit Discord
+ffmpeg-workbench --cli subtitles talk.mp4 --burn      # subtitles from speech, burned in
+ffmpeg-workbench --cli hdr-to-sdr IMG_2087.MOV
 ```
 
-On Windows, use `wme-cli.bat` in the install folder. [AGENTS.md](AGENTS.md)
+On Windows, use `ffw-cli.bat` in the install folder. [AGENTS.md](AGENTS.md)
 tells AI assistants how to use the app safely: every operation, the rules (it
 never overwrites your files), and recipes for common requests. If you ask an
 assistant to do something to your videos, point it at that file.
@@ -708,9 +733,9 @@ The interface is available in 28 languages. You can switch at any time in
   added the Linux menu entry). Its settings were in the folder too.
 - **Windows installer:** use *Add or Remove Programs* in Settings, or the uninstaller in
   the Start Menu.
-- **Ubuntu / Debian:** `sudo apt remove wyldveils-media-editor`
+- **Ubuntu / Debian:** `sudo apt remove ffmpeg-workbench`
 - **Fedora:** run `./uninstall.sh` from the extracted folder.
-- **Arch:** `sudo pacman -R wyldveils-media-editor`, or `./uninstall.sh`
+- **Arch:** `sudo pacman -R ffmpeg-workbench`, or `./uninstall.sh`
 
 With the installers, your settings stay in your user folder in case you come back.
 

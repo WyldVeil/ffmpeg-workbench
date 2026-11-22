@@ -1,4 +1,4 @@
-# Developing WyldVeil's Media Editor
+# Developing FFmpeg Workbench
 
 This guide covers the shared building blocks every tool uses, and how to
 test changes. The structure and its reasons are in
@@ -193,14 +193,14 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 ## Making a release
 
 1. Set the version in `core/__init__.py` (`APP_VERSION`) and `pyproject.toml`, add it to
-   `CHANGELOG.md` and to `packaging/linux/io.github.wyldveil.MediaEditor.metainfo.xml`.
+   `CHANGELOG.md` and to `packaging/linux/io.github.ffmpeg_workbench.FFmpegWorkbench.metainfo.xml`.
 2. Fetch the pinned tools for each platform (checked against `scripts/binaries.lock.json`):
    `python scripts/fetch_binaries.py --platform linux-x64` and `--platform windows-x64`.
    `--refresh` resolves newer versions into the lock file first.
 3. Linux packages (Debian and Ubuntu `.deb`, Arch and Fedora `.tar.gz`):
    `python packaging/release.py --linux` (needs Python 3.14+ to run, and podman or docker).
    They include `bin/linux-x64`, the add-ons from `packaging/bundled-libs.txt`, and their own
-   Python in `/opt/wyldveils-media-editor/python`: CPython from python-build-standalone (pinned
+   Python in `/opt/ffmpeg-workbench/python`: CPython from python-build-standalone (pinned
    with SHA-256 in `LINUX_PYTHON` in `release.py`). Its Tk only knows the X server's bitmap fonts,
    so `packaging/linux/build-tk.sh` rebuilds the same Tk version with Xft in an AlmaLinux 8
    container (glibc 2.28) the first time; the result is kept in `build/tk-<version>-xft`. To move
@@ -208,7 +208,7 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
    `TK_SOURCES` to the Tcl/Tk that python-build-standalone release uses (its
    `pythonbuild/downloads.json`). Try the packages in containers before publishing, including
    ones with no Python at all, e.g.
-   `podman run --rm -v ./dist/release:/r:Z debian:12 sh -c "apt update && apt install -y /r/*debian*.deb && wyldveils-media-editor --cli tools"`.
+   `podman run --rm -v ./dist/release:/r:Z debian:12 sh -c "apt update && apt install -y /r/*debian*.deb && ffmpeg-workbench --cli tools"`.
 4. Windows installer: `python packaging/release.py --windows --python-embed DIR --iscc "ISCC.exe"`.
    DIR is python.org's embeddable package (`python-3.14.x-embed-amd64.zip`, checked against the
    SHA-256 python.org publishes) with tkinter added from the same version's `amd64/tcltk.msi`

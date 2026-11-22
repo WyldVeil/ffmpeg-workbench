@@ -1,7 +1,7 @@
-# AGENTS.md: WyldVeil's Media Editor
+# AGENTS.md: FFmpeg Workbench
 
-This is a guide for AI assistants and scripts. **WyldVeil's Media Editor** is a
-desktop video and audio editing suite with 81 tools. It ships its own FFmpeg 9,
+This is a guide for AI assistants and scripts. **FFmpeg Workbench** is a
+desktop video and audio editing suite with 83 tools. It ships its own FFmpeg 9,
 yt-dlp, whisper.cpp (offline speech-to-text) and Deno.
 
 Everything below runs from a terminal **without opening the window**. If a
@@ -10,25 +10,25 @@ can be done, use this file.
 
 ## 1. How to run it
 
-| What the person has | Command (called `wme` below) |
+| What the person has | Command (called `ffw` below) |
 |---|---|
 | The source code (this folder) | `python main.py --cli ...` (Python 3.11+) |
-| Portable folder (Linux) | `<folder>/wyldveils-media-editor --cli ...` |
-| Portable folder (Windows) | `<folder>\wme-cli.bat ...` (the `--cli` is optional) |
-| Linux package (Debian, Ubuntu, Arch, Fedora) | `wyldveils-media-editor --cli ...` |
-| Windows (installed) | `"C:\Program Files\WyldVeil Media Editor\wme-cli.bat" ...` (the `--cli` is optional). Earlier versions were installed under `C:\Program Files\DoffysApp`, and an upgrade stays there. |
+| Portable folder (Linux) | `<folder>/ffmpeg-workbench --cli ...` |
+| Portable folder (Windows) | `<folder>\ffw-cli.bat ...` (the `--cli` is optional) |
+| Linux package (Debian, Ubuntu, Arch, Fedora) | `ffmpeg-workbench --cli ...` |
+| Windows (installed) | `"C:\Program Files\FFmpeg Workbench\ffw-cli.bat" ...` (the `--cli` is optional). |
 
 Start with these:
 
 ```sh
-wme --cli tools --json         # every operation and its options, as JSON
-wme --cli OPERATION --help     # one operation in detail
-wme --cli info FILE --json     # what a file contains: streams, length, HDR, rotation, personal metadata
-wme --cli paths --json         # where the bundled ffmpeg, ffprobe and yt-dlp live
-wme --cli guide                # print this file
+ffw --cli tools --json         # every operation and its options, as JSON
+ffw --cli OPERATION --help     # one operation in detail
+ffw --cli info FILE --json     # what a file contains: streams, length, HDR, rotation, personal metadata
+ffw --cli paths --json         # where the bundled ffmpeg, ffprobe and yt-dlp live
+ffw --cli guide                # print this file
 ```
 
-On Windows the `wme` part is the `wme-cli.bat` in the install folder, and the
+On Windows the `ffw` part is the `ffw-cli.bat` in the install folder, and the
 `--cli` can be left out.
 
 ## 2. Rules the command line follows, and you should too
@@ -107,20 +107,20 @@ Every operation also takes `-o`, `--overwrite` and `--json`.
 ## 4. Common requests
 
 ```sh
-wme --cli compress clip.mp4 --size 10MB --json                 # "make it small enough for Discord"
-wme --cli trim talk.mp4 --start 0:30 --end 5:10 --json         # "cut out the start and the end"
-wme --cli shorts video.mp4 --platform tiktok --json            # "make it vertical for TikTok"
-wme --cli subtitles interview.mp4 --model small --burn --json  # "add subtitles to the video"
-wme --cli metadata-clean IMG_4021.MOV --json                   # "remove the location before I post it"
-wme --cli gif clip.mp4 --start 12 --duration 4 --max-mb 8 --json
-wme --cli collage a.mp4 b.mp4 c.mp4 d.mp4 --size 1920x1080 --json   # "put these side by side"
-wme --cli normalize podcast.mp3 --target youtube --json
-wme --cli clean-voice voiceover.wav --json
-wme --cli remove-silence lecture.mp4 --json
-wme --cli rotate phone.mp4 --degrees 90 --lossless --json      # "it's sideways"
-wme --cli hdr-to-sdr iphone_hdr.mov --json                     # "the colours look washed out"
-wme --cli extract-audio concert.mp4 --format mp3 --json
-wme --cli download "https://..." --max-height 1080 -o ~/Videos --json
+ffw --cli compress clip.mp4 --size 10MB --json                 # "make it small enough for Discord"
+ffw --cli trim talk.mp4 --start 0:30 --end 5:10 --json         # "cut out the start and the end"
+ffw --cli shorts video.mp4 --platform tiktok --json            # "make it vertical for TikTok"
+ffw --cli subtitles interview.mp4 --model small --burn --json  # "add subtitles to the video"
+ffw --cli metadata-clean IMG_4021.MOV --json                   # "remove the location before I post it"
+ffw --cli gif clip.mp4 --start 12 --duration 4 --max-mb 8 --json
+ffw --cli collage a.mp4 b.mp4 c.mp4 d.mp4 --size 1920x1080 --json   # "put these side by side"
+ffw --cli normalize podcast.mp3 --target youtube --json
+ffw --cli clean-voice voiceover.wav --json
+ffw --cli remove-silence lecture.mp4 --json
+ffw --cli rotate phone.mp4 --degrees 90 --lossless --json      # "it's sideways"
+ffw --cli hdr-to-sdr iphone_hdr.mov --json                     # "the colours look washed out"
+ffw --cli extract-audio concert.mp4 --format mp3 --json
+ffw --cli download "https://..." --max-height 1080 -o ~/Videos --json
 ```
 
 **Doing several steps in a row.** Feed each result into the next step, using
@@ -131,15 +131,15 @@ files you created. Never delete the person's own files.
 
 ## 5. Things the command line doesn't cover
 
-- The app has 81 tools. If a request needs one that isn't listed above, tell
+- The app has 83 tools. If a request needs one that isn't listed above, tell
   the person which tool to open from the sidebar. Some examples: Beat Sync
   Cutter, Smart Reframe, Green Screen Keyer, Colour Match, Speed Ramper (with
   speed curves), Deshaker, Animated Titles, Slideshow Maker, Karaoke Generator,
   Music Ducker, Audio Mixer, Waveform Editor, MIDIfier, Screen Recorder, Batch
-  Processor. Running `wme FILE...` without `--cli` opens the window with those
+  Processor. Running `ffw FILE...` without `--cli` opens the window with those
   files loaded.
 - If you know FFmpeg well, you can use the **bundled FFmpeg** directly. Get its
-  path from `wme --cli paths --json`. It is FFmpeg 9 with libx264, libx265,
+  path from `ffw --cli paths --json`. It is FFmpeg 9 with libx264, libx265,
   SVT-AV1, VP9, Opus, MP3, NVENC/QSV/AMF/VAAPI, libplacebo (Vulkan), zscale,
   libvmaf, rubberband, vid.stab, arnndn and libass. Follow the same rules: never
   write over inputs, and write to a temporary name first.

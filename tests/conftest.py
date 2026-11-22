@@ -14,12 +14,20 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import tempfile
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+# Before anything is imported: the tests never touch the developer's own
+# settings, caches or logs (a folder made under the app's name would also stop
+# that person's own upgrade from bringing their old folders over).
+_HOME = tempfile.mkdtemp(prefix="workbench-tests-")
+for _kind in ("config", "data", "cache", "log"):
+    os.environ.setdefault(f"CROSSFADER_{_kind.upper()}_DIR", os.path.join(_HOME, _kind))
 
 
 def pytest_configure(config):

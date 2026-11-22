@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.wyldveil.MediaEditor</id>
-  <name>WyldVeil's Media Editor</name>
+  <id>io.github.ffmpeg_workbench.FFmpegWorkbench</id>
+  <name>FFmpeg Workbench</name>
   <summary>Video and audio toolkit powered by FFmpeg</summary>
   <metadata_license>CC0-1.0</metadata_license>
-  <developer id="io.github.wyldveil">
-    <name>WyldVeil</name>
+  <developer id="io.github.ffmpeg_workbench">
+    <name>FFmpeg Workbench</name>
   </developer>
   <description>
     <p>
@@ -15,11 +15,19 @@
       download videos and much more - all running locally with FFmpeg.
     </p>
   </description>
-  <launchable type="desktop-id">io.github.wyldveil.MediaEditor.desktop</launchable>
-  <url type="homepage">https://github.com/WyldVeil/wyldveils-media-editor</url>
-  <url type="bugtracker">https://github.com/WyldVeil/wyldveils-media-editor/issues</url>
+  <launchable type="desktop-id">io.github.ffmpeg_workbench.FFmpegWorkbench.desktop</launchable>
+  <url type="homepage">@REPO_URL@</url>
+  <url type="bugtracker">@REPO_URL@/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.6" date="2026-11-22">
+      <description>
+        <p>A new name: FFmpeg Workbench, in a new repository. New: a Contact
+          Sheet tool, and a much bigger Slideshow Maker (GIFs, video clips, title cards, 61 transitions
+          including fading squares and swirl, music fitted to the slideshow and changes on the beat).
+          The Crossfader gets the same transitions; every time box works the same way; fixes.</p>
+      </description>
+    </release>
     <release version="1.2.5" date="2026-11-22">
       <description>
         <p>Smoother and sturdier: pages never freeze while the app checks what FFmpeg can do, every program

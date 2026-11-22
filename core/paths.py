@@ -8,10 +8,10 @@ platform's conventions:
 =========  ==========================================  =====================================
 Kind       Windows                                     Linux (XDG)
 =========  ==========================================  =====================================
-config     %APPDATA%\\WyldVeil Media Editor             ~/.config/wyldveil-media-editor
-data       %LOCALAPPDATA%\\WyldVeil Media Editor        ~/.local/share/wyldveil-media-editor
-cache      %LOCALAPPDATA%\\WyldVeil Media Editor\\Cache  ~/.cache/wyldveil-media-editor
-logs       %LOCALAPPDATA%\\WyldVeil Media Editor\\Logs   ~/.local/state/wyldveil-media-editor/logs
+config     %APPDATA%\\FFmpeg Workbench                  ~/.config/ffmpeg-workbench
+data       %LOCALAPPDATA%\\FFmpeg Workbench             ~/.local/share/ffmpeg-workbench
+cache      %LOCALAPPDATA%\\FFmpeg Workbench\\Cache  ~/.cache/ffmpeg-workbench
+logs       %LOCALAPPDATA%\\FFmpeg Workbench\\Logs   ~/.local/state/ffmpeg-workbench/logs
 =========  ==========================================  =====================================
 
 macOS uses ~/Library/Application Support, ~/Library/Caches and ~/Library/Logs.
@@ -36,9 +36,10 @@ import tempfile
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: Folder name on Windows / macOS.
-APP_DIR_NAME = "WyldVeil Media Editor"
+APP_DIR_NAME = "FFmpeg Workbench"
 #: Folder name on Linux (XDG convention: lowercase, no spaces).
-APP_SLUG = "wyldveil-media-editor"
+APP_SLUG = "ffmpeg-workbench"
+
 
 _IS_WIN = sys.platform.startswith("win")
 _IS_MAC = sys.platform == "darwin"
@@ -77,24 +78,28 @@ def base_dir(kind: str) -> str:
     portable = _portable_root()
     if portable:
         return os.path.join(portable, kind)
+    return _user_dir(kind, APP_DIR_NAME, APP_SLUG)
 
+
+def _user_dir(kind: str, dir_name: str, slug: str) -> str:
+    """The per-user folder of *kind* for an app called *dir_name* / *slug*."""
     home = os.path.expanduser("~")
     if _IS_WIN:
         roaming = os.environ.get("APPDATA") or os.path.join(home, "AppData", "Roaming")
         local = os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
         return {
-            "config": os.path.join(roaming, APP_DIR_NAME),
-            "data": os.path.join(local, APP_DIR_NAME),
-            "cache": os.path.join(local, APP_DIR_NAME, "Cache"),
-            "log": os.path.join(local, APP_DIR_NAME, "Logs"),
+            "config": os.path.join(roaming, dir_name),
+            "data": os.path.join(local, dir_name),
+            "cache": os.path.join(local, dir_name, "Cache"),
+            "log": os.path.join(local, dir_name, "Logs"),
         }[kind]
     if _IS_MAC:
         lib = os.path.join(home, "Library")
         return {
-            "config": os.path.join(lib, "Application Support", APP_DIR_NAME),
-            "data": os.path.join(lib, "Application Support", APP_DIR_NAME),
-            "cache": os.path.join(lib, "Caches", APP_DIR_NAME),
-            "log": os.path.join(lib, "Logs", APP_DIR_NAME),
+            "config": os.path.join(lib, "Application Support", dir_name),
+            "data": os.path.join(lib, "Application Support", dir_name),
+            "cache": os.path.join(lib, "Caches", dir_name),
+            "log": os.path.join(lib, "Logs", dir_name),
         }[kind]
     xdg = {
         "config": os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"),
@@ -102,7 +107,7 @@ def base_dir(kind: str) -> str:
         "cache": os.environ.get("XDG_CACHE_HOME") or os.path.join(home, ".cache"),
         "log": os.environ.get("XDG_STATE_HOME") or os.path.join(home, ".local", "state"),
     }[kind]
-    path = os.path.join(xdg, APP_SLUG)
+    path = os.path.join(xdg, slug)
     return os.path.join(path, "logs") if kind == "log" else path
 
 

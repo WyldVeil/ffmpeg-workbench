@@ -1,6 +1,6 @@
 # Architecture
 
-How WyldVeil's Media Editor is put together, and why. Read this before
+How FFmpeg Workbench is put together, and why. Read this before
 changing anything structural; read [CONVENTIONS.md](CONVENTIONS.md) before
 changing anything at all. Every rule marked **(enforced)** is checked by a
 test or by CI, so it cannot quietly erode.

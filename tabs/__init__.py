@@ -1,5 +1,5 @@
 """
-tabs  -  Quintessential Video Editor tool tab package
+tabs  -  FFmpeg Workbench: the tool pages
 
 Sub-packages
 ------------

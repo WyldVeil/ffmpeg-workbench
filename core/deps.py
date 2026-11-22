@@ -45,7 +45,7 @@ def _user_libs_dir() -> str:
         base = base_dir("data")
     except Exception:
         logger.debug("_user_libs_dir: best-effort step failed", exc_info=True)
-        base = os.path.join(os.path.expanduser("~"), ".local", "share", "wyldveil-media-editor")
+        base = os.path.join(os.path.expanduser("~"), ".local", "share", "ffmpeg-workbench")
     return os.path.join(base, "python-libs", "py{}.{}".format(*sys.version_info[:2]))
 
 

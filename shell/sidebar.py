@@ -78,12 +78,11 @@ class Sidebar(tk.Frame):
             badge.create_rectangle(0, 0, px(38), px(34), fill=skin["accent"], outline="")
         names = tk.Frame(logo, bg=bg)
         names.pack(side="left", anchor="w")
-        tk.Label(names, text="WYLDVEIL", font=(UI_FONT, 11, "bold"), bg=bg, fg="#CCCCCC").pack(
+        # the app's name is a name: the same in every language
+        tk.Label(names, text="FFmpeg", font=(UI_FONT, 11, "bold"), bg=bg, fg="#CCCCCC").pack(
             anchor="w"
         )
-        tk.Label(names, text=t("app.subtitle"), font=(UI_FONT, 8), bg=bg, fg="#424242").pack(
-            anchor="w"
-        )
+        tk.Label(names, text="Workbench", font=(UI_FONT, 8), bg=bg, fg="#5A5A5A").pack(anchor="w")
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14), pady=px(16, 0))
 
         pinned = tk.Frame(top, bg=bg)
