@@ -615,32 +615,6 @@ class EncoderPanel(tk.Frame):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  here_button
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def here_button(
-    parent,
-    var: tk.StringVar,
-    get_pos: Callable[[], float],
-    on_set: Callable[[], None] | None = None,
-    tip: str = "Use the frame shown in the preview",
-) -> tk.Button:
-    """A small ◉ button that puts the preview's position (to the millisecond,
-    so frame-exact after , and . stepping) into the time field *var*."""
-    from tabs.base_tab import add_tooltip
-
-    def use():
-        var.set(ff.format_time(max(0.0, float(get_pos()))))
-        if on_set is not None:
-            on_set()
-
-    btn = tk.Button(parent, text="◉", relief="flat", width=2, cursor="hand2", command=use)
-    add_tooltip(btn, tip)
-    return btn
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 #  FramePicker - choose a time by looking at the frames (for tools without a preview)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -740,54 +714,3 @@ class FramePicker(tk.Toplevel):
     def _use(self):
         self._var.set(self._fmt(framestep.snap(float(self.pos.get()), self._fps)))
         self.destroy()
-
-
-def pick_button(
-    parent,
-    var: tk.StringVar,
-    get_path: Callable[[], str | None],
-    fmt: Callable[[float], str] = ff.format_time,
-) -> tk.Button:
-    """A 🎞 button that opens a :class:`FramePicker` for the time field *var*."""
-    from tabs.base_tab import add_tooltip
-
-    def open_picker():
-        path = get_path()
-        if not path or not os.path.isfile(path):
-            from tkinter import messagebox
-
-            messagebox.showinfo("Pick a frame", "Choose a video first.", parent=parent)
-            return
-        FramePicker(parent, path, var, fmt)
-
-    btn = tk.Button(parent, text="🎞", relief="flat", width=2, cursor="hand2", command=open_picker)
-    add_tooltip(btn, "Find the moment by looking at the frames (, and . step one frame)")
-    return btn
-
-
-def add_pickers(
-    root,
-    variables,
-    get_path: Callable[[], str | None],
-    fmt: Callable[[float], str] = ff.format_time,
-) -> int:
-    """Put a 🎞 button right after the entry of each time field in *variables*
-    (looked up under *root*).  Returns how many were added."""
-    names = {str(v): v for v in variables}
-    added = 0
-    todo = [root]
-    while todo:
-        w = todo.pop()
-        todo.extend(w.winfo_children())
-        try:
-            tv = (
-                str(w.cget("textvariable"))
-                if w.winfo_class() in ("Entry", "Spinbox", "TEntry")
-                else ""
-            )
-        except tk.TclError:
-            tv = ""
-        if tv in names and w.winfo_manager() == "pack":
-            pick_button(w.master, names[tv], get_path, fmt).pack(side="left", after=w)
-            added += 1
-    return added

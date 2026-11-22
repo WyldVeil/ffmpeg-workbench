@@ -160,7 +160,7 @@ def test_pip_keeps_background_length(ui, media, outdir):
     ui.pump(0.4)
     tab.radius_var.set("16")
     tab.border_var.set("3")
-    tab.from_var.set("0.5")
+    tab.window.start.set(0.5)
     tab.anim_var.set(ANIMS["fade"])
     tab.audio_var.set(AUDIO["mix"])
     out = str(outdir / "pip.mp4")

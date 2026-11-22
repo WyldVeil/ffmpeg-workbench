@@ -136,6 +136,35 @@ def test_thread_pools_live_only_in_core_tasks():
     assert not users, f"use core.tasks.submit / run_all: {users}"
 
 
+#: pages that read a time field themselves, and why a time picker doesn't fit
+OWN_TIME_FIELDS = {
+    "tabs/cutting/trimmer.py": "the trimming tool itself: its own handles, set-to-preview buttons, fix-up on Enter",
+    "tabs/audio/waveform.py": "the waveform editor's own in/out marks",
+    "tabs/audio/replacer.py": "a signed offset (+/-), not a moment in a video",
+    "tabs/social/chapter_markers.py": "a 'jump to' box for the chapter list",
+}
+
+
+def test_pages_read_times_through_the_kit():
+    """A moment or a part of a video is chosen with tabs/kit/time_fields.py
+    (MomentPicker / RangePicker), which parses, checks and offers 🎞 / ◉ - not a
+    hand-made entry parsed on the spot."""
+    import re
+
+    pattern = re.compile(r"parse_time\(self\.\w+\.get\(\)")
+    users = {
+        rel
+        for rel, path in _py_files("tabs")
+        if not rel.startswith("tabs/kit/") and pattern.search(open(path, encoding="utf-8").read())
+    }
+    assert users <= set(OWN_TIME_FIELDS), (
+        f"use MomentPicker / RangePicker: {sorted(users - set(OWN_TIME_FIELDS))}"
+    )
+    assert set(OWN_TIME_FIELDS) <= users, (
+        f"fixed - remove from OWN_TIME_FIELDS: {sorted(set(OWN_TIME_FIELDS) - users)}"
+    )
+
+
 def test_tool_pages_never_import_the_window():
     breaks = {
         rel: bad

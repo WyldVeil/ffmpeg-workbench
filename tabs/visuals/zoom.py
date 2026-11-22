@@ -23,7 +23,8 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, here_button, scroll_body
+from tabs.kit.time_fields import MomentPicker
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 MODES = {
     "punch": "Punch-in (zoom in at a moment, then back out)",
@@ -187,10 +188,15 @@ class AnimatedZoomTab(BaseTab):
             return tk.Entry(parent, textvariable=v[key], width=width)
 
         def time_entry(parent, key, default, width=8):
-            box = tk.Frame(parent)
-            entry(box, key, default, width).pack(side="left")
-            here_button(box, v[key], lambda: float(self.pos_var.get())).pack(side="left")
-            return box
+            picker = MomentPicker(
+                parent,
+                value=default,
+                width=width,
+                here=lambda: float(self.pos_var.get()),
+                on_change=self._changed,
+            )
+            v[key] = picker.var
+            return picker
 
         def labelled(parent, *items):
             row = tk.Frame(parent)

@@ -22,6 +22,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 MODES = [
@@ -59,10 +60,10 @@ def _tempo(speed: float) -> str:
 class ClipLooperTab(BaseTab):
     # i / o (and the buttons): the section starts / ends at the frame shown
     def mark_in(self):
-        self.start_var.set(ff.format_time(float(self.pos_var.get())))
+        self.section.start.use_here()
 
     def mark_out(self):
-        self.end_var.set(ff.format_time(float(self.pos_var.get())))
+        self.section.end.use_here()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -116,13 +117,8 @@ class ClipLooperTab(BaseTab):
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="Section from").pack(side="left")
-        self.start_var = tk.StringVar(value="0")
-        tk.Entry(r, textvariable=self.start_var, width=11).pack(side="left", padx=px(4))
-        self.end_lbl = tk.Label(r, text="to")
-        self.end_lbl.pack(side="left")
-        self.end_var = tk.StringVar(value="2")
-        self.end_entry = tk.Entry(r, textvariable=self.end_var, width=11)
-        self.end_entry.pack(side="left", padx=px(4))
+        self.section = RangePicker(r, end="2", here=lambda: float(self.pos_var.get()))
+        self.section.pack(side="left", padx=px(4))
         tk.Label(r, text="Repeats:").pack(side="left", padx=px(10, 2))
         self.count_var = tk.StringVar(value="4")
         tk.Entry(r, textvariable=self.count_var, width=4).pack(side="left")
@@ -171,14 +167,14 @@ class ClipLooperTab(BaseTab):
 
     def _mode_changed(self):
         stutter = self.mode_var.get() == "stutter"
-        self.end_entry.config(state="disabled" if stutter else "normal")
+        self.section.end.entry.config(state="disabled" if stutter else "normal")
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
         self.preview.load(path, dur, 0.0)
-        self.end_var.set(ff.format_time(min(2.0, dur)))
+        self.section.end.set(min(2.0, dur))
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "looped"))
 
@@ -191,11 +187,13 @@ class ClipLooperTab(BaseTab):
         mode = self.mode_var.get()
         fps = info.require_video().fps or 30.0
         try:
-            start = ff.parse_time(self.start_var.get() or "0")
+            start = self.section.start.seconds(0.0, "From") or 0.0
             if mode == "stutter":
                 end = start + common.number(self.slice_var.get(), "Stutter slice", 1.0 / fps, 5)
             else:
-                end = ff.parse_time(self.end_var.get())
+                end = self.section.end.seconds(None, "To")
+                if end is None:
+                    raise ValueError("Say where the section ends.")
             count = int(common.number(self.count_var.get(), "Repeats", 2, 200))
             factor = common.number(self.factor_var.get() or "1.3", "Speed-up", 1.01, 4)
             if not 0 <= start < end <= dur + 0.05:

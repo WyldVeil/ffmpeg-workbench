@@ -272,7 +272,7 @@ def test_gif_maker_frame_steps_then_i_and_o(ui, media):
     for _ in range(15):
         framestep.on_key(ui.app, None, 1)  # .
     ui.app.shortcuts.mark_out()  # o
-    assert ff.parse_time(tab.start_var.get()) == pytest.approx(1.0)
+    assert tab.start.seconds() == pytest.approx(1.0)
     assert float(tab.dur_var.get()) == pytest.approx(0.5)
 
 
@@ -282,7 +282,7 @@ def test_gif_maker_frame_steps_then_i_and_o(ui, media):
     [
         ("Special Effects", 10),
         ("Universal Downsizer", 2),
-        ("WebM Maker", 2),
+        ("WebM Maker", 4),  # both trims (simple and advanced)
         ("All-in-One Builder", 4),
     ],
 )
@@ -315,6 +315,17 @@ def test_frame_picker_fills_the_field(ui, media):
     assert ff.parse_time(var.get()) == pytest.approx(0.1)
 
 
+def _variables(ui, tab):
+    """The page's Tk variables, those inside its time pickers included."""
+    import tkinter as tk
+
+    from tabs.kit.time_fields import MomentPicker
+
+    found = {k: v.get() for k, v in vars(tab).items() if isinstance(v, tk.Variable)}
+    found.update({str(w): w.var.get() for w in ui.walk(tab) if isinstance(w, MomentPicker)})
+    return found
+
+
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 @pytest.mark.parametrize(
@@ -336,9 +347,7 @@ def test_i_and_o_use_the_frame_shown(ui, media, tool):
     tab.load_file(media["h264"])
     ui.pump(0.6)
     assert hasattr(tab, "mark_in"), tool
-    before = {
-        k: v.get() for k, v in vars(tab).items() if isinstance(v, __import__("tkinter").Variable)
-    }
+    before = _variables(ui, tab)
     target = next(w for w in framestep._order if w() is not None and framestep._inside(w(), tab))()
     framestep.touch(target)
     start = float(target.get())  # previews start part-way in
@@ -348,9 +357,7 @@ def test_i_and_o_use_the_frame_shown(ui, media, tool):
         framestep.on_key(ui.app, None, 1)
     ui.app.shortcuts.mark_in()
     ui.pump(0.2)
-    after = {
-        k: v.get() for k, v in vars(tab).items() if isinstance(v, __import__("tkinter").Variable)
-    }
+    after = _variables(ui, tab)
     changed = [k for k in after if after[k] != before.get(k)]
     if tool == "Chapter Markers":
         assert any(abs(c.time - want) < 0.01 for c in tab.chapters), tab.chapters

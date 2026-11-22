@@ -18,6 +18,7 @@ from core.ops.shared import audio_job_args
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
 
 MODES = {
@@ -81,11 +82,9 @@ class MuterTab(BaseTab):
         framestep.slider(self.slider, self.preview)  # , and . step a frame
         mark = tk.Frame(pv)
         mark.pack(fill="x")
-        self.a_var, self.b_var = tk.StringVar(), tk.StringVar()
-        tk.Button(mark, text="Start here", relief="flat", command=self.mark_in).pack(side="left")
-        tk.Entry(mark, textvariable=self.a_var, width=11).pack(side="left", padx=px(2))
-        tk.Button(mark, text="End here", relief="flat", command=self.mark_out).pack(side="left")
-        tk.Entry(mark, textvariable=self.b_var, width=11).pack(side="left", padx=px(2))
+        tk.Label(mark, text="From").pack(side="left")
+        self.span = RangePicker(mark, start="", here=lambda: float(self.pos_var.get()))
+        self.span.pack(side="left", padx=px(2))
         tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(
             side="left", padx=px(4)
         )
@@ -154,14 +153,17 @@ class MuterTab(BaseTab):
 
     # i / o (and the buttons): the moment starts / ends at the frame shown
     def mark_in(self):
-        self.a_var.set(ff.format_time(float(self.pos_var.get())))
+        self.span.start.use_here()
 
     def mark_out(self):
-        self.b_var.set(ff.format_time(float(self.pos_var.get())))
+        self.span.end.use_here()
 
     def _add(self):
         try:
-            self.add_range(ff.parse_time(self.a_var.get()), ff.parse_time(self.b_var.get()))
+            start, end = self.span.span()
+            if end is None:
+                raise ValueError("Say where the muted part ends.")
+            self.add_range(start, end)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 

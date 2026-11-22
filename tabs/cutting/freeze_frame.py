@@ -21,6 +21,7 @@ from core.ops.freeze_frame import Freeze, freeze_graph
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import MomentPicker
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 MODES = [
@@ -83,8 +84,8 @@ class FreezeFrameTab(BaseTab):
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="At:").pack(side="left")
-        self.at_var = tk.StringVar(value="0")
-        tk.Entry(r, textvariable=self.at_var, width=12).pack(side="left", padx=px(4))
+        self.at = MomentPicker(r, value="0", width=12)
+        self.at.pack(side="left", padx=px(4))
         tk.Label(r, text="(follows the slider)   Hold for (s):").pack(side="left")
         self.hold_var = tk.StringVar(value="2")
         tk.Entry(r, textvariable=self.hold_var, width=6).pack(side="left", padx=px(4))
@@ -147,7 +148,7 @@ class FreezeFrameTab(BaseTab):
 
     def _moved(self):
         pos = float(self.pos_var.get())
-        self.at_var.set(ff.format_time(pos))
+        self.at.set(pos)
         self.preview.show(pos)
 
     def _render(self):
@@ -157,7 +158,7 @@ class FreezeFrameTab(BaseTab):
             return
         dur = info.duration
         try:
-            at = ff.parse_time(self.at_var.get() or "0")
+            at = self.at.seconds(0.0, "At") or 0.0
             hold = common.number(self.hold_var.get(), "Hold for", 0.04, 600)
             if not 0 <= at < dur:
                 raise ValueError(

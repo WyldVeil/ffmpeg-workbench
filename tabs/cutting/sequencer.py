@@ -19,6 +19,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import EncoderPanel, FramePreview, SaveRow, scroll_body
 
 SIZES = {
@@ -96,15 +97,10 @@ class SequencerTab(BaseTab):
         trim = tk.Frame(right)
         trim.pack(fill="x", pady=px(2))
         tk.Label(trim, text="In").pack(side="left")
-        self.in_var = tk.StringVar()
-        tk.Entry(trim, textvariable=self.in_var, width=11).pack(side="left", padx=px(2))
-        tk.Button(trim, text="⇤", relief="flat", command=lambda: self._mark("in")).pack(side="left")
-        tk.Label(trim, text="Out").pack(side="left", padx=px(8, 0))
-        self.out_var = tk.StringVar()
-        tk.Entry(trim, textvariable=self.out_var, width=11).pack(side="left", padx=px(2))
-        tk.Button(trim, text="⇥", relief="flat", command=lambda: self._mark("out")).pack(
-            side="left"
+        self.trim = RangePicker(
+            trim, start="", joiner="Out", here=lambda: float(self.pos_var.get())
         )
+        self.trim.pack(side="left", padx=px(2))
         tk.Button(trim, text="Apply", relief="flat", command=self._apply_trim).pack(
             side="left", padx=px(6)
         )
@@ -213,19 +209,13 @@ class SequencerTab(BaseTab):
         self.slider.configure(to=max(c["duration"], 0.01))
         self.pos_var.set(c["start"])
         self.preview.load(c["path"], c["duration"], c["start"])
-        self.in_var.set(ff.format_time(c["start"]))
-        self.out_var.set(ff.format_time(c["end"]))
+        self.trim.set(c["start"], c["end"])
 
     def mark_in(self):
-        self._mark("in")
+        self.trim.start.use_here()
 
     def mark_out(self):
-        self._mark("out")
-
-    def _mark(self, which):
-        (self.in_var if which == "in" else self.out_var).set(
-            ff.format_time(float(self.pos_var.get()))
-        )
+        self.trim.end.use_here()
 
     def _apply_trim(self):
         i = self._index()
@@ -233,8 +223,8 @@ class SequencerTab(BaseTab):
             return
         c = self.clips[i]
         try:
-            a = ff.parse_time(self.in_var.get() or "0")
-            b = ff.parse_time(self.out_var.get()) if self.out_var.get().strip() else c["duration"]
+            a, until = self.trim.span(c["duration"])
+            b = c["duration"] if until is None else until
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

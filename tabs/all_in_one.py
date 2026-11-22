@@ -30,13 +30,13 @@ import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
-from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops import all_in_one as aio
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.time_fields import RangePicker
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
 
@@ -248,13 +248,6 @@ class AllInOneTab(BaseTab):
         self._duration = 0.0  # loaded video duration - needed for fade-out math
         self._last_cmd = []  # most recently built command list
         self._build_ui()
-        from tabs.widgets import add_pickers
-
-        add_pickers(
-            self,
-            [self._trim_start, self._trim_end, self._text_start, self._text_end],
-            lambda: self._src_var.get().strip(),
-        )
 
     # ─────────────────────────────────────────────────────────────────────
     #  Top-level layout
@@ -416,17 +409,17 @@ class AllInOneTab(BaseTab):
         self._sec_trim.pack(fill="x", pady=px(1))
         b = self._sec_trim.body
 
-        self._trim_start = tk.StringVar(value="0.0")
-        self._trim_end = tk.StringVar(value="")
-        self._trim_start.trace_add("write", lambda *_: self._rebuild_cmd())
-        self._trim_end.trace_add("write", lambda *_: self._rebuild_cmd())
-
         r = _row(b)
-        _lbl(r, "Start (s):").pack(side="left")
-        _entry(r, self._trim_start, 8).pack(side="left", padx=px(6))
-        _lbl(r, "  End (s):").pack(side="left")
-        _entry(r, self._trim_end, 8).pack(side="left", padx=px(6))
-        _lbl(r, "(leave End blank to go to end of video)", dim=True).pack(side="left", padx=px(6))
+        _lbl(r, "From:").pack(side="left")
+        trim = RangePicker(
+            r,
+            start="0.0",
+            end_hint="(blank = to the end of the video)",
+            source=self._source,
+            on_change=self._rebuild_cmd,
+        )
+        trim.pack(side="left", padx=px(6))
+        self._trim_range = trim
 
     # ── 📐 Scale ──────────────────────────────────────────────────────────
 
@@ -753,17 +746,7 @@ class AllInOneTab(BaseTab):
         self._text_size = tk.StringVar(value="42")
         self._text_color = tk.StringVar(value="white")
         self._text_pos = tk.StringVar(value="Bottom Right")
-        self._text_start = tk.StringVar(value="0")
-        self._text_end = tk.StringVar(value="")
-
-        for v in (
-            self._text_val,
-            self._text_size,
-            self._text_color,
-            self._text_pos,
-            self._text_start,
-            self._text_end,
-        ):
+        for v in (self._text_val, self._text_size, self._text_color, self._text_pos):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
         r1 = _row(b)
@@ -781,10 +764,12 @@ class AllInOneTab(BaseTab):
         _combo(r2, self._text_pos, list(_TEXT_POSITIONS.keys()), width=14).pack(
             side="left", padx=px(6)
         )
-        _lbl(r2, "  Show from (s):").pack(side="left")
-        _entry(r2, self._text_start, 6).pack(side="left", padx=px(4))
-        _lbl(r2, "  to (s, blank = end):").pack(side="left")
-        _entry(r2, self._text_end, 6).pack(side="left", padx=px(4))
+        _lbl(r2, "  Show from:").pack(side="left")
+        shown = RangePicker(
+            r2, end_hint="(blank = to the end)", source=self._source, on_change=self._rebuild_cmd
+        )
+        shown.pack(side="left", padx=px(4))
+        self._text_shown = shown
 
     # ── 🌅 Fade In / Out ─────────────────────────────────────────────────
 
@@ -990,6 +975,9 @@ class AllInOneTab(BaseTab):
     #  Command builder  ← the heart of the tab
     # ─────────────────────────────────────────────────────────────────────
 
+    def _source(self) -> str:
+        return self._src_var.get().strip()
+
     def _rebuild_cmd(self, *_):
         """Show the FFmpeg command for every enabled section (core/ops/all_in_one.py)."""
         if not hasattr(self, "_cmd_text"):
@@ -1050,12 +1038,11 @@ class AllInOneTab(BaseTab):
             return 0.0, None
         start, end = 0.0, None
         try:
-            start = max(0.0, ff.parse_time(self._trim_start.get() or "0"))
+            start = max(0.0, self._trim_range.start.seconds(0.0) or 0.0)
         except ValueError:
             notes.append("trim start is not a time")
         try:
-            if self._trim_end.get().strip():
-                end = ff.parse_time(self._trim_end.get())
+            end = self._trim_range.end.seconds()
         except ValueError:
             notes.append("trim end is not a time")
         if end is not None and end <= start:
@@ -1112,9 +1099,10 @@ class AllInOneTab(BaseTab):
             fh.write(self._text_val.get())
         enable = None
         try:
-            st = ff.parse_time(self._text_start.get().strip() or "0")
-            if self._text_end.get().strip():
-                enable = f"between(t,{st:.3f},{ff.parse_time(self._text_end.get()):.3f})"
+            st = self._text_shown.start.seconds(0.0) or 0.0
+            until = self._text_shown.end.seconds()
+            if until is not None:
+                enable = f"between(t,{st:.3f},{until:.3f})"
             elif st > 0:
                 enable = f"gte(t,{st:.3f})"
         except ValueError:

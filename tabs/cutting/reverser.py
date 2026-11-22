@@ -21,6 +21,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 MODES = [
@@ -109,12 +110,11 @@ class ReverserTab(BaseTab):
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
         self.range_f = tk.Frame(mode_lf)
         tk.Label(self.range_f, text="Section from").pack(side="left")
-        self.start_var = tk.StringVar(value="0")
-        tk.Entry(self.range_f, textvariable=self.start_var, width=10).pack(side="left", padx=px(4))
-        tk.Label(self.range_f, text="to").pack(side="left")
-        self.end_var = tk.StringVar(value="")
-        tk.Entry(self.range_f, textvariable=self.end_var, width=10).pack(side="left", padx=px(4))
-        tk.Label(self.range_f, text="(empty = end)   Repeats:").pack(side="left")
+        self.section = RangePicker(
+            self.range_f, end_hint="(empty = end)", source=lambda: self.src_row.path
+        )
+        self.section.pack(side="left", padx=px(4))
+        tk.Label(self.range_f, text="   Repeats:").pack(side="left")
         self.repeat_var = tk.StringVar(value="3")
         tk.Entry(self.range_f, textvariable=self.repeat_var, width=4).pack(side="left", padx=px(4))
         self.audio_var = tk.BooleanVar(value=True)
@@ -174,12 +174,8 @@ class ReverserTab(BaseTab):
         dur = info.duration
         mode = self.mode_var.get()
         try:
-            start = ff.parse_time(self.start_var.get() or "0") if mode != "full" else 0.0
-            end = (
-                ff.parse_time(self.end_var.get())
-                if mode != "full" and self.end_var.get().strip()
-                else dur
-            )
+            start, end_or_none = self.section.span() if mode != "full" else (0.0, None)
+            end = dur if end_or_none is None else end_or_none
             repeats = int(common.number(self.repeat_var.get() or "1", "Repeats", 1, 50))
             if not 0 <= start < end <= dur + 0.05:
                 raise ValueError("The section must lie inside the clip, with 'from' before 'to'.")

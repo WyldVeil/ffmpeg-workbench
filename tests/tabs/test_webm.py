@@ -48,7 +48,7 @@ def test_simple_rejects_too_long(ui, media, outdir):
     tab.src_var.set(media["h264"])
     ui.wait_for(lambda: tab._src_dur > 0, 30)
     tab.notebook.select(0)
-    tab.simple_start_var.set("5.5")  # leaves < 2 s
+    tab.simple_trim.start.var.set("5.5")  # leaves < 2 s
     tab.out_row.set(str(outdir / "short.webm"))
     tab._start_render()
     ui.pump(0.3)

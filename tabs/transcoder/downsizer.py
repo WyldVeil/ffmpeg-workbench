@@ -29,7 +29,8 @@ from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, SaveRow, add_pickers, scroll_body
+from tabs.kit.time_fields import RangePicker
+from tabs.widgets import FileRow, SaveRow, scroll_body
 
 TARGETS = [
     ("8 MB", 8),
@@ -59,9 +60,6 @@ class UniversalDownsizerTab(BaseTab):
         self._info = None
         self._job = None
         self._build_ui()
-        add_pickers(
-            self, [self.start_var, self.end_var], lambda: self.src_row.path
-        )  # 🎞 next to the trim
 
     def _build_ui(self):
         self.make_header(
@@ -146,18 +144,16 @@ class UniversalDownsizerTab(BaseTab):
             command=self._changed,
         ).pack(side="left", padx=px(10))
         row(4, "Allowed:", perm)
-        self.start_var, self.end_var = tk.StringVar(), tk.StringVar()
-        tr = tk.Frame(opt)
-        tk.Entry(tr, textvariable=self.start_var, width=10).pack(side="left")
-        tk.Label(tr, text=" to ").pack(side="left")
-        tk.Entry(tr, textvariable=self.end_var, width=10).pack(side="left")
-        tk.Label(tr, text="  (optional - leave empty for the whole video)", fg=CLR["fgdim"]).pack(
-            side="left"
+        self.trim = RangePicker(
+            opt,
+            start="",
+            end_hint="(optional - leave empty for the whole video)",
+            source=lambda: self.src_row.path,
         )
-        row(5, "Trim:", tr)
+        row(5, "Trim:", self.trim)
         for w in (tb, cb, ab):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        for v in (self._target_mb, self.start_var, self.end_var):
+        for v in (self._target_mb, self.trim.start.var, self.trim.end.var):
             v.trace_add("write", lambda *_a: self._changed())
         self.plan_lbl = tk.Label(
             opt, text="", fg=CLR["accent"], justify="left", anchor="w", wraplength=px(640)
@@ -203,9 +199,8 @@ class UniversalDownsizerTab(BaseTab):
         return int(mb * 1_000_000)  # decimal MB: also fits limits counted in MiB
 
     def _trim(self, info):
-        a = ff.parse_time(self.start_var.get()) if self.start_var.get().strip() else 0.0
-        b = ff.parse_time(self.end_var.get()) if self.end_var.get().strip() else info.duration
-        b = min(b, info.duration)
+        a, end = self.trim.span(info.duration)
+        b = info.duration if end is None else end
         if b - a < 0.5:
             raise ValueError("The trimmed part must be at least half a second long.")
         return a, b

@@ -18,6 +18,7 @@ from core.ops.region_blur import KINDS, Region, blur_graph
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 PRESETS = {  # name: (x, y, w, h) as fractions of the frame
@@ -118,14 +119,13 @@ class RegionBlurTab(BaseTab):
             length=px(140),
             label="Strength",
         ).grid(row=0, column=1, sticky="w", padx=px(6))
-        self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
         tf = tk.Frame(ed)
         tf.grid(row=1, column=0, columnspan=2, sticky="w")
         tk.Label(tf, text="From").pack(side="left")
-        tk.Entry(tf, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
-        tk.Label(tf, text="to").pack(side="left")
-        tk.Entry(tf, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
-        tk.Label(tf, text="(empty = to the end)", fg=CLR["fgdim"]).pack(side="left")
+        self.window = RangePicker(
+            tf, end_hint="(empty = to the end)", here=lambda: float(self.pos_var.get())
+        )
+        self.window.pack(side="left")
         tk.Button(ed, text="Apply to region", relief="flat", command=self._apply_edit).grid(
             row=2, column=0, sticky="w", pady=px(2)
         )
@@ -285,18 +285,17 @@ class RegionBlurTab(BaseTab):
         r = self.regions[i]
         self.kind_var.set(KINDS[r.kind])
         self.strength_var.set(r.strength)
-        self.from_var.set(ff.format_time(r.start) if r.start else "0")
-        self.to_var.set(ff.format_time(r.end) if r.end is not None else "")
+        self.window.set(r.start, r.end)
         self._draw_regions()
 
     # i / o (and the buttons): the selected region starts / stops at the frame shown
     def mark_in(self):
-        self.from_var.set(ff.format_time(float(self.pos_var.get())))
+        self.window.start.use_here()
         if self._selected() is not None:
             self._apply_edit()
 
     def mark_out(self):
-        self.to_var.set(ff.format_time(float(self.pos_var.get())))
+        self.window.end.use_here()
         if self._selected() is not None:
             self._apply_edit()
 
@@ -305,10 +304,7 @@ class RegionBlurTab(BaseTab):
         if i is None:
             return
         try:
-            start = ff.parse_time(self.from_var.get() or "0")
-            end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else None
-            if end is not None and end <= start:
-                raise ValueError("'to' must be after 'from'.")
+            start, end = self.window.span()
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

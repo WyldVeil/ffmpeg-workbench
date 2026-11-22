@@ -29,6 +29,7 @@ from core.ops.frame_extractor import quality_args
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
+from tabs.kit.time_fields import MomentPicker, RangePicker
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
 FORMATS = {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"}
@@ -133,24 +134,19 @@ class FrameExtractorTab(BaseTab):
         self.panels = {}
         p = self.panels["single"] = tk.Frame(opts)
         tk.Label(p, text="Time:").pack(side="left")
-        self.time_var = tk.StringVar(value="0")
-        tk.Entry(p, textvariable=self.time_var, width=14).pack(side="left", padx=px(6))
+        self.moment = MomentPicker(p, value="0", width=14, on_change=self._time_typed)
+        self.moment.pack(side="left", padx=px(6))
         tk.Label(
             p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"], font=(UI_FONT, 8)
         ).pack(side="left")
-        self.time_var.trace_add("write", lambda *_a: self._time_typed())
 
         p = self.panels["interval"] = tk.Frame(opts)
         self.every_var = tk.StringVar(value="1")
-        self.from_var = tk.StringVar(value="0")
-        self.to_var = tk.StringVar(value="")
-        for label, var, w in (
-            ("Every (s):", self.every_var, 6),
-            ("From:", self.from_var, 10),
-            ("To (empty = end):", self.to_var, 10),
-        ):
-            tk.Label(p, text=label).pack(side="left", padx=px(8, 2))
-            tk.Entry(p, textvariable=var, width=w).pack(side="left")
+        tk.Label(p, text="Every (s):").pack(side="left", padx=px(8, 2))
+        tk.Entry(p, textvariable=self.every_var, width=6).pack(side="left")
+        tk.Label(p, text="From:").pack(side="left", padx=px(8, 2))
+        self.part = RangePicker(p, end_hint="(empty = end)", here=lambda: float(self.pos_var.get()))
+        self.part.pack(side="left")
 
         p = self.panels["scenes"] = tk.Frame(opts)
         tk.Label(p, text="Sensitivity:").pack(side="left")
@@ -255,7 +251,7 @@ class FrameExtractorTab(BaseTab):
     def _moved(self):
         pos = float(self.pos_var.get())
         self._syncing = True
-        self.time_var.set(ff.format_time(pos))
+        self.moment.set(pos)
         self._syncing = False
         self.preview.show(pos)
 
@@ -263,8 +259,10 @@ class FrameExtractorTab(BaseTab):
         if getattr(self, "_syncing", False):
             return
         try:
-            pos = ff.parse_time(self.time_var.get())
+            pos = self.moment.seconds()
         except ValueError:
+            return
+        if pos is None:
             return
         self.pos_var.set(pos)
         self.preview.show(pos)
@@ -307,7 +305,7 @@ class FrameExtractorTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 
     def _single(self, src, info, folder, base, ext, q):
-        at = ff.parse_time(self.time_var.get())
+        at = self.moment.seconds(0.0, "Time") or 0.0
         at = max(0.0, min(at, max(0.0, info.duration - 1.0 / self._fps())))
         stamp = ff.format_time(at).replace(":", "-")
         from core.outputs import unique_path
@@ -341,10 +339,8 @@ class FrameExtractorTab(BaseTab):
 
     def _interval(self, src, info, folder, base, ext, q):
         every = common.number(self.every_var.get(), "Every", 0.01, 3600)
-        start = ff.parse_time(self.from_var.get() or "0")
-        end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else info.duration
-        if end <= start:
-            raise ValueError("'To' must be after 'From'.")
+        start, until = self.part.span(info.duration)
+        end = info.duration if until is None else until
         out_dir = fresh_folder(folder, f"{base} frames")
         # image2 patterns treat every '%' as a format code - escape real ones
         pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%05d.{ext}"

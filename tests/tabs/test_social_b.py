@@ -126,7 +126,7 @@ def test_frame_extractor(ui, media, outdir, mode, fmt):
     tab._mode_changed()
     tab.fmt_var.set(frame_extractor.FORMATS[fmt])
     if mode == "single":
-        tab.time_var.set("1.5")
+        tab.moment.var.set("1.5")
     if mode == "interval":
         tab.every_var.set("1")
     tab._render()

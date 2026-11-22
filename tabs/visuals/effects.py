@@ -37,6 +37,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.time_fields import frame_button, seconds_text
 
 logger = logging.getLogger("crossfader.visuals.effects")
 
@@ -192,7 +193,8 @@ def _lf(parent, title, **kw):
     )
 
 
-def _spin(parent, label, var, from_, to, resolution=0.5, width=6):
+def _spin(parent, label, var, from_, to, resolution=0.5, width=6, *, source=None):
+    """``Label [spinbox]`` - with a 🎞 frame picker when it holds a time in the video *source()*."""
     f = tk.Frame(parent, bg=CLR["bg"])
     tk.Label(f, text=label, bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10)).pack(side="left")
     tk.Spinbox(
@@ -207,6 +209,8 @@ def _spin(parent, label, var, from_, to, resolution=0.5, width=6):
         buttonbackground=CLR["panel"],
         insertbackground=CLR["fg"],
     ).pack(side="left", padx=px(6))
+    if source is not None:
+        frame_button(f, var, source, seconds_text).pack(side="left")
     return f
 
 
@@ -249,34 +253,6 @@ class SpecialEffectsTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self._build_ui()
-        self._add_frame_pickers()
-
-    #: the effects' "at" times, each picked from frames of its own source video
-    PICKED_TIMES = (
-        "_em_start",
-        "_lt_start",
-        "_sub_start",
-        "_cd_start",
-        "_rgb_start",
-        "_ll_start",
-        "_sh_start",
-        "_zp_at",
-        "_wp_at",
-        "_mc_start",
-    )
-
-    def _add_frame_pickers(self):
-        from tabs.widgets import add_pickers
-
-        self._pickers = 0
-        for name in self.PICKED_TIMES:
-            src = getattr(self, name.rsplit("_", 1)[0] + "_src")
-            self._pickers += add_pickers(
-                self,
-                [getattr(self, name)],
-                lambda s=src: s.get().strip(),
-                fmt=lambda t: f"{t:.3f}".rstrip("0").rstrip(".") or "0",
-            )
 
     # ── Shared plumbing for every effect ──────────────────────────────────
     #: Appended to every video chain: even dimensions, square pixels and
@@ -1168,7 +1144,15 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
 
-        _spin(opts, "Appear at (s):", self._em_start, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Appear at (s):",
+            self._em_start,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._em_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Hold for (s):", self._em_hold, 0.2, 30, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._em_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
@@ -1305,7 +1289,15 @@ class SpecialEffectsTab(BaseTab):
                 insertbackground=CLR["fg"],
             ).pack(side="left", padx=px(6))
 
-        _spin(opts, "Appear at (s):", self._lt_start, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Appear at (s):",
+            self._lt_start,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._lt_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Hold for (s):", self._lt_hold, 0.5, 60, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._lt_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
@@ -1421,7 +1413,15 @@ class SpecialEffectsTab(BaseTab):
             ["Bottom Centre", "Top Centre", "Bottom Left", "Bottom Right"],
             width=16,
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Appear at (s):", self._sub_start, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Appear at (s):",
+            self._sub_start,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._sub_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Hold for (s):", self._sub_hold, 0.5, 60, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._sub_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
@@ -1543,7 +1543,15 @@ class SpecialEffectsTab(BaseTab):
         self._cd_crf = tk.StringVar(value="18")
 
         _spin(opts, "Count from (s):", self._cd_from, 3, 3600, 1).pack(anchor="w", pady=px(3))
-        _spin(opts, "Start at (s):", self._cd_start, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Start at (s):",
+            self._cd_start,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._cd_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Font size:", self._cd_size, 24, 200, 8).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._cd_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
@@ -1748,6 +1756,9 @@ class SpecialEffectsTab(BaseTab):
             fg=CLR["fg"],
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
+        frame_button(r, self._rgb_start, lambda: self._rgb_src.get().strip(), seconds_text).pack(
+            side="left"
+        )
         tk.Label(r, text="  Duration (s, or 'whole video'):", bg=CLR["bg"], fg=CLR["fg"]).pack(
             side="left"
         )
@@ -2129,7 +2140,15 @@ class SpecialEffectsTab(BaseTab):
         self._ll_color = tk.StringVar(value="Warm Orange")
         self._ll_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Appear at (s):", self._ll_start, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Appear at (s):",
+            self._ll_start,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._ll_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Duration (s):", self._ll_dur, 0.2, 5, 0.2).pack(anchor="w", pady=px(3))
         _combo(
             opts,
@@ -2237,6 +2256,9 @@ class SpecialEffectsTab(BaseTab):
             fg=CLR["fg"],
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
+        frame_button(r, self._sh_start, lambda: self._sh_src.get().strip(), seconds_text).pack(
+            side="left"
+        )
         tk.Label(r, text="  Duration (s / 'whole video'):", bg=CLR["bg"], fg=CLR["fg"]).pack(
             side="left"
         )
@@ -2364,7 +2386,15 @@ class SpecialEffectsTab(BaseTab):
         self._zp_release = tk.StringVar(value="0.5")
         self._zp_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Punch at (s):", self._zp_at, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Punch at (s):",
+            self._zp_at,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._zp_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Zoom factor (×):", self._zp_zoom, 1.1, 4, 0.05).pack(anchor="w", pady=px(3))
         _spin(opts, "Attack (s):", self._zp_attack, 0.03, 0.5, 0.02).pack(anchor="w", pady=px(3))
         _spin(opts, "Hold at peak (s):", self._zp_hold, 0.05, 2, 0.05).pack(anchor="w", pady=px(3))
@@ -2525,7 +2555,15 @@ class SpecialEffectsTab(BaseTab):
         self._wp_str = tk.StringVar(value="40")
         self._wp_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Apply at (s):", self._wp_at, 0, 3600, 0.5).pack(anchor="w", pady=px(3))
+        _spin(
+            opts,
+            "Apply at (s):",
+            self._wp_at,
+            0,
+            3600,
+            0.5,
+            source=lambda: self._wp_src.get().strip(),
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "Duration (s):", self._wp_dur, 0.1, 2, 0.05).pack(anchor="w", pady=px(3))
         _combo(opts, "Direction:", self._wp_dir, ["Horizontal", "Vertical"], width=12).pack(
             anchor="w", pady=px(3)
@@ -2634,6 +2672,9 @@ class SpecialEffectsTab(BaseTab):
             fg=CLR["fg"],
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
+        frame_button(r2, self._mc_start, lambda: self._mc_src.get().strip(), seconds_text).pack(
+            side="left"
+        )
         tk.Label(r2, text="  Duration (s / 'whole video'):", bg=CLR["bg"], fg=CLR["fg"]).pack(
             side="left"
         )

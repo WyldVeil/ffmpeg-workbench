@@ -22,6 +22,7 @@ from core.i18n import t
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.social.webm_maker")
@@ -243,9 +244,6 @@ class WebMTab(BaseTab):
         self._lock_updating = False  # prevents slider feedback loops
         self._task_id = None
         self._build_ui()
-        from tabs.widgets import add_pickers
-
-        add_pickers(self, [self.simple_start_var, self.simple_end_var], lambda: self.src_row.path)
 
     # ═════════════════════════════════════════════════════════════════════════
     #  UI
@@ -359,17 +357,14 @@ class WebMTab(BaseTab):
         trim.pack(fill="x", padx=px(8), pady=px(4))
         row = tk.Frame(trim)
         row.pack(fill="x")
-        tk.Label(row, text="Start").pack(side="left")
-        self.simple_start_var = tk.StringVar(value="0")
-        e1 = tk.Entry(row, textvariable=self.simple_start_var, width=10)
-        e1.pack(side="left", padx=px(4))
-        tk.Label(row, text="s    End").pack(side="left")
-        self.simple_end_var = tk.StringVar(value="0")
-        e2 = tk.Entry(row, textvariable=self.simple_end_var, width=10)
-        e2.pack(side="left", padx=px(4))
-        tk.Label(row, text="(0 = full) s").pack(side="left")
-        for e in (e1, e2):
-            e.bind("<KeyRelease>", lambda _e: self._update_simple_estimate())
+        tk.Label(row, text="From").pack(side="left")
+        self.simple_trim = RangePicker(
+            row,
+            end_hint="(empty = to the end)",
+            source=lambda: self.src_row.path,
+            on_change=self._update_simple_estimate,
+        )
+        self.simple_trim.pack(side="left", padx=px(4))
         self.simple_est_lbl = tk.Label(
             parent, text="", fg=CLR["accent"], font=(MONO_FONT, 10), justify="left"
         )
@@ -667,16 +662,11 @@ class WebMTab(BaseTab):
 
         trim_row = tk.Frame(trim_lf)
         trim_row.pack(fill="x")
-        tk.Label(trim_row, text=t("common.start_s")).pack(side="left")
-        self.trim_start_var = tk.StringVar(value="0")
-        tk.Entry(trim_row, textvariable=self.trim_start_var, width=8, relief="flat").pack(
-            side="left", padx=px(4)
+        tk.Label(trim_row, text="From").pack(side="left")
+        self.trim = RangePicker(
+            trim_row, end_hint="(empty = to the end)", source=lambda: self.src_row.path
         )
-        tk.Label(trim_row, text=t("webm_maker.end_s_0_full")).pack(side="left", padx=px(12, 0))
-        self.trim_end_var = tk.StringVar(value="0")
-        tk.Entry(trim_row, textvariable=self.trim_end_var, width=8, relief="flat").pack(
-            side="left", padx=px(4)
-        )
+        self.trim.pack(side="left", padx=px(4))
 
         # ── Extra options ─────────────────────────────────────────────────
         extra_lf = tk.LabelFrame(
@@ -817,9 +807,8 @@ class WebMTab(BaseTab):
     #  Simple estimate
     # ═════════════════════════════════════════════════════════════════════════
     def _simple_trim(self):
-        start = ff.parse_time(self.simple_start_var.get() or "0")
-        end_txt = (self.simple_end_var.get() or "0").strip()
-        end = ff.parse_time(end_txt) if end_txt not in ("", "0") else 0.0
+        start, until = self.simple_trim.span()
+        end = until or 0.0  # 0: to the end
         eff = (end if end > start else self._src_dur) - start
         return start, end, eff
 
@@ -1215,9 +1204,8 @@ class WebMTab(BaseTab):
         size_limited = self.size_limit_enabled_var.get()
         preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
         _, vp9_cpu, vp9_deadline, vp8_cpu, _crf_hint = preset
-        t_start = ff.parse_time(self.trim_start_var.get() or "0")
-        t_end_txt = (self.trim_end_var.get() or "0").strip()
-        t_end = ff.parse_time(t_end_txt) if t_end_txt not in ("", "0") else 0.0
+        t_start, t_until = self.trim.span()
+        t_end = t_until or 0.0  # 0: to the end
         if t_start >= self._src_dur:
             raise ValueError(f"Trim start ({t_start:g}s) is past the end of the clip.")
         eff = (t_end if t_end > t_start else self._src_dur) - t_start

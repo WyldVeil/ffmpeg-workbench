@@ -20,6 +20,7 @@ from core.ops.shared import audio_encoder_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import RangePicker
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
 FORMATS = {  # id: (label, extension or None = from codec, encoder args)
@@ -71,11 +72,8 @@ class AudioExtractorTab(BaseTab):
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
         self.track_box.grid(row=1, column=1, sticky="w", pady=px(4))
         tk.Label(opt, text="From / to (optional):").grid(row=2, column=0, sticky="w")
-        tr = tk.Frame(opt)
-        tr.grid(row=2, column=1, sticky="w")
-        self.from_var, self.to_var = tk.StringVar(), tk.StringVar()
-        tk.Entry(tr, textvariable=self.from_var, width=10).pack(side="left")
-        tk.Entry(tr, textvariable=self.to_var, width=10).pack(side="left", padx=px(6))
+        self.part = RangePicker(opt, start="", source=lambda: self.src_row.path)
+        self.part.grid(row=2, column=1, sticky="w")
         self.norm_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opt,
@@ -149,10 +147,7 @@ class AudioExtractorTab(BaseTab):
             return
         self._info = info
         try:
-            start = ff.parse_time(self.from_var.get()) if self.from_var.get().strip() else 0.0
-            end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else None
-            if end is not None and end <= start:
-                raise ValueError("'to' must be after 'from'.")
+            start, end = self.part.span()
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

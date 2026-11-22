@@ -26,6 +26,7 @@ from core.ops.shared import audio_encoder_args
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.time_fields import MomentPicker
 
 logger = logging.getLogger("crossfader.audio.tts")
 
@@ -432,10 +433,8 @@ class TTSVoiceOverTab(BaseTab):
         ts_row = tk.Frame(self._video_lf)
         ts_row.pack(fill="x", pady=px(2))
         tk.Label(ts_row, text=t("tts.insert_at_label"), width=16, anchor="e").pack(side="left")
-        self.timestamp_var = tk.StringVar(value="0")
-        tk.Entry(ts_row, textvariable=self.timestamp_var, width=10, relief="flat").pack(
-            side="left", padx=px(8)
-        )
+        self.timestamp = MomentPicker(ts_row, value="0", width=10)
+        self.timestamp.pack(side="left", padx=px(8))
         tk.Label(ts_row, text=t("tts.insert_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(
             side="left"
         )
@@ -907,7 +906,6 @@ class TTSVoiceOverTab(BaseTab):
     #  Main render
     # ─────────────────────────────────────────────────────────────────────
     def _render(self):
-        from core import ffmpeg as ff
         from tabs import common
 
         text = self._get_text()
@@ -949,7 +947,7 @@ class TTSVoiceOverTab(BaseTab):
                 max(0.0, float(self.pad_before_var.get() or 0)),
                 max(0.0, float(self.pad_after_var.get() or 0)),
             )
-            offset = ff.parse_time(self.timestamp_var.get() or "0") if mode == "video" else 0.0
+            offset = (self.timestamp.seconds(0.0, "Insert at") or 0.0) if mode == "video" else 0.0
         except ValueError:
             messagebox.showwarning(
                 t("common.warning"),

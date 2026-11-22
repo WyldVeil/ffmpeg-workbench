@@ -26,7 +26,8 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, here_button, scroll_body
+from tabs.kit.time_fields import MomentPicker
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 STYLES = {
     "lower_third": "Lower third (sliding bar)",
@@ -366,14 +367,16 @@ class TitlesGeneratorTab(BaseTab):
             r1, textvariable=v["style"], values=list(STYLES.values()), state="readonly", width=30
         ).pack(side="left")
         tk.Label(r1, text=t("titles.start_label")).pack(side="left", padx=px(10, 2))
-        tk.Entry(r1, textvariable=v["start"], width=8).pack(side="left")
-        here_button(
+        start = MomentPicker(
             r1,
-            v["start"],
-            lambda: float(self.pos_var.get()),
-            lambda r=row: self._use(r),
-            "Start at the frame shown (i)",
-        ).pack(side="left")
+            value=v["start"].get(),
+            width=8,
+            here=lambda: float(self.pos_var.get()),
+            on_change=lambda r=row: self._use(r),
+            tip="Start at the frame shown (i)",
+        )
+        start.pack(side="left")
+        v["start"] = start.var
         tk.Label(r1, text=t("titles.duration_label")).pack(side="left", padx=px(10, 2))
         tk.Entry(r1, textvariable=v["duration"], width=6).pack(side="left")
         end_btn = tk.Button(

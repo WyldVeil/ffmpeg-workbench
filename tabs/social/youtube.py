@@ -43,6 +43,7 @@ from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.time_fields import RangePicker
 
 logger = logging.getLogger("crossfader.social.youtube")
 
@@ -89,19 +90,6 @@ def _fmt_dur(seconds) -> str:
     return f"{Timecode.of(seconds):H.0}"
 
 
-def _parse_time(t: str) -> float:
-    t = t.strip()
-    try:
-        parts = t.split(":")
-        if len(parts) == 3:
-            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
-        if len(parts) == 2:
-            return int(parts[0]) * 60 + float(parts[1])
-        return float(parts[0])
-    except (ValueError, IndexError):
-        return 0.0
-
-
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".qve_yt_history.json")
 
 _DL_PROGRESS_RE = re.compile(
@@ -109,11 +97,6 @@ _DL_PROGRESS_RE = re.compile(
 )
 
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):([\d.]+)")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main Tab Class
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _ytdlp_version(ytdlp: str) -> str:
@@ -1291,36 +1274,14 @@ class YouTubeDownloaderTab(BaseTab):
         tk.Label(
             trim_row, text=t("youtube.from"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left", padx=px(16, 0))
-        self._start_var = tk.StringVar(value="00:00:00")
-        self._start_ent = tk.Entry(
-            trim_row,
-            textvariable=self._start_var,
-            width=10,
-            relief="flat",
-            font=(MONO_FONT, 9),
-            bg=CLR["input_bg"],
-            fg=CLR["input_fg"],
-            insertbackground=CLR["accent"],
-            state="disabled",
+        self._section = RangePicker(
+            trim_row, start="00:00:00", end="00:00:00", joiner=t("youtube.to")
         )
-        self._start_ent.pack(side="left", padx=px(4))
-
-        tk.Label(
-            trim_row, text=t("youtube.to"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
-        ).pack(side="left")
-        self._end_var = tk.StringVar(value="00:00:00")
-        self._end_ent = tk.Entry(
-            trim_row,
-            textvariable=self._end_var,
-            width=10,
-            relief="flat",
-            font=(MONO_FONT, 9),
-            bg=CLR["input_bg"],
-            fg=CLR["input_fg"],
-            insertbackground=CLR["accent"],
-            state="disabled",
-        )
-        self._end_ent.pack(side="left", padx=px(4))
+        self._section.pack(side="left", padx=px(4))
+        self._start_var, self._end_var = self._section.start.var, self._section.end.var
+        self._start_ent, self._end_ent = self._section.start.entry, self._section.end.entry
+        for entry in (self._start_ent, self._end_ent):
+            entry.config(state="disabled", font=(MONO_FONT, 9), width=10)
 
         tk.Label(
             trim_row, text=t("youtube.hh_mm_ss"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
@@ -2464,10 +2425,13 @@ class YouTubeDownloaderTab(BaseTab):
         """Returns trim args or None. Returns False-y empty list if no trim."""
         if not self._trim_var.get():
             return []
-        s0 = _parse_time(self._start_var.get())
-        s1 = _parse_time(self._end_var.get())
-        if s1 <= s0:
-            messagebox.showwarning(t("common.warning"), "'To' must be after 'From'.")
+        try:
+            s0, s1 = self._section.span()
+        except ValueError as exc:
+            messagebox.showwarning(t("common.warning"), str(exc))
+            return None
+        if s1 is None:
+            messagebox.showwarning(t("common.warning"), "Say where the section ends.")
             return None
         return ["--download-sections", f"*{s0:.3f}-{s1:.3f}", "--force-keyframes-at-cuts"]
 

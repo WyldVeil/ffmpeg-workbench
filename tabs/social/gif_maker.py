@@ -20,6 +20,7 @@ from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.time_fields import MomentPicker
 from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
 
 DITHERS = {
@@ -34,11 +35,11 @@ DITHERS = {
 class GIFMakerTab(BaseTab):
     # i / o (and the buttons): the GIF starts / ends at the frame shown
     def mark_in(self):
-        self.start_var.set(ff.format_time(float(self.pos_var.get())))
+        self.start.use_here()
 
     def mark_out(self):
         try:
-            start = ff.parse_time(self.start_var.get() or "0")
+            start = self.start.seconds(0.0) or 0.0
         except ValueError:
             start = 0.0
         length = float(self.pos_var.get()) - start
@@ -87,11 +88,12 @@ class GIFMakerTab(BaseTab):
             for i, w in enumerate(widgets):
                 w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
 
-        self.start_var, self.dur_var = tk.StringVar(value="0"), tk.StringVar(value="4")
+        self.start = MomentPicker(opt, value="0", width=11, here=lambda: float(self.pos_var.get()))
+        self.dur_var = tk.StringVar(value="4")
         row(
             0,
             "Start:",
-            tk.Entry(opt, textvariable=self.start_var, width=11),
+            self.start,
             tk.Label(opt, text="Length (s):"),
             tk.Entry(opt, textvariable=self.dur_var, width=6),
         )
@@ -210,7 +212,7 @@ class GIFMakerTab(BaseTab):
         if info is None:
             return
         try:
-            start = ff.parse_time(self.start_var.get() or "0")
+            start = self.start.seconds(0.0, "Start") or 0.0
             dur = common.number(self.dur_var.get(), "Length", 0.1, 600)
             fps = common.number(self.fps_var.get(), "Frame rate", 1, 60)
             width = int(common.number(self.width_var.get(), "Width", 16, 4096)) // 2 * 2

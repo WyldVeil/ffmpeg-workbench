@@ -19,7 +19,8 @@ from core.ops.image_watermark import POSITIONS, Logo, logo_graph
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, here_button, scroll_body
+from tabs.kit.time_fields import RangePicker
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 
 class ImageWatermarkTab(BaseTab):
@@ -106,24 +107,10 @@ class ImageWatermarkTab(BaseTab):
         tk.Checkbutton(tr, text="Only from", variable=self.window_var, command=self._changed).pack(
             side="left"
         )
-        self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="10")
-        tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
-        here_button(
-            tr,
-            self.from_var,
-            lambda: self.compare.position,
-            self._window_on,
-            "From the frame shown (i)",
-        ).pack(side="left")
-        tk.Label(tr, text="to").pack(side="left")
-        tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
-        here_button(
-            tr,
-            self.to_var,
-            lambda: self.compare.position,
-            self._window_on,
-            "To the frame shown (o)",
-        ).pack(side="left")
+        self.window = RangePicker(
+            tr, start="0", end="10", here=lambda: self.compare.position, on_change=self._window_on
+        )
+        self.window.pack(side="left")
         tk.Label(tr, text="  Fade (s):").pack(side="left")
         self.fade_var = tk.StringVar(value="0.5")
         tk.Entry(tr, textvariable=self.fade_var, width=5).pack(side="left")
@@ -160,11 +147,8 @@ class ImageWatermarkTab(BaseTab):
         place = next((k for k, v in POSITIONS.items() if v[0] == self.place_var.get()), "br")
         window = None
         if self.window_var.get():
-            a = ff.parse_time(self.from_var.get() or "0")
-            b = ff.parse_time(self.to_var.get())
-            if b <= a:
-                raise ValueError("'to' must be after 'from'.")
-            window = (a, b)
+            a, b = self.window.span(info.duration)
+            window = (a, b if b is not None else info.duration)
         spec = Logo(
             pct=float(self.size_var.get()),
             opacity=float(self.opacity_var.get()),
@@ -192,12 +176,10 @@ class ImageWatermarkTab(BaseTab):
 
     # i / o: the logo shows from / to the frame shown
     def mark_in(self):
-        self.from_var.set(ff.format_time(self.compare.position))
-        self._window_on()
+        self.window.start.use_here()
 
     def mark_out(self):
-        self.to_var.set(ff.format_time(self.compare.position))
-        self._window_on()
+        self.window.end.use_here()
 
     def _changed(self):
         if self._job is not None:

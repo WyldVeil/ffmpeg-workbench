@@ -20,7 +20,8 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, here_button, scroll_body
+from tabs.kit.time_fields import RangePicker
+from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 POSITIONS = {
     "tl": "Top left",
@@ -134,12 +135,10 @@ def pip_graph(spec: PipSpec, bg: str = "[0:v]", fg: str = "[1:v]", out: str = "[
 class PIPTab(BaseTab):
     # i / o: the inset shows from / until the frame shown
     def mark_in(self):
-        self.from_var.set(ff.format_time(self.compare.position))
-        self._changed()
+        self.window.start.use_here()
 
     def mark_out(self):
-        self.to_var.set(ff.format_time(self.compare.position))
-        self._changed()
+        self.window.end.use_here()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -239,25 +238,14 @@ class PIPTab(BaseTab):
         tr = tk.Frame(opt)
         tr.grid(row=3, column=0, columnspan=3, sticky="w", pady=px(3))
         tk.Label(tr, text="Show from").pack(side="left")
-        self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
-        tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
-        here_button(
+        self.window = RangePicker(
             tr,
-            self.from_var,
-            lambda: self.compare.position,
-            self._changed,
-            "From the frame shown (i)",
-        ).pack(side="left")
-        tk.Label(tr, text="until").pack(side="left")
-        tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
-        here_button(
-            tr,
-            self.to_var,
-            lambda: self.compare.position,
-            self._changed,
-            "Until the frame shown (o)",
-        ).pack(side="left")
-        tk.Label(tr, text="(empty = until the inset ends)", fg=CLR["fgdim"]).pack(side="left")
+            joiner="until",
+            end_hint="(empty = until the inset ends)",
+            here=lambda: self.compare.position,
+            on_change=self._changed,
+        )
+        self.window.pack(side="left")
         ar = tk.Frame(opt)
         ar.grid(row=4, column=0, columnspan=3, sticky="w", pady=px(3))
         self.anim_var = tk.StringVar(value=ANIMS["none"])
@@ -321,10 +309,7 @@ class PIPTab(BaseTab):
     def spec(self) -> PipSpec:
         if self._bg is None or not self._bg.has_video or self._fg is None or not self._fg.has_video:
             raise ValueError("Choose a background video and an inset video.")
-        start = ff.parse_time(self.from_var.get() or "0")
-        end = ff.parse_time(self.to_var.get()) if self.to_var.get().strip() else None
-        if end is not None and end <= start:
-            raise ValueError("'until' must be after 'show from'.")
+        start, end = self.window.span()
         if end is None and self._fg.duration:
             end = min(start + self._fg.duration, self._bg.duration or start + self._fg.duration)
         return PipSpec(

@@ -348,7 +348,7 @@ class ToolTip:
             self._tip = None
 
 
-def add_tooltip(widget, text):
+def add_tooltip(widget: tk.Misc, text: str) -> ToolTip:
     """Convenience function to attach a tooltip to any widget."""
     return ToolTip(widget, text)
 
