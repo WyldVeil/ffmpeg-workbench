@@ -125,7 +125,13 @@ class AudioDuckerTab(BaseTab):
             self, text=t("ducker.sect_duck_settings"), padx=px(16), pady=px(10)
         )
         settings_f.pack(fill="x", padx=px(20), pady=px(8))
+        self._music_volume_row(settings_f)
+        self._sensitivity_row(settings_f)
+        self._intensity_row(settings_f)
+        self._timing_row(settings_f)
 
+    def _music_volume_row(self, settings_f):
+        """How loud the music plays under the voice."""
         # Music volume
         r1 = tk.Frame(settings_f)
         r1.pack(fill="x", pady=px(3))
@@ -152,6 +158,8 @@ class AudioDuckerTab(BaseTab):
             side="left", padx=px(12)
         )
 
+    def _sensitivity_row(self, settings_f):
+        """How loud the voice must be to duck the music."""
         # Sensitivity / threshold
         r2 = tk.Frame(settings_f)
         r2.pack(fill="x", pady=px(3))
@@ -175,6 +183,8 @@ class AudioDuckerTab(BaseTab):
             side="left", padx=px(12)
         )
 
+    def _intensity_row(self, settings_f):
+        """How far the music ducks."""
         # Duck intensity / ratio
         r3 = tk.Frame(settings_f)
         r3.pack(fill="x", pady=px(3))
@@ -199,6 +209,8 @@ class AudioDuckerTab(BaseTab):
             side="left", padx=px(12)
         )
 
+    def _timing_row(self, settings_f):
+        """How fast the music ducks and comes back."""
         # Attack / release
         r4 = tk.Frame(settings_f)
         r4.pack(fill="x", pady=px(3))

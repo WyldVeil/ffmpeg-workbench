@@ -54,8 +54,8 @@ def _volume(path):
 
 def test_pure_helpers(tmp_path):
     from core import tts
+    from core.ops.voiceover import shift_srt as _shift_srt
     from tabs.audio import voice_isolation
-    from tabs.audio.tts import _shift_srt
 
     assert (
         _shift_srt("1\n00:00:01,500 --> 00:00:59,900\nHi\n", 0.25)

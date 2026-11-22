@@ -5,11 +5,15 @@ track placed, levelled and saved alone, or laid over (or replacing) a video's so
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
 from core import ffmpeg as ff
+from core import tts as tts_core
 from core.ops.shared import audio_encoder_args
+from core.queue_manager import TaskContext
 
 
 class SpeechFormat(StrEnum):
@@ -111,3 +115,50 @@ def voiceover_cmd(
     if out.lower().endswith((".mp4", ".mov", ".m4v")):
         cmd += ["-movflags", "+faststart"]
     return [*cmd, out], dur
+
+
+def shift_srt(srt: str, seconds: float) -> str:
+    """Move every SRT cue later by *seconds*."""
+
+    def fix(m: re.Match[str]) -> str:
+        h, mi, se, ms = (int(g) for g in m.groups())
+        total = max(0, (h * 3600 + mi * 60 + se) * 1000 + ms + round(seconds * 1000))
+        h, rem = divmod(total, 3_600_000)
+        mi, rem = divmod(rem, 60_000)
+        se, ms = divmod(rem, 1000)
+        return f"{h:02d}:{mi:02d}:{se:02d},{ms:03d}"
+
+    return re.sub(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})", fix, srt)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class VoiceoverJob:
+    """Speak *text* with *voice*, then place it (alone or into *video*); with
+    *subtitles*, an .srt beside the output, moved to where the speech starts."""
+
+    text: str
+    voice: tts_core.Voice
+    placement: Placement
+    video: str
+    info: ff.MediaInfo | None
+    subtitles: bool
+
+    def run(self, _p: object, _c: object, ctx: TaskContext, *, out: str) -> int:
+        speech = os.path.join(
+            ctx.tempdir(), "speech" + (".mp3" if self.voice.engine == "edge" else ".wav")
+        )
+        ctx.log("Step 1/2: speaking the script…")
+        srt = tts_core.synthesize(
+            self.text, speech, self.voice, subtitles=self.subtitles, cancelled=ctx.cancelled
+        )
+        ctx.progress(0.3)
+        ctx.log("Step 2/2: building the output…")
+        cmd, dur = voiceover_cmd(speech, ctx.output(out), self.video, self.info, self.placement)
+        ctx.span(0.3, 1.0).run(cmd, duration=dur)
+        if self.subtitles and srt:
+            shift = self.placement.pads[0] + self.placement.offset
+            srt_path = os.path.splitext(out)[0] + ".srt"
+            with open(srt_path, "w", encoding="utf-8") as fh:
+                fh.write(shift_srt(srt, shift) if shift else srt)
+            ctx.log(f"Subtitles saved: {os.path.basename(srt_path)}")
+        return 0

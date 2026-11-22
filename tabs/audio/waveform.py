@@ -67,7 +67,11 @@ class WaveformEditorTab(BaseTab):
         self._src_var = self.src_row.var
         self._info_lbl = tk.Label(self, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9), anchor="w")
         self._info_lbl.pack(fill="x", padx=px(20))
+        self._build_waveform_view()
+        return self._build_marks()
 
+    def _build_waveform_view(self):
+        """The waveform: click and drag to select, the wheel zooms."""
         wf_lf = tk.LabelFrame(
             self,
             text=f"  {t('waveform.mark_info_section')}  ",
@@ -102,6 +106,8 @@ class WaveformEditorTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
+    def _build_marks(self):
+        """In and out marks, the selection's length, zoom to it."""
         mk = tk.Frame(self)
         mk.pack(fill="x", padx=px(20), pady=px(4))
         self._in_var, self._out_var_t = tk.StringVar(value="0"), tk.StringVar(value="0")

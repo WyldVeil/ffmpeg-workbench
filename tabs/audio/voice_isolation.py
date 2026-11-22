@@ -64,6 +64,12 @@ class VoiceIsolationTab(BaseTab):
             ),
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        opt = self._build_methods(body)
+        self._build_method_options(opt)
+        self._build_output(body)
+
+    def _build_methods(self, body):
+        """Which method cleans the voice."""
         opt = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value="neural")
@@ -86,6 +92,10 @@ class VoiceIsolationTab(BaseTab):
                     radios["nlm"].pack(anchor="w", after=radios["fft"])
 
             capabilities.on_ready("anlmdn", _offer)
+        return opt
+
+    def _build_method_options(self, opt):
+        """The chosen method's settings and a preview."""
         mr = tk.Frame(opt)
         mr.pack(fill="x", pady=px(4))
         tk.Label(mr, text="Model:").pack(side="left")
@@ -125,6 +135,9 @@ class VoiceIsolationTab(BaseTab):
         tk.Button(opt, text="▶ Preview 12 s", relief="flat", command=self._preview).pack(
             anchor="w", pady=px(4)
         )
+
+    def _build_output(self, body):
+        """Where the result goes, the button and the log."""
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = SaveRow(

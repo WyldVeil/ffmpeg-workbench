@@ -51,6 +51,12 @@ class MuterTab(BaseTab):
             on_change=self._source_changed,
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        self._build_moments(body)
+        self._build_mode(body)
+        self._build_output(body)
+
+    def _build_moments(self, body):
+        """The picture, the moment picker and the list of moments."""
         top = tk.Frame(body)
         top.pack(fill="x", padx=px(20), pady=px(4))
         pv = tk.Frame(top)
@@ -83,6 +89,8 @@ class MuterTab(BaseTab):
             anchor="w"
         )
 
+    def _build_mode(self, body):
+        """What to do with the moments."""
         opt = tk.LabelFrame(body, text="  What to do  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="silence")
@@ -94,6 +102,8 @@ class MuterTab(BaseTab):
         self.fade_var = tk.StringVar(value="0.05")
         tk.Entry(fr, textvariable=self.fade_var, width=6).pack(side="left", padx=px(4))
 
+    def _build_output(self, body):
+        """Where the result goes, the button and the log."""
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.out_row = SaveRow(

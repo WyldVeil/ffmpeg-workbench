@@ -861,6 +861,48 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  Main render
     # ─────────────────────────────────────────────────────────────────────
+    def _voiceover_source(self):
+        """(video info or None, inputs, default output) - None after saying why it can't go on."""
+        from tabs import common
+
+        if self.mode_var.get() != "video":
+            ext = vo.SPEECH_EXT[self.audio_fmt.value]
+            return None, [], os.path.join(os.path.expanduser("~"), "voiceover" + ext)
+        vid = (self.vid_var.get() or getattr(self, "_vid_path", "")).strip()
+        info = common.check_source(self, vid)
+        if info is None:
+            return None
+        self._vid_path = vid
+        return info, [vid], self.suggest_output(vid, "voiceover")
+
+    def _placement(self) -> vo.Placement | None:
+        """Where the speech goes (None after saying the numbers are wrong)."""
+        video = self.mode_var.get() == "video"
+        try:
+            pads = (
+                max(0.0, float(self.pad_before_var.get() or 0)),
+                max(0.0, float(self.pad_after_var.get() or 0)),
+            )
+            offset = (self.timestamp.seconds(0.0, "Insert at") or 0.0) if video else 0.0
+        except ValueError:
+            messagebox.showwarning(
+                t("common.warning"),
+                "Padding and start time must be numbers of seconds.",
+                parent=self,
+            )
+            return None
+        return vo.Placement(
+            video=video,
+            pads=pads,
+            offset=offset,
+            volume=1.0 + self.vol_var.get() / 100.0,
+            normalise=self.normalise_var.get(),
+            fmt=self.audio_fmt.value,
+            replace=self.mix_mode_var.get() == "replace",
+            original_volume=float(self.orig_vol_var.get()),
+            video_out=self.vid_fmt.value,
+        )
+
     def _render(self):
         from tabs import common
 
@@ -875,70 +917,25 @@ class TTSVoiceOverTab(BaseTab):
                 t("common.warning"), "No voice engine is available.", parent=self
             )
             return
-        mode = self.mode_var.get()
-        info = None
-        inputs = []
-        if mode == "video":
-            vid = (self.vid_var.get() or getattr(self, "_vid_path", "")).strip()
-            info = common.check_source(self, vid)
-            if info is None:
-                return
-            self._vid_path = vid
-            inputs = [vid]
-            default = self.suggest_output(vid, "voiceover")
-        else:
-            ext = vo.SPEECH_EXT[self.audio_fmt.value]
-            default = os.path.join(os.path.expanduser("~"), "voiceover" + ext)
-        try:
-            pads = (
-                max(0.0, float(self.pad_before_var.get() or 0)),
-                max(0.0, float(self.pad_after_var.get() or 0)),
-            )
-            offset = (self.timestamp.seconds(0.0, "Insert at") or 0.0) if mode == "video" else 0.0
-        except ValueError:
-            messagebox.showwarning(
-                t("common.warning"),
-                "Padding and start time must be numbers of seconds.",
-                parent=self,
-            )
+        source = self._voiceover_source()
+        if source is None:
+            return
+        info, inputs, default = source
+        placement = self._placement()
+        if placement is None:
             return
         out = self.confirm_output(self.out_var.get().strip() or default, inputs)
         if not out:
             return
         self.out_var.set(out)
-        cfg = self._synth_settings()
-        with_srt = self.srt_var.get()
-        settings = vo.Placement(
-            video=mode == "video",
-            pads=pads,
-            offset=offset,
-            volume=1.0 + self.vol_var.get() / 100.0,
-            normalise=self.normalise_var.get(),
-            fmt=self.audio_fmt.value,
-            replace=self.mix_mode_var.get() == "replace",
-            original_volume=float(self.orig_vol_var.get()),
-            video_out=self.vid_fmt.value,
+        job = vo.VoiceoverJob(
+            text=text,
+            voice=self._synth_settings(),
+            placement=placement,
+            video=self._vid_path,
+            info=info,
+            subtitles=self.srt_var.get(),
         )
-
-        def work(_p, _c, ctx):
-            speech = os.path.join(
-                ctx.tempdir(), "speech" + (".mp3" if cfg.engine == "edge" else ".wav")
-            )
-            ctx.log("Step 1/2: speaking the script…")
-            srt = tts_core.synthesize(
-                text, speech, cfg, subtitles=with_srt, cancelled=ctx.cancelled
-            )
-            ctx.progress(0.3)
-            ctx.log("Step 2/2: building the output…")
-            cmd, dur = vo.voiceover_cmd(speech, ctx.output(out), self._vid_path, info, settings)
-            ctx.span(0.3, 1.0).run(cmd, duration=dur)
-            if with_srt and srt:
-                shift = settings.pads[0] + settings.offset
-                srt_path = os.path.splitext(out)[0] + ".srt"
-                with open(srt_path, "w", encoding="utf-8") as fh:
-                    fh.write(_shift_srt(srt, shift) if shift else srt)
-                ctx.log(f"Subtitles saved: {os.path.basename(srt_path)}")
-            return 0
 
         self._gen_status.config(text=t("tts.running_tts_engine"), fg=CLR["accent"])
         common.queue_job(
@@ -946,25 +943,10 @@ class TTSVoiceOverTab(BaseTab):
             common.Job(
                 name="TTS Voice-Over",
                 out=out,
-                work=work,
+                work=partial(job.run, out=out),
                 duration=info.duration if info else None,
                 inputs=inputs,
             ),
             btn=self.btn_render,
             console=self.console,
         )
-
-
-def _shift_srt(srt: str, seconds: float) -> str:
-    """Move every SRT cue later by *seconds*."""
-    import re as _re
-
-    def fix(m):
-        h, mi, se, ms = (int(g) for g in m.groups())
-        total = max(0, (h * 3600 + mi * 60 + se) * 1000 + ms + round(seconds * 1000))
-        h, rem = divmod(total, 3_600_000)
-        mi, rem = divmod(rem, 60_000)
-        se, ms = divmod(rem, 1000)
-        return f"{h:02d}:{mi:02d}:{se:02d},{ms:03d}"
-
-    return _re.sub(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})", fix, srt)

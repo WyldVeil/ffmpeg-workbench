@@ -155,7 +155,13 @@ class KaraokeTab(BaseTab):
             self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10)
         )
         sf.pack(fill="x", padx=px(20), pady=px(6))
+        self._model_row(sf)
+        self._darkness_row(sf)
+        self._lyrics_style_row(sf)
+        self._vocals_row(sf)
 
+    def _model_row(self, sf):
+        """Speech model and language."""
         # Whisper model + language
         ra = tk.Frame(sf)
         ra.pack(fill="x", pady=px(3))
@@ -170,6 +176,8 @@ class KaraokeTab(BaseTab):
             ra, textvariable=self._lang_var, values=LANGUAGES, state="readonly", width=14
         ).pack(side="left", padx=px(8))
 
+    def _darkness_row(self, sf):
+        """How dark the video goes under the lyrics."""
         # Video darkness
         rb = tk.Frame(sf)
         rb.pack(fill="x", pady=px(3))
@@ -192,6 +200,8 @@ class KaraokeTab(BaseTab):
             rb, text=t("karaoke.max_brightness_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left", padx=px(12))
 
+    def _lyrics_style_row(self, sf):
+        """Lyric size and colours."""
         # Font size + colours
         rc = tk.Frame(sf)
         rc.pack(fill="x", pady=px(3))
@@ -224,6 +234,8 @@ class KaraokeTab(BaseTab):
             rc, text=t("karaoke.colour_as_sung_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left", padx=px(8))
 
+    def _vocals_row(self, sf):
+        """Remove the singer."""
         # Vocal removal checkbox
         rd = tk.Frame(sf)
         rd.pack(fill="x", pady=px(3))

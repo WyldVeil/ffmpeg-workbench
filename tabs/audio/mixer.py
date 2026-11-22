@@ -258,7 +258,13 @@ class AudioMixerTab(BaseTab):
         row = tk.Frame(self.track_frame, relief="groove", bd=px(1))
         row.pack(fill="x", pady=px(2))
         trk.row = row
+        self._track_head(row, trk)
+        self._track_file(row, trk)
+        self._track_levels(row, trk)
+        self._track_timing(row, trk)
 
+    def _track_head(self, row, trk):
+        """The number and on/off switch."""
         # Track number + enable
         head = tk.Frame(row, width=px(140))
         head.pack(side="left")
@@ -267,6 +273,8 @@ class AudioMixerTab(BaseTab):
         ).pack(side="left")
         tk.Checkbutton(head, variable=trk.enabled).pack(side="left")
 
+    def _track_file(self, row, trk):
+        """The track's file."""
         # File browse
         file_entry = tk.Entry(row, textvariable=trk.path_var, width=22, font=(MONO_FONT, 8))
         file_entry.pack(side="left", padx=px(2))
@@ -287,6 +295,8 @@ class AudioMixerTab(BaseTab):
             side="left", padx=px(1)
         )
 
+    def _track_levels(self, row, trk):
+        """Type, volume and pan."""
         # Type
         ttk.Combobox(
             row, textvariable=trk.type_var, values=TRACK_TYPES, state="readonly", width=16
@@ -332,6 +342,8 @@ class AudioMixerTab(BaseTab):
             ),
         )
 
+    def _track_timing(self, row, trk):
+        """Offset, fades, loop and mute."""
         # Offset, fade in, fade out
         for var, w in [(trk.offset_var, 6), (trk.fadein_var, 4), (trk.fadeout_var, 4)]:
             tk.Entry(row, textvariable=var, width=w, font=(MONO_FONT, 8)).pack(

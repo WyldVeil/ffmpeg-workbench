@@ -790,48 +790,54 @@ class AudioExporterTab(BaseTab):
         self._comp_row.pack_forget()
 
         if fd["lossy"]:
-            # Lossy: show CBR/VBR controls
-            self._rb_cbr.pack(side="left", padx=px(12, 4))
-            self._rb_vbr.pack(side="left", padx=px(4))
-
-            # Update bitrate list
-            self._br_cb.config(values=fd["bitrates"])
-            self.bitrate_var.set(fd["default_br"])
-
-            has_vbr = fd.get("vbr_flag") is not None
-
-            if not has_vbr:
-                self.br_mode_var.set("CBR")
-            self._rb_vbr.config(state="normal" if has_vbr else "disabled")
-
-            if self.br_mode_var.get() == "CBR" or not has_vbr:
-                self._cbr_row.pack(fill="x", pady=px(4))
-            else:
-                self._vbr_row.pack(fill="x", pady=px(4))
-                vr = fd.get("vbr_range", (0, 9))
-                self._vbr_scale.config(from_=vr[0], to=vr[1])
-                self.vbr_var.set(fd.get("vbr_default", vr[0]))
-                self._vbr_hint.config(
-                    text=f"{vr[0]} = {'best' if fd.get('ext') != '.ogg' else 'worst'}, "
-                    f"{vr[1]} = {'smallest' if fd.get('ext') != '.ogg' else 'best'}"
-                )
+            self._show_lossy_controls(fd)
         else:
-            # Lossless: show bit depth
-            self._rb_cbr.pack_forget()
-            self._rb_vbr.pack_forget()
+            self._show_lossless_controls(fmt, fd)
 
-            depths = fd.get("bit_depths", {})
-            if depths:
-                self._depth_row.pack(fill="x", pady=px(4))
-                self._depth_cb.config(values=list(depths.keys()))
-                self.depth_var.set(fd.get("default_depth", "16-bit"))
+    def _show_lossy_controls(self, fd):
+        """CBR/VBR choice, and the bitrate list or the VBR quality scale."""
+        self._rb_cbr.pack(side="left", padx=px(12, 4))
+        self._rb_vbr.pack(side="left", padx=px(4))
 
-            # FLAC compression
-            if fmt is ae.AudioFormat.FLAC:
-                self._comp_row.pack(fill="x", pady=px(4))
-                cr = fd.get("compression_range", (0, 12))
-                self._comp_scale.config(from_=cr[0], to=cr[1])
-                self.comp_var.set(fd.get("compression_default", 5))
+        # Update bitrate list
+        self._br_cb.config(values=fd["bitrates"])
+        self.bitrate_var.set(fd["default_br"])
+
+        has_vbr = fd.get("vbr_flag") is not None
+
+        if not has_vbr:
+            self.br_mode_var.set("CBR")
+        self._rb_vbr.config(state="normal" if has_vbr else "disabled")
+
+        if self.br_mode_var.get() == "CBR" or not has_vbr:
+            self._cbr_row.pack(fill="x", pady=px(4))
+        else:
+            self._vbr_row.pack(fill="x", pady=px(4))
+            vr = fd.get("vbr_range", (0, 9))
+            self._vbr_scale.config(from_=vr[0], to=vr[1])
+            self.vbr_var.set(fd.get("vbr_default", vr[0]))
+            self._vbr_hint.config(
+                text=f"{vr[0]} = {'best' if fd.get('ext') != '.ogg' else 'worst'}, "
+                f"{vr[1]} = {'smallest' if fd.get('ext') != '.ogg' else 'best'}"
+            )
+
+    def _show_lossless_controls(self, fmt, fd):
+        """Bit depth, and FLAC's compression level."""
+        self._rb_cbr.pack_forget()
+        self._rb_vbr.pack_forget()
+
+        depths = fd.get("bit_depths", {})
+        if depths:
+            self._depth_row.pack(fill="x", pady=px(4))
+            self._depth_cb.config(values=list(depths.keys()))
+            self.depth_var.set(fd.get("default_depth", "16-bit"))
+
+        # FLAC compression
+        if fmt is ae.AudioFormat.FLAC:
+            self._comp_row.pack(fill="x", pady=px(4))
+            cr = fd.get("compression_range", (0, 12))
+            self._comp_scale.config(from_=cr[0], to=cr[1])
+            self.comp_var.set(fd.get("compression_default", 5))
 
     # ── Build FFmpeg command ─────────────────────────────────────────────────
 
