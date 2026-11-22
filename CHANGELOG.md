@@ -6,8 +6,9 @@
 
 WyldVeil's Media Editor is now **FFmpeg Workbench** - same app, a plainer
 name for what it is, in a new repository. On the command line the program is
-`ffmpeg-workbench`; on Windows the helper is `ffw-cli.bat`. It installs as a
-new app, so remove 1.2.5 first if you have it.
+`ffmpeg-workbench`; on Windows the helper is `ffw-cli.bat`. The Windows
+installer replaces 1.2.5; on Linux the package has a new name, so remove
+`wyldveils-media-editor` first if you have it.
 
 ### New
 
