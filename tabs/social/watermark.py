@@ -18,6 +18,7 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.ops.text_watermark import PLACES, TextMark, build_script, parse_ranges
 from core.scaling import px
 from tabs import common
@@ -280,7 +281,7 @@ class TextBurnerTab(BaseTab):
 
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src, info=info, out=out, chain=ass.subtitles_filter(path), name="Watermarker"
             ),
             encoder=self.encoder,

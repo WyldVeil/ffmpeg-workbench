@@ -16,6 +16,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.ops.image_watermark import POSITIONS, Logo, logo_graph
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import UI_FONT, BaseTab
@@ -228,7 +229,7 @@ class ImageWatermarkTab(BaseTab):
             logo_in = ["-loop", "1", "-i", logo]
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

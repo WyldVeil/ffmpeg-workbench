@@ -19,6 +19,7 @@ from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops.crop import fit_aspect
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -457,7 +458,7 @@ class ManualCropTab(BaseTab):
         self.log(self.console, f"Cropping to {w}×{h} at ({x},{y})")
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Manual Crop"),
+            RenderJob(src=src, info=info, out=out, chain=chain, name="Manual Crop"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

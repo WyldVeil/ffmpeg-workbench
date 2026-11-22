@@ -17,6 +17,7 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -396,7 +397,7 @@ class PIPTab(BaseTab):
             audio = None  # background sound, kept as is when possible
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

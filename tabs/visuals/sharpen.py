@@ -16,6 +16,7 @@ from functools import partial
 from tkinter import ttk
 
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.ops.sharpen import sharpen_chain
 from core.scaling import px
 from tabs import common
@@ -160,7 +161,7 @@ class SharpenTab(BaseTab):
             return
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=self._chain(), name="Sharpen"),
+            RenderJob(src=src, info=info, out=out, chain=self._chain(), name="Sharpen"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

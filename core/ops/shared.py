@@ -7,7 +7,7 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from core import encoders as enc
@@ -108,3 +108,89 @@ def audio_job_args(out: str, info: ff.MediaInfo | None, *, stream: int = 0) -> l
     if ext in (".mp4", ".mov", ".m4v"):
         args += ["-movflags", "+faststart"]
     return args
+
+
+# ── The everyday render: one source, one chain or graph ────────────────────
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RenderJob:
+    """One render: ``ffmpeg [pre_input] -i src [extra_inputs] <chain|graph> <audio>
+    <encoder> [extra_args] out``.
+
+    *chain* is a simple ``-vf`` chain; *graph* a ``-filter_complex`` graph whose
+    video output is labelled ``[v]``.  *audio* defaults to keeping the source's
+    audio; *inputs* are further files the job reads (guarded against overwriting)."""
+
+    src: str
+    info: ff.MediaInfo
+    out: str
+    name: str
+    chain: str = ""
+    graph: str = ""
+    extra_inputs: Sequence[str] = ()
+    audio: Sequence[str] | None = None
+    duration: float | None = None
+    extra_args: Sequence[str] = ()
+    inputs: Sequence[str] = ()
+    pre_input: Sequence[str] = ()
+
+    def command(self, venc: enc.VideoEncode) -> list[str]:
+        container = os.path.splitext(self.out)[1].lower().lstrip(".") or "mp4"
+        cmd = [
+            ff.ffmpeg_path(),
+            "-y",
+            *self.pre_input,
+            *venc.pre_input,
+            "-i",
+            self.src,
+            *self.extra_inputs,
+        ]
+        if self.graph:
+            if venc.filter_suffix:
+                cmd += [
+                    "-filter_complex",
+                    f"{self.graph};[v]{venc.filter_suffix}[venc]",
+                    "-map",
+                    "[venc]",
+                ]
+            else:
+                cmd += ["-filter_complex", self.graph, "-map", "[v]"]
+        else:
+            cmd += ["-map", "0:v:0", *venc.vf_args(self.chain)]
+        cmd += list(self.audio if self.audio is not None else keep_audio_args(self.info, container))
+        return [*cmd, *self.extra_args, *venc.args, "-map_metadata", "0", self.out]
+
+
+def intermediate_args(venc: enc.VideoEncode) -> list[str]:
+    """Encoder args for temporary pieces that are joined later: drops the
+    container-specific flags (faststart, hvc1 tag) that only belong on the
+    final file - see :func:`final_copy_args`."""
+    out: list[str] = []
+    skip = False
+    for a in venc.args:
+        if skip:
+            skip = False
+            continue
+        if a in ("-movflags", "-tag:v"):
+            skip = True
+            continue
+        out.append(a)
+    return out
+
+
+def final_copy_args(venc: enc.VideoEncode, container: str) -> list[str]:
+    """Flags for the final stream-copied file made from intermediate pieces."""
+    args: list[str] = []
+    if container in ("mp4", "mov", "m4v"):
+        args += ["-movflags", "+faststart"]
+        if venc.codec == "hevc":
+            args += ["-tag:v", "hvc1"]
+    return args
+
+
+def preview_audio_cmd(src: str, af: str, start: float, seconds: float, wav: str) -> list[str]:
+    """A short stretch of *src*'s sound through filter *af*, as a WAV to listen to."""
+    head = [ff.ffmpeg_path(), "-y", "-hide_banner", "-nostdin", "-loglevel", "error"]
+    cut = ["-ss", ff.ts(start), "-t", ff.ts(seconds), "-i", src, "-map", "0:a:0", "-vn"]
+    return [*head, *cut, *(["-af", af] if af else []), "-c:a", "pcm_s16le", wav]

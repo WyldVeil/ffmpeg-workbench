@@ -20,6 +20,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.ops.denoise import denoise_chain
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -159,7 +160,7 @@ class DenoiseTab(BaseTab):
             chain = chain.replace("format=yuv420p", "format=yuv420p10le")
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

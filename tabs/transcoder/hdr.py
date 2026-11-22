@@ -25,6 +25,7 @@ from core import capabilities, hdr, tasks
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.hdr_args import subtitle_args
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -314,7 +315,7 @@ class HdrToSdrTab(BaseTab):
         )
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

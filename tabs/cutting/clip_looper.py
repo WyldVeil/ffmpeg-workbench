@@ -20,7 +20,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.encoders import VideoEncode
 from core.i18n import t
-from core.ops.shared import frame_rate
+from core.ops.shared import final_copy_args, frame_rate, intermediate_args
 from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common, framestep
@@ -101,7 +101,7 @@ class _LoopJob:
         return [
             *cmd,
             *(audio if self.audio else ["-an"]),
-            *common.intermediate_args(self.venc),
+            *intermediate_args(self.venc),
             seg,
         ]
 
@@ -142,7 +142,7 @@ class _LoopJob:
         ]
         final += audio if self.audio else ["-an"]
         ctx.span(0.9, 1.0).run(
-            [*final, *common.final_copy_args(self.venc, self.container), ctx.output()],
+            [*final, *final_copy_args(self.venc, self.container), ctx.output()],
             duration=self.total,
         )
         return 0

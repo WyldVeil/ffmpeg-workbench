@@ -25,7 +25,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import proc as _proc
 from core.i18n import t
-from core.ops.shared import frame_rate, keep_audio_args
+from core.ops.shared import RenderJob, frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -282,7 +282,7 @@ class SmartReframeTab(BaseTab):
             )
             common.render(
                 self,
-                common.RenderJob(src=src, info=info, out=out, chain=chain, name="Smart Reframe"),
+                RenderJob(src=src, info=info, out=out, chain=chain, name="Smart Reframe"),
                 encoder=venc,
                 console=self.console,
                 btn=self.btn_render,

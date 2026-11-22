@@ -22,6 +22,7 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.deinterlace import deinterlace_chain
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -156,7 +157,7 @@ class DeinterlaceTab(BaseTab):
         self.log(self.console, self._chain())
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=self._chain(), name="Deinterlace"),
+            RenderJob(src=src, info=info, out=out, chain=self._chain(), name="Deinterlace"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

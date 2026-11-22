@@ -14,6 +14,7 @@ from tkinter import colorchooser, messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.ops.shortifier import ANCHORS, PLATFORMS, reframe_graph
 from core.scaling import px
 from tabs import common
@@ -233,7 +234,7 @@ class ShortifierTab(BaseTab):
         self.log(self.console, f"{PLATFORMS[self._key()][0]} · {tw}×{th}")
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

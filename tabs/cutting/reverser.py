@@ -20,6 +20,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.encoders import VideoEncode
 from core.i18n import t
+from core.ops.shared import final_copy_args, intermediate_args
 from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
@@ -106,7 +107,7 @@ class _ReverseJob:
         return [
             *cmd,
             *(audio if self.audio else ["-an"]),
-            *common.intermediate_args(self.venc),
+            *intermediate_args(self.venc),
             seg,
         ]
 
@@ -154,7 +155,7 @@ class _ReverseJob:
         ]
         final += [
             *(audio if self.audio else ["-an"]),
-            *common.final_copy_args(self.venc, self.container),
+            *final_copy_args(self.venc, self.container),
         ]
         ctx.span(0.95, 1.0).run([*final, ctx.output()], duration=self.total)
         return 0

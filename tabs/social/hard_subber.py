@@ -23,6 +23,7 @@ from core import ass
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -418,7 +419,7 @@ class HardSubberTab(BaseTab):
 
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Hard-Subber"),
+            RenderJob(src=src, info=info, out=out, chain=chain, name="Hard-Subber"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

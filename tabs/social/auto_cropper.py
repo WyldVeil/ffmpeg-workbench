@@ -18,6 +18,7 @@ from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops.auto_cropper import detect_bars
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -179,7 +180,7 @@ class AutoCropperTab(BaseTab):
         x, y, w, h = self.box
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

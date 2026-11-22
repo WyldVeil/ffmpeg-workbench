@@ -30,7 +30,7 @@ from core import filters as fl
 from core import tasks
 from core.beats import ENV_RATE, beat_grid, envelope, estimate_tempo, onset_peaks, onset_strength
 from core.i18n import t
-from core.ops.shared import frame_rate
+from core.ops.shared import final_copy_args, frame_rate, intermediate_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -388,7 +388,7 @@ class BeatSyncCutterTab(BaseTab):
                         "-an",
                         "-sn",
                         *venc.vf_args(chain),
-                        *common.intermediate_args(venc),
+                        *intermediate_args(venc),
                         seg,
                     ],
                     duration=frames / fps,
@@ -418,7 +418,7 @@ class BeatSyncCutterTab(BaseTab):
                     ),
                     "-t",
                     f"{total:.3f}",
-                    *common.final_copy_args(venc, container),
+                    *final_copy_args(venc, container),
                     ctx.output(),
                 ],
                 duration=total,

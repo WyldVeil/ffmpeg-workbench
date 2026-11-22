@@ -15,6 +15,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.region_blur import KINDS, Region, blur_graph
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -345,7 +346,7 @@ class RegionBlurTab(BaseTab):
         graph = blur_graph(self.regions, w, h)
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, graph=graph, name="Privacy Blur"),
+            RenderJob(src=src, info=info, out=out, graph=graph, name="Privacy Blur"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

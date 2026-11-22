@@ -21,6 +21,7 @@ from tkinter import messagebox
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -319,7 +320,7 @@ class ColorMatchTab(BaseTab):
             return
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Colour Match"),
+            RenderJob(src=src, info=info, out=out, chain=chain, name="Colour Match"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

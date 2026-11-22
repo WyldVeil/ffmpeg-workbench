@@ -17,6 +17,7 @@ import tkinter as tk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.rotate_flip import lossless_args, reencode_chain
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -197,7 +198,7 @@ class RotateFlipTab(BaseTab):
                 return
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src, info=info, out=out, chain=reencode_chain(rot, hf, vf), name="Rotate & Flip"
             ),
             encoder=self.encoder,

@@ -16,6 +16,7 @@ from tkinter import messagebox, ttk
 
 from core.i18n import t
 from core.ops.lut import INTERPOLATIONS, build_chain
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -286,7 +287,7 @@ class LUTApplicatorTab(BaseTab):
         )
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=self.chain(), name="LUT"),
+            RenderJob(src=src, info=info, out=out, chain=self.chain(), name="LUT"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

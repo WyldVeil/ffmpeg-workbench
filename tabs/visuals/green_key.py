@@ -25,7 +25,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks
 from core.i18n import t
-from core.ops.shared import frame_rate, keep_audio_args
+from core.ops.shared import RenderJob, frame_rate, keep_audio_args
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -595,7 +595,7 @@ class GreenKeyerTab(BaseTab):
         self.log(self.console, f"Keying #{self.key_colour} ({self.method_var.get()})")
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

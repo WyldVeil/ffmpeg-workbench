@@ -30,7 +30,7 @@ from core import tasks, upscale
 from core.encoders import VideoEncode
 from core.i18n import t
 from core.ops.scaler import GPU_METHODS, fps_filter, geometry, rate_fraction, scale_chain
-from core.ops.shared import frame_rate
+from core.ops.shared import RenderJob, final_copy_args, frame_rate, intermediate_args
 from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
@@ -143,7 +143,7 @@ class _FrameRateJob:
             "0:v:0",
             "-c:v",
             "copy",
-            *common.final_copy_args(self.venc, self.container),
+            *final_copy_args(self.venc, self.container),
         ]
         cmd += [*self.audio_args(1), "-t", f"{self.out_dur:.3f}", "-map_metadata", "1", final]
         ctx.span(0.92, 1.0).run(cmd, duration=self.out_dur)
@@ -154,7 +154,7 @@ class _FrameRateJob:
         v = self.venc
         cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", *v.pre_input]
         cmd += ["-ss", f"{start:.6f}", "-t", f"{length:.6f}", "-i", self.src, "-map", "0:v:0"]
-        cmd += [*v.vf_args(self.chain), *common.intermediate_args(v), "-an", name]
+        cmd += [*v.vf_args(self.chain), *intermediate_args(v), "-an", name]
         stretched = length * float(self.factor)
 
         def prog(p: ff.Progress) -> None:
@@ -381,7 +381,7 @@ class ResolutionScalerTab(BaseTab):
         self.log(self.console, chain)
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

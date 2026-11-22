@@ -30,6 +30,29 @@ for _kind in ("config", "data", "cache", "log"):
     os.environ.setdefault(f"CROSSFADER_{_kind.upper()}_DIR", os.path.join(_HOME, _kind))
 
 
+def _record_commands(log_path: str) -> None:
+    """CROSSFADER_ARGV_LOG=FILE: append every program the tests start (with the
+    test that started it) to FILE, one JSON line each - to compare what a
+    refactor makes FFmpeg do, old tree against new."""
+    import json
+
+    from core import proc
+
+    spawn = proc.spawn
+
+    def recording(argv, *args, **kwargs):
+        test = os.environ.get("PYTEST_CURRENT_TEST", "").rsplit(" ", 1)[0]
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"test": test, "argv": [str(a) for a in argv]}) + "\n")
+        return spawn(argv, *args, **kwargs)
+
+    proc.spawn = recording
+
+
+if os.environ.get("CROSSFADER_ARGV_LOG"):
+    _record_commands(os.environ["CROSSFADER_ARGV_LOG"])
+
+
 def pytest_configure(config):
     config.addinivalue_line("markers", "ffmpeg: needs ffmpeg/ffprobe on PATH or in bin/")
     config.addinivalue_line("markers", "gui: drives the Tk application headlessly")

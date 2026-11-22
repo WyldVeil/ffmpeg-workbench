@@ -13,6 +13,7 @@ from functools import partial
 from tkinter import ttk
 
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -271,7 +272,7 @@ class ColorCorrectorTab(BaseTab):
             return
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Colour Correct"),
+            RenderJob(src=src, info=info, out=out, chain=chain, name="Colour Correct"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

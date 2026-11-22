@@ -22,6 +22,7 @@ from tkinter import colorchooser, messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.ops.titles import Card, build_script
 from core.scaling import px
 from tabs import common, framestep
@@ -401,7 +402,7 @@ class TitlesGeneratorTab(BaseTab):
 
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, chain=chain, name="Animated Titles"),
+            RenderJob(src=src, info=info, out=out, chain=chain, name="Animated Titles"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,

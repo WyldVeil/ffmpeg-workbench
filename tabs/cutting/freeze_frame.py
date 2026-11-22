@@ -18,6 +18,7 @@ from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.freeze_frame import Freeze, freeze_graph
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -237,7 +238,7 @@ class FreezeFrameTab(BaseTab):
 
         common.render(
             self,
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 info=info,
                 out=out,

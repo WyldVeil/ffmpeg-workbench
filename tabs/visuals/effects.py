@@ -30,10 +30,10 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks
 from core.encoders import VideoEncode
-from core.hardware import (
-    get_binary_path,
-)
 from core.i18n import t
+from core.ops import effects as fx
+from core.ops.effects import first_visible_time
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -52,14 +52,6 @@ VIDEO_TYPES = [
 ]
 
 
-def _ffmpeg():
-    return get_binary_path("ffmpeg")
-
-
-def _ffprobe():
-    return get_binary_path("ffprobe")
-
-
 def _probe_duration(path):
     """Duration of *path* in seconds, or 0.0."""
     return ff.duration_of(path)
@@ -76,36 +68,6 @@ def _probe_wh(path):
 
 def _probe_length_and_size(src):
     return _probe_duration(src), _probe_wh(src)
-
-
-def _first_visible_time(path, scan=10.0):
-    """End of any black opening (blackdetect), or 0.0; fast, single pass."""
-    try:
-        r = ff.capture(
-            [
-                ff.ffmpeg_path(),
-                "-hide_banner",
-                "-nostdin",
-                "-t",
-                f"{scan:.1f}",
-                "-i",
-                path,
-                "-vf",
-                "blackdetect=d=0.05:pix_th=0.10",
-                "-an",
-                "-f",
-                "null",
-                "-",
-            ],
-            timeout=60,
-        )
-        import re as _re
-
-        m = _re.search(r"black_start:0(?:\.0+)?\s+black_end:([\d.]+)", r.stderr or "")
-        return float(m.group(1)) + 0.05 if m else 0.0
-    except Exception:
-        logger.debug("_first_visible_time: best-effort step failed", exc_info=True)
-        return 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -273,7 +235,6 @@ class SpecialEffectsTab(BaseTab):
     #: Appended to every video chain: even dimensions, square pixels and
     #: 4:2:0 so H.264 output plays everywhere (odd sizes / 10-bit / RGB
     #: filters used to produce unplayable or failing renders).
-    FX_GUARD = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p"
 
     def run_ffmpeg(
         self,
@@ -290,16 +251,15 @@ class SpecialEffectsTab(BaseTab):
         """Effects that build their own command still get overwrite protection,
         playable 4:2:0 output, progress and the source as an input guard."""
         cmd = [str(c) for c in cmd]
-        if not inputs and "-i" in cmd:
-            src = cmd[cmd.index("-i") + 1]
+        src = fx.first_input(cmd)
+        if not inputs and src is not None:
             final = self.confirm_output(cmd[-1], [src])
             if not final:
                 if btn is not None:
                     btn.config(state="normal")
                 return None
             cmd[-1] = final
-            if "libx264" in cmd and "-pix_fmt" not in cmd:
-                cmd[-1:-1] = ["-pix_fmt", "yuv420p"]
+            fx.ensure_420(cmd)
             inputs = [src]
             if duration is None:
                 duration = ff.duration_of(src) or None
@@ -338,52 +298,16 @@ class SpecialEffectsTab(BaseTab):
         out_var.set(out)
         return src, out, info
 
-    @staticmethod
-    def _fx_geom(info):
-        """(even width, even height, exact fps string, duration) of a source."""
-        v = info.require_video()
-        w, h = v.display_size
-        w, h = max(2, w // 2 * 2), max(2, h // 2 * 2)
-        fps = v.raw.get("avg_frame_rate") or "30/1"
-        if fps in ("0/0", "") or not v.fps or v.fps > 240:
-            fps = "30/1"
-        dur = v.duration if v.duration > 0.05 else info.duration
-        return w, h, fps, dur
-
-    def _fx_venc(self, crf_var):
-        crf = str(crf_var.get()).strip() or "18"
-        if not crf.isdigit():
-            crf = "18"
-        return [
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "+faststart",
-        ]
-
-    def _fx_audio(self, info, copy=True):
-        if not info.has_audio:
-            return ["-an"]
-        if copy and (info.require_audio().codec in ("aac", "mp3", "ac3", "opus", "alac", "flac")):
-            return ["-map", "0:a:0", "-c:a", "copy"]
-        return ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"]
-
     def _fx_run(
-        self, job: common.RenderJob, crf_var: tk.Variable, btn: tk.Button, console: tk.Text
+        self, job: RenderJob, crf_var: tk.Variable, btn: tk.Button, console: tk.Text
     ) -> None:
         """Queue *job* encoded with x264 at the CRF in *crf_var* (the audio is
         copied when it can be)."""
         if job.audio is None:
-            job = replace(job, audio=self._fx_audio(job.info))
+            job = replace(job, audio=fx.effect_audio(job.info))
         if job.duration is None:
-            job = replace(job, duration=self._fx_geom(job.info)[3])
-        venc = VideoEncode("libx264", "h264", args=self._fx_venc(crf_var))
+            job = replace(job, duration=fx.geometry(job.info)[3])
+        venc = VideoEncode("libx264", "h264", args=fx.x264_args(str(crf_var.get())))
         common.render(self, job, encoder=venc, console=console, btn=btn)
 
     def _build_ui(self):
@@ -518,19 +442,13 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        _w, _h, _fps, dur = self._fx_geom(info)
-        still_at = custom if custom is not None else _first_visible_time(src)
+        _w, _h, _fps, dur = fx.geometry(info)
+        still_at = custom if custom is not None else first_visible_time(src)
         still_at = max(0.0, min(still_at, max(0.0, dur - 0.1)))
         self.log(self._fi_console, f"  Still frame at {still_at:.2f}s")
-        graph = (
-            f"[0:v]setpts=PTS-STARTPTS,split[m][s];"
-            f"[s]trim=start={still_at:.3f},setpts=PTS-STARTPTS,trim=end_frame=1,"
-            f"loop=loop=-1:size=1,trim=duration={fade:.3f},setpts=PTS-STARTPTS,"
-            f"format=rgba,fade=t=out:st=0:d={fade:.3f}:alpha=1[ov];"
-            f"[m][ov]overlay=eof_action=pass,{self.FX_GUARD}[v]"
-        )
+        graph = fx.fadein_graph(fade, still_at)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._fi_crf,
             self._fi_btn,
             self._fi_console,
@@ -591,14 +509,11 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, _dur = self._fx_geom(info)
+        w, h, fps, _dur = fx.geometry(info)
         n = max(1, round(d * (info.require_video().fps or 30)))
-        graph = (
-            f"zoompan=z='if(lte(on,{n}),{z}-({z}-1)*on/{n},1)':x='iw/2-(iw/zoom/2)':"
-            f"y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps},{self.FX_GUARD}"
-        )
+        graph = fx.zoomburst_graph(fps, h, n, w, z)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._zb_crf,
             self._zb_btn,
             self._zb_console,
@@ -668,12 +583,9 @@ class SpecialEffectsTab(BaseTab):
             y = f"if(lt(t,{d:.3f}),H*{ease},0)"
         else:
             x = f"if(lt(t,{d:.3f}),-W*{ease},0)"
-        graph = (
-            f"[0:v]setpts=PTS-STARTPTS,split[a][b];[a]drawbox=c=black:t=fill[bg];"
-            f"[bg][b]overlay=x='{x}':y='{y}':eval=frame,{self.FX_GUARD}[v]"
-        )
+        graph = fx.slidein_graph(x, y)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._sl_crf,
             self._sl_btn,
             self._sl_console,
@@ -733,14 +645,9 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         k = f"if(lte(t,{d:.3f}),0.05+0.95*pow(t/{d:.3f},2),1)"
-        graph = (
-            f"[0:v]setpts=PTS-STARTPTS,split[a][b];[a]drawbox=c=black:t=fill[bg];"
-            f"[b]format=rgba,rotate=a='if(lte(t,{d:.3f}),{turns}*2*PI*(1-pow(t/{d:.3f},2)),0)':c=none,"
-            f"scale=w='max(2,trunc(iw*{k}/2)*2)':h='max(2,trunc(ih*{k}/2)*2)':eval=frame[s];"
-            f"[bg][s]overlay=x='(W-w)/2':y='(H-h)/2':eval=frame,{self.FX_GUARD}[v]"
-        )
+        graph = fx.spinin_graph(d, k, turns)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._sp_crf,
             self._sp_btn,
             self._sp_console,
@@ -806,15 +713,11 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, _dur = self._fx_geom(info)
+        w, h, fps, _dur = fx.geometry(info)
         trans = "vertopen" if "Vertical" in self._spo_dir.get() else "horzopen"
-        graph = (
-            f"color=c=black:s={w}x{h}:r={fps}:d={d:.3f},format=yuv420p,setsar=1,settb=AVTB[blk];"
-            f"[0:v]setpts=PTS-STARTPTS,scale={w}:{h},fps={fps},format=yuv420p,setsar=1,settb=AVTB[vid];"
-            f"[blk][vid]xfade=transition={trans}:duration={d:.3f}:offset=0,{self.FX_GUARD}[v]"
-        )
+        graph = fx.splitopen_graph(d, fps, h, trans, w)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._spo_crf,
             self._spo_btn,
             self._spo_console,
@@ -879,25 +782,7 @@ class SpecialEffectsTab(BaseTab):
         total = _probe_duration(src)
         start = max(0, total - dur)
 
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-vf",
-            f"fade=type=out:st={start}:d={dur}",
-            "-af",
-            f"afade=type=out:st={start}:d={dur}",
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.fadeout_cmd(crf, dur, out, src, start)
         self.run_ffmpeg(
             cmd,
             self._fo_console,
@@ -955,23 +840,11 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, dur = self._fx_geom(info)
+        w, h, fps, dur = fx.geometry(info)
         extra = hold + fade
-        graph = (
-            f"[0:v]setpts=PTS-STARTPTS,trim=duration={dur:.3f},tpad=stop_mode=clone:stop_duration={extra:.3f},"
-            f"zoompan=z='if(gte(it,{dur:.3f}),max(1,1.1-0.1*(it-{dur:.3f})/{max(hold, 0.1):.3f}),1)':"
-            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps}"
-            + (f",fade=t=out:st={dur + hold:.3f}:d={fade:.3f}" if fade > 0 else "")
-            + f",{self.FX_GUARD}[v]"
-        )
-        audio = ["-an"]
-        if info.has_audio:
-            af = f"apad=pad_dur={extra:.3f}" + (
-                f",afade=t=out:st={dur + hold:.3f}:d={fade:.3f}" if fade > 0 else ""
-            )
-            audio = ["-map", "0:a:0", "-af", af, "-c:a", "aac", "-b:a", "192k"]
+        audio, graph = fx.freezezoom_graph(dur, extra, fade, fps, h, hold, info, w)
         self._fx_run(
-            common.RenderJob(
+            RenderJob(
                 src=src,
                 out=out,
                 info=info,
@@ -1030,29 +903,12 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, dur = self._fx_geom(info)
+        w, h, fps, dur = fx.geometry(info)
         d = min(d, max(0.1, dur - 0.05))
         start = max(0.0, dur - d)
-        graph = (
-            f"[0:v]setpts=PTS-STARTPTS,trim=duration={dur:.3f},scale={w}:{h},fps={fps},"
-            f"format=yuv420p,setsar=1,settb=AVTB[v0];"
-            f"color=c=black:s={w}x{h}:r={fps}:d={d:.3f},format=yuv420p,setsar=1,settb=AVTB[blk];"
-            f"[v0][blk]xfade=transition=circleclose:duration={d:.3f}:offset={start:.3f},{self.FX_GUARD}[v]"
-        )
-        audio = ["-an"]
-        if info.has_audio:
-            audio = [
-                "-map",
-                "0:a:0",
-                "-af",
-                f"afade=t=out:st={start:.3f}:d={d:.3f}",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
-            ]
+        audio, graph = fx.irisclose_graph(d, dur, fps, h, info, start, w)
         self._fx_run(
-            common.RenderJob(
+            RenderJob(
                 src=src, out=out, info=info, name="Special Effects", graph=graph, audio=audio
             ),
             self._ir_crf,
@@ -1199,49 +1055,10 @@ class SpecialEffectsTab(BaseTab):
         text = self._em_text.get()
         crf = self._em_crf.get()
 
+        pop = fx.Pop(text=text, size=size, xpct=xpct, ypct=ypct, start=start, hold=hold, crf=crf)
+
         def _start(probed):
-            w, h = probed
-            end = start + hold
-
-            # x/y as absolute pixels, centred on the chosen %
-            x_px = int(w * xpct)
-            y_px = int(h * ypct)
-
-            # Pop-in: over the first 0.2 s the emoji grows from nothing to full size
-            scale_expr = f"if(lt(t-{start},0.2),max(1,{size}*(t-{start})/0.2),{size})"
-
-            filter_str = fl.DrawText(
-                textfile=fl.drawtext_text_file(text),
-                font="emoji",
-                fontsize=scale_expr,
-                fontcolor="white",
-                x=f"{x_px}-text_w/2",
-                y=f"{y_px}-text_h/2",
-                shadowx=3,
-                shadowy=3,
-                shadowcolor="black@0.7",
-                enable=f"between(t,{start},{end})",
-            ).filter()
-
-            cmd = [
-                _ffmpeg(),
-                "-y",
-                "-i",
-                src,
-                "-vf",
-                filter_str,
-                "-c:v",
-                "libx264",
-                "-crf",
-                crf,
-                "-preset",
-                "fast",
-                "-c:a",
-                "copy",
-                "-movflags",
-                "+faststart",
-                out,
-            ]
+            cmd = fx.emoji_cmd(src, out, probed, pop)
             self.run_ffmpeg(
                 cmd,
                 self._em_console,
@@ -1330,7 +1147,7 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, _dur = self._fx_geom(info)
+        w, h, fps, _dur = fx.geometry(info)
         bar_h = max(40, int(h * 0.14)) // 2 * 2
         y0 = h - bar_h - int(h * 0.08)
         colour = self._lt_color.get().strip().lstrip("#") or "1565C0"
@@ -1357,13 +1174,9 @@ class SpecialEffectsTab(BaseTab):
             y=f"{slide}+{int(bar_h * 0.6)}",
             enable=enable,
         ).filter()
-        graph = (
-            f"color=c=0x{colour}@0.85:s={w}x{bar_h}:r={fps},format=rgba[bar];"
-            f"[0:v][bar]overlay=x=0:y='{slide}':enable='{enable}':shortest=1,"
-            f"{title},{sub},{self.FX_GUARD}[v]"
-        )
+        graph = fx.lowerthird_graph(bar_h, colour, enable, fps, slide, sub, title, w)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._lt_crf,
             self._lt_btn,
             self._lt_console,
@@ -1425,7 +1238,7 @@ class SpecialEffectsTab(BaseTab):
             opts,
             "Position:",
             self._sub_pos,
-            ["Bottom Centre", "Top Centre", "Bottom Left", "Bottom Right"],
+            list(fx.BANNER_PLACES),
             width=16,
         ).pack(anchor="w", pady=px(3))
         _spin(
@@ -1468,52 +1281,10 @@ class SpecialEffectsTab(BaseTab):
         text = self._sub_text.get()
         pos = self._sub_pos.get()
 
-        def _start(probed):
-            _w, _h = probed
+        banner = fx.Banner(text=text, size=size, start=start, end=end, position=pos, crf=crf)
 
-            pos_map = {
-                "Bottom Centre": ("(w-text_w)/2", "h-text_h-40"),
-                "Top Centre": ("(w-text_w)/2", "40"),
-                "Bottom Left": ("40", "h-text_h-40"),
-                "Bottom Right": ("w-text_w-40", "h-text_h-40"),
-            }
-            x_expr, y_expr = pos_map.get(pos, pos_map["Bottom Centre"])
-
-            filter_str = fl.DrawText(
-                textfile=fl.drawtext_text_file(text),
-                font="sans bold",
-                fontsize=size,
-                fontcolor="white",
-                x=x_expr,
-                y=y_expr,
-                shadowx=3,
-                shadowy=3,
-                shadowcolor="black@0.8",
-                box=True,
-                boxcolor="black@0.45",
-                boxborderw=8,
-                enable=f"between(t,{start},{end})",
-            ).filter()
-
-            cmd = [
-                _ffmpeg(),
-                "-y",
-                "-i",
-                src,
-                "-vf",
-                filter_str,
-                "-c:v",
-                "libx264",
-                "-crf",
-                crf,
-                "-preset",
-                "fast",
-                "-c:a",
-                "copy",
-                "-movflags",
-                "+faststart",
-                out,
-            ]
+        def _start(_probed):
+            cmd = fx.subscribe_cmd(src, out, banner)
             self.run_ffmpeg(
                 cmd,
                 self._sub_console,
@@ -1594,36 +1365,7 @@ class SpecialEffectsTab(BaseTab):
         end = start + count_from
 
         # drawtext with a time-based expression that counts down
-        filter_str = (
-            "drawtext="
-            f"text='%{{eif\\:{count_from}-(t-{start})\\:d}}':"
-            f"fontsize={size}:"
-            "fontcolor=white:"
-            "x=(w-text_w)/2:y=(h-text_h)/2:"
-            "shadowcolor=black@0.8:shadowx=4:shadowy=4:"
-            "box=1:boxcolor=black@0.5:boxborderw=12:"
-            f"enable='between(t,{start},{end})'"
-        )
-
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-vf",
-            filter_str,
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.countdown_cmd(count_from, crf, end, out, size, src, start)
         self.run_ffmpeg(
             cmd,
             self._cd_console,
@@ -1698,15 +1440,12 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, dur = self._fx_geom(info)
+        w, h, fps, dur = fx.geometry(info)
         colour = self._pb_color.get().strip().lstrip("#") or "FF0000"
         y = 0 if self._pb_pos.get() == "Top" else h - bar_h
-        graph = (
-            f"color=c=0x{colour}:s={w}x{bar_h}:r={fps}[bar];"
-            f"[0:v][bar]overlay=x='-w+w*t/{max(dur, 0.1):.3f}':y={y}:shortest=1,{self.FX_GUARD}[v]"
-        )
+        graph = fx.progressbar_graph(bar_h, colour, dur, fps, w, y)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._pb_crf,
             self._pb_btn,
             self._pb_console,
@@ -1816,44 +1555,7 @@ class SpecialEffectsTab(BaseTab):
 
         # Split channels, offset R right, B left, keep G centre
         # Then blend with addition
-        filter_str = (
-            "[0:v]split=3[r0][g0][b0];"
-            "[r0]geq=r='r(X,Y)':g=0:b=0[r];"
-            "[g0]geq=r=0:g='g(X,Y)':b=0[g];"
-            "[b0]geq=r=0:g=0:b='b(X,Y)'[b];"
-            f"[r]pad=iw+{offset}:ih:0:0:color=black[rp];"
-            f"[b]pad=iw+{offset}:ih:{offset}:0:color=black[bp];"
-            f"[g]pad=iw+{offset}:ih:{offset // 2}:0:color=black[gp];"
-            "[rp][gp]blend=all_mode=addition[rg];"
-            "[rg][bp]blend=all_mode=addition,"
-            f"crop=iw-{offset}:ih:0:0"
-            "[glitch];"
-            f"[0:v][glitch]overlay=0:0:enable='{enable}'[v]"
-        )
-
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-filter_complex",
-            filter_str,
-            "-map",
-            "[v]",
-            "-map",
-            "0:a?",
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.rgb_cmd(crf, enable, offset, out, src)
         self.run_ffmpeg(
             cmd,
             self._rgb_console,
@@ -1922,44 +1624,7 @@ class SpecialEffectsTab(BaseTab):
         noise, chroma_blur, luma_blur, scan_alpha = params.get(level, params["Medium"])
         luma_blur = min(float(luma_blur), 2.0)  # unsharp accepts -2..5
 
-        filter_str = (
-            # Chroma blur simulates colour bleed
-            "split=2[main][cb];"
-            f"[cb]hue=s=1.3,boxblur=luma_radius={chroma_blur}:chroma_radius={chroma_blur}[cblur];"
-            "[main][cblur]blend=all_mode=overlay:all_opacity=0.3[blended];"
-            # Luma softness
-            f"[blended]unsharp=3:3:-{luma_blur}[soft];"
-            # Noise (grain)
-            f"[soft]noise=alls={noise}:allf=t[noisy];"
-            # Scanlines
-            "[noisy]drawgrid="
-            "width=0:height=2:thickness=1:"
-            f"color=black@{scan_alpha}[v]"
-        )
-
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-filter_complex",
-            filter_str,
-            "-map",
-            "[v]",
-            "-map",
-            "0:a?",
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.vhs_cmd(chroma_blur, crf, luma_blur, noise, out, scan_alpha, src)
         self.run_ffmpeg(
             cmd,
             self._vhs_console,
@@ -2021,25 +1686,7 @@ class SpecialEffectsTab(BaseTab):
             amount = 20
 
         crf = self._gr_crf.get()
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-vf",
-            f"noise=alls={amount}:allf=t+u",
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.grain_cmd(amount, crf, out, src)
         self.run_ffmpeg(
             cmd,
             self._gr_console,
@@ -2096,25 +1743,7 @@ class SpecialEffectsTab(BaseTab):
 
         angle = self._vi_angle.get()
         crf = self._vi_crf.get()
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-vf",
-            f"vignette=angle={angle}",
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.vignette_cmd(angle, crf, out, src)
         self.run_ffmpeg(
             cmd,
             self._vi_console,
@@ -2188,7 +1817,7 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, dur = self._fx_geom(info)
+        w, h, fps, dur = fx.geometry(info)
         colour = {
             "Warm Orange": "FFA040",
             "Cool White": "E8F0FF",
@@ -2197,16 +1826,9 @@ class SpecialEffectsTab(BaseTab):
             "Electric Blue": "40A0FF",
         }.get(self._ll_color.get(), "FFA040")
         half = d / 2
-        graph = (
-            f"gradients=s={w}x{h}:r={fps}:c0=0x{colour}:c1=0x000000:x0=0:y0=0:x1={w}:y1={h // 3}:"
-            f"nb_colors=2:speed=0:d={dur:.3f},format=gbrp,"
-            f"fade=t=in:st={start:.3f}:d={half:.3f}:color=black,"
-            f"fade=t=out:st={start + half:.3f}:d={half:.3f}:color=black[leak];"
-            f"[0:v]setpts=PTS-STARTPTS,scale={w}:{h},format=gbrp[base];"
-            f"[base][leak]blend=all_mode=screen:shortest=1,{self.FX_GUARD}[v]"
-        )
+        graph = fx.lightleak_graph(colour, dur, fps, h, half, start, w)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._ll_crf,
             self._ll_btn,
             self._ll_console,
@@ -2320,41 +1942,11 @@ class SpecialEffectsTab(BaseTab):
             )
             return
 
+        shake = fx.Shake(amp=amp, start=start, span=span, freq1=freq1, freq2=freq2, crf=crf)
+
         def _start(probed):
-            total, (w, h) = probed
-            end = total if span is None else start + span
-            enable = f"between(t,{start},{end})"
-
-            # Use crop to hide black edges introduced by the translate
-            cw = w - amp * 2
-            ch = h - amp * 2
-
-            filter_str = (
-                f"crop={cw}:{ch}:"
-                f"x='if({enable},{amp}+{amp}*sin(t*{freq1}),{amp})':"
-                f"y='if({enable},{amp}+{amp}*cos(t*{freq2}),{amp})',"
-                f"scale={w}:{h},setsar=1,format=yuv420p"
-            )
-
-            cmd = [
-                _ffmpeg(),
-                "-y",
-                "-i",
-                src,
-                "-vf",
-                filter_str,
-                "-c:v",
-                "libx264",
-                "-crf",
-                crf,
-                "-preset",
-                "fast",
-                "-c:a",
-                "copy",
-                "-movflags",
-                "+faststart",
-                out,
-            ]
+            total, size = probed
+            cmd = fx.shake_cmd(src, out, size, total, shake)
             self.run_ffmpeg(
                 cmd,
                 self._sh_console,
@@ -2433,18 +2025,15 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, _dur = self._fx_geom(info)
+        w, h, fps, _dur = fx.geometry(info)
         t1, t2, t3 = at + a, at + a + hold, at + a + hold + rel
         zexpr = (
             f"if(lt(it,{at:.3f}),1,if(lt(it,{t1:.3f}),1+({z}-1)*(it-{at:.3f})/{a:.3f},"
             f"if(lt(it,{t2:.3f}),{z},if(lt(it,{t3:.3f}),{z}-({z}-1)*(it-{t2:.3f})/{rel:.3f},1))))"
         )
-        graph = (
-            f"zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:"
-            f"s={w}x{h}:fps={fps},{self.FX_GUARD}"
-        )
+        graph = fx.zoompunch_graph(fps, h, w, zexpr)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._zp_crf,
             self._zp_btn,
             self._zp_console,
@@ -2510,7 +2099,7 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, fps, dur = self._fx_geom(info)
+        w, h, fps, dur = fx.geometry(info)
         p = f"it/{max(dur, 0.1):.3f}"
         d = _KB_PANS.get(self._kb_dir.get(), "centre")
         x, y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
@@ -2522,12 +2111,9 @@ class SpecialEffectsTab(BaseTab):
             y = f"(ih-ih/zoom)*{p}"
         elif d == "bottom":
             y = f"(ih-ih/zoom)*(1-{p})"
-        graph = (
-            f"zoompan=z='{z0}+({z1}-{z0})*{p}':x='{x}':y='{y}':d=1:s={w}x{h}:fps={fps},"
-            f"{self.FX_GUARD}"
-        )
+        graph = fx.kenburns_graph(fps, h, p, w, x, y, z0, z1)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._kb_crf,
             self._kb_btn,
             self._kb_console,
@@ -2599,16 +2185,13 @@ class SpecialEffectsTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        w, h, _fps, _dur = self._fx_geom(info)
+        w, h, _fps, _dur = fx.geometry(info)
         horizontal = self._wp_dir.get() != "Vertical"
         size = max(1, min(strength, (w if horizontal else h) // 2 - 1))
         sx, sy = (size, 1) if horizontal else (1, size)
-        graph = (
-            f"avgblur=sizeX={sx}:sizeY={sy}:enable='between(t,{at:.3f},{at + d:.3f})',"
-            f"{self.FX_GUARD}"
-        )
+        graph = fx.whippan_graph(at, d, sx, sy)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", chain=graph),
             self._wp_crf,
             self._wp_btn,
             self._wp_console,
@@ -2750,25 +2333,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Enter at least one caption.")
             return
 
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-vf",
-            ",".join(filters),
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.meme_cmd(crf, filters, out, src)
         self.run_ffmpeg(
             cmd,
             self._mc_console,
@@ -2840,7 +2405,7 @@ class SpecialEffectsTab(BaseTab):
         if not begun:
             return
         src, out, info = begun
-        w, h, fps, _dur = self._fx_geom(info)
+        w, h, fps, _dur = fx.geometry(info)
         try:
             ratio = float(self._cb_ratio.get().split(":")[0])
             ad = self._fx_num(self._cb_adur, "Animation", 0.05, 30)
@@ -2860,14 +2425,9 @@ class SpecialEffectsTab(BaseTab):
             ybot = f"if(lt(t,{ad:.3f}),H-h*t/{ad:.3f},H-h)"
         else:
             ytop, ybot = "0", "H-h"
-        graph = (
-            f"color=c=black:s={w}x{bar}:r={fps}[tb];color=c=black:s={w}x{bar}:r={fps}[bb];"
-            f"[0:v]scale={w}:{h}[base];"
-            f"[base][tb]overlay=x=0:y='{ytop}':shortest=1[o1];"
-            f"[o1][bb]overlay=x=0:y='{ybot}':shortest=1,{self.FX_GUARD}[v]"
-        )
+        graph = fx.cinebars_graph(bar, fps, h, w, ybot, ytop)
         self._fx_run(
-            common.RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
+            RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
             self._cb_crf,
             self._cb_btn,
             self._cb_console,
@@ -2979,25 +2539,7 @@ class SpecialEffectsTab(BaseTab):
             shadowcolor=f"black@{min(alpha + 0.2, 1.0)}",
         ).filter()
 
-        cmd = [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            src,
-            "-vf",
-            filter_str,
-            "-c:v",
-            "libx264",
-            "-crf",
-            crf,
-            "-preset",
-            "fast",
-            "-c:a",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out,
-        ]
+        cmd = fx.watermark_cmd(crf, filter_str, out, src)
         self.run_ffmpeg(
             cmd,
             self._wm_console,

@@ -16,6 +16,7 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -302,7 +303,7 @@ class VideoScopesTab(BaseTab):
         graph = export_graph(self.scope_var.get(), self._layout_key(), w, h)
         common.render(
             self,
-            common.RenderJob(src=src, info=info, out=out, graph=graph, name="Scope video"),
+            RenderJob(src=src, info=info, out=out, graph=graph, name="Scope video"),
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_vid,
