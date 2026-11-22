@@ -97,7 +97,8 @@ class ColourButton(tk.Button):
     """A button filled with a colour; clicking it opens the colour picker.
 
     :attr:`colour` is '#RRGGBB', :attr:`rgb` the same without '#' (the form
-    ASS and FFmpeg take); *on_change(colour)* runs after each pick."""
+    ASS and FFmpeg take); *show_hex* writes the colour on the button;
+    *on_change(colour)* runs after each pick."""
 
     def __init__(
         self,
@@ -106,12 +107,14 @@ class ColourButton(tk.Button):
         *,
         text: str = "",
         width: int = 6,
+        show_hex: bool = False,
         on_change: Callable[[str], object] | None = None,
     ) -> None:
         super().__init__(
             master, text=text, width=width, relief="flat", cursor="hand2", command=self._pick
         )
         self._on_change = on_change
+        self._show_hex = show_hex
         self._colour = normal_colour(colour)
         self._paint()
 
@@ -131,6 +134,8 @@ class ColourButton(tk.Button):
     def _paint(self) -> None:
         fg = _readable_on(self._colour)
         self.configure(bg=self._colour, activebackground=self._colour, fg=fg, activeforeground=fg)
+        if self._show_hex:
+            self.configure(text=f"  {self._colour}  ")
 
     def _pick(self) -> None:
         from tkinter import colorchooser

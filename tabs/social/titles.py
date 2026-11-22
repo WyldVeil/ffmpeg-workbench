@@ -17,7 +17,7 @@ import contextlib
 import os
 import shutil
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ass
 from core import ffmpeg as ff
@@ -28,6 +28,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 STYLES = {
@@ -164,7 +165,7 @@ class TitlesGeneratorTab(BaseTab):
             "start": tk.StringVar(value=f"{card.start:g}"),
             "duration": tk.StringVar(value=f"{card.duration:g}"),
         }
-        row = {"frame": frame, "vars": v, "accent": card.accent}
+        row = {"frame": frame, "vars": v}
         r1 = tk.Frame(frame)
         r1.pack(fill="x")
         ttk.Combobox(
@@ -193,14 +194,7 @@ class TitlesGeneratorTab(BaseTab):
         )
         end_btn.pack(side="left")
         add_tooltip(end_btn, "End at the frame shown (o) - sets the duration")
-        swatch = tk.Button(
-            r1,
-            text="  ",
-            bg=card.accent,
-            relief="flat",
-            width=3,
-            command=lambda r=row: self._pick_accent(r),
-        )
+        swatch = ColourButton(r1, card.accent, width=3, on_change=lambda _c: self._schedule())
         swatch.pack(side="left", padx=px(10))
         row["swatch"] = swatch
         tk.Button(
@@ -261,13 +255,6 @@ class TitlesGeneratorTab(BaseTab):
                 r["frame"].config(text=f"  Card {i}  ")
             self._schedule()
 
-    def _pick_accent(self, row):
-        res = colorchooser.askcolor(row["accent"], parent=self)
-        if res and res[1]:
-            row["accent"] = res[1]
-            row["swatch"].config(bg=res[1])
-            self._schedule()
-
     def _show_card(self, row):
         try:
             start = ff.parse_time(row["vars"]["start"].get())
@@ -293,7 +280,9 @@ class TitlesGeneratorTab(BaseTab):
                 ) from None
             dur = common.number(v["duration"].get(), f"Card {i} duration", 0.2, 3600)
             style = next((k for k, lbl in STYLES.items() if lbl == v["style"].get()), "lower_third")
-            out.append(Card(style, v["line1"].get(), v["line2"].get(), start, dur, r["accent"]))
+            out.append(
+                Card(style, v["line1"].get(), v["line2"].get(), start, dur, r["swatch"].colour)
+            )
         return out
 
     def script(self, width: int, height: int) -> ass.Script:

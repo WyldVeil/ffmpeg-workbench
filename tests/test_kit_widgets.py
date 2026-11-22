@@ -6,7 +6,7 @@ from enum import StrEnum
 
 import pytest
 
-from tabs.kit.widgets import ChoiceBox
+from tabs.kit.widgets import ChoiceBox, ColourButton, normal_colour
 
 
 class Speed(StrEnum):
@@ -51,3 +51,31 @@ def test_choice_box_can_relabel_a_choice(ui):
             box.relabel(Speed.SLOW, "Quick")
     finally:
         box.destroy()
+
+
+def test_colours_are_normalised():
+    assert normal_colour("#abc") == "#AABBCC"
+    assert normal_colour("1e1e2e") == "#1E1E2E"
+    with pytest.raises(ValueError):
+        normal_colour("#12345")
+    with pytest.raises(ValueError):
+        normal_colour("purple")
+
+
+@pytest.mark.gui
+def test_colour_button_picks_paints_and_reports(ui, monkeypatch):
+    from tkinter import colorchooser
+
+    seen: list[str] = []
+    btn = ColourButton(ui.app, "#101010", show_hex=True, on_change=seen.append)
+    assert (btn.colour, btn.rgb, btn.cget("fg")) == ("#101010", "101010", "white")
+    assert "#101010" in btn.cget("text")
+    monkeypatch.setattr(colorchooser, "askcolor", lambda *_a, **_k: ((255, 238, 0), "#ffee00"))
+    btn.invoke()
+    assert (btn.colour, seen, btn.cget("fg")) == ("#FFEE00", ["#FFEE00"], "black")
+    monkeypatch.setattr(colorchooser, "askcolor", lambda *_a, **_k: (None, None))
+    btn.invoke()  # cancelled: nothing changes
+    assert (btn.colour, seen) == ("#FFEE00", ["#FFEE00"])
+    btn.set("00b140")  # set by the page: no report
+    assert (btn.colour, seen) == ("#00B140", ["#FFEE00"])
+    btn.destroy()

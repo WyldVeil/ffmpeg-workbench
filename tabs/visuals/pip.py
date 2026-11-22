@@ -11,7 +11,7 @@ sound are kept (or the inset's sound, or both mixed).
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -22,6 +22,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 POSITIONS = {
@@ -59,7 +60,6 @@ class PIPTab(BaseTab):
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._bg = self._fg = None
-        self.colour = "FFFFFF"
         self._job = None
         self._build_ui()
 
@@ -149,8 +149,8 @@ class PIPTab(BaseTab):
         tk.Label(br, text="Border (px):").pack(side="left")
         self.border_var = tk.StringVar(value="0")
         tk.Entry(br, textvariable=self.border_var, width=4).pack(side="left", padx=px(4))
-        self.colour_btn = tk.Button(
-            br, text="Colour…", bg="#FFFFFF", relief="flat", command=self._pick_colour
+        self.colour_btn = ColourButton(
+            br, "#FFFFFF", text="Colour…", on_change=lambda _c: self._changed()
         )
         self.colour_btn.pack(side="left")
         tk.Label(br, text="  Rounded corners (px):").pack(side="left")
@@ -202,13 +202,6 @@ class PIPTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _pick_colour(self):
-        res = colorchooser.askcolor(f"#{self.colour}", parent=self)
-        if res and res[1]:
-            self.colour = res[1].lstrip("#").upper()
-            self.colour_btn.config(bg=res[1])
-            self._changed()
-
     def _bg_changed(self, path):
         self._bg = ff.try_probe(path)
         self.compare.load(path)
@@ -237,7 +230,7 @@ class PIPTab(BaseTab):
             ),
             margin_pct=float(self.margin_var.get()),
             border=int(common.number(self.border_var.get() or "0", "Border", 0, 100)),
-            border_colour=self.colour,
+            border_colour=self.colour_btn.rgb,
             radius=int(common.number(self.radius_var.get() or "0", "Corners", 0, 500)),
             opacity=float(self.opacity_var.get()),
             start=start,

@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from functools import partial
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks
@@ -28,6 +28,7 @@ from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 METHODS = {
@@ -47,7 +48,6 @@ class GreenKeyerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.key_colour = "00B140"  # typical chroma green until sampled
         self._info = None
         self._job = None
         self._build_ui()
@@ -84,14 +84,8 @@ class GreenKeyerTab(BaseTab):
         )
         bm.pack(side="left", padx=px(6))
         bm.bind("<<ComboboxSelected>>", lambda _e: self._bg_mode_changed())
-        self.bg_colour = "202020"
-        self.bg_swatch = tk.Button(
-            brow,
-            text="  Colour…  ",
-            bg="#202020",
-            fg="white",
-            relief="flat",
-            command=self._pick_bg_colour,
+        self.bg_swatch = ColourButton(
+            brow, "#202020", text="  Colour…  ", width=10, on_change=lambda _c: self._schedule()
         )
         self.bg_row = FileRow(
             pick,
@@ -140,13 +134,9 @@ class GreenKeyerTab(BaseTab):
         tk.Label(r0, text=t("green_key.key_colour_label"), font=(UI_FONT, 10, "bold")).pack(
             side="left", padx=px(16, 4)
         )
-        self.swatch = tk.Button(
-            r0,
-            text=f"  #{self.key_colour}  ",
-            bg=f"#{self.key_colour}",
-            fg="black",
-            relief="flat",
-            command=self._pick_key_colour,
+        # typical chroma green until sampled
+        self.swatch = ColourButton(
+            r0, "#00B140", width=10, show_hex=True, on_change=lambda _c: self._schedule()
         )
         self.swatch.pack(side="left")
         tk.Button(
@@ -300,27 +290,17 @@ class GreenKeyerTab(BaseTab):
             name="KeyEyedropper",
         )
 
+    @property
+    def key_colour(self) -> str:
+        """The colour keyed out, RRGGBB."""
+        return self.swatch.rgb
+
+    @property
+    def bg_colour(self) -> str:
+        return self.bg_swatch.rgb
+
     def _set_key(self, colour):
-        self.key_colour = colour
-        r, g, b = (int(colour[i : i + 2], 16) for i in (0, 2, 4))
-        self.swatch.config(
-            text=f"  #{colour}  ",
-            bg=f"#{colour}",
-            fg="black" if (r * 299 + g * 587 + b * 114) > 128000 else "white",
-        )
-
-    def _pick_key_colour(self):
-        res = colorchooser.askcolor(f"#{self.key_colour}", parent=self)
-        if res and res[1]:
-            self._set_key(gk.hex_colour(res[1]))
-            self._schedule()
-
-    def _pick_bg_colour(self):
-        res = colorchooser.askcolor(f"#{self.bg_colour}", parent=self)
-        if res and res[1]:
-            self.bg_colour = gk.hex_colour(res[1])
-            self.bg_swatch.config(bg=f"#{self.bg_colour}")
-            self._schedule()
+        self.swatch.set(colour)
 
     def _bg_mode_changed(self):
         kind = self.bg_kind()

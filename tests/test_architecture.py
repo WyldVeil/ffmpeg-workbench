@@ -516,6 +516,25 @@ def test_pages_use_the_kit_for_buttons_and_consoles():
     assert not hits, hits
 
 
+def test_colours_are_picked_with_the_kit():
+    """A colour choice is a tabs.kit.widgets.ColourButton (swatch, picker,
+    readable text, '#RRGGBB'), not a button and askcolor wired by hand."""
+    hits = [
+        rel
+        for rel, path in _py_files("tabs", "shell")
+        if rel != "tabs/kit/widgets.py"
+        and "colorchooser"
+        in _imports(path)
+        | {
+            a.name
+            for n in ast.walk(ast.parse(open(path, encoding="utf-8").read(), path))
+            if isinstance(n, ast.ImportFrom) and n.module == "tkinter"
+            for a in n.names
+        }
+    ]
+    assert not hits, f"use ColourButton: {hits}"
+
+
 def test_the_whole_engine_is_type_checked_strictly():
     """pyright's strict mode covers the engine, the window shell and the page kit;
     CI fails on any error, so this list may only grow."""

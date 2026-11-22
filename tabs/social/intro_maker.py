@@ -18,7 +18,7 @@ from __future__ import annotations
 import base64
 import os
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 from typing import Literal
 
 from core import ass, tasks
@@ -31,6 +31,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import EncoderPanel, FileRow, SaveRow, scroll_body
 
 BACKGROUNDS = {
@@ -72,10 +73,6 @@ ATTACH = {
 class IntroMakerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.colour = "#1E1E2E"
-        self.colour2 = "#7C3AED"
-        self.text_colour = "#FFFFFF"
-        self.accent = "#FFB300"
         self._photo = None
         self._preview_job = None
         self._build_ui()
@@ -164,17 +161,11 @@ class IntroMakerTab(BaseTab):
         return body, design, row
 
     def _build_text(self, design, row):
-        self.text_btn = tk.Button(
-            design,
-            text="Text colour",
-            relief="flat",
-            command=lambda: self._pick("text_colour", self.text_btn),
+        self.text_btn = ColourButton(
+            design, "#FFFFFF", text="Text colour", width=12, on_change=self._recolour
         )
-        self.accent_btn = tk.Button(
-            design,
-            text="Subtitle outline",
-            relief="flat",
-            command=lambda: self._pick("accent", self.accent_btn),
+        self.accent_btn = ColourButton(
+            design, "#FFB300", text="Subtitle outline", width=14, on_change=self._recolour
         )
         row(4, "Colours:", self.text_btn, self.accent_btn)
         self.bg_var = tk.StringVar(value=BACKGROUNDS["gradient"])
@@ -195,17 +186,11 @@ class IntroMakerTab(BaseTab):
             width=16,
         )
         row(5, "Background:", bg_box, self.grad_box)
-        self.c1_btn = tk.Button(
-            design,
-            text="Colour 1",
-            relief="flat",
-            command=lambda: self._pick("colour", self.c1_btn),
+        self.c1_btn = ColourButton(
+            design, "#1E1E2E", text="Colour 1", width=10, on_change=self._recolour
         )
-        self.c2_btn = tk.Button(
-            design,
-            text="Colour 2",
-            relief="flat",
-            command=lambda: self._pick("colour2", self.c2_btn),
+        self.c2_btn = ColourButton(
+            design, "#7C3AED", text="Colour 2", width=10, on_change=self._recolour
         )
         row(6, "", self.c1_btn, self.c2_btn)
         self.bg_row = FileRow(
@@ -300,25 +285,10 @@ class IntroMakerTab(BaseTab):
         self.btn_render = self.make_render_btn(body, "🎬  CREATE", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
-        self._paint_buttons()
         self._bg_changed()
 
-    def _paint_buttons(self):
-        for btn, col in (
-            (self.text_btn, self.text_colour),
-            (self.accent_btn, self.accent),
-            (self.c1_btn, self.colour),
-            (self.c2_btn, self.colour2),
-        ):
-            r, g, b = (int(col.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
-            btn.config(bg=col, fg="black" if r * 299 + g * 587 + b * 114 > 128000 else "white")
-
-    def _pick(self, attr, _btn):
-        res = colorchooser.askcolor(getattr(self, attr), parent=self)
-        if res and res[1]:
-            setattr(self, attr, res[1].upper())
-            self._paint_buttons()
-            self._schedule()
+    def _recolour(self, _colour: str) -> None:
+        self._schedule()
 
     def _bg_changed(self):
         kind = self.bg_kind()
@@ -359,8 +329,8 @@ class IntroMakerTab(BaseTab):
     def _card(self) -> ic.CardLook:
         bg = Background(
             self.bg_kind(),
-            self.colour,
-            self.colour2,
+            self.c1_btn.colour,
+            self.c2_btn.colour,
             self._key(GRADIENTS, self.grad_var, "horizontal"),
             self.bg_row.path,
         )
@@ -379,8 +349,8 @@ class IntroMakerTab(BaseTab):
             subtitle=self.sub_var.get(),
             font=self.font_var.get(),
             scale=SIZES.get(self.size_var.get(), 1.0),
-            colour=self.text_colour,
-            accent=self.accent,
+            colour=self.text_btn.colour,
+            accent=self.accent_btn.colour,
             animation=self._key(ANIMATIONS, self.anim_var, "fade"),
             position=self._key(POSITIONS, self.pos_var, "centre"),
         )

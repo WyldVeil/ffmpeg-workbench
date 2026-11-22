@@ -27,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import partial
-from tkinter import colorchooser, messagebox
+from tkinter import messagebox
 
 from core import ass, proc, tasks
 from core import ffmpeg as ff
@@ -38,7 +38,7 @@ from core.paths import temp_dir
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
-from tabs.kit.widgets import ChoiceBox
+from tabs.kit.widgets import ChoiceBox, ColourButton
 from tabs.widgets import FileRow, FramePreview, SaveRow, scroll_body
 
 GRIDS = ((3, 3), (4, 4), (4, 5), (5, 6), (6, 8), (8, 10))
@@ -100,7 +100,6 @@ class ContactSheetTab(BaseTab):
         self._gen = 0  # bumps on every preview request: older results are dropped
         self._after: str | None = None
         self._folder: str | None = None  # the previews (made on first use)
-        self._colours = {"background": "#141414", "border": "#FFFFFF", "text": "#FFFFFF"}
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────
@@ -161,13 +160,6 @@ class ContactSheetTab(BaseTab):
         var.trace_add("write", self._changed)
         return var
 
-    def _colour_button(self, parent, key, text):
-        btn = tk.Button(
-            parent, text=text, relief="flat", width=12, command=partial(self._pick_colour, key)
-        )
-        self._paint(btn, key)
-        return btn
-
     def _build_grid(self, cols):
         f = tk.LabelFrame(cols, text="  Grid  ", padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True, padx=px(0, 6))
@@ -186,9 +178,13 @@ class ContactSheetTab(BaseTab):
         self.border_var = self._spin(f, 6, "Border:", 0, 0, 16, unit="px")
         swatches = tk.Frame(f)
         swatches.grid(row=7, column=0, columnspan=3, sticky="w", pady=px(4, 0))
-        self.bg_btn = self._colour_button(swatches, "background", "Background")
+        self.bg_btn = ColourButton(
+            swatches, "#141414", text="Background", width=12, on_change=self._recolour
+        )
         self.bg_btn.pack(side="left", padx=px(0, 4))
-        self.border_btn = self._colour_button(swatches, "border", "Border")
+        self.border_btn = ColourButton(
+            swatches, "#FFFFFF", text="Border", width=12, on_change=self._recolour
+        )
         self.border_btn.pack(side="left")
 
     def _build_frames(self, cols):
@@ -257,7 +253,9 @@ class ContactSheetTab(BaseTab):
         size = tk.Frame(f)
         size.grid(row=4, column=0, columnspan=4, sticky="w")
         self.text_size_var = self._spin(size, 0, "Text size:", 0, 0, 60, unit="(0 = automatic)")
-        self.text_btn = self._colour_button(f, "text", "Text colour")
+        self.text_btn = ColourButton(
+            f, "#FFFFFF", text="Text colour", width=12, on_change=self._recolour
+        )
         self.text_btn.grid(row=5, column=0, columnspan=2, sticky="w", pady=px(4, 0))
 
     def _build_output(self, body):
@@ -289,23 +287,8 @@ class ContactSheetTab(BaseTab):
         self.cols_var.set(str(cols))
         self.rows_var.set(str(rows))
 
-    def _pick_colour(self, key):
-        chosen = colorchooser.askcolor(self._colours[key], parent=self)[1]
-        if chosen:
-            self._colours[key] = chosen.upper()
-            self._paint(
-                {"background": self.bg_btn, "border": self.border_btn, "text": self.text_btn}[key],
-                key,
-            )
-            self._changed()
-
-    def _paint(self, btn, key):
-        colour = self._colours[key]
-        dark = (
-            int(colour[1:3], 16) * 0.3 + int(colour[3:5], 16) * 0.59 + int(colour[5:7], 16) * 0.11
-            < 128
-        )
-        btn.configure(bg=colour, activebackground=colour, fg="white" if dark else "black")
+    def _recolour(self, _colour: str) -> None:
+        self._changed()
 
     def _sampling_changed(self, *_):
         scenes = self.sampling.value is cs.Sampling.SCENES
@@ -326,8 +309,8 @@ class ContactSheetTab(BaseTab):
             gap=int(common.number(self.gap_var.get(), "Gap", 0, 200)),
             margin=int(common.number(self.margin_var.get(), "Margin", 0, 400)),
             border=int(common.number(self.border_var.get(), "Border", 0, 40)),
-            background=self._colours["background"],
-            border_colour=self._colours["border"],
+            background=self.bg_btn.colour,
+            border_colour=self.border_btn.colour,
         )
         labels = cs.Labels(
             details=frozenset(d for d, var in self.detail_vars.items() if var.get()),
@@ -336,7 +319,7 @@ class ContactSheetTab(BaseTab):
             numbers=self.numbers_var.get(),
             font=self.font_var.get(),
             text_size=int(common.number(self.text_size_var.get() or "0", "Text size", 0, 120)),
-            text_colour=self._colours["text"],
+            text_colour=self.text_btn.colour,
         )
         picking = cs.Picking(
             sampling=self.sampling.value,

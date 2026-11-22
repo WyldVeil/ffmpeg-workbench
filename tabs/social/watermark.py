@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import shutil
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ass
 from core import ffmpeg as ff
@@ -23,6 +23,7 @@ from core.ops.text_watermark import PLACES, TextMark, build_script, parse_ranges
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 
@@ -30,7 +31,6 @@ class TextBurnerTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.colour = "#FFFFFF"
         self._info = None
         self._job = None
         self._pdir = None
@@ -102,8 +102,8 @@ class TextBurnerTab(BaseTab):
             ("Outline", self.outline_var),
         ):
             tk.Checkbutton(flags, text=text, variable=var, command=self._changed).pack(side="left")
-        self.col_btn = tk.Button(
-            flags, text="Colour…", relief="flat", bg=self.colour, command=self._pick
+        self.col_btn = ColourButton(
+            flags, "#FFFFFF", text="Colour…", on_change=lambda _c: self._changed()
         )
         return body
 
@@ -177,13 +177,6 @@ class TextBurnerTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _pick(self):
-        res = colorchooser.askcolor(self.colour, parent=self)
-        if res and res[1]:
-            self.colour = res[1].upper()
-            self.col_btn.config(bg=self.colour)
-            self._changed()
-
     def script(self, w, h, duration) -> ass.Script:
         place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
         every = common.number(self.every_var.get() or "3", "Jump every", 0.2, 3600)
@@ -192,7 +185,7 @@ class TextBurnerTab(BaseTab):
             place=place,
             font=self.font_var.get(),
             size=int(self.size_var.get()),
-            colour=self.colour,
+            colour=self.col_btn.colour,
             opacity=float(self.opacity_var.get()),
             bold=self.bold_var.get(),
             italic=self.italic_var.get(),

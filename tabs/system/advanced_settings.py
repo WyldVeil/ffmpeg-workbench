@@ -37,6 +37,7 @@ from core.skins import (
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.stars import set_star_count, set_star_speed
+from tabs.kit.widgets import ColourButton, normal_colour
 
 logger = logging.getLogger("crossfader.system.advanced_settings")
 
@@ -1241,6 +1242,7 @@ class AdvancedSettingsTab(BaseTab):
         # Load current custom colors
         current_custom = get_skin("Custom")
         self._custom_vars: dict[str, tk.StringVar] = {}
+        self._custom_swatches: dict[str, ColourButton] = {}
 
         # Color sections: (Section title, [(display_label, color_key), ...])
         sections = [
@@ -1295,69 +1297,46 @@ class AdvancedSettingsTab(BaseTab):
         for section_title, props in sections:
             sec_frame = tk.LabelFrame(inner, text=f"  {section_title}  ", padx=px(12), pady=px(10))
             sec_frame.pack(fill="x", padx=px(8), pady=px(8, 4))
-
             for label_text, key in props:
-                row = tk.Frame(sec_frame)
-                row.pack(fill="x", pady=px(3))
-
                 initial = current_custom.get(key, _CUSTOM_DEFAULTS.get(key, "#222222"))
-                var = tk.StringVar(value=initial)
-                self._custom_vars[key] = var
+                self._custom_colour_row(sec_frame, key, label_text, initial)
 
-                tk.Label(row, text=label_text, width=26, anchor="w", font=(UI_FONT, 9)).pack(
-                    side="left"
-                )
+    def _custom_colour_row(self, parent, key: str, label_text: str, initial: str) -> None:
+        """One colour of the custom skin: name, swatch (click to pick), hex field."""
+        row = tk.Frame(parent)
+        row.pack(fill="x", pady=px(3))
+        var = tk.StringVar(value=initial)
+        self._custom_vars[key] = var
+        tk.Label(row, text=label_text, width=26, anchor="w", font=(UI_FONT, 9)).pack(side="left")
+        swatch = ColourButton(
+            row,
+            initial,
+            text=t("advanced_settings.pick"),
+            on_change=partial(self._custom_picked, key),
+        )
+        swatch.pack(side="left", padx=px(4, 2))
+        self._custom_swatches[key] = swatch
+        entry = tk.Entry(row, textvariable=var, width=9, font=(MONO_FONT, 9))
+        entry.pack(side="left", padx=px(2))
+        entry.bind("<FocusOut>", partial(self._custom_typed, key))
+        entry.bind("<Return>", partial(self._custom_typed, key))
 
-                # Color swatch
-                swatch = tk.Label(row, width=4, bg=initial, relief="solid", bd=px(1))
-                swatch.pack(side="left", padx=px(4, 2))
+    def _custom_picked(self, key: str, colour: str) -> None:
+        self._custom_vars[key].set(colour)
+        self._save_custom(key, colour)
 
-                # Hex entry
-                entry = tk.Entry(row, textvariable=var, width=9, font=(MONO_FONT, 9))
-                entry.pack(side="left", padx=px(2))
+    def _custom_typed(self, key: str, _event: object = None) -> None:
+        """A hex colour typed in the field (ignored until it is one)."""
+        try:
+            colour = normal_colour(self._custom_vars[key].get())
+        except ValueError:
+            return
+        self._custom_swatches[key].set(colour)
+        self._save_custom(key, colour)
 
-                # Pick button - closure captures key, var, swatch
-                def _pick(k=key, v=var, sw=swatch):
-                    from tkinter import colorchooser
-
-                    current_hex = v.get()
-                    try:
-                        _rgb, hex_color = colorchooser.askcolor(
-                            color=current_hex, title=f"Choose color for {k}"
-                        )
-                    except Exception:
-                        logger.debug("_pick: best-effort step failed", exc_info=True)
-                        return
-                    if hex_color:
-                        hex_color = hex_color.upper()
-                        v.set(hex_color)
-                        with contextlib.suppress(tk.TclError):
-                            sw.configure(bg=hex_color)
-                        save_custom_color(k, hex_color)
-                        # Update live preview swatch
-                        self._custom_status.config(
-                            text=t("advanced_settings.saved"), fg=CLR["green"]
-                        )
-
-                tk.Button(
-                    row, text=t("advanced_settings.pick"), command=_pick, font=(UI_FONT, 8)
-                ).pack(side="left", padx=px(4))
-
-                # Keep swatch in sync when user types directly in entry
-                def _sync_swatch(evt, sw=swatch, v=var, k=key):
-                    val = v.get().strip()
-                    if len(val) in (4, 7) and val.startswith("#"):
-                        try:
-                            sw.configure(bg=val)
-                            save_custom_color(k, val.upper())
-                            self._custom_status.config(
-                                text=t("advanced_settings.saved"), fg=CLR["green"]
-                            )
-                        except Exception:
-                            logger.debug("_sync_swatch: best-effort step failed", exc_info=True)
-
-                entry.bind("<FocusOut>", _sync_swatch)
-                entry.bind("<Return>", _sync_swatch)
+    def _save_custom(self, key: str, colour: str) -> None:
+        save_custom_color(key, colour)
+        self._custom_status.config(text=t("advanced_settings.saved"), fg=CLR["green"])
 
     def _build_custom_reset(self, inner):
         # Reset to defaults button
@@ -1384,6 +1363,8 @@ class AdvancedSettingsTab(BaseTab):
         for key, val in _CUSTOM_DEFAULTS.items():
             if isinstance(val, str) and val.startswith("#"):
                 self._custom_vars[key].set(val)
+                if key in self._custom_swatches:
+                    self._custom_swatches[key].set(val)
                 changes[f"{prefix}{key}"] = val
         update(changes)
         try:

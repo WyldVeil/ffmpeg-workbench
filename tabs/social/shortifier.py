@@ -10,7 +10,7 @@ background.  Optional trim to the platform's length limit.
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
@@ -19,6 +19,7 @@ from core.ops.shortifier import ANCHORS, PLATFORMS, reframe_graph
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, EncoderPanel, FileRow, SaveRow, scroll_body
 
 BACKGROUNDS = {
@@ -43,7 +44,6 @@ class ShortifierTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.colour = "1E1E1E"
         self._info = None
         self._job = None
         self._build_ui()
@@ -100,13 +100,8 @@ class ShortifierTab(BaseTab):
             width=30,
         )
         bb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        self.colour_btn = tk.Button(
-            opt,
-            text="Colour…",
-            relief="flat",
-            bg=f"#{self.colour}",
-            fg="white",
-            command=self._pick_colour,
+        self.colour_btn = ColourButton(
+            opt, "#1E1E1E", text="Colour…", on_change=self._colour_chosen
         )
         row(1, "Layout:", bb, self.colour_btn)
         self.anchor_var = tk.StringVar(value="Centre")
@@ -168,15 +163,12 @@ class ShortifierTab(BaseTab):
         tw, th = self.size()
         mode = next((k for k, v in BACKGROUNDS.items() if v == self.bg_var.get()), "blur")
         anchor = next((k for k, v in ANCHORS.items() if v[0] == self.anchor_var.get()), "center")
-        return reframe_graph(tw, th, mode, anchor, self.colour)
+        return reframe_graph(tw, th, mode, anchor, self.colour_btn.rgb)
 
-    def _pick_colour(self):
-        res = colorchooser.askcolor(f"#{self.colour}", parent=self)
-        if res and res[1]:
-            self.colour = res[1].lstrip("#").upper()
-            self.colour_btn.config(bg=res[1])
-            self.bg_var.set(BACKGROUNDS["colour"])
-            self._changed()
+    def _colour_chosen(self, _colour: str) -> None:
+        """Picking a colour means a coloured background."""
+        self.bg_var.set(BACKGROUNDS["colour"])
+        self._changed()
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)

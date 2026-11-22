@@ -17,7 +17,7 @@ import os
 import shutil
 import tkinter as tk
 from pathlib import Path
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ass
 from core import ffmpeg as ff
@@ -27,6 +27,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import UI_FONT, BaseTab
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.social.hard_subber")
@@ -111,8 +112,6 @@ class HardSubberTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.colour = "#FFFFFF"
-        self.outline_colour = "#000000"
         self._info = None
         self._tracks: list = []
         self._work = None
@@ -200,12 +199,12 @@ class HardSubberTab(BaseTab):
         return body, r0, st
 
     def _build_output(self, body, r0, st):
-        self.col_btn = tk.Button(
-            r0, text="Text", relief="flat", command=lambda: self._pick("colour")
+        self.col_btn = ColourButton(
+            r0, "#FFFFFF", text="Text", width=8, on_change=lambda _c: self._schedule()
         )
         self.col_btn.pack(side="left", padx=px(4))
-        self.out_btn = tk.Button(
-            r0, text="Outline / box", relief="flat", command=lambda: self._pick("outline_colour")
+        self.out_btn = ColourButton(
+            r0, "#000000", text="Outline / box", width=12, on_change=lambda _c: self._schedule()
         )
         self.out_btn.pack(side="left", padx=px(4))
         r1 = tk.Frame(st)
@@ -274,20 +273,8 @@ class HardSubberTab(BaseTab):
         self.btn_render = self.make_render_btn(body, "🔥  BURN SUBTITLES", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
-        self._paint()
 
     # ── state ────────────────────────────────────────────────────────────────
-
-    def _paint(self):
-        self.col_btn.config(bg=self.colour, fg="black")
-        self.out_btn.config(bg=self.outline_colour, fg="white")
-
-    def _pick(self, attr):
-        res = colorchooser.askcolor(getattr(self, attr), parent=self)
-        if res and res[1]:
-            setattr(self, attr, res[1].upper())
-            self._paint()
-            self._schedule()
 
     def _source_changed(self, path):
         self._info = ff.try_probe(path)
@@ -326,8 +313,8 @@ class HardSubberTab(BaseTab):
         return force_style(
             font=self.font_var.get() or "Open Sans",
             size=int(self.size_var.get()),
-            colour=self.colour,
-            outline_colour=self.outline_colour,
+            colour=self.col_btn.colour,
+            outline_colour=self.out_btn.colour,
             outline=float(self.outline_var.get()),
             box=self.box_var.get(),
             position=key,

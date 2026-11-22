@@ -12,13 +12,14 @@ from __future__ import annotations
 import contextlib
 import os
 import tkinter as tk
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core.i18n import t
 from core.ops.media_gen import AUDIO_EXTS, Generate, generate_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import SaveRow, scroll_body
 
 PATTERNS = {
@@ -70,7 +71,6 @@ RATES = {
 class MediaGeneratorTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
-        self.colour = "202020"
         self._build_ui()
 
     def _build_ui(self):
@@ -100,14 +100,7 @@ class MediaGeneratorTab(BaseTab):
         )
         pb.bind("<<ComboboxSelected>>", lambda _e: self._pattern_changed())
         row(0, t("mgen.visual_pattern"), pb)
-        self.colour_btn = tk.Button(
-            f,
-            text="  Colour…  ",
-            bg="#202020",
-            fg="white",
-            relief="flat",
-            command=self._pick_colour,
-        )
+        self.colour_btn = ColourButton(f, "#202020", text="  Colour…  ", width=10)
         self.colour_btn.grid(row=0, column=2, sticky="w", padx=px(8))
         self.size_var = tk.StringVar(value="1920×1080 (Full HD)")
         row(
@@ -202,12 +195,6 @@ class MediaGeneratorTab(BaseTab):
         else:
             self.freq_row.grid_remove()
 
-    def _pick_colour(self):
-        res = colorchooser.askcolor(f"#{self.colour}", parent=self)
-        if res and res[1]:
-            self.colour = res[1].lstrip("#").upper()
-            self.colour_btn.config(bg=res[1])
-
     # ── render ───────────────────────────────────────────────────────────────
 
     def _render(self):
@@ -242,7 +229,7 @@ class MediaGeneratorTab(BaseTab):
             width=w,
             height=h,
             rate=RATES.get(self.rate_var.get(), "25"),
-            colour=self.colour,
+            colour=self.colour_btn.rgb,
             freq=freq,
         )
         cmd, dur, textfile = generate_cmd(spec, out)

@@ -29,7 +29,7 @@ import shutil
 import tkinter as tk
 from dataclasses import dataclass, replace
 from functools import partial
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import messagebox, ttk
 
 from core import ass, proc, tasks
 from core import beats as beats_core
@@ -45,6 +45,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker, RangePicker
+from tabs.kit.widgets import ColourButton
 from tabs.widgets import EncoderPanel, SaveRow, scroll_body
 
 RANDOM = "random"
@@ -252,9 +253,12 @@ class SlideshowMakerTab(BaseTab):
         tk.Label(self.card_row, text="Subtitle:").pack(side="left", padx=px(10, 4))
         self.card_sub_var = self._traced(tk.StringVar())
         tk.Entry(self.card_row, textvariable=self.card_sub_var, width=26).pack(side="left")
-        self.card_bg = "#101010"
-        self.card_bg_btn = tk.Button(
-            self.card_row, text="Background", relief="flat", command=self._pick_card_bg
+        self.card_bg_btn = ColourButton(
+            self.card_row,
+            "#101010",
+            text="Background",
+            width=10,
+            on_change=lambda _c: self._edited(),
         )
         self.card_bg_btn.pack(side="left", padx=px(10, 0))
 
@@ -310,8 +314,7 @@ class SlideshowMakerTab(BaseTab):
             tk.Label(opt, text="Motion amount:"),
             zoom,
         )
-        self.bars = "#000000"
-        self.bars_btn = tk.Button(opt, text="Bars colour", relief="flat", command=self._pick_bars)
+        self.bars_btn = ColourButton(opt, "#000000", text="Bars colour", width=10)
         self.bars_btn.grid(row=2, column=5, sticky="w")
         self.res_var, self.fps_var = (
             tk.StringVar(value=next(iter(RESOLUTIONS))),
@@ -552,8 +555,7 @@ class SlideshowMakerTab(BaseTab):
         card = s.card if s else None
         self.card_title_var.set(card.title if card else "")
         self.card_sub_var.set(card.subtitle if card else "")
-        self.card_bg = card.background if card else "#101010"
-        self.card_bg_btn.config(bg=self.card_bg)
+        self.card_bg_btn.set(card.background if card else "#101010")
 
     def _edited(self, *_):
         """A field of the selected slide changed: store it (bad numbers wait for render)."""
@@ -570,7 +572,9 @@ class SlideshowMakerTab(BaseTab):
         with contextlib.suppress(ValueError):  # a bad part is explained when rendering
             s.start, s.end = self.part.span()
         if s.card is not None:
-            s.card = ss.Card(self.card_title_var.get(), self.card_sub_var.get(), self.card_bg)
+            s.card = ss.Card(
+                self.card_title_var.get(), self.card_sub_var.get(), self.card_bg_btn.colour
+            )
         self._refresh_row(i)
 
     def _refresh_row(self, i):
@@ -581,19 +585,6 @@ class SlideshowMakerTab(BaseTab):
         self.tree.item(
             str(i), values=(i + 1, s.name, KIND_NAMES[s.kind], self._time_text(s), trans, s.caption)
         )
-
-    def _pick_card_bg(self):
-        chosen = colorchooser.askcolor(self.card_bg, parent=self)[1]
-        if chosen:
-            self.card_bg = chosen
-            self.card_bg_btn.config(bg=chosen)
-            self._edited()
-
-    def _pick_bars(self):
-        chosen = colorchooser.askcolor(self.bars, parent=self)[1]
-        if chosen:
-            self.bars = chosen
-            self.bars_btn.config(bg=chosen)
 
     # ── Music ────────────────────────────────────────────────────────────────
 
@@ -655,7 +646,9 @@ class SlideshowMakerTab(BaseTab):
     def _look(self) -> ss.Look:
         w, h = RESOLUTIONS.get(self.res_var.get(), (1920, 1080))
         fit = FIT_KEYS.get(self.fit_var.get(), "blur")
-        return ss.Look(w, h, self.fps_var.get() or "30", fit, float(self.zoom_var.get()), self.bars)
+        return ss.Look(
+            w, h, self.fps_var.get() or "30", fit, float(self.zoom_var.get()), self.bars_btn.colour
+        )
 
     def _lengths(self) -> list[float | None]:
         """Each slide's own length: its own time, a video's part, else None (the slideshow's)."""
@@ -814,7 +807,7 @@ class SlideshowMakerTab(BaseTab):
             "25",
             self._look().fit,
             self._look().zoom,
-            self.bars,
+            self.bars_btn.colour,
         )
         self.log(self.console, f"Preview: {tr.LABELS.get(join.name, 'a cut')} …")
         tasks.submit(
