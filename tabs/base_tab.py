@@ -675,7 +675,7 @@ class BaseTab(ttk.Frame):
     Common base class for all tool tabs.
 
     Rendering
-      run_ffmpeg(cmd, console, on_done, btn, btn_label, *, duration, output, inputs)
+      run_ffmpeg(cmd, console, on_done, btn, *, duration, output, inputs, name)
           Queue an FFmpeg command.  While it runs, *btn* shows the progress
           and becomes a Cancel button; *on_done(rc)* gets 0 on success.
       enqueue_render(...)        lower-level queue access (multi-step jobs)
@@ -927,35 +927,56 @@ class BaseTab(ttk.Frame):
 
     def run_ffmpeg(
         self,
-        cmd,
-        console=None,
-        on_done=None,
-        btn=None,
-        btn_label="▶  Run",
+        cmd: Sequence[object],
+        console: tk.Text | None = None,
+        on_done: Callable[[int], object] | None = None,
+        btn: tk.Button | None = None,
         *,
-        duration=None,
-        output=None,
-        inputs=(),
-        name=None,
-        cmds=None,
+        duration: float | None = None,
+        output: str | None = None,
+        inputs: Sequence[str] = (),
+        name: str | None = None,
     ) -> str | None:
-        """Queue FFmpeg *cmd* (or a list *cmds* run in order).
+        """Queue FFmpeg *cmd* (see :meth:`run_ffmpeg_steps`)."""
+        return self.run_ffmpeg_steps(
+            [cmd], console, on_done, btn, duration=duration, output=output, inputs=inputs, name=name
+        )
+
+    def run_ffmpeg_steps(
+        self,
+        steps: Sequence[Sequence[object]],
+        console: tk.Text | None = None,
+        on_done: Callable[[int], object] | None = None,
+        btn: tk.Button | None = None,
+        *,
+        duration: float | None = None,
+        output: str | None = None,
+        inputs: Sequence[str] = (),
+        name: str | None = None,
+    ) -> str | None:
+        """Queue FFmpeg commands run one after another, as one job.
 
         *duration* is the expected output length in seconds (enables an
         accurate percentage; guessed from the command when omitted).
         *output* is the final file (written atomically; defaults to the last
-        argument of the last command).  While the job runs, *btn* shows the
-        progress and acts as a Cancel button.
+        command's last argument).  While the job runs, *btn* shows the
+        progress and acts as a Cancel button, then gets its own text back.
         """
         shell = self.shell()
-        cmds = [list(map(str, c)) for c in cmds] if cmds else [list(map(str, cmd))]
+        cmds = [[str(c) for c in cmd] for cmd in steps]
         if output is None and cmds and cmds[-1] and ff.is_ffmpeg(cmds[-1][0]):
             last = cmds[-1][-1]
             output = (
                 last if last not in ("-", "pipe:", "pipe:1") and not last.startswith("-") else ""
             )
         self.log_debug("Queuing: " + " | ".join(ff.format_cmd(c) for c in cmds))
-        state = {"task": None, "orig_cmd": None, "t0": time.time(), "clicked": time.monotonic()}
+        state: dict[str, Any] = {
+            "task": None,
+            "orig_cmd": None,
+            "label": "",
+            "t0": time.time(),
+            "clicked": time.monotonic(),
+        }
 
         def _cancel_click():
             # Ignore the second half of an accidental double-click on Render.
@@ -967,6 +988,7 @@ class BaseTab(ttk.Frame):
         if btn is not None:
             try:
                 state["orig_cmd"] = btn.cget("command")
+                state["label"] = btn.cget("text")
                 btn.config(
                     state="normal", text="⏳ " + t("app.status.queued_btn"), command=_cancel_click
                 )
@@ -1002,7 +1024,7 @@ class BaseTab(ttk.Frame):
             )
             if btn is not None:
                 with contextlib.suppress(tk.TclError):
-                    btn.config(state="normal", text=btn_label, command=state["orig_cmd"] or "")
+                    btn.config(state="normal", text=state["label"], command=state["orig_cmd"] or "")
             tk_task = self.task(task_id)
             status = tk_task.status if tk_task else ("done" if returncode == 0 else "failed")
             if shell is not None:

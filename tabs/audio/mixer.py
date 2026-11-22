@@ -530,7 +530,6 @@ class AudioMixerTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("mixer.mix_button"),
             duration=dur,
             output=out,
             inputs=[video] + [track_path(x) for x in active],

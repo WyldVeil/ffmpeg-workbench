@@ -415,7 +415,6 @@ class HardSubberTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🔥  BURN SUBTITLES",
             name="Hard-Subber",
             on_done=done,
         )

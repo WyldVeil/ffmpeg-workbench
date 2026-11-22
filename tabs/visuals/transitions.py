@@ -315,7 +315,6 @@ class TransitionStudioTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label="🎬  RENDER TRANSITION",
             duration=secs,
             output=out,
             inputs=[c.path for c in clips],

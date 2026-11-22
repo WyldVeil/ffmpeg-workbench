@@ -576,7 +576,6 @@ class WaveformEditorTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("waveform.apply_button"),
             duration=self.duration or None,
             output=out,
             inputs=[src],

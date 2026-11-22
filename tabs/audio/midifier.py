@@ -436,7 +436,6 @@ class MIDIfierTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("midifier.run_btn"),
             console=self.console,
             duration=length,
             inputs=[src],

@@ -255,7 +255,6 @@ class GIFMakerTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("gif_maker.create_button"),
             console=self.console,
             duration=dur,
             inputs=[src],

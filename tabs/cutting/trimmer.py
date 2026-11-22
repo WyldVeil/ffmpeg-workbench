@@ -776,7 +776,6 @@ class TrimmerTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("trimmer.export_button"),
             duration=dur,
             output=out,
             inputs=[self.file_path],

@@ -451,7 +451,6 @@ class AutoSubsTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.mux_btn,
-            btn_label="📎 Add as a subtitle track…",
             duration=info.duration or None,
             output=out,
             inputs=[src, subs],

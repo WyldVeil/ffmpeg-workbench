@@ -686,7 +686,6 @@ class IntroMakerTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="🎬  CREATE",
             console=self.console,
             duration=total,
             inputs=[p for p in (main, self.bg_row.path, self.music_row.path) if p],

@@ -218,7 +218,6 @@ class AudioReplacerTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label="🎼  APPLY",
             duration=info.duration or None,
             output=out,
             inputs=[src, self.audio_row.path],

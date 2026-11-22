@@ -162,6 +162,5 @@ class DeinterlaceTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="〰  DEINTERLACE",
             name="Deinterlace",
         )

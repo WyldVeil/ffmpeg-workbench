@@ -617,7 +617,6 @@ class VideoCollageTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("collage.build_collage"),
             duration=total,
             output=out,
             inputs=paths,

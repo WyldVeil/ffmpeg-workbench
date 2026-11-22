@@ -702,7 +702,6 @@ class PresetManagerTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("presets.run_now_button"),
             duration=ff.duration_of(src) or None,
             output=out,
             inputs=[src],

@@ -429,7 +429,6 @@ class TextBurnerTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="©  BURN WATERMARK",
             name="Watermarker",
             on_done=done,
         )

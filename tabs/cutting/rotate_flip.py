@@ -190,7 +190,6 @@ class RotateFlipTab(BaseTab):
                     self.console,
                     on_done=lambda rc: self.show_result(rc, out),
                     btn=self.btn_render,
-                    btn_label="🔄  APPLY",
                     duration=info.duration or None,
                     output=out,
                     inputs=[src],
@@ -206,6 +205,5 @@ class RotateFlipTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🔄  APPLY",
             name="Rotate & Flip",
         )

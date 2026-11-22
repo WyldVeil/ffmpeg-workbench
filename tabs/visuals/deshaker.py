@@ -286,7 +286,6 @@ class DeshakerTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("deshaker.stabilise_button"),
             console=self.console,
             duration=duration,
             inputs=[src],

@@ -327,6 +327,5 @@ class ColorMatchTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label=t("color_match.apply_button"),
             name="Colour Match",
         )

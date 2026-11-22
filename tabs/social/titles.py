@@ -592,7 +592,6 @@ class TitlesGeneratorTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label=t("titles.render_button"),
             name="Animated Titles",
             on_done=done,
         )

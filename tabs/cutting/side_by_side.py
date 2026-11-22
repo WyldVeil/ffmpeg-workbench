@@ -458,7 +458,6 @@ class SideBySideTab(BaseTab):
             self.console,
             on_done=done,
             btn=self.btn_render,
-            btn_label="◫  CREATE",
             duration=total,
             output=out,
             inputs=[c.path for c in clips],

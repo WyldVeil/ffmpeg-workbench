@@ -454,6 +454,5 @@ class ManualCropTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label=t("crop.export_button"),
             name="Manual Crop",
         )

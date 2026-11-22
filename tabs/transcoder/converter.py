@@ -232,7 +232,6 @@ class FormatConverterTab(BaseTab):
             out=out_label,
             work=work,
             btn=self.btn_render,
-            btn_label=t("converter.btn_convert_all"),
             console=self.console,
             inputs=paths,
         )

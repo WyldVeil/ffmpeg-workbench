@@ -20,7 +20,9 @@ def test_pure_helpers():
     g = shortifier_ops.reframe_graph(1080, 1920, "crop", "left")
     assert "x=(iw-ow)*0.0" in g
     assert "paletteuse=dither=bayer:bayer_scale=4" in gif_maker.gif_graph(15, 480, 128, "bayer4")
-    assert "scale=192:-1" in image_watermark.logo_graph(1280, 720, image_watermark.Logo(pct=15, opacity=1, place="br"))
+    assert "scale=192:-1" in image_watermark.logo_graph(
+        1280, 720, image_watermark.Logo(pct=15, opacity=1, place="br")
+    )
 
 
 @pytest.fixture(scope="module")

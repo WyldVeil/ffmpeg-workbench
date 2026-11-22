@@ -310,6 +310,5 @@ class VideoScopesTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_vid,
-            btn_label=t("scopes.scope_video_button"),
             name="Scope video",
         )

@@ -21,6 +21,7 @@ effects overlay onto the existing video so no content is lost.
 import logging
 import os
 import tkinter as tk
+from collections.abc import Callable, Sequence
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
@@ -282,27 +283,25 @@ class SpecialEffectsTab(BaseTab):
 
     def run_ffmpeg(
         self,
-        cmd,
-        console=None,
-        on_done=None,
-        btn=None,
-        btn_label="\u25b6  Run",
+        cmd: Sequence[object],
+        console: tk.Text | None = None,
+        on_done: Callable[[int], object] | None = None,
+        btn: tk.Button | None = None,
         *,
-        duration=None,
-        output=None,
-        inputs=(),
-        name=None,
-        cmds=None,
-    ):
+        duration: float | None = None,
+        output: str | None = None,
+        inputs: Sequence[str] = (),
+        name: str | None = None,
+    ) -> str | None:
         """Effects that build their own command still get overwrite protection,
         playable 4:2:0 output, progress and the source as an input guard."""
+        cmd = [str(c) for c in cmd]
         if not inputs and "-i" in cmd:
-            cmd = list(cmd)
             src = cmd[cmd.index("-i") + 1]
             final = self.confirm_output(cmd[-1], [src])
             if not final:
                 if btn is not None:
-                    btn.config(state="normal", text=btn_label)
+                    btn.config(state="normal")
                 return None
             cmd[-1] = final
             if "libx264" in cmd and "-pix_fmt" not in cmd:
@@ -311,16 +310,7 @@ class SpecialEffectsTab(BaseTab):
             if duration is None:
                 duration = ff.duration_of(src) or None
         return super().run_ffmpeg(
-            cmd,
-            console,
-            on_done,
-            btn,
-            btn_label,
-            duration=duration,
-            output=output,
-            inputs=inputs,
-            name=name,
-            cmds=cmds,
+            cmd, console, on_done, btn, duration=duration, output=output, inputs=inputs, name=name
         )
 
     def _fx_num(self, var, label, lo=None, hi=None):
@@ -419,9 +409,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             console,
-            on_done=lambda rc: self._done(rc, out, btn, label),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=btn,
-            btn_label=label,
             duration=duration or self._fx_geom(info)[3],
             output=out,
             inputs=[src],
@@ -933,9 +922,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._fo_console,
-            on_done=lambda rc: self._done(rc, out, self._fo_btn, "⬛  APPLY FADE-OUT"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._fo_btn,
-            btn_label="⬛  APPLY FADE-OUT",
         )
 
     def _build_outro_freezezoom(self, nb):
@@ -1265,9 +1253,8 @@ class SpecialEffectsTab(BaseTab):
             self.run_ffmpeg(
                 cmd,
                 self._em_console,
-                on_done=lambda rc: self._done(rc, out, self._em_btn, "😂  BURN EMOJI ONTO VIDEO"),
+                on_done=lambda rc: self.show_result(rc, out),
                 btn=self._em_btn,
-                btn_label="😂  BURN EMOJI ONTO VIDEO",
             )
 
         tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_emoji")
@@ -1518,11 +1505,8 @@ class SpecialEffectsTab(BaseTab):
             self.run_ffmpeg(
                 cmd,
                 self._sub_console,
-                on_done=lambda rc: self._done(
-                    rc, out, self._sub_btn, "🔔  BURN SUBSCRIBE REMINDER"
-                ),
+                on_done=lambda rc: self.show_result(rc, out),
                 btn=self._sub_btn,
-                btn_label="🔔  BURN SUBSCRIBE REMINDER",
             )
 
         tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_subscribe")
@@ -1623,9 +1607,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._cd_console,
-            on_done=lambda rc: self._done(rc, out, self._cd_btn, "⏱  BURN COUNTDOWN"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._cd_btn,
-            btn_label="⏱  BURN COUNTDOWN",
         )
 
     def _build_ov_progressbar(self, nb):
@@ -1847,9 +1830,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._rgb_console,
-            on_done=lambda rc: self._done(rc, out, self._rgb_btn, "🌈  APPLY RGB GLITCH"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._rgb_btn,
-            btn_label="🌈  APPLY RGB GLITCH",
         )
 
     def _build_gl_vhs(self, nb):
@@ -1954,9 +1936,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._vhs_console,
-            on_done=lambda rc: self._done(rc, out, self._vhs_btn, "📼  APPLY VHS EFFECT"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._vhs_btn,
-            btn_label="📼  APPLY VHS EFFECT",
         )
 
     def _build_gl_grain(self, nb):
@@ -2035,9 +2016,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._gr_console,
-            on_done=lambda rc: self._done(rc, out, self._gr_btn, "🎞  APPLY FILM GRAIN"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._gr_btn,
-            btn_label="🎞  APPLY FILM GRAIN",
         )
 
     def _build_gl_vignette(self, nb):
@@ -2111,9 +2091,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._vi_console,
-            on_done=lambda rc: self._done(rc, out, self._vi_btn, "🔲  APPLY VIGNETTE"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._vi_btn,
-            btn_label="🔲  APPLY VIGNETTE",
         )
 
     def _build_gl_lightleak(self, nb):
@@ -2337,9 +2316,8 @@ class SpecialEffectsTab(BaseTab):
             self.run_ffmpeg(
                 cmd,
                 self._sh_console,
-                on_done=lambda rc: self._done(rc, out, self._sh_btn, "📳  APPLY CAMERA SHAKE"),
+                on_done=lambda rc: self.show_result(rc, out),
                 btn=self._sh_btn,
-                btn_label="📳  APPLY CAMERA SHAKE",
             )
 
         tasks.submit(
@@ -2753,9 +2731,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._mc_console,
-            on_done=lambda rc: self._done(rc, out, self._mc_btn, "🗯  BURN MEME CAPTIONS"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._mc_btn,
-            btn_label="🗯  BURN MEME CAPTIONS",
         )
 
     def _build_br_cinebars(self, nb):
@@ -2979,9 +2956,8 @@ class SpecialEffectsTab(BaseTab):
         self.run_ffmpeg(
             cmd,
             self._wm_console,
-            on_done=lambda rc: self._done(rc, out, self._wm_btn, "©  BURN WATERMARK"),
+            on_done=lambda rc: self.show_result(rc, out),
             btn=self._wm_btn,
-            btn_label="©  BURN WATERMARK",
         )
 
     # ═════════════════════════════════════════════════════════════════════
@@ -3008,7 +2984,3 @@ class SpecialEffectsTab(BaseTab):
         )
         if p:
             out_var.set(p)
-
-    def _done(self, rc, out_path, btn, btn_label):
-        btn.config(state="normal", text=btn_label)
-        self.show_result(rc, out_path)

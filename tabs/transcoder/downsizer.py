@@ -329,7 +329,6 @@ class UniversalDownsizerTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("downsizer.render_button"),
             console=self.console,
             duration=length,
             inputs=[src],

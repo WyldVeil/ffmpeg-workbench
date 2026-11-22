@@ -601,7 +601,6 @@ class SlideshowMakerTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="🎞  CREATE SLIDESHOW",
             console=self.console,
             duration=total,
             inputs=[s.path for s in slides] + ([music] if music else []),

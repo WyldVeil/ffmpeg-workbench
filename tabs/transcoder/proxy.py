@@ -348,7 +348,6 @@ class ProxyGenTab(BaseTab):
             out=os.path.dirname(jobs[0][1]),
             work=work,
             btn=self.btn_render,
-            btn_label=t("proxy.render_button"),
             console=self.console,
             inputs=list(self.file_paths),
         )

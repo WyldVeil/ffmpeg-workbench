@@ -261,7 +261,6 @@ class CodecCruncherTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("codec.btn_encode"),
             duration=info.duration or None,
             output=out,
             inputs=[src],

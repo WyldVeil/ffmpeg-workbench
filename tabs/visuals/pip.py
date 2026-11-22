@@ -410,7 +410,6 @@ class PIPTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🖼  MAKE PICTURE-IN-PICTURE",
             name="Picture-in-Picture",
             audio=audio,
             extra_args=["-t", f"{dur:.3f}"],

@@ -309,7 +309,6 @@ class HdrToSdrTab(BaseTab):
             encoder=venc,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🌗  CONVERT TO SDR",
             name="HDR to SDR",
             extra_args=subtitle_args(info, common.container_of(out)),
             pre_input=["-init_hw_device", "vulkan"] if self._gpu() else (),

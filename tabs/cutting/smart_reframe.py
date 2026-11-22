@@ -290,7 +290,6 @@ class SmartReframeTab(BaseTab):
                 encoder=venc,
                 console=self.console,
                 btn=self.btn_render,
-                btn_label="🎯  REFRAME",
                 name="Smart Reframe",
             )
             return
@@ -340,7 +339,6 @@ class SmartReframeTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="🎯  REFRAME",
             console=self.console,
             duration=dur,
             inputs=[src],

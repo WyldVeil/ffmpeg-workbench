@@ -1534,7 +1534,6 @@ class AllInOneTab(BaseTab):
             self.console,
             on_done=_on_done_wrapper,
             btn=self.btn_render,
-            btn_label="▶  RENDER",
             duration=getattr(self, "_expected_len", None),
             output=checked,
             inputs=[src],

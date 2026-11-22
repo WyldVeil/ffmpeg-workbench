@@ -73,7 +73,6 @@ def render(
     encoder,
     console,
     btn,
-    btn_label: str,
     name: str,
     chain: str = "",
     graph: str = "",
@@ -117,7 +116,6 @@ def render(
         console,
         on_done=_done,
         btn=btn,
-        btn_label=btn_label,
         duration=duration or info.duration or None,
         output=out,
         inputs=[src, *inputs],
@@ -142,7 +140,6 @@ def queue_job(
     out: str,
     work,
     btn,
-    btn_label: str,
     console,
     duration: float | None = None,
     inputs: Sequence[str] = (),
@@ -152,7 +149,7 @@ def queue_job(
     """Queue a multi-step ``work(progress, cancelled, ctx)`` job.  While it
     runs, *btn* shows the progress and cancels the job when clicked;
     ``on_done(rc)`` runs on the UI thread afterwards."""
-    orig = btn.cget("command")
+    orig, label = btn.cget("command"), btn.cget("text")
     queued_at = time.monotonic()
 
     def cancel():
@@ -168,7 +165,7 @@ def queue_job(
 
     def on_complete(tid, rc):
         with contextlib.suppress(tk.TclError):
-            btn.config(text=btn_label, command=orig, state="normal")
+            btn.config(text=label, command=orig, state="normal")
         tab.last_task = tab.task(tid)
         tab.show_result(rc, out)
         if on_done is not None:

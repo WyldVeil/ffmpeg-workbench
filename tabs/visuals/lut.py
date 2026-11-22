@@ -294,6 +294,5 @@ class LUTApplicatorTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label=t("lut.apply_button"),
             name="LUT",
         )

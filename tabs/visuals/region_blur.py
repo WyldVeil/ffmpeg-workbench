@@ -343,6 +343,5 @@ class RegionBlurTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🕶  APPLY BLUR",
             name="Privacy Blur",
         )

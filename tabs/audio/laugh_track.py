@@ -661,7 +661,6 @@ class LaughTrackRemoverTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("laugh_track.remove_button"),
             duration=self.duration or None,
             output=out,
             inputs=[self.file_path],

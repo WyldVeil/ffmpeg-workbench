@@ -471,7 +471,6 @@ class AudioDynamicsTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("dynamics.btn_apply_dynamics"),
             duration=info.duration or None,
             output=out,
             inputs=[src],

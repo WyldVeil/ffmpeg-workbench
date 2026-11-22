@@ -241,7 +241,6 @@ class ShortifierTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="📱  SHORTIFY",
             name="Shortifier",
             extra_args=extra,
             duration=dur,

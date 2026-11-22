@@ -415,7 +415,6 @@ class MediaGeneratorTab(BaseTab):
             self.console,
             on_done=done,
             btn=self.btn_render,
-            btn_label=t("mgen.btn_generate"),
             duration=dur,
             output=out,
             name="Media Generator",

@@ -412,7 +412,6 @@ class AudioDuckerTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_render,
-            btn_label=t("ducker.btn_duck_render"),
             duration=dur,
             output=out,
             inputs=[src, music],

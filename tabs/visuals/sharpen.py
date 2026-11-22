@@ -161,6 +161,5 @@ class SharpenTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🔪  SHARPEN",
             name="Sharpen",
         )

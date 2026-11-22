@@ -560,7 +560,6 @@ class GreenKeyerTab(BaseTab):
                 self.console,
                 on_done=lambda rc: self.show_result(rc, out),
                 btn=self.btn_render,
-                btn_label=t("green_key.composite_button"),
                 duration=info.duration or None,
                 output=out,
                 inputs=[src],
@@ -594,7 +593,6 @@ class GreenKeyerTab(BaseTab):
             extra_inputs=extra_inputs,
             console=self.console,
             btn=self.btn_render,
-            btn_label=t("green_key.composite_button"),
             name="Green screen",
             inputs=[bg] if kind == "file" else [],
         )

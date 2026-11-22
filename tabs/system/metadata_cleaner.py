@@ -254,7 +254,6 @@ class MetadataCleanerTab(BaseTab):
             out=out_label,
             work=work,
             btn=self.btn,
-            btn_label="🧹  CLEAN FILES",
             console=self.console,
             inputs=files,
         )

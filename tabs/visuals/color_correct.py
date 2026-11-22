@@ -274,6 +274,5 @@ class ColorCorrectorTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label=t("color_correct.render_grade"),
             name="Colour Correct",
         )

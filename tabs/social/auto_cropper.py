@@ -187,6 +187,5 @@ class AutoCropperTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="✂  REMOVE BARS",
             name="Auto-Cropper",
         )

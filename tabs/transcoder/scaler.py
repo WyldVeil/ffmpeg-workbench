@@ -284,7 +284,6 @@ class ResolutionScalerTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="📐  SCALE VIDEO",
             name="Resolution Scaler",
             pre_input=extra_pre,
         )
@@ -604,7 +603,6 @@ class FPSInterpolatorTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="🎞  CHANGE FRAME RATE",
             console=self.console,
             duration=out_dur,
             inputs=[src],

@@ -218,7 +218,6 @@ class LoudnessNormTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="📢  NORMALISE",
             console=self.console,
             duration=dur,
             inputs=[src],

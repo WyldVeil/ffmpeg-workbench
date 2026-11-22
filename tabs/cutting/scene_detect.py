@@ -292,7 +292,6 @@ class SceneDetectTab(BaseTab):
                 self.console,
                 on_done=lambda rc: self.show_result(rc, out_dir),
                 btn=self.btn_split,
-                btn_label="✂  SPLIT INTO SCENES",
                 duration=info.duration,
                 output=out_dir,
                 inputs=[src],
@@ -324,16 +323,14 @@ class SceneDetectTab(BaseTab):
                     os.path.join(out_dir, f"{base}_scene_{i:03d}.mp4"),
                 ]
             )
-        self.run_ffmpeg(
-            None,
+        self.run_ffmpeg_steps(
+            cmds,
             self.console,
             on_done=lambda rc: self.show_result(rc, out_dir),
             btn=self.btn_split,
-            btn_label="✂  SPLIT INTO SCENES",
             output=out_dir,
             inputs=[src],
             name="Scene split",
-            cmds=cmds,
         )
 
     def _chapters(self):
@@ -377,7 +374,6 @@ class SceneDetectTab(BaseTab):
             self.console,
             on_done=lambda rc: self.show_result(rc, out),
             btn=self.btn_chapters,
-            btn_label="📑 Add as chapters…",
             duration=info.duration,
             output=out,
             inputs=[src],

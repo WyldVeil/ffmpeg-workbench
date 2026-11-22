@@ -430,7 +430,6 @@ class AnimatedZoomTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="🔍  RENDER ZOOM",
             name="Animated Zoom",
             pre_input=["-init_hw_device", "vulkan"] if gpu else (),
         )

@@ -1002,7 +1002,6 @@ class TTSVoiceOverTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("tts.generate_export"),
             console=self.console,
             duration=info.duration if info else None,
             inputs=inputs,

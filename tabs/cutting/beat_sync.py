@@ -540,7 +540,6 @@ class BeatSyncCutterTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="🥁  BUILD MONTAGE",
             console=self.console,
             duration=total,
             inputs=[music] + [c[0] for c in self.clips],

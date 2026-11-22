@@ -1275,7 +1275,6 @@ class AudioExporterTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("exporter.export_btn"),
             console=self.console,
             duration=length,
             inputs=[src],

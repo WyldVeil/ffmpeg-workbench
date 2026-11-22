@@ -162,7 +162,6 @@ class DenoiseTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="✨  DENOISE",
             name="Denoise",
             pre_input=["-init_hw_device", "vulkan"] if gpu else (),
         )

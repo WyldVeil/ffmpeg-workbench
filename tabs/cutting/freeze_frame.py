@@ -306,7 +306,6 @@ class FreezeFrameTab(BaseTab):
             encoder=self.encoder,
             console=self.console,
             btn=self.btn_render,
-            btn_label="⏸  CREATE",
             name="Freeze Frame",
             audio=audio,
             duration=total,

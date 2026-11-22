@@ -332,7 +332,6 @@ class CompareQualityTab(BaseTab):
             out="",
             work=work,
             btn=self.btn,
-            btn_label="📊  MEASURE QUALITY",
             console=self.console,
             duration=span,
             inputs=[ref, dist],

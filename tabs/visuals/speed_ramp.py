@@ -596,7 +596,6 @@ class SpeedRamperTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label=t("speed_ramp.apply_button"),
             console=self.console,
             duration=new_dur,
             inputs=[src],

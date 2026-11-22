@@ -376,7 +376,6 @@ class BatchTab(BaseTab):
             out=out_dir,
             work=work,
             btn=self.btn_render,
-            btn_label=t("batch.process_all_files"),
             console=self.console,
             inputs=files,
         )

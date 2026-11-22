@@ -235,7 +235,6 @@ class SilenceTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="✂  REMOVE SILENCES",
             console=self.console,
             duration=info.duration,
             inputs=[src],

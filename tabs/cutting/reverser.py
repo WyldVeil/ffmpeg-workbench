@@ -294,7 +294,6 @@ class ReverserTab(BaseTab):
             out=out,
             work=work,
             btn=self.btn_render,
-            btn_label="⏪  CREATE",
             console=self.console,
             duration=total,
             inputs=[src],
