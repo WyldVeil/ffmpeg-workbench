@@ -375,8 +375,8 @@ class SplicerTab(BaseTab):
                     return
                 self.reencode_var.set(True)
             else:
-                from core.paths import temp_dir
                 from core.ops.trim import keyframe_at_or_before
+                from core.paths import temp_dir
 
                 ins, outs = [], []
                 for p in pieces:
@@ -409,9 +409,7 @@ class SplicerTab(BaseTab):
         venc = enc.video(
             "vp9" if container == "webm" else "h264", "high", hw="auto", container=container
         )
-        crf = self.crf_var.get().strip()
-        if "-crf" in venc.args and crf.isdigit():
-            venc.args[venc.args.index("-crf") + 1] = crf
+        venc.set_quality(self.crf_var.get())
         cmd, total = concat.filter_join_command(
             pieces, out, venc=venc, audio_codec="opus" if container == "webm" else "aac"
         )

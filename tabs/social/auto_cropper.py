@@ -18,6 +18,7 @@ from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops.auto_cropper import detect_bars
+from core.ops.crop import crop_chain
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
@@ -111,7 +112,7 @@ class AutoCropperTab(BaseTab):
             self.box = box
             x, y, bw, bh = box
             self.result_lbl.config(text=f"Picture is {bw}×{bh} at ({x}, {y}) inside {w}×{h}.")
-            self.compare.set_filter(f"crop={bw}:{bh}:{x}:{y}")
+            self.compare.set_filter(crop_chain(x, y, bw, bh))
             self._draw_bars()
 
         tasks.submit(
@@ -184,7 +185,7 @@ class AutoCropperTab(BaseTab):
                 src=src,
                 info=info,
                 out=out,
-                chain=f"crop={w}:{h}:{x}:{y},setsar=1",
+                chain=crop_chain(x, y, w, h),
                 name="Auto-Cropper",
             ),
             encoder=self.encoder,

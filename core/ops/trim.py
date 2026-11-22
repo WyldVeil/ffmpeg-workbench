@@ -78,10 +78,9 @@ def encode_cmd(
 ) -> list[str]:
     """Frame-exact: H.264 at *crf* (the encoder's default if *crf* isn't a number)."""
     venc = enc.video("h264", "high", speed="balanced", hw="off", container=container or "mp4")
-    vargs = list(venc.args)
-    if "-crf" in vargs and crf.replace(".", "", 1).isdigit():
-        vargs[vargs.index("-crf") + 1] = crf
+    if crf.replace(".", "", 1).isdigit():
+        venc.set_option("-crf", crf)
     audio = enc.audio("aac", "192k", container=container or "mp4") if has_audio else []
     cut = [ff.ffmpeg_path(), "-y", "-ss", ff.ts(start), "-i", src, "-t", ff.ts(end - start)]
     streams = ["-map", "0:v:0", "-map", "0:a?", "-sn", "-dn"]
-    return [*cut, *streams, *vargs, *audio, "-map_metadata", "0", "-map_chapters", "-1", out]
+    return [*cut, *streams, *venc.args, *audio, "-map_metadata", "0", "-map_chapters", "-1", out]

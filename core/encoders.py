@@ -369,6 +369,32 @@ class VideoEncode:
     def label(self) -> str:
         return f"{self.encoder} ({HW_LABELS[self.hw]})" if self.hw else self.encoder
 
+    def set_option(self, flag: str, value: str) -> bool:
+        """Change *flag*'s value in the output options, if the encoder uses it."""
+        if flag not in self.args:
+            return False
+        self.args[self.args.index(flag) + 1] = value
+        return True
+
+    def set_quality(self, crf: str) -> None:
+        """Use *crf* (a whole number) when the encoder has a CRF; anything else is ignored."""
+        if crf.strip().isdigit():
+            self.set_option("-crf", crf.strip())
+
+
+def default_audio(container: str, bitrate: str | None = None) -> list[str]:
+    """Sound encoded with *container*'s usual codec."""
+    codec = default_audio_for(container)
+    return (
+        audio(codec, bitrate, container=container) if bitrate else audio(codec, container=container)
+    )
+
+
+def full_chroma(venc: VideoEncode) -> None:
+    """4:4:4 colour (sharp coloured text in screen recordings) on encoders that take it."""
+    if venc.encoder in ("libx264", "libx265", "h264_nvenc", "hevc_nvenc"):
+        venc.set_option("-pix_fmt", "yuv444p")
+
 
 def choose_encoder(codec: str = "h264", hw: str = "auto") -> tuple[str, str | None]:
     """Return ``(encoder_name, hw_kind_or_None)`` for *codec*.

@@ -170,6 +170,6 @@ def generate_cmd(g: Generate, out: str) -> tuple[list[str], float, str | None]:
         if container in ("wav", "mov"):
             cmd += ["-c:a", "pcm_s24le"]
         else:
-            cmd += enc.audio(enc.default_audio_for(container), container=container, bitrate="256k")
+            cmd += enc.default_audio(container, "256k")
         cmd += ["-t", f"{dur:.3f}"]
     return [*cmd, out], dur, textfile

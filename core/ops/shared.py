@@ -43,12 +43,12 @@ def keep_audio_args(
             *args,
             "-af",
             filters,
-            *enc.audio(enc.default_audio_for(container), container=container),
+            *enc.default_audio(container),
         ]
     key = enc.audio_key_from_probe(audio.codec)
     if key and enc.audio_ok_for(container, key):
         return [*args, "-c:a", "copy"]
-    return args + enc.audio(enc.default_audio_for(container), container=container)
+    return args + enc.default_audio(container)
 
 
 def frame_rate(info: ff.MediaInfo) -> str:
@@ -242,7 +242,7 @@ def join_pieces_cmd(
         "-c:v",
         "copy",
     ]
-    sound = ["-map", "0:a:0", *enc.audio(enc.default_audio_for(container), container=container)]
+    sound = ["-map", "0:a:0", *enc.default_audio(container)]
     return [*cmd, *(sound if audio else ["-an"]), *final_copy_args(venc, container), out]
 
 
@@ -273,6 +273,13 @@ def chapters_cmd(src: str, metadata: str, out: str) -> list[str]:
     return [*inputs, "-map", "0", "-map_metadata", "0", "-map_chapters", "1", "-c", "copy", out]
 
 
+def encoded_audio(container: str, present: bool, label: str = "[a]") -> list[str]:
+    """The graph's sound (*label*) encoded for *container*, or no sound."""
+    if not present:
+        return ["-an"]
+    return ["-map", label, *enc.default_audio(container)]
+
+
 def graph_encode_cmd(
     inputs: Sequence[str],
     graph: str,
@@ -289,11 +296,7 @@ def graph_encode_cmd(
     if venc.filter_suffix:
         graph += f";[v]{venc.filter_suffix}[venc]"
         vmap = "[venc]"
-    amap = (
-        ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-        if audio
-        else ["-an"]
-    )
+    amap = encoded_audio(container, audio)
     cmd = [
         ff.ffmpeg_path(),
         "-y",

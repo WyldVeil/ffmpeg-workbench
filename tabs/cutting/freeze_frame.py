@@ -18,7 +18,7 @@ from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
 from core.ops.freeze_frame import Freeze, freeze_graph
-from core.ops.shared import RenderJob
+from core.ops.shared import RenderJob, encoded_audio
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -223,13 +223,7 @@ class FreezeFrameTab(BaseTab):
         )
         graph, total, audio_out = freeze_graph(freeze, dur, has_audio=info.has_audio)
         container = common.container_of(out)
-        from core import encoders as enc
-
-        audio = (
-            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-            if audio_out
-            else ["-an"]
-        )
+        audio = encoded_audio(container, audio_out)
 
         def done(rc):
             if work_dir:

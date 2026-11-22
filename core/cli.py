@@ -187,11 +187,7 @@ class Ctx:
         if ve.filter_suffix:
             graph += f";[v]{ve.filter_suffix}[venc]"
         cmd += ["-filter_complex", graph, "-map", "[venc]" if ve.filter_suffix else "[v]"]
-        cmd += (
-            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-            if has_audio
-            else ["-an"]
-        )
+        cmd += ["-map", "[a]", *enc.default_audio(container)] if has_audio else ["-an"]
         cmd += [*ve.args]
         if duration:
             cmd += ["-t", f"{duration:.3f}"]

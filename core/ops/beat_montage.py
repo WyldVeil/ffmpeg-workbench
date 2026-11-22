@@ -113,9 +113,7 @@ class MontageJob:
             self.music,
         ]
         cmd += ["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy"]
-        cmd += enc.audio(
-            enc.default_audio_for(self.container), container=self.container, bitrate="256k"
-        )
+        cmd += enc.default_audio(self.container, "256k")
         return [
             *cmd,
             "-t",

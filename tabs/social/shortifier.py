@@ -226,9 +226,9 @@ class ShortifierTab(BaseTab):
         if not out:
             return
         limit = PLATFORMS[self._key()][3]
-        extra, dur = [], info.duration
+        cut_at, dur = None, info.duration
         if self.trim_var.get() and limit and info.duration > limit:
-            extra, dur = ["-t", str(limit)], float(limit)
+            cut_at, dur = float(limit), float(limit)
             self.log(self.console, f"Trimming to the {limit}s limit.")
         tw, th = self.size()
         self.log(self.console, f"{PLATFORMS[self._key()][0]} · {tw}×{th}")
@@ -240,7 +240,7 @@ class ShortifierTab(BaseTab):
                 out=out,
                 graph=graph,
                 name="Shortifier",
-                extra_args=extra,
+                limit=cut_at,
                 duration=dur,
             ),
             encoder=self.encoder,

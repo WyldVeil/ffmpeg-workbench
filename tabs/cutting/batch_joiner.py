@@ -375,9 +375,7 @@ class BatchJoinerTab(BaseTab):
             hw="auto",
             container=container,
         )
-        crf = self.crf_var.get().strip()
-        if "-crf" in venc.args and crf.isdigit():
-            venc.args[venc.args.index("-crf") + 1] = crf
+        venc.set_quality(self.crf_var.get())
         cmd, total = concat.filter_join_command(
             pieces,
             out,

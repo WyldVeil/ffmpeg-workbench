@@ -193,7 +193,7 @@ class SpeedJob:
         audio = [
             "-map",
             "[a]",
-            *enc.audio(enc.default_audio_for(self.container), container=self.container),
+            *enc.default_audio(self.container),
         ]
         cmd = [
             ff.ffmpeg_path(),

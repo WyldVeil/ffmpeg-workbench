@@ -125,7 +125,7 @@ def _audio(n: int, a: ff.Stream, fmt: str, smart: bool) -> tuple[list[str], str]
     args = ["-map", f"0:{a.index}"]
     if _copyable(smart, fmt, key, bool(key) and enc.audio_ok_for(fmt, key or "")):
         return [*args, f"-c:a:{n}", "copy"], f"audio {a.codec} copied"
-    spec = enc.audio(enc.default_audio_for(fmt), container=fmt)
+    spec = enc.default_audio(fmt)
     args += [f"{x}:{n}" if x in ("-c:a", "-b:a", "-q:a") else x for x in spec]
     return args, f"audio {a.codec} → {spec[1]}"
 

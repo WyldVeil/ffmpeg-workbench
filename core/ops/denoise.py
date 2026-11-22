@@ -7,13 +7,15 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 
-def denoise_chain(method: str, strength: float, *, gpu: bool = False) -> str:
-    """Filter chain for *strength* 1..10 (CPU chain unless *gpu*)."""
+def denoise_chain(method: str, strength: float, *, gpu: bool = False, ten_bit: bool = False) -> str:
+    """Filter chain for *strength* 1..10 (CPU chain unless *gpu*; *ten_bit* keeps
+    10-bit precision through the GPU round trip)."""
     s = max(0.5, min(10.0, strength))
     if method == "nlm":
         sigma = 1.0 + s * 0.8
         if gpu:
-            return f"format=yuv420p,hwupload,nlmeans_vulkan=s={sigma:.2f}:p=7:r=15,hwdownload,format=yuv420p"
+            fmt = "yuv420p10le" if ten_bit else "yuv420p"
+            return f"format={fmt},hwupload,nlmeans_vulkan=s={sigma:.2f}:p=7:r=15,hwdownload,format={fmt}"
         return f"nlmeans=s={sigma:.2f}:p=7:r=15"
     if method == "temporal":
         return (

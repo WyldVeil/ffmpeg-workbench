@@ -1124,12 +1124,8 @@ class ScreenRecorderTab(BaseTab):
             "slow": "slow",
         }.get(self.preset_var.get(), "fastest")
         ve = enc.video(codec, quality, speed=speed, hw=hw, container=ext.lstrip("."))
-        if (
-            self.chroma.value is Chroma.FULL
-            and ve.encoder in ("libx264", "libx265", "h264_nvenc", "hevc_nvenc")
-            and "-pix_fmt" in ve.args
-        ):
-            ve.args[ve.args.index("-pix_fmt") + 1] = "yuv444p"
+        if self.chroma.value is Chroma.FULL:
+            enc.full_chroma(ve)
         region = window = None
         if self.capture_mode_var.get() == "window":
             window = self.window_title_var.get().strip()

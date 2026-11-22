@@ -155,9 +155,9 @@ class DenoiseTab(BaseTab):
         if not out:
             return
         gpu = self._method() == "nlm" and fl.vulkan_ok()
-        chain = denoise_chain(self._method(), float(self.strength_var.get()), gpu=gpu)
-        if gpu and self.encoder.ten_bit:
-            chain = chain.replace("format=yuv420p", "format=yuv420p10le")
+        chain = denoise_chain(
+            self._method(), float(self.strength_var.get()), gpu=gpu, ten_bit=self.encoder.ten_bit
+        )
         common.render(
             self,
             RenderJob(

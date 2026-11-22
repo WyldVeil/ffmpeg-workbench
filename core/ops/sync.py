@@ -56,4 +56,4 @@ def reencode_cmd(src: str, out: str, offset: float, track: int, duration: float)
         f"0:a:{track}",
     ]
     cmd += ["-af", reencode_filter(offset) + ",apad", "-t", f"{duration:.3f}"]
-    return [*cmd, *enc.audio(enc.default_audio_for(container), container=container), out]
+    return [*cmd, *enc.default_audio(container), out]

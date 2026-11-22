@@ -128,5 +128,5 @@ def tighten_cmd(
     ]
     if venc is None:
         return [*cmd, "-map", "[a]", *audio_encoder_args(out), out]
-    audio = enc.audio(enc.default_audio_for(container), container=container)
+    audio = enc.default_audio(container)
     return [*cmd, "-map", "[v]", "-map", "[a]", *venc.args, *audio, out]

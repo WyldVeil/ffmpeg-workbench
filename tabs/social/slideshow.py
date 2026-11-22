@@ -777,7 +777,7 @@ class SlideshowMakerTab(BaseTab):
             video=tuple(venc.args),
             pre_input=tuple(venc.pre_input),
             filter_suffix=venc.filter_suffix,
-            audio=tuple(enc.audio(enc.default_audio_for(container), container=container)),
+            audio=tuple(enc.default_audio(container)),
         )
         caption_style = (
             self.cap_font.get(),

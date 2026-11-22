@@ -54,7 +54,7 @@ def replace_cmd(src: str, audio: str, out: str, info: ff.MediaInfo, r: Replaceme
     cmd = [ff.ffmpeg_path(), "-y", "-i", src, *loop, "-i", audio, "-filter_complex", graph]
     cmd += ["-map", "0:v", "-c:v", "copy", "-map", "[a]"]
     cmd += [
-        *enc.audio(enc.default_audio_for(container), container=container),
+        *enc.default_audio(container),
         "-t",
         f"{info.duration:.3f}",
     ]
