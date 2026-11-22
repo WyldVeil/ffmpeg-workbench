@@ -496,6 +496,7 @@ def build_windows(python_embed: str, iscc: str) -> str:
     with open(os.path.join(stage, "wme-cli.bat"), "w", encoding="utf-8", newline="\r\n") as fh:
         fh.write('@echo off\r\nrem Command line for scripts and AI assistants - see app\\AGENTS.md\r\n'
                  '"%~dp0python\\python.exe" "%~dp0app\\main.py" --cli %*\r\n')
+    check_no_build_paths(stage)
     iss = os.path.join(ROOT, "packaging", "windows", "release.iss")
     argv = shlex.split(iscc) + [f"/DAppVersion={APP_VERSION}", f"/DStageDir={_win_path(stage)}",
                                 f"/O{_win_path(OUT)}", _win_path(iss)]
@@ -517,6 +518,8 @@ def _stage_windows(python_embed: str, python_dir: str, app_dir: str) -> None:
                     "--target", os.path.join(app_dir, "libs"), "--platform", "win_amd64",
                     "--python-version", f"{ver[0]}.{ver[1:]}", "--only-binary=:all:", "--no-deps",
                     "--require-hashes", "-r", os.path.join(ROOT, "packaging", "bundled-libs.txt")], check=True)
+    # pip's console scripts start with the path of the Python that ran the build: not wanted
+    shutil.rmtree(os.path.join(app_dir, "libs", "bin"), ignore_errors=True)
 
 
 # ── Portable ──────────────────────────────────────────────────────────────────
@@ -629,6 +632,35 @@ def _win_path(path: str) -> str:
     return "Z:" + os.path.abspath(path).replace("/", "\\")
 
 
+def check_no_build_paths(path: str) -> None:
+    """Fail the build if a release file contains the build machine's home folder
+    (e.g. a script whose first line names the Python that ran pip)."""
+    import zipfile
+    needle = os.path.expanduser("~").encode()
+    if len(needle) < 4:
+        return
+    found = []
+    if path.endswith(".zip"):
+        with zipfile.ZipFile(path) as zf:
+            found = [n for n in zf.namelist() if needle in zf.read(n)]
+    elif path.endswith(".tar.gz"):
+        with tarfile.open(path) as tf:
+            for m in tf:
+                f = tf.extractfile(m) if m.isfile() else None
+                if f is not None and needle in f.read():
+                    found.append(m.name)
+    elif os.path.isdir(path):
+        for dirpath, _dirs, files in os.walk(path):
+            for name in files:
+                full = os.path.join(dirpath, name)
+                with open(full, "rb") as fh:
+                    if needle in fh.read():
+                        found.append(os.path.relpath(full, path))
+    if found:
+        raise SystemExit(f"{os.path.basename(path)} contains the build machine's home folder in:\n  "
+                         + "\n  ".join(found[:20]))
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--linux", action="store_true")
@@ -646,6 +678,9 @@ def main(argv=None) -> int:
         built += [build_portable_windows(args.python_embed), build_windows(args.python_embed, args.iscc)]
     if not built:
         ap.error("choose --linux and/or --windows")
+    for path in built:
+        if not path.endswith((".exe", ".deb")):      # the installer and .debs: checked through their contents
+            check_no_build_paths(path)
     for path in built:
         h = hashlib.sha256()
         with open(path, "rb") as fh:
