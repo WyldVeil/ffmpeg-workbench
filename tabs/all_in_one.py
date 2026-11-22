@@ -263,6 +263,9 @@ class AllInOneTab(BaseTab):
         self._duration   = 0.0    # loaded video duration - needed for fade-out math
         self._last_cmd   = []     # most recently built command list
         self._build_ui()
+        from tabs.widgets import add_pickers
+        add_pickers(self, [self._trim_start, self._trim_end, self._text_start, self._text_end],
+                    lambda: self._src_var.get().strip())
 
     # ─────────────────────────────────────────────────────────────────────
     #  Top-level layout

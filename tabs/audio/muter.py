@@ -14,8 +14,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
+from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
@@ -67,11 +66,9 @@ class MuterTab(BaseTab):
         mark = tk.Frame(pv)
         mark.pack(fill="x")
         self.a_var, self.b_var = tk.StringVar(), tk.StringVar()
-        tk.Button(mark, text="Start here", relief="flat",
-                  command=lambda: self.a_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
+        tk.Button(mark, text="Start here", relief="flat", command=self.mark_in).pack(side="left")
         tk.Entry(mark, textvariable=self.a_var, width=11).pack(side="left", padx=px(2))
-        tk.Button(mark, text="End here", relief="flat",
-                  command=lambda: self.b_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
+        tk.Button(mark, text="End here", relief="flat", command=self.mark_out).pack(side="left")
         tk.Entry(mark, textvariable=self.b_var, width=11).pack(side="left", padx=px(2))
         tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(side="left", padx=px(4))
         right = tk.Frame(top)
@@ -121,6 +118,13 @@ class MuterTab(BaseTab):
         self.listbox.delete(0, "end")
         for x, y in self.ranges:
             self.listbox.insert("end", f"{ff.format_time(x)}  →  {ff.format_time(y)}   ({y - x:.2f}s)")
+
+    # i / o (and the buttons): the moment starts / ends at the frame shown
+    def mark_in(self):
+        self.a_var.set(ff.format_time(float(self.pos_var.get())))
+
+    def mark_out(self):
+        self.b_var.set(ff.format_time(float(self.pos_var.get())))
 
     def _add(self):
         try:

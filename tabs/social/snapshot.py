@@ -25,11 +25,11 @@ import tkinter as tk
 from tkinter import ttk
 
 from core import ffmpeg as ff
-from core.hardware import CREATE_NO_WINDOW
-from core.procenv import child_env
 from core import filters as fl
 from core import hdr
+from core.hardware import CREATE_NO_WINDOW
 from core.i18n import t
+from core.procenv import child_env
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip, reveal_file
@@ -400,8 +400,8 @@ class SnapshotTab(BaseTab):
         self.size_lbl.config(text=f"{w}×{h} PNG, {bits}")
 
     def _detect_bars(self):
-        from tabs.social.auto_cropper import detect_bars
         from core import ui
+        from tabs.social.auto_cropper import detect_bars
         path, info = self.file_path, self._info
 
         def done(box):

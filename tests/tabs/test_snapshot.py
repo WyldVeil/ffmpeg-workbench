@@ -139,13 +139,18 @@ def test_keys_leave_text_boxes_alone(ui, media):
     framestep.touch(tab.slider)
     import tkinter as tk
     entry = next(w for w in ui.walk(tab) if isinstance(w, tk.Entry))
-    entry.focus_force()
-    ui.pump(0.1)
-    assert framestep.on_key(ui.app, None, 1) is None       # typing a full stop must still work
-    assert tab._frame() == 0
-    tab.slider.focus_force()
-    ui.pump(0.1)
-    assert framestep.on_key(ui.app, None, 1) == "break" and tab._frame() == 1
+    real = ui.app.focus_get
+    try:
+        ui.app.focus_get = lambda: entry                       # the cursor is in a text box
+        assert framestep.on_key(ui.app, None, 1) is None       # typing a full stop must still work
+        assert tab._frame() == 0
+        ui.app.focus_get = lambda: tab.slider
+    finally:
+        pass
+    try:
+        assert framestep.on_key(ui.app, None, 1) == "break" and tab._frame() == 1
+    finally:
+        ui.app.focus_get = real
 
 
 @pytest.mark.gui
@@ -169,3 +174,83 @@ def test_timeline_handles_step_by_frame(ui, media):
     row = tab.split_rows[-1]
     assert row["start"].get() == "00:00:00.100"               # the new range comes from the timeline
     assert ff.parse_time(row["end"].get()) == pytest.approx(end, abs=0.001)
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_gif_maker_frame_steps_then_i_and_o(ui, media):
+    ui.reset()
+    tab = ui.open("Pro GIF Maker")
+    tab.load_file(media["h264"])
+    ui.pump(0.5)
+    tab.slider.focus_force()
+    framestep.touch(tab.slider)
+    ui.pump(0.1)
+    framestep.on_key(ui.app, None, 1, second=True)            # Shift+. : one second
+    ui.app._kb_set_in()                                         # i
+    for _ in range(15):
+        framestep.on_key(ui.app, None, 1)                       # .
+    ui.app._kb_set_out()                                        # o
+    assert ff.parse_time(tab.start_var.get()) == pytest.approx(1.0)
+    assert float(tab.dur_var.get()) == pytest.approx(0.5)
+
+
+@pytest.mark.gui
+@pytest.mark.parametrize("tool,expected", [("Special Effects", 10), ("Universal Downsizer", 2),
+                                           ("WebM Maker", 2), ("All-in-One Builder", 4)])
+def test_frame_pickers_next_to_time_fields(ui, tool, expected):
+    """Tools without a preview get a 🎞 button next to each start / end time."""
+    import tkinter as tk
+    ui.reset()
+    tab = ui.open(tool)
+    found = sum(1 for w in ui.walk(tab) if isinstance(w, tk.Button) and w.cget("text") == "🎞")
+    assert found == expected
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+def test_frame_picker_fills_the_field(ui, media):
+    import tkinter as tk
+    from tabs.widgets import FramePicker
+    var = tk.StringVar(value="1.0")
+    picker = FramePicker(ui.app, media["h264"], var)
+    ui.pump(0.3)
+    assert float(picker.pos.get()) == pytest.approx(1.0)
+    for _ in range(3):
+        picker.event_generate("<period>")
+    picker.event_generate("<less>")                            # Shift+, : a second back
+    ui.pump(0.2)
+    picker._use()
+    assert ff.parse_time(var.get()) == pytest.approx(0.1)
+
+
+@pytest.mark.gui
+@pytest.mark.ffmpeg
+@pytest.mark.parametrize("tool", ["Privacy Blur", "Image Watermark", "Picture-in-Picture", "Animated Zoom",
+                                  "Animated Titles", "Chapter Markers", "Clip Looper", "The Muter"])
+def test_i_and_o_use_the_frame_shown(ui, media, tool):
+    ui.reset()
+    tab = ui.open(tool)
+    tab.load_file(media["h264"])
+    ui.pump(0.6)
+    assert hasattr(tab, "mark_in"), tool
+    before = {k: v.get() for k, v in vars(tab).items() if isinstance(v, __import__("tkinter").Variable)}
+    target = next(w for w in framestep._order if w() is not None and framestep._inside(w(), tab))()
+    framestep.touch(target)
+    start = float(target.get())                                 # previews start part-way in
+    want = framestep.snap(start, 30, 36)                          # + 1 s + 6 frames at 30 fps
+    framestep.on_key(ui.app, None, 1, second=True)
+    for _ in range(6):
+        framestep.on_key(ui.app, None, 1)
+    ui.app._kb_set_in()
+    ui.pump(0.2)
+    after = {k: v.get() for k, v in vars(tab).items() if isinstance(v, __import__("tkinter").Variable)}
+    changed = [k for k in after if after[k] != before.get(k)]
+    if tool == "Chapter Markers":
+        assert any(abs(c.time - want) < 0.01 for c in tab.chapters), tab.chapters
+    elif tool == "Animated Titles":
+        assert ff.parse_time(tab._card()["vars"]["start"].get()) == pytest.approx(want)
+    elif tool == "Animated Zoom":
+        assert ff.parse_time(tab.vars["p_start"].get()) == pytest.approx(want)
+    else:
+        assert any(ff.format_time(want) in str(after[k]) for k in changed), (want, changed, after)

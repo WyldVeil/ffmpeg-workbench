@@ -21,8 +21,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.3_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.3-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.4_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.4-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +34,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.3_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `wyldveils-media-editor_1.2.3_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.3_ubuntu_amd64.deb` |
-| **Debian** | `wyldveils-media-editor_1.2.3_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.3_debian_amd64.deb` |
-| **Fedora** | `wyldveils-media-editor-1.2.3-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `wyldveils-media-editor-1.2.3-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.4_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `wyldveils-media-editor_1.2.4_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.4_ubuntu_amd64.deb` |
+| **Debian** | `wyldveils-media-editor_1.2.4_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.4_debian_amd64.deb` |
+| **Fedora** | `wyldveils-media-editor-1.2.4-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `wyldveils-media-editor-1.2.4-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -51,6 +51,15 @@ or drop in a file. Here, a phone clip contains a GPS location, so the first
 suggestion is to remove it before sharing.
 
 ![Suggestions for a dropped file](screenshots/start-suggestions.png)
+
+### Snapshot
+
+Save any frame as a full-size PNG. Step through the video frame by frame with
+the `,` and `.` keys, and see exactly how the picture will look: accurate
+colours, the pixel shape corrected, HDR tone-mapped, black bars cropped if you
+like, with optional sharpening and noise reduction.
+
+![Snapshot](screenshots/29_snapshot.png)
 
 ### HDR to SDR
 
@@ -102,8 +111,10 @@ with the FFmpeg command shown (and editable) underneath.
 
 ![All-in-One Builder](screenshots/03_all_in_one_builder.png)
 
-Also: offline subtitles from speech (whisper.cpp, no uploads and no account) and
-a command line for scripts and AI assistants (see below). See the
+Also: `,` and `.` step one frame back and forward in every tool that picks a moment
+(with Shift, a second), sharp and properly sized on HiDPI screens at any scaling,
+offline subtitles from speech (whisper.cpp, no uploads and no account) and a
+command line for scripts and AI assistants (see below). See the
 [changelog](CHANGELOG.md) for everything.
 
 ## Everything inside

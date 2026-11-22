@@ -20,7 +20,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, here_button, scroll_body
 
 POSITIONS = {
     "tl": "Top left", "tc": "Top centre", "tr": "Top right", "ml": "Middle left", "c": "Centre",
@@ -107,6 +107,15 @@ def pip_graph(spec: PipSpec, bg: str = "[0:v]", fg: str = "[1:v]", out: str = "[
 
 
 class PIPTab(BaseTab):
+    # i / o: the inset shows from / until the frame shown
+    def mark_in(self):
+        self.from_var.set(ff.format_time(self.compare.position))
+        self._changed()
+
+    def mark_out(self):
+        self.to_var.set(ff.format_time(self.compare.position))
+        self._changed()
+
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
@@ -170,8 +179,12 @@ class PIPTab(BaseTab):
         tk.Label(tr, text="Show from").pack(side="left")
         self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="")
         tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
+        here_button(tr, self.from_var, lambda: self.compare.position, self._changed,
+                    "From the frame shown (i)").pack(side="left")
         tk.Label(tr, text="until").pack(side="left")
         tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
+        here_button(tr, self.to_var, lambda: self.compare.position, self._changed,
+                    "Until the frame shown (o)").pack(side="left")
         tk.Label(tr, text="(empty = until the inset ends)", fg=CLR["fgdim"]).pack(side="left")
         ar = tk.Frame(opt)
         ar.grid(row=4, column=0, columnspan=3, sticky="w", pady=px(3))

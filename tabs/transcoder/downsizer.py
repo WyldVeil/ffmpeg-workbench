@@ -29,7 +29,7 @@ from core import filters as fl
 from core.i18n import t
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import FileRow, scroll_body
+from tabs.widgets import FileRow, add_pickers, scroll_body
 from core.scaling import px
 
 TARGETS = [("8 MB", 8), ("10 MB - Discord", 10), ("18 MB - safe for email", 18), ("25 MB", 25),
@@ -120,6 +120,7 @@ class UniversalDownsizerTab(BaseTab):
         self._info = None
         self._job = None
         self._build_ui()
+        add_pickers(self, [self.start_var, self.end_var], lambda: self.src_row.path)   # 🎞 next to the trim
 
     def _build_ui(self):
         self.make_header(self, t("tab.universal_downsizer"), "Shrink a video to fit a size limit, at the best "

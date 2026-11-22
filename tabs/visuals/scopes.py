@@ -18,6 +18,7 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs import common
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 from core.scaling import px
+from tabs import framestep
 
 # key: (label, filter chain, display aspect (w/h) or None = same as video, help)
 SCOPES = {
@@ -124,6 +125,7 @@ class VideoScopesTab(BaseTab):
         self.slider = ttk.Scale(bar, from_=0.0, to=1.0, variable=self.pos_var,
                                 command=lambda _v: self._moved())
         self.slider.pack(side="left", fill="x", expand=True)
+        framestep.slider(self.slider, lambda: framestep.fps_of(self.src_row.path))
         self.time_lbl = tk.Label(bar, text="", width=12, bg=CLR["bg"], fg=CLR["fgdim"])
         self.time_lbl.pack(side="left", padx=px(6))
         tk.Button(bar, text="Save snapshot…", relief="flat", cursor="hand2",

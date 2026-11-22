@@ -18,10 +18,9 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
+from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, here_button, scroll_body
 
 MODES = {"punch": "Punch-in (zoom in at a moment, then back out)", "kenburns": "Ken Burns (slow move over the clip)",
          "keyframes": "Keyframe pan (from one framing to another)", "pulse": "Zoom pulse (quick bump)"}
@@ -87,6 +86,21 @@ def zoom_filter(exprs: tuple, size: tuple, fps: str, *, gpu: bool, pix_fmt: str 
 
 
 class AnimatedZoomTab(BaseTab):
+    # i / o: the move starts / ends at the frame shown (for the chosen kind of move)
+    _MARKS = {"punch": ("p_start", "p_end"), "keyframes": ("k_t0", "k_t1"), "pulse": ("u_time", None)}
+
+    def _mark(self, which):
+        key = next((k for k, v in MODES.items() if v == self.mode_var.get()), "")
+        name = self._MARKS.get(key, (None, None))[which]
+        if name:
+            self.vars[name].set(ff.format_time(float(self.pos_var.get())))
+
+    def mark_in(self):
+        self._mark(0)
+
+    def mark_out(self):
+        self._mark(1)
+
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
@@ -125,6 +139,12 @@ class AnimatedZoomTab(BaseTab):
             v[key].trace_add("write", lambda *_a: self._changed())
             return tk.Entry(parent, textvariable=v[key], width=width)
 
+        def time_entry(parent, key, default, width=8):
+            box = tk.Frame(parent)
+            entry(box, key, default, width).pack(side="left")
+            here_button(box, v[key], lambda: float(self.pos_var.get())).pack(side="left")
+            return box
+
         def labelled(parent, *items):
             row = tk.Frame(parent)
             row.pack(anchor="w", pady=px(2))
@@ -132,7 +152,7 @@ class AnimatedZoomTab(BaseTab):
                 (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(side="left", padx=px(2))
 
         f = self.frames["punch"] = tk.Frame(opt)
-        labelled(f, "From", lambda r: entry(r, "p_start", "1", 8), "to", lambda r: entry(r, "p_end", "3", 8),
+        labelled(f, "From", lambda r: time_entry(r, "p_start", "1"), "to", lambda r: time_entry(r, "p_end", "3"),
                  "  zoom ×", lambda r: entry(r, "p_zoom", "1.5", 5))
         labelled(f, "Keep in view - X %", lambda r: entry(r, "p_x", "50", 5), "Y %", lambda r: entry(r, "p_y", "40", 5))
         f = self.frames["kenburns"] = tk.Frame(opt)
@@ -142,12 +162,12 @@ class AnimatedZoomTab(BaseTab):
         labelled(f, lambda r: kb, "  zoom ×", lambda r: entry(r, "kb_zoom", "1.3", 5))
         f = self.frames["keyframes"] = tk.Frame(opt)
         labelled(f, "Start: X %", lambda r: entry(r, "k_x0", "50", 5), "Y %", lambda r: entry(r, "k_y0", "50", 5),
-                 "zoom ×", lambda r: entry(r, "k_z0", "1.0", 5), "  at", lambda r: entry(r, "k_t0", "0", 8))
+                 "zoom ×", lambda r: entry(r, "k_z0", "1.0", 5), "  at", lambda r: time_entry(r, "k_t0", "0"))
         labelled(f, "End:   X %", lambda r: entry(r, "k_x1", "70", 5), "Y %", lambda r: entry(r, "k_y1", "35", 5),
-                 "zoom ×", lambda r: entry(r, "k_z1", "1.6", 5), "  at", lambda r: entry(r, "k_t1", "", 8),
+                 "zoom ×", lambda r: entry(r, "k_z1", "1.6", 5), "  at", lambda r: time_entry(r, "k_t1", ""),
                  "(empty = the end)")
         f = self.frames["pulse"] = tk.Frame(opt)
-        labelled(f, "At", lambda r: entry(r, "u_time", "1", 8), "lasting", lambda r: entry(r, "u_dur", "0.4", 5),
+        labelled(f, "At", lambda r: time_entry(r, "u_time", "1"), "lasting", lambda r: entry(r, "u_dur", "0.4", 5),
                  "s   zoom ×", lambda r: entry(r, "u_zoom", "1.3", 5))
         labelled(f, "Keep in view - X %", lambda r: entry(r, "u_x", "50", 5), "Y %", lambda r: entry(r, "u_y", "50", 5))
         er = self._ease_row = tk.Frame(opt)

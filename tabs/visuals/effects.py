@@ -202,6 +202,19 @@ class SpecialEffectsTab(BaseTab):
     def __init__(self, parent):
         super().__init__(parent)
         self._build_ui()
+        self._add_frame_pickers()
+
+    #: the effects' "at" times, each picked from frames of its own source video
+    PICKED_TIMES = ("_em_start", "_lt_start", "_sub_start", "_cd_start", "_rgb_start", "_ll_start",
+                    "_sh_start", "_zp_at", "_wp_at", "_mc_start")
+
+    def _add_frame_pickers(self):
+        from tabs.widgets import add_pickers
+        self._pickers = 0
+        for name in self.PICKED_TIMES:
+            src = getattr(self, name.rsplit("_", 1)[0] + "_src")
+            self._pickers += add_pickers(self, [getattr(self, name)], lambda s=src: s.get().strip(),
+                                         fmt=lambda t: f"{t:.3f}".rstrip("0").rstrip(".") or "0")
 
     # ── Shared plumbing for every effect ──────────────────────────────────
     #: Appended to every video chain: even dimensions, square pixels and

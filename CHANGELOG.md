@@ -19,6 +19,19 @@
   Frame, Clip Looper, GIF Maker, Frame Extractor, Manual Crop and more. Steps
   land exactly on frames, so cuts can be frame-accurate. Typing a comma or
   full stop in a text box still types it.
+- **Set a start or end from the frame shown** wherever a tool has a preview:
+  the i and o keys and ◉ buttons in GIF Maker (new End here button, which
+  sets the length), Clip Looper, The Muter, the Multi-Clip Sequencer, Privacy
+  Blur (new To here), Image Watermark and Picture-in-Picture ("only from /
+  to"), Animated Zoom (its from / to / at times) and Animated Titles (each
+  card's start and end); i adds a chapter in Chapter Markers. i and o now
+  also work straight after stepping with , and . (they were ignored while the
+  position slider had the keyboard).
+- **🎞 Pick a frame** for the start / end times of tools without a preview
+  (WebM Maker, Universal Downsizer, the All-in-One Builder's trim and text
+  times, and every Special Effects "at" time): a small window with the
+  frame, a slider, ◀ ▶ and the , and . keys; Enter uses that frame.
+- Video Scopes and Chapter Markers' sliders step frame by frame too.
 
 ### Fixed
 

@@ -218,6 +218,8 @@ class WebMTab(BaseTab):
         self._lock_updating = False      # prevents slider feedback loops
         self._task_id = None
         self._build_ui()
+        from tabs.widgets import add_pickers
+        add_pickers(self, [self.simple_start_var, self.simple_end_var], lambda: self.src_row.path)
 
     # ═════════════════════════════════════════════════════════════════════════
     #  UI

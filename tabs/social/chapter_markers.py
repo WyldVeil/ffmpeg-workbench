@@ -26,6 +26,7 @@ from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
 from tabs.widgets import scroll_body
 from core.i18n import t
 from core.scaling import px
+from tabs import framestep
 
 
 def _fmt_yt(secs: float) -> str:
@@ -131,9 +132,10 @@ class ChapterMarkersTab(BaseTab):
 
         self.timeline = tk.Scale(scrub_lf, from_=0, to=100,
                                   orient="horizontal", length=px(700),
-                                  resolution=0.1,
+                                  resolution=0.001,
                                   command=self._on_scrub)
         self.timeline.pack(fill="x")
+        framestep.slider(self.timeline, lambda: framestep.fps_of(self.file_path))
 
         ts_row = tk.Frame(scrub_lf); ts_row.pack(fill="x", pady=px(4))
         tk.Label(ts_row, text=t("chapter_markers.current_position_label")).pack(side="left")
@@ -285,6 +287,10 @@ class ChapterMarkersTab(BaseTab):
 
     def _jump_pct(self, pct):
         self.timeline.set(self._duration * pct / 100)
+
+    def mark_in(self):
+        """i: a chapter starts at the position shown."""
+        self._mark_here()
 
     def _mark_here(self):
         secs = float(self.timeline.get())

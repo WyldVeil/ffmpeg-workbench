@@ -19,8 +19,7 @@ from core import ffmpeg as ff
 from core import quality as q
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
+from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
 

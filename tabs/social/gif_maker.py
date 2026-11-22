@@ -15,8 +15,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
+from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, FramePreview, scroll_body
 
@@ -36,6 +35,19 @@ def gif_graph(fps: float, width: int, colours: int, dither: str) -> str:
 
 
 class GIFMakerTab(BaseTab):
+    # i / o (and the buttons): the GIF starts / ends at the frame shown
+    def mark_in(self):
+        self.start_var.set(ff.format_time(float(self.pos_var.get())))
+
+    def mark_out(self):
+        try:
+            start = ff.parse_time(self.start_var.get() or "0")
+        except ValueError:
+            start = 0.0
+        length = float(self.pos_var.get()) - start
+        if length > 0:
+            self.dur_var.set(f"{length:.3f}".rstrip("0").rstrip("."))
+
     def __init__(self, parent):
         super().__init__(parent)
         self.src_var = tk.StringVar()
@@ -59,8 +71,8 @@ class GIFMakerTab(BaseTab):
                                 command=lambda _v: self.preview.show(float(self.pos_var.get())))
         self.slider.pack(side="left", fill="x", expand=True)
         framestep.slider(self.slider, self.preview)      # , and . step a frame
-        tk.Button(bar, text="Start here", relief="flat",
-                  command=lambda: self.start_var.set(ff.format_time(float(self.pos_var.get())))).pack(side="left")
+        tk.Button(bar, text="Start here", relief="flat", command=self.mark_in).pack(side="left")
+        tk.Button(bar, text="End here", relief="flat", command=self.mark_out).pack(side="left")
 
         opt = tk.LabelFrame(body, text="  GIF  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))

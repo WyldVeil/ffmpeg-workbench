@@ -34,8 +34,8 @@ from core import encoders
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
 from core.skins import MONO_FONT, UI_FONT
+from tabs import framestep
 
 
 def _clr():
@@ -474,3 +474,130 @@ class EncoderPanel(tk.Frame):
             pass
         if notify and self._on_change:
             self._on_change()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  here_button
+# ─────────────────────────────────────────────────────────────────────────────
+
+def here_button(parent, var: tk.StringVar, get_pos: Callable[[], float],
+                on_set: Optional[Callable[[], None]] = None,
+                tip: str = "Use the frame shown in the preview") -> tk.Button:
+    """A small ◉ button that puts the preview's position (to the millisecond,
+    so frame-exact after , and . stepping) into the time field *var*."""
+    from tabs.base_tab import add_tooltip
+
+    def use():
+        var.set(ff.format_time(max(0.0, float(get_pos()))))
+        if on_set is not None:
+            on_set()
+
+    btn = tk.Button(parent, text="◉", relief="flat", width=2, cursor="hand2", command=use)
+    add_tooltip(btn, tip)
+    return btn
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  FramePicker - choose a time by looking at the frames (for tools without a preview)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FramePicker(tk.Toplevel):
+    """A small window to find a moment: the frame, a slider, ◀ ▶ buttons and
+    the , and . keys (Shift: a second).  "Use this frame" puts its time into
+    *var*."""
+
+    def __init__(self, parent, path: str, var: tk.StringVar,
+                 fmt: Callable[[float], str] = ff.format_time, title: str = "Pick a frame"):
+        super().__init__(parent)
+        clr = _clr()
+        self.configure(bg=clr["bg"])
+        self.title(title)
+        self.transient(parent.winfo_toplevel())
+        self._var, self._fmt = var, fmt
+        info = ff.try_probe(path)
+        self._fps = framestep.fps_of(path)
+        dur = info.duration if info else 0.0
+        self.preview = FramePreview(self, 480, 270, show_time=False)
+        self.preview.pack(padx=px(12), pady=px(12, 4))
+        self.pos = tk.DoubleVar(value=0.0)
+        self.slider = ttk.Scale(self, from_=0.0, to=max(0.0, dur - 1.0 / self._fps), variable=self.pos,
+                                command=lambda _v: self._moved())
+        self.slider.pack(fill="x", padx=px(12))
+        framestep.slider(self.slider, lambda: self._fps)
+        bar = tk.Frame(self, bg=clr["bg"])
+        bar.pack(fill="x", padx=px(12), pady=px(6))
+        for label, frames, seconds in (("◀◀", 0, -1), ("◀", -1, 0), ("▶", 1, 0), ("▶▶", 0, 1)):
+            tk.Button(bar, text=label, relief="flat", width=3,
+                      command=lambda f=frames, s=seconds: framestep.step(self.slider, f, s)).pack(side="left")
+        self.time_lbl = tk.Label(bar, text="", bg=clr["bg"], fg=clr["accent"], font=(MONO_FONT, 10, "bold"))
+        self.time_lbl.pack(side="left", padx=px(10))
+        tk.Button(bar, text="Cancel", relief="flat", command=self.destroy).pack(side="right")
+        tk.Button(bar, text="✓  Use this frame", bg=clr["green"], fg="white", relief="flat",
+                  command=self._use).pack(side="right", padx=px(6))
+        tk.Label(self, text="Keys:  ,  and  .  one frame   ·   with Shift, one second   ·   Enter to use it",
+                 bg=clr["bg"], fg=clr["fgdim"], font=(UI_FONT, 8)).pack(pady=px(0, 8))
+        for key, frames, seconds in (("<comma>", -1, 0), ("<period>", 1, 0), ("<less>", 0, -1),
+                                     ("<semicolon>", 0, -1), ("<greater>", 0, 1), ("<colon>", 0, 1)):
+            self.bind(key, lambda _e, f=frames, s=seconds: framestep.step(self.slider, f, s))
+        self.bind("<Return>", lambda _e: self._use())
+        self.bind("<Escape>", lambda _e: self.destroy())
+        try:
+            start = ff.parse_time(var.get()) if var.get().strip() else 0.0
+        except ValueError:
+            start = 0.0
+        start = min(float(self.slider.cget("to")), max(0.0, framestep.snap(start, self._fps)))
+        self.preview.load(path, dur, start)
+        self.pos.set(start)
+        self._moved()
+        self.slider.focus_set()
+        try:
+            self.grab_set()
+        except tk.TclError:
+            pass
+
+    def _moved(self):
+        at = framestep.snap(float(self.pos.get()), self._fps)
+        self.time_lbl.config(text=f"{ff.format_time(at)}   ·   frame {int(round(at * self._fps)) + 1:,}")
+        self.preview.show(at)
+
+    def _use(self):
+        self._var.set(self._fmt(framestep.snap(float(self.pos.get()), self._fps)))
+        self.destroy()
+
+
+def pick_button(parent, var: tk.StringVar, get_path: Callable[[], Optional[str]],
+                fmt: Callable[[float], str] = ff.format_time) -> tk.Button:
+    """A 🎞 button that opens a :class:`FramePicker` for the time field *var*."""
+    from tabs.base_tab import add_tooltip
+
+    def open_picker():
+        path = get_path()
+        if not path or not os.path.isfile(path):
+            from tkinter import messagebox
+            messagebox.showinfo("Pick a frame", "Choose a video first.", parent=parent)
+            return
+        FramePicker(parent, path, var, fmt)
+
+    btn = tk.Button(parent, text="🎞", relief="flat", width=2, cursor="hand2", command=open_picker)
+    add_tooltip(btn, "Find the moment by looking at the frames (, and . step one frame)")
+    return btn
+
+
+def add_pickers(root, variables, get_path: Callable[[], Optional[str]],
+                fmt: Callable[[float], str] = ff.format_time) -> int:
+    """Put a 🎞 button right after the entry of each time field in *variables*
+    (looked up under *root*).  Returns how many were added."""
+    names = {str(v): v for v in variables}
+    added = 0
+    todo = [root]
+    while todo:
+        w = todo.pop()
+        todo.extend(w.winfo_children())
+        try:
+            tv = str(w.cget("textvariable")) if w.winfo_class() in ("Entry", "Spinbox", "TEntry") else ""
+        except tk.TclError:
+            tv = ""
+        if tv in names and w.winfo_manager() == "pack":
+            pick_button(w.master, names[tv], get_path, fmt).pack(side="left", after=w)
+            added += 1
+    return added

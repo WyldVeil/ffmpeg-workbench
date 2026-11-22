@@ -23,8 +23,10 @@ def test_hex_to_ass_colour():
 
 
 def test_concat_line_quotes():
-    line = fl.concat_line("/tmp/it's here.mp4")
-    assert line == "file '/tmp/it'\\''s here.mp4'"
+    path = os.path.abspath("/tmp/it's here.mp4")          # a drive letter and backslashes on Windows
+    line = fl.concat_line(path)
+    assert line == "file '" + path.replace("'", "'\\''") + "'"
+    assert line.endswith("it'\\''s here.mp4'")
 
 
 def test_write_ffmetadata(tmp_path):

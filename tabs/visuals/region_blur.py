@@ -16,8 +16,7 @@ from typing import Optional
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
+from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
@@ -152,9 +151,10 @@ class RegionBlurTab(BaseTab):
         tk.Label(tf, text="(empty = to the end)", fg=CLR["fgdim"]).pack(side="left")
         tk.Button(ed, text="Apply to region", relief="flat", command=self._apply_edit).grid(row=2, column=0,
                                                                                             sticky="w", pady=px(2))
-        tk.Button(ed, text="From here", relief="flat",
-                  command=lambda: self.from_var.set(ff.format_time(float(self.pos_var.get())))).grid(
-            row=2, column=1, sticky="w")
+        here = tk.Frame(ed)
+        here.grid(row=2, column=1, sticky="w")
+        tk.Button(here, text="From here", relief="flat", command=self.mark_in).pack(side="left")
+        tk.Button(here, text="To here", relief="flat", command=self.mark_out).pack(side="left", padx=px(4, 0))
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
@@ -280,6 +280,17 @@ class RegionBlurTab(BaseTab):
         self.from_var.set(ff.format_time(r.start) if r.start else "0")
         self.to_var.set(ff.format_time(r.end) if r.end is not None else "")
         self._draw_regions()
+
+    # i / o (and the buttons): the selected region starts / stops at the frame shown
+    def mark_in(self):
+        self.from_var.set(ff.format_time(float(self.pos_var.get())))
+        if self._selected() is not None:
+            self._apply_edit()
+
+    def mark_out(self):
+        self.to_var.set(ff.format_time(float(self.pos_var.get())))
+        if self._selected() is not None:
+            self._apply_edit()
 
     def _apply_edit(self):
         i = self._selected()

@@ -16,8 +16,7 @@ from core import concat
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
+from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
@@ -160,6 +159,12 @@ class SequencerTab(BaseTab):
         self.preview.load(c["path"], c["duration"], c["start"])
         self.in_var.set(ff.format_time(c["start"]))
         self.out_var.set(ff.format_time(c["end"]))
+
+    def mark_in(self):
+        self._mark("in")
+
+    def mark_out(self):
+        self._mark("out")
 
     def _mark(self, which):
         (self.in_var if which == "in" else self.out_var).set(ff.format_time(float(self.pos_var.get())))

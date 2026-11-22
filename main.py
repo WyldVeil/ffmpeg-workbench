@@ -850,7 +850,7 @@ class App(tk.Tk):
             return False
         return isinstance(w, (tk.Entry, tk.Text, tk.Spinbox, tk.Listbox, ttk.Entry, ttk.Combobox,
                               ttk.Spinbox, tk.Button, ttk.Button, tk.Checkbutton, ttk.Checkbutton,
-                              tk.Radiobutton, ttk.Radiobutton, tk.Scale, ttk.Scale))
+                              tk.Radiobutton, ttk.Radiobutton))     # a slider is fine: step with , . then i / o
 
     def _kb_play_pause(self, event=None):
         if self._kb_focused_on_entry():
@@ -892,6 +892,8 @@ class App(tk.Tk):
             tl._start = tl._playhead
             tl._draw()
             tl._fire_change()
+        elif hasattr(page, "mark_in"):
+            page.mark_in()
         elif hasattr(page, "_start_var") and hasattr(page, "_scrub"):
             try:
                 from tabs.cutting.trimmer import fmt_time
@@ -912,6 +914,8 @@ class App(tk.Tk):
             tl._end = tl._playhead
             tl._draw()
             tl._fire_change()
+        elif hasattr(page, "mark_out"):
+            page.mark_out()
         elif hasattr(page, "_end_var") and hasattr(page, "_scrub"):
             try:
                 from tabs.cutting.trimmer import fmt_time

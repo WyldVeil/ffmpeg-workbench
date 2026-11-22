@@ -17,6 +17,7 @@ from core import dialogs
 import os
 
 from tabs.base_tab import BaseTab, CLR, UI_FONT, MONO_FONT
+from tabs.widgets import FramePreview
 from core.hardware import (    launch_preview,
 )
 from core.i18n import t
@@ -46,6 +47,7 @@ class ThumbnailMakerTab(BaseTab):
         self.duration = 0.0
         self.preview_proc = None
         self._build_ui()
+        self._watch_look()
 
     def _build_ui(self):
         self.make_header(self, t("tab.thumbnail_maker"),
@@ -69,6 +71,13 @@ class ThumbnailMakerTab(BaseTab):
         frame_lf = tk.LabelFrame(self, text=f"  {t('thumbnail.frame_section')}  ", padx=px(15), pady=px(10),
                                  font=(UI_FONT, 9, "bold"))
         frame_lf.pack(fill="x", padx=px(20), pady=px(8))
+
+        # Live preview of the thumbnail itself: the export's own filters (size,
+        # adjustments, text) on the chosen frame
+        self._preview = FramePreview(frame_lf, 320, 180, show_time=False)
+        self._preview.pack(side="right", padx=px(10, 0))
+        self._preview.canvas.configure(bg=CLR["bg"])
+        self._preview_job = None
 
         fr1 = tk.Frame(frame_lf)
         fr1.pack(fill="x", pady=px(3))
@@ -242,6 +251,11 @@ class ThumbnailMakerTab(BaseTab):
             self._src_var.set(p)
             self._src_typed()
 
+    def _watch_look(self):
+        for var in (self._size_var, self._brightness, self._contrast, self._saturation, self._use_text,
+                    self._text_var, self._text_size, self._text_color, self._text_pos, self._text_stroke):
+            var.trace_add("write", self._look_changed)
+
     def _src_typed(self):
         p = self._src_var.get().strip()
         if p and os.path.isfile(p) and p != getattr(self, "file_path", ""):
@@ -254,6 +268,19 @@ class ThumbnailMakerTab(BaseTab):
             self._fps = info.video.fps or 30.0
             self._dur_lbl.config(text=_fmt(self.duration))
             self._scrub.config(to=max(0.1, self.duration))
+            self._preview.load(p, self.duration, float(self._scrub_var.get()))
+            self._look_changed()
+
+    def _look_changed(self, *_a):
+        """Size, adjustments or text changed: refresh the preview (debounced)."""
+        if self._preview_job is not None:
+            self.after_cancel(self._preview_job)
+        self._preview_job = self.after(250, self._refresh_preview)
+
+    def _refresh_preview(self):
+        self._preview_job = None
+        if getattr(self, "file_path", ""):
+            self._preview.set_filter(",".join(self._build_vf()))
 
     def _browse_out(self):
         p = dialogs.asksaveasfilename(
@@ -265,6 +292,7 @@ class ThumbnailMakerTab(BaseTab):
     def _on_scrub(self, val):
         try:
             self._time_lbl.config(text=_fmt(float(val)))
+            self._preview.show(float(val))
         except (ValueError, tk.TclError):
             pass
 
@@ -272,6 +300,7 @@ class ThumbnailMakerTab(BaseTab):
         pos = max(0.0, min(self._scrub_var.get() + delta, self.duration))
         self._scrub_var.set(pos)
         self._time_lbl.config(text=_fmt(pos))
+        self._preview.show(pos)
 
     def _preview_frame(self):
         if not self.file_path:

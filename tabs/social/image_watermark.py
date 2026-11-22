@@ -17,7 +17,7 @@ from core.i18n import t
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import UI_FONT, BaseTab
-from tabs.widgets import CompareView, EncoderPanel, FileRow, scroll_body
+from tabs.widgets import CompareView, EncoderPanel, FileRow, here_button, scroll_body
 
 POSITIONS = {
     "tl": ("Top left", "M", "M"), "tc": ("Top centre", "(W-w)/2", "M"), "tr": ("Top right", "W-w-M", "M"),
@@ -100,8 +100,12 @@ class ImageWatermarkTab(BaseTab):
         tk.Checkbutton(tr, text="Only from", variable=self.window_var, command=self._changed).pack(side="left")
         self.from_var, self.to_var = tk.StringVar(value="0"), tk.StringVar(value="10")
         tk.Entry(tr, textvariable=self.from_var, width=9).pack(side="left", padx=px(2))
+        here_button(tr, self.from_var, lambda: self.compare.position, self._window_on,
+                    "From the frame shown (i)").pack(side="left")
         tk.Label(tr, text="to").pack(side="left")
         tk.Entry(tr, textvariable=self.to_var, width=9).pack(side="left", padx=px(2))
+        here_button(tr, self.to_var, lambda: self.compare.position, self._window_on,
+                    "To the frame shown (o)").pack(side="left")
         tk.Label(tr, text="  Fade (s):").pack(side="left")
         self.fade_var = tk.StringVar(value="0.5")
         tk.Entry(tr, textvariable=self.fade_var, width=5).pack(side="left")
@@ -145,6 +149,19 @@ class ImageWatermarkTab(BaseTab):
         self._changed()
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "logo"))
+
+    def _window_on(self):
+        self.window_var.set(True)
+        self._changed()
+
+    # i / o: the logo shows from / to the frame shown
+    def mark_in(self):
+        self.from_var.set(ff.format_time(self.compare.position))
+        self._window_on()
+
+    def mark_out(self):
+        self.to_var.set(ff.format_time(self.compare.position))
+        self._window_on()
 
     def _changed(self):
         if self._job is not None:

@@ -22,10 +22,9 @@ from core import ass
 from core import ffmpeg as ff
 from core.i18n import t
 from core.scaling import px
-from tabs import framestep
-from tabs import common
-from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
+from tabs import common, framestep
+from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
+from tabs.widgets import EncoderPanel, FileRow, FramePreview, here_button, scroll_body
 
 STYLES = {
     "lower_third": "Lower third (sliding bar)",
@@ -37,6 +36,12 @@ STYLES = {
 ACCENTS = {"YouTube red": "#E53935", "Electric blue": "#1565C0", "Neon green": "#00C853",
            "Gold": "#FFB300", "Purple": "#7B1FA2", "Charcoal": "#263238"}
 SIZES = {"Small": 0.8, "Medium": 1.0, "Large": 1.25}
+
+
+def _walk(widget):
+    yield widget
+    for child in widget.winfo_children():
+        yield from _walk(child)
 
 
 @dataclass
@@ -230,8 +235,14 @@ class TitlesGeneratorTab(BaseTab):
                      width=30).pack(side="left")
         tk.Label(r1, text=t("titles.start_label")).pack(side="left", padx=px(10, 2))
         tk.Entry(r1, textvariable=v["start"], width=8).pack(side="left")
+        here_button(r1, v["start"], lambda: float(self.pos_var.get()), lambda r=row: self._use(r),
+                    "Start at the frame shown (i)").pack(side="left")
         tk.Label(r1, text=t("titles.duration_label")).pack(side="left", padx=px(10, 2))
         tk.Entry(r1, textvariable=v["duration"], width=6).pack(side="left")
+        end_btn = tk.Button(r1, text="◉", relief="flat", width=2, cursor="hand2",
+                            command=lambda r=row: self._end_here(r))
+        end_btn.pack(side="left")
+        add_tooltip(end_btn, "End at the frame shown (o) - sets the duration")
         swatch = tk.Button(r1, text="  ", bg=card.accent, relief="flat", width=3,
                            command=lambda r=row: self._pick_accent(r))
         swatch.pack(side="left", padx=px(10))
@@ -248,9 +259,41 @@ class TitlesGeneratorTab(BaseTab):
         tk.Entry(r2, textvariable=v["line2"], width=34).pack(side="left")
         for var in v.values():
             var.trace_add("write", lambda *_a: self._schedule())
+        for w in _walk(frame):
+            if isinstance(w, tk.Entry):
+                w.bind("<FocusIn>", lambda _e, r=row: self._use(r), add=True)
         self.rows.append(row)
+        self._active = row
         self._schedule()
         return row
+
+    # ── i / o and the ◉ buttons: a card starts / ends at the frame shown ──
+    def _use(self, row):
+        self._active = row
+
+    def _card(self):
+        row = getattr(self, "_active", None)
+        return row if row in self.rows else (self.rows[-1] if self.rows else None)
+
+    def _end_here(self, row):
+        self._use(row)
+        try:
+            start = ff.parse_time(row["vars"]["start"].get())
+        except ValueError:
+            return
+        length = float(self.pos_var.get()) - start
+        if length > 0:
+            row["vars"]["duration"].set(f"{length:.3f}".rstrip("0").rstrip("."))
+
+    def mark_in(self):
+        row = self._card()
+        if row is not None:
+            row["vars"]["start"].set(ff.format_time(float(self.pos_var.get())))
+
+    def mark_out(self):
+        row = self._card()
+        if row is not None:
+            self._end_here(row)
 
     def _remove(self, row):
         if row in self.rows:
