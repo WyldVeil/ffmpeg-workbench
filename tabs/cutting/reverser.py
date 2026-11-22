@@ -10,18 +10,12 @@ order (audio is reversed the same way and encoded once at the end).
 
 from __future__ import annotations
 
-import os
 import tkinter as tk
-from dataclasses import dataclass
 from tkinter import messagebox
 
-from core import encoders as enc
 from core import ffmpeg as ff
-from core import filters as fl
-from core.encoders import VideoEncode
 from core.i18n import t
-from core.ops.shared import final_copy_args, intermediate_args
-from core.queue_manager import TaskContext
+from core.ops import reverse as rv
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -38,127 +32,6 @@ MODES = [
     ("boomerang", "Boomerang", "Forwards, then backwards (Instagram style)."),
     ("pingpong", "Ping-pong loop", "Forwards and backwards, repeated."),
 ]
-MEMORY_BUDGET = 1.2e9  # bytes of decoded frames the reverse filter may hold
-
-
-def chunk_seconds(width: int, height: int, fps: float, budget: float = MEMORY_BUDGET) -> float:
-    frame_bytes = max(1, width * height) * 1.5 * 1.3  # yuv420p + filter overhead
-    return max(1.0, budget / frame_bytes / max(fps, 1.0))
-
-
-def reverse_chunks(start: float, end: float, chunk: float) -> list:
-    """[(a, b)] slices of [start, end] in the order they must be played once
-    each slice is reversed (latest slice first)."""
-    out, b = [], end
-    while b - start > 1e-6:
-        a = max(start, b - chunk)
-        out.append((a, b))
-        b = a
-    return out
-
-
-def plan(mode: str, dur: float, start: float, end: float, repeats: int) -> list:
-    """[('fwd'|'rev', a, b)] pieces of the output in order."""
-    if mode == "full":
-        return [("rev", 0.0, dur)]
-    if mode == "range":
-        pieces = []
-        if start > 0.01:
-            pieces.append(("fwd", 0.0, start))
-        pieces.append(("rev", start, end))
-        if end < dur - 0.01:
-            pieces.append(("fwd", end, dur))
-        return pieces
-    if mode == "boomerang":
-        return [("fwd", start, end), ("rev", start, end)]
-    return [("fwd", start, end), ("rev", start, end)] * max(1, repeats)
-
-
-@dataclass(frozen=True, kw_only=True)
-class _ReverseJob:
-    """Reversed parts are made in chunks small enough to reverse in memory
-    (each chunk reversed, the chunks in reverse order); then all are joined."""
-
-    src: str
-    pieces: list[tuple[str, float, float]]  # kind ("fwd"/"rev"), from, to
-    chunk: float
-    norm: str
-    venc: VideoEncode
-    container: str
-    audio: bool
-    total: float
-
-    def _slice_cmd(self, kind: str, sa: float, sb: float, seg: str) -> list[str]:
-        vf = ("reverse," if kind == "rev" else "") + self.norm
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            *self.venc.pre_input,
-            "-ss",
-            ff.ts(sa),
-            "-i",
-            self.src,
-            "-t",
-            ff.ts(sb - sa),
-        ]
-        cmd += ["-map", "0:v:0", *self.venc.vf_args(vf)]
-        af = "areverse" if kind == "rev" else "anull"
-        audio = ["-map", "0:a:0", "-af", af, "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
-        return [
-            *cmd,
-            *(audio if self.audio else ["-an"]),
-            *intermediate_args(self.venc),
-            seg,
-        ]
-
-    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
-        tmp = ctx.tempdir()
-        files: list[str] = []
-        cache: dict[tuple[str, float, float], list[str]] = {}
-        done, n = 0.0, 0
-        for kind, a, b in self.pieces:
-            key = (kind, a, b)
-            if key in cache:  # ping-pong reuses rendered pieces
-                files += cache[key]
-                done += b - a
-                continue
-            made: list[str] = []
-            for sa, sb in reverse_chunks(a, b, self.chunk) if kind == "rev" else [(a, b)]:
-                n += 1
-                seg = os.path.join(tmp, f"piece{n:05d}.mkv")
-                ctx.span(0.95 * done / self.total, 0.95 * (done + sb - sa) / self.total).run(
-                    self._slice_cmd(kind, sa, sb, seg), duration=sb - sa
-                )
-                done += sb - sa
-                made.append(seg)
-            cache[key] = made
-            files += made
-        lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
-        final = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            lst,
-            "-map",
-            "0:v:0",
-            "-c:v",
-            "copy",
-        ]
-        audio = [
-            "-map",
-            "0:a:0",
-            *enc.audio(enc.default_audio_for(self.container), container=self.container),
-        ]
-        final += [
-            *(audio if self.audio else ["-an"]),
-            *final_copy_args(self.venc, self.container),
-        ]
-        ctx.span(0.95, 1.0).run([*final, ctx.output()], duration=self.total)
-        return 0
 
 
 class ReverserTab(BaseTab):
@@ -283,26 +156,23 @@ class ReverserTab(BaseTab):
         if not out:
             return
         w, h = common.even_size(info)
-        chunk = chunk_seconds(w, h, info.require_video().fps or 30.0)
-        pieces = plan(mode, info.duration, start, end, repeats)
+        chunk = rv.chunk_seconds(w, h, info.require_video().fps or 30.0)
+        pieces = rv.plan(mode, info.duration, start, end, repeats)
         container = common.container_of(out)
         venc = self.encoder.video_encode(container)
-        norm = f"scale={w}:{h},setsar=1" + (
-            "" if venc.pix_fmt.endswith("10le") else ",format=yuv420p"
-        )
         total = sum(b - a for _k, a, b in pieces)
-        job = _ReverseJob(
+        job = rv.ReverseJob(
             src=src,
             pieces=pieces,
             chunk=chunk,
-            norm=norm,
+            norm=rv.normalise(w, h, venc),
             venc=venc,
             container=container,
             audio=self.audio_var.get() and info.has_audio,
             total=total,
         )
 
-        n_chunks = sum(len(reverse_chunks(a, b, chunk)) for k, a, b in pieces if k == "rev")
+        n_chunks = sum(len(rv.reverse_chunks(a, b, chunk)) for k, a, b in pieces if k == "rev")
         self.log(
             self.console,
             f"{dict((k, lbl) for k, lbl, _d in MODES)[mode]} · "

@@ -7,14 +7,14 @@ import pytest
 from core import ffmpeg as ff
 from core.ops import freeze_frame as freeze_ops
 from core.ops import looper, scenes
-from tabs.cutting import reverser
+from core.ops import reverse as rv
 
 
 def test_pure_helpers():
-    assert reverser.reverse_chunks(0, 25, 10) == [(15, 25), (5, 15), (0, 5)]
-    assert reverser.plan("range", 10, 2, 5, 1) == [("fwd", 0.0, 2), ("rev", 2, 5), ("fwd", 5, 10)]
-    assert len(reverser.plan("pingpong", 10, 0, 2, 3)) == 6
-    assert reverser.chunk_seconds(3840, 2160, 60) < reverser.chunk_seconds(1280, 720, 30)
+    assert rv.reverse_chunks(0, 25, 10) == [(15, 25), (5, 15), (0, 5)]
+    assert rv.plan("range", 10, 2, 5, 1) == [("fwd", 0.0, 2), ("rev", 2, 5), ("fwd", 5, 10)]
+    assert len(rv.plan("pingpong", 10, 0, 2, 3)) == 6
+    assert rv.chunk_seconds(3840, 2160, 60) < rv.chunk_seconds(1280, 720, 30)
     assert looper.loop_units("accel", 3, 2.0) == [(1.0, 1.0), (2.0, 1.0), (4.0, 1.0)]
     assert scenes.scene_ranges([0.0, 2.0, 5.0], 8.0) == [(0.0, 2.0), (2.0, 5.0), (5.0, 8.0)]
     freeze = freeze_ops.Freeze(mode="insert", at=1.0, hold=2.0)
@@ -43,9 +43,7 @@ def _src(ui, tab, path):
 @pytest.mark.ffmpeg
 @pytest.mark.parametrize("mode", ["full", "pingpong"])
 def test_reverser_chunked(ui, media, outdir, monkeypatch, mode):
-    monkeypatch.setattr(
-        reverser, "MEMORY_BUDGET", 1280 * 720 * 1.5 * 1.3 * 30 * 1.5
-    )  # 1.5 s chunks
+    monkeypatch.setattr(rv, "MEMORY_BUDGET", 1280 * 720 * 1.5 * 1.3 * 30 * 1.5)  # 1.5 s chunks
     ui.reset()
     tab = ui.open("Video Reverser")
     _src(ui, tab, media["h264"])

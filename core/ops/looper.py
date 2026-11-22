@@ -10,9 +10,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import encoders as enc
-from core import ffmpeg as ff
 from core import filters as fl
-from core.ops.shared import final_copy_args, intermediate_args
+from core.ops.shared import join_pieces_cmd, piece_cmd
 from core.queue_manager import TaskContext
 
 MAX_SPEED = 16.0
@@ -84,26 +83,7 @@ class LoopJob:
             + (f",{fl.atempo_chain(sp)}" if sp != 1 else "")
             + (f",volume={lv:.3f}" if lv < 1 else "")
         )
-        # -t before -i limits the SOURCE section (speed changes come after)
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            *self.venc.pre_input,
-            "-ss",
-            ff.ts(a),
-            "-t",
-            ff.ts(b - a),
-            "-i",
-            self.src,
-        ]
-        cmd += ["-map", "0:v:0", *self.venc.vf_args(vf)]
-        audio = ["-map", "0:a:0", "-af", af, "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
-        return [
-            *cmd,
-            *(audio if self.audio else ["-an"]),
-            *intermediate_args(self.venc),
-            seg,
-        ]
+        return piece_cmd(self.src, a, b - a, seg, self.venc, vf=vf, af=af if self.audio else None)
 
     def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
         tmp = ctx.tempdir()
@@ -121,28 +101,6 @@ class LoopJob:
             done += length
             files.append(made[key])
         lst = fl.write_concat_list(files, os.path.join(tmp, "list.txt"))
-        final = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            lst,
-            "-map",
-            "0:v:0",
-            "-c:v",
-            "copy",
-        ]
-        audio = [
-            "-map",
-            "0:a:0",
-            *enc.audio(enc.default_audio_for(self.container), container=self.container),
-        ]
-        final += audio if self.audio else ["-an"]
-        ctx.span(0.9, 1.0).run(
-            [*final, *final_copy_args(self.venc, self.container), ctx.output()],
-            duration=self.total,
-        )
+        join = join_pieces_cmd(lst, ctx.output(), self.venc, self.container, audio=self.audio)
+        ctx.span(0.9, 1.0).run(join, duration=self.total)
         return 0

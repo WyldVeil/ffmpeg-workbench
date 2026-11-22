@@ -193,6 +193,59 @@ def final_copy_args(venc: enc.VideoEncode, container: str) -> list[str]:
     return args
 
 
+def piece_cmd(
+    src: str,
+    start: float,
+    length: float,
+    out: str,
+    venc: enc.VideoEncode,
+    *,
+    vf: str,
+    af: str | None,
+) -> list[str]:
+    """One intermediate piece: *length* s of *src* from *start* (cut on the input,
+    so speed changes in *vf*/*af* come after), sound as PCM (*af* None: no sound)."""
+    cut = [
+        ff.ffmpeg_path(),
+        "-y",
+        *venc.pre_input,
+        "-ss",
+        ff.ts(start),
+        "-t",
+        ff.ts(length),
+        "-i",
+        src,
+    ]
+    sound = (
+        ["-map", "0:a:0", "-af", af, "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
+        if af is not None
+        else ["-an"]
+    )
+    return [*cut, "-map", "0:v:0", *venc.vf_args(vf), *sound, *intermediate_args(venc), out]
+
+
+def join_pieces_cmd(
+    listing: str, out: str, venc: enc.VideoEncode, container: str, *, audio: bool
+) -> list[str]:
+    """The pieces in the concat *listing*, joined: picture copied, sound encoded once."""
+    cmd = [
+        ff.ffmpeg_path(),
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        listing,
+        "-map",
+        "0:v:0",
+        "-c:v",
+        "copy",
+    ]
+    sound = ["-map", "0:a:0", *enc.audio(enc.default_audio_for(container), container=container)]
+    return [*cmd, *(sound if audio else ["-an"]), *final_copy_args(venc, container), out]
+
+
 def preview_audio_cmd(src: str, af: str, start: float, seconds: float, wav: str) -> list[str]:
     """A short stretch of *src*'s sound through filter *af*, as a WAV to listen to."""
     head = [ff.ffmpeg_path(), "-y", "-hide_banner", "-nostdin", "-loglevel", "error"]
