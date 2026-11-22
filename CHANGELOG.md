@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 ### Fixed
 
@@ -8,7 +8,6 @@
   150% or more, e.g. GNOME at 200%) with "X Error of failed request: BadValue
   ... X_CreatePixmap". The Start page kept widening itself until the window
   was too big for the X server.
-
 - **The preview stayed empty in Image Watermark** whenever a logo was chosen
   ("Could not decode a frame here"). The same happened in the Green Screen
   Keyer with a photo as the background, and in Picture-in-Picture with a photo

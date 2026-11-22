@@ -21,8 +21,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.2_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.2-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.3_Windows_Portable.zip` | Unzip it, then double-click **Start WyldVeil Media Editor** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `wyldveils-media-editor-1.2.3-linux-x86_64-portable.tar.gz` | Extract it, then run `./wyldveils-media-editor` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +34,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.2_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `wyldveils-media-editor_1.2.2_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.2_ubuntu_amd64.deb` |
-| **Debian** | `wyldveils-media-editor_1.2.2_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.2_debian_amd64.deb` |
-| **Fedora** | `wyldveils-media-editor-1.2.2-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `wyldveils-media-editor-1.2.2-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `WyldVeils-Media-Editor_1.2.3_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `wyldveils-media-editor_1.2.3_ubuntu_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.3_ubuntu_amd64.deb` |
+| **Debian** | `wyldveils-media-editor_1.2.3_debian_amd64.deb` | `sudo apt install ./wyldveils-media-editor_1.2.3_debian_amd64.deb` |
+| **Fedora** | `wyldveils-media-editor-1.2.3-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `wyldveils-media-editor-1.2.3-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 

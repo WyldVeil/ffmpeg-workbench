@@ -20,6 +20,12 @@
   <url type="bugtracker">https://github.com/WyldVeil/wyldveils-media-editor/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.3" date="2026-11-22">
+      <description>
+        <p>Proper HiDPI support: on a scaled screen the whole interface grows with the text, and the app no
+          longer closes at start at 150% scaling or more. Previews with a logo or photo work again.</p>
+      </description>
+    </release>
     <release version="1.2.2" date="2026-11-20">
       <description>
         <p>Portable downloads for Windows and Linux: unpack anywhere and run, nothing to install.</p>
