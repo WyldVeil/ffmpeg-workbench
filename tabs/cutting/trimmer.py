@@ -15,10 +15,10 @@ from core import ffmpeg as ff
 from core import proc as _proc
 from core import ui as _ui
 from core.hardware import (
-    get_binary_path,
     launch_preview,
 )
 from core.i18n import t
+from core.ops import trim
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
@@ -38,49 +38,6 @@ def parse_time(time_str):
     """HH:MM:SS.ms, MM:SS.ms, seconds (',' accepted as decimal point).
     Raises ValueError on anything else - never silently returns 0."""
     return ff.parse_time(time_str)
-
-
-def keyframe_at_or_before(path, at, lookback=30.0):
-    """PTS of the last video keyframe at or before *at* seconds (None if the
-    probe fails).  Stream copy can only start on a keyframe."""
-    ffprobe = ff.ffprobe_path()
-    window = max(0.0, at - lookback)
-    try:
-        r = ff.capture(
-            [
-                ffprobe,
-                "-v",
-                "error",
-                "-read_intervals",
-                f"{window:.3f}%{at + 0.05:.3f}",
-                "-select_streams",
-                "v:0",
-                "-skip_frame",
-                "nokey",
-                "-show_entries",
-                "frame=pts_time,best_effort_timestamp_time",
-                "-of",
-                "csv=p=0",
-                path,
-            ],
-            timeout=30,
-        )
-    except Exception:
-        logger.debug("keyframe_at_or_before: best-effort step failed", exc_info=True)
-        return None
-    best = None
-    for line in r.stdout.splitlines():
-        for part in line.split(","):
-            try:
-                pts = float(part)
-            except ValueError:
-                continue
-            if pts <= at + 1e-3 and (best is None or pts > best):
-                best = pts
-            break
-    if best is None and window > 0:
-        return keyframe_at_or_before(path, at, lookback=lookback * 4) if lookback < 600 else 0.0
-    return best if best is not None else 0.0
 
 
 class TrimmerTab(BaseTab):
@@ -644,28 +601,10 @@ class TrimmerTab(BaseTab):
 
         ss = self._tv(self._start_var, 0.0)
         ee = self._tv(self._end_var, self.duration)
-        dur = max(0.1, ee - ss)
 
-        ffplay = get_binary_path("ffplay.exe")
-        cmd = [
-            ffplay,
-            "-ss",
-            str(ss),
-            "-i",
-            self.file_path,
-            "-t",
-            str(dur),
-            "-loop",
-            "0",
-            "-window_title",
-            f"Trim Preview  {fmt_time(ss)} – {fmt_time(ee)}",
-            "-x",
-            "800",
-            "-y",
-            "450",
-            "-loglevel",
-            "quiet",
-        ]
+        cmd = trim.preview_cmd(
+            self.file_path, ss, ee, f"Trim Preview  {fmt_time(ss)} – {fmt_time(ee)}"
+        )
         self.preview_proc = _proc.spawn(cmd)
 
     # ─── Trim / Export ────────────────────────────────────────────────────
@@ -684,11 +623,7 @@ class TrimmerTab(BaseTab):
 
     def _copy_cmd(self, ss: float, end: float, out: str, container: str) -> tuple[list[str], float]:
         """Lossless (stream copy) from the keyframe at or before *ss*."""
-        ffmpeg = ff.ffmpeg_path()
-        # Lossless: input-seek to the keyframe at/before the mark so video
-        # and audio both start at 0 (output-side -ss with -c copy left a
-        # second of missing video at the start).
-        k = keyframe_at_or_before(self.file_path, ss)
+        k = trim.keyframe_at_or_before(self.file_path, ss)
         k = ss if k is None else k
         if ss - k > 0.01:
             self.log_tagged(
@@ -699,81 +634,25 @@ class TrimmerTab(BaseTab):
                 f"({ss - k:.2f} s before your mark). Untick 'stream copy' for a frame-exact cut.",
                 "info",
             )
-        dur = end - k
-        cmd = [
-            ffmpeg,
-            "-y",
-            "-ss",
-            ff.ts(k),
-            "-i",
-            self.file_path,
-            "-t",
-            ff.ts(dur),
-            "-map",
-            "0:v:0?",
-            "-map",
-            "0:a?",
-            "-c",
-            "copy",
-            "-sn",
-            "-dn",
-            "-map_metadata",
-            "0",
-            "-map_chapters",
-            "-1",
-        ]
-        if container in ("mp4", "m4v", "mov"):
-            cmd += ["-movflags", "+faststart"]
-        cmd.append(out)
         self.log(
             self.console,
-            f"Lossless trim: {fmt_time(k)} \u2013 {fmt_time(end)}  ({fmt_time(dur)})",
+            f"Lossless trim: {fmt_time(k)} \u2013 {fmt_time(end)}  ({fmt_time(end - k)})",
         )
-        return cmd, dur
+        return trim.copy_cmd(self.file_path, k, end, out, container), end - k
 
     def _encode_cmd(
         self, ss: float, end: float, out: str, container: str
     ) -> tuple[list[str], float]:
         """Frame-exact: re-encoded with H.264 at the chosen CRF."""
-        ffmpeg = ff.ffmpeg_path()
-        from core import encoders as enc
-
-        venc = enc.video("h264", "high", speed="balanced", hw="off", container=container or "mp4")
         crf = (self._crf_var.get() or "18").strip()
-        vargs = list(venc.args)
-        if "-crf" in vargs and crf.replace(".", "", 1).isdigit():
-            vargs[vargs.index("-crf") + 1] = crf
-        dur = end - ss
         info = ff.try_probe(self.file_path)
-        has_audio = bool(info and info.has_audio)
-        cmd = [
-            ffmpeg,
-            "-y",
-            "-ss",
-            ff.ts(ss),
-            "-i",
-            self.file_path,
-            "-t",
-            ff.ts(dur),
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a?",
-            "-sn",
-            "-dn",
-            *vargs,
-            *(enc.audio("aac", "192k", container=container or "mp4") if has_audio else []),
-            "-map_metadata",
-            "0",
-            "-map_chapters",
-            "-1",
-            out,
-        ]
-        self.log(
-            self.console,
-            f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}",
+        cmd = trim.encode_cmd(
+            self.file_path, ss, end, out, container, crf, has_audio=bool(info and info.has_audio)
         )
-        return cmd, dur
+        self.log(
+            self.console, f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}"
+        )
+        return cmd, end - ss
 
     def _run_trim(self):
         if not self.file_path:

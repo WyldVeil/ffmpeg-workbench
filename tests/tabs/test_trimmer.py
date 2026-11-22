@@ -2,14 +2,15 @@
 
 import pytest
 
+from core.ops import trim
 from tabs.cutting import trimmer as tr
 
 
 @pytest.mark.ffmpeg
 def test_keyframe_lookup(media):
     # test clip has a keyframe every 30 frames (1 s)
-    assert tr.keyframe_at_or_before(media["h264"], 1.5) == pytest.approx(1.0, abs=0.04)
-    assert tr.keyframe_at_or_before(media["h264"], 0.2) == pytest.approx(0.0, abs=0.04)
+    assert trim.keyframe_at_or_before(media["h264"], 1.5) == pytest.approx(1.0, abs=0.04)
+    assert trim.keyframe_at_or_before(media["h264"], 0.2) == pytest.approx(0.0, abs=0.04)
 
 
 def test_parse_time_is_strict():

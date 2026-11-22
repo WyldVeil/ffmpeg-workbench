@@ -376,7 +376,7 @@ class SplicerTab(BaseTab):
                 self.reencode_var.set(True)
             else:
                 from core.paths import temp_dir
-                from tabs.cutting.trimmer import keyframe_at_or_before
+                from core.ops.trim import keyframe_at_or_before
 
                 ins, outs = [], []
                 for p in pieces:

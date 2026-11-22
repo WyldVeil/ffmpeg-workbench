@@ -45,7 +45,7 @@ def _fmt(seconds):
 
 def _copy_start(path: str, at: float) -> float:
     """Where a copied clip starts: the keyframe at or before *at*."""
-    from tabs.cutting.trimmer import keyframe_at_or_before
+    from core.ops.trim import keyframe_at_or_before
 
     k = keyframe_at_or_before(path, at)
     return at if k is None else k
