@@ -83,7 +83,12 @@ def main() -> None:
         print("  3. Run:  set HF_TOKEN=hf_your_token_here")
         print("           python translate_pcm.py")
         sys.exit(1)
+    en, meta, pcm, pcm_path, to_translate = _strings_to_translate()
+    _translate_all(en, meta, pcm, pcm_path, to_translate, token)
 
+
+def _strings_to_translate():
+    """The keys still holding English (filled in from en_GB), with their English text."""
     # Load en_US source
     with open(LOCALE_DIR / "en_US.json", encoding="utf-8") as f:
         en = json.load(f)
@@ -124,7 +129,11 @@ def main() -> None:
 
     print(f"Keys to translate into Nigerian Pidgin: {len(to_translate)}")
     print(f"(Keys already genuinely translated: {len(pcm) - len(to_translate)})\n")
+    return en, meta, pcm, pcm_path, to_translate
 
+
+def _translate_all(en, meta, pcm, pcm_path, to_translate, token):
+    """Translate them one by one into pcm; how many came back."""
     keys = list(to_translate.keys())
     values = list(to_translate.values())
 

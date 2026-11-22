@@ -157,49 +157,45 @@ def process_language(
         print(f"    [dry-run] {len(missing_keys)} keys in batches of {batch_size}")
         return
 
-    translated_count = 0
-    total_batches = (len(missing_keys) + batch_size - 1) // batch_size
-
     for batch_num, batch_start in enumerate(range(0, len(missing_keys), batch_size), 1):
         batch_keys = missing_keys[batch_start : batch_start + batch_size]
-        batch_values = [en_strings[k] for k in batch_keys]
         print(
-            f"    batch {batch_num}/{total_batches} ({len(batch_keys)} strings)…",
+            f"    batch {batch_num}/{-(-len(missing_keys) // batch_size)} ({len(batch_keys)} strings)…",
             end=" ",
             flush=True,
         )
-
-        try:
-            translations = translate_batch(google_code, batch_keys, batch_values)
-            existing.update(translations)
-            translated_count += len(translations)
-            print(f"done  ({translated_count}/{len(missing_keys)})")
-        except Exception as exc:  # noqa: BLE001 - a dev script: report the batch and go on
-            print(f"FAILED: {exc}")
-            print("    Retrying in 5s…")
-            time.sleep(5)
-            try:
-                translations = translate_batch(google_code, batch_keys, batch_values)
-                existing.update(translations)
-                translated_count += len(translations)
-                print(f"    retry ok  ({translated_count}/{len(missing_keys)})")
-            except Exception as exc2:  # noqa: BLE001 - as above
-                print(f"    Retry also failed ({exc2}), skipping batch.")
-
+        existing.update(
+            _translate_with_retry(google_code, batch_keys, [en_strings[k] for k in batch_keys])
+        )
         time.sleep(0.3)  # be polite to Google's free endpoint
+    save_json(lang_file, _in_order(meta, en_strings, existing))
 
-    # Rebuild file: _meta first, then keys in en_US order
-    output: dict = {}
-    if meta is not None:
-        output["_meta"] = meta
-    for k in en_strings:
-        if k in existing:
-            output[k] = existing[k]
-    for k, v in existing.items():
-        if k not in output:
-            output[k] = v
 
-    save_json(lang_file, output)
+def _translate_with_retry(google_code: str, keys: list[str], values: list[str]) -> dict[str, str]:
+    """One batch's translations (retried once after five seconds; none if both fail)."""
+    try:
+        out = translate_batch(google_code, keys, values)
+        print(f"done  ({len(out)})")
+        return out
+    except Exception as exc:  # noqa: BLE001 - a dev script: report the batch and go on
+        print(f"FAILED: {exc}")
+        print("    Retrying in 5s…")
+        time.sleep(5)
+    try:
+        out = translate_batch(google_code, keys, values)
+        print(f"    retry ok  ({len(out)})")
+        return out
+    except Exception as exc2:  # noqa: BLE001 - as above
+        print(f"    Retry also failed ({exc2}), skipping batch.")
+        return {}
+
+
+def _in_order(meta: object, en_strings: dict, existing: dict) -> dict:
+    """_meta first, then the keys in en_US order, then any others."""
+    output: dict = {} if meta is None else {"_meta": meta}
+    output.update({k: existing[k] for k in en_strings if k in existing})
+    output.update({k: v for k, v in existing.items() if k not in output})
+    return output
 
 
 def main() -> None:

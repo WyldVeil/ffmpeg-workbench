@@ -39,28 +39,11 @@ class MenuBar:
     theme: tk.StringVar
 
 
-def build(
-    window: tk.Tk,
-    skin: dict[str, Any],
-    actions: MenuActions,
-    *,
-    debug_mode: tk.BooleanVar,
-    theme: str,
-) -> MenuBar:
-    def menu(parent: tk.Menu) -> tk.Menu:
-        return tk.Menu(
-            parent,
-            tearoff=0,
-            bg=skin["panel"],
-            fg=skin["fg"],
-            activebackground=skin["accent"],
-            activeforeground="#FFFFFF",
-            relief="flat",
-            bd=0,
-        )
-
-    bar = tk.Menu(
-        window,
+def _menu(parent: tk.Misc, skin: dict[str, Any]) -> tk.Menu:
+    """A menu (or the menu bar) in the skin's colours."""
+    return tk.Menu(
+        parent,
+        tearoff=0,
         bg=skin["panel"],
         fg=skin["fg"],
         activebackground=skin["accent"],
@@ -68,9 +51,11 @@ def build(
         relief="flat",
         bd=0,
     )
-    window.config(menu=bar)
 
-    file = menu(bar)
+
+def _file_menu(bar: tk.Menu, skin: dict[str, Any], actions: MenuActions) -> tk.Menu:
+    """File (returns its Recent Files menu, filled later)."""
+    file = _menu(bar, skin)
     bar.add_cascade(label="File", menu=file)
     file.add_command(
         label="Start - what do you want to do?", command=lambda: actions.show(ToolId.START)
@@ -79,14 +64,19 @@ def build(
     file.add_separator()
     file.add_command(label="Open video file…", command=actions.open_files, accelerator="Ctrl+O")
     file.add_separator()
-    recent = menu(file)
+    recent = _menu(file, skin)
     file.add_cascade(label="Recent Files", menu=recent)
     file.add_separator()
     file.add_command(label="Open output folder…", command=actions.open_output_folder)
     file.add_separator()
     file.add_command(label="Exit", command=actions.quit, accelerator="Alt+F4")
+    return recent
 
-    edit = menu(bar)
+
+def _edit_menu(
+    bar: tk.Menu, skin: dict[str, Any], actions: MenuActions, debug_mode: tk.BooleanVar
+) -> None:
+    edit = _menu(bar, skin)
     bar.add_cascade(label="Edit", menu=edit)
     edit.add_command(label="Quick Settings", command=lambda: actions.show(ToolId.SETTINGS))
     edit.add_command(
@@ -95,17 +85,25 @@ def build(
     edit.add_separator()
     edit.add_checkbutton(label="Debug mode", variable=debug_mode)
 
+
+def _tool_menus(bar: tk.Menu, skin: dict[str, Any], actions: MenuActions) -> None:
+    """One menu per sidebar category, listing its tools."""
     for category in Category:
         if category in (Category.PINNED, Category.HIDDEN):
             continue
-        tools = menu(bar)
+        tools = _menu(bar, skin)
         bar.add_cascade(label=labels.section(category).title(), menu=tools)
         for spec in sidebar(category):
             tools.add_command(label=labels.tool(spec.id), command=lambda t=spec.id: actions.show(t))
 
-    view = menu(bar)
+
+def _view_menu(
+    bar: tk.Menu, window: tk.Tk, skin: dict[str, Any], actions: MenuActions, theme: str
+) -> tk.StringVar:
+    """View (returns the chosen theme's variable)."""
+    view = _menu(bar, skin)
     bar.add_cascade(label="View", menu=view)
-    themes = menu(view)
+    themes = _menu(view, skin)
     view.add_cascade(label="Theme", menu=themes)
     theme_var = tk.StringVar(master=window, value=theme)
     for name in SKINS:
@@ -116,8 +114,11 @@ def build(
     view.add_command(label="Jump to top of sidebar", command=actions.scroll_sidebar_top)
     view.add_command(label="Expand all categories", command=lambda: actions.expand_sidebar(True))
     view.add_command(label="Collapse all categories", command=lambda: actions.expand_sidebar(False))
+    return theme_var
 
-    help_ = menu(bar)
+
+def _help_menu(bar: tk.Menu, skin: dict[str, Any], actions: MenuActions) -> None:
+    help_ = _menu(bar, skin)
     bar.add_cascade(label="Help", menu=help_)
     help_.add_command(label="Keyboard Shortcuts", command=actions.shortcuts)
     help_.add_command(label="System Info", command=actions.system_info)
@@ -125,4 +126,21 @@ def build(
     help_.add_command(label="Open log folder", command=actions.open_logs)
     help_.add_separator()
     help_.add_command(label=f"About {APP_NAME}", command=actions.about)
+
+
+def build(
+    window: tk.Tk,
+    skin: dict[str, Any],
+    actions: MenuActions,
+    *,
+    debug_mode: tk.BooleanVar,
+    theme: str,
+) -> MenuBar:
+    bar = _menu(window, skin)
+    window.config(menu=bar)
+    recent = _file_menu(bar, skin, actions)
+    _edit_menu(bar, skin, actions, debug_mode)
+    _tool_menus(bar, skin, actions)
+    theme_var = _view_menu(bar, window, skin, actions, theme)
+    _help_menu(bar, skin, actions)
     return MenuBar(bar, recent, theme_var)

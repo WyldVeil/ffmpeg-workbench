@@ -60,7 +60,13 @@ class App(tk.Tk):
         super().__init__(className="ffmpeg-workbench")  # WM_CLASS: matches the .desktop file
         _scaling.apply(self)
         self._set_icons()
-        # thread-safe UI calls, logging and crash reports first: everything below relies on them
+        self._start_services()
+        area = self._build_layout()
+        self._wire_up()
+        self._open(area)
+
+    def _start_services(self) -> None:
+        """Thread-safe UI calls, logging and crash reports first: everything below relies on them."""
         ui.install(self)
         logs.setup(debug="--debug" in sys.argv)
         logs.install_excepthooks(self)
@@ -68,6 +74,8 @@ class App(tk.Tk):
         encoders.detect_in_background()
         capabilities.warm()  # what this FFmpeg can do, learned off the UI thread
 
+    def _build_layout(self) -> tk.Frame:
+        """Title, size, skin; the status bar, sidebar and content area."""
         self.title(f"{APP_NAME}  ·  {APP_VERSION}")
         self._size_window()
         self._recent: list[ToolId] = tools.parse_all(settings.RECENT_TOOLS.get())
@@ -103,7 +111,10 @@ class App(tk.Tk):
         area = tk.Frame(self.content, bg=self.skin["content"])
         area.pack(side="top", fill="both", expand=True)
         self.pages = PageHost(area, self.show_page)
+        return area
 
+    def _wire_up(self) -> None:
+        """Menus, files, shortcuts and the mouse wheel."""
         menubar = menus.build(
             self,
             self.skin,
@@ -136,6 +147,8 @@ class App(tk.Tk):
         self.shortcuts = Shortcuts(self, self.current, self.stop_previews)
         self.wheel = WheelRouter(self, lambda: (self.sidebar, self.sidebar.canvas))
 
+    def _open(self, area: tk.Frame) -> None:
+        """The theme, the first page, drops and the startup sound."""
         self.apply_theme(load_skin_name())
         self.protocol("WM_DELETE_WINDOW", self.quit_app)
         RenderQueueManager.get_instance().register_update_callback(self.statusbar.queue_changed)

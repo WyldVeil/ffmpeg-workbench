@@ -59,9 +59,17 @@ class Sidebar(tk.Frame):
 
     # ── Building ──────────────────────────────────────────────────────────────
     def _build_header(self) -> None:
-        skin, bg, border = self.skin, self.skin["sb_bg"], self.skin.get("border", "#2C2C2C")
-        top = tk.Frame(self, bg=bg)
+        top = tk.Frame(self, bg=self.skin["sb_bg"])
         top.pack(side="top", fill="x")
+        self._build_logo(top)
+        self._build_pinned(top)
+        self._build_search(top)
+
+    def _build_logo(self, top: tk.Frame) -> None:
+        """The app's badge and name."""
+        skin = self.skin
+        bg = self.skin["sb_bg"]
+        border = self.skin.get("border", "#2C2C2C")
         logo = tk.Frame(top, bg=bg)
         logo.pack(fill="x", padx=px(16), pady=px(20, 0))
         badge = tk.Canvas(logo, width=px(38), height=px(34), bg=bg, highlightthickness=0)
@@ -85,6 +93,11 @@ class Sidebar(tk.Frame):
         tk.Label(names, text="Workbench", font=(UI_FONT, 8), bg=bg, fg="#5A5A5A").pack(anchor="w")
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14), pady=px(16, 0))
 
+    def _build_pinned(self, top: tk.Frame) -> None:
+        """The All-in-One button, above everything."""
+        skin = self.skin
+        bg = self.skin["sb_bg"]
+        border = self.skin.get("border", "#2C2C2C")
         pinned = tk.Frame(top, bg=bg)
         pinned.pack(fill="x", padx=px(6), pady=px(8, 5))
         self._add_button(
@@ -97,6 +110,11 @@ class Sidebar(tk.Frame):
         )
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14), pady=px(4, 0))
 
+    def _build_search(self, top: tk.Frame) -> None:
+        """The tool search box."""
+        skin = self.skin
+        bg = self.skin["sb_bg"]
+        border = self.skin.get("border", "#2C2C2C")
         box = tk.Frame(top, bg=bg)
         box.pack(fill="x", padx=px(12), pady=px(10, 8))
         field_bg = skin.get("input_bg", "#1E1E1E")
