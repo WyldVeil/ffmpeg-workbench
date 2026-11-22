@@ -38,6 +38,7 @@ from core import ffmpeg as ff
 from core import proc as _proc
 from core.encoders import VideoEncode
 from core.errors import InputError
+from core.ops.shared import Steps
 
 logger = logging.getLogger("crossfader.cli")
 
@@ -504,13 +505,8 @@ def op_transition(ctx: Ctx) -> Result:
         raise CliError(problem)
     out = output_path(ctx, paths, "transition")
     part = part_of(out)
-    argv, secs = xf.build_command(
-        clips,
-        part,
-        T=ctx.args.duration,
-        transitions=[ctx.args.type] * (len(clips) - 1),
-        venc=venc(ctx, container_of(out)),
-    )
+    fade = xf.Crossfade(ctx.args.duration, [ctx.args.type] * (len(clips) - 1))
+    argv, secs = xf.build_command(clips, part, fade, venc=venc(ctx, container_of(out)))
     ctx.run(argv, secs)
     finish(part, out)
     return result(out)
@@ -766,19 +762,22 @@ def op_compress(ctx: Ctx) -> Result:
     a, b = time_value(ctx.args.start, 0.0), time_value(ctx.args.end, info.duration)
     w, h = info.require_video().display_size
     try:
-        plan = ds.plan(
-            b - a,
+        goal = ds.Goal(
             target,
+            codec=ctx.args.codec,
+            audio_mode=ctx.args.audio,
+            allow_res=not ctx.args.keep_resolution,
+            allow_fps=not ctx.args.keep_framerate,
+        )
+        plan = ds.plan(
+            goal,
+            b - a,
             (w // 2 * 2, h // 2 * 2),
             info.require_video().fps,
-            codec=ctx.args.codec,
             has_audio=info.has_audio,
-            audio_mode=ctx.args.audio,
             audio_src_kbps=int((info.require_audio().bit_rate or 0) / 1000)
             if info.has_audio
             else 0,
-            allow_res=not ctx.args.keep_resolution,
-            allow_fps=not ctx.args.keep_framerate,
         )
     except ValueError as exc:
         raise CliError(str(exc)) from None
@@ -786,21 +785,8 @@ def op_compress(ctx: Ctx) -> Result:
         ctx.log(n)
     out = output_path(ctx, [src], "small", ".mp4")
     part = part_of(out)
-    ds.encode_to_size(
-        src,
-        part,
-        info,
-        plan,
-        target,
-        codec=ctx.args.codec,
-        fast=ctx.args.fast,
-        audio_mode=ctx.args.audio,
-        start=a,
-        end=b,
-        tmp=ctx.tmp(),
-        run=ctx.run,
-        log=ctx.log,
-    )
+    steps = Steps(ctx.run, ctx.log, ctx.tmp())
+    ds.encode_to_size(src, part, info, plan, steps, fast=ctx.args.fast, start=a, end=b)
     finish(part, out)
     return result(out, target_bytes=target, resolution=f"{plan.width}x{plan.height}")
 
@@ -995,11 +981,7 @@ def op_compare(ctx: Ctx) -> Result:
     a = ctx.args
     ri, di = probe(a.original, video=True), probe(a.copy, video=True)
     try:
-        argv, files = qual.build(
-            a.original,
-            a.copy,
-            ri,
-            di,
+        how = qual.Measure(
             metrics=[m.strip() for m in a.metrics.split(",")],
             model=a.model,
             skip_ref=a.skip_original,
@@ -1007,6 +989,7 @@ def op_compare(ctx: Ctx) -> Result:
             seconds=a.seconds,
             subsample=a.every,
         )
+        argv, files = qual.build(a.original, a.copy, ri, di, how)
     except ValueError as exc:
         raise CliError(str(exc)) from None
     span = min(ri.duration - a.skip_original, di.duration - a.skip_copy)
@@ -1447,7 +1430,7 @@ def _gif_options(p: argparse.ArgumentParser) -> None:
     options=_gif_options,
 )
 def op_gif(ctx: Ctx) -> Result:
-    from core.ops.gif_maker import make_animation
+    from core.ops.gif_maker import Animation, make_animation
 
     src = ctx.args.inputs[0]
     info = probe(src, video=True)
@@ -1457,18 +1440,13 @@ def op_gif(ctx: Ctx) -> Result:
         raise CliError("--start is past the end.")
     out = output_path(ctx, [src], "anim", ".webp" if ctx.args.webp else ".gif")
     part = part_of(out)
-    make_animation(
-        src,
-        part,
-        start=start,
-        dur=dur,
-        fps=ctx.args.fps,
-        width=ctx.args.width // 2 * 2,
+    look = Animation(
+        ctx.args.fps,
+        ctx.args.width // 2 * 2,
         cap=int(ctx.args.max_mb * 1024 * 1024),
         webp=ctx.args.webp,
-        run=ctx.run,
-        log=ctx.log,
     )
+    make_animation(src, part, look, Steps(ctx.run, ctx.log), start=start, dur=dur)
     finish(part, out)
     return result(out)
 
@@ -1692,19 +1670,16 @@ def op_collage(ctx: Ctx) -> Result:
         else float(ctx.args.length)
     )
     loop = not ctx.args.no_loop
-    graph, has_a = grid.collage_filter(
-        clips,
+    canvas = grid.Canvas(
         W,
         H,
         fps=frame_rate(infos[0]),
         gap=ctx.args.gap,
         mode="fill" if ctx.args.fill else "fit",
-        bg=ctx.args.background,
-        total=total,
-        loop=loop,
-        end=ctx.args.end,
-        audio=ctx.args.audio,
+        background=ctx.args.background,
     )
+    timing = grid.Timing(total, loop=loop, end=ctx.args.end, audio=ctx.args.audio)
+    graph, has_a = grid.collage_filter(clips, canvas, timing)
     out = output_path(ctx, paths, "collage", ".mp4")
     render_graph(
         ctx,
@@ -1941,7 +1916,7 @@ def op_tts(ctx: Ctx) -> Result:
         raise CliError(f"{out} already exists - add --overwrite or -o.")
     tmp = os.path.join(ctx.tmp(), "speech" + (".mp3" if engine == "edge" else ".wav"))
     try:
-        tts.synthesize(text, tmp, engine=engine, voice=ctx.args.voice)
+        tts.synthesize(text, tmp, tts.Voice(engine=engine, name=ctx.args.voice))
     except tts.TTSError as exc:
         raise CliError(str(exc)) from None
     if os.path.splitext(out)[1].lower() == os.path.splitext(tmp)[1].lower():

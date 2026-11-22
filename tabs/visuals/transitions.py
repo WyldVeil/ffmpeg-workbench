@@ -268,16 +268,8 @@ class TransitionStudioTab(BaseTab):
             from core import encoders as enc
 
             venc = enc.video("h264", "low", speed="fastest", hw="off", container="mp4")
-            argv, _secs = xf.build_command(
-                parts,
-                out,
-                T=T,
-                transitions=[trans],
-                freeze=freeze,
-                audio_mode=audio,
-                audio_curve=curve,
-                venc=venc,
-            )
+            fade = xf.Crossfade(T, [trans], freeze, audio, curve)
+            argv, _secs = xf.build_command(parts, out, fade, venc=venc)
             res = ff.run(argv)
             if res.returncode != 0:
                 raise RuntimeError("\n".join(res.log_tail[-4:]))
@@ -313,16 +305,10 @@ class TransitionStudioTab(BaseTab):
         if not out:
             return
         venc = self.encoder.video_encode(common.container_of(out))
-        argv, secs = xf.build_command(
-            clips,
-            out,
-            T=T,
-            transitions=[self._transition()],
-            freeze=self.freeze_var.get(),
-            audio_mode=self.audio_var.get(),
-            audio_curve=curve,
-            venc=venc,
+        fade = xf.Crossfade(
+            T, [self._transition()], self.freeze_var.get(), self.audio_var.get(), curve
         )
+        argv, secs = xf.build_command(clips, out, fade, venc=venc)
         self.log(self.console, f"{self._transition()} · {T:g} s · {ff.format_time(secs)} total")
         self.run_ffmpeg(
             argv,

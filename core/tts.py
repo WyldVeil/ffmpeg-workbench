@@ -21,6 +21,7 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from core import proc as _proc
 from core.errors import ToolError
@@ -115,15 +116,22 @@ def edge_proxy() -> str | None:
     return url
 
 
+@dataclass(frozen=True, slots=True)
+class Voice:
+    """Who speaks, and how: *engine* "edge" (online voices) or "system" (offline)."""
+
+    engine: str = "edge"
+    name: str = "en-GB-RyanNeural"  # an online voice's id (the system engine has one voice)
+    rate: str = "+0%"
+    pitch: str = "+0Hz"
+    volume: str = "+0%"
+
+
 def synthesize(
     text: str,
     out_path: str,
+    voice: Voice | None = None,
     *,
-    engine: str = "edge",
-    voice: str = "en-GB-RyanNeural",
-    rate: str = "+0%",
-    pitch: str = "+0Hz",
-    volume: str = "+0%",
     subtitles: bool = False,
     cancelled: Cancelled = None,
 ) -> str | None:
@@ -134,21 +142,15 @@ def synthesize(
     text = (text or "").strip()
     if not text:
         raise TTSError("There is no text to speak.")
-    if engine == "edge":
-        return _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled)
-    _system_synth(text, out_path, rate, pitch, volume, cancelled)
+    voice = voice or Voice()
+    if voice.engine == "edge":
+        return _edge_synth(text, out_path, voice, subtitles, cancelled)
+    _system_synth(text, out_path, voice, cancelled)
     return None
 
 
 def _edge_synth(
-    text: str,
-    out_path: str,
-    voice: str,
-    rate: str,
-    pitch: str,
-    volume: str,
-    subtitles: bool,
-    cancelled: Cancelled,
+    text: str, out_path: str, voice: Voice, subtitles: bool, cancelled: Cancelled
 ) -> str | None:
     import asyncio
 
@@ -168,10 +170,10 @@ def _edge_synth(
     async def run():
         comm = edge_tts.Communicate(
             text,
-            voice,
-            rate=rate,
-            pitch=pitch,
-            volume=volume,
+            voice.name,
+            rate=voice.rate,
+            pitch=voice.pitch,
+            volume=voice.volume,
             boundary="SentenceBoundary",
             proxy=proxy,
             connect_timeout=15,
@@ -232,16 +234,14 @@ def _run(cmd: list[str], cancelled: Cancelled, timeout: float = 600) -> None:
         )
 
 
-def _system_synth(
-    text: str, out_path: str, rate: str, pitch: str, volume: str, cancelled: Cancelled
-) -> None:
+def _system_synth(text: str, out_path: str, voice: Voice, cancelled: Cancelled) -> None:
     eng = system_engine()
     if not eng:
         raise TTSError(
             "No offline voice was found. On Linux install espeak-ng "
             "(e.g. 'sudo apt install espeak-ng' or 'sudo pacman -S espeak-ng')."
         )
-    r, p, v = _pct(rate), _pct(pitch), _pct(volume)
+    r, p, v = _pct(voice.rate), _pct(voice.pitch), _pct(voice.volume)
     with tempfile.TemporaryDirectory(prefix="wme_tts_") as tmp:
         txt = os.path.join(tmp, "text.txt")
         with open(txt, "w", encoding="utf-8") as fh:

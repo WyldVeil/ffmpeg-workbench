@@ -14,6 +14,7 @@ from tkinter import messagebox, ttk
 from core import proc as _proc
 from core.hardware import detect_gpu, get_binary_path
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -633,10 +634,11 @@ class LaughTrackRemoverTab(BaseTab):
             self.enqueue_render(
                 "Laugh Track (AI)",
                 output_path=_out,
-                worker_fn=_ai_worker_fn,
-                on_progress=lambda _t, line: self.log(self.console, line),
-                on_complete=_done,
+                work=_ai_worker_fn,
                 inputs=[self.file_path],
+                hooks=Hooks(
+                    on_progress=lambda _t, line: self.log(self.console, line), on_complete=_done
+                ),
             )
 
     def _render_ffmpeg(self, out):

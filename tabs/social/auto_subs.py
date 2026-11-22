@@ -20,6 +20,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import tasks, whisper
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from core.tools import ToolId
 from tabs import common
@@ -381,11 +382,12 @@ class AutoSubsTab(BaseTab):
         tid = self.enqueue_render(
             "Auto-Subtitles",
             outputs[0],
-            worker_fn=work,
-            on_progress=lambda _t, line: self.log(self.console, line),
-            on_complete=on_complete,
+            work=work,
             expected_duration=duration,
             inputs=[src],
+            hooks=Hooks(
+                on_progress=lambda _t, line: self.log(self.console, line), on_complete=on_complete
+            ),
         )
         self.btn_render.config(text=f"✖ {t('btn.cancel')}", command=lambda: self.cancel_render(tid))
         self.log(

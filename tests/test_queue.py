@@ -6,6 +6,7 @@ import time
 import pytest
 
 from core import ffmpeg as ff
+from core.queue_manager import Hooks
 
 
 @pytest.fixture
@@ -66,9 +67,9 @@ def test_success_promotes_part_file(q, outdir):
     tid = q.enqueue(
         "ok",
         out,
-        cmd=_lavfi(2, out),
+        work=[_lavfi(2, out)],
         expected_duration=2.0,
-        on_complete=lambda t, rc: events.append(rc),
+        hooks=Hooks(on_complete=lambda t, rc: events.append(rc)),
     )
     assert q.pump_until(lambda: events)
     task = q.get_task(tid)
@@ -85,9 +86,9 @@ def test_cancel_running_kills_and_cleans(q, outdir):
     tid = q.enqueue(
         "long",
         out,
-        cmd=_lavfi(600, out, "veryslow"),
+        work=[_lavfi(600, out, "veryslow")],
         expected_duration=600,
-        on_complete=lambda t, rc: events.append(rc),
+        hooks=Hooks(on_complete=lambda t, rc: events.append(rc)),
     )
     assert q.pump_until(lambda: q.get_task(tid).status == "active" and q.get_task(tid).fraction)
     q.cancel(tid)
@@ -102,8 +103,12 @@ def test_cancel_running_kills_and_cleans(q, outdir):
 def test_cancel_pending_still_completes(q, outdir):
     a, b = str(outdir / "a.mp4"), str(outdir / "b.mp4")
     done = {}
-    ta = q.enqueue("a", a, cmd=_lavfi(3, a), on_complete=lambda t, rc: done.setdefault("a", rc))
-    tb = q.enqueue("b", b, cmd=_lavfi(3, b), on_complete=lambda t, rc: done.setdefault("b", rc))
+    ta = q.enqueue(
+        "a", a, work=[_lavfi(3, a)], hooks=Hooks(on_complete=lambda t, rc: done.setdefault("a", rc))
+    )
+    tb = q.enqueue(
+        "b", b, work=[_lavfi(3, b)], hooks=Hooks(on_complete=lambda t, rc: done.setdefault("b", rc))
+    )
     if q._parallel() == 1:
         q.cancel(tb)
         assert q.pump_until(lambda: "b" in done, 5)
@@ -121,8 +126,8 @@ def test_failure_keeps_existing_file_and_reports_error(q, media, outdir):
     tid = q.enqueue(
         "bad",
         str(out),
-        cmd=[ff.ffmpeg_path(), "-y", "-i", media["h264"], "-vf", "nosuchfilter", str(out)],
-        on_complete=lambda t, rc: events.append(rc),
+        work=[[ff.ffmpeg_path(), "-y", "-i", media["h264"], "-vf", "nosuchfilter", str(out)]],
+        hooks=Hooks(on_complete=lambda t, rc: events.append(rc)),
     )
     assert q.pump_until(lambda: events)
     task = q.get_task(tid)
@@ -151,8 +156,8 @@ def test_worker_fn_with_context(q, outdir):
     tid = q.enqueue(
         "multi",
         str(outdir / "final.mp4"),
-        worker_fn=job,
-        on_complete=lambda t, rc: events.append(rc),
+        work=job,
+        hooks=Hooks(on_complete=lambda t, rc: events.append(rc)),
     )
     assert q.pump_until(lambda: events)
     assert events == [0] and q.get_task(tid).fraction == 1.0
@@ -181,6 +186,8 @@ def test_worker_fn_failure_reports_summary(q, outdir):
         return 0
 
     events = []
-    tid = q.enqueue("multi-bad", "", worker_fn=job, on_complete=lambda t, rc: events.append(rc))
+    tid = q.enqueue(
+        "multi-bad", "", work=job, hooks=Hooks(on_complete=lambda t, rc: events.append(rc))
+    )
     assert q.pump_until(lambda: events)
     assert q.get_task(tid).status == "failed" and "bogus" in q.get_task(tid).error

@@ -24,7 +24,8 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.downsizer import encode_to_size, plan
+from core.ops.downsizer import Goal, Plan, encode_to_size, plan
+from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -227,7 +228,7 @@ class UniversalDownsizerTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "small", ".mp4"))
         self._changed()
 
-    def _plan(self) -> tuple:
+    def _plan(self) -> tuple[Plan, tuple[float, float]]:
         info = self._info
         if info is None or not info.has_video:
             raise ValueError("Choose a video first.")
@@ -235,19 +236,22 @@ class UniversalDownsizerTab(BaseTab):
         codec = self._key(CODECS, self.codec_var, "h264")
         audio_mode = self._key(AUDIO_MODES, self.audio_var, "auto")
         src_kbps = int((info.require_audio().bit_rate or 0) / 1000) if info.has_audio else 0
-        p = plan(
-            b - a,
+        goal = Goal(
             self._target_bytes(),
-            common.even_size(info),
-            info.require_video().fps,
             codec=codec,
-            has_audio=info.has_audio,
             audio_mode=audio_mode,
-            audio_src_kbps=src_kbps,
             allow_res=self._allow_res.get(),
             allow_fps=self._allow_fps.get(),
         )
-        return p, (a, b), codec, audio_mode
+        p = plan(
+            goal,
+            b - a,
+            common.even_size(info),
+            info.require_video().fps,
+            has_audio=info.has_audio,
+            audio_src_kbps=src_kbps,
+        )
+        return p, (a, b)
 
     def _changed(self):
         self.custom_entry.config(
@@ -263,7 +267,7 @@ class UniversalDownsizerTab(BaseTab):
             self.plan_lbl.config(text="")
             return
         try:
-            p, (a, b), _codec, _am = self._plan()
+            p, (a, b) = self._plan()
         except ValueError as exc:
             self.plan_lbl.config(text=f"⚠  {exc}", fg=CLR["orange"])
             return
@@ -288,7 +292,7 @@ class UniversalDownsizerTab(BaseTab):
             return
         self._info = info
         try:
-            p, (start, end), codec, audio_mode = self._plan()
+            p, (start, end) = self._plan()
             target = self._target_bytes()
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
@@ -314,20 +318,9 @@ class UniversalDownsizerTab(BaseTab):
             def runner(cmd, duration, lo, hi):
                 ctx.span(lo, hi).run(cmd, duration=duration)
 
+            steps = Steps(runner, ctx.log, ctx.tempdir())
             return encode_to_size(
-                src,
-                ctx.output(),
-                info,
-                p,
-                target,
-                codec=codec,
-                fast=fast,
-                audio_mode=audio_mode,
-                start=start,
-                end=end,
-                tmp=ctx.tempdir(),
-                run=runner,
-                log=ctx.log,
+                src, ctx.output(), info, p, steps, fast=fast, start=start, end=end
             )
 
         common.queue_job(

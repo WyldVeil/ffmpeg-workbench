@@ -28,6 +28,7 @@ from core.i18n import t
 from core.ops.crossfader import (
     TRANS_DEFAULT,
     Clip,
+    Crossfade,
     _even,
     _tr,
     build_command,
@@ -637,17 +638,10 @@ class CrossfaderTab(BaseTab):
                 return None
             venc = self.encoder.video_encode(container)
             size = None
-        return build_command(
-            clips,
-            out,
-            T=T,
-            transitions=self._transitions(),
-            freeze=freeze,
-            audio_mode=self._audio_mode(),
-            audio_curve=self.audio_curve_var.get(),
-            venc=venc,
-            size=size,
+        fade = Crossfade(
+            T, self._transitions(), freeze, self._audio_mode(), self.audio_curve_var.get()
         )
+        return build_command(clips, out, fade, venc=venc, size=size)
 
     def _start_render(self):
         clips = self._clips()

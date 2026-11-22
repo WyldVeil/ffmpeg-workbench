@@ -143,14 +143,14 @@ def test_format_converter_reports_failures(ui, media, outdir, tmp_path):
 
 
 def test_downsizer_plan():
-    from core.ops.downsizer import plan, retry_kbps
+    from core.ops.downsizer import Goal, plan, retry_kbps
 
-    p = plan(60, 10_000_000, (1920, 1080), 60, codec="h264")
+    p = plan(Goal(10_000_000, codec="h264"), 60, (1920, 1080), 60)
     assert (
         p.fps == 30 and p.height < 1080 and p.video_kbps + p.audio_kbps < 10_000_000 * 8 / 1000 / 60
     )
     with pytest.raises(ValueError):
-        plan(3600, 8_000_000, (1920, 1080), 30)
+        plan(Goal(8_000_000), 3600, (1920, 1080), 30)
     assert retry_kbps(1000, 10_000_000, 11_000_000) < 1000
 
 

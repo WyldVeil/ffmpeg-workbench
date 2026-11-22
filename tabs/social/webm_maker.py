@@ -19,6 +19,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, scroll_body
@@ -1393,11 +1394,10 @@ class WebMTab(BaseTab):
         self._task_id = self.enqueue_render(
             "WebM Encode",
             out,
-            worker_fn=work,
-            on_progress=on_progress,
-            on_complete=on_complete,
+            work=work,
             expected_duration=job["dur"],
             inputs=[src],
+            hooks=Hooks(on_progress=on_progress, on_complete=on_complete),
         )
 
     def _log(self, msg: str):

@@ -38,6 +38,7 @@ from core import tasks
 from core.errors import ToolError
 from core.hardware import get_binary_path
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -2777,9 +2778,13 @@ class YouTubeDownloaderTab(BaseTab):
         self.enqueue_render(
             f"YT Encode: {os.path.basename(out)}",
             output_path=out,
-            worker_fn=_worker,
-            on_progress=lambda tid, line: self.after(0, lambda s=line: self.log(self.console, s)),
-            on_complete=_on_done,
+            work=_worker,
+            hooks=Hooks(
+                on_progress=lambda tid, line: self.after(
+                    0, lambda s=line: self.log(self.console, s)
+                ),
+                on_complete=_on_done,
+            ),
         )
 
     def _on_encode_progress(self, pct: float, elapsed: float, total: float):

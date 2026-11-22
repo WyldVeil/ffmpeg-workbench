@@ -22,6 +22,7 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -220,11 +221,10 @@ class SceneDetectTab(BaseTab):
         tid = self.enqueue_render(
             "Scene detection",
             "",
-            worker_fn=work,
-            on_complete=on_complete,
-            on_progress=lambda _t, line: None,
+            work=work,
             expected_duration=info.duration,
             inputs=[src],
+            hooks=Hooks(on_complete=on_complete, on_progress=lambda _t, line: None),
         )
         self.btn_detect.config(text="✖ Stop", command=lambda: self.cancel_render(tid))
 

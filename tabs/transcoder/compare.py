@@ -297,12 +297,14 @@ class CompareQualityTab(BaseTab):
                 dist,
                 ri,
                 di,
-                metrics=[m for m, v in self.metric_vars.items() if v.get()],
-                model=self._model(),
-                skip_ref=skip_ref,
-                skip_dist=skip_dist,
-                seconds=seconds,
-                subsample=next((k for k, v in SPEEDS.items() if v == self.speed_var.get()), 1),
+                q.Measure(
+                    metrics=[m for m, v in self.metric_vars.items() if v.get()],
+                    model=self._model(),
+                    skip_ref=skip_ref,
+                    skip_dist=skip_dist,
+                    seconds=seconds,
+                    subsample=next((k for k, v in SPEEDS.items() if v == self.speed_var.get()), 1),
+                ),
             )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)

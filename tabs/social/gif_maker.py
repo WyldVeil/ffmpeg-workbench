@@ -15,7 +15,8 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core.i18n import t
-from core.ops.gif_maker import make_animation
+from core.ops.gif_maker import Animation, make_animation
+from core.ops.shared import Steps
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -243,20 +244,9 @@ class GIFMakerTab(BaseTab):
             def runner(cmd, duration, lo, hi):
                 ctx.span(lo, hi).run(cmd, duration=duration)
 
+            look = Animation(fps, width, colours, dither, loops, cap, webp)
             return make_animation(
-                src,
-                ctx.output(),
-                start=start,
-                dur=dur,
-                fps=fps,
-                width=width,
-                colours=colours,
-                dither=dither,
-                loops=loops,
-                cap=cap,
-                webp=webp,
-                run=runner,
-                log=ctx.log,
+                src, ctx.output(), look, Steps(runner, ctx.log), start=start, dur=dur
             )
 
         common.queue_job(

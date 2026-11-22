@@ -98,20 +98,33 @@ def total_duration(clips: Sequence[Clip], T: float, freeze: bool) -> float:
     return max(0.0, sum(lengths) - T * (len(clips) - 1))
 
 
+@dataclass(frozen=True, slots=True)
+class Crossfade:
+    """How clips blend into each other.
+
+    *seconds*: each transition's length; *transitions*: one xfade name per join
+    (missing ones fade); *freeze* holds the edge frames instead of overlapping
+    the clips; *audio_mode* 'normal', 'hq' or 'none'; *audio_curve* the
+    acrossfade curve."""
+
+    seconds: float
+    transitions: Sequence[str] = ()
+    freeze: bool = False
+    audio_mode: str = "normal"
+    audio_curve: str = "tri"
+
+
 def build_command(
     clips: Sequence[Clip],
     out: str,
+    fade: Crossfade,
     *,
-    T: float,
-    transitions: Sequence[str],
-    freeze: bool = False,
-    audio_mode: str = "normal",
-    audio_curve: str = "tri",
     venc: enc.VideoEncode | None = None,
     size: tuple[int, int] | None = None,
-    extra_output_args: Sequence[str] | None = None,
 ) -> tuple[list[str], float]:
     """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
+    T, transitions, freeze = fade.seconds, fade.transitions, fade.freeze
+    audio_mode, audio_curve = fade.audio_mode, fade.audio_curve
     n = len(clips)
     if venc is None:
         venc = enc.video("h264", "high", hw="off", container=os.path.splitext(out)[1] or "mp4")
@@ -207,5 +220,5 @@ def build_command(
         ]
     else:
         argv += ["-an"]
-    argv += [*venc.args, *(extra_output_args or []), "-map_metadata", "-1", "-sn", out]
+    argv += [*venc.args, "-map_metadata", "-1", "-sn", out]
     return argv, total_duration(clips, T, freeze)

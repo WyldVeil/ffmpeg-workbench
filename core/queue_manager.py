@@ -76,6 +76,17 @@ WorkerFn = Callable[..., int | None]
 OnStart = Callable[[str], object]  # (task_id)
 OnProgress = Callable[[str, str], object]  # (task_id, log line)
 OnComplete = Callable[[str, int], object]  # (task_id, returncode)
+#: A job's work: commands run in order, or a worker function
+Work = Sequence[Sequence[object]] | WorkerFn
+
+
+@dataclass(frozen=True, slots=True)
+class Hooks:
+    """What a job tells the page that queued it - always on the Tk thread."""
+
+    on_start: OnStart | None = None
+    on_progress: OnProgress | None = None
+    on_complete: OnComplete | None = None  # fires exactly once, cancelled jobs included
 
 
 @dataclass(eq=False, kw_only=True)
@@ -87,9 +98,7 @@ class RenderTask:
     output_path: str = ""
     cmds: list[list[str]] | None = None
     worker_fn: WorkerFn | None = None
-    on_start: OnStart | None = None
-    on_progress: OnProgress | None = None
-    on_complete: OnComplete | None = None
+    hooks: Hooks = field(default_factory=Hooks)
     expected_duration: float | None = None
     inputs: list[str] = field(default_factory=list[str])
     atomic_output: bool = True
@@ -256,33 +265,26 @@ class RenderQueueManager:
         name: str,
         output_path: str = "",
         *,
-        cmd: Sequence[object] | None = None,
-        cmds: Sequence[Sequence[object]] | None = None,
-        worker_fn: WorkerFn | None = None,
-        on_start: OnStart | None = None,
-        on_progress: OnProgress | None = None,
-        on_complete: OnComplete | None = None,
+        work: Work,
+        hooks: Hooks | None = None,
         expected_duration: float | None = None,
         inputs: Sequence[str] = (),
         atomic_output: bool = True,
     ) -> str:
-        if cmd is not None:
-            cmds_arg = [[str(c) for c in cmd]]
-        elif cmds is not None:
-            cmds_arg = [[str(c) for c in c_] for c_ in cmds]
+        """Queue *work* (commands run in order, or a worker function) and return its id."""
+        if callable(work):
+            cmds, worker = None, work
         else:
-            cmds_arg: list[list[str]] | None = None
-        if cmds_arg is None and worker_fn is None:
-            raise ValueError("enqueue() needs cmd, cmds or worker_fn")
+            cmds, worker = [[str(c) for c in cmd] for cmd in work], None
+            if not cmds:
+                raise ValueError("enqueue() needs at least one command")
         task = RenderTask(
             id=uuid.uuid4().hex[:8],
             name=name,
             output_path=output_path,
-            cmds=cmds_arg,
-            worker_fn=worker_fn,
-            on_start=on_start,
-            on_progress=on_progress,
-            on_complete=on_complete,
+            cmds=cmds,
+            worker_fn=worker,
+            hooks=hooks or Hooks(),
             expected_duration=expected_duration,
             inputs=[i for i in inputs if i],
             atomic_output=atomic_output,
@@ -330,11 +332,8 @@ class RenderQueueManager:
         return self.enqueue(
             task.name,
             task.output_path,
-            cmds=task.cmds,
-            worker_fn=task.worker_fn,
-            on_start=task.on_start,
-            on_progress=task.on_progress,
-            on_complete=task.on_complete,
+            work=task.worker_fn or task.cmds or [],
+            hooks=task.hooks,
             expected_duration=task.expected_duration,
             inputs=task.inputs,
             atomic_output=task.atomic_output,
@@ -421,11 +420,11 @@ class RenderQueueManager:
     def _execute(self, task: RenderTask) -> None:
         task.started_at = time.time()
         self._fire_update(force=True)
-        self._dispatch(task.on_start, task.id)
+        self._dispatch(task.hooks.on_start, task.id)
 
         def progress_cb(line: str) -> None:
             task.progress = line
-            self._dispatch(task.on_progress, task.id, line)
+            self._dispatch(task.hooks.on_progress, task.id, line)
 
         rc = 0
         try:
@@ -566,7 +565,7 @@ class RenderQueueManager:
                 return
             task.completed_fired = True
         self._fire_update(force=True)
-        self._dispatch(task.on_complete, task.id, task.returncode)
+        self._dispatch(task.hooks.on_complete, task.id, task.returncode)
         try:
             from core.notify import job_finished
 

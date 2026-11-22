@@ -112,7 +112,6 @@ def spawn(
     text: bool = False,
     cwd: str | None = None,
     env: Mapping[str, str] | None = None,
-    new_group: bool = True,
     bufsize: int = -1,
 ) -> subprocess.Popen[Any]:
     """Start a program (not waiting for it) and register it for :func:`kill_all`."""
@@ -128,9 +127,9 @@ def spawn(
     if text:
         kwargs.update(text=True, encoding="utf-8", errors="replace")
     if IS_WINDOWS:
-        kwargs["creationflags"] = CREATE_NO_WINDOW | (_CREATE_NEW_PROCESS_GROUP if new_group else 0)
-    elif new_group:
-        kwargs["start_new_session"] = True
+        kwargs["creationflags"] = CREATE_NO_WINDOW | _CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True  # its own group, so kill() reaches its children too
     try:
         proc = subprocess.Popen(args, **kwargs)
     except FileNotFoundError as exc:

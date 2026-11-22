@@ -9,6 +9,7 @@ import time
 import pytest
 
 from core import ffmpeg as ff
+from core.encoders import VideoEncode
 
 
 def test_recording_names_never_overwrite(tmp_path):
@@ -27,7 +28,7 @@ def test_ffmpeg_command_layout():
         ["-f", "lavfi", "-i", "testsrc"],
         ["mon.monitor", "default"],
         "/x/o.mp4",
-        ["-c:v", "libx264"],
+        VideoEncode("libx264", "h264", args=["-c:v", "libx264"]),
         seconds=5,
     )
     joined = " ".join(cmd)
@@ -46,7 +47,11 @@ def test_recording_stops_cleanly_and_is_playable(tmp_path):
         ["-re", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30"],
         [],
         out,
-        ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"],
+        VideoEncode(
+            "libx264",
+            "h264",
+            args=["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"],
+        ),
     )
     ended = {}
     rec = recorder.Recording(cmd, out, on_exit=lambda r, rc: ended.setdefault("rc", rc))
@@ -64,7 +69,10 @@ def test_recording_failure_is_noticed(tmp_path):
 
     out = str(tmp_path / "bad.mp4")
     cmd = recorder.ffmpeg_command(
-        ["-f", "lavfi", "-i", "nosuchsource"], [], out, ["-c:v", "libx264"]
+        ["-f", "lavfi", "-i", "nosuchsource"],
+        [],
+        out,
+        VideoEncode("libx264", "h264", args=["-c:v", "libx264"]),
     )
     ended = {}
     rec = recorder.Recording(cmd, out, on_exit=lambda r, rc: ended.setdefault("rc", rc))

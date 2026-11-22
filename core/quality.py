@@ -54,24 +54,34 @@ def _rate(info: ff.MediaInfo) -> str:
     return rate
 
 
+@dataclass(frozen=True, slots=True)
+class Measure:
+    """What to measure and how the two files line up.
+
+    *skip_ref* / *skip_dist*: seconds to skip at the start of the original / the
+    copy, to line them up when one of them was trimmed.  *seconds* limits the
+    comparison; *subsample* scores every n-th frame (faster)."""
+
+    metrics: Iterable[str] = METRICS
+    model: str = "hd"
+    skip_ref: float = 0.0
+    skip_dist: float = 0.0
+    seconds: float | None = None
+    subsample: int = 1
+    threads: int | None = None
+
+
 def build(
     ref: str,
     dist: str,
     ref_info: ff.MediaInfo,
     dist_info: ff.MediaInfo,
-    *,
-    metrics: Iterable[str] = METRICS,
-    model: str = "hd",
-    skip_ref: float = 0.0,
-    skip_dist: float = 0.0,
-    seconds: float | None = None,
-    subsample: int = 1,
-    threads: int | None = None,
+    how: Measure | None = None,
 ) -> tuple[list[str], dict[str, str]]:
-    """(argv, {metric: log file name}).  *skip_ref* / *skip_dist*: seconds to
-    skip at the start of the original / the copy, to line them up when one of
-    them was trimmed."""
-    wanted = set(metrics)
+    """(argv, {metric: log file name}) comparing the copy *dist* with *ref*."""
+    how = how or Measure()
+    skip_ref, skip_dist, seconds = how.skip_ref, how.skip_dist, how.seconds
+    wanted = set(how.metrics)
     chosen = [m for m in METRICS if m in wanted]
     if not chosen:
         raise ValueError("Choose at least one measurement.")
@@ -107,9 +117,9 @@ def build(
         if m == "vmaf":
             files[m] = "vmaf.json"
             parts.append(
-                f"[d{i}][r{i}]libvmaf=model={MODELS.get(model, MODELS['hd'])[1]}:log_fmt=json:"
-                f"log_path=vmaf.json:n_threads={threads or max(1, min(16, os.cpu_count() or 4))}:"
-                f"n_subsample={max(1, int(subsample))}:{sync}"
+                f"[d{i}][r{i}]libvmaf=model={MODELS.get(how.model, MODELS['hd'])[1]}:log_fmt=json:"
+                f"log_path=vmaf.json:n_threads={how.threads or max(1, min(16, os.cpu_count() or 4))}:"
+                f"n_subsample={max(1, int(how.subsample))}:{sync}"
             )
         elif m == "ssim":
             files[m] = "ssim.log"

@@ -33,6 +33,7 @@ from functools import partial
 from core import ffmpeg as ff
 from core import proc as _proc
 from core import tasks
+from core.encoders import VideoEncode
 
 Region = tuple[int, int, int, int]  # x, y, width, height
 
@@ -253,23 +254,22 @@ def ffmpeg_command(
     video_in: Sequence[str],
     audio_sources_: Sequence[str],
     out: str,
-    video_args: Sequence[str],
+    venc: VideoEncode,
     *,
     audio_codec: str = "aac",
     region_crop: Region | None = None,
     seconds: int | None = None,
-    pre_input: Sequence[str] | None = None,
-    vf_suffix: str = "",
 ) -> list[str]:
-    cmd = [ff.ffmpeg_path(), "-hide_banner", "-y", *(pre_input or []), *video_in]
+    """Capture *video_in* (plus each audio source, mixed) into *out* with *venc*."""
+    cmd = [ff.ffmpeg_path(), "-hide_banner", "-y", *venc.pre_input, *video_in]
     for src in audio_sources_:
         cmd += audio_input(src)
     vf = "crop=trunc(iw/2)*2:trunc(ih/2)*2"  # encoders need even sizes
     if region_crop and IS_MAC:
         x, y, w, h = region_crop
         vf = f"crop={w // 2 * 2}:{h // 2 * 2}:{x}:{y}"
-    if vf_suffix:  # e.g. VAAPI upload
-        vf += "," + vf_suffix
+    if venc.filter_suffix:  # e.g. VAAPI upload
+        vf += "," + venc.filter_suffix
     n = len(audio_sources_)
     if n >= 2:
         mix = "".join(f"[{i + 1}:a]" for i in range(n))
@@ -285,7 +285,7 @@ def ffmpeg_command(
         cmd += ["-map", "0:v", "-vf", vf]
         if n == 1:
             cmd += ["-map", "1:a"]
-    cmd += video_args
+    cmd += venc.args
     if n:
         ext = os.path.splitext(out)[1].lower()
         codec = audio_codec

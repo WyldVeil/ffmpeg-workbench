@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from core import encoders as enc
 from core import ffmpeg as ff
@@ -16,6 +17,16 @@ from core import ffmpeg as ff
 Runner = Callable[[list[str], float, float, float], object]
 #: Receives a line for the job's log
 Log = Callable[[str], object]
+
+
+@dataclass(frozen=True, slots=True)
+class Steps:
+    """How a multi-step job runs: its command runner (the queue's or the command
+    line's), where its log lines go, and a scratch folder."""
+
+    run: Runner
+    log: Log = print
+    tmp: str = ""
 
 
 def keep_audio_args(

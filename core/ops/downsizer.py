@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
-from core.ops.shared import Log, Runner
+from core.ops.shared import Steps
 
 #: acceptable bits per pixel per frame - below this the picture falls apart
 MIN_BPP = {"h264": 0.045, "hevc": 0.03, "av1": 0.025}
@@ -24,6 +24,19 @@ LADDER = (2160, 1440, 1080, 900, 720, 540, 480, 360, 240, 180)
 MARGIN = 0.97  # container overhead + encoder slack
 
 
+@dataclass(frozen=True, slots=True)
+class Goal:
+    """What the smaller file must be: under *target_bytes*, in *codec*, with its
+    audio kept ('copy'), re-encoded ('auto') or dropped ('none'); the size and
+    frame rate may be lowered only where allowed."""
+
+    target_bytes: int
+    codec: str = "h264"
+    audio_mode: str = "auto"
+    allow_res: bool = True
+    allow_fps: bool = True
+
+
 @dataclass
 class Plan:
     video_kbps: int
@@ -33,23 +46,22 @@ class Plan:
     height: int
     fps: float
     notes: list[str]
+    goal: Goal
 
 
 def plan(
+    goal: Goal,
     duration: float,
-    target_bytes: int,
     size: tuple[int, int],
     fps: float,
     *,
-    codec: str = "h264",
     has_audio: bool = True,
-    audio_mode: str = "auto",
     audio_src_kbps: int = 0,
-    allow_res: bool = True,
-    allow_fps: bool = True,
 ) -> Plan:
-    """Work out bitrates, size and frame rate for *target_bytes*.  Raises
-    ValueError when the target cannot hold a watchable video."""
+    """Work out bitrates, size and frame rate for *goal*.  Raises ValueError
+    when the target cannot hold a watchable video."""
+    target_bytes, codec, audio_mode = goal.target_bytes, goal.codec, goal.audio_mode
+    allow_res, allow_fps = goal.allow_res, goal.allow_fps
     if duration <= 0:
         raise ValueError("The video's length is unknown.")
     budget = target_bytes * 8 / 1000 / duration * MARGIN  # kbit/s for everything
@@ -98,7 +110,7 @@ def plan(
         notes.append(
             "Expect visible blockiness - a shorter clip or a bigger size would look better."
         )
-    return Plan(v_kbps, a_kbps, mono, out_w, out_h, out_fps, notes)
+    return Plan(v_kbps, a_kbps, mono, out_w, out_h, out_fps, notes, goal)
 
 
 def retry_kbps(v_kbps: int, target_bytes: int, actual_bytes: int, audio_bytes: int = 0) -> int:
@@ -113,22 +125,17 @@ def encode_to_size(
     final: str,
     info: ff.MediaInfo,
     p: Plan,
-    target: int,
+    steps: Steps,
     *,
-    codec: str = "h264",
     fast: bool = False,
-    audio_mode: str = "auto",
     start: float = 0.0,
     end: float | None = None,
-    tmp: str,
-    run: Runner,
-    log: Log = print,
 ) -> int:
-    """Encode *src* into *final* under *target* bytes following plan *p*:
-    two-pass on the CPU (or the GPU when *fast*), then re-encode at a lower
-    bitrate until the file fits.  *run(cmd, duration, lo, hi)* runs one
-    command (lo/hi = its share of the progress).  Shared by the tool and the
-    command line."""
+    """Encode *src* into *final* under the plan's target size: two-pass on the
+    CPU (or the GPU when *fast*), then re-encode at a lower bitrate until the
+    file fits.  Shared by the tool and the command line."""
+    target, codec, audio_mode = p.goal.target_bytes, p.goal.codec, p.goal.audio_mode
+    run, log, tmp = steps.run, steps.log, steps.tmp
     end = info.duration if end is None else end
     length = end - start
     v = info.require_video()

@@ -11,9 +11,9 @@ def _clips(media, *names):
     return [cf.Clip.from_info(ff.probe(media[n])) for n in names]
 
 
-def _render(clips, out, **kw):
+def _render(clips, out, T, **kw):
     venc = enc.video("h264", "low", speed="fastest", hw="off", container="mp4")
-    cmd, seconds = cf.build_command(clips, out, venc=venc, **kw)
+    cmd, seconds = cf.build_command(clips, out, cf.Crossfade(T, **kw), venc=venc)
     res = ff.run(cmd, duration=seconds)
     assert res.ok, res.error_summary
     return ff.probe(out, use_cache=False), seconds
@@ -59,7 +59,7 @@ def test_hostile_filename_and_webm_output(media, outdir):
     clips = _clips(media, "nasty", "h264_b")
     venc = enc.video("vp9", "lowest", speed="fastest", hw="off", container="webm")
     out = str(outdir / "o.webm")
-    cmd, seconds = cf.build_command(clips, out, T=1.0, transitions=["fade"], venc=venc)
+    cmd, seconds = cf.build_command(clips, out, cf.Crossfade(1.0, ["fade"]), venc=venc)
     res = ff.run(cmd, duration=seconds)
     assert res.ok, res.error_summary
     info = ff.probe(out, use_cache=False)

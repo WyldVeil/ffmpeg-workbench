@@ -590,20 +590,11 @@ class VideoCollageTab(BaseTab):
             )
             if not spec.get("auto") and not loop and end == "reflow":
                 end = "hold"  # fixed grids keep their cells
-            graph, has_a = grid.collage_filter(
-                gclips,
-                W,
-                H,
-                fps=fps,
-                gap=self._gap(),
-                mode=self._mode_var.get(),
-                bg=bg,
-                total=total,
-                loop=loop,
-                end=end,
-                audio=audio,
-                layouts=layouts,
+            canvas = grid.Canvas(
+                W, H, fps=fps, gap=self._gap(), mode=self._mode_var.get(), background=bg
             )
+            timing = grid.Timing(total, loop=loop, end=end, audio=audio)
+            graph, has_a = grid.collage_filter(gclips, canvas, timing, layouts)
             for p in paths:
                 cmd += (["-stream_loop", "-1"] if loop else []) + ["-i", p]
         if venc.filter_suffix:

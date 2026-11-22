@@ -7,9 +7,10 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 from core import ffmpeg as ff
-from core.ops.shared import Log, Runner
+from core.ops.shared import Steps
 
 
 def gif_graph(fps: float, width: int, colours: int, dither: str) -> str:
@@ -24,26 +25,29 @@ def gif_graph(fps: float, width: int, colours: int, dither: str) -> str:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Animation:
+    """What the GIF (or animated WebP, *webp*) looks like.  *loops*: 0 forever,
+    -1 once, n = n extra times; *cap*: a size limit in bytes (0: none)."""
+
+    fps: float
+    width: int
+    colours: int = 256
+    dither: str = "sierra2_4a"
+    loops: int = 0
+    cap: int = 0
+    webp: bool = False
+
+
 def make_animation(
-    src: str,
-    final: str,
-    *,
-    start: float,
-    dur: float,
-    fps: float,
-    width: int,
-    colours: int = 256,
-    dither: str = "sierra2_4a",
-    loops: int = 0,
-    cap: int = 0,
-    webp: bool = False,
-    run: Runner,
-    log: Log = print,
+    src: str, final: str, look: Animation, steps: Steps, *, start: float, dur: float
 ) -> int:
-    """GIF (or animated WebP) of [start, start+dur]; when *cap* bytes is set the
+    """GIF (or animated WebP) of [start, start+dur]; with a size cap the
     animation is re-made smaller (width, then frame rate) until it fits.
-    *run(cmd, duration, lo, hi)* runs one command.  Shared with the command line."""
-    w_now, fps_now = width, fps
+    Shared with the command line."""
+    colours, dither, loops, cap, webp = look.colours, look.dither, look.loops, look.cap, look.webp
+    run, log = steps.run, steps.log
+    w_now, fps_now = look.width, look.fps
     for attempt in range(6):
         inp = [ff.ffmpeg_path(), "-y", "-ss", ff.ts(start), "-t", ff.ts(dur), "-i", src]
         if webp:

@@ -231,25 +231,42 @@ def _place(label: str, rect: Rect, crop: Size | None, fps: str) -> str:
     return f"{label}scale={w}:{h},setsar=1,fps={fps},format=yuv420p"
 
 
-def collage_filter(
-    clips: Sequence[Clip],
-    W: int,
-    H: int,
-    *,
-    fps: str = "30",
-    gap: int = 0,
-    mode: str = "fit",
-    bg: str = "black",
-    total: float,
-    loop: bool = True,
-    end: str = "hold",
-    audio: str = "first",
-    layouts: Mapping[LayoutKey, Layout] | None = None,
-) -> tuple[str, bool]:
-    """filter_complex for the collage -> (graph, has_audio).
+@dataclass(frozen=True, slots=True)
+class Canvas:
+    """The frame the clips are arranged on."""
+
+    width: int
+    height: int
+    fps: str = "30"
+    gap: int = 0
+    mode: str = "fit"  # "fit": whole clips (letterboxed); "fill": cropped to their cells
+    background: str = "black"
+
+
+@dataclass(frozen=True, slots=True)
+class Timing:
+    """How long the collage runs, and what its clips do meanwhile.
 
     *end* (when not looping): 'hold' (last frame stays), 'background', or
-    'reflow' (the remaining clips are re-arranged to fill the frame)."""
+    'reflow' (the remaining clips are re-arranged to fill the frame).
+    *audio*: 'first', 'mix' or 'none'."""
+
+    total: float
+    loop: bool = True
+    end: str = "hold"
+    audio: str = "first"
+
+
+def collage_filter(
+    clips: Sequence[Clip],
+    canvas: Canvas,
+    timing: Timing,
+    layouts: Mapping[LayoutKey, Layout] | None = None,
+) -> tuple[str, bool]:
+    """filter_complex for the collage -> (graph, has_audio)."""
+    W, H, fps, gap = canvas.width, canvas.height, canvas.fps, canvas.gap
+    mode, bg = canvas.mode, canvas.background
+    total, loop, end, audio = timing.total, timing.loop, timing.end, timing.audio
     parts: list[str] = []
     if not loop and end == "reflow":
         cuts = sorted({0.0, total, *[c.duration for c in clips if 0 < c.duration < total]})

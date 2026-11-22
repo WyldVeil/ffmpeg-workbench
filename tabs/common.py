@@ -21,6 +21,7 @@ from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops.shared import keep_audio_args
+from core.queue_manager import Hooks
 
 
 def container_of(path: str) -> str:
@@ -177,12 +178,10 @@ def queue_job(
     state["tid"] = tab.enqueue_render(
         name,
         out,
-        worker_fn=work,
-        on_start=on_start,
-        on_progress=on_progress,
-        on_complete=on_complete,
+        work=work,
         expected_duration=duration,
         inputs=inputs,
+        hooks=Hooks(on_start=on_start, on_progress=on_progress, on_complete=on_complete),
     )
     btn.config(text=f"\u2716 {t('btn.cancel')}", command=cancel)
     tab.log(console, f"Queued: {os.path.basename(out)}")

@@ -767,15 +767,9 @@ class TTSVoiceOverTab(BaseTab):
         vol_s = f"+{vol}%" if vol >= 0 else f"{vol}%"
         return vid, rate_s, pitch_s, vol_s
 
-    def _synth_settings(self):
+    def _synth_settings(self) -> tts_core.Voice:
         voice_id, rate, pitch, volume = self._edge_voice_str()
-        return {
-            "engine": self._engine(),
-            "voice": voice_id,
-            "rate": rate,
-            "pitch": pitch,
-            "volume": volume,
-        }
+        return tts_core.Voice(self._engine(), voice_id, rate, pitch, volume)
 
     def _synth_async(self, text, out_path, with_subs, on_ready):
         """Speak *text* in a worker thread, then call on_ready(path, srt) on the UI thread."""
@@ -789,7 +783,7 @@ class TTSVoiceOverTab(BaseTab):
             on_ready(out_path, srt)
 
         tasks.submit(
-            partial(tts_core.synthesize, text, out_path, subtitles=with_subs, **cfg),
+            partial(tts_core.synthesize, text, out_path, cfg, subtitles=with_subs),
             on_done=ready,
             on_error=lambda e: self._on_tts_error(str(e)),
             name="TTS",
@@ -983,11 +977,11 @@ class TTSVoiceOverTab(BaseTab):
 
         def work(_p, _c, ctx):
             speech = os.path.join(
-                ctx.tempdir(), "speech" + (".mp3" if cfg["engine"] == "edge" else ".wav")
+                ctx.tempdir(), "speech" + (".mp3" if cfg.engine == "edge" else ".wav")
             )
             ctx.log("Step 1/2: speaking the script…")
             srt = tts_core.synthesize(
-                text, speech, subtitles=with_srt, cancelled=ctx.cancelled, **cfg
+                text, speech, cfg, subtitles=with_srt, cancelled=ctx.cancelled
             )
             ctx.progress(0.3)
             ctx.log("Step 2/2: building the output…")

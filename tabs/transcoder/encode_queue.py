@@ -17,6 +17,7 @@ from tkinter import messagebox, scrolledtext, ttk
 from core import ffmpeg as ff
 from core.hardware import get_binary_path
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -520,11 +521,13 @@ class EncodeQueueTab(BaseTab):
         self.enqueue_render(
             os.path.basename(src),
             output_path=out,
-            cmd=cmd,
+            work=[cmd],
             inputs=[src],
             expected_duration=ff.duration_of(src) or None,
-            on_progress=lambda tid, line: self._on_task_progress(tid, line),
-            on_complete=lambda tid, rc, out=out: self._on_task_complete(tid, rc, out),
+            hooks=Hooks(
+                on_progress=lambda tid, line: self._on_task_progress(tid, line),
+                on_complete=lambda tid, rc, out=out: self._on_task_complete(tid, rc, out),
+            ),
         )
         return True
 

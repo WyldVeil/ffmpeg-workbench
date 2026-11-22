@@ -14,7 +14,8 @@ import contextlib
 import logging
 import time
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from functools import partial
 from tkinter import messagebox, ttk
 from typing import Any, Literal
@@ -23,7 +24,7 @@ from core import ffmpeg as ff
 from core import logs, outputs, proc, settings, ui
 from core.hardware import open_in_explorer, reveal_file
 from core.i18n import t
-from core.queue_manager import RenderTask
+from core.queue_manager import Hooks, RenderQueueManager, RenderTask, Work
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from core.timecode import Timecode
@@ -876,42 +877,35 @@ class BaseTab(ttk.Frame):
 
     def enqueue_render(
         self,
-        task_name,
-        output_path="",
+        task_name: str,
+        output_path: str = "",
         *,
-        cmd=None,
-        cmds=None,
-        worker_fn=None,
-        on_start=None,
-        on_progress=None,
-        on_complete=None,
-        expected_duration=None,
-        inputs=(),
-        atomic_output=True,
-    ):
+        work: Work,
+        hooks: Hooks | None = None,
+        expected_duration: float | None = None,
+        inputs: Sequence[str] = (),
+        atomic_output: bool = True,
+    ) -> str:
         """Submit a job to the global render queue and return its task id.
 
-        Provide exactly one of *cmd*, *cmds* (run sequentially) or
-        *worker_fn* (``fn(progress_cb, cancel_fn[, ctx])`` returning an int).
-        Callbacks run on the Tk thread; *on_complete(task_id, rc)* always
-        fires (rc 0 = success, -1 = cancelled).
+        *work* is a list of commands (run in order) or a worker function
+        ``fn(progress_cb, cancel_fn[, ctx])`` returning an int.  *hooks* run on
+        the Tk thread; ``on_complete(task_id, rc)`` always fires (rc 0 =
+        success, -1 = cancelled).
         """
-        from core.queue_manager import RenderQueueManager
+        hooks = hooks or Hooks()
+        page_done = hooks.on_complete
 
-        def _done(task_id, rc):
+        def _done(task_id: str, rc: int) -> None:
             self._active_tasks.discard(task_id)
-            if on_complete:
-                on_complete(task_id, rc)
+            if page_done:
+                page_done(task_id, rc)
 
         task_id = RenderQueueManager.get_instance().enqueue(
-            name=task_name,
-            output_path=output_path,
-            cmd=cmd,
-            cmds=cmds,
-            worker_fn=worker_fn,
-            on_start=on_start,
-            on_progress=on_progress,
-            on_complete=_done,
+            task_name,
+            output_path,
+            work=work,
+            hooks=replace(hooks, on_complete=_done),
             expected_duration=expected_duration,
             inputs=inputs,
             atomic_output=atomic_output,
@@ -922,15 +916,11 @@ class BaseTab(ttk.Frame):
 
     def cancel_render(self, task_id=None):
         """Cancel *task_id*, or every job this tab started."""
-        from core.queue_manager import RenderQueueManager
-
         q = RenderQueueManager.get_instance()
         for tid in [task_id] if task_id else list(self._active_tasks):
             q.cancel(tid)
 
     def task(self, task_id):
-        from core.queue_manager import RenderQueueManager
-
         return RenderQueueManager.get_instance().get_task(task_id)
 
     # ── FFmpeg runner ─────────────────────────────────────────────────────────
@@ -1035,10 +1025,8 @@ class BaseTab(ttk.Frame):
         state["task"] = self.enqueue_render(
             name or getattr(self, "TOOL_NAME", "") or "Render",
             output or "",
-            cmds=cmds,
-            on_start=_on_start,
-            on_progress=_on_progress,
-            on_complete=_on_complete,
+            work=cmds,
+            hooks=Hooks(on_start=_on_start, on_progress=_on_progress, on_complete=_on_complete),
             expected_duration=duration,
             inputs=inputs,
         )

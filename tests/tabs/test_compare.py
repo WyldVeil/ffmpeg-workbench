@@ -44,7 +44,7 @@ def copies(media, tmp_path_factory):
 
 
 def measure(ref, dist, **kw):
-    argv, files = q.build(ref, dist, ff.probe(ref), ff.probe(dist), **kw)
+    argv, files = q.build(ref, dist, ff.probe(ref), ff.probe(dist), q.Measure(**kw))
     tmp = tempfile.mkdtemp()
     subprocess.run(argv, cwd=tmp, check=True, capture_output=True)
     return q.read(tmp, files, ff.probe(ref).require_video().fps, kw.get("skip_ref", 0.0))
@@ -87,7 +87,7 @@ def test_faster_settings(media, copies):
 
 def test_build_validates():
     with pytest.raises(ValueError):
-        q.build("a", "b", ff.MediaInfo("a"), ff.MediaInfo("b"), metrics=())
+        q.build("a", "b", ff.MediaInfo("a"), ff.MediaInfo("b"), q.Measure(metrics=()))
     assert q.verdict(96).startswith("Visually") and q.verdict(65).startswith("Poor")
     assert math.isinf(q.ssim_db(1.0)) and q.ssim_db(0.99) == pytest.approx(20.0)
 

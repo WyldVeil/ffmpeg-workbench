@@ -980,12 +980,10 @@ class ScreenRecorderTab(BaseTab):
                 video_in,
                 sources,
                 out,
-                venc.args,
+                venc,
                 audio_codec=self.acodec_var.get() or "aac",
                 region_crop=region,
                 seconds=seconds,
-                pre_input=venc.pre_input,
-                vf_suffix=venc.filter_suffix,
             )
         self._execute(cmd, out, mode_name, seconds)
 

@@ -13,6 +13,7 @@ from core import ffmpeg as ff
 from core import outputs
 from core.hardware import get_video_duration
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from core.timecode import Timecode
 from tabs import framestep
@@ -432,8 +433,9 @@ class MultiSplitterTab(BaseTab):
         self.enqueue_render(
             "Multi-Splitter",
             "",
-            worker_fn=work,
+            work=work,
             inputs=[src],
-            on_progress=lambda tid, line: self.log(self.console, line),
-            on_complete=done,
+            hooks=Hooks(
+                on_progress=lambda tid, line: self.log(self.console, line), on_complete=done
+            ),
         )

@@ -20,6 +20,7 @@ from tkinter import messagebox, ttk
 
 from core import tasks
 from core.i18n import t
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -555,10 +556,9 @@ class KaraokeTab(BaseTab):
         self._task = self.enqueue_render(
             "Karaoke",
             output_path=out,
-            worker_fn=lambda p, c, ctx: self._worker(src, out, settings, ctx),
-            on_progress=lambda _t, line: self._log(line),
-            on_complete=done,
+            work=lambda p, c, ctx: self._worker(src, out, settings, ctx),
             inputs=[src],
+            hooks=Hooks(on_progress=lambda _t, line: self._log(line), on_complete=done),
         )
 
     # ─── Background worker (queue job) ───────────────────────────────────────

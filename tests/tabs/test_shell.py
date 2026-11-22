@@ -68,18 +68,20 @@ def test_closing_with_running_job_cancels_it(ui, outdir, monkeypatch):
     tid = q.enqueue(
         "long",
         out,
-        cmd=[
-            ff.ffmpeg_path(),
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            "testsrc2=size=1280x720:rate=30:d=600",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryslow",
-            out,
+        work=[
+            [
+                ff.ffmpeg_path(),
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=1280x720:rate=30:d=600",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryslow",
+                out,
+            ]
         ],
         expected_duration=600,
     )
