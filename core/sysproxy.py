@@ -40,7 +40,7 @@ import socket
 import sys
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
@@ -60,10 +60,10 @@ class SystemProxy:
 
     source: str = "none"  # where it came from, for the UI
     mode: str = "direct"  # direct | manual | pac | wpad | resolver
-    proxies: dict = field(
-        default_factory=dict
+    proxies: dict[str, str] = field(
+        default_factory=dict[str, str]
     )  # scheme -> proxy URL ("http", "https", "socks", "all")
-    bypass: list = field(default_factory=list)  # no-proxy patterns
+    bypass: list[str] = field(default_factory=list[str])  # no-proxy patterns
     pac_url: str = ""
     note: str = ""
 
@@ -83,7 +83,7 @@ def hide_auth(url: str) -> str:
     return re.sub(r"//[^/@]+@", "//•••@", url)
 
 
-def _run(cmd: list, timeout: float = 4.0) -> str | None:
+def _run(cmd: list[str], timeout: float = 4.0) -> str | None:
     try:
         r = _proc.run(cmd, timeout=timeout)
     except (OSError, _proc.ProcessError):
@@ -112,9 +112,9 @@ def normalise_proxy(value: str, default_scheme: str = "http") -> str:
     return f"{scheme}://{rest}"
 
 
-def parse_windows_proxy_server(value: str) -> dict:
+def parse_windows_proxy_server(value: str) -> dict[str, str]:
     """ProxyServer: 'host:port' or 'http=h:p;https=h:p;socks=h:p'."""
-    out = {}
+    out: dict[str, str] = {}
     value = (value or "").strip()
     if not value:
         return out
@@ -132,7 +132,9 @@ def parse_windows_proxy_server(value: str) -> dict:
 
 def parse_scutil(text: str) -> SystemProxy:
     """macOS ``scutil --proxy`` output."""
-    d, exceptions, in_list = {}, [], False
+    d: dict[str, str] = {}
+    exceptions: list[str] = []
+    in_list = False
     for line in (text or "").splitlines():
         s = line.strip()
         if s.startswith("ExceptionsList") and "<array>" in s:
@@ -168,13 +170,13 @@ def parse_scutil(text: str) -> SystemProxy:
 
 def parse_gsettings(text: str) -> SystemProxy:
     """``gsettings list-recursively org.gnome.system.proxy`` output."""
-    vals = {}
+    vals: dict[str, str] = {}
     for line in (text or "").splitlines():
         parts = line.split(None, 2)
         if len(parts) == 3 and parts[0].startswith("org.gnome.system.proxy"):
             vals[f"{parts[0]}.{parts[1]}"] = parts[2].strip()
 
-    def s(key):
+    def s(key: str) -> str:
         v = vals.get(key, "")
         v = re.sub(r"^(uint32|int32)\s+", "", v)
         return v.strip("'\"")
@@ -223,7 +225,8 @@ def parse_kioslaverc(text: str, env: Mapping[str, str] | None = None) -> SystemP
     """KDE ``kioslaverc`` [Proxy Settings] (Plasma 5 and 6)."""
     env = os.environ if env is None else env
     assert env is not None
-    section, vals = "", {}
+    section = ""
+    vals: dict[str, str] = {}
     for line in (text or "").splitlines():
         line = line.strip()
         if line.startswith("[") and line.endswith("]"):
@@ -263,7 +266,7 @@ def from_environment(env: Mapping[str, str] | None = None) -> SystemProxy:
     env = os.environ if env is None else env
     assert env is not None
 
-    def get(name):
+    def get(name: str) -> str:
         return env.get(name) or env.get(name.upper()) or ""
 
     sp = SystemProxy(source="environment variables")
@@ -276,9 +279,9 @@ def from_environment(env: Mapping[str, str] | None = None) -> SystemProxy:
     return sp
 
 
-def parse_pac_result(result: str) -> list:
+def parse_pac_result(result: str) -> list[str]:
     """'PROXY a:1; SOCKS5 b:2; DIRECT' -> ['http://a:1', 'socks5h://b:2', 'direct://']"""
-    out = []
+    out: list[str] = []
     for part in (result or "").split(";"):
         bits = part.strip().split()
         if not bits:
@@ -298,7 +301,7 @@ def parse_pac_result(result: str) -> list:
     return out or [DIRECT]
 
 
-def bypassed(url: str, patterns: list) -> bool:
+def bypassed(url: str, patterns: Iterable[str]) -> bool:
     """no_proxy / exception-list matching: hosts, .domain, *.wildcards, CIDR,
     host:port, '*' (everything) and Windows' <local> (names without dots)."""
     parts = urlsplit(url)
@@ -343,7 +346,7 @@ def bypassed(url: str, patterns: list) -> bool:
     return False
 
 
-def choose(sp: SystemProxy, url: str) -> list:
+def choose(sp: SystemProxy, url: str) -> list[str]:
     """Proxies for *url* from a manual configuration."""
     if bypassed(url, sp.bypass):
         return [DIRECT]
@@ -405,7 +408,7 @@ def _mac() -> SystemProxy:
     return parse_scutil(out) if out else SystemProxy()
 
 
-def portal_lookup(url: str) -> list | None:
+def portal_lookup(url: str) -> list[str] | None:
     """Ask the desktop portal (GNOME, KDE, Flatpak...) - None when there is no portal."""
     gdbus = shutil.which("gdbus")
     if not gdbus or not os.environ.get("DBUS_SESSION_BUS_ADDRESS", "x"):
@@ -431,7 +434,7 @@ def portal_lookup(url: str) -> list | None:
     return [DIRECT if p.startswith("direct") else normalise_proxy(p) for p in found] or None
 
 
-def libproxy_lookup(url: str) -> list | None:
+def libproxy_lookup(url: str) -> list[str] | None:
     tool = shutil.which("proxy")
     if not tool:
         return None
@@ -468,8 +471,8 @@ def _linux_static() -> SystemProxy:
 
 
 _lock = threading.Lock()
-_static_cache: tuple = (0.0, None)
-_url_cache: dict = {}
+_static_cache: tuple[float, SystemProxy | None] = (0.0, None)
+_url_cache: dict[tuple[str, str], tuple[float, list[str]]] = {}
 _TTL = 300.0
 
 
@@ -494,7 +497,7 @@ def system_config(refresh: bool = False) -> SystemProxy:
     return sp
 
 
-def proxies_for(url: str, *, refresh: bool = False) -> list:
+def proxies_for(url: str, *, refresh: bool = False) -> list[str]:
     """Proxy URLs to try for *url*, best first (``direct://`` = no proxy)."""
     host_key = (urlsplit(url).scheme, (urlsplit(url).hostname or "").lower())
     with _lock:
@@ -560,7 +563,7 @@ const __f = new Function('__job', __PRELUDE__ + '\n' + __job.pac + '\nreturn Fin
 console.log(String(__f(__job)));
 """
 
-_pac_cache: dict = {}
+_pac_cache: dict[str, str] = {}
 
 
 def _deno() -> str | None:
@@ -589,17 +592,18 @@ def _resolve(host: str) -> str | None:
         return None
 
 
-def run_pac(pac_text: str, url: str, *, timeout: float = 10.0) -> list:
+def run_pac(pac_text: str, url: str, *, timeout: float = 10.0) -> list[str]:
     """Evaluate a PAC script for *url* in a permission-less Deno sandbox."""
     deno = _deno()
     if not deno:
         raise RuntimeError("The JavaScript runtime needed for auto-config scripts is missing.")
     host = urlsplit(url).hostname or ""
-    job = {"pac": pac_text, "url": url, "host": host, "myip": _my_ip(), "dns": {}}
+    dns: dict[str, str] = {}
+    job = {"pac": pac_text, "url": url, "host": host, "myip": _my_ip(), "dns": dns}
     if host:
         ip = _resolve(host)
         if ip:
-            job["dns"][host] = ip
+            dns[host] = ip
     import tempfile
 
     with tempfile.TemporaryDirectory(prefix="wme_pac_") as tmp:
@@ -634,9 +638,9 @@ def run_pac(pac_text: str, url: str, *, timeout: float = 10.0) -> list:
     return parse_pac_result(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else "")
 
 
-def _wpad_candidates() -> list:
+def _wpad_candidates() -> list[str]:
     """http://wpad.<each parent of this machine's DNS domain>/wpad.dat, then http://wpad/wpad.dat."""
-    domains = []
+    domains: list[str] = []
     fqdn = socket.getfqdn()
     if "." in fqdn:
         domains.append(fqdn.split(".", 1)[1])
@@ -648,7 +652,7 @@ def _wpad_candidates() -> list:
                         domains += line.split()[1:]
         except OSError:
             pass
-    out = []
+    out: list[str] = []
     for d in dict.fromkeys(domains):
         labels = d.strip(".").split(".")
         for i in range(len(labels) - 1):  # stop before the top-level domain
@@ -669,7 +673,7 @@ def _fetch_pac(url: str) -> str:
         return r.read(1_000_000).decode("utf-8", "replace")
 
 
-def pac_proxies(sp: SystemProxy, url: str) -> list:
+def pac_proxies(sp: SystemProxy, url: str) -> list[str]:
     key = sp.pac_url or "wpad"
     text = _pac_cache.get(key)
     if text is None:
@@ -696,8 +700,8 @@ def pac_proxies(sp: SystemProxy, url: str) -> list:
 # ── Special systems ──────────────────────────────────────────────────────────
 
 
-def os_release() -> dict:
-    out = {}
+def os_release() -> dict[str, str]:
+    out: dict[str, str] = {}
     for path in ("/etc/os-release", "/usr/lib/os-release"):
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:

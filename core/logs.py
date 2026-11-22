@@ -19,6 +19,8 @@ import sys
 import threading
 import traceback
 from collections.abc import Callable
+from types import TracebackType
+from typing import Any
 
 logger = logging.getLogger("crossfader.logs")
 
@@ -62,13 +64,13 @@ def setup(debug: bool = False) -> logging.Logger:
     logging.captureWarnings(True)
     _configured = True
     try:
-        from core import APP_VERSION
+        from core import APP_VERSION as version
     except Exception:
         logger.debug("setup: best-effort step failed", exc_info=True)
-        APP_VERSION = "?"
+        version = "?"
     logger.info(
         "Started v%s on %s %s (Python %s)",
-        APP_VERSION,
+        version,
         platform.system(),
         platform.release(),
         platform.python_version(),
@@ -80,7 +82,7 @@ def get(name: str = "") -> logging.Logger:
     return logging.getLogger(f"{LOGGER_NAME}.{name}" if name else LOGGER_NAME)
 
 
-def _format(exc_type, exc, tb) -> str:
+def _format(exc_type: type[BaseException], exc: BaseException, tb: TracebackType | None) -> str:
     return "".join(traceback.format_exception(exc_type, exc, tb))
 
 
@@ -95,7 +97,14 @@ def set_presenter(presenter: Presenter | None) -> None:
     _presenter = presenter
 
 
-def report(exc_type, exc, tb, *, where: str = "", dialog: bool = True) -> None:
+def report(
+    exc_type: type[BaseException],
+    exc: BaseException,
+    tb: TracebackType | None,
+    *,
+    where: str = "",
+    dialog: bool = True,
+) -> None:
     details = _format(exc_type, exc, tb)
     get().error("Unhandled exception%s:\n%s", f" in {where}" if where else "", details)
     presenter = _presenter
@@ -109,24 +118,29 @@ def report(exc_type, exc, tb, *, where: str = "", dialog: bool = True) -> None:
         ui.call_soon(presenter, "Unexpected error", summary, details)
 
 
-def install_excepthooks(tk_root=None) -> None:
-    def _sys_hook(exc_type, exc, tb):
+def install_excepthooks(tk_root: Any = None) -> None:
+    def _sys_hook(
+        exc_type: type[BaseException], exc: BaseException, tb: TracebackType | None
+    ) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc, tb)
             return
         report(exc_type, exc, tb, where="the application")
 
-    def _thread_hook(args):
+    def _thread_hook(args: threading.ExceptHookArgs) -> None:
         if args.exc_type is SystemExit:
             return
         name = getattr(args.thread, "name", "a background task")
-        report(args.exc_type, args.exc_value, args.exc_traceback, where=name)
+        exc = args.exc_value if args.exc_value is not None else args.exc_type()
+        report(args.exc_type, exc, args.exc_traceback, where=name)
 
     sys.excepthook = _sys_hook
     threading.excepthook = _thread_hook
     if tk_root is not None:
 
-        def _tk_hook(exc_type, exc, tb):
+        def _tk_hook(
+            exc_type: type[BaseException], exc: BaseException, tb: TracebackType | None
+        ) -> None:
             report(exc_type, exc, tb, where="a button or window action")
 
         tk_root.report_callback_exception = _tk_hook

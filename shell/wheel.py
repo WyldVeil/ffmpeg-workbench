@@ -17,13 +17,20 @@ UNITS_PER_NOTCH = 3  # Windows' default is 3 lines
 _IS_MAC = sys.platform == "darwin"
 
 
+def yview(widget: tk.Misc) -> tuple[float, float]:
+    """The visible part of a scrollable widget, as fractions (first, last).
+    Raises TclError for a widget that doesn't scroll."""
+    first, last = widget.tk.call(str(widget), "yview")
+    return float(first), float(last)
+
+
 def can_scroll(widget: tk.Misc) -> bool:
     """True when *widget* has more content than it shows vertically."""
     try:
-        first, last = widget.yview()  # type: ignore[attr-defined]
-    except (tk.TclError, ValueError, AttributeError):
+        first, last = yview(widget)
+    except (tk.TclError, ValueError):
         return False
-    return float(first) > 0.0 or float(last) < 1.0
+    return first > 0.0 or last < 1.0
 
 
 def units(num: int, delta: int, carry: int) -> tuple[int, int]:

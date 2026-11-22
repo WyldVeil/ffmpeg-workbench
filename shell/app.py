@@ -300,8 +300,8 @@ class App(tk.Tk):
             "out_path_var",
         ):  # the usual names for a tool's output box
             var = getattr(page, attr, None)
-            if isinstance(var, tk.Variable):
-                value = str(var.get()).strip()
+            if isinstance(var, tk.StringVar):
+                value = var.get().strip()
                 candidate = value if os.path.isdir(value) else os.path.dirname(value)
                 if value and os.path.exists(candidate):
                     folder = candidate

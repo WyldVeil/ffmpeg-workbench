@@ -5,11 +5,13 @@ drag-and-drop and the command line all end in :meth:`FileOpener.open`.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox
+from typing import Any
 
 from core import settings
 from core.tools import ToolId
@@ -90,7 +92,7 @@ class FileOpener:
     def rebuild_menu(self) -> None:
         menu = self._menu
         menu.delete(0, tk.END)
-        recent = [p for p in settings.RECENT_FILES.get() if isinstance(p, str)]
+        recent = settings.RECENT_FILES.get()
         if not recent:
             menu.add_command(label="(no recent files)", state="disabled")
             return
@@ -116,12 +118,13 @@ class FileOpener:
     # ── Drag-and-drop (Windows, Linux X11/XWayland, macOS) ───────────────────
     def accept_drops(self, *targets: tk.Misc) -> None:
         try:
-            from tkinterdnd2 import DND_FILES, TkinterDnD  # pyright: ignore[reportMissingImports] - optional
+            dnd: Any = importlib.import_module("tkinterdnd2")  # optional, and untyped
 
-            TkinterDnD._require(self._window)  # noqa: SLF001 - tkinterdnd2's documented set-up call
+            dnd.TkinterDnD._require(self._window)  # noqa: SLF001 - tkinterdnd2's documented set-up call
             for widget in targets:
-                widget.drop_target_register(DND_FILES)  # type: ignore[attr-defined]
-                widget.dnd_bind("<<Drop>>", self._dropped)  # type: ignore[attr-defined]
+                target: Any = widget  # tkinterdnd2 adds these methods to every widget
+                target.drop_target_register(dnd.DND_FILES)
+                target.dnd_bind("<<Drop>>", self._dropped)
             self.drag_and_drop = True
         except Exception as exc:  # no tkdnd for this Tk: the app works without it
             logger.info("Drag-and-drop unavailable: %s", exc, exc_info=True)
@@ -129,7 +132,7 @@ class FileOpener:
     def _dropped(self, event: tk.Event) -> str:
         data = str(getattr(event, "data", ""))
         try:
-            paths = list(self._window.tk.splitlist(data))
+            paths = [str(p) for p in self._window.tk.splitlist(data)]  # pyright: ignore[reportUnknownMemberType] - stub gap
         except tk.TclError:
             paths = [data]
         paths = [p[7:] if p.startswith("file://") else p for p in paths]

@@ -19,11 +19,19 @@ import os
 import shutil
 import sys
 import threading
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from core import proc as _proc
 from core import settings, tasks
+
+if TYPE_CHECKING:
+    import tkinter as tk
+
+#: The window a dialog belongs to (None: the main window)
+Parent: TypeAlias = "tk.Misc | None"
+#: A file-type entry's patterns: "*.mp4 *.mov" or ["*.mp4", "*.mov"]
+Patterns = str | Sequence[str]
 
 _IS_WIN = sys.platform.startswith("win")
 _IS_MAC = sys.platform == "darwin"
@@ -101,9 +109,9 @@ def _patterns(exts: Sequence[str]) -> str:
     return " ".join(f"*.{e} *.{e.upper()}" for e in exts)
 
 
-def filetypes(kind: str = "media", extra: Sequence[str] = ()) -> list:
+def filetypes(kind: str = "media", extra: Sequence[str] = ()) -> list[tuple[str, str]]:
     """Tk-style ``filetypes`` list for *kind* (plus optional extra kinds)."""
-    out = []
+    out: list[tuple[str, str]] = []
     for k in (kind, *extra):
         label, exts = _KINDS.get(k, _KINDS["any"])
         if exts:
@@ -127,7 +135,7 @@ def _last_dir(kind: str) -> str:
     return os.path.expanduser("~")
 
 
-def _start_dir(kw: dict, kind: str) -> str:
+def _start_dir(kw: Mapping[str, Any], kind: str) -> str:
     """The folder a dialog opens in: the one asked for, else the last one used."""
     asked = kw.get("initialdir")
     return asked if isinstance(asked, str) and os.path.isdir(asked) else _last_dir(kind)
@@ -166,14 +174,14 @@ def _native_tool() -> str | None:
     return None
 
 
-def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
+def _run_blocking_keep_ui(cmd: list[str], parent: Parent = None) -> str | None:
     """Run *cmd* in a thread while the Tk event loop keeps running."""
     import tkinter as tk
 
     from core import ui
 
     root = parent or ui.tk_default_root()
-    result: dict = {}
+    result: dict[str, Any] = {}
     finished = threading.Event()
 
     def _worker():
@@ -216,23 +224,25 @@ def _run_blocking_keep_ui(cmd: list, parent=None) -> str | None:
 
 def _kdialog_filter(kind: str) -> str:
     label, exts = _KINDS.get(kind, _KINDS["any"])
-    parts = []
+    parts: list[str] = []
     if exts:
         parts.append(f"{_patterns(exts)}|{label}")
     parts.append("*|All files")
     return "\n".join(parts)
 
 
-def _zenity_filters(kind: str) -> list:
+def _zenity_filters(kind: str) -> list[str]:
     label, exts = _KINDS.get(kind, _KINDS["any"])
-    out = []
+    out: list[str] = []
     if exts:
         out.append(f"--file-filter={label} | {_patterns(exts)}")
     out.append("--file-filter=All files | *")
     return out
 
 
-def _native_open(tool: str, kind: str, title: str, start: str, many: bool, parent) -> list | None:
+def _native_open(
+    tool: str, kind: str, title: str, start: str, many: bool, parent: Parent
+) -> list[str] | None:
     if tool == "kdialog":
         cmd = [
             "kdialog",
@@ -260,7 +270,7 @@ def _native_open(tool: str, kind: str, title: str, start: str, many: bool, paren
     return [p for p in out.splitlines() if p.strip()] if out else []
 
 
-def _native_save(tool: str, kind: str, title: str, start_path: str, parent) -> str | None:
+def _native_save(tool: str, kind: str, title: str, start_path: str, parent: Parent) -> str | None:
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getsavefilename", start_path, _kdialog_filter(kind)]
     else:
@@ -275,7 +285,7 @@ def _native_save(tool: str, kind: str, title: str, start_path: str, parent) -> s
     return _run_blocking_keep_ui(cmd, parent)
 
 
-def _native_dir(tool: str, title: str, start: str, parent) -> str | None:
+def _native_dir(tool: str, title: str, start: str, parent: Parent) -> str | None:
     if tool == "kdialog":
         cmd = ["kdialog", "--title", title, "--getexistingdirectory", start]
     else:
@@ -293,7 +303,11 @@ def _native_dir(tool: str, title: str, start: str, parent) -> str | None:
 
 
 def ask_open(
-    kind: str = "media", *, title: str = "Open", parent=None, initialdir: str | None = None
+    kind: str = "media",
+    *,
+    title: str = "Open",
+    parent: Parent = None,
+    initialdir: str | None = None,
 ) -> str:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
@@ -317,8 +331,12 @@ def ask_open(
 
 
 def ask_open_many(
-    kind: str = "media", *, title: str = "Open", parent=None, initialdir: str | None = None
-) -> list:
+    kind: str = "media",
+    *,
+    title: str = "Open",
+    parent: Parent = None,
+    initialdir: str | None = None,
+) -> list[str]:
     start = initialdir if initialdir and os.path.isdir(initialdir) else _last_dir(kind)
     tool = _native_tool()
     if tool:
@@ -347,7 +365,7 @@ def ask_save(
     kind: str = "video",
     defaultextension: str = ".mp4",
     title: str = "Save as",
-    parent=None,
+    parent: Parent = None,
     initialdir: str | None = None,
 ) -> str:
     """Ask where to save.  The native/Tk dialog already confirms overwrites."""
@@ -387,7 +405,7 @@ def ask_save(
 def ask_directory(
     *,
     title: str = "Choose folder",
-    parent=None,
+    parent: Parent = None,
     initialdir: str | None = None,
     kind: str = "folder",
 ) -> str:
@@ -406,7 +424,7 @@ def ask_directory(
 
 
 #: Paths the user picked in a save dialog (overwrite already confirmed there).
-_CONFIRMED: set = set()
+_CONFIRMED: set[str] = set()
 
 
 def was_confirmed(path: str) -> bool:
@@ -419,9 +437,9 @@ def was_confirmed(path: str) -> bool:
 # patterns and remembered folders.
 
 
-def _expand_case(patterns) -> str:
+def _expand_case(patterns: str | Iterable[str]) -> str:
     items = patterns.split() if isinstance(patterns, str) else list(patterns)
-    out = []
+    out: list[str] = []
     for p in items:
         out.append(p)
         if not _IS_WIN and "." in p and p not in ("*.*",) and p.upper() != p:
@@ -429,7 +447,7 @@ def _expand_case(patterns) -> str:
     return " ".join(dict.fromkeys(out))
 
 
-def _clean_patterns(pats) -> str:
+def _clean_patterns(pats: Patterns) -> str:
     """Keep real glob patterns only: a pattern that came through the
     translation layer can be a sentence in some languages, which would make
     the filter match nothing.  On Linux '*.*' also hides files without an
@@ -443,23 +461,23 @@ def _clean_patterns(pats) -> str:
     return " ".join(good)
 
 
-def _normalise_filetypes(filetypes) -> list:
-    norm = []
-    for entry in filetypes or ():
-        try:
-            label, pats = entry
-        except (TypeError, ValueError):
+def _normalise_filetypes(filetypes: object) -> list[tuple[str, str]]:
+    norm: list[tuple[str, str]] = []
+    entries = cast("Iterable[object]", filetypes) if isinstance(filetypes, (list, tuple)) else ()
+    for entry in entries:
+        if not isinstance(entry, (list, tuple)) or len(cast("Sequence[object]", entry)) != 2:
             continue
+        label, pats = cast("tuple[object, Patterns]", tuple(cast("Sequence[object]", entry)))
         norm.append((str(label), _expand_case(_clean_patterns(pats))))
     if not any(p.strip() in ("*", "*.*") for _, p in norm):
         norm.append(("All files", "*"))
     return norm
 
 
-def _kind_from_filetypes(filetypes) -> str:
-    exts = set()
-    for _label, pats in filetypes or ():
-        for p in pats.split() if isinstance(pats, str) else pats:
+def _kind_from_filetypes(filetypes: Sequence[tuple[str, str]]) -> str:
+    exts: set[str] = set()
+    for _label, pats in filetypes:
+        for p in pats.split():
             if p.startswith("*."):
                 exts.add(p[2:].lower())
     for kind in ("subtitle", "lut", "midi", "soundfont", "font", "image", "audio", "video"):
@@ -474,13 +492,13 @@ def _kind_from_filetypes(filetypes) -> str:
     return "any"
 
 
-def _native_filter_from_types(tool: str, filetypes: list) -> list:
+def _native_filter_from_types(tool: str, filetypes: Sequence[tuple[str, str]]) -> list[str]:
     if tool == "kdialog":
         return ["\n".join(f"{p}|{label}" for label, p in filetypes)]
     return [f"--file-filter={label} | {p}" for label, p in filetypes]
 
 
-def askopenfilename(**kw) -> str:
+def askopenfilename(**kw: Any) -> str:
     filetypes = _normalise_filetypes(kw.pop("filetypes", None))
     kind = _kind_from_filetypes(filetypes)
     title = kw.get("title") or "Open"
@@ -517,7 +535,7 @@ def askopenfilename(**kw) -> str:
     return path
 
 
-def askopenfilenames(**kw) -> tuple:
+def askopenfilenames(**kw: Any) -> tuple[str, ...]:
     filetypes = _normalise_filetypes(kw.pop("filetypes", None))
     kind = _kind_from_filetypes(filetypes)
     title = kw.get("title") or "Open"
@@ -560,7 +578,7 @@ def askopenfilenames(**kw) -> tuple:
     return paths
 
 
-def asksaveasfilename(**kw) -> str:
+def asksaveasfilename(**kw: Any) -> str:
     filetypes = _normalise_filetypes(kw.pop("filetypes", None))
     kind = _kind_from_filetypes(filetypes)
     title = kw.get("title") or "Save as"
@@ -610,7 +628,7 @@ def asksaveasfilename(**kw) -> str:
     return path
 
 
-def askdirectory(**kw) -> str:
+def askdirectory(**kw: Any) -> str:
     title = kw.get("title") or "Choose folder"
     start = _start_dir(kw, "folder")
     tool = _native_tool()

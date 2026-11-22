@@ -19,6 +19,7 @@ from core.paths import resource_path
 from core.scaling import px
 from core.skins import UI_FONT
 from core.tools import Category, ToolId, sidebar
+from shell.wheel import yview
 from tabs.kit import labels
 
 WIDTH = 272  # design pixels
@@ -72,7 +73,7 @@ class Sidebar(tk.Frame):
             self._badge = tk.PhotoImage(
                 master=self, file=resource_path("assets", "icons", f"app_{size}.png")
             )
-            badge.create_image(px(19), px(17), image=self._badge)
+            badge.create_image(px(19), px(17), image=self._badge)  # pyright: ignore[reportUnknownMemberType] - stub gap
         except tk.TclError:
             badge.create_rectangle(0, 0, px(38), px(34), fill=skin["accent"], outline="")
         names = tk.Frame(logo, bg=bg)
@@ -124,7 +125,7 @@ class Sidebar(tk.Frame):
         self._search.insert(0, self._placeholder)
         self._search.bind("<FocusIn>", self._search_focus)
         self._search.bind("<FocusOut>", self._search_blur)
-        self.search_var.trace_add("write", lambda *_: self._search_soon())
+        self.search_var.trace_add("write", self._search_changed)
         self._clear = tk.Label(
             inner, text="✕", bg=field_bg, fg="#484848", font=(UI_FONT, 8), cursor="hand2"
         )
@@ -136,7 +137,7 @@ class Sidebar(tk.Frame):
         holder = tk.Frame(self, bg=bg)
         holder.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(holder, bg=bg, highlightthickness=0, yscrollincrement=px(20))
-        bar = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)
+        bar = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType] - stub gap
         self.inner = tk.Frame(self.canvas, bg=bg)
         window = self.canvas.create_window(
             (0, 0), window=self.inner, anchor="nw", width=px(WIDTH - 18)
@@ -287,7 +288,7 @@ class Sidebar(tk.Frame):
         self.canvas.update_idletasks()
         total = box[3]
         frac = (btn.winfo_rooty() - self.inner.winfo_rooty()) / max(total, 1)
-        top, bottom = self.canvas.yview()
+        top, bottom = yview(self.canvas)
         if frac < top:
             self.canvas.yview_moveto(max(0.0, frac - 0.05))
         elif frac + 30 / total > bottom:
@@ -331,6 +332,9 @@ class Sidebar(tk.Frame):
         self._search.delete(0, tk.END)
         self._search_blur(None)
         self.filter()
+
+    def _search_changed(self, _name: str, _index: str, _mode: str) -> None:
+        self._search_soon()
 
     def _search_soon(self) -> None:
         if self._search_job is not None:

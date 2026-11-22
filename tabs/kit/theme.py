@@ -12,18 +12,56 @@ import logging
 import random
 import sys
 import tkinter as tk
+from collections.abc import Callable
+from dataclasses import dataclass
 from tkinter import ttk
+from typing import cast
 
 from core import settings
 from core.scaling import px
-from core.skins import UI_FONT, get_skin, load_skin_name
+from core.skins import UI_FONT, Skin, get_skin, load_skin_name
 
 logger = logging.getLogger("crossfader.kit.theme")
 
 # ── Module-level state for star animation ────────────────────────────────────
+_STAR_CHARS = ("✦", "✧", "⋆", "·", "˚", "∘", "*")
+_STAR_COLOURS = (
+    "#E1BEE7",
+    "#CE93D8",
+    "#BA68C8",
+    "#AB47BC",
+    "#F3E5F5",
+    "#D1C4E9",
+    "#B39DDB",
+    "#EDE7F6",
+)
+
+
+@dataclass(slots=True)
+class _Star:
+    """One falling star: where it is, how it moves, and its canvas item."""
+
+    x: float = 0.0
+    y: float = 0.0
+    speed: float = 1.0
+    drift: float = 0.0
+    char: str = "*"
+    colour: str = "#FFFFFF"
+    size: int = 12
+    item: int | None = None
+
+    def respawn(self, x: float, y: float) -> None:
+        self.x, self.y = x, y
+        self.speed = random.uniform(0.5, 1.8)
+        self.drift = random.uniform(-0.2, 0.2)
+        self.char = random.choice(_STAR_CHARS)
+        self.colour = random.choice(_STAR_COLOURS)
+        self.size = random.randint(8, 16)
+
+
 _star_canvas = None
 _star_toplevel = None  # click-through Toplevel overlay (Windows)
-_star_data: list = []
+_star_data: list[_Star] = []
 _star_after_id = None
 # Unique chroma-key colour - never used in any real skin palette
 _STAR_CHROMA = "#010203"
@@ -84,7 +122,7 @@ def stop_stars():
     _star_data.clear()
 
 
-def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
+def start_stars(app: tk.Tk, skin: Skin, inner_frame: tk.Misc | None = None) -> None:
     """Spawn the Mystical falling-star particle overlay across the full window.
 
     On Windows: creates a borderless click-through Toplevel that sits over the
@@ -102,17 +140,6 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
     # Load persisted speed / density preferences
     set_star_speed(settings.STAR_SPEED.get())
     set_star_count(settings.STAR_COUNT.get())
-    CHARS = ["✦", "✧", "⋆", "·", "˚", "∘", "*"]
-    COLOURS = [
-        "#E1BEE7",
-        "#CE93D8",
-        "#BA68C8",
-        "#AB47BC",
-        "#F3E5F5",
-        "#D1C4E9",
-        "#B39DDB",
-        "#EDE7F6",
-    ]
 
     if sys.platform == "win32":
         import ctypes
@@ -189,7 +216,7 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
         # Canvas.lower() reorders the canvas's *items*; the window-stacking
         # lower is Misc.lower - without it the canvas covered the whole UI.
         with contextlib.suppress(tk.TclError):
-            tk.Misc.lower(_star_canvas)
+            tk.Misc.lower(_star_canvas)  # pyright: ignore[reportUnknownMemberType] - Misc.lower's stub is untyped
 
     # _star_data is populated lazily on the first tick.
     # We use the MAIN APP window dimensions (always reliable) rather than the
@@ -198,64 +225,47 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
 
     def _get_wh():
         """Return (W, H) using app dims - the overlay always matches the app."""
-        W = app.winfo_width()
-        H = app.winfo_height()
-        if W < 100:
-            W = 1440
-        if H < 100:
-            H = 900
-        return W, H
+        width, height = app.winfo_width(), app.winfo_height()
+        return (width if width >= 100 else 1440), (height if height >= 100 else 900)
 
     def _tick():
         global _star_after_id
         if _star_canvas is None or not _star_canvas.winfo_exists():
             return
 
-        W, H = _get_wh()
+        width, height = _get_wh()
 
         # Lazy init - runs once, using reliable app dimensions.
         if not _star_data:
-            n = _star_count
-            slot_w = W / n
-            for i in range(n):
-                _star_data.append(
-                    {
-                        "x": slot_w * i + random.uniform(0, slot_w),
-                        "y": random.uniform(-px(120), H + px(200)),
-                        "speed": random.uniform(0.5, 1.8),
-                        "char": random.choice(CHARS),
-                        "col": random.choice(COLOURS),
-                        "size": random.randint(8, 16),
-                        "drift": random.uniform(-0.2, 0.2),
-                        "id": None,
-                    }
+            slot_w = width / _star_count
+            for i in range(_star_count):
+                star = _Star()
+                star.respawn(
+                    slot_w * i + random.uniform(0, slot_w),
+                    random.uniform(-px(120), height + px(200)),
                 )
+                _star_data.append(star)
 
-        for s in _star_data:
-            if s["id"] is not None:
+        canvas = _star_canvas
+        for star in _star_data:
+            if star.item is not None:
                 with contextlib.suppress(tk.TclError):
-                    _star_canvas.delete(s["id"])
-                s["id"] = None
-
-            s["y"] += px(s["speed"] * _star_speed_mult)
-            s["x"] += px(s["drift"] * _star_speed_mult)
-
-            if s["y"] > H + px(20):
-                # Re-enter from a random x across the full width
-                s["y"] = random.uniform(-px(30), -px(5))
-                s["x"] = random.uniform(0, W)
-                s["speed"] = random.uniform(0.5, 1.8)
-                s["char"] = random.choice(CHARS)
-                s["col"] = random.choice(COLOURS)
-                s["size"] = random.randint(8, 16)
-                s["drift"] = random.uniform(-0.2, 0.2)
-            if s["x"] < 0:
-                s["x"] = W
-            if s["x"] > W:
-                s["x"] = 0
-
-            s["id"] = _star_canvas.create_text(
-                int(s["x"]), int(s["y"]), text=s["char"], fill=s["col"], font=(UI_FONT, s["size"])
+                    canvas.delete(star.item)
+                star.item = None
+            star.y += px(star.speed * _star_speed_mult)
+            star.x += px(star.drift * _star_speed_mult)
+            if star.y > height + px(20):  # re-enter from a random x across the full width
+                star.respawn(random.uniform(0, width), random.uniform(-px(30), -px(5)))
+            if star.x < 0:
+                star.x = width
+            if star.x > width:
+                star.x = 0
+            star.item = canvas.create_text(
+                int(star.x),
+                int(star.y),
+                text=star.char,
+                fill=star.colour,
+                font=(UI_FONT, star.size),
             )
 
         _star_after_id = _star_canvas.after(50, _tick)
@@ -266,7 +276,7 @@ def start_stars(app: tk.Tk, skin: dict, inner_frame=None):
 # ── Global tk option cascading ────────────────────────────────────────────────
 
 
-def apply_default_options(app: tk.Tk, skin: dict):
+def apply_default_options(app: tk.Tk, skin: Skin) -> None:
     """
     Set tk option_add defaults so EVERY tk widget (in all 67 tabs) inherits
     dark-theme colors without touching individual tab files.
@@ -275,6 +285,9 @@ def apply_default_options(app: tk.Tk, skin: dict):
     try:
         app.option_clear()
         P = "widgetDefault"  # lowest priority - explicit widget settings override
+        # option_add's stub leaves the value untyped: give it a typed name once
+        option_add = app.option_add  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        add = cast("Callable[[str, object, str], None]", option_add)
         c = skin["content"]
         fg = skin["fg"]
         i_bg = skin.get("input_bg", "#222222")
@@ -284,119 +297,119 @@ def apply_default_options(app: tk.Tk, skin: dict):
         acc = skin["accent"]
 
         # Frame / generic background
-        app.option_add("*Background", c, P)
-        app.option_add("*Foreground", fg, P)
-        app.option_add("*Font", f"{{{UI_FONT}}} 10", P)
-        app.option_add("*activeBackground", pnl, P)
-        app.option_add("*activeForeground", fg, P)
-        app.option_add("*disabledForeground", bdr, P)
+        add("*Background", c, P)
+        add("*Foreground", fg, P)
+        add("*Font", f"{{{UI_FONT}}} 10", P)
+        add("*activeBackground", pnl, P)
+        add("*activeForeground", fg, P)
+        add("*disabledForeground", bdr, P)
 
         # Label
-        app.option_add("*Label.Background", c, P)
-        app.option_add("*Label.Foreground", fg, P)
-        app.option_add("*Label.BorderWidth", "0", P)
+        add("*Label.Background", c, P)
+        add("*Label.Foreground", fg, P)
+        add("*Label.BorderWidth", "0", P)
 
         # LabelFrame
-        app.option_add("*LabelFrame.Background", c, P)
-        app.option_add("*LabelFrame.Foreground", skin["fgdim"], P)
-        app.option_add("*LabelFrame.Relief", "solid", P)
-        app.option_add("*LabelFrame.BorderWidth", px(1), P)
-        app.option_add("*LabelFrame.Font", f"{{{UI_FONT}}} 9 bold", P)
+        add("*LabelFrame.Background", c, P)
+        add("*LabelFrame.Foreground", skin["fgdim"], P)
+        add("*LabelFrame.Relief", "solid", P)
+        add("*LabelFrame.BorderWidth", px(1), P)
+        add("*LabelFrame.Font", f"{{{UI_FONT}}} 9 bold", P)
 
         # Entry
-        app.option_add("*Entry.Background", i_bg, P)
-        app.option_add("*Entry.Foreground", i_fg, P)
-        app.option_add("*Entry.insertBackground", i_fg, P)
-        app.option_add("*Entry.selectBackground", acc, P)
-        app.option_add("*Entry.selectForeground", "#FFFFFF", P)
-        app.option_add("*Entry.Relief", "flat", P)
-        app.option_add("*Entry.BorderWidth", px(1), P)
-        app.option_add("*Entry.HighlightThickness", "0", P)
+        add("*Entry.Background", i_bg, P)
+        add("*Entry.Foreground", i_fg, P)
+        add("*Entry.insertBackground", i_fg, P)
+        add("*Entry.selectBackground", acc, P)
+        add("*Entry.selectForeground", "#FFFFFF", P)
+        add("*Entry.Relief", "flat", P)
+        add("*Entry.BorderWidth", px(1), P)
+        add("*Entry.HighlightThickness", "0", P)
 
         # Spinbox
-        app.option_add("*Spinbox.Background", i_bg, P)
-        app.option_add("*Spinbox.Foreground", i_fg, P)
-        app.option_add("*Spinbox.insertBackground", i_fg, P)
-        app.option_add("*Spinbox.selectBackground", acc, P)
-        app.option_add("*Spinbox.Relief", "flat", P)
-        app.option_add("*Spinbox.buttonBackground", pnl, P)
-        app.option_add("*Spinbox.HighlightThickness", "0", P)
+        add("*Spinbox.Background", i_bg, P)
+        add("*Spinbox.Foreground", i_fg, P)
+        add("*Spinbox.insertBackground", i_fg, P)
+        add("*Spinbox.selectBackground", acc, P)
+        add("*Spinbox.Relief", "flat", P)
+        add("*Spinbox.buttonBackground", pnl, P)
+        add("*Spinbox.HighlightThickness", "0", P)
 
         # Button
-        app.option_add("*Button.Background", pnl, P)
-        app.option_add("*Button.Foreground", fg, P)
-        app.option_add("*Button.activeBackground", skin["sb_hover"], P)
-        app.option_add("*Button.activeForeground", "#FFFFFF", P)
-        app.option_add("*Button.Relief", "flat", P)
-        app.option_add("*Button.BorderWidth", "0", P)
-        app.option_add("*Button.Cursor", "hand2", P)
-        app.option_add("*Button.HighlightThickness", "0", P)
+        add("*Button.Background", pnl, P)
+        add("*Button.Foreground", fg, P)
+        add("*Button.activeBackground", skin["sb_hover"], P)
+        add("*Button.activeForeground", "#FFFFFF", P)
+        add("*Button.Relief", "flat", P)
+        add("*Button.BorderWidth", "0", P)
+        add("*Button.Cursor", "hand2", P)
+        add("*Button.HighlightThickness", "0", P)
 
         # Checkbutton
-        app.option_add("*Checkbutton.Background", c, P)
-        app.option_add("*Checkbutton.Foreground", fg, P)
-        app.option_add("*Checkbutton.selectColor", pnl, P)
-        app.option_add("*Checkbutton.activeBackground", c, P)
-        app.option_add("*Checkbutton.activeForeground", acc, P)
-        app.option_add("*Checkbutton.HighlightThickness", "0", P)
+        add("*Checkbutton.Background", c, P)
+        add("*Checkbutton.Foreground", fg, P)
+        add("*Checkbutton.selectColor", pnl, P)
+        add("*Checkbutton.activeBackground", c, P)
+        add("*Checkbutton.activeForeground", acc, P)
+        add("*Checkbutton.HighlightThickness", "0", P)
 
         # Radiobutton
-        app.option_add("*Radiobutton.Background", c, P)
-        app.option_add("*Radiobutton.Foreground", fg, P)
-        app.option_add("*Radiobutton.selectColor", acc, P)
-        app.option_add("*Radiobutton.activeBackground", c, P)
-        app.option_add("*Radiobutton.activeForeground", acc, P)
-        app.option_add("*Radiobutton.HighlightThickness", "0", P)
+        add("*Radiobutton.Background", c, P)
+        add("*Radiobutton.Foreground", fg, P)
+        add("*Radiobutton.selectColor", acc, P)
+        add("*Radiobutton.activeBackground", c, P)
+        add("*Radiobutton.activeForeground", acc, P)
+        add("*Radiobutton.HighlightThickness", "0", P)
 
         # Scale (slider).  Tk draws the slider in the background colour, so the
         # trough must be clearly lighter for the slider to show at all.
-        app.option_add("*Scale.Background", c, P)
-        app.option_add("*Scale.Foreground", fg, P)
+        add("*Scale.Background", c, P)
+        add("*Scale.Foreground", fg, P)
         # option *names* are case-sensitive ("troughColor"); its class is
         # "Background", so without this the trough took the background colour
-        app.option_add("*Scale.troughColor", _blend(bdr, fg, 0.35), P)
-        app.option_add("*Scale.activeBackground", acc, P)
-        app.option_add("*Scale.SliderRelief", "flat", P)
-        app.option_add("*Scale.HighlightThickness", "0", P)
-        app.option_add("*Scale.BorderWidth", "0", P)
+        add("*Scale.troughColor", _blend(bdr, fg, 0.35), P)
+        add("*Scale.activeBackground", acc, P)
+        add("*Scale.SliderRelief", "flat", P)
+        add("*Scale.HighlightThickness", "0", P)
+        add("*Scale.BorderWidth", "0", P)
         # Tk's own default sizes are in pixels: grow them on HiDPI screens
-        app.option_add("*Scale.Width", px(15), P)
-        app.option_add("*Scale.SliderLength", px(30), P)
-        app.option_add("*Scale.Length", px(100), P)
-        app.option_add("*Scrollbar.Width", px(11), P)
+        add("*Scale.Width", px(15), P)
+        add("*Scale.SliderLength", px(30), P)
+        add("*Scale.Length", px(100), P)
+        add("*Scrollbar.Width", px(11), P)
         for cls in ("Entry", "Spinbox", "Text"):
-            app.option_add(f"*{cls}.InsertWidth", px(2), P)
+            add(f"*{cls}.InsertWidth", px(2), P)
 
         # Listbox
-        app.option_add("*Listbox.Background", i_bg, P)
-        app.option_add("*Listbox.Foreground", i_fg, P)
-        app.option_add("*Listbox.selectBackground", acc, P)
-        app.option_add("*Listbox.selectForeground", "#FFFFFF", P)
-        app.option_add("*Listbox.Relief", "flat", P)
-        app.option_add("*Listbox.BorderWidth", "0", P)
-        app.option_add("*Listbox.HighlightThickness", "0", P)
+        add("*Listbox.Background", i_bg, P)
+        add("*Listbox.Foreground", i_fg, P)
+        add("*Listbox.selectBackground", acc, P)
+        add("*Listbox.selectForeground", "#FFFFFF", P)
+        add("*Listbox.Relief", "flat", P)
+        add("*Listbox.BorderWidth", "0", P)
+        add("*Listbox.HighlightThickness", "0", P)
 
         # Text (used for console log areas)
-        app.option_add("*Text.Background", skin["console_bg"], P)
-        app.option_add("*Text.Foreground", skin["console_fg"], P)
-        app.option_add("*Text.insertBackground", skin["console_fg"], P)
-        app.option_add("*Text.selectBackground", acc, P)
-        app.option_add("*Text.Relief", "flat", P)
-        app.option_add("*Text.BorderWidth", "0", P)
-        app.option_add("*Text.HighlightThickness", "0", P)
+        add("*Text.Background", skin["console_bg"], P)
+        add("*Text.Foreground", skin["console_fg"], P)
+        add("*Text.insertBackground", skin["console_fg"], P)
+        add("*Text.selectBackground", acc, P)
+        add("*Text.Relief", "flat", P)
+        add("*Text.BorderWidth", "0", P)
+        add("*Text.HighlightThickness", "0", P)
 
         # Canvas
-        app.option_add("*Canvas.Background", c, P)
-        app.option_add("*Canvas.HighlightThickness", "0", P)
+        add("*Canvas.Background", c, P)
+        add("*Canvas.HighlightThickness", "0", P)
 
         # Menu
-        app.option_add("*Menu.Background", pnl, P)
-        app.option_add("*Menu.Foreground", fg, P)
-        app.option_add("*Menu.activeBackground", acc, P)
-        app.option_add("*Menu.activeForeground", "#FFFFFF", P)
-        app.option_add("*Menu.Relief", "flat", P)
-        app.option_add("*Menu.BorderWidth", px(1), P)
-        app.option_add("*Menu.TearOff", "0", P)
+        add("*Menu.Background", pnl, P)
+        add("*Menu.Foreground", fg, P)
+        add("*Menu.activeBackground", acc, P)
+        add("*Menu.activeForeground", "#FFFFFF", P)
+        add("*Menu.Relief", "flat", P)
+        add("*Menu.BorderWidth", px(1), P)
+        add("*Menu.TearOff", "0", P)
 
     except Exception:
         logger.debug("apply_default_options: best-effort step failed", exc_info=True)
@@ -417,7 +430,7 @@ def _blend(a: str, b: str, amount: float) -> str:
 
 def apply_skin(
     app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame, stars_behind: tk.Misc | None = None
-) -> dict:
+) -> Skin:
     """Apply the saved theme to the window (safe to repeat: live switching).
     Returns the palette; the shell's own widgets recolour themselves from it."""
     skin = get_skin(load_skin_name())
@@ -453,7 +466,7 @@ def apply_skin(
     return skin
 
 
-def apply_ttk_styles(skin: dict):
+def apply_ttk_styles(skin: Skin) -> None:
     """Apply comprehensive ttk styling."""
     try:
         style = ttk.Style()
@@ -574,12 +587,17 @@ def apply_ttk_styles(skin: dict):
         logger.debug("apply_ttk_styles: best-effort step failed", exc_info=True)
 
 
-def _recolour_frame(widget, bg_col: str):
+def _configure(widget: tk.Misc, **options: str) -> None:
+    """``widget.configure(**options)`` for any Tk widget class (Misc doesn't declare the options)."""
+    widget.tk.call(str(widget), "configure", *[x for k, v in options.items() for x in (f"-{k}", v)])
+
+
+def _recolour_frame(widget: tk.Misc, bg_col: str) -> None:
     """Recursively set bg on Frame/Label/Checkbutton sidebar children."""
     try:
         cls = widget.winfo_class()
         if cls in ("Frame", "Label", "Checkbutton"):
-            widget.config(bg=bg_col)
+            _configure(widget, bg=bg_col)
     except Exception:
         logger.debug("_recolour_frame: best-effort step failed", exc_info=True)
     try:
@@ -589,7 +607,7 @@ def _recolour_frame(widget, bg_col: str):
         logger.debug("_recolour_frame: best-effort step failed", exc_info=True)
 
 
-def _recolour_widget_tree(widget, skin: dict):
+def _recolour_widget_tree(widget: tk.Misc, skin: Skin) -> None:
     """
     Recursively update background colors in the content area for live skin switch.
     Only updates widgets that don't have explicit color overrides (checks for
@@ -601,13 +619,13 @@ def _recolour_widget_tree(widget, skin: dict):
 
         if cls == "Frame":
             with contextlib.suppress(tk.TclError):
-                widget.config(bg=c)
+                _configure(widget, bg=c)
         elif cls == "Label":
             with contextlib.suppress(tk.TclError):
-                widget.config(bg=c, fg=skin["fg"])
+                _configure(widget, bg=c, fg=skin["fg"])
         elif cls == "LabelFrame":
             with contextlib.suppress(tk.TclError):
-                widget.config(bg=c, fg=skin["fgdim"])
+                _configure(widget, bg=c, fg=skin["fgdim"])
 
         for child in widget.winfo_children():
             _recolour_widget_tree(child, skin)

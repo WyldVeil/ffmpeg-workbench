@@ -128,4 +128,4 @@ class ScrubTransport:
         return max(0.0, float(self._duration() or 0.0))
 
     def seek(self, seconds: float) -> None:
-        self._scale.set(max(0.0, min(seconds, self.duration or seconds)))
+        self._scale.set(max(0.0, min(seconds, self.duration or seconds)))  # pyright: ignore[reportUnknownMemberType] - stub gap
