@@ -11,6 +11,7 @@ from core import filters as fl
 from core.ops import green_key as gk
 from core.ops import lut as lut_ops
 from core.ops import scopes as sc
+from core.ops import speed_ramp as sr_ops
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
 
 # ── pure helpers ─────────────────────────────────────────────────────────────
@@ -26,14 +27,14 @@ def test_colour_chain_neutral_and_curves():
 
 
 def test_speed_curve_maths():
-    pts = speed_ramp.normalise_points([(2, 1.0), (4, 3.0)], 10)
+    pts = sr_ops.normalise_points([(2, 1.0), (4, 3.0)], 10)
     assert pts[0] == (0.0, 1.0) and pts[-1] == (10, 3.0)
     # 0-2 s at 1x, 2-4 s ramp 1->3x (ln 3 / 1 s), 4-10 s at 3x
     expected = 2 + __import__("math").log(3) + 2
-    assert speed_ramp.output_duration(pts) == pytest.approx(expected, abs=1e-6)
+    assert sr_ops.output_duration(pts) == pytest.approx(expected, abs=1e-6)
     assert fl.atempo_chain(0.2) == "atempo=0.5,atempo=0.5,atempo=0.800000"
-    assert "rubberband tempo" in speed_ramp.tempo_commands(pts, "rubberband")
-    assert speed_ramp.tempo_commands(pts, "atempo").count("atempo@") >= 4
+    assert "rubberband tempo" in sr_ops.tempo_commands(pts, "rubberband")
+    assert sr_ops.tempo_commands(pts, "atempo").count("atempo@") >= 4
 
 
 def test_lut_kinds(tmp_path, media):
@@ -246,9 +247,7 @@ def test_speed(ui, media, outdir, mode):
         tab.preset_var.set("Speed up in the middle")
         tab._apply_preset()
         ui.pump(0.3)
-        expected = speed_ramp.output_duration(
-            speed_ramp.normalise_points(tab.parsed_points(), src_dur)
-        )
+        expected = sr_ops.output_duration(sr_ops.normalise_points(tab.parsed_points(), src_dur))
     else:
         tab.mode_var.set("constant")
         tab._on_mode()

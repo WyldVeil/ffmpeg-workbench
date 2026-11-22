@@ -13,17 +13,14 @@ tabs/visuals/speed_ramp.py  -  Speed Ramper
 
 from __future__ import annotations
 
-import itertools
 import math
-import os
 import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
-from core import encoders as enc
 from core import ffmpeg as ff
-from core.filters import atempo_chain
 from core.i18n import t
+from core.ops import speed_ramp as sr_ops
 from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
@@ -54,125 +51,6 @@ PRESETS = {
         (0.6, 3.0),
     ],
 }
-
-
-# ── Speed curve maths (pure, tested) ─────────────────────────────────────────
-
-
-def normalise_points(points, duration):
-    """Sorted (time, speed) points clipped to [0, duration], with the speed
-    held before the first and after the last point."""
-    pts = sorted((max(0.0, min(float(tm), duration)), float(sp)) for tm, sp in points)
-    merged = []
-    for tm, sp in pts:
-        if merged and abs(merged[-1][0] - tm) < 1e-6:
-            merged[-1] = (tm, sp)
-        else:
-            merged.append((tm, sp))
-    if not merged:
-        return [(0.0, 1.0), (duration, 1.0)]
-    if merged[0][0] > 0:
-        merged.insert(0, (0.0, merged[0][1]))
-    if merged[-1][0] < duration:
-        merged.append((duration, merged[-1][1]))
-    return merged
-
-
-def speed_at(points, at):
-    for (t0, v0), (t1, v1) in itertools.pairwise(points):
-        if t0 <= at <= t1:
-            return v0 if t1 - t0 < 1e-9 else v0 + (v1 - v0) * (at - t0) / (t1 - t0)
-    return points[-1][1]
-
-
-def segments(points):
-    """[(t0, t1, v0, v1, out_start, out_len)] for consecutive points."""
-    out, acc = [], 0.0
-    for (t0, v0), (t1, v1) in itertools.pairwise(points):
-        if t1 - t0 < 1e-9:
-            continue
-        if abs(v1 - v0) < 1e-9:
-            seg = (t1 - t0) / v0
-        else:
-            k = (v1 - v0) / (t1 - t0)
-            seg = math.log(v1 / v0) / k
-        out.append((t0, t1, v0, v1, acc, seg))
-        acc += seg
-    return out
-
-
-def output_duration(points) -> float:
-    segs = segments(points)
-    return segs[-1][4] + segs[-1][5] if segs else 0.0
-
-
-def setpts_expr(points) -> str:
-    """Output time (seconds) as an FFmpeg expression of the source time T."""
-    pieces = []
-    for t0, t1, v0, v1, start, _seg in segments(points):
-        if abs(v1 - v0) < 1e-9:
-            e = f"({start:.6f}+(T-{t0:.6f})/{v0:.6f})"
-        else:
-            k = (v1 - v0) / (t1 - t0)
-            e = f"({start:.6f}+log(({v0:.6f}+{k:.6f}*(T-{t0:.6f}))/{v0:.6f})/{k:.6f})"
-        pieces.append((t1, e))
-    expr = pieces[-1][1]
-    for t1, e in reversed(pieces[:-1]):
-        expr = f"if(lt(T,{t1:.6f}),{e},{expr})"
-    return expr
-
-
-_ATEMPO_STAGES = ("a", "b", "c", "d")  # 4 chained atempo: 0.0625x - 10^8x
-
-
-def tempo_commands(points, engine: str = "rubberband", step: float = 0.1) -> str:
-    """asendcmd script that makes the audio tempo follow the speed curve.
-
-    *engine* ``rubberband`` drives one rubberband filter (0.01x - 100x);
-    ``atempo`` drives four named atempo filters with the 4th root of the
-    speed each (atempo alone only accepts 0.5x - 100x)."""
-
-    def line(at, speed):
-        if engine == "rubberband":
-            return f"{at:.3f} rubberband tempo {speed:.6f};"
-        r = speed**0.25
-        return f"{at:.3f} " + ", ".join(f"atempo@{n} tempo {r:.6f}" for n in _ATEMPO_STAGES) + ";"
-
-    lines = []
-    for t0, t1, v0, v1, _s, _l in segments(points):
-        if abs(v1 - v0) < 1e-9:
-            lines.append(line(t0, v0))
-            continue
-        k = (v1 - v0) / (t1 - t0)
-        tm = t0
-        while tm < t1 - 1e-9:
-            end = min(tm + step, t1)
-            va, vb = v0 + k * (tm - t0), v0 + k * (end - t0)
-            # constant speed with the same output length as this slice of the curve
-            lines.append(line(tm, (end - tm) * k / math.log(vb / va)))
-            tm = end
-    return "\n".join(lines) + "\n"
-
-
-def ramp_audio_chain(points, engine: str = "rubberband") -> str:
-    """Audio filters (after asendcmd) for a speed curve starting at points[0]."""
-    v0 = points[0][1]
-    if engine == "rubberband":
-        return f"asendcmd=f=tempo.cmd,rubberband=tempo={v0:.6f}"
-    r = v0**0.25
-    return "asendcmd=f=tempo.cmd," + ",".join(f"atempo@{n}={r:.6f}" for n in _ATEMPO_STAGES)
-
-
-def tempo_engine() -> str:
-    return "rubberband" if ff.has_filter("rubberband") else "atempo"
-
-
-def frame_filter(mode: str, fps: str) -> str:
-    if mode == "blend":
-        return f"framerate=fps={fps}"
-    if mode == "flow":
-        return f"minterpolate=fps={fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
-    return f"fps={fps}"
 
 
 # ── Tab ──────────────────────────────────────────────────────────────────────
@@ -460,7 +338,7 @@ class SpeedRamperTab(BaseTab):
             if self.mode_var.get() == "constant":
                 new = dur / max(self.speed_var.get(), MIN_SPEED)
             else:
-                new = output_duration(normalise_points(self.parsed_points(), dur))
+                new = sr_ops.output_duration(sr_ops.normalise_points(self.parsed_points(), dur))
         except ValueError as exc:
             self.result_lbl.config(text=f"⚠ {exc}")
             return
@@ -475,7 +353,7 @@ class SpeedRamperTab(BaseTab):
         left, right, edge = px(30), px(4), px(8)
         dur = self.duration or 10.0
         try:
-            pts = normalise_points(self.parsed_points(), dur)
+            pts = sr_ops.normalise_points(self.parsed_points(), dur)
         except ValueError:
             return
         lo, hi = math.log2(MIN_SPEED), math.log2(MAX_SPEED)
@@ -501,7 +379,7 @@ class SpeedRamperTab(BaseTab):
         steps = 200
         for i in range(steps + 1):
             tm = dur * i / steps
-            xy += [left + (w - left - right) * i / steps, y_of(speed_at(pts, tm))]
+            xy += [left + (w - left - right) * i / steps, y_of(sr_ops.speed_at(pts, tm))]
         c.create_line(*xy, fill=CLR["accent"], width=px(2), smooth=False)
         for tm, sp in pts:
             x = left + (w - left - right) * tm / dur
@@ -528,8 +406,8 @@ class SpeedRamperTab(BaseTab):
                 points = None
                 new_dur = dur / speed
             else:
-                points = normalise_points(self.parsed_points(), dur)
-                new_dur = output_duration(points)
+                points = sr_ops.normalise_points(self.parsed_points(), dur)
+                new_dur = sr_ops.output_duration(points)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -537,76 +415,34 @@ class SpeedRamperTab(BaseTab):
         if not out:
             return
         container = common.container_of(out)
-        frames = frame_filter(slowmo, fps)
         has_audio = info.has_audio and audio_mode != "mute"
         sr = int(info.require_audio().sample_rate or 48000) if info.has_audio else 48000
-
+        spec = sr_ops.Speed(
+            points=points,
+            speed=speed,
+            slowmo=slowmo,
+            rate=fps,
+            keep_pitch=audio_mode != "pitch",
+            audio=has_audio,
+            sample_rate=sr,
+        )
         if points is None:
-            graph = f"[0:v]setpts=(PTS-STARTPTS)/{speed:.6f},{frames}[v]"
-            if has_audio:
-                if audio_mode == "pitch":
-                    af = f"asetrate={sr * speed:.0f},aresample={sr}"
-                else:
-                    af = atempo_chain(speed, tempo_engine())
-                graph += f";[0:a:0]asetpts=PTS-STARTPTS,{af}[a]"
             self.log(self.console, f"Speed {speed:g}× → {ff.format_time(new_dur)}")
-            self._queue(src, info, out, container, graph, has_audio, new_dur, None)
-            return
-
-        expr = setpts_expr(points)
-        graph = f"[0:v]setpts=PTS-STARTPTS,setpts='({expr})/TB',{frames}[v]"
-        engine = tempo_engine()
-        if has_audio:
-            graph += f";[0:a:0]asetpts=PTS-STARTPTS,{ramp_audio_chain(points, engine)}[a]"
-        self.log(
-            self.console, f"Speed ramp through {len(points)} points → {ff.format_time(new_dur)}"
+        else:
+            self.log(
+                self.console, f"Speed ramp through {len(points)} points → {ff.format_time(new_dur)}"
+            )
+        job = sr_ops.SpeedJob(
+            src=src,
+            speed=spec,
+            engine=sr_ops.tempo_engine(),
+            venc=self.encoder.video_encode(container),
+            container=container,
+            duration=new_dur,
         )
-        self._queue(
-            src,
-            info,
-            out,
-            container,
-            graph,
-            has_audio,
-            new_dur,
-            tempo_commands(points, engine) if has_audio else None,
-        )
-
-    def _queue(self, src, info, out, container, graph, has_audio, new_dur, commands):
-        venc = self.encoder.video_encode(container)
-        if venc.filter_suffix:
-            graph += f";[v]{venc.filter_suffix}[venc]"
-        vmap = "[venc]" if venc.filter_suffix else "[v]"
-        audio = (
-            ["-map", "[a]", *enc.audio(enc.default_audio_for(container), container=container)]
-            if has_audio
-            else ["-an"]
-        )
-        base = [
-            ff.ffmpeg_path(),
-            "-y",
-            *venc.pre_input,
-            "-i",
-            src,
-            "-filter_complex",
-            graph,
-            "-map",
-            vmap,
-            *audio,
-            *venc.args,
-        ]
-
-        def work(_progress, _cancelled, ctx):
-            workdir = ctx.tempdir()
-            if commands:
-                with open(os.path.join(workdir, "tempo.cmd"), "w", encoding="ascii") as fh:
-                    fh.write(commands)
-            ctx.run([*base, ctx.output()], duration=new_dur, cwd=workdir)
-            return 0
-
         common.queue_job(
             self,
-            common.Job(name="Speed Ramper", out=out, work=work, duration=new_dur, inputs=[src]),
+            common.Job(name="Speed Ramper", out=out, work=job.run, duration=new_dur, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
         )
