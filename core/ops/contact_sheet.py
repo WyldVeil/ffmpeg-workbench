@@ -22,11 +22,13 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import partial
 
 from core import ass
 from core import ffmpeg as ff
 from core.errors import CommandError
 from core.ops.frame_extractor import quality_args
+from core.queue_manager import TaskContext
 
 #: each "next set" moves the picks by this fraction of a slot (1 - 1/golden ratio):
 #: the sets interleave and no two are the same.
@@ -488,3 +490,40 @@ def make(
     ass_path = script.write(os.path.join(folder, "sheet.ass"))
     if not run(compose_cmd(folder, p.geo, p.layout, ass_path, out, quality=quality), 1.0):
         raise CommandError("the tiles couldn't be joined into a sheet")
+
+
+# ── The queued job ───────────────────────────────────────────────────────────
+
+
+@dataclass(kw_only=True)
+class SheetJob:
+    """The queued sheet (the Contact Sheet page, the Frame Extractor): finds the
+    shot changes if needed, then makes it, with progress."""
+
+    info: ff.MediaInfo
+    layout: Layout
+    labels: Labels
+    picking: Picking
+    threshold: float | None
+    cuts: list[float] | None  # the preview's, when it found them
+    quality: int
+    _at: float = 0.0  # progress so far
+
+    def _run(self, ctx: TaskContext, cmd: list[str], done: float) -> bool:
+        start, self._at = self._at, max(self._at, done)
+        return ctx.span(start, self._at).run(cmd, check=False).returncode == 0
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        cuts = self.cuts
+        if self.threshold is not None and cuts is None:
+            ctx.log("Finding the shot changes…")
+            find = scene_cmd(self.info.path, self.threshold)
+            cuts = parse_cuts(
+                ctx.span(0.0, 0.3).run(find, duration=self.info.duration, tail=100_000).log_tail
+            )
+            self._at = 0.3
+        p = plan(self.info, self.layout, self.labels, self.picking, cuts or ())
+        run = partial(self._run, ctx)
+        make(p, ctx.tempdir(), ctx.output(), run, quality=self.quality, cancelled=ctx.cancelled)
+        ctx.log(f"{len(p.times)} frames · {p.geo.width} × {p.geo.height} px")
+        return 0

@@ -157,3 +157,15 @@ def free_name(path: str, taken: Collection[str]) -> str:
         cand = f"{base} ({n}){ext}"
         n += 1
     return cand
+
+
+def fresh_folder(parent: str, base: str) -> str:
+    """A new (or empty) folder *base* in *parent* for a set of outputs:
+    "base", else "base (2)", "base (3)"... - created; never one with files in it."""
+    path = os.path.join(parent, base)
+    n = 2
+    while os.path.exists(path) and os.listdir(path):
+        path = os.path.join(parent, f"{base} ({n})")
+        n += 1
+    os.makedirs(path, exist_ok=True)
+    return path

@@ -556,7 +556,7 @@ class ThumbnailMakerTab(BaseTab):
             )
             if not out_root:
                 return
-            from tabs.social.frame_extractor import fresh_folder
+            from core.outputs import fresh_folder
 
             base = os.path.splitext(os.path.basename(src))[0]
             out_dir = fresh_folder(out_root, f"{base} thumbnails")

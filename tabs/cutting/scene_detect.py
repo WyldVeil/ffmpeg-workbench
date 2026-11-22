@@ -22,11 +22,11 @@ from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
+from core.ops.frame_extractor import keep_scenes
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.social.frame_extractor import keep_scenes
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, scroll_body
 
 
@@ -259,7 +259,7 @@ class SceneDetectTab(BaseTab):
             return
         folder = self.dir_var.get().strip() or os.path.dirname(src)
         base = os.path.splitext(os.path.basename(src))[0]
-        from tabs.social.frame_extractor import fresh_folder
+        from core.outputs import fresh_folder
 
         out_dir = fresh_folder(folder, f"{base} scenes")
         ext = os.path.splitext(src)[1].lower() if self.lossless_var.get() else ".mp4"

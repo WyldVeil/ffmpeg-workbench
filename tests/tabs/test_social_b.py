@@ -7,6 +7,7 @@ import pytest
 
 from core import ass
 from core import ffmpeg as ff
+from core.ops import frame_extractor as fe
 from core.ops import titles as titles_ops
 from tabs.social import frame_extractor, intro_maker, slideshow, titles
 
@@ -33,9 +34,9 @@ def test_title_script_all_styles_scale():
 
 
 def test_frame_helpers():
-    assert frame_extractor.keep_scenes([0.5, 3.0, 3.5, 9.0], 2.0) == [0.0, 3.0, 9.0]
-    assert frame_extractor.quality_args("jpg", 100)[-1] == "2"
-    assert frame_extractor.quality_args("jpg", 1)[-1] == "31"
+    assert fe.keep_scenes([0.5, 3.0, 3.5, 9.0], 2.0) == [0.0, 3.0, 9.0]
+    assert fe.quality_args("jpg", 100)[-1] == "2"
+    assert fe.quality_args("jpg", 1)[-1] == "31"
     fade = slideshow.ss.Join("fade", 1.0)
     starts, total = slideshow.ss.timeline([4.0, 4.0, 4.0], [fade, fade])
     assert starts == [0.0, 3.0, 6.0] and total == 10.0

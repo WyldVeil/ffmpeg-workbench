@@ -170,9 +170,28 @@ PROFILE_LABELS = {
 }
 
 # duration → audio bitrate (kbps)
-AUDIO_MAP_6MB: dict[float, float] = {15: 128, 30: 120, 45: 112, 95: 96, 120: 80, 240: 64, 300: 56, 360: 48, 400: 32}
+AUDIO_MAP_6MB: dict[float, float] = {
+    15: 128,
+    30: 120,
+    45: 112,
+    95: 96,
+    120: 80,
+    240: 64,
+    300: 56,
+    360: 48,
+    400: 32,
+}
 AUDIO_MAP_4MB: dict[float, float] = {10: 96, 20: 64, 40: 56, 60: 48, 120: 32}
-AUDIO_MAP_MUSIC: dict[float, float] = {15: 320, 45: 256, 100: 192, 220: 160, 285: 128, 300: 120, 330: 112, 400: 96}
+AUDIO_MAP_MUSIC: dict[float, float] = {
+    15: 320,
+    45: 256,
+    100: 192,
+    220: 160,
+    285: 128,
+    300: 120,
+    330: 112,
+    400: 96,
+}
 
 _FPS_MAP: dict[float, float] = {150.0: 60.0, 200.0: 30.0, 400.0: 24.0}
 _BITRATE_COMP_MAP: dict[float, float] = {240.0: 0, 300.0: 2, 360.0: 3, 380.0: 4, 400.0: 6}

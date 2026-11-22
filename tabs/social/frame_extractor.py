@@ -18,14 +18,15 @@ with or overwritten by new ones.
 from __future__ import annotations
 
 import os
-import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core import filters as fl
 from core.i18n import t
+from core.ops import contact_sheet as cs
+from core.ops import frame_extractor as fe
 from core.ops.frame_extractor import quality_args
+from core.outputs import fresh_folder
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
@@ -39,31 +40,6 @@ MODES = {
     "scenes": "Scene starts",
     "sheet": "Contact sheet",
 }
-
-
-def times_select(times, fps: float) -> str:
-    """select= expression picking the frame nearest to each time."""
-    half = 0.5 / max(fps, 1.0)
-    return "+".join(f"between(t,{tm - half:.4f},{tm + half - 1e-4:.4f})" for tm in times)
-
-
-def keep_scenes(cuts, min_len: float) -> list:
-    """Scene start times: 0 plus each cut at least *min_len* after the last kept."""
-    kept = [0.0]
-    for c in sorted(cuts):
-        if c - kept[-1] >= min_len:
-            kept.append(c)
-    return kept
-
-
-def fresh_folder(parent: str, base: str) -> str:
-    path = os.path.join(parent, base)
-    n = 2
-    while os.path.exists(path) and os.listdir(path):
-        path = os.path.join(parent, f"{base} ({n})")
-        n += 1
-    os.makedirs(path, exist_ok=True)
-    return path
 
 
 class FrameExtractorTab(BaseTab):
@@ -320,21 +296,7 @@ class FrameExtractorTab(BaseTab):
         from core.outputs import unique_path
 
         out = unique_path(os.path.join(folder, f"{base}_{stamp}.{ext}"))
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-ss",
-            ff.ts(at),
-            "-i",
-            src,
-            "-frames:v",
-            "1",
-            "-an",
-            *q,
-            "-update",
-            "1",
-            out,
-        ]
+        cmd = fe.single_cmd(src, at, out, q)
         self.run_ffmpeg(
             cmd,
             self.console,
@@ -353,23 +315,7 @@ class FrameExtractorTab(BaseTab):
         out_dir = fresh_folder(folder, f"{base} frames")
         # image2 patterns treat every '%' as a format code - escape real ones
         pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%05d.{ext}"
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-ss",
-            ff.ts(start),
-            "-to",
-            ff.ts(end),
-            "-i",
-            src,
-            "-an",
-            "-vf",
-            f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{every - 0.5 / self._fps():.4f})'",
-            "-fps_mode",
-            "passthrough",
-            *q,
-            pattern,
-        ]
+        cmd = fe.interval_cmd(src, (start, end), every, self._fps(), pattern, q)
         self.log(self.console, f"One frame every {every:g}s → {out_dir}")
         self.run_ffmpeg(
             cmd,
@@ -386,149 +332,50 @@ class FrameExtractorTab(BaseTab):
         threshold = float(self.scene_var.get())
         min_len = common.number(self.min_scene_var.get() or "0", "Min. scene", 0, 3600)
         out_dir = fresh_folder(folder, f"{base} scenes")
-        fps = self._fps()
         dur = info.duration
-
-        def work(_p, _c, ctx):
-            tmp = ctx.tempdir()
-            ctx.span(0.0, 0.7).run(
-                [
-                    ff.ffmpeg_path(),
-                    "-i",
-                    src,
-                    "-an",
-                    "-sn",
-                    "-vf",
-                    f"scale=320:-2,select='gt(scene,{threshold:.3f})',metadata=print:file=cuts.txt",
-                    "-fps_mode",
-                    "passthrough",
-                    "-f",
-                    "null",
-                    "-",
-                ],
-                duration=dur,
-                cwd=tmp,
-            )
-            try:
-                with open(os.path.join(tmp, "cuts.txt"), encoding="utf-8", errors="replace") as fh:
-                    cuts = [float(m) for m in re.findall(r"pts_time:\s*([\d.]+)", fh.read())]
-            except OSError:
-                cuts = []
-            starts = keep_scenes(set(cuts), min_len)
-            ctx.log(
-                f"{len(starts)} scene(s): "
-                + ", ".join(ff.format_time(s) for s in starts[:20])
-                + (" …" if len(starts) > 20 else "")
-            )
-            ctx.span(0.7, 1.0).run(
-                [
-                    ff.ffmpeg_path(),
-                    "-y",
-                    "-i",
-                    src,
-                    "-an",
-                    "-sn",
-                    "-vf",
-                    f"select='{times_select(starts, fps)}'",
-                    "-fps_mode",
-                    "passthrough",
-                    *q,
-                    os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%04d.{ext}",
-                ],
-                duration=dur,
-            )
-            return 0
-
+        job = fe.SceneFrames(
+            src=src,
+            threshold=threshold,
+            min_len=min_len,
+            fps=self._fps(),
+            duration=dur,
+            pattern=os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%04d.{ext}",
+            quality=tuple(q),
+        )
         self.log(self.console, f"Finding scenes (sensitivity {threshold:.2f}) → {out_dir}")
         common.queue_job(
             self,
             common.Job(
-                name="Scene frames", out=out_dir, work=work, duration=dur * 1.3, inputs=[src]
+                name="Scene frames", out=out_dir, work=job.run, duration=dur * 1.3, inputs=[src]
             ),
             btn=self.btn_render,
             console=self.console,
         )
 
-    def _sheet(self, src, info, folder, base, ext, q):
-        cols = int(common.number(self.cols_var.get(), "Columns", 1, 20))
-        rows = int(common.number(self.rows_var.get(), "Rows", 1, 20))
-        tile_w = int(common.number(self.tile_w_var.get(), "Thumb width", 64, 1920)) // 2 * 2
-        n = cols * rows
-        dur = info.duration
-        times = [dur * (i + 0.5) / n for i in range(n)]
+    def _sheet(self, src, info, folder, base, ext, _q):
+        """A contact sheet (the Contact Sheet tool's engine, its default look)."""
         from core.outputs import unique_path
-        from core.paths import temp_dir
 
+        layout = cs.Layout(
+            cols=int(common.number(self.cols_var.get(), "Columns", 1, 12)),
+            rows=int(common.number(self.rows_var.get(), "Rows", 1, 20)),
+            tile_width=int(common.number(self.tile_w_var.get(), "Thumb width", 64, 1920)),
+        )
+        corner = cs.Corner.BOTTOM_RIGHT if self.stamp_var.get() else cs.Corner.OFF
         out = unique_path(os.path.join(folder, f"{base}_contact_sheet.{ext}"))
-        work = temp_dir("sheet_")
-        chain = [f"select='{times_select(times, self._fps())}'", f"scale={tile_w}:-2"]
-        if self.stamp_var.get():
-            chain.append(
-                fl.DrawText(
-                    textfile=fl.drawtext_text_file("%{pts:hms}", work),
-                    font="mono",
-                    fontsize=max(12, tile_w // 18),
-                    fontcolor="white",
-                    box=True,
-                    boxcolor="black@0.55",
-                    boxborderw=4,
-                    x="w-text_w-6",
-                    y="h-text_h-6",
-                    expansion="normal",
-                ).filter()
-            )
-        pad = 6
-        chain.append(f"tile={cols}x{rows}:padding={pad}:margin={pad}:color=0x181818")
-        head = max(28, tile_w // 9)
-        v = info.require_video()
-        title = (
-            f"{os.path.basename(src)}   ·   {ff.format_time(dur)}   ·   "
-            f"{v.display_size[0]}×{v.display_size[1]}   ·   {v.fps:.3g} fps"
+        job = cs.SheetJob(
+            info=info,
+            layout=layout,
+            labels=cs.Labels(timestamps=corner),
+            picking=cs.Picking(),
+            threshold=None,
+            cuts=None,
+            quality=int(self.quality_var.get()),
         )
-        chain.append(f"pad=iw:ih+{head}:0:{head}:color=0x181818")
-        chain.append(
-            fl.DrawText(
-                textfile=fl.drawtext_text_file(title, work),
-                font="sans",
-                fontsize=int(head * 0.5),
-                fontcolor="white",
-                x="12",
-                y=f"({head}-text_h)/2",
-            ).filter()
-        )
-        cmd = [
-            ff.ffmpeg_path(),
-            "-y",
-            "-i",
-            src,
-            "-an",
-            "-sn",
-            "-vf",
-            ",".join(chain),
-            "-fps_mode",
-            "passthrough",
-            "-frames:v",
-            "1",
-            *q,
-            "-update",
-            "1",
-            out,
-        ]
-
-        def done(rc):
-            import shutil
-
-            shutil.rmtree(work, ignore_errors=True)
-            self.show_result(rc, out)
-
-        self.log(self.console, f"Contact sheet {cols}×{rows} → {out}")
-        self.run_ffmpeg(
-            cmd,
-            self.console,
-            on_done=done,
+        self.log(self.console, f"Contact sheet {layout.cols}×{layout.rows} → {out}")
+        common.queue_job(
+            self,
+            common.Job(name="Contact sheet", out=out, work=job.run, inputs=[src]),
             btn=self.btn_render,
-            duration=dur,
-            output=out,
-            inputs=[src],
-            name="Contact sheet",
+            console=self.console,
         )

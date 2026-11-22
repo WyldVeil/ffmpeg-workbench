@@ -35,7 +35,6 @@ from core.errors import Cancelled, CommandError
 from core.i18n import t
 from core.ops import contact_sheet as cs
 from core.paths import temp_dir
-from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
@@ -473,7 +472,7 @@ class ContactSheetTab(BaseTab):
         if not out:
             return
         threshold = self._threshold()
-        job = _SheetJob(
+        job = cs.SheetJob(
             info=info,
             layout=layout,
             labels=labels,
@@ -556,36 +555,3 @@ class _Preview:
 
 def _quick_run(cmd: list[str], _done: float) -> bool:
     return proc.run(cmd, timeout=60).ok
-
-
-@dataclass(kw_only=True)
-class _SheetJob:
-    """The queued, full-size sheet: the same frames as the preview."""
-
-    info: ff.MediaInfo
-    layout: cs.Layout
-    labels: cs.Labels
-    picking: cs.Picking
-    threshold: float | None
-    cuts: list[float] | None  # the preview's, when it found them
-    quality: int
-    _at: float = 0.0  # progress so far
-
-    def _run(self, ctx: TaskContext, cmd: list[str], done: float) -> bool:
-        start, self._at = self._at, max(self._at, done)
-        return ctx.span(start, self._at).run(cmd, check=False).returncode == 0
-
-    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
-        cuts = self.cuts
-        if self.threshold is not None and cuts is None:
-            ctx.log("Finding the shot changes…")
-            find = cs.scene_cmd(self.info.path, self.threshold)
-            cuts = cs.parse_cuts(
-                ctx.span(0.0, 0.3).run(find, duration=self.info.duration, tail=100_000).log_tail
-            )
-            self._at = 0.3
-        p = cs.plan(self.info, self.layout, self.labels, self.picking, cuts or ())
-        run = partial(self._run, ctx)
-        cs.make(p, ctx.tempdir(), ctx.output(), run, quality=self.quality, cancelled=ctx.cancelled)
-        ctx.log(f"{len(p.times)} frames · {p.geo.width} × {p.geo.height} px")
-        return 0
