@@ -30,8 +30,10 @@ import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
 
+from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops import all_in_one as aio
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
@@ -98,162 +100,13 @@ _TEXT_POSITIONS = {  # (x, y) drawtext expressions; margins scale with the frame
     "Top Left": ("w*0.03", "h*0.04"),
     "Top Right": ("w-text_w-w*0.03", "h*0.04"),
 }
-_NVENC_PRESET = {
-    "ultrafast": "p1",
-    "superfast": "p2",
-    "veryfast": "p3",
-    "faster": "p3",
-    "fast": "p4",
-    "medium": "p5",
-    "slow": "p6",
-    "slower": "p7",
-    "veryslow": "p7",
-}
-_AMF_QUALITY = {
-    "ultrafast": "speed",
-    "superfast": "speed",
-    "veryfast": "speed",
-    "faster": "speed",
-    "fast": "balanced",
-    "medium": "balanced",
-    "slow": "quality",
-    "slower": "quality",
-    "veryslow": "quality",
-}
-_SVT_PRESET = {
-    "ultrafast": 12,
-    "superfast": 11,
-    "veryfast": 10,
-    "faster": 9,
-    "fast": 8,
-    "medium": 7,
-    "slow": 6,
-    "slower": 5,
-    "veryslow": 4,
-}
 
 
-def _video_codec_args(vcodec: str, crf: str, preset: str, container: str) -> list:
-    """Encoder arguments per encoder family (x264 preset names and CRF are
-    translated - NVENC/AMF/QSV reject x264 names)."""
-    q = int(crf) if str(crf).isdigit() else 18
-    if vcodec in ("libx264", "libx265"):
-        args = ["-c:v", vcodec, "-crf", str(q), "-preset", preset, "-pix_fmt", "yuv420p"]
-        if vcodec == "libx265":
-            args += ["-x265-params", "log-level=error"]
-    elif vcodec.endswith("_nvenc"):
-        args = [
-            "-c:v",
-            vcodec,
-            "-preset",
-            _NVENC_PRESET.get(preset, "p5"),
-            "-tune",
-            "hq",
-            "-rc",
-            "vbr",
-            "-cq",
-            str(q),
-            "-b:v",
-            "0",
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec.endswith("_amf"):
-        args = [
-            "-c:v",
-            vcodec,
-            "-quality",
-            _AMF_QUALITY.get(preset, "balanced"),
-            "-rc",
-            "cqp",
-            "-qp_i",
-            str(q),
-            "-qp_p",
-            str(q + 2),
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec.endswith("_qsv"):
-        qsv_preset = (
-            preset
-            if preset in ("veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")
-            else "medium"
-        )
-        args = [
-            "-c:v",
-            vcodec,
-            "-preset",
-            qsv_preset,
-            "-global_quality",
-            str(q),
-            "-pix_fmt",
-            "nv12",
-        ]
-    elif vcodec == "libsvtav1":
-        args = [
-            "-c:v",
-            "libsvtav1",
-            "-crf",
-            str(min(63, round(q * 1.6))),
-            "-preset",
-            str(_SVT_PRESET.get(preset, 8)),
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec in ("libvpx-vp9", "libvpx"):
-        args = [
-            "-c:v",
-            vcodec,
-            "-b:v",
-            "0",
-            "-crf",
-            str(min(63, round(q * 1.65))),
-            "-row-mt",
-            "1",
-            "-deadline",
-            "good",
-            "-cpu-used",
-            "2" if preset in ("slow", "slower", "veryslow") else "4",
-            "-pix_fmt",
-            "yuv420p",
-        ]
-    elif vcodec == "prores_ks":
-        args = [
-            "-c:v",
-            "prores_ks",
-            "-profile:v",
-            "3",
-            "-vendor",
-            "apl0",
-            "-pix_fmt",
-            "yuv422p10le",
-        ]
-    else:
-        args = ["-c:v", vcodec]
-    if container in ("mp4", "mov", "m4v") and ("265" in vcodec or "hevc" in vcodec):
-        args += ["-tag:v", "hvc1"]
-    return args
-
-
-def _resolve_auto(vcodec: str) -> str:
-    """'auto_h264' / 'auto_hevc' -> the best working encoder on this machine."""
-    if not vcodec.startswith("auto_"):
-        return vcodec
-    from core import encoders
-
-    enc, _hw = encoders.choose_encoder(vcodec[5:], "auto")
-    return enc
-
-
-def _codec_container(vcodec: str, out: str) -> str:
-    """Output path with an extension the codec can live in."""
-    base, ext = os.path.splitext(out)
-    ext = ext.lower()
-    if vcodec == "prores_ks" and ext not in (".mov", ".mkv"):
-        return base + ".mov"
-    if vcodec in ("libvpx-vp9", "libvpx") and ext not in (".webm", ".mkv"):
-        return base + ".webm"
-    return out
+def _num(var: tk.Variable, default: float) -> float:
+    try:
+        return float(var.get())
+    except ValueError:
+        return default
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1138,11 +991,7 @@ class AllInOneTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
 
     def _rebuild_cmd(self, *_):
-        """Assemble one FFmpeg command from every enabled section and show it.
-
-        Order matters: trim on the INPUT side (source time), then rotate,
-        scale, speed, frame rate, colour, denoise, sharpen, text and fades
-        (fade times are in OUTPUT time, i.e. after the speed change)."""
+        """Show the FFmpeg command for every enabled section (core/ops/all_in_one.py)."""
         if not hasattr(self, "_cmd_text"):
             return
         if getattr(self, "_cmd_dirty", False):
@@ -1156,254 +1005,146 @@ class AllInOneTab(BaseTab):
                 "# Select a source video and output file above\n# to generate the FFmpeg command."
             )
             return
-        from core import ffmpeg as _ff
-        from core import filters as _fl
-
-        parts = [_ff.ffmpeg_path(), "-y"]
-        vf, af, notes = [], [], []
-        dur = float(getattr(self, "_duration", 0.0) or 0.0)
-
-        # ── Trim (input side, source time) ───────────────────────────────
-        start, end = 0.0, None
-        if self._sec_trim.get():
-            try:
-                start = max(0.0, _ff.parse_time(self._trim_start.get() or "0"))
-            except ValueError:
-                notes.append("trim start is not a time")
-            try:
-                if self._trim_end.get().strip():
-                    end = _ff.parse_time(self._trim_end.get())
-            except ValueError:
-                notes.append("trim end is not a time")
-            if end is not None and end <= start:
-                notes.append("trim end must be after the start")
-                end = None
-            if start > 0:
-                parts += ["-ss", _ff.ts(start)]
-            if end is not None:
-                parts += ["-to", _ff.ts(end)]
-        parts += ["-i", src]
-        src_len = ((end if end is not None else dur) - start) if dur or end else 0.0
-
-        # ── Speed factor (needed for output-time fades) ───────────────────
-        speed = 1.0
-        if self._sec_speed.get():
-            try:
-                speed = max(0.05, min(float(self._speed_val.get()), 64.0))
-            except ValueError:
-                notes.append("speed is not a number")
-        out_len = src_len / speed if src_len else 0.0
-
-        # ── Rotate & flip ──────────────────────────────────────────────────
-        if self._sec_rotate.get():
-            rot = self._rotate_val.get()
-            vf += {
-                "90": ["transpose=clock"],
-                "180": ["hflip", "vflip"],
-                "270": ["transpose=cclock"],
-            }.get(rot, [])
-            if self._flip_h.get():
-                vf.append("hflip")
-            if self._flip_v.get():
-                vf.append("vflip")
-
-        # ── Scale ─────────────────────────────────────────────────────────
-        if self._sec_scale.get():
-            w = (self._scale_w.get() or "1920").strip()
-            h = (self._scale_h.get() or "1080").strip()
-            w, h = ("-2" if w in ("-1", "") else w), ("-2" if h in ("-1", "") else h)
-            alg = _SCALE_ALGO.get(self._scale_algo.get(), "lanczos")
-            if self._scale_pad.get() and "-2" not in (w, h):
-                vf.append(
-                    f"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags={alg},"
-                    f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black"
-                )
-            else:
-                if self._scale_pad.get():
-                    notes.append("letterboxing needs both width and height")
-                vf.append(f"scale={w}:{h}:flags={alg}")
-            vf.append("setsar=1")
-
-        # ── Speed (video) then frame rate ─────────────────────────────────
-        if abs(speed - 1.0) > 1e-3:
-            vf.append(f"setpts=(PTS-STARTPTS)/{speed:.4f}")
-        if self._sec_fps.get():
-            vf.append(f"fps={(self._fps_val.get().strip() or '30')}")
-
-        # ── Colour ────────────────────────────────────────────────────────
-        if self._sec_color.get():
-            try:
-                bri, con, sat, gam, hue = (
-                    float(v.get()) for v in (self._bri, self._con, self._sat, self._gam, self._hue)
-                )
-            except ValueError:
-                bri, con, sat, gam, hue = 0, 1, 1, 1, 0
-            eq = [
-                f"{k}={v:.3f}"
-                for k, v, d in (
-                    ("brightness", bri, 0),
-                    ("contrast", con, 1),
-                    ("saturation", sat, 1),
-                    ("gamma", gam, 1),
-                )
-                if abs(v - d) > 1e-3
-            ]
-            if eq:
-                vf.append("eq=" + ":".join(eq))
-            if abs(hue) > 0.1:
-                vf.append(f"hue=h={hue:.1f}")
-
-        # ── Denoise / sharpen ─────────────────────────────────────────────
-        if self._sec_denoise.get():
-            p = {
-                "Light": (2, 2, 3, 3),
-                "Medium": (4, 4, 6, 6),
-                "Strong": (8, 8, 12, 12),
-                "Aggressive": (14, 14, 20, 20),
-            }.get(self._denoise_str.get(), (4, 4, 6, 6))
-            vf.append(
-                "hqdn3d={}:{}:{}:{}".format(*p)
-                if self._denoise_algo.get() == "hqdn3d"
-                else f"nlmeans=s={p[0]}"
-            )
-        if self._sec_sharpen.get():
-            try:
-                lx, la = int(self._sharp_lx.get()) | 1, float(self._sharp_la.get())
-            except ValueError:
-                lx, la = 5, 1.0
-            vf.append(f"unsharp={lx}:{lx}:{la}:{lx}:{lx}:0")
-
-        # ── Text (drawtext from a UTF-8 file: any characters are safe) ─────
-        if self._sec_text.get() and self._text_val.get().strip():
-            if getattr(self, "_aio_tmp", None) is None:
-                from core.paths import temp_dir
-
-                self._aio_tmp = temp_dir("allinone_")
-            textfile = os.path.join(self._aio_tmp, "caption.txt")
-            with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(self._text_val.get())
-            x, y = _TEXT_POSITIONS.get(self._text_pos.get(), _TEXT_POSITIONS["Bottom Right"])
-            enable = None
-            try:
-                st = _ff.parse_time(self._text_start.get().strip() or "0")
-                if self._text_end.get().strip():
-                    enable = f"between(t,{st:.3f},{_ff.parse_time(self._text_end.get()):.3f})"
-                elif st > 0:
-                    enable = f"gte(t,{st:.3f})"
-            except ValueError:
-                notes.append("text times are not valid times")
-            vf.append(
-                _fl.DrawText(
-                    textfile=textfile,
-                    font="sans bold",
-                    fontsize=(self._text_size.get() or "42").strip(),
-                    fontcolor=self._text_color.get() or "white",
-                    borderw=3,
-                    x=x,
-                    y=y,
-                    enable=enable,
-                ).filter()
-            )
-
-        # ── Fades (output time) ───────────────────────────────────────────
-        def _num(var, default):
-            try:
-                return float(var.get())
-            except ValueError:
-                return default
-
-        if self._sec_fade.get():
-            if self._fi_en.get():
-                vf.append(f"fade=t=in:st=0:d={_num(self._fi_dur, 1.5):.2f}")
-            if self._fo_en.get() and out_len > 0:
-                fd = _num(self._fo_dur, 2.0)
-                vf.append(f"fade=t=out:st={max(0.0, out_len - fd):.3f}:d={fd:.2f}")
-
-        # ── Audio filters ─────────────────────────────────────────────────
-        if abs(speed - 1.0) > 1e-3:
-            if self._speed_pitch.get():
-                rem, chain = speed, []
-                while rem > 2.0:
-                    chain.append("atempo=2.0")
-                    rem /= 2.0
-                while rem < 0.5:
-                    chain.append("atempo=0.5")
-                    rem *= 2.0
-                af += [*chain, f"atempo={rem:.4f}"]
-            else:
-                sr = int(getattr(self, "_sample_rate", 0) or 48000)
-                af += [f"asetrate={round(sr * speed)}", f"aresample={sr}"]
-        if self._sec_audio.get():
-            if self._vol_en.get():
-                af.append(f"volume={_num(self._vol_val, 1.0):.2f}")
-            if self._norm_en.get():
-                af += [
-                    f"loudnorm=I={self._norm_lufs.get() or '-23'}:TP=-1:LRA=11",
-                    "aresample=48000",
-                    "asetnsamples=n=4096:p=0",
-                ]
-        if self._sec_fade.get() and self._fade_audio.get():
-            if self._fi_en.get():
-                af.append(f"afade=t=in:st=0:d={_num(self._fi_dur, 1.5):.2f}")
-            if self._fo_en.get() and out_len > 0:
-                fd = _num(self._fo_dur, 2.0)
-                af.append(f"afade=t=out:st={max(0.0, out_len - fd):.3f}:d={fd:.2f}")
-
-        # ── Codecs ────────────────────────────────────────────────────────
-        enc_on = self._sec_encode.get()
-        vcodec = _resolve_auto(_VCODECS.get(self._vcodec.get(), "libx264")) if enc_on else "libx264"
-        acodec = self._acodec.get() if enc_on else "aac"
-        if vcodec == "copy" and vf:
-            notes.append("'Copy' can't apply video changes - encoding with H.264")
-            vcodec = "libx264"
-        if not enc_on and not vf:
-            vcodec = "copy"
-        fixed = _codec_container(vcodec, out)
-        if fixed != out:
-            notes.append(f"{os.path.splitext(fixed)[1]} is required for this codec")
-            out = fixed
-        container = os.path.splitext(out)[1].lower().lstrip(".")
-        if acodec == "copy" and af:
-            notes.append("'copy' can't apply audio changes - encoding audio")
-            acodec = "libopus" if container == "webm" else "aac"
-        if container == "webm" and acodec in ("aac", "libmp3lame"):
-            acodec = "libopus"
-
-        parts += ["-map", "0:v:0"]
-        if acodec != "none":
-            parts += ["-map", "0:a?"]
-        if container in ("mkv",):
-            parts += ["-map", "0:s?", "-c:s", "copy"]
-        if vf:
-            parts += ["-vf", ",".join(vf)]
-        if af and acodec != "none":
-            parts += ["-af", ",".join(af)]
-        if vcodec == "copy":
-            parts += ["-c:v", "copy"]
-        else:
-            parts += _video_codec_args(
-                vcodec,
-                self._crf.get() if enc_on else "18",
-                self._preset.get() if enc_on else "fast",
-                container,
-            )
-        if acodec == "none":
-            parts += ["-an"]
-        elif acodec == "copy":
-            parts += ["-c:a", "copy"]
-        else:
-            parts += ["-c:a", acodec]
-            if acodec in ("aac", "libmp3lame", "libopus", "libvorbis"):
-                parts += ["-b:a", self._abitrate.get() if enc_on else "192k"]
-        parts += ["-map_metadata", "0", "-map_chapters", "0"]
-        if container in ("mp4", "mov", "m4v"):
-            parts += ["-movflags", "+faststart"]
-        parts.append(out)
-
-        self._last_cmd = parts
-        self._expected_len = out_len or None
-        self._set_cmd_text(self._format_cmd(parts))
+        notes: list[str] = []
+        built = aio.build(self._recipe(src, out, notes))
+        notes += built.notes
+        self._last_cmd = built.argv
+        self._expected_len = built.length or None
+        self._set_cmd_text(self._format_cmd(built.argv))
         self._edit_lbl.config(text=("⚠ " + "; ".join(notes)) if notes else "")
+
+    # ── reading the sections (each None while switched off) ─────────────────
+
+    def _recipe(self, src: str, out: str, notes: list[str]) -> aio.Recipe:
+        start, end = self._trim(notes)
+        rotate = self._sec_rotate.get()
+        audio = self._sec_audio.get()
+        return aio.Recipe(
+            src=src,
+            out=out,
+            duration=float(getattr(self, "_duration", 0.0) or 0.0),
+            sample_rate=int(getattr(self, "_sample_rate", 0) or 48000),
+            start=start,
+            end=end,
+            speed=self._speed(notes),
+            keep_pitch=self._speed_pitch.get(),
+            rotate=self._rotate_val.get() if rotate else "0",
+            flip_h=rotate and self._flip_h.get(),
+            flip_v=rotate and self._flip_v.get(),
+            scale=self._scale(),
+            fps=self._fps_val.get() if self._sec_fps.get() else None,
+            colour=self._colour(),
+            denoise=(self._denoise_algo.get(), self._denoise_str.get())
+            if self._sec_denoise.get()
+            else None,
+            sharpen=self._sharpen(),
+            caption=self._caption(notes),
+            fades=self._fades(),
+            volume=_num(self._vol_val, 1.0) if audio and self._vol_en.get() else None,
+            loudness=self._norm_lufs.get() if audio and self._norm_en.get() else None,
+            encode=self._encode(),
+        )
+
+    def _trim(self, notes: list[str]) -> tuple[float, float | None]:
+        if not self._sec_trim.get():
+            return 0.0, None
+        start, end = 0.0, None
+        try:
+            start = max(0.0, ff.parse_time(self._trim_start.get() or "0"))
+        except ValueError:
+            notes.append("trim start is not a time")
+        try:
+            if self._trim_end.get().strip():
+                end = ff.parse_time(self._trim_end.get())
+        except ValueError:
+            notes.append("trim end is not a time")
+        if end is not None and end <= start:
+            notes.append("trim end must be after the start")
+            end = None
+        return start, end
+
+    def _speed(self, notes: list[str]) -> float:
+        if not self._sec_speed.get():
+            return 1.0
+        try:
+            return max(0.05, min(float(self._speed_val.get()), 64.0))
+        except ValueError:
+            notes.append("speed is not a number")
+            return 1.0
+
+    def _scale(self) -> aio.Scale | None:
+        if not self._sec_scale.get():
+            return None
+        return aio.Scale(
+            self._scale_w.get() or "1920",
+            self._scale_h.get() or "1080",
+            _SCALE_ALGO.get(self._scale_algo.get(), "lanczos"),
+            self._scale_pad.get(),
+        )
+
+    def _colour(self) -> aio.Colour | None:
+        if not self._sec_color.get():
+            return None
+        try:
+            return aio.Colour(
+                *(float(v.get()) for v in (self._bri, self._con, self._sat, self._gam, self._hue))
+            )
+        except ValueError:
+            return aio.Colour()
+
+    def _sharpen(self) -> tuple[int, float] | None:
+        if not self._sec_sharpen.get():
+            return None
+        try:
+            return int(self._sharp_lx.get()) | 1, float(self._sharp_la.get())
+        except ValueError:
+            return 5, 1.0
+
+    def _caption(self, notes: list[str]) -> aio.Caption | None:
+        if not self._sec_text.get() or not self._text_val.get().strip():
+            return None
+        if getattr(self, "_aio_tmp", None) is None:
+            from core.paths import temp_dir
+
+            self._aio_tmp = temp_dir("allinone_")
+        textfile = os.path.join(self._aio_tmp, "caption.txt")
+        with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(self._text_val.get())
+        enable = None
+        try:
+            st = ff.parse_time(self._text_start.get().strip() or "0")
+            if self._text_end.get().strip():
+                enable = f"between(t,{st:.3f},{ff.parse_time(self._text_end.get()):.3f})"
+            elif st > 0:
+                enable = f"gte(t,{st:.3f})"
+        except ValueError:
+            notes.append("text times are not valid times")
+        return aio.Caption(
+            textfile,
+            _TEXT_POSITIONS.get(self._text_pos.get(), _TEXT_POSITIONS["Bottom Right"]),
+            (self._text_size.get() or "42").strip(),
+            self._text_color.get() or "white",
+            enable,
+        )
+
+    def _fades(self) -> aio.Fades | None:
+        if not self._sec_fade.get():
+            return None
+        return aio.Fades(
+            _num(self._fi_dur, 1.5) if self._fi_en.get() else None,
+            _num(self._fo_dur, 2.0) if self._fo_en.get() else None,
+            self._fade_audio.get(),
+        )
+
+    def _encode(self) -> aio.Encode:
+        return aio.Encode(
+            self._sec_encode.get(),
+            _VCODECS.get(self._vcodec.get(), "libx264"),
+            self._acodec.get(),
+            self._crf.get(),
+            self._preset.get(),
+            self._abitrate.get(),
+        )
 
     # ─────────────────────────────────────────────────────────────────────
     #  Command display helpers

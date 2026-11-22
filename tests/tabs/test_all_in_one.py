@@ -3,15 +3,15 @@
 import pytest
 
 from core import ffmpeg as ff
-from tabs import all_in_one
+from core.ops import all_in_one as aio
 
 
 def test_codec_args_per_family():
-    nv = all_in_one._video_codec_args("h264_nvenc", "20", "slow", "mp4")
+    nv = aio.video_codec_args("h264_nvenc", "20", "slow", "mp4")
     assert "p6" in nv and "-cq" in nv and "slow" not in nv
-    x = all_in_one._video_codec_args("libx265", "22", "medium", "mp4")
+    x = aio.video_codec_args("libx265", "22", "medium", "mp4")
     assert x[-2:] == ["-tag:v", "hvc1"]
-    assert all_in_one._codec_container("prores_ks", "/a/b.mp4") == "/a/b.mov"
+    assert aio.codec_container("prores_ks", "/a/b.mp4") == "/a/b.mov"
 
 
 @pytest.fixture(scope="module")
