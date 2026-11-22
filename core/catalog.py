@@ -235,9 +235,10 @@ GOALS = (
         "manage",
         "🧰",
         "Inspect, batch & automate",
-        "File details, folders of files, job queue",
+        "File details, contact sheets, folders of files, job queue",
         (
             "Media Inspector",
+            "Contact Sheet",
             "Compare & Quality",
             "Batch Processor",
             "Encode Queue",

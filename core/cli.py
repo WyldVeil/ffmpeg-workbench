@@ -1567,6 +1567,67 @@ def op_frames(ctx: Ctx) -> Result:
     return {"ok": True, "output": folder, "files": len(os.listdir(folder))}
 
 
+def _contact_sheet_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument("--grid", default="4x5", help="COLUMNSxROWS")
+    p.add_argument("--width", type=int, default=384, help="tile width in pixels")
+    p.add_argument("--set", type=int, default=1, help="which set of frames: 1, 2, 3...")
+    p.add_argument("--scenes", action="store_true", help="take the frames at shot changes")
+    p.add_argument("--skip", default="0,0", help="START,END: per cent of the video to leave out")
+    p.add_argument("--title", default="", help="shown in place of the file name")
+    p.add_argument("--times", default="br", choices=["br", "bl", "tr", "tl", "off"])
+    p.add_argument("--numbers", action="store_true", help="number the tiles")
+    p.add_argument("--format", default="png", choices=["png", "jpg", "webp"])
+
+
+def _sheet_step(cmd: list[str], done: float) -> bool:
+    ok = _proc.run(cmd, timeout=120).ok
+    print(f"progress {int(done * 100)}%", file=sys.stderr, flush=True)
+    return ok
+
+
+@operation(
+    "contact-sheet",
+    "A grid of frames with the video's details (--grid 4x5, --set N for other frames)",
+    "Social",
+    options=_contact_sheet_options,
+)
+def op_contact_sheet(ctx: Ctx) -> Result:
+    from core.ops import contact_sheet as cs
+
+    src = ctx.args.inputs[0]
+    info = probe(src, video=True)
+    try:
+        cols, rows = (int(n) for n in ctx.args.grid.lower().split("x"))
+        head, tail = (float(n) for n in ctx.args.skip.split(","))
+    except ValueError:
+        raise CliError("--grid is COLUMNSxROWS (4x5) and --skip is START,END (5,10)") from None
+    if not (1 <= cols <= 12 and 1 <= rows <= 20 and 64 <= ctx.args.width <= 1920):
+        raise CliError("The grid can be up to 12x20 tiles, each 64 to 1920 pixels wide.")
+    sampling = cs.Sampling.SCENES if ctx.args.scenes else cs.Sampling.EVEN
+    cuts: list[float] = []
+    if ctx.args.scenes:
+        lines: list[str] = []
+        ctx.run(cs.scene_cmd(src), info.duration, 0.0, 0.3, lines=lines)
+        cuts = cs.parse_cuts(lines)
+    plan = cs.plan(
+        info,
+        cs.Layout(cols=cols, rows=rows, tile_width=ctx.args.width),
+        cs.Labels(
+            title=ctx.args.title, timestamps=cs.Corner(ctx.args.times), numbers=ctx.args.numbers
+        ),
+        cs.Picking(
+            sampling=sampling, skip_start=head, skip_end=tail, variant=max(0, ctx.args.set - 1)
+        ),
+        cuts,
+    )
+    out = output_path(ctx, [src], "contact sheet", "." + ctx.args.format)
+    part = part_of(out)
+    cs.make(plan, ctx.tmp(), part, _sheet_step)
+    finish(part, out)
+    return result(out, frames=len(plan.times), width=plan.geo.width, height=plan.geo.height)
+
+
 def _logo_options(p: argparse.ArgumentParser) -> None:
     _in(p, 1)
     p.add_argument("--logo", required=True)

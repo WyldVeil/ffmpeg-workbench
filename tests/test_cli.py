@@ -395,6 +395,37 @@ def test_gif_and_images(capsys, media, outdir):
 
 
 @pytest.mark.ffmpeg
+def test_contact_sheet(capsys, media, outdir):
+    d = ok(
+        capsys,
+        "contact-sheet",
+        media["h264"],
+        "--grid",
+        "3x2",
+        "--width",
+        "160",
+        "-o",
+        str(outdir / "s.png"),
+    )
+    assert d["frames"] == 6 and d["output"].endswith(".png")
+    d = ok(
+        capsys,
+        "contact-sheet",
+        media["h264"],
+        "--set",
+        "3",
+        "--scenes",
+        "--numbers",
+        "--format",
+        "jpg",
+        "-o",
+        str(outdir / "s.jpg"),
+    )
+    assert d["frames"] == 20 and d["width"] > 1000
+    code, data = run(capsys, "contact-sheet", media["h264"], "--grid", "40x2")
+    assert code != 0 and "12x20" in data["error"]
+
+
 def test_shorts_logo_collage_blur(capsys, media, outdir):
     d = ok(capsys, "shorts", media["h264"], "--platform", "shorts", "-o", str(outdir / "s.mp4"))
     assert "1080x1920" in d["video"] and "audio" in d

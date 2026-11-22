@@ -17,6 +17,7 @@ _EXPORTS = {
     "AutoSubsTab": "tabs.social.auto_subs",
     "TitlesGeneratorTab": "tabs.social.titles",
     "FrameExtractorTab": "tabs.social.frame_extractor",
+    "ContactSheetTab": "tabs.social.contact_sheet",
     "IntroMakerTab": "tabs.social.intro_maker",
     "SlideshowMakerTab": "tabs.social.slideshow",
     "ChapterMarkersTab": "tabs.social.chapter_markers",

@@ -62,6 +62,7 @@ class ToolId(StrEnum):
     AUTO_SUBTITLES = "auto_subs"
     ANIMATED_TITLES = "titles"
     FRAME_EXTRACTOR = "frame_extractor"
+    CONTACT_SHEET = "contact_sheet"
     SNAPSHOT = "snapshot"
     INTRO_OUTRO_MAKER = "intro_maker"
     SLIDESHOW_MAKER = "slideshow"
@@ -352,6 +353,14 @@ SPECS: Final[tuple[ToolSpec, ...]] = (
         "📸",
         "Save stills from a video - one frame or many.",
         "frames stills many every seconds scenes contact sheet storyboard extract image png jpg",
+    ),
+    _t(
+        ToolId.CONTACT_SHEET,
+        "Contact Sheet",
+        Category.SOCIAL,
+        "🎞",
+        "A grid of frames from a video with its details, to see it at a glance.",
+        "contact sheet thumbnails grid overview storyboard frames tiles mosaic preview",
     ),
     _t(
         ToolId.SNAPSHOT,

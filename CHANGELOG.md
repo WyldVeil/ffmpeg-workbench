@@ -2,6 +2,23 @@
 
 ## 1.2.6
 
+### New
+
+- **Contact Sheet** (Social & Format): a grid of frames from a video with its
+  details on top - file name, size, duration, resolution, frame rate, bit
+  rate, video and audio codecs - and each frame's time. It appears as soon as
+  a video is opened and changes as you go:
+  - any grid from 1×1 to 12×20 (or a preset), tile width, gaps, margin,
+    borders and colours;
+  - **Previous set / Next set** show other moments from the video - each set
+    lands between the ones before, so none repeats;
+  - frames evenly spread or **at shot changes**, and the start and end (titles,
+    credits) can be left out;
+  - choose which details show, or give the sheet a title; times in any corner
+    or off; tile numbers; font, size and colour;
+  - PNG, JPEG or WebP. Frames are taken with fast seeking, so a two-hour film
+    takes seconds. Also on the command line: `contact-sheet`.
+
 ### Easier
 
 - Every time box in the app works the same way: type 12.5, 1:02.5 or

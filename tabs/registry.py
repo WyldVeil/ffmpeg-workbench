@@ -74,6 +74,7 @@ PAGES: Final[Mapping[ToolId, LazyTab]] = {
     ToolId.AUTO_SUBTITLES: _lazy("tabs.social.auto_subs", "AutoSubsTab"),
     ToolId.ANIMATED_TITLES: _lazy("tabs.social.titles", "TitlesGeneratorTab"),
     ToolId.FRAME_EXTRACTOR: _lazy("tabs.social.frame_extractor", "FrameExtractorTab"),
+    ToolId.CONTACT_SHEET: _lazy("tabs.social.contact_sheet", "ContactSheetTab"),
     ToolId.SNAPSHOT: _lazy("tabs.social.snapshot", "SnapshotTab"),
     ToolId.INTRO_OUTRO_MAKER: _lazy("tabs.social.intro_maker", "IntroMakerTab"),
     ToolId.SLIDESHOW_MAKER: _lazy("tabs.social.slideshow", "SlideshowMakerTab"),

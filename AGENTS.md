@@ -91,6 +91,7 @@ On Windows the `wme` part is the `wme-cli.bat` in the install folder, and the
 | `shorts` | Vertical or square version for Shorts, TikTok, Reels... | `--platform shorts\|tiktok\|reels\|story\|ig_square\|ig_portrait\|x\|youtube\|linkedin\|snapchat`, `--background blur\|crop\|mirror\|black\|white` | The Shortifier |
 | `thumbnail` | One frame as an image | `--at 12.5`, `--format jpg\|png\|webp` | Frame Extractor |
 | `frames` | Many frames into a folder | `--every 2` or `--count 10`, `--format` | Frame Extractor |
+| `contact-sheet` | A grid of frames with the video's details | `--grid 4x5`, `--width 384` (tile), `--set 2` (other frames), `--scenes`, `--skip 5,10` (% start,end), `--title`, `--times br\|bl\|tr\|tl\|off`, `--numbers`, `--format png\|jpg\|webp` | Contact Sheet |
 | `logo` | Put a logo or watermark image on a video | `--logo FILE`, `--position tl\|tc\|tr\|ml\|c\|mr\|bl\|bc\|br`, `--size 15` (% of the width), `--opacity` | Image Watermark |
 | `collage` | Any number of clips on one screen, laid out automatically | `--size 1920x1080`, `--fill`, `--gap`, `--length longest\|shortest\|SECONDS`, `--no-loop`, `--end hold\|background\|reflow`, `--audio first\|mix\|none` | Video Collage |
 | `blur-region` | Blur, pixelate or black out part of the frame | `--region X,Y,W,H` (percentages, repeatable), `--type blur\|pixelate\|box`, `--from/--to` | Privacy Blur |
