@@ -14,13 +14,15 @@ import os
 import re
 import shutil
 import tkinter as tk
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks, whisper
 from core.i18n import t
-from core.queue_manager import Hooks
+from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from core.tools import ToolId
 from tabs import common
@@ -40,6 +42,77 @@ SOFT_SUB_CODEC = {
     "mkv": "srt",
     "webm": "webvtt",
 }
+
+
+@dataclass(frozen=True)
+class _Options:
+    language: str  # "auto" or a code
+    translate: bool
+    max_len: int
+    prompt: str
+
+
+@dataclass
+class _Transcription:
+    """Speech to subtitles: the model (downloaded once), the sound as 16 kHz
+    WAV, whisper-cli, then the files copied to their places."""
+
+    src: str
+    model: str
+    stream: int
+    duration: float | None
+    formats: tuple[str, ...]
+    outputs: list[str]
+    opts: _Options
+    detected: str = ""
+
+    def __post_init__(self) -> None:
+        self.detected = self.opts.language if self.opts.language != "auto" else ""
+
+    def run(self, _p: object, cancelled: Callable[[], bool], ctx: TaskContext) -> int:
+        if not whisper.is_installed(self.model):
+            ctx.log(f"Downloading the {whisper.MODELS[self.model].label} model (one time)…")
+            whisper.download_model(self.model, lambda f: ctx.progress(0.25 * f), cancelled)
+        tmp = ctx.tempdir()
+        wav = os.path.join(tmp, "audio.wav")
+        ctx.span(0.25, 0.3).run(
+            whisper.audio_extract_cmd(self.src, wav, stream=self.stream), duration=self.duration
+        )
+        out_base = os.path.join(tmp, "subs")
+        o = self.opts
+        cmd = whisper.transcribe_cmd(
+            wav,
+            whisper.model_path(self.model),
+            out_base,
+            language=o.language,
+            translate=o.translate,
+            max_len=o.max_len,
+            formats=self.formats,
+            prompt=o.prompt,
+        )
+        ctx.log("$ " + ff.format_cmd(cmd))
+        res = ff.run(cmd, on_line=partial(self._line, ctx), cancel=cancelled)
+        if res.cancelled:
+            raise ff.CancelledError("cancelled")
+        if res.returncode != 0:
+            ctx.task.log_tail = res.log_tail[-40:]
+            raise RuntimeError("Speech recognition failed:\n" + "\n".join(res.log_tail[-6:]))
+        for fmt_, final in zip(self.formats, self.outputs, strict=False):
+            produced = f"{out_base}.{fmt_}"
+            if not os.path.isfile(produced) or os.path.getsize(produced) == 0:
+                raise RuntimeError("No speech was recognised in this file.")
+            shutil.copyfile(produced, ctx.output(final))
+        return 0
+
+    def _line(self, ctx: TaskContext, line: str) -> None:
+        m = re.search(r"auto-detected language:\s*([a-z]{2,3})", line)
+        if m:
+            self.detected = m.group(1)
+        frac = whisper.parse_progress(line)
+        if frac is not None:
+            ctx.progress(0.3 + 0.7 * frac)
+        elif line.startswith("[") or "auto-detected language" in line:
+            ctx.log(line)
 
 
 class AutoSubsTab(BaseTab):
@@ -281,22 +354,29 @@ class AutoSubsTab(BaseTab):
 
     # ── generate ─────────────────────────────────────────────────────────────
 
-    def _run(self):
-        src = self.src_row.path
+    def _transcribable(self, src: str) -> ff.MediaInfo | None:
+        """*src*'s details when it has sound and the speech engine is here (else says why)."""
         info = common.check_source(self, src, need_video=False)
         if info is None:
-            return
+            return None
         if not info.has_audio:
             messagebox.showwarning(
                 t("common.warning"), "This file has no audio track to transcribe.", parent=self
             )
-            return
+            return None
         if not whisper.cli_path():
             messagebox.showerror(
                 t("common.error"),
                 "The speech-to-text engine (whisper-cli) is missing from this build.",
                 parent=self,
             )
+            return None
+        return info
+
+    def _run(self):
+        src = self.src_row.path
+        info = self._transcribable(src)
+        if info is None:
             return
         fmt = self._fmt()
         exts = {"srt": [".srt"], "vtt": [".vtt"], "both": [".srt", ".vtt"], "txt": [".txt"]}[fmt]
@@ -312,56 +392,12 @@ class AutoSubsTab(BaseTab):
         lang = next((k for k, lbl in whisper.LANGUAGES if lbl == self.lang_var.get()), "auto")
         tracks = list(self.track_box.cget("values"))
         stream = tracks.index(self.track_var.get()) if self.track_var.get() in tracks else 0
-        translate, max_len = self.translate_var.get(), int(self.maxlen_var.get())
-        prompt = self.prompt_var.get()
+        translate = self.translate_var.get()
+        whisper_opts = _Options(lang, translate, int(self.maxlen_var.get()), self.prompt_var.get())
         formats = {"both": ("srt", "vtt")}.get(fmt, (fmt,))
         duration = info.duration or None
-        detected = {"lang": lang if lang != "auto" else ""}
 
-        def work(_p, cancelled, ctx):
-            if not whisper.is_installed(key):
-                ctx.log(f"Downloading the {whisper.MODELS[key].label} model (one time)…")
-                whisper.download_model(key, lambda f: ctx.progress(0.25 * f), cancelled)
-            tmp = ctx.tempdir()
-            wav = os.path.join(tmp, "audio.wav")
-            ctx.span(0.25, 0.3).run(
-                whisper.audio_extract_cmd(src, wav, stream=stream), duration=duration
-            )
-            out_base = os.path.join(tmp, "subs")
-            cmd = whisper.transcribe_cmd(
-                wav,
-                whisper.model_path(key),
-                out_base,
-                language=lang,
-                translate=translate,
-                max_len=max_len,
-                formats=formats,
-                prompt=prompt,
-            )
-            ctx.log("$ " + ff.format_cmd(cmd))
-
-            def on_line(line):
-                m = re.search(r"auto-detected language:\s*([a-z]{2,3})", line)
-                if m:
-                    detected["lang"] = m.group(1)
-                frac = whisper.parse_progress(line)
-                if frac is not None:
-                    ctx.progress(0.3 + 0.7 * frac)
-                elif line.startswith("[") or "auto-detected language" in line:
-                    ctx.log(line)
-
-            res = ff.run(cmd, on_line=on_line, cancel=cancelled)
-            if res.cancelled:
-                raise ff.CancelledError("cancelled")
-            if res.returncode != 0:
-                ctx.task.log_tail = res.log_tail[-40:]
-                raise RuntimeError("Speech recognition failed:\n" + "\n".join(res.log_tail[-6:]))
-            for fmt_, final in zip(formats, outputs, strict=False):
-                produced = f"{out_base}.{fmt_}"
-                if not os.path.isfile(produced) or os.path.getsize(produced) == 0:
-                    raise RuntimeError("No speech was recognised in this file.")
-                shutil.copyfile(produced, ctx.output(final))
-            return 0
+        job = _Transcription(src, key, stream, duration, formats, outputs, whisper_opts)
 
         def on_complete(tid, rc):
             self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
@@ -370,7 +406,7 @@ class AutoSubsTab(BaseTab):
             self.last_task = task
             if rc == 0:
                 self._last_subs = outputs[0]
-                self._last_lang = "en" if translate else detected["lang"]
+                self._last_lang = "en" if translate else job.detected
                 if outputs[0].endswith((".srt", ".vtt")):
                     self.burn_btn.config(state="normal")
                     self.mux_btn.config(state="normal")
@@ -380,7 +416,7 @@ class AutoSubsTab(BaseTab):
         tid = self.enqueue_render(
             "Auto-Subtitles",
             outputs[0],
-            work=work,
+            work=job.run,
             expected_duration=duration,
             inputs=[src],
             hooks=Hooks(
