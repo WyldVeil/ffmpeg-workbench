@@ -8,6 +8,7 @@ import pytest
 
 from core import ffmpeg as ff
 from core.ops import audio_export as ae
+from core.ops import karaoke as ko
 from core.ops import voiceover as vo
 from tabs.audio import mixer
 from tabs.kit.widgets import ChoiceBox
@@ -52,7 +53,7 @@ def _volume(path):
 
 def test_pure_helpers(tmp_path):
     from core import tts
-    from tabs.audio import karaoke, voice_isolation
+    from tabs.audio import voice_isolation
     from tabs.audio.tts import _shift_srt
 
     assert (
@@ -68,7 +69,7 @@ def test_pure_helpers(tmp_path):
     )
     for name in voice_isolation.MODELS:
         assert os.path.isfile(os.path.join(voice_isolation.models_dir(), name)), name
-    assert "[side][bass]amix" in karaoke.vocal_remove_filter()
+    assert "[side][bass]amix" in ko.vocal_remove_filter()
 
 
 @pytest.mark.gui

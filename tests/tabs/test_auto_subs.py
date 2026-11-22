@@ -133,7 +133,7 @@ def test_karaoke_from_audio(ui, outdir):
 
 
 def test_karaoke_word_grouping(tmp_path):
-    from tabs.audio.karaoke import segments_from_whispercpp
+    from core.ops.karaoke import segments_from_whispercpp
 
     p = tmp_path / "w.json"
     p.write_text(
@@ -144,5 +144,5 @@ def test_karaoke_word_grouping(tmp_path):
         '{"text": " world", "offsets": {"from": 600, "to": 1200}}]}]}'
     )
     segs = segments_from_whispercpp(str(p))
-    assert [w["word"] for w in segs[0]["words"]] == [" Hello", " world"]
-    assert segs[0]["words"][0]["end"] == 0.5
+    assert [w.word for w in segs[0].words] == [" Hello", " world"]
+    assert segs[0].words[0].end == 0.5

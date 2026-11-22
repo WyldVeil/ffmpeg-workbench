@@ -1,5 +1,5 @@
 """
-tab_karaoke.py  ─  Karaoke Video Generator
+tabs/audio/karaoke.py - Karaoke Video Generator (the engine is core/ops/karaoke.py)
 
 Turns any music video into a singalong karaoke track in three steps:
   1. Whisper (word_timestamps=True) transcribes every word with precise timing.
@@ -20,6 +20,7 @@ from tkinter import messagebox, ttk
 
 from core import tasks
 from core.i18n import t
+from core.ops import karaoke as ko
 from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -73,114 +74,6 @@ LANG_CODES = {
 }
 
 # ASS colours are &HAABBGGRR  (AA=alpha 00=opaque, then BGR, then R last)
-ASS_COLOURS = {
-    "Yellow": "&H0000FFFF",  # #FFFF00
-    "White": "&H00FFFFFF",  # #FFFFFF
-    "Cyan": "&H00FFFF00",  # #00FFFF
-    "Green": "&H0000FF00",  # #00FF00
-    "Pink": "&H008080FF",  # #FF8080 - soft pink, readable
-    "Orange": "&H000080FF",  # #FF8000
-}
-
-
-# ── ASS builder ───────────────────────────────────────────────────────────────
-
-
-def _ass_time(seconds: float) -> str:
-    """Format seconds → ASS timestamp  H:MM:SS.cs"""
-    total_cs = round(seconds * 100)
-    cs = total_cs % 100
-    s = (total_cs // 100) % 60
-    m = (total_cs // 6000) % 60
-    h = total_cs // 360000
-    return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
-
-
-def _build_ass(segments, path, font_size, primary, secondary, res_x=1920, res_y=1080):
-    """
-    Write an ASS karaoke file.
-
-    primary   = colour that fills in as the word is sung  (e.g. green)
-    secondary = colour of words waiting to be sung         (e.g. yellow)
-
-    Each Dialogue line uses \\kf<cs> tags (fill karaoke, centiseconds).
-    The fill animation sweeps left-to-right within each word as it is sung,
-    which is exactly what you see on a real karaoke machine.
-    """
-    header = (
-        "[Script Info]\n"
-        "ScriptType: v4.00+\n"
-        "Collisions: Normal\n"
-        f"PlayResX: {res_x}\n"
-        f"PlayResY: {res_y}\n"
-        "Timer: 100.0\n"
-        "\n"
-        "[V4+ Styles]\n"
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
-        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
-        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Bold=-1 (yes), Alignment=2 (bottom-centre), Outline=3, Shadow=1
-        f"Style: Karaoke,Montserrat,{font_size},{primary},{secondary},&H00000000,&H80000000,"
-        "-1,0,0,0,100,100,0,0,1,3,1,2,10,10,40,1\n"
-        "\n"
-        "[Events]\n"
-        "Format: Layer, Start, End, Style, Name, "
-        "MarginL, MarginR, MarginV, Effect, Text\n"
-    )
-
-    dialogue_lines = []
-
-    for seg in segments:
-        words = seg.get("words") or []
-
-        if not words:
-            # No word-level data - treat whole segment as one karaoke block
-            from core.ass import escape as _esc
-
-            text = _esc(seg.get("text", "").strip())
-            if not text:
-                continue
-            t0, t1 = seg["start"], seg["end"]
-            dur_cs = max(1, round((t1 - t0) * 100))
-            dialogue_lines.append(
-                f"Dialogue: 0,{_ass_time(t0)},{_ass_time(t1)},Karaoke,,0,0,0,,{{\\kf{dur_cs}}}{text}\n"
-            )
-            continue
-
-        # Build the \\kf chain, accounting for silence gaps between words
-        seg_start = words[0]["start"]
-        seg_end = words[-1]["end"]
-        prev_end = seg_start
-        parts = []
-
-        from core.ass import escape as _esc
-
-        for n, w in enumerate(words):
-            w_start = w.get("start", prev_end)
-            w_end = w.get("end", w_start + 0.1)
-            word_text = _esc(w.get("word", "").lstrip() if n == 0 else w.get("word", ""))
-
-            # Silence/gap before this word: an empty timed token keeps the sweep in
-            # sync (no extra space - the word already carries its own).
-            gap_cs = max(0, round((w_start - prev_end) * 100))
-            if gap_cs > 0:
-                parts.append(f"{{\\kf{gap_cs}}}")
-
-            dur_cs = max(1, round((w_end - w_start) * 100))
-            parts.append(f"{{\\kf{dur_cs}}}{word_text}")
-            prev_end = w_end
-
-        text_body = "".join(parts)
-        dialogue_lines.append(
-            f"Dialogue: 0,{_ass_time(seg_start)},{_ass_time(seg_end)},Karaoke,,0,0,0,,{text_body}\n"
-        )
-
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(header)
-        fh.writelines(dialogue_lines)
-
-    return len(dialogue_lines)
 
 
 # ── Tab ───────────────────────────────────────────────────────────────────────
@@ -191,48 +84,6 @@ def _whisper_ok():
     from core import whisper
 
     return bool(whisper.cli_path())
-
-
-def segments_from_whispercpp(path: str) -> list:
-    """whisper.cpp full JSON (-ojf) -> [{'start','end','text','words':[{'word','start','end'}]}]."""
-    import json
-
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        data = json.load(fh)
-    segments = []
-    for seg in data.get("transcription", []):
-        words = []
-        for tok in seg.get("tokens", []):
-            text = tok.get("text", "")
-            if not text or text.startswith("[_"):
-                continue
-            a = tok.get("offsets", {}).get("from", 0) / 1000.0
-            b = tok.get("offsets", {}).get("to", 0) / 1000.0
-            if words and not text.startswith(" ") and text.strip():
-                words[-1]["word"] += text
-                words[-1]["end"] = max(words[-1]["end"], b)
-            elif text.strip():
-                words.append({"word": text, "start": a, "end": max(b, a + 0.05)})
-        off = seg.get("offsets", {})
-        if words:
-            segments.append(
-                {
-                    "start": off.get("from", 0) / 1000.0,
-                    "end": off.get("to", 0) / 1000.0,
-                    "text": seg.get("text", "").strip(),
-                    "words": words,
-                }
-            )
-    return segments
-
-
-def vocal_remove_filter() -> str:
-    """Centre-panned vocals out, bass (usually centred too) kept, same polarity on both sides."""
-    return (
-        "asplit[ka][kb];[ka]pan=stereo|c0=c0-c1|c1=c0-c1[side];"
-        "[kb]lowpass=f=180,pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1[bass];"
-        "[side][bass]amix=inputs=2:normalize=0,alimiter=limit=0.95"
-    )
 
 
 class KaraokeTab(BaseTab):
@@ -374,7 +225,7 @@ class KaraokeTab(BaseTab):
         ttk.Combobox(
             rc,
             textvariable=self._col_unsung,
-            values=list(ASS_COLOURS.keys()),
+            values=list(ko.ASS_COLOURS.keys()),
             state="readonly",
             width=8,
         ).pack(side="left", padx=px(6))
@@ -383,7 +234,7 @@ class KaraokeTab(BaseTab):
         ttk.Combobox(
             rc,
             textvariable=self._col_sung,
-            values=list(ASS_COLOURS.keys()),
+            values=list(ko.ASS_COLOURS.keys()),
             state="readonly",
             width=8,
         ).pack(side="left", padx=px(6))
@@ -549,15 +400,15 @@ class KaraokeTab(BaseTab):
             return
         self._out_var.set(out)
         try:
-            settings = {
-                "model": MODELS.get(self._model_var.get(), "base"),
-                "lang": LANG_CODES.get(self._lang_var.get()) or "auto",
-                "darkness": float(self._darkness.get()),
-                "font_size": max(12, int(self._font_size.get())),
-                "primary": ASS_COLOURS.get(self._col_sung.get(), ASS_COLOURS["Green"]),
-                "secondary": ASS_COLOURS.get(self._col_unsung.get(), ASS_COLOURS["Yellow"]),
-                "rm_vocals": self._rm_vocals.get(),
-            }
+            settings = ko.Karaoke(
+                model=MODELS.get(self._model_var.get(), "base"),
+                language=LANG_CODES.get(self._lang_var.get()) or "auto",
+                darkness=float(self._darkness.get()),
+                font_size=max(12, int(self._font_size.get())),
+                sung=ko.ASS_COLOURS.get(self._col_sung.get(), ko.ASS_COLOURS["Green"]),
+                waiting=ko.ASS_COLOURS.get(self._col_unsung.get(), ko.ASS_COLOURS["Yellow"]),
+                remove_vocals=self._rm_vocals.get(),
+            )
         except ValueError:
             messagebox.showerror(
                 t("msg.bad_input_title"), t("msg.font_size_whole_number"), parent=self
@@ -576,106 +427,10 @@ class KaraokeTab(BaseTab):
         self._task = self.enqueue_render(
             "Karaoke",
             output_path=out,
-            work=lambda p, c, ctx: self._worker(src, out, settings, ctx),
+            work=partial(ko.make_karaoke, src, out, settings),
             inputs=[src],
             hooks=Hooks(on_progress=lambda _t, line: self._log(line), on_complete=done),
         )
-
-    # ─── Background worker (queue job) ───────────────────────────────────────
-    def _worker(self, src, out, cfg, ctx):
-        import os
-
-        from core import ass as ass_mod
-        from core import ffmpeg as ff
-        from core import whisper
-
-        info = ff.probe(src)
-        tmp = ctx.tempdir()
-        if not whisper.is_installed(cfg["model"]):
-            ctx.log(f"Downloading the {whisper.MODELS[cfg['model']].label} model (one time)…")
-            whisper.download_model(cfg["model"], lambda f: ctx.progress(0.2 * f), ctx.cancelled)
-        wav = os.path.join(tmp, "audio.wav")
-        ctx.log("Step 1/3: transcribing the lyrics…")
-        ctx.span(0.2, 0.25).run(whisper.audio_extract_cmd(src, wav), duration=info.duration or None)
-        base = os.path.join(tmp, "words")
-        cmd = whisper.transcribe_cmd(
-            wav,
-            whisper.model_path(cfg["model"]),
-            base,
-            language=cfg["lang"],
-            max_len=40,
-            formats=("json",),
-        )
-
-        def progress(line):
-            f = whisper.parse_progress(line)
-            if f is not None:
-                ctx.progress(0.25 + 0.45 * f)
-
-        res = ff.run(
-            cmd,
-            on_line=progress,
-            cancel=ctx.cancelled,
-        )
-        if res.cancelled:
-            raise ff.CancelledError("cancelled")
-        if res.returncode != 0 or not os.path.isfile(base + ".json"):
-            raise RuntimeError("Speech recognition failed:\n" + "\n".join(res.log_tail[-6:]))
-        segments = segments_from_whispercpp(base + ".json")
-        if not segments:
-            raise RuntimeError("No sung or spoken words were recognised.")
-        ctx.log(f"Step 2/3: {len(segments)} lyric lines.")
-        w, h = info.require_video().display_size if info.has_video else (1920, 1080)
-        ass_path = os.path.join(tmp, "karaoke.ass")
-        _build_ass(
-            segments,
-            ass_path,
-            font_size=round(cfg["font_size"] * min(w, h) / 1080),
-            primary=cfg["primary"],
-            secondary=cfg["secondary"],
-            res_x=w,
-            res_y=h,
-        )
-        ctx.log("Step 3/3: rendering the karaoke video…")
-        if info.has_video:
-            cmd = [ff.ffmpeg_path(), "-y", "-i", src]
-            vf = f"curves=all='0/0 1/{cfg['darkness']:.2f}',{ass_mod.subtitles_filter(ass_path)},format=yuv420p"
-        else:  # audio only: lyrics on a dark background
-            cmd = [
-                ff.ffmpeg_path(),
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                f"color=c=0x101018:s={w}x{h}:r=30",
-                "-i",
-                src,
-                "-shortest",
-            ]
-            vf = f"{ass_mod.subtitles_filter(ass_path)},format=yuv420p"
-        a_in = "0:a:0" if info.has_video else "1:a:0"
-        cmd += ["-map", "0:v:0", "-map", a_in, "-vf", vf]
-        if cfg["rm_vocals"]:
-            cmd += ["-af", vocal_remove_filter()]
-        cmd += [
-            "-c:v",
-            "libx264",
-            "-crf",
-            "18",
-            "-preset",
-            "medium",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "256k",
-            "-movflags",
-            "+faststart",
-            ctx.output(out),
-        ]
-        ctx.span(0.7, 1.0).run(cmd, duration=info.duration or None)
-        return 0
 
     def _finish(self):
         self._btn_go.config(state="normal", text=t("karaoke.generate_button"))
