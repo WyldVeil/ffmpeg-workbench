@@ -28,6 +28,7 @@ import sys
 import threading
 from concurrent.futures import Future
 from dataclasses import dataclass, field
+from typing import Any
 
 from core import proc as _proc
 from core import settings, tasks
@@ -159,8 +160,8 @@ def quality_key(value: str) -> str:
 # ── Encoder discovery ────────────────────────────────────────────────────────
 
 _lock = threading.Lock()
-_ENCODERS: dict[str, set] = {}  # ffmpeg path -> encoder names
-_HW_OK: dict[str, dict] = {}  # ffmpeg path -> {kind: bool}
+_ENCODERS: dict[str, set[str]] = {}  # ffmpeg path -> encoder names
+_HW_OK: dict[str, dict[str, bool]] = {}  # ffmpeg path -> {kind: bool}
 _VAAPI_DEVICE: dict[str, str] = {}  # ffmpeg path -> render node
 
 
@@ -188,7 +189,7 @@ def _binary_key(ff: str) -> str:
         return ff
 
 
-def _load_disk_cache(ff: str) -> dict | None:
+def _load_disk_cache(ff: str) -> dict[str, Any] | None:
     path = _cache_file()
     if not path or not os.path.isfile(path):
         return None
@@ -200,12 +201,12 @@ def _load_disk_cache(ff: str) -> dict | None:
         return None
 
 
-def _save_disk_cache(ff: str, entry: dict) -> None:
+def _save_disk_cache(ff: str, entry: dict[str, Any]) -> None:
     path = _cache_file()
     if not path:
         return
     try:
-        data = {}
+        data: dict[str, Any] = {}
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
@@ -218,13 +219,13 @@ def _save_disk_cache(ff: str, entry: dict) -> None:
         pass
 
 
-def list_encoders(ffmpeg: str | None = None) -> set:
+def list_encoders(ffmpeg: str | None = None) -> set[str]:
     """Names of every encoder compiled into *ffmpeg* (cached)."""
     ff = ffmpeg or _ffmpeg()
     with _lock:
         if ff in _ENCODERS:
             return _ENCODERS[ff]
-    names: set = set()
+    names: set[str] = set()
     try:
         r = _proc.run([ff, "-hide_banner", "-encoders"], timeout=15)
         started = False
@@ -247,7 +248,7 @@ def has_encoder(name: str) -> bool:
     return name in list_encoders()
 
 
-def _vaapi_nodes() -> list:
+def _vaapi_nodes() -> list[str]:
     return sorted(glob.glob("/dev/dri/renderD*")) if sys.platform.startswith("linux") else []
 
 
@@ -258,7 +259,7 @@ def _hw_test(ff: str, kind: str) -> bool:
     src = ["-f", "lavfi", "-i", "color=c=black:s=640x360:r=30:d=0.5"]
     tail = ["-frames:v", "8", "-c:v", enc, "-f", "null", "-"]
     base = [ff, "-hide_banner", "-nostdin", "-loglevel", "error"]
-    attempts = []
+    attempts: list[tuple[str | None, list[str]]] = []
     if kind == "vaapi":
         for node in _vaapi_nodes():
             attempts.append(
@@ -280,7 +281,7 @@ def _hw_test(ff: str, kind: str) -> bool:
     return False
 
 
-def _platform_kinds() -> tuple:
+def _platform_kinds() -> tuple[str, ...]:
     if sys.platform == "darwin":
         return ("videotoolbox",)
     if sys.platform.startswith("win"):
@@ -288,7 +289,7 @@ def _platform_kinds() -> tuple:
     return ("nvenc", "vaapi", "qsv", "amf")
 
 
-def hw_available(refresh: bool = False, ffmpeg: str | None = None) -> dict:
+def hw_available(refresh: bool = False, ffmpeg: str | None = None) -> dict[str, bool]:
     """Return ``{kind: bool}`` for each hardware encoder family that applies to
     this platform, after a functional test.  Cached in memory and on disk."""
     ff = ffmpeg or _ffmpeg()
@@ -310,7 +311,7 @@ def hw_available(refresh: bool = False, ffmpeg: str | None = None) -> dict:
     return dict(result)
 
 
-def working_hw_kinds() -> list:
+def working_hw_kinds() -> list[str]:
     return [k for k, ok in hw_available().items() if ok]
 
 
@@ -350,8 +351,8 @@ class VideoEncode:
     encoder: str
     codec: str
     hw: str | None = None
-    pre_input: list = field(default_factory=list)
-    args: list = field(default_factory=list)
+    pre_input: list[str] = field(default_factory=list[str])
+    args: list[str] = field(default_factory=list[str])
     filter_suffix: str = ""
     pix_fmt: str = ""
 
@@ -359,7 +360,7 @@ class VideoEncode:
         parts = [p for p in ((chain or "").strip(","), self.filter_suffix) if p]
         return ",".join(parts) if parts else None
 
-    def vf_args(self, chain: str | None = None) -> list:
+    def vf_args(self, chain: str | None = None) -> list[str]:
         v = self.vf(chain)
         return ["-vf", v] if v else []
 
@@ -527,7 +528,7 @@ def _double_rate(rate: str) -> str:
         return text
 
 
-def two_pass_args(encoder: str, pass_no: int, passlog: str) -> list:
+def two_pass_args(encoder: str, pass_no: int, passlog: str) -> list[str]:
     """Options for pass 1 or 2 of a two-pass software encode."""
     if encoder in ("libx264", "libvpx-vp9", "libvpx", "libaom-av1", "mpeg4"):
         return ["-pass", str(pass_no), "-passlogfile", passlog]
@@ -538,9 +539,9 @@ def two_pass_args(encoder: str, pass_no: int, passlog: str) -> list:
     return []
 
 
-def container_video_args(container: str, codec: str) -> list:
+def container_video_args(container: str, codec: str) -> list[str]:
     c = container.lower().lstrip(".")
-    out = []
+    out: list[str] = []
     if c in ("mp4", "m4v", "mov"):
         out += ["-movflags", "+faststart"]
         if codec == "hevc":
@@ -639,7 +640,7 @@ def audio(
     channels: int | None = None,
     sample_rate: int | None = None,
     vbr_quality: float | None = None,
-) -> list:
+) -> list[str]:
     """Arguments for encoding audio.
 
     *codec* is a key from :data:`AUDIO_ENCODERS` (``"aac"``, ``"opus"`` …) or

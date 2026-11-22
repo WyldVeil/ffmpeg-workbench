@@ -18,7 +18,9 @@ import json
 import math
 import os
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from core import ffmpeg as ff
 
@@ -58,19 +60,20 @@ def build(
     ref_info: ff.MediaInfo,
     dist_info: ff.MediaInfo,
     *,
-    metrics=METRICS,
+    metrics: Iterable[str] = METRICS,
     model: str = "hd",
     skip_ref: float = 0.0,
     skip_dist: float = 0.0,
     seconds: float | None = None,
     subsample: int = 1,
     threads: int | None = None,
-) -> tuple:
+) -> tuple[list[str], dict[str, str]]:
     """(argv, {metric: log file name}).  *skip_ref* / *skip_dist*: seconds to
     skip at the start of the original / the copy, to line them up when one of
     them was trimmed."""
-    metrics = [m for m in METRICS if m in metrics]
-    if not metrics:
+    wanted = set(metrics)
+    chosen = [m for m in METRICS if m in wanted]
+    if not chosen:
         raise ValueError("Choose at least one measurement.")
     if ref_info.video is None or dist_info.video is None:
         raise ValueError("Both files need a picture.")
@@ -82,7 +85,7 @@ def build(
     limit = f",trim=duration={seconds:.3f}" if seconds else ""
     d_trim = f"trim=start={skip_dist:.3f}," if skip_dist > 0 else ""
     r_trim = f"trim=start={skip_ref:.3f}," if skip_ref > 0 else ""
-    n = len(metrics)
+    n = len(chosen)
     # FFmpeg converts between differently tagged inputs and treats untagged video as SD (BT.601): a copy
     # that merely gained or lost its colour tags would be scored as colour-shifted.  Where only one side
     # is tagged, both are measured as tagged.
@@ -98,9 +101,9 @@ def build(
         f"{limit},setpts=PTS-STARTPTS"
         + (f",split={n}" + "".join(f"[r{i}]" for i in range(n)) if n > 1 else "[r0]"),
     ]
-    files = {}
+    files: dict[str, str] = {}
     sync = "shortest=1:repeatlast=0"
-    for i, m in enumerate(metrics):
+    for i, m in enumerate(chosen):
         if m == "vmaf":
             files[m] = "vmaf.json"
             parts.append(
@@ -134,9 +137,9 @@ def build(
     return argv, files
 
 
-def shared_tags(a, b) -> dict:
+def shared_tags(a: ff.Stream, b: ff.Stream) -> dict[str, str]:
     """setparams values for colour tags present on only one of two streams."""
-    out = {}
+    out: dict[str, str] = {}
     for key, attr in (
         ("range", "color_range"),
         ("color_primaries", "color_primaries"),
@@ -152,8 +155,8 @@ def shared_tags(a, b) -> dict:
 
 @dataclass
 class Series:
-    times: list = field(default_factory=list)
-    values: list = field(default_factory=list)
+    times: list[float] = field(default_factory=list[float])
+    values: list[float] = field(default_factory=list[float])
 
     def mean(self) -> float:
         vals = [v for v in self.values if math.isfinite(v)]
@@ -182,10 +185,10 @@ class Result:
     psnr: Series = field(default_factory=Series)
     vmaf_harmonic: float = float("nan")
 
-    def worst(self, n: int = 8, gap: float = 2.0) -> list:
+    def worst(self, n: int = 8, gap: float = 2.0) -> list[tuple[float, float]]:
         """[(time, vmaf)] of the lowest-scoring moments, at least *gap* s apart."""
         pts = sorted(zip(self.vmaf.values, self.vmaf.times, strict=False))
-        out = []
+        out: list[tuple[float, float]] = []
         for value, at in pts:
             if all(abs(at - t0) >= gap for t0, _v in out):
                 out.append((at, value))
@@ -193,14 +196,14 @@ class Result:
                 break
         return sorted(out)
 
-    def summary(self) -> dict:
-        d = {}
+    def summary(self) -> dict[str, dict[str, Any]]:
+        d: dict[str, dict[str, Any]] = {}
 
-        def num(v):
+        def num(v: float) -> float | str | None:
             return round(v, 4) if math.isfinite(v) else ("inf" if v > 0 else None)
 
         for name in METRICS:
-            s = getattr(self, name)
+            s: Series = getattr(self, name)
             if s.values:
                 d[name] = {
                     "mean": num(s.mean()),
@@ -213,9 +216,9 @@ class Result:
         return d
 
     def to_csv(self, path: str) -> None:
-        rows = {}
+        rows: dict[float, dict[str, float]] = {}
         for name in METRICS:
-            s = getattr(self, name)
+            s: Series = getattr(self, name)
             for t, v in zip(s.times, s.values, strict=False):
                 rows.setdefault(round(t, 4), {})[name] = v
         with open(path, "w", encoding="utf-8", newline="") as fh:
@@ -232,7 +235,7 @@ _SSIM = re.compile(r"n:(\d+).*?All:([\d.]+)")
 _PSNR = re.compile(r"n:(\d+).*?psnr_avg:(inf|[\d.]+)")
 
 
-def read(folder: str, files: dict, fps: float, skip_ref: float = 0.0) -> Result:
+def read(folder: str, files: Mapping[str, str], fps: float, skip_ref: float = 0.0) -> Result:
     """Parse the logs written by :func:`build`'s command; times are in the original's timeline."""
     start = max(0.0, skip_ref)
     res = Result(fps)
@@ -243,16 +246,13 @@ def read(folder: str, files: dict, fps: float, skip_ref: float = 0.0) -> Result:
         for fr in data.get("frames", []):
             res.vmaf.times.append(start + fr["frameNum"] / fps)
             res.vmaf.values.append(float(fr["metrics"]["vmaf"]))
-        res.vmaf_harmonic = float(
-            ((data.get("pooled_metrics") or {}).get("vmaf") or {}).get(
-                "harmonic_mean", float("nan")
-            )
-        )
+        pooled = ff.json_object(ff.json_object(data.get("pooled_metrics")).get("vmaf"))
+        res.vmaf_harmonic = float(pooled.get("harmonic_mean", float("nan")))
     for name, rx in (("ssim", _SSIM), ("psnr", _PSNR)):
         path = os.path.join(folder, files.get(name, ""))
         if name not in files or not os.path.isfile(path):
             continue
-        series = getattr(res, name)
+        series: Series = getattr(res, name)
         with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 m = rx.search(line)

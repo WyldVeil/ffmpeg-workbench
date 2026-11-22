@@ -65,9 +65,14 @@ AUDIO_FORMAT_ENCODE = {
 }
 
 
-def stream_args(info: ff.MediaInfo, fmt: str, smart: bool = True) -> tuple[list, list, list, str]:
+def stream_args(
+    info: ff.MediaInfo, fmt: str, smart: bool = True
+) -> tuple[list[str], list[str], list[str], str]:
     """(pre-input args, output args, notes, summary) for converting *info* to *fmt*."""
-    pre, args, notes, actions = [], [], [], []
+    pre: list[str] = []
+    args: list[str] = []
+    notes: list[str] = []
+    actions: list[str] = []
     audio_only = FORMATS[fmt][1] == "audio"
     videos = [s for s in info.streams if s.type == "video" and not s.attached_pic]
     audios = [s for s in info.streams if s.type == "audio"]

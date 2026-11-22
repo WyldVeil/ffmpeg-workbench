@@ -11,9 +11,9 @@ import re
 from core import ffmpeg as ff
 
 
-def detect_bars(path: str, duration: float, samples: int = 6) -> tuple | None:
+def detect_bars(path: str, duration: float, samples: int = 6) -> tuple[int, int, int, int] | None:
     """(x, y, w, h) of the picture area, or None when there are no bars."""
-    boxes = []
+    boxes: list[tuple[int, int, int, int]] = []
     for i in range(samples):
         at = duration * (i + 0.5) / samples
         r = ff.capture(

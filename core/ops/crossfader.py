@@ -7,6 +7,7 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import encoders as enc
@@ -58,10 +59,10 @@ def _even(n: float) -> int:
     return max(2, round(n) // 2 * 2)
 
 
-def segment_lengths(clips: list, T: float, freeze: bool) -> list:
+def segment_lengths(clips: Sequence[Clip], T: float, freeze: bool) -> list[float]:
     """Length of each clip as it enters the xfade chain (freeze pads it)."""
     n = len(clips)
-    out = []
+    out: list[float] = []
     for i, c in enumerate(clips):
         length = c.duration
         if freeze:
@@ -70,7 +71,7 @@ def segment_lengths(clips: list, T: float, freeze: bool) -> list:
     return out
 
 
-def validate(clips: list, T: float, freeze: bool) -> str | None:
+def validate(clips: Sequence[Clip], T: float, freeze: bool) -> str | None:
     """Return a user-facing problem description, or None when renderable."""
     if len(clips) < 2:
         return _tr("crossfader.need_two", "Add at least two clips.")
@@ -92,24 +93,24 @@ def validate(clips: list, T: float, freeze: bool) -> str | None:
     return None
 
 
-def total_duration(clips: list, T: float, freeze: bool) -> float:
+def total_duration(clips: Sequence[Clip], T: float, freeze: bool) -> float:
     lengths = segment_lengths(clips, T, freeze)
     return max(0.0, sum(lengths) - T * (len(clips) - 1))
 
 
 def build_command(
-    clips: list,
+    clips: Sequence[Clip],
     out: str,
     *,
     T: float,
-    transitions: list,
+    transitions: Sequence[str],
     freeze: bool = False,
     audio_mode: str = "normal",
     audio_curve: str = "tri",
     venc: enc.VideoEncode | None = None,
-    size: tuple | None = None,
-    extra_output_args: list | None = None,
-) -> tuple[list, float]:
+    size: tuple[int, int] | None = None,
+    extra_output_args: Sequence[str] | None = None,
+) -> tuple[list[str], float]:
     """Build the FFmpeg argv for the whole crossfade.  Returns (argv, seconds)."""
     n = len(clips)
     if venc is None:
@@ -123,7 +124,7 @@ def build_command(
     argv = [ff.ffmpeg_path(), "-y", *venc.pre_input]
     for c in clips:
         argv += ["-i", c.path]
-    silent_index = {}
+    silent_index: dict[int, int] = {}
     if use_audio:
         for i, c in enumerate(clips):
             if not c.has_audio:
@@ -137,7 +138,7 @@ def build_command(
                     "anullsrc=channel_layout=stereo:sample_rate=48000",
                 ]
 
-    graph = []
+    graph: list[str] = []
     for i, c in enumerate(clips):
         chain = (
             f"[{i}:v]setpts=PTS-STARTPTS,"
@@ -146,7 +147,7 @@ def build_command(
             f"trim=duration={c.duration:.6f},setpts=PTS-STARTPTS,format={pix}"
         )
         if freeze:
-            pads = []
+            pads: list[str] = []
             if i > 0:
                 pads.append(f"start_mode=clone:start_duration={T:.6f}")
             if i < n - 1:

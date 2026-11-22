@@ -20,9 +20,13 @@ import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 
 from core import proc as _proc
 from core.errors import ToolError
+
+#: Polled while speaking; True stops it
+Cancelled = Callable[[], bool] | None
 
 logger = logging.getLogger("crossfader.tts")
 
@@ -121,7 +125,7 @@ def synthesize(
     pitch: str = "+0Hz",
     volume: str = "+0%",
     subtitles: bool = False,
-    cancelled=None,
+    cancelled: Cancelled = None,
 ) -> str | None:
     """Speak *text* into *out_path* (mp3 for edge, wav for system).
 
@@ -136,7 +140,16 @@ def synthesize(
     return None
 
 
-def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled):
+def _edge_synth(
+    text: str,
+    out_path: str,
+    voice: str,
+    rate: str,
+    pitch: str,
+    volume: str,
+    subtitles: bool,
+    cancelled: Cancelled,
+) -> str | None:
     import asyncio
 
     edge_tts = _edge()
@@ -193,7 +206,7 @@ def _edge_synth(text, out_path, voice, rate, pitch, volume, subtitles, cancelled
         raise TTSError(f"The online voice service failed: {exc}") from exc
 
 
-def _run(cmd, cancelled, timeout=600):
+def _run(cmd: list[str], cancelled: Cancelled, timeout: float = 600) -> None:
     proc = _proc.spawn(cmd, stdin=_proc.DEVNULL, stdout=_proc.PIPE, stderr=_proc.PIPE)
     try:
         waited = 0.0
@@ -219,7 +232,9 @@ def _run(cmd, cancelled, timeout=600):
         )
 
 
-def _system_synth(text, out_path, rate, pitch, volume, cancelled):
+def _system_synth(
+    text: str, out_path: str, rate: str, pitch: str, volume: str, cancelled: Cancelled
+) -> None:
     eng = system_engine()
     if not eng:
         raise TTSError(
@@ -233,7 +248,7 @@ def _system_synth(text, out_path, rate, pitch, volume, cancelled):
             fh.write(text)
         if IS_WIN:
 
-            def q(s):
+            def q(s: str) -> str:
                 return "'" + s.replace("'", "''") + "'"
 
             ps = os.path.join(tmp, "speak.ps1")

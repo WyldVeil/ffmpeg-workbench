@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Any
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -68,7 +69,7 @@ class HdrInfo:
         return " · ".join(parts)
 
 
-def _ratio(value) -> float:
+def _ratio(value: object) -> float:
     try:
         text = str(value)
         if "/" in text:
@@ -79,10 +80,10 @@ def _ratio(value) -> float:
         return 0.0
 
 
-def _read_side_data(entries, out: HdrInfo) -> bool:
+def _read_side_data(entries: object, out: HdrInfo) -> bool:
     """Fill *out* from ffprobe side data; True when HDR10+ metadata was seen."""
     plus = False
-    for sd in entries or []:
+    for sd in ff.json_objects(entries):
         kind = str(sd.get("side_data_type", ""))
         if kind.startswith("DOVI configuration"):
             out.dv_profile = int(sd.get("dv_profile") or 0)
@@ -99,7 +100,7 @@ def _read_side_data(entries, out: HdrInfo) -> bool:
     return plus
 
 
-def first_frame_side_data(path: str) -> list:
+def first_frame_side_data(path: str) -> list[dict[str, Any]]:
     try:
         r = ff.capture(
             [
@@ -119,8 +120,8 @@ def first_frame_side_data(path: str) -> list:
             ],
             timeout=30,
         )
-        frames = json.loads(r.stdout or "{}").get("frames") or []
-        return frames[0].get("side_data_list") or [] if frames else []
+        frames = ff.json_objects(ff.json_object(json.loads(r.stdout or "{}")).get("frames"))
+        return ff.json_objects(frames[0].get("side_data_list")) if frames else []
     except (OSError, ValueError):
         return []
 

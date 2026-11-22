@@ -121,7 +121,7 @@ def json_object(value: object) -> dict[str, Any]:
     return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
 
 
-def _objs(value: object) -> list[dict[str, Any]]:
+def json_objects(value: object) -> list[dict[str, Any]]:
     """A JSON list of objects from ffprobe (anything else is skipped)."""
     items = cast("list[object]", value) if isinstance(value, list) else []
     return [cast("dict[str, Any]", x) for x in items if isinstance(x, dict)]
@@ -315,7 +315,7 @@ def _parse_stream(d: dict[str, Any]) -> Stream:
     tags = _tags(d.get("tags"))
     disp = json_object(d.get("disposition"))
     rotation = 0
-    for sd in _objs(d.get("side_data_list")):
+    for sd in json_objects(d.get("side_data_list")):
         if "rotation" in sd:
             rotation = round(-_f(sd.get("rotation"))) % 360
             break
@@ -363,7 +363,7 @@ def _parse_stream(d: dict[str, Any]) -> Stream:
 
 def parse_probe_json(path: str, data: dict[str, Any]) -> MediaInfo:
     fmt = json_object(data.get("format"))
-    streams = tuple(_parse_stream(s) for s in _objs(data.get("streams")))
+    streams = tuple(_parse_stream(s) for s in json_objects(data.get("streams")))
     duration = _f(fmt.get("duration"))
     if not duration:
         duration = max((s.duration for s in streams), default=0.0)
@@ -376,7 +376,7 @@ def parse_probe_json(path: str, data: dict[str, Any]) -> MediaInfo:
         bit_rate=_i(fmt.get("bit_rate")),
         start_time=_f(fmt.get("start_time")),
         streams=streams,
-        chapters=tuple(_objs(data.get("chapters"))),
+        chapters=tuple(json_objects(data.get("chapters"))),
         tags=_tags(fmt.get("tags")),
         raw=data,
     )

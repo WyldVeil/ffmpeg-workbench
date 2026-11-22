@@ -7,9 +7,9 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 
 from core import ffmpeg as ff
+from core.ops.shared import Log, Runner
 
 
 def gif_graph(fps: float, width: int, colours: int, dither: str) -> str:
@@ -37,8 +37,8 @@ def make_animation(
     loops: int = 0,
     cap: int = 0,
     webp: bool = False,
-    run: Callable[[list[str], float, float, float], object],
-    log: Callable[[str], object] = print,
+    run: Runner,
+    log: Log = print,
 ) -> int:
     """GIF (or animated WebP) of [start, start+dur]; when *cap* bytes is set the
     animation is re-made smaller (width, then frame rate) until it fits.

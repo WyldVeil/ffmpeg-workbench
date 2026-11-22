@@ -52,20 +52,20 @@ def _even(n: float) -> int:
     return max(2, round(n) // 2 * 2)
 
 
-def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
+def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list[str]:
     """Reasons why the files can NOT be joined losslessly (empty = fine)."""
-    problems = []
+    problems: list[str] = []
     if not infos:
         return ["no files"]
     ref = infos[0]
 
-    def vkey(i):
+    def vkey(i: ff.MediaInfo) -> tuple[object, ...] | None:
         v = i.video
         if not v:
             return None
         return (v.codec, v.profile, v.width, v.height, v.pix_fmt, round(v.fps, 3), v.sar or "1:1")
 
-    def akey(i):
+    def akey(i: ff.MediaInfo) -> tuple[object, ...] | None:
         a = i.audio
         if not a:
             return None
@@ -78,7 +78,7 @@ def copy_compatibility(infos: Sequence[ff.MediaInfo]) -> list:
             if not rv or not iv:
                 problems.append(f"{name}: video stream missing in one of the files")
             else:
-                diffs = []
+                diffs: list[str] = []
                 for label, a, b in (
                     ("codec", rv.codec, iv.codec),
                     ("profile", rv.profile, iv.profile),
@@ -112,7 +112,7 @@ def copy_join_command(
     list_path: str,
     inpoints: Sequence[float | None] | None = None,
     outpoints: Sequence[float | None] | None = None,
-) -> list:
+) -> list[str]:
     fl.write_concat_list(paths, list_path, inpoints=inpoints, outpoints=outpoints)
     container = os.path.splitext(out)[1].lstrip(".").lower()
     cmd = [
@@ -138,7 +138,7 @@ def copy_join_command(
     return [*cmd, out]
 
 
-def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple:
+def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple[int, int, str]:
     """(width, height, fps_str) for a join: ``first`` clip, ``largest`` clip,
     or an explicit ``"1920x1080"``."""
     vids = [p.info.video for p in pieces if p.info.video]
@@ -152,12 +152,12 @@ def target_geometry(pieces: Sequence[Piece], mode: str = "first") -> tuple:
         size = (_even(best.display_size[0]), _even(best.display_size[1]))
     else:
         size = (_even(vids[0].display_size[0]), _even(vids[0].display_size[1]))
-    fps = vids[0].raw.get("avg_frame_rate") or "30/1"
+    fps = str(vids[0].raw.get("avg_frame_rate") or "30/1")
     if fps in ("0/0", "") or not vids[0].fps or vids[0].fps > 240:
         fps = "30/1"
     if mode == "largest":
         fps_v = max(vids, key=lambda v: v.fps or 0)
-        fps = fps_v.raw.get("avg_frame_rate") or fps
+        fps = str(fps_v.raw.get("avg_frame_rate") or fps)
     return size[0], size[1], fps
 
 
@@ -165,13 +165,13 @@ def filter_join_command(
     pieces: Sequence[Piece],
     out: str,
     *,
-    size: tuple | None = None,
+    size: tuple[int, int] | None = None,
     fps: str | None = None,
     venc: enc.VideoEncode | None = None,
     audio: bool = True,
     audio_codec: str = "aac",
     audio_bitrate: str = "192k",
-) -> tuple:
+) -> tuple[list[str], float]:
     """Single-pass normalising join.  Returns (argv, expected_seconds)."""
     if venc is None:
         venc = enc.video("h264", "high", hw="off", container=os.path.splitext(out)[1] or "mp4")
@@ -185,7 +185,7 @@ def filter_join_command(
     argv = [ff.ffmpeg_path(), "-y", *venc.pre_input]
     for p in pieces:
         argv += ["-i", p.path]
-    silence = {}
+    silence: dict[int, int] = {}  # piece -> input number of its silent track
     if use_audio:
         for i, p in enumerate(pieces):
             if not p.info.has_audio:
@@ -198,7 +198,8 @@ def filter_join_command(
                     "-i",
                     "anullsrc=channel_layout=stereo:sample_rate=48000",
                 ]
-    graph, labels = [], []
+    graph: list[str] = []
+    labels: list[str] = []
     for i, p in enumerate(pieces):
         trim = f"trim=start={p.start:.6f}:duration={p.length:.6f},"
         graph.append(

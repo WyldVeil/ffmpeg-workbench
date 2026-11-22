@@ -7,11 +7,14 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 
 from core import ffmpeg as ff
 
+Span = tuple[float, float]  # start, end in seconds
 
-def detect_cmd(src: str, threshold_db: float, min_silence: float, stream: int = 0) -> list:
+
+def detect_cmd(src: str, threshold_db: float, min_silence: float, stream: int = 0) -> list[str]:
     return [
         ff.ffmpeg_path(),
         "-hide_banner",
@@ -30,7 +33,7 @@ def detect_cmd(src: str, threshold_db: float, min_silence: float, stream: int = 
     ]
 
 
-def parse_silences(text: str, duration: float) -> list:
+def parse_silences(text: str, duration: float) -> list[Span]:
     starts = [float(x) for x in re.findall(r"silence_start:\s*(-?[\d.]+)", text)]
     ends = [float(x) for x in re.findall(r"silence_end:\s*([\d.]+)", text)]
     if len(ends) < len(starts):  # silent until the very end
@@ -39,10 +42,15 @@ def parse_silences(text: str, duration: float) -> list:
 
 
 def keep_zones(
-    silences, duration: float, padding: float, fps: float = 0.0, min_keep: float = 0.05
-) -> list:
+    silences: Iterable[Span],
+    duration: float,
+    padding: float,
+    fps: float = 0.0,
+    min_keep: float = 0.05,
+) -> list[Span]:
     """Parts to keep: everything except silences, with *padding* left around speech."""
-    zones, pos = [], 0.0
+    zones: list[Span] = []
+    pos = 0.0
     for a, b in silences:
         end = min(duration, a + padding)
         if end - pos > min_keep:
@@ -52,11 +60,11 @@ def keep_zones(
         zones.append((pos, duration))
     if fps:
 
-        def snap(x):
+        def snap(x: float) -> float:
             return round(x * fps) / fps
 
         zones = [(snap(a), snap(b)) for a, b in zones if snap(b) > snap(a)]
-    merged = []
+    merged: list[Span] = []
     for a, b in zones:
         if merged and a <= merged[-1][1] + 1e-6:
             merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
@@ -65,9 +73,9 @@ def keep_zones(
     return merged
 
 
-def cut_graph(zones, has_video: bool, has_audio: bool) -> str:
+def cut_graph(zones: Sequence[Span], has_video: bool, has_audio: bool) -> str:
     n = len(zones)
-    parts = []
+    parts: list[str] = []
     if has_video:
         parts.append(f"[0:v]split={n}" + "".join(f"[vs{i}]" for i in range(n)))
     if has_audio:

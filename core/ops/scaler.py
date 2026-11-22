@@ -6,6 +6,7 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from fractions import Fraction
 
 from core import upscale
@@ -13,11 +14,14 @@ from core import upscale
 GPU_METHODS = {"gpu", *upscale.SHADERS}
 
 
+Size = tuple[float, float]  # width, height
+
+
 def _even(x: float) -> int:
     return max(2, round(x / 2) * 2)
 
 
-def geometry(src: tuple, box: tuple, shape: str) -> tuple:
+def geometry(src: Size, box: Size, shape: str) -> tuple[tuple[int, int], tuple[int, int]]:
     """((scaled_w, scaled_h), (out_w, out_h)) for *shape*."""
     sw, sh = src
     bw, bh = box
@@ -31,15 +35,15 @@ def geometry(src: tuple, box: tuple, shape: str) -> tuple:
 
 
 def scale_chain(
-    src: tuple,
-    box: tuple,
+    src: Size,
+    box: Size,
     shape: str,
     method: str,
     *,
     sharpen: float = 0.0,
     gpu: bool = False,
     pix_fmt: str = "yuv420p",
-    tags: dict | None = None,
+    tags: Mapping[str, str] | None = None,
 ) -> str:
     """Filter graph scaling *src* into *box*.  GPU methods (libplacebo, with
     or without an upscaling shader) process the brightness plane only, see

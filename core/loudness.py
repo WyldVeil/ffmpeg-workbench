@@ -10,10 +10,14 @@ resampled back to the source rate.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
+
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
 
 TARGETS = {  # id: (label, integrated LUFS, true peak dBTP, LRA)
     "streaming": ("Streaming - Spotify, Apple Music, YouTube Music (-14 LUFS)", -14.0, -1.0, 11.0),
@@ -49,7 +53,7 @@ def measure_cmd(
     stream: int = 0,
     start: float = 0.0,
     duration: float | None = None,
-) -> list:
+) -> list[str]:
     cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin"]
     if start > 0:
         cmd += ["-ss", ff.ts(start)]
@@ -82,7 +86,7 @@ def parse_measurement(lines: Sequence[str]) -> Measurement:
         raise ValueError("loudnorm did not report a measurement")
     data = json.loads(block[a : b + 1])
 
-    def num(key):
+    def num(key: str) -> float:
         v = str(data.get(key, "0")).strip()
         return -99.0 if v in ("-inf", "inf", "nan") else float(v)
 
@@ -112,8 +116,8 @@ def measure(
     lra: float = 11.0,
     *,
     stream: int = 0,
-    cancel=None,
-    ctx=None,
+    cancel: Callable[[], bool] | None = None,
+    ctx: TaskContext | None = None,
 ) -> Measurement:
     """Run the measurement pass (through *ctx* when inside a queue job)."""
     cmd = measure_cmd(path, i, tp, lra, stream=stream)

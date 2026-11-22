@@ -6,6 +6,7 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core import ffmpeg as ff
@@ -24,7 +25,7 @@ class Region:
     start: float = 0.0
     end: float | None = None
 
-    def pixels(self, width: int, height: int) -> tuple:
+    def pixels(self, width: int, height: int) -> tuple[int, int, int, int]:
         x = min(max(0, int(self.x * width) // 2 * 2), width - 4)
         y = min(max(0, int(self.y * height) // 2 * 2), height - 4)
         w = max(4, min(width - x, round(self.w * width / 2) * 2))
@@ -46,10 +47,12 @@ class Region:
         )
 
 
-def blur_graph(regions, width: int, height: int, src: str = "[0:v]", out: str = "[v]") -> str:
+def blur_graph(
+    regions: Sequence[Region], width: int, height: int, src: str = "[0:v]", out: str = "[v]"
+) -> str:
     """filter_complex applying every region in order."""
     soft = [r for r in regions if r.kind != "box"]
-    parts = []
+    parts: list[str] = []
     cur = src
     if soft:
         parts.append(

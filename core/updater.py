@@ -20,10 +20,12 @@ import re
 import ssl
 import sys
 from collections.abc import Callable
+from http.client import HTTPResponse
+from typing import Any
 
 from core import proc as _proc
 from core import settings
-from core.hardware import find_binary, platform_tag, user_tools_dir
+from core.hardware import platform_tag, user_tools_dir
 
 logger = logging.getLogger("crossfader.updater")
 Log = Callable[[str], None]
@@ -34,7 +36,7 @@ _VARIANT = {"windows-x64": "win64-gpl-shared", "linux-x64": "linux64-gpl-shared"
 _YTDLP_ASSET = {"windows-x64": "yt-dlp.exe", "linux-x64": "yt-dlp_linux"}
 
 
-def _offline() -> bool:
+def offline() -> bool:
     """Offline mode (Settings → Network) or the test switch."""
     if os.environ.get("CROSSFADER_NO_NETWORK") == "1":
         return True
@@ -43,18 +45,18 @@ def _offline() -> bool:
 
         return network.is_offline()
     except Exception:
-        logger.debug("_offline: best-effort step failed", exc_info=True)
+        logger.debug("offline: best-effort step failed", exc_info=True)
         return False
 
 
 def _checks_enabled() -> bool:
     """Automatic update checks: not offline and not switched off."""
-    if _offline():
+    if offline():
         return False
     return settings.CHECK_UPDATES.get()
 
 
-def _open(url: str, timeout: float = 30.0):
+def open_verified(url: str, timeout: float = 30.0) -> HTTPResponse:
     """urlopen honouring proxy settings but ALWAYS verifying TLS."""
     import urllib.request
 
@@ -72,20 +74,20 @@ def _open(url: str, timeout: float = 30.0):
         return urllib.request.urlopen(req, timeout=timeout, context=ctx)
 
 
-def _json(url: str):
-    with _open(url) as r:
+def _json(url: str) -> Any:
+    with open_verified(url) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
 def _text(url: str) -> str:
-    with _open(url) as r:
+    with open_verified(url) as r:
         return r.read().decode("utf-8", "replace")
 
 
 def _download(url: str, dest: str, sha256: str, log: Log) -> None:
     h = hashlib.sha256()
     total = 0
-    with _open(url, timeout=120) as r, open(dest, "wb") as fh:
+    with open_verified(url, timeout=120) as r, open(dest, "wb") as fh:
         size = int(r.headers.get("Content-Length") or 0)
         last = -10
         while True:
@@ -105,8 +107,8 @@ def _download(url: str, dest: str, sha256: str, log: Log) -> None:
         raise RuntimeError("Checksum mismatch - the download was corrupted or tampered with.")
 
 
-def _sums(text: str) -> dict:
-    out = {}
+def _sums(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
     for line in text.splitlines():
         parts = line.split()
         if len(parts) >= 2 and re.fullmatch(r"[0-9a-fA-F]{64}", parts[0]):
@@ -136,7 +138,7 @@ def is_app_managed(path: str | None) -> bool:
 
 def latest_ytdlp_release(force: bool = False) -> str | None:
     """Newest yt-dlp version (automatic checks respect 'check for updates')."""
-    if _offline() or (not force and not _checks_enabled()):
+    if offline() or (not force and not _checks_enabled()):
         return None
     try:
         return _json(_YTDLP_API).get("tag_name")
@@ -147,7 +149,7 @@ def latest_ytdlp_release(force: bool = False) -> str | None:
 
 def install_ytdlp(log: Log) -> bool:
     """Download the newest yt-dlp stand-alone build into the user tools folder."""
-    if _offline():
+    if offline():
         log("Updates are disabled (offline mode).")
         return False
     asset = _YTDLP_ASSET.get(platform_tag())
@@ -190,24 +192,3 @@ def install_ytdlp(log: Log) -> bool:
         logger.exception("yt-dlp update failed")
         log(f"❌ Update failed: {exc}")
         return False
-
-
-def tool_versions() -> dict:
-    """{tool: (path, version)} for the About / System Info dialogs."""
-    from core.ffmpeg import version_of
-
-    out = {}
-    for tool in ("ffmpeg", "ffprobe", "ffplay"):
-        path = find_binary(tool)
-        out[tool] = (path, version_of(path) if path else "Missing")
-    for tool, args in (("yt-dlp", ["--version"]), ("deno", ["--version"])):
-        path = find_binary(tool)
-        ver = "Missing"
-        if path:
-            try:
-                r = _proc.run([path, *args], timeout=30)
-                ver = (r.stdout.strip().splitlines() or ["?"])[0]
-            except _proc.ProcessError:
-                ver = "Unknown"
-        out[tool] = (path, ver)
-    return out

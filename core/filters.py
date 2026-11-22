@@ -27,7 +27,7 @@ import os
 import shutil
 import sys
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from core import proc as _proc
 
@@ -45,7 +45,7 @@ def _escape_option_level(value: str) -> str:
 
 
 def _escape_graph_level(value: str) -> str:
-    out = []
+    out: list[str] = []
     for ch in value:
         if ch in "\\'[],;":
             out.append("\\" + ch)
@@ -210,7 +210,7 @@ def drawtext_filter(
     """
     if textfile is None and text is None:
         raise ValueError("text or textfile required")
-    opts = []
+    opts: list[str] = []
     if fontfile is None and font:
         fontfile = find_font(font)
     if fontfile:
@@ -292,7 +292,7 @@ def write_concat_list(
 
 
 def _meta_escape(value: str) -> str:
-    out = []
+    out: list[str] = []
     for ch in str(value):
         if ch in "=;#\\\n":
             out.append("\\" + ch)
@@ -301,14 +301,19 @@ def _meta_escape(value: str) -> str:
     return "".join(out)
 
 
-def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (), tags: dict | None = None) -> str:
+def write_ffmetadata(
+    path: str,
+    *,
+    chapters: Sequence[tuple[float, float, str]] = (),
+    tags: Mapping[str, object] | None = None,
+) -> str:
     """Write an FFMETADATA1 file.  *chapters* is a sequence of
     ``(start_seconds, end_seconds, title)``; use with
     ``-i META -map_metadata 1 -map_chapters 1``."""
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(";FFMETADATA1\n")
         for k, v in (tags or {}).items():
-            fh.write(f"{_meta_escape(k)}={_meta_escape(v)}\n")
+            fh.write(f"{_meta_escape(k)}={_meta_escape(str(v))}\n")
         for start, end, title in chapters:
             fh.write("\n[CHAPTER]\nTIMEBASE=1/1000\n")
             fh.write(f"START={round(start * 1000)}\n")
@@ -322,16 +327,16 @@ def write_ffmetadata(path: str, *, chapters: Sequence[tuple] = (), tags: dict | 
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _bundled_font_dir() -> str:
+def bundled_font_dir() -> str:
     from core.paths import resource_path
 
     return resource_path("assets", "fonts")
 
 
-def bundled_fonts() -> dict:
+def bundled_fonts() -> dict[str, str]:
     """``{display name: path}`` for fonts shipped in assets/fonts."""
-    out = {}
-    d = _bundled_font_dir()
+    out: dict[str, str] = {}
+    d = bundled_font_dir()
     if os.path.isdir(d):
         for f in sorted(os.listdir(d)):
             if f.lower().endswith((".ttf", ".otf")):
@@ -339,7 +344,7 @@ def bundled_fonts() -> dict:
     return out
 
 
-def _system_font_dirs() -> list:
+def _system_font_dirs() -> list[str]:
     if _IS_WIN:
         windir = os.environ.get("WINDIR", r"C:\Windows")
         local = os.environ.get("LOCALAPPDATA", "")
@@ -362,7 +367,7 @@ def _system_font_dirs() -> list:
     ]
 
 
-_FONT_CACHE: dict = {}
+_FONT_CACHE: dict[str, str | None] = {}
 
 # Cross-platform stand-ins for commonly requested fonts.  The first entries
 # are metric-compatible system fonts (Liberation/DejaVu/Nimbus on Linux),

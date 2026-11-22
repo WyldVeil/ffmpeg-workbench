@@ -21,8 +21,13 @@ FSRCNNX was left out: it is GPL-3.0 licensed.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from core import filters as fl
+
+if TYPE_CHECKING:
+    from core import ffmpeg as ff
 
 #: key: (label, shader file, what it's for)
 SHADERS = {
@@ -42,7 +47,7 @@ SHADERS = {
 }
 
 
-def shader_dirs() -> list:
+def shader_dirs() -> list[str]:
     """Bundled shaders (bin/<platform>/shaders, installed by scripts/fetch_binaries.py)."""
     from core.hardware import APP_ROOT, bundled_bin_dirs
 
@@ -62,7 +67,7 @@ def shader_path(key: str) -> str | None:
     return None
 
 
-def available() -> list:
+def available() -> list[str]:
     """Shader keys whose files are present (the GPU check is filters.vulkan_ok())."""
     return [k for k in SHADERS if shader_path(k)]
 
@@ -72,7 +77,11 @@ def _tag(value: str, default: str = "unknown") -> str:
 
 
 def plane_graph(
-    size: tuple, *, shader: str | None = None, deep: bool = False, tags: dict | None = None
+    size: tuple[int, int],
+    *,
+    shader: str | None = None,
+    deep: bool = False,
+    tags: Mapping[str, str] | None = None,
 ) -> str:
     """A single-input/single-output filter graph (usable as -vf) scaling to
     *size*: brightness through libplacebo (with *shader*), colour through
@@ -99,7 +108,7 @@ def plane_graph(
     )
 
 
-def tags_of(video) -> dict:
+def tags_of(video: ff.Stream) -> dict[str, str]:
     """Colour tags of a probed video stream, for :func:`plane_graph`."""
     return {
         "range": video.color_range or "",

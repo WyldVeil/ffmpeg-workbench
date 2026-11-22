@@ -877,7 +877,7 @@ def op_scale(ctx):
             ctx.args.method,
             sharpen=ctx.args.sharpen,
             gpu=gpu,
-            tags=upscale.tags_of(info.video),
+            tags=upscale.tags_of(info.require_video()),
         )
     except ValueError as exc:
         raise CliError(str(exc)) from None

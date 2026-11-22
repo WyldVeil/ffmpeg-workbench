@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from core import encoders as enc
 from core import ffmpeg as ff
 from core import filters as fl
+from core.ops.shared import Log, Runner
 
 #: acceptable bits per pixel per frame - below this the picture falls apart
 MIN_BPP = {"h264": 0.045, "hevc": 0.03, "av1": 0.025}
@@ -31,13 +32,13 @@ class Plan:
     width: int
     height: int
     fps: float
-    notes: list
+    notes: list[str]
 
 
 def plan(
     duration: float,
     target_bytes: int,
-    size: tuple,
+    size: tuple[int, int],
     fps: float,
     *,
     codec: str = "h264",
@@ -52,7 +53,7 @@ def plan(
     if duration <= 0:
         raise ValueError("The video's length is unknown.")
     budget = target_bytes * 8 / 1000 / duration * MARGIN  # kbit/s for everything
-    notes = []
+    notes: list[str] = []
     mono = False
     if not has_audio or audio_mode == "none":
         a_kbps = 0
@@ -74,7 +75,7 @@ def plan(
     out_fps = fps if fps and fps > 0 else 30.0
     min_bpp = MIN_BPP.get(codec, 0.045)
 
-    def bpp(ww, hh, ff_):
+    def bpp(ww: float, hh: float, ff_: float) -> float:
         return v_kbps * 1000 / max(1, ww * hh * ff_)
 
     if allow_fps and out_fps > 31 and bpp(w, h, out_fps) < min_bpp * 1.5:
@@ -110,7 +111,7 @@ def retry_kbps(v_kbps: int, target_bytes: int, actual_bytes: int, audio_bytes: i
 def encode_to_size(
     src: str,
     final: str,
-    info,
+    info: ff.MediaInfo,
     p: Plan,
     target: int,
     *,
@@ -120,8 +121,8 @@ def encode_to_size(
     start: float = 0.0,
     end: float | None = None,
     tmp: str,
-    run,
-    log=print,
+    run: Runner,
+    log: Log = print,
 ) -> int:
     """Encode *src* into *final* under *target* bytes following plan *p*:
     two-pass on the CPU (or the GPU when *fast*), then re-encode at a lower
@@ -130,10 +131,10 @@ def encode_to_size(
     command line."""
     end = info.duration if end is None else end
     length = end - start
-    v = info.video
+    v = info.require_video()
     hdr = v.is_hdr
     ten_bit = codec != "h264" and (v.bit_depth > 8 or hdr)
-    chain = []
+    chain: list[str] = []
     if hdr and codec == "h264":
         chain.append(fl.hdr_to_sdr_chain())
     w0, h0 = v.display_size
@@ -146,7 +147,7 @@ def encode_to_size(
     if container == "part":
         container = os.path.splitext(os.path.splitext(final)[0])[1].lstrip(".").lower() or "mp4"
 
-    def video_args(kbps):
+    def video_args(kbps: int) -> enc.VideoEncode:
         return enc.video(
             codec,
             "high",

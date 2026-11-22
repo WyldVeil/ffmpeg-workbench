@@ -260,7 +260,7 @@ class ResolutionScalerTab(BaseTab):
                 sharpen=float(self.sharpen_var.get()),
                 gpu=gpu,
                 pix_fmt="yuv420p10le" if self.encoder.ten_bit else "yuv420p",
-                tags=upscale.tags_of(info.video),
+                tags=upscale.tags_of(info.require_video()),
             )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)

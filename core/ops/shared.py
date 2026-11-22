@@ -7,14 +7,20 @@ Pure functions: values in, FFmpeg arguments out - no widgets, no Tk.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 
 from core import encoders as enc
 from core import ffmpeg as ff
 
+#: Runs one command of a multi-step job: (argv, expected seconds, progress from, progress to)
+Runner = Callable[[list[str], float, float, float], object]
+#: Receives a line for the job's log
+Log = Callable[[str], object]
+
 
 def keep_audio_args(
     info: ff.MediaInfo | None, container: str, *, index: int = 0, filters: str = ""
-) -> list:
+) -> list[str]:
     """Map all audio of input *index*: stream-copied when the container accepts
     the codec and no *filters* are applied, otherwise re-encoded."""
     audio = info.audio if info is not None else None
@@ -60,7 +66,7 @@ AUDIO_ONLY_EXTS = (
 )
 
 
-def audio_encoder_args(out: str) -> list:
+def audio_encoder_args(out: str) -> list[str]:
     """Encoder for processed audio, chosen from the output file's type."""
     ext = os.path.splitext(out)[1].lower()
     return {
@@ -78,7 +84,7 @@ def audio_encoder_args(out: str) -> list:
     }.get(ext, ["-c:a", "aac", "-b:a", "256k"])
 
 
-def audio_job_args(out: str, info: ff.MediaInfo | None, *, stream: int = 0) -> list:
+def audio_job_args(out: str, info: ff.MediaInfo | None, *, stream: int = 0) -> list[str]:
     """Mapping + codecs when an audio tool writes *out*: audio-only files get
     just the processed track; video files keep the picture (copied) and
     subtitles where the container allows."""

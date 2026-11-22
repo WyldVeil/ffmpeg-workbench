@@ -45,7 +45,9 @@ def is_tails() -> bool:
     return sysproxy.special_system() == "tails"
 
 
-def _sudo(args: list, password: str | None = None, timeout: float = 20) -> _proc.ProcResult[str]:
+def _sudo(
+    args: list[str], password: str | None = None, timeout: float = 20
+) -> _proc.ProcResult[str]:
     cmd = ["sudo", "-S", "-p", "", *args] if password is not None else ["sudo", "-n", *args]
     return _proc.run(
         cmd, timeout=timeout, input=(password + "\n") if password is not None else None
@@ -68,11 +70,11 @@ def sudo_state() -> str:
     return "denied"
 
 
-def problems() -> list:
+def problems() -> list[str]:
     """What stops the direct route from working, as sentences ([] = ready)."""
     if not is_tails():
         return ["This is only for Tails."]
-    out = []
+    out: list[str] = []
     if not os.path.exists(NETNS_PATH) or not os.path.exists(RESOLV):
         out.append(
             "The Unsafe Browser is not enabled. Restart Tails and, in the Welcome Screen, open "
@@ -93,7 +95,7 @@ def problems() -> list:
     return out
 
 
-def enable(password: str, remember: bool = False) -> tuple:
+def enable(password: str, remember: bool = False) -> tuple[bool, str]:
     """(ok, message).  Checks the password with sudo and opens the route."""
     global _remembered
     issues = problems()
@@ -138,7 +140,7 @@ def _refresh() -> None:
             _sudo(["-v"], password=_remembered.decode("utf-8"))
 
 
-def wrap(argv: list) -> list:
+def wrap(argv: list[str]) -> list[str]:
     """Run *argv* in Tails' clearnet namespace as the normal user - the same
     steps as Tails' Unsafe Browser launcher."""
     _refresh()

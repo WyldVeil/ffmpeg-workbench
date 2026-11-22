@@ -13,7 +13,7 @@ import contextlib
 import hashlib
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
@@ -158,13 +158,13 @@ def download_model(
     cancelled: Callable[[], bool] | None = None,
 ) -> str:
     """Download and verify model *key*; returns its path.  Raises RuntimeError."""
-    from core.updater import _offline, _open
+    from core.updater import offline, open_verified
 
     m = MODELS[key]
     dest = model_path(key)
     if is_installed(key) or adopt_file(key):
         return dest
-    if _offline():
+    if offline():
         raise RuntimeError(
             f"Offline mode is on. To install this model by hand, put {m.file} "
             f"(from {BASE_URL}{m.file}) in {models_folder()} and choose it again."
@@ -175,7 +175,10 @@ def download_model(
     try:
         from core import network
 
-        with _open(network.mirror_url(BASE_URL + m.file), timeout=60) as r, open(part, "wb") as fh:
+        with (
+            open_verified(network.mirror_url(BASE_URL + m.file), timeout=60) as r,
+            open(part, "wb") as fh,
+        ):
             total = int(r.headers.get("Content-Length") or 0) or m.size_mb * 1_000_000
             while True:
                 if cancelled is not None and cancelled():
@@ -213,9 +216,9 @@ def transcribe_cmd(
     language: str = "auto",
     translate: bool = False,
     max_len: int = 42,
-    formats=("srt",),
+    formats: Sequence[str] = ("srt",),
     prompt: str = "",
-) -> list:
+) -> list[str]:
     """whisper-cli argv: writes ``out_base.<fmt>`` for each format."""
     cli = cli_path()
     if not cli:
@@ -254,7 +257,7 @@ def parse_progress(line: str) -> float | None:
 
 def audio_extract_cmd(
     src: str, wav: str, *, start: float = 0.0, duration: float | None = None, stream: int = 0
-) -> list:
+) -> list[str]:
     """16 kHz mono PCM, the format whisper.cpp reads."""
     from core import ffmpeg as ff
 

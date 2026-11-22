@@ -13,6 +13,7 @@ Every invocation gets:
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 
 from core.hardware import find_binary
 
@@ -21,7 +22,7 @@ def ytdlp_path() -> str | None:
     return find_binary("yt-dlp")
 
 
-def js_runtime_args() -> list:
+def js_runtime_args() -> list[str]:
     deno = find_binary("deno")
     if deno:
         return ["--js-runtimes", f"deno:{deno}"]
@@ -35,7 +36,7 @@ def js_runtime_args() -> list:
 
 def base_argv(
     ytdlp: str | None = None, *, network: bool = True, url: str = "https://www.youtube.com/"
-) -> list:
+) -> list[str]:
     """yt-dlp command prefix.  Raises OSError (offline mode, strict proxy not
     set up...) instead of quietly connecting some other way."""
     exe = ytdlp or ytdlp_path() or "yt-dlp"
@@ -56,7 +57,7 @@ def base_argv(
     return _net.wrapper_prefix() + argv
 
 
-def redact(argv: list) -> list:
+def redact(argv: Sequence[str]) -> list[str]:
     """Copy of *argv* safe to show in logs (credentials replaced)."""
     secret = {
         "--password",
@@ -67,7 +68,8 @@ def redact(argv: list) -> list:
         "--cookies",
         "--client-certificate-password",
     }
-    out, hide = [], False
+    out: list[str] = []
+    hide = False
     for a in argv:
         if hide:
             out.append("•••")

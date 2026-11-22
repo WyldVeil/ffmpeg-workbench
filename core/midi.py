@@ -19,9 +19,12 @@ import math
 import os
 import shutil
 import sys
+from collections.abc import Iterable, Sequence
 
 from core import ffmpeg as ff
 from core.hardware import bundled_bin_dirs, find_binary
+
+Note = tuple[int, float, float, int]  # pitch, start s, end s, velocity
 
 logger = logging.getLogger("crossfader.midi")
 
@@ -161,7 +164,7 @@ def analysis_graph(
     return ";\n".join(parts)
 
 
-def analysis_cmd(src: str, graph_file: str) -> list:
+def analysis_cmd(src: str, graph_file: str) -> list[str]:
     return [
         ff.ffmpeg_path(),
         "-hide_banner",
@@ -179,11 +182,11 @@ def analysis_cmd(src: str, graph_file: str) -> list:
     ]
 
 
-def read_levels(folder: str, n_bins: int = N_BINS) -> list:
+def read_levels(folder: str, n_bins: int = N_BINS) -> list[list[float]]:
     """Per-band lists of dB levels written by the analysis pass."""
-    levels = []
+    levels: list[list[float]] = []
     for i in range(n_bins):
-        vals = []
+        vals: list[float] = []
         with open(os.path.join(folder, f"b{i:02d}.txt"), encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 if line.startswith("lavfi.astats.Overall.RMS_level="):
@@ -197,13 +200,13 @@ def read_levels(folder: str, n_bins: int = N_BINS) -> list:
 
 
 def transcribe(
-    levels: list,
+    levels: Sequence[Sequence[float]],
     *,
     hop_s: float = HOP / RATE,
     threshold: float = 0.5,
     min_dur: float = 0.05,
     first: int = FIRST_NOTE,
-) -> list:
+) -> list[Note]:
     """Piano roll -> [(pitch, start_s, end_s, velocity)].
 
     Levels are scaled to 0..1 over an 80 dB range below the loudest band;
@@ -227,7 +230,7 @@ def transcribe(
             if v >= threshold and v >= max(col[max(0, p - 2) : p + 3]) - 0.05:
                 on[p][f] = 1
     min_frames = max(1, round(min_dur / hop_s))
-    notes = []
+    notes: list[Note] = []
     for p in range(n_bins):
         pitch = first + p
         if pitch > 127:
@@ -262,10 +265,12 @@ def _vlq(n: int) -> bytes:
     return bytes(reversed(out))
 
 
-def write_midi(path: str, notes, *, program: int = 0, bpm: float = 120.0, ppq: int = 480) -> None:
+def write_midi(
+    path: str, notes: Iterable[Note], *, program: int = 0, bpm: float = 120.0, ppq: int = 480
+) -> None:
     """Single-track (format 0) MIDI file on channel 1."""
     ticks_per_s = ppq * bpm / 60.0
-    events = []
+    events: list[tuple[int, int, bytes]] = []
     for pitch, start, end, vel in notes:
         a = round(start * ticks_per_s)
         b = max(a + 1, round(end * ticks_per_s))
@@ -311,7 +316,7 @@ def find_fluidsynth() -> str | None:
     return shutil.which("fluidsynth")
 
 
-def soundfont_dirs() -> list:
+def soundfont_dirs() -> list[str]:
     dirs = [os.path.join(d, "soundfonts") for d in bundled_bin_dirs()]
     from core.hardware import APP_ROOT
 
@@ -333,7 +338,8 @@ def soundfont_dirs() -> list:
             "/usr/local/share/soundfonts",
             "/usr/share/sounds/sf3",
         ]
-    seen, out = set(), []
+    seen: set[str] = set()
+    out: list[str] = []
     for d in dirs:
         if d and d not in seen and os.path.isdir(d):
             seen.add(d)
@@ -341,14 +347,14 @@ def soundfont_dirs() -> list:
     return out
 
 
-def find_soundfonts() -> list:
+def find_soundfonts() -> list[str]:
     """All .sf2/.sf3 files found, best General MIDI banks first."""
-    files = []
+    files: list[str] = []
     for d in soundfont_dirs():
         for pattern in ("*.sf2", "*.sf3", "*.SF2"):
             files += glob.glob(os.path.join(d, pattern))
 
-    def rank(p):
+    def rank(p: str) -> tuple[int, str]:
         n = os.path.basename(p).lower()
         return (
             0
@@ -368,5 +374,5 @@ def find_soundfonts() -> list:
 
 def render_cmd(
     fluidsynth: str, soundfont: str, midi: str, wav: str, *, rate: int = 44100, gain: float = 0.6
-) -> list:
+) -> list[str]:
     return [fluidsynth, "-ni", "-q", "-g", f"{gain:g}", "-r", str(rate), "-F", wav, soundfont, midi]

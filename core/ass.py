@@ -70,7 +70,7 @@ def box(
 
 def word_reveal(text: str, start_ms: int, step_ms: int) -> str:
     """Words appear one by one (layout stays put: hidden words keep space)."""
-    out = []
+    out: list[str] = []
     for i, word in enumerate((text or "").split(" ")):
         t0 = start_ms + i * step_ms
         out.append(f"{{\\alpha&HFF&\\t({t0},{t0 + 1},\\alpha&H00&)}}{escape(word)}")
@@ -133,12 +133,15 @@ class Style:
         )
 
 
+Event = tuple[int, float, float, str, str]  # layer, start s, end s, style, text
+
+
 @dataclass
 class Script:
     width: int
     height: int
-    styles: list = field(default_factory=list)
-    events: list = field(default_factory=list)
+    styles: list[Style] = field(default_factory=list[Style])
+    events: list[Event] = field(default_factory=list[Event])
 
     def style(self, style: Style) -> Style:
         self.styles = [s for s in self.styles if s.name != style.name] + [style]
@@ -186,9 +189,9 @@ class Script:
 
 def fonts_dir() -> str | None:
     """Folder of bundled fonts handed to libass (``fontsdir=``)."""
-    from core.filters import _bundled_font_dir
+    from core.filters import bundled_font_dir
 
-    d = _bundled_font_dir()
+    d = bundled_font_dir()
     return d if d and os.path.isdir(d) else None
 
 
@@ -213,5 +216,5 @@ def subtitles_filter(path: str) -> str:
     return _sf(path, fonts_dir=fonts_dir())
 
 
-def families(extra: Iterable[str] = ()) -> list:
+def families(extra: Iterable[str] = ()) -> list[str]:
     return list(dict.fromkeys([*BUNDLED_FAMILIES, *extra]))
