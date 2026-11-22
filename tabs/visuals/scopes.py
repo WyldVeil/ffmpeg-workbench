@@ -16,93 +16,19 @@ from tkinter import ttk
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
+from core.ops import scopes as sc
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
-# key: (label, filter chain, display aspect (w/h) or None = same as video, help)
-SCOPES = {
-    "waveform": (
-        "Waveform (luma)",
-        "waveform=m=column:c=1:d=overlay:s=ire:g=green:fl=numbers+dots:i=0.08",
-        16 / 9,
-        "Brightness across the frame. IRE scale: 0 = black, 100 = white; "
-        "anything flat at the top or bottom is clipped.",
-    ),
-    "parade": (
-        "RGB parade",
-        "format=gbrp,waveform=m=column:c=7:d=parade:s=ire:g=green:fl=numbers+dots:i=0.08",
-        16 / 9,
-        "Red, green and blue waveforms side by side - level the three for a neutral white balance.",
-    ),
-    "histogram": (
-        "Histogram (RGB)",
-        "format=gbrp,histogram=display_mode=stack:levels_mode=linear",
-        4 / 3,
-        "How many pixels sit at each level. Piled against an edge = clipping.",
-    ),
-    "vectorscope": (
-        "Vectorscope",
-        "vectorscope=m=color2:g=color:f=name:c=auto",
-        1.0,
-        "Hue (angle) and saturation (distance from centre); the targets mark "
-        "the 75% colour bars. Skin tones sit near the line to the top left.",
-    ),
-    "falsecolor": (
-        "False colour (exposure)",
-        "pseudocolor=p=turbo",
-        None,
-        "Exposure map: blue = shadows, green = mid-tones, red = highlights.",
-    ),
-}
-GRID = ("waveform", "parade", "vectorscope", "histogram")
 LAYOUTS = {
     "side": "Scope to the right of the picture",
     "below": "Scope below the picture",
     "grid": "Picture + all four scopes (2×2 grid)",
     "only": "Scope only",
 }
-
-
-def _even(x: float) -> int:
-    return max(2, round(x / 2) * 2)
-
-
-def scope_box(key: str, width: int, height: int, *, fit: str = "height") -> tuple[int, int]:
-    """Size for scope *key* next to a WxH picture (fit='height') or under it ('width')."""
-    aspect = SCOPES[key][2] or (width / height)
-    if fit == "width":
-        return _even(width), _even(width / aspect)
-    return _even(height * aspect), _even(height)
-
-
-def export_graph(key: str, layout: str, width: int, height: int) -> str:
-    """filter_complex graph (output [v]) for a scope video."""
-
-    def chain(k, bw, bh):
-        return f"{SCOPES[k][1]},scale={bw}:{bh},setsar=1,format=yuv420p"
-
-    if layout == "grid":
-        hw, hh = _even(width / 2), _even(height / 2)
-        parts = ["[0:v]setsar=1,format=yuv420p,split=5[src][s0][s1][s2][s3]"]
-        for i, k in enumerate(GRID):
-            parts.append(f"[s{i}]{chain(k, hw, hh)}[g{i}]")
-        parts.append("[g0][g1][g2][g3]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0[grid]")
-        parts.append(f"[src]scale={2 * hw}:{2 * hh}[pic]")
-        parts.append("[pic][grid]hstack=inputs=2[v]")
-        return ";".join(parts)
-    if layout == "only":
-        bw, bh = scope_box(key, width, height)
-        return f"[0:v]{chain(key, bw, bh)}[v]"
-    fit = "width" if layout == "below" else "height"
-    bw, bh = scope_box(key, width, height, fit=fit)
-    stack = "vstack" if layout == "below" else "hstack"
-    return (
-        f"[0:v]setsar=1,format=yuv420p,split[src][s];[s]{chain(key, bw, bh)}[sc];"
-        f"[src][sc]{stack}=inputs=2[v]"
-    )
 
 
 class VideoScopesTab(BaseTab):
@@ -126,7 +52,7 @@ class VideoScopesTab(BaseTab):
             side="left"
         )
         self.scope_var = tk.StringVar(value="waveform")
-        for key, (label, *_rest) in SCOPES.items():
+        for key, (label, *_rest) in sc.SCOPES.items():
             tk.Radiobutton(
                 pick,
                 text=label,
@@ -218,14 +144,14 @@ class VideoScopesTab(BaseTab):
         self.slider.configure(to=max(dur, 0.01))
         self.pos_var.set(dur * 0.25)
         self.picture.load(path, dur, dur * 0.25)
-        self.scope_view.set_filter(SCOPES[self.scope_var.get()][1])
+        self.scope_view.set_filter(sc.SCOPES[self.scope_var.get()][1])
         self.scope_view.load(path, dur, dur * 0.25)
         self.time_lbl.config(text=ff.format_time(dur * 0.25))
 
     def _scope_changed(self):
         key = self.scope_var.get()
-        self.help_lbl.config(text="ℹ  " + SCOPES[key][3])
-        self.scope_view.set_filter(SCOPES[key][1])
+        self.help_lbl.config(text="ℹ  " + sc.SCOPES[key][3])
+        self.scope_view.set_filter(sc.SCOPES[key][1])
 
     def _moved(self):
         pos = float(self.pos_var.get())
@@ -252,28 +178,8 @@ class VideoScopesTab(BaseTab):
             return
         w, h = common.even_size(info)
         layout = "grid" if self._layout_key() == "grid" else "side"
-        graph = export_graph(self.scope_var.get(), layout, w, h)
-        cmd = [
-            ff.ffmpeg_path(),
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-y",
-            "-ss",
-            ff.ts(float(self.pos_var.get())),
-            "-i",
-            src,
-            "-filter_complex",
-            graph,
-            "-map",
-            "[v]",
-            "-frames:v",
-            "1",
-            "-update",
-            "1",
-            out,
-        ]
+        graph = sc.export_graph(self.scope_var.get(), layout, w, h)
+        cmd = sc.snapshot_cmd(src, float(self.pos_var.get()), graph, out)
 
         def work():
             return ff.capture(cmd, timeout=120)
@@ -300,7 +206,7 @@ class VideoScopesTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "scopes")
         if not out:
             return
-        graph = export_graph(self.scope_var.get(), self._layout_key(), w, h)
+        graph = sc.export_graph(self.scope_var.get(), self._layout_key(), w, h)
         common.render(
             self,
             RenderJob(src=src, info=info, out=out, graph=graph, name="Scope video"),

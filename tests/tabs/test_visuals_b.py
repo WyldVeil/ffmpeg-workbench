@@ -10,6 +10,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.ops import green_key as gk
 from core.ops import lut as lut_ops
+from core.ops import scopes as sc
 from tabs.visuals import color_correct, green_key, lut, media_gen, scopes, speed_ramp
 
 # ── pure helpers ─────────────────────────────────────────────────────────────
@@ -47,8 +48,8 @@ def test_lut_kinds(tmp_path, media):
 
 
 def test_scope_layout_sizes():
-    assert scopes.scope_box("vectorscope", 1280, 720) == (720, 720)
-    assert scopes.scope_box("waveform", 1080, 1920, fit="width") == (1080, 608)
+    assert sc.scope_box("vectorscope", 1280, 720) == (720, 720)
+    assert sc.scope_box("waveform", 1080, 1920, fit="width") == (1080, 608)
 
 
 def test_green_key_chains():
