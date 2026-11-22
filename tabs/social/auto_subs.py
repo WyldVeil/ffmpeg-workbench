@@ -121,8 +121,8 @@ class AutoSubsTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        body, eng, row = self._build_header()
-        self._build_output(body, eng, row)
+        body, eng = self._build_header()
+        self._build_output(body, eng)
 
     def _build_header(self):
         self.make_header(
@@ -144,24 +144,18 @@ class AutoSubsTab(BaseTab):
         eng = tk.LabelFrame(body, text="  Speech recognition  ", padx=px(12), pady=px(8))
         eng.pack(fill="x", padx=px(20), pady=px(6))
 
-        def row(r, label, *widgets):
-            tk.Label(eng, text=label, anchor="w", width=18).grid(
-                row=r, column=0, sticky="w", pady=px(3)
-            )
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(3))
-
         self.model_var = tk.StringVar()
         self.model_box = ttk.Combobox(eng, textvariable=self.model_var, state="readonly", width=40)
         self.model_box.bind("<<ComboboxSelected>>", lambda _e: self._model_status())
         self.dl_btn = tk.Button(
             eng, text="Download", relief="flat", cursor="hand2", command=self._download
         )
-        row(0, "Model:", self.model_box, self.dl_btn)
+        self.form_row(eng, 0, "Model:", self.model_box, self.dl_btn, label_width=18)
         self.model_lbl = tk.Label(eng, text="", fg=CLR["fgdim"], font=(UI_FONT, 8))
         self.model_lbl.grid(row=1, column=1, columnspan=3, sticky="w")
         self.lang_var = tk.StringVar(value=whisper.LANGUAGES[0][1])
-        row(
+        self.form_row(
+            eng,
             2,
             "Spoken language:",
             ttk.Combobox(
@@ -171,17 +165,21 @@ class AutoSubsTab(BaseTab):
                 values=[lbl for _k, lbl in whisper.LANGUAGES],
                 width=24,
             ),
+            label_width=18,
         )
         self.translate_var = tk.BooleanVar(value=False)
-        row(
+        self.form_row(
+            eng,
             3,
             "",
             tk.Checkbutton(
                 eng, text="Translate the subtitles into English", variable=self.translate_var
             ),
+            label_width=18,
         )
         self.maxlen_var = tk.IntVar(value=42)
-        row(
+        self.form_row(
+            eng,
             4,
             "Max. characters/line:",
             tk.Scale(
@@ -193,20 +191,23 @@ class AutoSubsTab(BaseTab):
                 fg=CLR["fgdim"],
                 font=(UI_FONT, 8),
             ),
+            label_width=18,
         )
-        return body, eng, row
+        return body, eng
 
-    def _build_output(self, body, eng, row):
+    def _build_output(self, body, eng):
         self.prompt_var = tk.StringVar()
-        row(
+        self.form_row(
+            eng,
             5,
             "Names / terms:",
             tk.Entry(eng, textvariable=self.prompt_var, width=44),
             tk.Label(eng, text="(optional - helps spelling)", fg=CLR["fgdim"], font=(UI_FONT, 8)),
+            label_width=18,
         )
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(eng, textvariable=self.track_var, state="readonly", width=40)
-        row(6, "Audio track:", self.track_box)
+        self.form_row(eng, 6, "Audio track:", self.track_box, label_width=18)
 
         out = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out.pack(fill="x", padx=px(20), pady=px(6))

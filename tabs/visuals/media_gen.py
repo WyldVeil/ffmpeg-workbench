@@ -84,12 +84,6 @@ class MediaGeneratorTab(BaseTab):
         f = tk.LabelFrame(body, text="  What to generate  ", padx=px(12), pady=px(8))
         f.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        def row(r, label, widget):
-            tk.Label(f, text=label, anchor="w", width=16).grid(
-                row=r, column=0, sticky="w", pady=px(3)
-            )
-            widget.grid(row=r, column=1, sticky="w", pady=px(3))
-
         self.pattern_var = tk.StringVar(value=PATTERNS["smpte_hd"])
         pb = ttk.Combobox(
             f,
@@ -99,33 +93,43 @@ class MediaGeneratorTab(BaseTab):
             width=34,
         )
         pb.bind("<<ComboboxSelected>>", lambda _e: self._pattern_changed())
-        row(0, t("mgen.visual_pattern"), pb)
+        self.form_row(f, 0, t("mgen.visual_pattern"), pb, label_width=16)
         self.colour_btn = ColourButton(f, "#202020", text="  Colour…  ", width=10)
         self.colour_btn.grid(row=0, column=2, sticky="w", padx=px(8))
         self.size_var = tk.StringVar(value="1920×1080 (Full HD)")
-        row(
+        self.form_row(
+            f,
             1,
             "Resolution:",
             ttk.Combobox(
                 f, textvariable=self.size_var, values=list(SIZES), state="readonly", width=34
             ),
+            label_width=16,
         )
         self.rate_var = tk.StringVar(value="25")
-        row(
+        self.form_row(
+            f,
             2,
             "Frame rate:",
             ttk.Combobox(
                 f, textvariable=self.rate_var, values=list(RATES), state="readonly", width=10
             ),
+            label_width=16,
         )
         self.dur_var = tk.StringVar(value="10")
-        row(3, t("mgen.duration_seconds"), tk.Entry(f, textvariable=self.dur_var, width=10))
+        self.form_row(
+            f,
+            3,
+            t("mgen.duration_seconds"),
+            tk.Entry(f, textvariable=self.dur_var, width=10),
+            label_width=16,
+        )
         self.audio_var = tk.StringVar(value=AUDIO["tone18"])
         ab = ttk.Combobox(
             f, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly", width=34
         )
         ab.bind("<<ComboboxSelected>>", lambda _e: self._audio_changed())
-        row(4, "Audio:", ab)
+        self.form_row(f, 4, "Audio:", ab, label_width=16)
         self.freq_var = tk.StringVar(value="440")
         self.freq_row = tk.Frame(f)
         tk.Label(self.freq_row, text="Hz").pack(side="right")

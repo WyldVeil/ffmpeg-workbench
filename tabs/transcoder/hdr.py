@@ -118,7 +118,6 @@ class HdrToSdrTab(BaseTab):
             capabilities.on_ready("vulkan", self._gpu_known)
         elif not known:
             self.gpu_note.config(text=_NO_GPU)
-        tk.Label(opt, text="Tone curve:").grid(row=2, column=0, sticky="w", pady=px(8, 0))
         self.curve_var = tk.StringVar(value=hdr.CURVES["bt2390"][0])
         cb = ttk.Combobox(
             opt,
@@ -127,7 +126,7 @@ class HdrToSdrTab(BaseTab):
             state="readonly",
             width=38,
         )
-        cb.grid(row=2, column=1, sticky="w", padx=px(6), pady=px(8, 0))
+        self.form_row(opt, 2, "Tone curve:", cb, pady=(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.adaptive_var = tk.BooleanVar(value=True)
         self.adaptive_cb = tk.Checkbutton(
@@ -137,7 +136,6 @@ class HdrToSdrTab(BaseTab):
             command=self._changed,
         )
         self.adaptive_cb.grid(row=3, column=0, columnspan=2, sticky="w", pady=px(4, 0))
-        tk.Label(opt, text="Input:").grid(row=4, column=0, sticky="w", pady=px(6, 0))
         self.assume_var = tk.StringVar(value=ASSUME[""])
 
     def _build_output(self, body, opt):
@@ -148,7 +146,7 @@ class HdrToSdrTab(BaseTab):
             state="readonly",
             width=38,
         )
-        ab.grid(row=4, column=1, sticky="w", padx=px(6), pady=px(6, 0))
+        self.form_row(opt, 4, "Input:", ab, pady=(6, 0))
         ab.bind("<<ComboboxSelected>>", lambda _e: self._changed())
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))

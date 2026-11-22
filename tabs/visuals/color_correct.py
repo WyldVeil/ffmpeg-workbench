@@ -116,26 +116,31 @@ class ColorCorrectorTab(BaseTab):
             label, lo, hi, default, res = cc.CONTROLS[key]
             var = tk.DoubleVar(value=default)
             self.vars[key] = var
-            tk.Label(lf, text=label, anchor="w", width=22).grid(row=row, column=0, sticky="w")
-            tk.Scale(
+            self.form_row(
                 lf,
-                variable=var,
-                from_=lo,
-                to=hi,
-                resolution=res,
-                orient="horizontal",
-                length=px(190),
-                showvalue=True,
-                command=lambda _v: self._schedule_preview(),
-            ).grid(row=row, column=1)
-            tk.Button(
-                lf,
-                text="↺",
-                width=2,
-                relief="flat",
-                cursor="hand2",
-                command=partial(self._reset_slider, var, default),
-            ).grid(row=row, column=2, padx=px(2))
+                row,
+                label,
+                tk.Scale(
+                    lf,
+                    variable=var,
+                    from_=lo,
+                    to=hi,
+                    resolution=res,
+                    orient="horizontal",
+                    length=px(190),
+                    showvalue=True,
+                    command=lambda _v: self._schedule_preview(),
+                ),
+                tk.Button(
+                    lf,
+                    text="↺",
+                    width=2,
+                    relief="flat",
+                    cursor="hand2",
+                    command=partial(self._reset_slider, var, default),
+                ),
+                label_width=22,
+            )
         return lf
 
     # ── Behaviour ────────────────────────────────────────────────────────────

@@ -472,31 +472,32 @@ class ScreenRecorderTab(BaseTab):
         )
         vid_f.pack(fill="x", pady=px(0, 6))
 
-        tk.Label(
-            vid_f, text=t("common.codec"), bg=CLR["bg"], fg=CLR["fg"], width=12, anchor="e"
-        ).grid(row=0, column=0, pady=px(4))
         self.vcodec = ChoiceBox(
             vid_f, {c: spec[0] for c, spec in RECORD_CODECS.items()}, RecordCodec.AUTO, width=32
         )
-        self.vcodec.grid(row=0, column=1, padx=px(5))
 
-        tk.Label(
+        self.form_row(
             vid_f,
-            text=t("screen_recorder.framerate"),
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            width=10,
-            anchor="e",
-        ).grid(row=0, column=2, pady=px(4))
-        ttk.Combobox(
-            vid_f, textvariable=self.fps_var, width=8, values=["24", "30", "60", "120"]
-        ).grid(row=0, column=3, padx=px(5))
+            0,
+            t("common.codec"),
+            self.vcodec,
+            tk.Label(
+                vid_f,
+                text=t("screen_recorder.framerate"),
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                width=10,
+                anchor="e",
+            ),
+            ttk.Combobox(
+                vid_f, textvariable=self.fps_var, width=8, values=["24", "30", "60", "120"]
+            ),
+            label_width=12,
+            pady=4,
+        )
 
-        tk.Label(
-            vid_f, text=t("codec.lbl_crf_quality"), bg=CLR["bg"], fg=CLR["fg"], width=12, anchor="e"
-        ).grid(row=1, column=0, pady=px(4))
         crf_row = tk.Frame(vid_f, bg=CLR["bg"])
-        crf_row.grid(row=1, column=1, sticky="w", padx=px(5))
+        self.form_row(vid_f, 1, t("codec.lbl_crf_quality"), crf_row, label_width=12, pady=4)
         tk.Scale(
             crf_row,
             variable=self.crf_var,
@@ -516,14 +517,6 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(5))
 
-        tk.Label(
-            vid_f,
-            text=t("codec.lbl_pixel_format"),
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            width=12,
-            anchor="e",
-        ).grid(row=2, column=0, pady=px(4))
         self.chroma = ChoiceBox(
             vid_f,
             {
@@ -533,23 +526,30 @@ class ScreenRecorderTab(BaseTab):
             Chroma.STANDARD,
             width=32,
         )
-        self.chroma.grid(row=2, column=1, padx=px(5))
 
-        tk.Label(
+        self.form_row(
             vid_f,
-            text=t("screen_recorder.encoder_preset"),
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            width=10,
-            anchor="e",
-        ).grid(row=2, column=2, pady=px(4))
-        ttk.Combobox(
-            vid_f,
-            textvariable=self.preset_var,
-            width=12,
-            state="readonly",
-            values=["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"],
-        ).grid(row=2, column=3, padx=px(5))
+            2,
+            t("codec.lbl_pixel_format"),
+            self.chroma,
+            tk.Label(
+                vid_f,
+                text=t("screen_recorder.encoder_preset"),
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                width=10,
+                anchor="e",
+            ),
+            ttk.Combobox(
+                vid_f,
+                textvariable=self.preset_var,
+                width=12,
+                state="readonly",
+                values=["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"],
+            ),
+            label_width=12,
+            pady=4,
+        )
 
     def _build_studio_tab_audio_devices_dynamic(self):
         """Audio Devices (Dynamic)."""
@@ -565,52 +565,57 @@ class ScreenRecorderTab(BaseTab):
         )
         aud_f.pack(fill="x", pady=px(0, 6))
 
-        tk.Label(aud_f, text=t("screen_recorder.source_1"), bg=CLR["bg"], fg=CLR["fg"]).grid(
-            row=0, column=0, sticky="e", pady=px(4)
-        )
         self.cb_audio1 = ttk.Combobox(
             aud_f, textvariable=self.audio_src1_var, width=28, state="readonly"
         )
-        self.cb_audio1.grid(row=0, column=1, padx=px(5), sticky="w")
 
-        tk.Label(aud_f, text=t("screen_recorder.source_2"), bg=CLR["bg"], fg=CLR["fg"]).grid(
-            row=0, column=2, sticky="e", padx=px(15, 0)
-        )
         self.cb_audio2 = ttk.Combobox(
             aud_f, textvariable=self.audio_src2_var, width=28, state="readonly"
         )
-        self.cb_audio2.grid(row=0, column=3, padx=px(5), sticky="w")
-
-        tk.Label(aud_f, text=t("codec.lbl_audio"), bg=CLR["bg"], fg=CLR["fg"]).grid(
-            row=1, column=0, sticky="e", pady=px(8)
+        self.form_row(
+            aud_f,
+            0,
+            t("screen_recorder.source_1"),
+            self.cb_audio1,
+            tk.Label(aud_f, text=t("screen_recorder.source_2"), bg=CLR["bg"], fg=CLR["fg"]),
+            self.cb_audio2,
+            pady=4,
         )
-        ttk.Combobox(
-            aud_f,
-            textvariable=self.acodec_var,
-            width=10,
-            state="readonly",
-            values=["aac", "flac", "libopus", "pcm_s16le"],
-        ).grid(row=1, column=1, sticky="w", padx=px(5))
 
-        tk.Checkbutton(
+        self.form_row(
             aud_f,
-            text=t("screen_recorder.capture_mouse_cursor"),
-            variable=self.cursor_var,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-        ).grid(row=1, column=2, columnspan=2, sticky="w", padx=px(15))
-
-        tk.Label(aud_f, text=t("screen_recorder.container"), bg=CLR["bg"], fg=CLR["fg"]).grid(
-            row=2, column=0, sticky="e"
+            1,
+            t("codec.lbl_audio"),
+            ttk.Combobox(
+                aud_f,
+                textvariable=self.acodec_var,
+                width=10,
+                state="readonly",
+                values=["aac", "flac", "libopus", "pcm_s16le"],
+            ),
+            tk.Checkbutton(
+                aud_f,
+                text=t("screen_recorder.capture_mouse_cursor"),
+                variable=self.cursor_var,
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                selectcolor=CLR["panel"],
+            ),
+            pady=8,
         )
-        ttk.Combobox(
+
+        self.form_row(
             aud_f,
-            textvariable=self.container_var,
-            width=10,
-            state="readonly",
-            values=[".mp4", ".mkv", ".mov"],
-        ).grid(row=2, column=1, sticky="w", padx=px(5))
+            2,
+            t("screen_recorder.container"),
+            ttk.Combobox(
+                aud_f,
+                textvariable=self.container_var,
+                width=10,
+                state="readonly",
+                values=[".mp4", ".mkv", ".mov"],
+            ),
+        )
 
         # Start the background scan for audio hardware
         self.cb_audio1.set(LOADING_DEVICES)

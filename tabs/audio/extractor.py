@@ -52,16 +52,13 @@ class AudioExtractorTab(BaseTab):
             state="readonly",
             width=34,
         )
-        fb.grid(row=0, column=1, sticky="w")
         fb.bind("<<ComboboxSelected>>", lambda _e: self._suggest_name(force=True))
-        tk.Label(opt, text="Format:").grid(row=0, column=0, sticky="w")
-        tk.Label(opt, text="Track:").grid(row=1, column=0, sticky="w")
+        self.form_row(opt, 0, "Format:", fb)
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
-        self.track_box.grid(row=1, column=1, sticky="w", pady=px(4))
-        tk.Label(opt, text="From / to (optional):").grid(row=2, column=0, sticky="w")
+        self.form_row(opt, 1, "Track:", self.track_box)
         self.part = RangePicker(opt, start="", source=lambda: self.src_row.path)
-        self.part.grid(row=2, column=1, sticky="w")
+        self.form_row(opt, 2, "From / to (optional):", self.part)
         self.norm_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opt,

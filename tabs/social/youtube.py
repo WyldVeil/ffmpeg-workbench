@@ -610,100 +610,55 @@ class YouTubeDownloaderTab(BaseTab):
             ).pack(anchor="w", pady=px(1))
 
     def _build_encode_tab(self, parent):
-        _combo, _row, col_left, col_right = self._build_encode_tab_vcodec(parent)
-        crf_row = self._build_encode_tab_res(col_left, col_right)
-        self._build_encode_tab_crf(_combo, _row, col_right, crf_row)
+        left = tk.Frame(parent, bg=CLR["bg"])
+        left.pack(side="left", fill="both", expand=True, padx=px(0, 16))
+        right = tk.Frame(parent, bg=CLR["bg"])
+        right.pack(side="left", fill="both", expand=True)
+        self._build_encode_video(left)
+        self._build_encode_quality(right)
 
-    def _build_encode_tab_vcodec(self, parent):
-        def _row(p, lbl, widget_factory, pady=3):
-            r = tk.Frame(p, bg=CLR["bg"])
-            r.pack(fill="x", pady=px(pady))
-            tk.Label(
-                r, text=lbl, font=(UI_FONT, 9), width=18, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]
-            ).pack(side="left")
-            widget_factory(r)
-            return r
-
-        def _combo(parent_row, var, values, width=22):
-            cb = ttk.Combobox(
-                parent_row,
-                textvariable=var,
-                values=values,
-                state="readonly",
-                width=width,
-                font=(UI_FONT, 9),
-            )
-            cb.pack(side="left", padx=px(6))
-            return cb
-
-        col_left = tk.Frame(parent, bg=CLR["bg"])
-        col_left.pack(side="left", fill="both", expand=True, padx=px(0, 16))
-        col_right = tk.Frame(parent, bg=CLR["bg"])
-        col_right.pack(side="left", fill="both", expand=True)
-
-        # Left column
-        self._vcodec_var = tk.StringVar(value="libx264")
-        _row(
-            col_left,
-            "Video codec:",
-            lambda p: _combo(p, self._vcodec_var, yto.VIDEO_CODECS),
-        )
-
-        self._acodec_var = tk.StringVar(value="aac")
-        _row(
-            col_left,
-            "Audio codec:",
-            lambda p: _combo(
-                p, self._acodec_var, ["aac", "libmp3lame", "flac", "libopus", "libvorbis", "copy"]
-            ),
-        )
-
-        self._container_var = tk.StringVar(value="mp4")
-        _row(
-            col_left,
-            "Container:",
-            lambda p: _combo(p, self._container_var, ["mp4", "mkv", "webm", "mov"], width=12),
-        )
-
-        self._preset_var = tk.StringVar(value="fast")
-        _row(
-            col_left,
-            "Preset:",
-            lambda p: _combo(p, self._preset_var, _X264_PRESETS, width=14),
-        )
-        return _combo, _row, col_left, col_right
-
-    def _show_custom_res(self, _e=None):
-        if self._res.value is yto.Resolution.CUSTOM:
-            self._custom_res_entry.pack(side="left", padx=px(4))
-        else:
-            self._custom_res_entry.pack_forget()
-
-    def _build_encode_tab_res(self, col_left, col_right):
-        res_row = tk.Frame(col_left, bg=CLR["bg"])
-        res_row.pack(fill="x", pady=px(3))
-        tk.Label(
-            res_row,
-            text=t("common.resolution"),
+    @staticmethod
+    def _encode_choice(parent, var, values, width=22):
+        return ttk.Combobox(
+            parent,
+            textvariable=var,
+            values=values,
+            state="readonly",
+            width=width,
             font=(UI_FONT, 9),
-            width=18,
-            anchor="e",
-            bg=CLR["bg"],
-            fg=CLR["fgdim"],
-        ).pack(side="left")
+        )
+
+    def _build_encode_video(self, col):
+        """Codecs, container, preset and size of the re-encode."""
+        self._vcodec_var = tk.StringVar(value="libx264")
+        self._acodec_var = tk.StringVar(value="aac")
+        self._container_var = tk.StringVar(value="mp4")
+        self._preset_var = tk.StringVar(value="fast")
+        audio = ["aac", "libmp3lame", "flac", "libopus", "libvorbis", "copy"]
+        for r, (label, var, values, width) in enumerate(
+            (
+                ("Video codec:", self._vcodec_var, yto.VIDEO_CODECS, 22),
+                ("Audio codec:", self._acodec_var, audio, 22),
+                ("Container:", self._container_var, ["mp4", "mkv", "webm", "mov"], 12),
+                ("Preset:", self._preset_var, _X264_PRESETS, 14),
+            )
+        ):
+            self.form_row(
+                col, r, label, self._encode_choice(col, var, values, width), label_width=18
+            )
         sizes = {r: r.value.replace("x", "×") for r in yto.Resolution}
         sizes |= {
             yto.Resolution.ORIGINAL: "Original",
-            yto.Resolution.CUSTOM: t("youtube.smart_reframe_custom"),
+            yto.Resolution.CUSTOM: t("smart_reframe.custom"),
         }
         self._res = ChoiceBox(
-            res_row, sizes, yto.Resolution.ORIGINAL, width=14, on_change=self._show_custom_res
+            col, sizes, yto.Resolution.ORIGINAL, width=14, on_change=self._show_custom_res
         )
         self._res.configure(font=(UI_FONT, 9))
-        self._res.pack(side="left", padx=px(6))
+        self.form_row(col, 4, t("common.resolution"), self._res, label_width=18)
         self._custom_res_var = tk.StringVar(value="1280×720")
         self._custom_res_entry = tk.Entry(
-            res_row,
+            col,
             textvariable=self._custom_res_var,
             width=10,
             relief="flat",
@@ -712,25 +667,25 @@ class YouTubeDownloaderTab(BaseTab):
             fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
         )
+        self._custom_res_label = self.form_row(
+            col, 5, "Custom size:", self._custom_res_entry, label_width=18
+        )
+        self._show_custom_res()
 
-        # Right column
-        crf_row = tk.Frame(col_right, bg=CLR["bg"])
-        crf_row.pack(fill="x", pady=px(3))
-        tk.Label(
-            crf_row,
-            text=t("youtube.crf_0_51"),
-            font=(UI_FONT, 9),
-            width=16,
-            anchor="e",
-            bg=CLR["bg"],
-            fg=CLR["fgdim"],
-        ).pack(side="left")
-        return crf_row
+    def _show_custom_res(self, _e=None):
+        """The size box only for a custom resolution."""
+        for w in (self._custom_res_label, self._custom_res_entry):
+            if self._res.value is yto.Resolution.CUSTOM:
+                w.grid()
+            else:
+                w.grid_remove()
 
-    def _build_encode_tab_crf(self, _combo, _row, col_right, crf_row):
+    def _build_encode_quality(self, col):
+        """Quality (CRF) and the sound's bitrate and sample rate."""
         self._crf_var = tk.IntVar(value=18)
+        self._crf_entry_var = tk.StringVar(value="18")
         crf_scale = tk.Scale(
-            crf_row,
+            col,
             variable=self._crf_var,
             from_=0,
             to=51,
@@ -741,10 +696,8 @@ class YouTubeDownloaderTab(BaseTab):
             highlightthickness=0,
             command=lambda v: self._crf_entry_var.set(str(int(float(v)))),
         )
-        crf_scale.pack(side="left", padx=px(4))
-        self._crf_entry_var = tk.StringVar(value="18")
         crf_entry = tk.Entry(
-            crf_row,
+            col,
             textvariable=self._crf_entry_var,
             width=4,
             relief="flat",
@@ -753,26 +706,27 @@ class YouTubeDownloaderTab(BaseTab):
             fg=CLR["input_fg"],
             insertbackground=CLR["accent"],
         )
-        crf_entry.pack(side="left", padx=px(4))
         crf_entry.bind(
             "<Return>",
             lambda e: self._crf_var.set(max(0, min(51, int(self._crf_entry_var.get() or 18)))),
         )
-
+        self.form_row(col, 0, t("youtube.crf_0_51"), crf_scale, crf_entry, label_width=16)
         self._abitrate_var = tk.StringVar(value="192k")
-        _row(
-            col_right,
-            "Audio bitrate:",
-            lambda p: _combo(
-                p, self._abitrate_var, ["320k", "256k", "192k", "128k", "96k", "64k"], width=10
-            ),
-        )
-
         self._asamplerate_var = tk.StringVar(value="48000")
-        _row(
-            col_right,
+        rates = ["320k", "256k", "192k", "128k", "96k", "64k"]
+        self.form_row(
+            col,
+            1,
+            "Audio bitrate:",
+            self._encode_choice(col, self._abitrate_var, rates, 10),
+            label_width=16,
+        )
+        self.form_row(
+            col,
+            2,
             "Sample rate:",
-            lambda p: _combo(p, self._asamplerate_var, ["48000", "44100", "22050"], width=10),
+            self._encode_choice(col, self._asamplerate_var, ["48000", "44100", "22050"], 10),
+            label_width=16,
         )
 
     def _build_audio_tab(self, parent):
@@ -801,12 +755,12 @@ class YouTubeDownloaderTab(BaseTab):
             r2,
             textvariable=self._audio_quality_var,
             values=[
-                t("youtube.youtube_0_best"),
+                t("youtube.0_best"),
                 "2",
                 "4",
-                t("youtube.youtube_5_medium"),
+                t("youtube.5_medium"),
                 "7",
-                t("youtube.youtube_9_worst"),
+                t("youtube.9_worst"),
             ],
             state="readonly",
             width=14,

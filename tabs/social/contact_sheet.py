@@ -151,10 +151,9 @@ class ContactSheetTab(BaseTab):
 
     def _spin(self, parent, row, label, value, low, high, *, step=1, unit=""):
         """A labelled number box on *row* of *parent*'s grid; its StringVar."""
-        tk.Label(parent, text=label, anchor="w").grid(row=row, column=0, sticky="w", pady=px(2))
         var = tk.StringVar(value=str(value))
         box = tk.Spinbox(parent, from_=low, to=high, increment=step, textvariable=var, width=6)
-        box.grid(row=row, column=1, sticky="w", pady=px(2))
+        self.form_row(parent, row, label, box, pady=2)
         if unit:
             tk.Label(parent, text=unit, fg=CLR["fgdim"]).grid(row=row, column=2, sticky="w")
         var.trace_add("write", self._changed)
@@ -190,12 +189,14 @@ class ContactSheetTab(BaseTab):
     def _build_frames(self, cols):
         f = tk.LabelFrame(cols, text="  Frames  ", padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True, padx=px(0, 6))
-        tk.Label(f, text="Take frames:", anchor="w").grid(row=0, column=0, sticky="w")
+        tk.Label(f, text="Take frames:", anchor="w").grid(row=0, column=0, columnspan=3, sticky="w")
         self.sampling = ChoiceBox(
             f, SAMPLING, cs.Sampling.EVEN, width=22, on_change=self._sampling_changed
         )
         self.sampling.grid(row=1, column=0, columnspan=3, sticky="w", pady=px(0, 4))
-        tk.Label(f, text="Shot changes:", anchor="w").grid(row=2, column=0, sticky="w")
+        tk.Label(f, text="Shot changes:", anchor="w").grid(
+            row=2, column=0, columnspan=3, sticky="w"
+        )
         self.sensitivity = ChoiceBox(
             f, SENSITIVITY, Sensitivity.NORMAL, width=16, on_change=self._changed
         )
@@ -225,30 +226,31 @@ class ContactSheetTab(BaseTab):
                 row=i // 3, column=i % 3, sticky="w"
             )
             self.detail_vars[detail] = var
-        tk.Label(f, text="Title:", anchor="w").grid(row=1, column=0, sticky="w", pady=px(4, 0))
         self.title_var = tk.StringVar()
         self.title_var.trace_add("write", self._changed)
         title = tk.Entry(f, textvariable=self.title_var, width=24)
-        title.grid(row=1, column=1, columnspan=3, sticky="w", pady=px(4, 0))
+        self.form_row(f, 1, "Title:", title, pady=(4, 0))
         add_tooltip(title, "Shown in place of the file name (leave empty for the name)")
-        tk.Label(f, text="Times:", anchor="w").grid(row=2, column=0, sticky="w", pady=px(2))
         self.corner = ChoiceBox(
             f, CORNERS, cs.Corner.BOTTOM_RIGHT, width=12, on_change=self._changed
         )
-        self.corner.grid(row=2, column=1, sticky="w")
         self.numbers_var = tk.BooleanVar(value=False)
         self.numbers_var.trace_add("write", self._changed)
-        tk.Checkbutton(f, text="Tile numbers", variable=self.numbers_var).grid(
-            row=2, column=2, columnspan=2, sticky="w"
+        self.form_row(
+            f,
+            2,
+            "Times:",
+            self.corner,
+            tk.Checkbutton(f, text="Tile numbers", variable=self.numbers_var),
+            pady=2,
         )
         self._build_font(f)
 
     def _build_font(self, f):
-        tk.Label(f, text="Font:", anchor="w").grid(row=3, column=0, sticky="w", pady=px(2))
         self.font_var = tk.StringVar(value="Montserrat")
         fonts = tk.OptionMenu(f, self.font_var, *ass.families())
         fonts.configure(relief="flat", width=14)
-        fonts.grid(row=3, column=1, sticky="w")
+        self.form_row(f, 3, "Font:", fonts, pady=2)
         self.font_var.trace_add("write", self._changed)
         size = tk.Frame(f)
         size.grid(row=4, column=0, columnspan=4, sticky="w")

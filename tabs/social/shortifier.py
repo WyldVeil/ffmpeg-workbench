@@ -66,13 +66,6 @@ class ShortifierTab(BaseTab):
         opt = tk.LabelFrame(body, text="  Format  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
-        def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(
-                row=r, column=0, sticky="w", pady=px(2)
-            )
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
-
         self.platform_var = tk.StringVar(value=platform_label("shorts"))
         pb = ttk.Combobox(
             opt,
@@ -83,13 +76,16 @@ class ShortifierTab(BaseTab):
         )
         pb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.cw_var, self.ch_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
-        row(
+        self.form_row(
+            opt,
             0,
             "Platform:",
             pb,
             tk.Label(opt, text="Custom:"),
             tk.Entry(opt, textvariable=self.cw_var, width=6),
             tk.Entry(opt, textvariable=self.ch_var, width=6),
+            label_width=12,
+            pady=2,
         )
         self.bg_var = tk.StringVar(value=BACKGROUNDS["blur"])
         bb = ttk.Combobox(
@@ -103,7 +99,7 @@ class ShortifierTab(BaseTab):
         self.colour_btn = ColourButton(
             opt, "#1E1E1E", text="Colour…", on_change=self._colour_chosen
         )
-        row(1, "Layout:", bb, self.colour_btn)
+        self.form_row(opt, 1, "Layout:", bb, self.colour_btn, label_width=12, pady=2)
         self.anchor_var = tk.StringVar(value="Centre")
         ab = ttk.Combobox(
             opt,
@@ -113,21 +109,27 @@ class ShortifierTab(BaseTab):
             width=12,
         )
         ab.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        row(
+        self.form_row(
+            opt,
             2,
             "Keep:",
             ab,
             tk.Label(
                 opt, text="(which part to keep when cropping)", fg=CLR["fgdim"], font=(UI_FONT, 8)
             ),
+            label_width=12,
+            pady=2,
         )
         self.trim_var = tk.BooleanVar(value=True)
-        row(
+        self.form_row(
+            opt,
             3,
             "Length:",
             tk.Checkbutton(
                 opt, text="Trim to the platform's maximum length", variable=self.trim_var
             ),
+            label_width=12,
+            pady=2,
         )
         for var in (self.cw_var, self.ch_var):
             var.trace_add("write", lambda *_a: self._changed())

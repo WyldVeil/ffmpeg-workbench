@@ -479,8 +479,8 @@ class TTSVoiceOverTab(BaseTab):
         tk.Label(vfmt_row, text=t("tts.video_output"), width=16, anchor="e").pack(side="left")
         video_outs = {
             vo.VideoOut.COPY: "Copy video stream  (fast, no re-encode)",
-            vo.VideoOut.CRF18: t("tts.tts_re_encode_h_264_crf_18_high_quality"),
-            vo.VideoOut.CRF23: t("tts.tts_re_encode_h_264_crf_23_balanced"),
+            vo.VideoOut.CRF18: t("tts.re_encode_h_264_crf_18_high_quality"),
+            vo.VideoOut.CRF23: t("tts.re_encode_h_264_crf_23_balanced"),
         }
         self.vid_fmt = ChoiceBox(vfmt_row, video_outs, vo.VideoOut.COPY, width=38)
         self.vid_fmt.pack(side="left", padx=px(8))

@@ -5,7 +5,7 @@ Provides:
   • CLR - live skin color dict
   • BaseTab - base class for all tool tabs
   • make_header, make_console, make_console_block, make_file_row, make_section,
-    make_render_btn, make_labeled_entry - UI factory helpers
+    make_render_btn, make_labeled_entry, form_row - UI factory helpers
 """
 
 from __future__ import annotations
@@ -236,6 +236,35 @@ def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
     return f
 
 
+def form_row(
+    parent,
+    r,
+    label,
+    *widgets,
+    label_width: int | None = None,
+    pady: int | tuple[int, int] = 3,
+    span: int = 1,
+):
+    """Row *r* of a form gridded in *parent*: the label (*label_width* characters,
+    or as wide as its text), then the widgets.  One widget is gridded in the
+    second column; several share a frame there, so a wide widget in one row
+    never pushes another row's apart; a single widget may *span* columns.  Returns the label."""
+    lbl = tk.Label(parent, text=label, anchor="w")
+    if label_width:
+        lbl.configure(width=label_width)
+    pad = px(*pady) if isinstance(pady, tuple) else px(pady)
+    lbl.grid(row=r, column=0, sticky="w", pady=pad)
+    if len(widgets) == 1:
+        widgets[0].grid(row=r, column=1, columnspan=span, sticky="w", pady=pad)
+        return lbl
+    holder = tk.Frame(parent)
+    holder.grid(row=r, column=1, sticky="w", pady=pad)
+    for w in widgets:
+        w.pack(in_=holder, side="left", padx=px(0, 6))
+        w.lift(holder)
+    return lbl
+
+
 def make_labeled_entry(parent, label, var, width=8, tooltip=""):
     """Inline label + entry, optionally with a dim tooltip/hint."""
     f = tk.Frame(parent, bg=CLR["bg"])
@@ -267,6 +296,8 @@ def make_render_btn(parent, text, command, width=24):
         font=(UI_FONT, 12, "bold"),
         bg=CLR["green"],
         fg="white",
+        activebackground=CLR["green"],
+        activeforeground="white",
         width=width,
         cursor="hand2",
         command=command,
@@ -712,6 +743,7 @@ class BaseTab(ttk.Frame):
     make_console_block = staticmethod(make_console_block)
     make_file_row = staticmethod(make_file_row)
     make_labeled_entry = staticmethod(make_labeled_entry)
+    form_row = staticmethod(form_row)
     make_render_btn = staticmethod(make_render_btn)
     VideoTimeline = VideoTimeline
     ToolTip = ToolTip

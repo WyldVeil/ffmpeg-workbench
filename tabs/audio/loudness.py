@@ -72,8 +72,7 @@ class LoudnessNormTab(BaseTab):
             )
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
-        tk.Label(opt, text="Audio track:").grid(row=2, column=0, sticky="w")
-        self.track_box.grid(row=2, column=1, columnspan=5, sticky="w", pady=px(4))
+        self.form_row(opt, 2, "Audio track:", self.track_box)
         self.report = tk.Label(
             body, text="", fg=CLR["accent"], font=(MONO_FONT, 10), justify="left"
         )

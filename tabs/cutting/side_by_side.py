@@ -57,8 +57,8 @@ class SideBySideTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        body, lay, row = self._build_header()
-        self._build_output(body, lay, row)
+        body, lay = self._build_header()
+        self._build_output(body, lay)
         self._build_render(body)
 
     def _build_header(self):
@@ -101,16 +101,10 @@ class SideBySideTab(BaseTab):
         lay = tk.LabelFrame(body, text="  Layout  ", padx=px(12), pady=px(6))
         lay.pack(fill="x", padx=px(20), pady=px(4))
 
-        def row(r, label, *widgets):
-            tk.Label(lay, text=label, width=14, anchor="w").grid(
-                row=r, column=0, sticky="w", pady=px(2)
-            )
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(2))
-
         self.layout_var = tk.StringVar(value=LAYOUTS["side"])
         self.size_var = tk.StringVar(value="1920×1080")
-        row(
+        self.form_row(
+            lay,
             0,
             "Layout:",
             ttk.Combobox(
@@ -123,14 +117,17 @@ class SideBySideTab(BaseTab):
             ttk.Combobox(
                 lay, textvariable=self.size_var, values=list(SIZES), state="readonly", width=18
             ),
+            label_width=14,
+            pady=2,
         )
-        return body, lay, row
+        return body, lay
 
-    def _build_output(self, body, lay, row):
+    def _build_output(self, body, lay):
         self.fill_var = tk.BooleanVar(value=False)
         self.divider_var = tk.BooleanVar(value=True)
         self.labels_on = tk.BooleanVar(value=True)
-        row(
+        self.form_row(
+            lay,
             1,
             "Framing:",
             tk.Checkbutton(
@@ -138,10 +135,13 @@ class SideBySideTab(BaseTab):
             ),
             tk.Checkbutton(lay, text="Divider line", variable=self.divider_var),
             tk.Checkbutton(lay, text="Labels", variable=self.labels_on),
+            label_width=14,
+            pady=2,
         )
         self.wipe_pos = tk.DoubleVar(value=0.5)
         self.wipe_period = tk.StringVar(value="0")
-        row(
+        self.form_row(
+            lay,
             2,
             "Wipe:",
             tk.Scale(
@@ -155,10 +155,13 @@ class SideBySideTab(BaseTab):
             ),
             tk.Label(lay, text="Sweep every (s, 0 = fixed):"),
             tk.Entry(lay, textvariable=self.wipe_period, width=5),
+            label_width=14,
+            pady=2,
         )
         self.audio_var = tk.StringVar(value=AUDIO["0"])
         self.length_var = tk.StringVar(value=LENGTH["shortest"])
-        row(
+        self.form_row(
+            lay,
             3,
             "Audio:",
             ttk.Combobox(
@@ -168,8 +171,11 @@ class SideBySideTab(BaseTab):
                 state="readonly",
                 width=24,
             ),
+            label_width=14,
+            pady=2,
         )
-        row(
+        self.form_row(
+            lay,
             4,
             "Length:",
             ttk.Combobox(
@@ -179,6 +185,8 @@ class SideBySideTab(BaseTab):
                 state="readonly",
                 width=44,
             ),
+            label_width=14,
+            pady=2,
         )
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))

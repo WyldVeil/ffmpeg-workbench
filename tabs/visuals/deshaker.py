@@ -53,9 +53,12 @@ class DeshakerTab(BaseTab):
         opts.pack(fill="x", padx=px(20), pady=px(6))
 
         def scale(row, label, var, lo, hi, hint=""):
-            tk.Label(opts, text=label, anchor="w", width=26).grid(row=row, column=0, sticky="w")
-            tk.Scale(opts, variable=var, from_=lo, to=hi, orient="horizontal", length=px(220)).grid(
-                row=row, column=1, sticky="w"
+            self.form_row(
+                opts,
+                row,
+                label,
+                tk.Scale(opts, variable=var, from_=lo, to=hi, orient="horizontal", length=px(220)),
+                label_width=26,
             )
             if hint:
                 tk.Label(
@@ -95,28 +98,47 @@ class DeshakerTab(BaseTab):
             "Detection accuracy (15 = best, slower analysis).",
         )
 
-        tk.Label(opts, text="Zoom:", anchor="w", width=26).grid(
-            row=3, column=0, sticky="w", pady=px(3)
-        )
         self.zoom_mode = tk.StringVar(value=next(iter(ZOOM_MODES)))
-        ttk.Combobox(
-            opts, textvariable=self.zoom_mode, values=list(ZOOM_MODES), state="readonly", width=40
-        ).grid(row=3, column=1, columnspan=2, sticky="w")
+        self.form_row(
+            opts,
+            3,
+            "Zoom:",
+            ttk.Combobox(
+                opts,
+                textvariable=self.zoom_mode,
+                values=list(ZOOM_MODES),
+                state="readonly",
+                width=40,
+            ),
+            label_width=26,
+            span=2,
+        )
         return body, opts
 
     def _build_output(self, body, opts):
-        tk.Label(opts, text="Extra zoom (%):", anchor="w", width=26).grid(
-            row=4, column=0, sticky="w"
-        )
         self.zoom_var = tk.StringVar(value="0")
-        tk.Entry(opts, textvariable=self.zoom_var, width=6).grid(row=4, column=1, sticky="w")
-        tk.Label(opts, text="Edges:", anchor="w", width=26).grid(
-            row=5, column=0, sticky="w", pady=px(3)
+        self.form_row(
+            opts,
+            4,
+            "Extra zoom (%):",
+            tk.Entry(opts, textvariable=self.zoom_var, width=6),
+            label_width=26,
         )
         self.edge_var = tk.StringVar(value=next(iter(EDGE_MODES)))
-        ttk.Combobox(
-            opts, textvariable=self.edge_var, values=list(EDGE_MODES), state="readonly", width=40
-        ).grid(row=5, column=1, columnspan=2, sticky="w")
+        self.form_row(
+            opts,
+            5,
+            "Edges:",
+            ttk.Combobox(
+                opts,
+                textvariable=self.edge_var,
+                values=list(EDGE_MODES),
+                state="readonly",
+                width=40,
+            ),
+            label_width=26,
+            span=2,
+        )
 
         self.tripod_var = tk.BooleanVar(value=False)
         tk.Checkbutton(

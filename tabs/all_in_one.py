@@ -156,7 +156,8 @@ def _spin(parent, var, from_, to, inc=0.5, width=7):
     )
 
 
-def _row(parent, pady=3):
+def _line(parent, pady=3):
+    """A strip for controls laid out like a sentence ("Width [ ] Height [ ]")."""
     f = tk.Frame(parent, bg=CLR["bg"])
     f.pack(fill="x", pady=px(pady))
     return f
@@ -289,7 +290,7 @@ class AllInOneTab(BaseTab):
         self._src_var = tk.StringVar()
         self._out_var = tk.StringVar()
 
-        r1 = _row(parent, pady=2)
+        r1 = _line(parent, pady=2)
         _lbl(r1, t("common.source_video"), bold=True).pack(side="left")
         _entry(r1, self._src_var, width=62).pack(side="left", padx=px(8))
         tk.Button(
@@ -301,7 +302,7 @@ class AllInOneTab(BaseTab):
         self._src_job = None
         self._src_var.trace_add("write", lambda *_a: self._src_typed())
 
-        r2 = _row(parent, pady=2)
+        r2 = _line(parent, pady=2)
         _lbl(r2, t("common.output_file"), bold=True).pack(side="left")
         _entry(r2, self._out_var, width=62).pack(side="left", padx=px(8))
         tk.Button(
@@ -400,7 +401,7 @@ class AllInOneTab(BaseTab):
         self._sec_trim.pack(fill="x", pady=px(1))
         b = self._sec_trim.body
 
-        r = _row(b)
+        r = _line(b)
         _lbl(r, "From:").pack(side="left")
         trim = RangePicker(
             r,
@@ -429,7 +430,7 @@ class AllInOneTab(BaseTab):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
         self._scale_pad.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r1 = _row(b)
+        r1 = _line(b)
         _lbl(r1, "Preset:").pack(side="left")
         cb = _combo(r1, self._scale_preset, list(_RES_PRESETS), width=24)
         cb.pack(side="left", padx=px(6))
@@ -442,7 +443,7 @@ class AllInOneTab(BaseTab):
         self._scale_h_entry.pack(side="left", padx=px(3))
         _lbl(r1, "(-1 = auto-aspect)", dim=True).pack(side="left", padx=px(6))
 
-        r2 = _row(b)
+        r2 = _line(b)
         _lbl(r2, "Algorithm:").pack(side="left")
         _combo(r2, self._scale_algo, list(_SCALE_ALGO.keys()), width=26).pack(
             side="left", padx=px(6)
@@ -475,7 +476,7 @@ class AllInOneTab(BaseTab):
         self._fps_val = tk.StringVar(value="30")
         self._fps_val.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r = _row(b)
+        r = _line(b)
         _lbl(r, "Target FPS:").pack(side="left")
         cb = _combo(r, self._fps_val, _FPS_VALS, width=8, state="normal")
         cb.pack(side="left", padx=px(6))
@@ -495,7 +496,7 @@ class AllInOneTab(BaseTab):
         for v in (self._rotate_val, self._flip_h, self._flip_v):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r = _row(b)
+        r = _line(b)
         _lbl(r, "Rotation:").pack(side="left")
         for val, label in [("0", "None"), ("90", "90° CW"), ("180", "180°"), ("270", "90° CCW")]:
             tk.Radiobutton(
@@ -510,7 +511,7 @@ class AllInOneTab(BaseTab):
                 command=self._rebuild_cmd,
             ).pack(side="left", padx=px(8))
 
-        r2 = _row(b)
+        r2 = _line(b)
         tk.Checkbutton(
             r2,
             text="Flip Horizontal (Mirror)",
@@ -544,12 +545,12 @@ class AllInOneTab(BaseTab):
         for v in (self._speed_val, self._speed_pitch):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r = _row(b)
+        r = _line(b)
         _lbl(r, "Speed multiplier:").pack(side="left")
         _spin(r, self._speed_val, 0.05, 16, 0.25, width=6).pack(side="left", padx=px(6))
         _lbl(r, "(0.5 = half speed · 2.0 = double)", dim=True).pack(side="left", padx=px(6))
 
-        r2 = _row(b)
+        r2 = _line(b)
         tk.Checkbutton(
             r2,
             text="Preserve audio pitch (atempo)",
@@ -594,7 +595,7 @@ class AllInOneTab(BaseTab):
             ("Hue shift°:", self._hue, -180, 180, 5.0),
         ]
         for label, var, lo, hi, inc in sliders:
-            r = _row(b, pady=2)
+            r = _line(b, pady=2)
             _lbl(r, label, bold=True).pack(side="left")
             sc = tk.Scale(
                 r,
@@ -612,7 +613,7 @@ class AllInOneTab(BaseTab):
             sc.pack(side="left", padx=px(6))
             _lbl(r, "", dim=True).pack(side="left")  # spacer
 
-        r5 = _row(b, pady=2)
+        r5 = _line(b, pady=2)
         tk.Button(
             r5,
             text="Reset all to defaults",
@@ -641,7 +642,7 @@ class AllInOneTab(BaseTab):
         for v in (self._denoise_algo, self._denoise_str):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r = _row(b)
+        r = _line(b)
         _lbl(r, "Algorithm:").pack(side="left")
         for val, lbl in [("hqdn3d", "HQDN3D (fast)"), ("nlmeans", "NLMeans (quality)")]:
             tk.Radiobutton(
@@ -656,7 +657,7 @@ class AllInOneTab(BaseTab):
                 command=self._rebuild_cmd,
             ).pack(side="left", padx=px(10))
 
-        r2 = _row(b)
+        r2 = _line(b)
         _lbl(r2, "Strength:").pack(side="left")
         _combo(r2, self._denoise_str, ["Light", "Medium", "Strong", "Aggressive"], width=12).pack(
             side="left", padx=px(6)
@@ -674,7 +675,7 @@ class AllInOneTab(BaseTab):
         for v in (self._sharp_lx, self._sharp_la):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r = _row(b)
+        r = _line(b)
         _lbl(r, "Kernel size (odd):").pack(side="left")
         _combo(r, self._sharp_lx, ["3", "5", "7"], width=4).pack(side="left", padx=px(6))
         _lbl(r, "  Amount (luma):").pack(side="left")
@@ -698,7 +699,7 @@ class AllInOneTab(BaseTab):
         for v in (self._vol_en, self._vol_val, self._norm_en, self._norm_lufs):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r1 = _row(b)
+        r1 = _line(b)
         tk.Checkbutton(
             r1,
             text="Adjust volume ×",
@@ -712,7 +713,7 @@ class AllInOneTab(BaseTab):
         _spin(r1, self._vol_val, 0.05, 10, 0.05, width=5).pack(side="left", padx=px(6))
         _lbl(r1, "(1.0 = no change · 2.0 = double)", dim=True).pack(side="left", padx=px(4))
 
-        r2 = _row(b)
+        r2 = _line(b)
         tk.Checkbutton(
             r2,
             text="Loudness normalise to",
@@ -742,7 +743,7 @@ class AllInOneTab(BaseTab):
         for v in (self._text_val, self._text_size, self._text_color, self._text_pos):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r1 = _row(b)
+        r1 = _line(b)
         _lbl(r1, "Text:").pack(side="left")
         _entry(r1, self._text_val, 34).pack(side="left", padx=px(6))
         _lbl(r1, "  Size:").pack(side="left")
@@ -752,7 +753,7 @@ class AllInOneTab(BaseTab):
             r1, self._text_color, ["white", "yellow", "red", "cyan", "black", "orange"], width=8
         ).pack(side="left", padx=px(4))
 
-        r2 = _row(b)
+        r2 = _line(b)
         _lbl(r2, "Position:").pack(side="left")
         _combo(r2, self._text_pos, list(_TEXT_POSITIONS.keys()), width=14).pack(
             side="left", padx=px(6)
@@ -780,7 +781,7 @@ class AllInOneTab(BaseTab):
         for v in (self._fi_en, self._fi_dur, self._fo_en, self._fo_dur, self._fade_audio):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r1 = _row(b)
+        r1 = _line(b)
         tk.Checkbutton(
             r1,
             text="Fade IN duration (s):",
@@ -793,7 +794,7 @@ class AllInOneTab(BaseTab):
         ).pack(side="left")
         _spin(r1, self._fi_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
 
-        r2 = _row(b)
+        r2 = _line(b)
         tk.Checkbutton(
             r2,
             text="Fade OUT duration (s):",
@@ -807,7 +808,7 @@ class AllInOneTab(BaseTab):
         _spin(r2, self._fo_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
         _lbl(r2, "(requires source duration to be loaded)", dim=True).pack(side="left", padx=px(6))
 
-        r3 = _row(b)
+        r3 = _line(b)
         tk.Checkbutton(
             r3,
             text="Also fade audio in/out",
@@ -837,7 +838,7 @@ class AllInOneTab(BaseTab):
         for v in (self._vcodec, self._crf, self._preset, self._acodec, self._abitrate):
             v.trace_add("write", lambda *_: self._rebuild_cmd())
 
-        r1 = _row(b)
+        r1 = _line(b)
         _lbl(r1, "Video codec:").pack(side="left")
         _combo(r1, self._vcodec, list(_VCODECS.keys()), width=24).pack(side="left", padx=px(6))
         _lbl(r1, "  Quality (CRF/CQ):").pack(side="left")
@@ -847,7 +848,7 @@ class AllInOneTab(BaseTab):
         _lbl(r1, "  Preset:").pack(side="left")
         _combo(r1, self._preset, _PRESETS, width=10).pack(side="left", padx=px(4))
 
-        r2 = _row(b)
+        r2 = _line(b)
         _lbl(r2, "Audio codec:").pack(side="left")
         _combo(r2, self._acodec, _ACODECS, width=12).pack(side="left", padx=px(6))
         _lbl(r2, "  Bitrate:").pack(side="left")

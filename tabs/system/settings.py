@@ -40,9 +40,9 @@ class SettingsTab(BaseTab):
         lf.pack(fill="x", padx=px(24), pady=px(14))
 
         rows = [
-            (t("settings.settings_default_crf_label"), "default_crf", "18", None),
+            (t("settings.default_crf_label"), "default_crf", "18", None),
             (
-                t("settings.settings_default_preset_label"),
+                t("settings.default_preset_label"),
                 "default_preset",
                 "fast",
                 [
@@ -67,17 +67,13 @@ class SettingsTab(BaseTab):
 
         self._vars = {}
         for i, (label, key, default, choices) in enumerate(rows):
-            tk.Label(lf, text=label, width=24, anchor="e").grid(row=i, column=0, pady=px(8))
             var = tk.StringVar(value=self.settings.get(key, default))
             self._vars[key] = var
             if choices:
-                ttk.Combobox(lf, textvariable=var, values=choices, state="readonly", width=16).grid(
-                    row=i, column=1, sticky="w", padx=px(10)
-                )
+                box = ttk.Combobox(lf, textvariable=var, values=choices, state="readonly", width=16)
             else:
-                tk.Entry(lf, textvariable=var, width=8, relief="flat").grid(
-                    row=i, column=1, sticky="w", padx=px(10)
-                )
+                box = tk.Entry(lf, textvariable=var, width=8, relief="flat")
+            self.form_row(lf, i, label, box, label_width=24, pady=8)
 
         # Output folder
         self._out_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
@@ -94,11 +90,10 @@ class SettingsTab(BaseTab):
         ).grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4))
 
         # Startup page
-        tk.Label(lf, text="Start the app on:", width=24, anchor="e").grid(
-            row=len(rows) + 2, column=0, pady=px(8)
-        )
         self.start_box = ChoiceBox(lf, START_CHOICES, settings.START_PAGE.get())
-        self.start_box.grid(row=len(rows) + 2, column=1, sticky="w", padx=px(10))
+        self.form_row(
+            lf, len(rows) + 2, "Start the app on:", self.start_box, label_width=24, pady=8
+        )
 
         # Save button
         btn_f = tk.Frame(self)

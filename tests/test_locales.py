@@ -47,3 +47,21 @@ def test_fragments_are_valid_json_strings():
             with open(os.path.join(folder, name), encoding="utf-8") as fh:
                 data = json.load(fh)
             assert all(isinstance(v, str) for v in data.values()), name
+
+
+def test_no_text_is_just_another_key():
+    """An entry whose "text" is another entry's key shows that key on screen
+    (106 such aliases once did: the Settings page read "settings.default_crf_label")."""
+    folder = os.path.join(ROOT, "locale")
+    with open(os.path.join(folder, "en_GB.json"), encoding="utf-8") as fh:
+        keys = set(json.load(fh))
+    bad = []
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as fh:
+                bad += [
+                    f"{name}: {k}"
+                    for k, v in json.load(fh).items()
+                    if isinstance(v, str) and v in keys and v != k
+                ]
+    assert not bad, bad[:10]

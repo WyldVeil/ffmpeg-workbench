@@ -237,17 +237,15 @@ class AdvancedSettingsTab(BaseTab):
 
         self._settings_vars = {}
         for i, (label, key, default, choices) in enumerate(rows):
-            tk.Label(opts, text=label, width=24, anchor="e").grid(row=i, column=0, pady=px(6))
             var = tk.StringVar(value=self.settings.get(key, default))
             self._settings_vars[key] = var
             if choices:
-                ttk.Combobox(
+                box = ttk.Combobox(
                     opts, textvariable=var, values=choices, state="readonly", width=16
-                ).grid(row=i, column=1, sticky="w", padx=px(8))
-            else:
-                tk.Entry(opts, textvariable=var, width=8, relief="flat").grid(
-                    row=i, column=1, sticky="w", padx=px(8)
                 )
+            else:
+                box = tk.Entry(opts, textvariable=var, width=8, relief="flat")
+            self.form_row(opts, i, label, box, label_width=24, pady=6)
 
         self.out_folder_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
         FolderRow(
@@ -475,29 +473,30 @@ class AdvancedSettingsTab(BaseTab):
         var("network.mode")
         g = tk.Frame(own)
         g.pack(anchor="w")
-        tk.Label(g, text="Type").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(
+        self.form_row(
             g,
-            textvariable=var("network.proxy_scheme"),
-            state="readonly",
-            width=9,
-            values=["http", "https", "socks5h", "socks5", "socks4a", "socks4"],
-        ).grid(row=0, column=1, sticky="w", padx=px(4))
-        tk.Label(g, text="Address").grid(row=0, column=2, sticky="w", padx=px(8, 0))
-        tk.Entry(g, textvariable=var("network.proxy_host"), width=26).grid(
-            row=0, column=3, padx=px(4)
+            0,
+            "Type",
+            ttk.Combobox(
+                g,
+                textvariable=var("network.proxy_scheme"),
+                state="readonly",
+                width=9,
+                values=["http", "https", "socks5h", "socks5", "socks4a", "socks4"],
+            ),
+            tk.Label(g, text="Address"),
+            tk.Entry(g, textvariable=var("network.proxy_host"), width=26),
+            tk.Label(g, text="Port"),
+            tk.Entry(g, textvariable=var("network.proxy_port"), width=7),
         )
-        tk.Label(g, text="Port").grid(row=0, column=4, sticky="w")
-        tk.Entry(g, textvariable=var("network.proxy_port"), width=7).grid(
-            row=0, column=5, padx=px(4)
-        )
-        tk.Label(g, text="Username").grid(row=1, column=0, sticky="w", pady=px(4))
-        tk.Entry(g, textvariable=var("network.proxy_user"), width=18).grid(
-            row=1, column=1, columnspan=2, sticky="w", padx=px(4)
-        )
-        tk.Label(g, text="Password").grid(row=1, column=3, sticky="e")
-        tk.Entry(g, textvariable=var("network.proxy_pass"), width=18, show="•").grid(
-            row=1, column=4, columnspan=2, sticky="w", padx=px(4)
+        self.form_row(
+            g,
+            1,
+            "Username",
+            tk.Entry(g, textvariable=var("network.proxy_user"), width=18),
+            tk.Label(g, text="Password"),
+            tk.Entry(g, textvariable=var("network.proxy_pass"), width=18, show="•"),
+            pady=4,
         )
         tk.Checkbutton(
             own,
@@ -573,17 +572,28 @@ class AdvancedSettingsTab(BaseTab):
         mir = section("Mirrors (when download sites are blocked)")
         g = tk.Frame(mir)
         g.pack(anchor="w")
-        tk.Label(g, text="Speech models (Hugging Face) mirror:").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(
-            g, textvariable=var("network.hf_mirror"), width=36, values=["", "https://hf-mirror.com"]
-        ).grid(row=0, column=1, padx=px(4), pady=px(2))
-        tk.Label(g, text="GitHub download prefix:").grid(row=1, column=0, sticky="w")
-        ttk.Combobox(
+        self.form_row(
             g,
-            textvariable=var("network.github_mirror"),
-            width=36,
-            values=["", "https://ghfast.top/", "https://gh-proxy.com/"],
-        ).grid(row=1, column=1, padx=px(4), pady=px(2))
+            0,
+            "Speech models (Hugging Face) mirror:",
+            ttk.Combobox(
+                g,
+                textvariable=var("network.hf_mirror"),
+                width=36,
+                values=["", "https://hf-mirror.com"],
+            ),
+        )
+        self.form_row(
+            g,
+            1,
+            "GitHub download prefix:",
+            ttk.Combobox(
+                g,
+                textvariable=var("network.github_mirror"),
+                width=36,
+                values=["", "https://ghfast.top/", "https://gh-proxy.com/"],
+            ),
+        )
         hint(
             mir,
             "Downloads are checked against fixed SHA-256 sums, so a mirror can't swap the files.",
@@ -609,26 +619,23 @@ class AdvancedSettingsTab(BaseTab):
             ("Browser identity (User-Agent), blank = default:", "network.user_agent", 40),
         ]
         for i, (label, key, width) in enumerate(rows):
-            tk.Label(g, text=label).grid(row=i, column=0, sticky="w", pady=px(2))
             if key == "network.source_address":
-                addresses = ttk.Combobox(g, textvariable=var(key), width=width, values=[""])
-                addresses.grid(row=i, column=1, sticky="w", padx=px(4))
+                box = ttk.Combobox(g, textvariable=var(key), width=width, values=[""])
                 tasks.submit(
                     local_addresses,
                     name="LocalAddresses",  # asks `ip`: not on the UI thread
-                    on_done=lambda found, cb=addresses: cb.config(values=["", *found]),
+                    on_done=lambda found, cb=box: cb.config(values=["", *found]),
                 )
             elif key == "network.wrapper":
-                ttk.Combobox(
+                box = ttk.Combobox(
                     g,
                     textvariable=var(key),
                     width=width,
                     values=["", "mullvad-exclude", "proxychains4 -q", "torsocks"],
-                ).grid(row=i, column=1, sticky="w", padx=px(4))
-            else:
-                tk.Entry(g, textvariable=var(key), width=width).grid(
-                    row=i, column=1, sticky="w", padx=px(4)
                 )
+            else:
+                box = tk.Entry(g, textvariable=var(key), width=width)
+            self.form_row(g, i, label, box, pady=2)
         r = tk.Frame(con)
         r.pack(anchor="w", pady=px(2))
         tk.Label(r, text="Internet protocol:").pack(side="left")

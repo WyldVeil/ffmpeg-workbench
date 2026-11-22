@@ -63,8 +63,8 @@ class GIFMakerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        body, opt, row = self._build_header()
-        self._build_output(body, opt, row)
+        body, opt = self._build_header()
+        self._build_output(body, opt)
         self._build_render(body)
 
     def _build_header(self):
@@ -96,24 +96,21 @@ class GIFMakerTab(BaseTab):
         opt = tk.LabelFrame(body, text="  GIF  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
-        def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(
-                row=r, column=0, sticky="w", pady=px(2)
-            )
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
-
         self.start = MomentPicker(opt, value="0", width=11, here=lambda: float(self.pos_var.get()))
         self.dur_var = tk.StringVar(value="4")
-        row(
+        self.form_row(
+            opt,
             0,
             "Start:",
             self.start,
             tk.Label(opt, text="Length (s):"),
             tk.Entry(opt, textvariable=self.dur_var, width=6),
+            label_width=12,
+            pady=2,
         )
         self.fps_var, self.width_var = tk.StringVar(value="15"), tk.StringVar(value="480")
-        row(
+        self.form_row(
+            opt,
             1,
             "Frame rate:",
             ttk.Combobox(
@@ -129,13 +126,16 @@ class GIFMakerTab(BaseTab):
                 values=["240", "320", "400", "480", "640", "800"],
                 width=6,
             ),
+            label_width=12,
+            pady=2,
         )
-        return body, opt, row
+        return body, opt
 
-    def _build_output(self, body, opt, row):
+    def _build_output(self, body, opt):
         self.colours_var = tk.StringVar(value="256")
         self.dither_var = tk.StringVar(value=DITHERS["sierra2_4a"])
-        row(
+        self.form_row(
+            opt,
             2,
             "Colours:",
             ttk.Combobox(
@@ -153,10 +153,13 @@ class GIFMakerTab(BaseTab):
                 state="readonly",
                 width=34,
             ),
+            label_width=12,
+            pady=2,
         )
         self.loop_var = tk.StringVar(value="forever")
         self.limit_var = tk.StringVar(value="")
-        row(
+        self.form_row(
+            opt,
             3,
             "Loop:",
             ttk.Combobox(
@@ -168,9 +171,11 @@ class GIFMakerTab(BaseTab):
             ),
             tk.Label(opt, text="Max size (MB, optional):"),
             tk.Entry(opt, textvariable=self.limit_var, width=6),
+            label_width=12,
+            pady=2,
         )
         self.format = ChoiceBox(opt, ANIM_FORMATS, AnimFormat.GIF, width=16)
-        row(4, "Format:", self.format)
+        self.form_row(opt, 4, "Format:", self.format, label_width=12, pady=2)
 
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))

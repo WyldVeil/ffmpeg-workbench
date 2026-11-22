@@ -62,8 +62,8 @@ class UniversalDownsizerTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self):
-        body, cb, opt, row, tb = self._build_header()
-        self._build_output(body, cb, opt, row, tb)
+        body, cb, opt, tb = self._build_header()
+        self._build_output(body, cb, opt, tb)
         self._changed()
 
     def _build_header(self):
@@ -83,13 +83,6 @@ class UniversalDownsizerTab(BaseTab):
         opt = tk.LabelFrame(body, text="  Target  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
 
-        def row(r, label, *widgets):
-            tk.Label(opt, text=label, width=14, anchor="w").grid(
-                row=r, column=0, sticky="w", pady=px(3)
-            )
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(3))
-
         self.target_var = tk.StringVar(value=TARGETS[1][0])
         tb = ttk.Combobox(
             opt,
@@ -100,7 +93,9 @@ class UniversalDownsizerTab(BaseTab):
         )
         self._target_mb = tk.StringVar(value="10")
         self.custom_entry = tk.Entry(opt, textvariable=self._target_mb, width=7)
-        row(0, "Size limit:", tb, self.custom_entry, tk.Label(opt, text="MB"))
+        self.form_row(
+            opt, 0, "Size limit:", tb, self.custom_entry, tk.Label(opt, text="MB"), label_width=14
+        )
         self.codec_var = tk.StringVar(value=CODECS["h264"])
         cb = ttk.Combobox(
             opt,
@@ -109,7 +104,7 @@ class UniversalDownsizerTab(BaseTab):
             state="readonly",
             width=40,
         )
-        row(1, "Codec:", cb)
+        self.form_row(opt, 1, "Codec:", cb, label_width=14)
         self.speed_var = tk.StringVar(value="quality")
         sp = tk.Frame(opt)
         tk.Radiobutton(
@@ -126,11 +121,11 @@ class UniversalDownsizerTab(BaseTab):
             value="fast",
             command=self._changed,
         ).pack(side="left", padx=px(10))
-        row(2, "Encoding:", sp)
+        self.form_row(opt, 2, "Encoding:", sp, label_width=14)
         self.audio_var = tk.StringVar(value=AUDIO_MODES["auto"])
-        return body, cb, opt, row, tb
+        return body, cb, opt, tb
 
-    def _build_output(self, body, cb, opt, row, tb):
+    def _build_output(self, body, cb, opt, tb):
         ab = ttk.Combobox(
             opt,
             textvariable=self.audio_var,
@@ -138,7 +133,7 @@ class UniversalDownsizerTab(BaseTab):
             state="readonly",
             width=28,
         )
-        row(3, "Audio:", ab)
+        self.form_row(opt, 3, "Audio:", ab, label_width=14)
         self._allow_res = tk.BooleanVar(value=True)
         self._allow_fps = tk.BooleanVar(value=True)
         perm = tk.Frame(opt)
@@ -151,14 +146,14 @@ class UniversalDownsizerTab(BaseTab):
             variable=self._allow_fps,
             command=self._changed,
         ).pack(side="left", padx=px(10))
-        row(4, "Allowed:", perm)
+        self.form_row(opt, 4, "Allowed:", perm, label_width=14)
         self.trim = RangePicker(
             opt,
             start="",
             end_hint="(optional - leave empty for the whole video)",
             source=lambda: self.src_row.path,
         )
-        row(5, "Trim:", self.trim)
+        self.form_row(opt, 5, "Trim:", self.trim, label_width=14)
         for w in (tb, cb, ab):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         for v in (self._target_mb, self.trim.start.var, self.trim.end.var):

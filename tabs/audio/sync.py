@@ -40,27 +40,28 @@ class AudioSyncTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text="  Shift  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        tk.Label(opt, text="Move the sound by (seconds):").grid(row=0, column=0, sticky="w")
         self.offset_var = tk.StringVar(value="0.000")
-        tk.Entry(opt, textvariable=self.offset_var, width=10).grid(
-            row=0, column=1, sticky="w", padx=px(4)
-        )
-        tk.Label(
+        self.form_row(
             opt,
-            text="positive = later (sound was early), negative = earlier",
-            fg=CLR["fgdim"],
-            font=(UI_FONT, 8),
-        ).grid(row=0, column=2, sticky="w")
+            0,
+            "Move the sound by (seconds):",
+            tk.Entry(opt, textvariable=self.offset_var, width=10),
+            tk.Label(
+                opt,
+                text="positive = later (sound was early), negative = earlier",
+                fg=CLR["fgdim"],
+                font=(UI_FONT, 8),
+            ),
+        )
         nudges = tk.Frame(opt)
         nudges.grid(row=1, column=0, columnspan=3, sticky="w", pady=px(4))
         for d in (-0.5, -0.1, -0.04, 0.04, 0.1, 0.5):
             tk.Button(
                 nudges, text=f"{d:+g}s", relief="flat", width=6, command=lambda v=d: self._nudge(v)
             ).pack(side="left", padx=px(1))
-        tk.Label(opt, text="Audio track:").grid(row=2, column=0, sticky="w")
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=36)
-        self.track_box.grid(row=2, column=1, columnspan=2, sticky="w")
+        self.form_row(opt, 2, "Audio track:", self.track_box)
         self.lossless_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             opt,

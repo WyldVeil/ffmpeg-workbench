@@ -80,9 +80,9 @@ class IntroMakerTab(BaseTab):
     # ── UI ───────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        body, design, row = self._build_header()
-        self._build_text(design, row)
-        self._build_attach_to_a_video_optional(body, design, row)
+        body, design = self._build_header()
+        self._build_text(design)
+        self._build_attach_to_a_video_optional(body, design)
         self._build_render(body)
 
     def _build_header(self):
@@ -111,20 +111,28 @@ class IntroMakerTab(BaseTab):
         design = tk.LabelFrame(left, text="  Card  ", padx=px(10), pady=px(6))
         design.pack(fill="x")
 
-        def row(r, label, *widgets):
-            tk.Label(design, text=label, anchor="w", width=13).grid(
-                row=r, column=0, sticky="w", pady=px(2)
-            )
-            for i, w in enumerate(widgets):
-                w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 6), pady=px(2))
-
         self.title_var = tk.StringVar(value="My Channel")
         self.sub_var = tk.StringVar(value="Subscribe for more")
-        row(0, "Title:", tk.Entry(design, textvariable=self.title_var, width=34))
-        row(1, "Subtitle:", tk.Entry(design, textvariable=self.sub_var, width=34))
+        self.form_row(
+            design,
+            0,
+            "Title:",
+            tk.Entry(design, textvariable=self.title_var, width=34),
+            label_width=13,
+            pady=2,
+        )
+        self.form_row(
+            design,
+            1,
+            "Subtitle:",
+            tk.Entry(design, textvariable=self.sub_var, width=34),
+            label_width=13,
+            pady=2,
+        )
         self.font_var = tk.StringVar(value="Montserrat")
         self.size_var = tk.StringVar(value="Medium")
-        row(
+        self.form_row(
+            design,
             2,
             "Font:",
             ttk.Combobox(
@@ -137,10 +145,13 @@ class IntroMakerTab(BaseTab):
             ttk.Combobox(
                 design, textvariable=self.size_var, values=list(SIZES), state="readonly", width=8
             ),
+            label_width=13,
+            pady=2,
         )
         self.anim_var = tk.StringVar(value=ANIMATIONS["fade"])
         self.pos_var = tk.StringVar(value=POSITIONS["centre"])
-        row(
+        self.form_row(
+            design,
             3,
             "Animation:",
             ttk.Combobox(
@@ -157,17 +168,19 @@ class IntroMakerTab(BaseTab):
                 state="readonly",
                 width=12,
             ),
+            label_width=13,
+            pady=2,
         )
-        return body, design, row
+        return body, design
 
-    def _build_text(self, design, row):
+    def _build_text(self, design):
         self.text_btn = ColourButton(
             design, "#FFFFFF", text="Text colour", width=12, on_change=self._recolour
         )
         self.accent_btn = ColourButton(
             design, "#FFB300", text="Subtitle outline", width=14, on_change=self._recolour
         )
-        row(4, "Colours:", self.text_btn, self.accent_btn)
+        self.form_row(design, 4, "Colours:", self.text_btn, self.accent_btn, label_width=13, pady=2)
         self.bg_var = tk.StringVar(value=BACKGROUNDS["gradient"])
         self.grad_var = tk.StringVar(value=GRADIENTS["diagonal"])
         bg_box = ttk.Combobox(
@@ -185,14 +198,14 @@ class IntroMakerTab(BaseTab):
             state="readonly",
             width=16,
         )
-        row(5, "Background:", bg_box, self.grad_box)
+        self.form_row(design, 5, "Background:", bg_box, self.grad_box, label_width=13, pady=2)
         self.c1_btn = ColourButton(
             design, "#1E1E2E", text="Colour 1", width=10, on_change=self._recolour
         )
         self.c2_btn = ColourButton(
             design, "#7C3AED", text="Colour 2", width=10, on_change=self._recolour
         )
-        row(6, "", self.c1_btn, self.c2_btn)
+        self.form_row(design, 6, "", self.c1_btn, self.c2_btn, label_width=13, pady=2)
         self.bg_row = FileRow(
             design,
             "Background file:",
@@ -204,7 +217,8 @@ class IntroMakerTab(BaseTab):
         self.bg_row.grid(row=7, column=0, columnspan=4, sticky="we")
         self.dur_var = tk.StringVar(value="5")
         self.fps_var = tk.StringVar(value="30")
-        row(
+        self.form_row(
+            design,
             8,
             "Length (s):",
             tk.Entry(design, textvariable=self.dur_var, width=6),
@@ -215,11 +229,14 @@ class IntroMakerTab(BaseTab):
                 state="readonly",
                 width=5,
             ),
+            label_width=13,
+            pady=2,
         )
 
-    def _build_attach_to_a_video_optional(self, body, design, row):
+    def _build_attach_to_a_video_optional(self, body, design):
         self.res_var = tk.StringVar(value=next(iter(RESOLUTIONS)))
-        row(
+        self.form_row(
+            design,
             9,
             "Size:",
             ttk.Combobox(
@@ -229,14 +246,19 @@ class IntroMakerTab(BaseTab):
                 state="readonly",
                 width=26,
             ),
+            label_width=13,
+            pady=2,
         )
         self.fade_var = tk.BooleanVar(value=True)
-        row(
+        self.form_row(
+            design,
             10,
             "",
             tk.Checkbutton(
                 design, text="Fade from / to black", variable=self.fade_var, command=self._schedule
             ),
+            label_width=13,
+            pady=2,
         )
         self.music_row = FileRow(
             design, "Music (optional):", kind="audio", label_width=17, width=30

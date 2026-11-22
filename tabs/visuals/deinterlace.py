@@ -67,20 +67,27 @@ class DeinterlaceTab(BaseTab):
         opt = tk.LabelFrame(body, text="  Deinterlace  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
-        def row(r, label, var, values, width):
-            tk.Label(opt, text=label, width=12, anchor="w").grid(
-                row=r, column=0, sticky="w", pady=px(3)
-            )
+        def choice(var, values, width):
             cb = ttk.Combobox(opt, textvariable=var, values=values, state="readonly", width=width)
-            cb.grid(row=r, column=1, sticky="w")
             cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+            return cb
 
         self.mode_var = tk.StringVar(value=MODES["smart"])
-        row(0, "Mode:", self.mode_var, list(MODES.values()), 46)
+        self.form_row(
+            opt, 0, "Mode:", choice(self.mode_var, list(MODES.values()), 46), label_width=12
+        )
         self.engine_var = tk.StringVar(value=ENGINES["bwdif"])
-        row(1, "Method:", self.engine_var, list(ENGINES.values()), 24)
+        self.form_row(
+            opt, 1, "Method:", choice(self.engine_var, list(ENGINES.values()), 24), label_width=12
+        )
         self.order_var = tk.StringVar(value=ORDERS["auto"])
-        row(2, "Field order:", self.order_var, list(ORDERS.values()), 24)
+        self.form_row(
+            opt,
+            2,
+            "Field order:",
+            choice(self.order_var, list(ORDERS.values()), 24),
+            label_width=12,
+        )
         out_lf = tk.LabelFrame(body, text="  Output  ", padx=px(12), pady=px(8))
         out_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.encoder = EncoderPanel(out_lf, codecs=("h264", "hevc", "av1", "prores"))

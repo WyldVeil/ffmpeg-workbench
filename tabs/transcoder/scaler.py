@@ -83,17 +83,6 @@ class ResolutionScalerTab(BaseTab):
         )
         opt.pack(fill="x", padx=px(20), pady=px(6))
 
-        def row(r, label, *widgets):
-            # each row lays out on its own, so a wide widget in one row can't push another row's apart
-            tk.Label(opt, text=label, width=10, anchor="w").grid(
-                row=r, column=0, sticky="w", pady=px(3)
-            )
-            holder = tk.Frame(opt)
-            holder.grid(row=r, column=1, sticky="w", pady=px(3))
-            for w in widgets:
-                w.pack(in_=holder, side="left", padx=px(0, 6))
-                w.lift(holder)
-
         self.size_var = tk.StringVar(value=SIZES[3][0])
         sb = ttk.Combobox(
             opt,
@@ -103,16 +92,19 @@ class ResolutionScalerTab(BaseTab):
             width=24,
         )
         self.w_var, self.h_var = tk.StringVar(value="1920"), tk.StringVar(value="1080")
-        row(
+        self.form_row(
+            opt,
             0,
             "Size:",
             sb,
             tk.Entry(opt, textvariable=self.w_var, width=6),
             tk.Label(opt, text="×"),
             tk.Entry(opt, textvariable=self.h_var, width=6),
+            label_width=10,
         )
         self.shape_var = tk.StringVar(value=SHAPES["fit"])
-        row(
+        self.form_row(
+            opt,
             1,
             "Shape:",
             ttk.Combobox(
@@ -122,6 +114,7 @@ class ResolutionScalerTab(BaseTab):
                 state="readonly",
                 width=40,
             ),
+            label_width=10,
         )
         self.method_var = tk.StringVar(value=METHODS["auto"])
         have = set(upscale.available()) if fl.vulkan_ok() else set()
@@ -130,15 +123,18 @@ class ResolutionScalerTab(BaseTab):
             for k, v in METHODS.items()
             if k not in GPU_METHODS or (k == "gpu" and fl.vulkan_ok()) or k in have
         ]
-        row(
+        self.form_row(
+            opt,
             2,
             "Method:",
             ttk.Combobox(
                 opt, textvariable=self.method_var, values=methods, state="readonly", width=40
             ),
+            label_width=10,
         )
         self.sharpen_var = tk.DoubleVar(value=0.3)
-        row(
+        self.form_row(
+            opt,
             3,
             "Sharpen:",
             tk.Scale(
@@ -151,6 +147,7 @@ class ResolutionScalerTab(BaseTab):
                 length=px(200),
             ),
             tk.Label(opt, text="(when upscaling with Lanczos, Bicubic or GPU)", fg=CLR["fgdim"]),
+            label_width=10,
         )
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
         self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=px(4, 0))

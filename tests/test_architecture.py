@@ -557,6 +557,37 @@ def test_output_rows_come_from_the_kit():
     assert not hits, f"use SaveRow / FolderRow: {hits}"
 
 
+def _hand_built_form_rows(tree: ast.AST) -> list[int]:
+    """A label gridded alone in column 0 (a form row's label), or a page's own row() helper."""
+    found: list[int] = []
+    for n in ast.walk(tree):
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "grid"
+            and isinstance(n.func.value, ast.Call)
+            and ast.unparse(n.func.value.func) == "tk.Label"
+        ):
+            kw = {k.arg: ast.unparse(k.value) for k in n.keywords}
+            if kw.get("column") == "0" and "columnspan" not in kw:
+                found.append(n.lineno)
+        if isinstance(n, ast.FunctionDef) and n.name in ("row", "_row"):
+            found.append(n.lineno)
+    return found
+
+
+def test_form_rows_come_from_the_kit():
+    """ "Label  [control]" rows are BaseTab.form_row: one label style, one spacing,
+    rows that don't push each other apart (there were ten copies of a row() helper)."""
+    hits = [
+        f"{rel}:{line}"
+        for rel, path in _py_files("tabs")
+        if rel not in ("tabs/base_tab.py", "tabs/widgets.py") and "/kit/" not in rel
+        for line in _hand_built_form_rows(ast.parse(open(path, encoding="utf-8").read(), path))
+    ]
+    assert not hits, f"use self.form_row(parent, row, label, *widgets): {hits}"
+
+
 def test_the_whole_engine_is_type_checked_strictly():
     """pyright's strict mode covers the engine, the window shell and the page kit;
     CI fails on any error, so this list may only grow."""

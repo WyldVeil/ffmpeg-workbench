@@ -262,13 +262,6 @@ class SlideshowMakerTab(BaseTab):
         )
         self.card_bg_btn.pack(side="left", padx=px(10, 0))
 
-    def _row(self, parent, r, label, *widgets):
-        tk.Label(parent, text=label, anchor="w", width=16).grid(
-            row=r, column=0, sticky="w", pady=px(2)
-        )
-        for i, w in enumerate(widgets):
-            w.grid(row=r, column=1 + i, sticky="w", padx=px(0, 8), pady=px(2))
-
     def _combo(self, parent, var, values, width):
         return ttk.Combobox(
             parent, textvariable=var, values=list(values), state="readonly", width=width
@@ -278,23 +271,27 @@ class SlideshowMakerTab(BaseTab):
         opt = tk.LabelFrame(body, text="  Slideshow  ", padx=px(10), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         self.dur_var, self.trans_dur_var = tk.StringVar(value="4"), tk.StringVar(value="1.0")
-        self._row(
+        self.form_row(
             opt,
             0,
             "Seconds per slide:",
             tk.Entry(opt, textvariable=self.dur_var, width=6),
             tk.Label(opt, text="Transition (s):"),
             tk.Entry(opt, textvariable=self.trans_dur_var, width=6),
+            label_width=16,
+            pady=2,
         )
         self.trans_var = tk.StringVar(value=TRANSITION_NAMES["fade"])
         self.motion_var = tk.StringVar(value=MOTIONS[RANDOM])
-        self._row(
+        self.form_row(
             opt,
             1,
             "Transition:",
             self._combo(opt, self.trans_var, TRANSITIONS, 34),
             tk.Label(opt, text="Motion:"),
             self._combo(opt, self.motion_var, MOTIONS.values(), 24),
+            label_width=16,
+            pady=2,
         )
         self.fit_var, self.zoom_var = tk.StringVar(value=FITS["blur"]), tk.DoubleVar(value=1.2)
         zoom = tk.Scale(
@@ -306,13 +303,15 @@ class SlideshowMakerTab(BaseTab):
             orient="horizontal",
             length=px(120),
         )
-        self._row(
+        self.form_row(
             opt,
             2,
             "Framing:",
             self._combo(opt, self.fit_var, FITS.values(), 28),
             tk.Label(opt, text="Motion amount:"),
             zoom,
+            label_width=16,
+            pady=2,
         )
         self.bars_btn = ColourButton(opt, "#000000", text="Bars colour", width=10)
         self.bars_btn.grid(row=2, column=5, sticky="w")
@@ -320,23 +319,27 @@ class SlideshowMakerTab(BaseTab):
             tk.StringVar(value=next(iter(RESOLUTIONS))),
             tk.StringVar(value="30"),
         )
-        self._row(
+        self.form_row(
             opt,
             3,
             "Size:",
             self._combo(opt, self.res_var, RESOLUTIONS, 30),
             tk.Label(opt, text="FPS:"),
             self._combo(opt, self.fps_var, ("24", "25", "30", "50", "60"), 5),
+            label_width=16,
+            pady=2,
         )
         self.cap_on, self.cap_font = tk.BooleanVar(value=True), tk.StringVar(value="Montserrat")
         self.cap_pos = tk.StringVar(value=CAPTION_POS["bottom"])
-        self._row(
+        self.form_row(
             opt,
             4,
             "Captions:",
             tk.Checkbutton(opt, text="Show", variable=self.cap_on),
             self._combo(opt, self.cap_font, ass.families(), 14),
             self._combo(opt, self.cap_pos, CAPTION_POS.values(), 16),
+            label_width=16,
+            pady=2,
         )
 
     def _build_music(self, body):
