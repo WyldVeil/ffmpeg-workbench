@@ -7,7 +7,8 @@ import subprocess
 import pytest
 
 from core import ffmpeg as ff
-from tabs.audio import exporter, mixer
+from core.ops import audio_export as ae
+from tabs.audio import mixer
 from tabs.kit.widgets import ChoiceBox
 
 
@@ -254,16 +255,16 @@ def test_converter_helpers():
         "[silencedetect @ 0x1] silence_end: 5 | silence_duration: 0.5",
         "[silencedetect @ 0x1] silence_start: 8.75",
     ]
-    assert exporter.silence_bounds(log, 10.0) == (1.25, 8.75)
-    assert exporter.silence_bounds(["silence_start: 0", "silence_end: 10"], 10.0) == (0.0, 10.0)
-    assert exporter.parse_replaygain(
+    assert ae.silence_bounds(log, 10.0) == (1.25, 8.75)
+    assert ae.silence_bounds(["silence_start: 0", "silence_end: 10"], 10.0) == (0.0, 10.0)
+    assert ae.parse_replaygain(
         [
             "[Parsed_replaygain_0 @ 0x1] track_gain = +9.89 dB",
             "[Parsed_replaygain_0 @ 0x1] track_peak = 0.060887",
         ]
     ) == (9.89, 0.060887)
-    cfg = {"fmt": exporter.AudioFormat.FLAC, "depth": "s32:24", "compression": "8"}
-    assert exporter.AudioExporterTab.codec_args(cfg, 10) == [
+    cfg = ae.Export(fmt=ae.AudioFormat.FLAC, depth="s32:24", compression="8")
+    assert ae.codec_args(cfg, 10) == [
         "-c:a",
         "flac",
         "-sample_fmt",
@@ -273,20 +274,16 @@ def test_converter_helpers():
         "-compression_level",
         "8",
     ]
-    assert exporter.AudioExporterTab.codec_args(
-        {"fmt": exporter.AudioFormat.MP3, "size_bytes": 1_000_000}, 60
-    ) == [
+    assert ae.codec_args(ae.Export(fmt=ae.AudioFormat.MP3, size_bytes=1_000_000), 60) == [
         "-c:a",
         "libmp3lame",
         "-b:a",
         "129k",
     ]
     with pytest.raises(ValueError):
-        exporter.AudioExporterTab.codec_args(
-            {"fmt": exporter.AudioFormat.MP3, "size_bytes": 1000}, 600
-        )
-    chain = exporter.AudioExporterTab.base_chain(
-        {"volume": 0, "fade_in": 1, "fade_out": 2}, 10.0, (1.0, 9.0)
+        ae.codec_args(ae.Export(fmt=ae.AudioFormat.MP3, size_bytes=1000), 600)
+    chain = ae.base_chain(
+        ae.Export(fmt=ae.AudioFormat.WAV, fade_in=1, fade_out=2), 10.0, (1.0, 9.0)
     )
     assert chain[-1] == "afade=t=out:st=6.000:d=2.000"
 
@@ -316,7 +313,7 @@ def test_converter_trim_is_start_to_end(ui, media, outdir):
     info = _converter(
         ui,
         media["h264"],
-        exporter.AudioFormat.WAV,
+        ae.AudioFormat.WAV,
         str(outdir / "trim.wav"),
         trim_start="1",
         trim_end="3",
@@ -329,8 +326,8 @@ def test_converter_trim_is_start_to_end(ui, media, outdir):
 @pytest.mark.parametrize(
     "fmt,ext,want",
     [
-        (exporter.AudioFormat.FLAC, ".flac", ("s32", 24)),
-        (exporter.AudioFormat.ALAC, ".m4a", ("s32p", 24)),
+        (ae.AudioFormat.FLAC, ".flac", ("s32", 24)),
+        (ae.AudioFormat.ALAC, ".m4a", ("s32p", 24)),
     ],
 )
 def test_converter_24_bit(ui, media, outdir, fmt, ext, want):
@@ -389,13 +386,11 @@ def test_converter_keeps_cover_and_rate_when_normalising(ui, media, outdir, tmp_
     )
     rate = ff.probe(src).require_audio().sample_rate
     out = str(outdir / "norm.flac")
-    info = _converter(ui, src, exporter.AudioFormat.FLAC, out, norm_box=exporter.Normalise.LOUDNESS)
+    info = _converter(ui, src, ae.AudioFormat.FLAC, out, norm_box=ae.Normalise.LOUDNESS)
     assert info.require_audio().sample_rate == rate  # no silent 192 kHz upsample
     assert any(s.attached_pic for s in info.streams)  # cover art kept
     peak_out = str(outdir / "peak.wav")
-    _converter(
-        ui, src, exporter.AudioFormat.WAV, peak_out, norm_box=exporter.Normalise.PEAK, tp_var="-3"
-    )
+    _converter(ui, src, ae.AudioFormat.WAV, peak_out, norm_box=ae.Normalise.PEAK, tp_var="-3")
     assert _volume(peak_out)[1] == pytest.approx(-3.0, abs=0.3)
 
 

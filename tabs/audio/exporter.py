@@ -18,19 +18,19 @@ video-with-audio) file and re-save it with full control over:
 
 import json
 import logging
-import math
 import os
 import tkinter as tk
 from enum import StrEnum
+from functools import partial
 from tkinter import messagebox, ttk
-from typing import Any
 
 from core import ffmpeg as ff
 from core import proc as _proc
 from core import tasks
 from core.hardware import get_binary_path
 from core.i18n import t
-from core.queue_manager import Hooks, TaskContext
+from core.ops import audio_export as ae
+from core.queue_manager import Hooks
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -42,157 +42,6 @@ logger = logging.getLogger("crossfader.audio.exporter")
 
 # ── Format definitions ───────────────────────────────────────────────────────
 #  key: (extension, codec_args, supports_bitrate, supports_vbr, supports_bit_depth)
-class AudioFormat(StrEnum):
-    MP3 = "mp3"
-    AAC = "aac"
-    VORBIS = "vorbis"
-    OPUS = "opus"
-    WAV = "wav"
-    FLAC = "flac"
-    ALAC = "alac"
-    AIFF = "aiff"
-    WMA = "wma"
-    AC3 = "ac3"
-
-
-FORMAT_DEFS: dict[AudioFormat, dict[str, Any]] = {
-    AudioFormat.MP3: {
-        "label": "MP3",
-        "ext": ".mp3",
-        "codec": ["-c:a", "libmp3lame"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "224k", "256k", "320k"],
-        "default_br": "320k",
-        "vbr_flag": "-q:a",
-        "vbr_range": (0, 9),  # 0 = best
-        "vbr_default": 2,
-        "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
-    },
-    AudioFormat.AAC: {
-        "label": "AAC (M4A)",
-        "ext": ".m4a",
-        "codec": ["-c:a", "aac"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-        "default_br": "256k",
-        "vbr_flag": None,
-        "sample_rates": [22050, 32000, 44100, 48000, 96000],
-    },
-    AudioFormat.VORBIS: {
-        "label": "OGG Vorbis",
-        "ext": ".ogg",
-        "codec": ["-c:a", "libvorbis"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-        "default_br": "192k",
-        "vbr_flag": "-q:a",
-        "vbr_range": (0, 10),  # 10 = best
-        "vbr_default": 6,
-        "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
-    },
-    AudioFormat.OPUS: {
-        "label": "Opus",
-        "ext": ".opus",
-        "codec": ["-c:a", "libopus"],
-        "lossy": True,
-        "bitrates": [
-            "32k",
-            "48k",
-            "64k",
-            "96k",
-            "128k",
-            "160k",
-            "192k",
-            "256k",
-            "320k",
-            "450k",
-            "510k",
-        ],
-        "default_br": "128k",
-        "vbr_flag": None,
-        "sample_rates": [8000, 12000, 16000, 24000, 48000],
-    },
-    AudioFormat.WAV: {
-        "label": "WAV",
-        "ext": ".wav",
-        "codec": [],  # set dynamically from bit depth
-        "lossy": False,
-        "bit_depths": {
-            "16-bit": "pcm_s16le",
-            "24-bit": "pcm_s24le",
-            "32-bit": "pcm_s32le",
-            "32-bit float": "pcm_f32le",
-        },
-        "default_depth": "16-bit",
-        "sample_rates": [
-            8000,
-            11025,
-            16000,
-            22050,
-            32000,
-            44100,
-            48000,
-            88200,
-            96000,
-            176400,
-            192000,
-        ],
-    },
-    AudioFormat.FLAC: {
-        "label": "FLAC",
-        "ext": ".flac",
-        "codec": ["-c:a", "flac"],
-        "lossy": False,
-        # the FLAC encoder takes s16/s32; 24-bit = s32 marked as 24 significant bits
-        "bit_depths": {"16-bit": "s16", "24-bit": "s32:24", "32-bit": "s32"},
-        "default_depth": "16-bit",
-        "compression_range": (0, 12),  # 0 = fastest, 12 = smallest
-        "compression_default": 5,
-        "sample_rates": [8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000],
-    },
-    AudioFormat.ALAC: {
-        "label": "ALAC (M4A)",
-        "ext": ".m4a",
-        "codec": ["-c:a", "alac"],
-        "lossy": False,
-        "bit_depths": {"16-bit": "s16p", "24-bit": "s32p:24"},  # ALAC stores at most 24 bits here
-        "default_depth": "16-bit",
-        "sample_rates": [44100, 48000, 88200, 96000, 176400, 192000],
-    },
-    AudioFormat.AIFF: {
-        "label": "AIFF",
-        "ext": ".aiff",
-        "codec": [],  # set from bit depth
-        "lossy": False,
-        "bit_depths": {"16-bit": "pcm_s16be", "24-bit": "pcm_s24be", "32-bit": "pcm_s32be"},
-        "default_depth": "16-bit",
-        "sample_rates": [22050, 32000, 44100, 48000, 88200, 96000],
-    },
-    AudioFormat.WMA: {
-        "label": "WMA",
-        "ext": ".wma",
-        "codec": ["-c:a", "wmav2"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-        "default_br": "192k",
-        "vbr_flag": None,
-        "sample_rates": [22050, 32000, 44100, 48000],
-    },
-    AudioFormat.AC3: {
-        "label": "AC3",
-        "ext": ".ac3",
-        "codec": ["-c:a", "ac3"],
-        "lossy": True,
-        "bitrates": ["128k", "192k", "224k", "256k", "320k", "384k", "448k", "640k"],
-        "default_br": "384k",
-        "vbr_flag": None,
-        "sample_rates": [32000, 44100, 48000],
-    },
-}
-
-#: what the drop-down shows for each format
-FORMATS = {fmt: str(spec["label"]) for fmt, spec in FORMAT_DEFS.items()}
-
 CHANNEL_LAYOUTS = [
     ("Auto (keep original)", ""),
     ("Mono", "1"),
@@ -203,19 +52,6 @@ CHANNEL_LAYOUTS = [
     ("5.1 Surround", "6"),
     ("7.1 Surround", "8"),
 ]
-
-
-class Normalise(StrEnum):
-    NONE = "none"
-    LOUDNESS = "loudness"
-    PEAK = "peak"
-
-
-NORMALISE = {
-    Normalise.NONE: "None",
-    Normalise.LOUDNESS: "EBU R128 (loudnorm)",
-    Normalise.PEAK: "Peak normalize",
-}
 
 
 class SizeUnit(StrEnum):
@@ -306,7 +142,7 @@ class AudioExporterTab(BaseTab):
             fg=CLR["fg"],
         ).pack(side="left")
         self.fmt_box = ChoiceBox(
-            row, FORMATS, AudioFormat.MP3, width=16, on_change=self._on_format_change
+            row, ae.FORMATS, ae.AudioFormat.MP3, width=16, on_change=self._on_format_change
         )
         self.fmt_box.pack(side="left", padx=px(8))
 
@@ -375,7 +211,7 @@ class AudioExporterTab(BaseTab):
         self._br_cb = ttk.Combobox(
             self._cbr_row,
             textvariable=self.bitrate_var,
-            values=FORMAT_DEFS[AudioFormat.MP3]["bitrates"],
+            values=ae.FORMAT_DEFS[ae.AudioFormat.MP3]["bitrates"],
             state="readonly",
             width=8,
         )
@@ -631,7 +467,7 @@ class AudioExporterTab(BaseTab):
         tk.Label(
             r2, text=t("exporter.normalize"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left")
-        self.norm_box = ChoiceBox(r2, NORMALISE, Normalise.NONE, width=22)
+        self.norm_box = ChoiceBox(r2, ae.NORMALISE, ae.Normalise.NONE, width=22)
         self.norm_box.pack(side="left", padx=px(8))
 
         self._norm_opts = tk.Frame(sec, bg=CLR["bg"])
@@ -879,12 +715,12 @@ class AudioExporterTab(BaseTab):
             self._probe_source(p)
 
     def _browse_out(self):
-        fmt_def = FORMAT_DEFS[self.fmt_box.value]
+        fmt_def = ae.FORMAT_DEFS[self.fmt_box.value]
         ext = fmt_def["ext"]
         p = dialogs.asksaveasfilename(
             title="Save audio as",
             defaultextension=ext,
-            filetypes=[(FORMATS[self.fmt_box.value], f"*{ext}"), ("All files", "*.*")],
+            filetypes=[(ae.FORMATS[self.fmt_box.value], f"*{ext}"), ("All files", "*.*")],
         )
         if p:
             self.out_var.set(p)
@@ -988,7 +824,7 @@ class AudioExporterTab(BaseTab):
     def _on_format_change(self, *_):
         """Reconfigure quality section when format changes."""
         fmt = self.fmt_box.value
-        fd = FORMAT_DEFS[fmt]
+        fd = ae.FORMAT_DEFS[fmt]
 
         # Update format note
         if fd["lossy"]:
@@ -996,7 +832,7 @@ class AudioExporterTab(BaseTab):
         else:
             self._fmt_note.config(
                 text=t("exporter.lossless_uncompressed")
-                if fmt in (AudioFormat.WAV, AudioFormat.AIFF)
+                if fmt in (ae.AudioFormat.WAV, ae.AudioFormat.AIFF)
                 else t("exporter.lossless_compressed")
             )
 
@@ -1005,7 +841,7 @@ class AudioExporterTab(BaseTab):
     def _toggle_br_mode(self):
         """Show/hide quality controls based on format + mode."""
         fmt = self.fmt_box.value
-        fd = FORMAT_DEFS[fmt]
+        fd = ae.FORMAT_DEFS[fmt]
 
         # Hide everything first
         self._cbr_row.pack_forget()
@@ -1051,7 +887,7 @@ class AudioExporterTab(BaseTab):
                 self.depth_var.set(fd.get("default_depth", "16-bit"))
 
             # FLAC compression
-            if fmt is AudioFormat.FLAC:
+            if fmt is ae.AudioFormat.FLAC:
                 self._comp_row.pack(fill="x", pady=px(4))
                 cr = fd.get("compression_range", (0, 12))
                 self._comp_scale.config(from_=cr[0], to=cr[1])
@@ -1059,10 +895,10 @@ class AudioExporterTab(BaseTab):
 
     # ── Build FFmpeg command ─────────────────────────────────────────────────
 
-    def _settings(self) -> dict:
+    def _settings(self) -> ae.Export:
         """Validate the form (UI thread).  Raises ValueError with a readable message."""
         fmt = self.fmt_box.value
-        fd = FORMAT_DEFS[fmt]
+        fd = ae.FORMAT_DEFS[fmt]
         ss, to = self.trim_start.get().strip(), self.trim_end.get().strip()
         start = ff.parse_time(ss) if ss else 0.0
         end = ff.parse_time(to) if to else None
@@ -1079,89 +915,51 @@ class AudioExporterTab(BaseTab):
                 raise ValueError(f"{label} must be between {lo:g} and {hi:g}.")
             return x
 
-        cfg = {
-            "fmt": fmt,
-            "start": start,
-            "end": end,
-            "volume": num(self.volume_var, "Volume", -60, 40),
-            "fade_in": num(self.fade_in, "Fade in", 0, 600),
-            "fade_out": num(self.fade_out, "Fade out", 0, 600),
-            "norm": self.norm_box.value,
-            "strip_silence": self.strip_silence_var.get(),
-            "replay_gain": self.replay_gain_var.get(),
-            "strip_meta": self.strip_meta_var.get() or not self.copy_meta_var.get(),
-            "strip_art": self.strip_art_var.get(),
-            "tags": {k: v.get().strip() for k, v in self.meta_vars.items() if v.get().strip()},
-            "sr": SAMPLE_RATES.get(self.sr_var.get(), ""),
-            "ch": next((val for label, val in CHANNEL_LAYOUTS if label == self.ch_var.get()), ""),
-        }
-        if cfg["norm"] is Normalise.LOUDNESS:
-            cfg["lufs"] = num(self.lufs_var, "Target loudness", -70, -5)
-            cfg["tp"] = num(self.tp_var, "True peak", -9, 0)
-        elif cfg["norm"] is Normalise.PEAK:
-            cfg["tp"] = num(self.tp_var, "Peak level", -20, 0)
+        size_bytes: float | None = None
+        vbr: str | None = None
+        bitrate: str | None = None
         if fd["lossy"]:
             if self.limit_enabled.get():
-                cfg["size_bytes"] = num(self.max_size_var, "Maximum size", 0.001, 1e6) * (
-                    1024 * 1024 if self.size_unit.value is SizeUnit.MB else 1024
-                )
+                unit = 1024 * 1024 if self.size_unit.value is SizeUnit.MB else 1024
+                size_bytes = num(self.max_size_var, "Maximum size", 0.001, 1e6) * unit
             elif self.br_mode_var.get() == "VBR" and fd.get("vbr_flag"):
-                cfg["vbr"] = str(self.vbr_var.get())
+                vbr = str(self.vbr_var.get())
             else:
-                cfg["bitrate"] = self.bitrate_var.get()
-        else:
-            cfg["depth"] = fd.get("bit_depths", {}).get(self.depth_var.get(), "")
-            if fmt is AudioFormat.FLAC:
-                cfg["compression"] = str(self.comp_var.get())
-        return cfg
-
-    @staticmethod
-    def codec_args(cfg: dict, seconds: float) -> list:
-        fmt = cfg["fmt"]
-        fd = FORMAT_DEFS[fmt]
-        if fd["lossy"]:
-            args = list(fd["codec"])
-            if "size_bytes" in cfg:
-                lo, hi = BITRATE_LIMITS_K.get(fmt, (8, 640))
-                kbps = int(cfg["size_bytes"] * 8 * 0.97 / max(seconds, 0.1) / 1000)
-                if kbps < lo:
-                    raise ValueError(
-                        f"{FORMATS[fmt]} can't get this short enough for that size "
-                        f"(it would need {kbps} kbps; the minimum is {lo})."
-                    )
-                args += ["-b:a", f"{min(kbps, hi)}k"]
-            elif "vbr" in cfg:
-                args += [fd["vbr_flag"], cfg["vbr"]]
-            else:
-                args += ["-b:a", cfg["bitrate"]]
-            return args
-        depth = cfg.get("depth", "")
-        if fmt in (AudioFormat.WAV, AudioFormat.AIFF):
-            return ["-c:a", depth or ("pcm_s16le" if fmt is AudioFormat.WAV else "pcm_s16be")]
-        args = list(fd["codec"])
-        if depth:
-            sample_fmt, _, bits = depth.partition(":")
-            args += ["-sample_fmt", sample_fmt] + (["-bits_per_raw_sample", bits] if bits else [])
-        if fmt is AudioFormat.FLAC:
-            args += ["-compression_level", cfg.get("compression", "5")]
-        return args
-
-    @staticmethod
-    def base_chain(cfg: dict, length: float, keep=None) -> list:
-        """Filters before normalisation: silence trim, volume, fades (no full-file buffering)."""
-        chain = []
-        a, b = keep if keep else (0.0, length)
-        if keep:
-            chain += [f"atrim=start={a:.3f}:end={b:.3f}", "asetpts=PTS-STARTPTS"]
-        final = max(0.01, b - a)
-        if cfg["volume"]:
-            chain.append(f"volume={cfg['volume']:g}dB")
-        if cfg["fade_in"] > 0:
-            chain.append(f"afade=t=in:st=0:d={min(cfg['fade_in'], final):.3f}")
-        if cfg["fade_out"] > 0:
-            d = min(cfg["fade_out"], final)
-            chain.append(f"afade=t=out:st={final - d:.3f}:d={d:.3f}")
-        return chain
+                bitrate = self.bitrate_var.get()
+        norm = self.norm_box.value
+        return ae.Export(
+            fmt=fmt,
+            start=start,
+            end=end,
+            volume=num(self.volume_var, "Volume", -60, 40),
+            fade_in=num(self.fade_in, "Fade in", 0, 600),
+            fade_out=num(self.fade_out, "Fade out", 0, 600),
+            norm=norm,
+            lufs=num(self.lufs_var, "Target loudness", -70, -5)
+            if norm is ae.Normalise.LOUDNESS
+            else -16.0,
+            tp=(
+                num(self.tp_var, "True peak", -9, 0)
+                if norm is ae.Normalise.LOUDNESS
+                else num(self.tp_var, "Peak level", -20, 0)
+                if norm is ae.Normalise.PEAK
+                else -1.0
+            ),
+            strip_silence=self.strip_silence_var.get(),
+            replay_gain=self.replay_gain_var.get(),
+            strip_meta=self.strip_meta_var.get() or not self.copy_meta_var.get(),
+            strip_art=self.strip_art_var.get(),
+            tags={k: v.get().strip() for k, v in self.meta_vars.items() if v.get().strip()},
+            sample_rate=SAMPLE_RATES.get(self.sr_var.get(), ""),
+            channels=next(
+                (val for label, val in CHANNEL_LAYOUTS if label == self.ch_var.get()), ""
+            ),
+            size_bytes=size_bytes,
+            vbr=vbr,
+            bitrate=bitrate,
+            depth="" if fd["lossy"] else fd.get("bit_depths", {}).get(self.depth_var.get(), ""),
+            compression=str(self.comp_var.get()) if fmt is ae.AudioFormat.FLAC else "5",
+        )
 
     def _export(self):
         typed = self.src_var.get().strip()
@@ -1181,7 +979,7 @@ class AudioExporterTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        ext = FORMAT_DEFS[cfg["fmt"]]["ext"]
+        ext = ae.FORMAT_DEFS[cfg.fmt]["ext"]
         out = self.out_var.get().strip() or self.suggest_output(src, "export", ext)
         if os.path.splitext(out)[1].lower() != ext:
             out = os.path.splitext(out)[0] + ext
@@ -1189,180 +987,36 @@ class AudioExporterTab(BaseTab):
         if not out:
             return
         self.out_var.set(out)
-        end = (
-            min(cfg["end"], info.duration)
-            if cfg["end"] is not None and info.duration
-            else cfg["end"]
-        )
-        length = max(0.01, (end if end is not None else info.duration) - cfg["start"])
+        end = min(cfg.end, info.duration) if cfg.end is not None and info.duration else cfg.end
+        length = max(0.01, (end if end is not None else info.duration) - cfg.start)
         cover = None
-        if not cfg["strip_art"] and ext in COVER_ART_EXTS:
+        if not cfg.strip_art and ext in ae.COVER_ART_EXTS:
             cover = next(
                 (s.index for s in info.streams if s.type == "video" and s.attached_pic), None
             )
         try:
-            self.codec_args(cfg, length)
+            ae.codec_args(cfg, length)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-
-        def work(_p: object, _c: object, ctx: TaskContext) -> int:
-            inp = _input_args(src, cfg["start"], end)
-            keep = _silence_kept(ctx, inp, length) if cfg["strip_silence"] else None
-            seg_len = keep[1] - keep[0] if keep else length
-            chain = self.base_chain(cfg, length, keep)
-            if cfg["replay_gain"]:
-                chain.append(_replay_gain(ctx, inp, chain, length))
-            rate = cfg["sr"] or str(info.require_audio().sample_rate or 48000)
-            level = _levelling(ctx, inp, chain, cfg, length, int(rate))
-            chain += [level] if level else []
-            cmd = [*inp, "-map", "0:a:0"]
-            if cover is not None:
-                cmd += ["-map", f"0:{cover}", "-c:v", "copy", "-disposition:v:0", "attached_pic"]
-            cmd += [*self.codec_args(cfg, seg_len), *_output_options(cfg, chain, out)]
-            ctx.log("Encoding…")
-            analysed = (
-                cfg["norm"] is not Normalise.NONE or cfg["replay_gain"] or cfg["strip_silence"]
-            )
-            ctx.span(0.6 if analysed else 0.0, 1.0).run([*cmd, ctx.output(out)], duration=seg_len)
-            return 0
+        rate = int(cfg.sample_rate or info.require_audio().sample_rate or 48000)
+        job = ae.ExportJob(src=src, export=cfg, end=end, length=length, cover=cover, rate=rate)
 
         def opened(_tid: str, rc: int) -> None:
             if rc == 0 and self.open_folder_var.get():
                 self.open_path(os.path.dirname(out))
 
-        self.log_tagged(self.console, f"Exporting: {os.path.basename(src)} -> {cfg['fmt']}", "info")
+        self.log_tagged(self.console, f"Exporting: {os.path.basename(src)} -> {cfg.fmt}", "info")
         common.queue_job(
             self,
-            common.Job(name="Audio Converter", out=out, work=work, duration=length, inputs=[src]),
+            common.Job(
+                name="Audio Converter",
+                out=out,
+                work=partial(job.run, out=out),
+                duration=length,
+                inputs=[src],
+            ),
             btn=self.btn_render,
             console=self.console,
             hooks=Hooks(on_complete=opened),
         )
-
-
-BITRATE_LIMITS_K = {
-    AudioFormat.MP3: (8, 320),
-    AudioFormat.AAC: (16, 512),
-    AudioFormat.VORBIS: (45, 500),
-    AudioFormat.OPUS: (6, 510),
-    AudioFormat.WMA: (24, 320),
-    AudioFormat.AC3: (32, 640),
-}
-COVER_ART_EXTS = (".mp3", ".flac", ".m4a")
-
-
-def _lines(res):
-    return res if isinstance(res, list) else str(res).splitlines()
-
-
-def silence_bounds(log, length: float, edge: float = 0.05) -> tuple:
-    """(start, end) to keep after dropping leading/trailing silence found by silencedetect."""
-    starts, ends = [], []
-    for line in _lines(log):
-        if "silence_start:" in line:
-            starts.append(float(line.split("silence_start:")[1].split()[0]))
-        elif "silence_end:" in line:
-            ends.append(float(line.split("silence_end:")[1].split()[0].rstrip("|")))
-    a, b = 0.0, length
-    if starts and starts[0] <= edge and ends:
-        a = ends[0]
-    if starts and (len(ends) < len(starts) or ends[-1] >= length - edge):
-        b = starts[-1]
-    if b - a < 0.05:  # all silent: keep everything rather than nothing
-        return 0.0, length
-    return a, b
-
-
-def parse_replaygain(log) -> tuple:
-    gain, peak = 0.0, 0.0
-    for line in _lines(log):
-        if "track_gain =" in line:
-            gain = float(line.split("track_gain =")[1].split("dB")[0])
-        elif "track_peak =" in line:
-            peak = float(line.split("track_peak =")[1].split()[0])
-    return gain, peak
-
-
-def parse_max_volume(log) -> float:
-    for line in reversed(_lines(log)):
-        if "max_volume:" in line:
-            return float(line.split("max_volume:")[1].split("dB")[0])
-    raise RuntimeError("Could not measure the peak level.")
-
-
-# ── the export job's steps ────────────────────────────────────────────────────
-
-
-def _input_args(src: str, start: float, end: float | None) -> list[str]:
-    inp = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y"]
-    inp += ["-ss", f"{start:.3f}"] if start > 0 else []
-    inp += ["-to", f"{end:.3f}"] if end is not None else []
-    return [*inp, "-i", src]
-
-
-def _analysis(
-    ctx: TaskContext, inp: list[str], af: str, length: float, span: tuple[float, float]
-) -> list[str]:
-    """Run the audio through *af* without writing anything; its log."""
-    cmd = [*inp, "-map", "0:a:0", "-af", af, "-f", "null", "-"]
-    return ctx.span(*span).run(cmd, duration=length, tail=200000).log_tail
-
-
-def _silence_kept(ctx: TaskContext, inp: list[str], length: float) -> tuple[float, float]:
-    ctx.log("Finding leading and trailing silence…")
-    keep = silence_bounds(
-        _analysis(ctx, inp, "silencedetect=n=-50dB:d=0.1", length, (0, 0.2)), length
-    )
-    ctx.log(f"Keeping {keep[0]:.2f}s → {keep[1]:.2f}s")
-    return keep
-
-
-def _replay_gain(ctx: TaskContext, inp: list[str], chain: list[str], length: float) -> str:
-    ctx.log("Measuring ReplayGain…")
-    gain_db, peak = parse_replaygain(
-        _analysis(ctx, inp, ",".join([*chain, "replaygain"]), length, (0.2, 0.4))
-    )
-    if peak > 0:  # never push the peak above -1 dBFS
-        gain_db = min(gain_db, -20 * math.log10(peak) - 1.0)
-    ctx.log(f"ReplayGain: {gain_db:+.2f} dB")
-    return f"volume={gain_db:.2f}dB"
-
-
-def _levelling(
-    ctx: TaskContext,
-    inp: list[str],
-    chain: list[str],
-    cfg: dict[str, Any],
-    length: float,
-    rate: int,
-) -> str | None:
-    """The loudness (EBU R128, two passes) or peak normalisation filter, if asked for."""
-    from core import loudness
-
-    if cfg["norm"] is Normalise.LOUDNESS:
-        ctx.log("Measuring loudness (pass 1 of 2)…")
-        probe = f"loudnorm=I={cfg['lufs']}:TP={cfg['tp']}:LRA=11:print_format=json"
-        meas = loudness.parse_measurement(
-            _analysis(ctx, inp, ",".join([*chain, probe]), length, (0.4, 0.6))
-        )
-        return loudness.normalise_filter(cfg["lufs"], cfg["tp"], 11, meas, rate)
-    if cfg["norm"] is Normalise.PEAK:
-        ctx.log("Measuring the peak level…")
-        peak = parse_max_volume(
-            _analysis(ctx, inp, ",".join([*chain, "volumedetect"]), length, (0.4, 0.6))
-        )
-        ctx.log(f"Peak {peak:.1f} dBFS → {cfg['tp']:.1f} dBFS")
-        return f"volume={cfg['tp'] - peak:.2f}dB"
-    return None
-
-
-def _output_options(cfg: dict[str, Any], chain: list[str], out: str) -> list[str]:
-    """Sample rate, channels, filters, tags and container flags."""
-    cmd = ["-ar", cfg["sr"]] if cfg["sr"] else []
-    cmd += ["-ac", cfg["ch"]] if cfg["ch"] else []
-    cmd += ["-af", ",".join(chain)] if chain else []
-    cmd += ["-map_metadata", "-1"] if cfg["strip_meta"] else []
-    for key, val in cfg["tags"].items():
-        cmd += ["-metadata", f"{key}={val}"]
-    return cmd + (["-movflags", "+faststart"] if out.lower().endswith(".m4a") else [])
