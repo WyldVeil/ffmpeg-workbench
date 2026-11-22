@@ -6,14 +6,15 @@ Extract multiple different segments from a single video into separate files.
 import os
 import re
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox
 
-from core import encoders as enc
 from core import ffmpeg as ff
 from core import outputs
 from core.hardware import get_video_duration
 from core.i18n import t
-from core.queue_manager import Hooks
+from core.ops.splitter import clip_command
+from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from core.timecode import Timecode
 from tabs import framestep
@@ -40,6 +41,14 @@ def _fmt(seconds):
     if h > 0:
         return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
     return f"{int(m):02d}:{s:05.2f}"
+
+
+def _copy_start(path: str, at: float) -> float:
+    """Where a copied clip starts: the keyframe at or before *at*."""
+    from tabs.cutting.trimmer import keyframe_at_or_before
+
+    k = keyframe_at_or_before(path, at)
+    return at if k is None else k
 
 
 class MultiSplitterTab(BaseTab):
@@ -268,6 +277,76 @@ class MultiSplitterTab(BaseTab):
             if re.fullmatch(r"_clip\d+", r["suffix"].get()):
                 r["suffix"].set(f"_clip{i}")
 
+    def _warn(self, key: str, fallback: str, **values: object) -> None:
+        messagebox.showwarning(
+            t("common.warning"), _tr(key, fallback).format(**values), parent=self
+        )
+
+    def _clips(self, total: float, base: str, ext: str) -> list[tuple[float, float, str]] | None:
+        """(start, end, output) of every row; None (after saying why) when one is wrong."""
+        jobs: list[tuple[float, float, str]] = []
+        seen: set[str] = set()
+        for i, data in enumerate(self.split_rows, start=1):
+            try:
+                ss, ee = ff.parse_time(data["start"].get()), ff.parse_time(data["end"].get())
+            except ValueError:
+                self._warn(
+                    "splitter.bad_time",
+                    "Clip {n}: times must look like 12.5, 01:23.4 or 1:02:03.",
+                    n=i,
+                )
+                return None
+            ee = min(ee, total) if total else ee
+            if ee <= ss:
+                self._warn("splitter.empty_range", "Clip {n} ends before it starts.", n=i)
+                return None
+            out = f"{base}{data['suffix'].get().strip() or f'_clip{i}'}{ext}"
+            key = os.path.normcase(os.path.abspath(out))
+            if key in seen:
+                self._warn(
+                    "splitter.duplicate_name",
+                    "Two clips would both be saved as\n{p}\nGive them different suffixes.",
+                    p=out,
+                )
+                return None
+            seen.add(key)
+            jobs.append((ss, ee, out))
+        return jobs
+
+    def _overwrite_or_rename(
+        self, jobs: list[tuple[float, float, str]]
+    ) -> list[tuple[float, float, str]] | None:
+        """Ask once when outputs exist: overwrite, new names, or stop (None)."""
+        existing = [o for _, _, o in jobs if os.path.exists(o)]
+        if not existing:
+            return jobs
+        ans = messagebox.askyesnocancel(
+            _tr("splitter.exists_title", "Files already exist"),
+            _tr(
+                "splitter.exists_msg",
+                "{n} of the output files already exist.\n\nYes = overwrite them\nNo = save with new names\nCancel = stop",
+            ).format(n=len(existing)),
+            parent=self,
+        )
+        if ans is None:
+            return None
+        return jobs if ans else [(a, b, outputs.unique_path(o)) for a, b, o in jobs]
+
+    def _report(self, results: list[tuple[str, str | None]]) -> None:
+        ok = [o for o, e in results if e is None]
+        bad = [(o, e) for o, e in results if e is not None]
+        if not bad:
+            names = "\n".join(os.path.basename(o) for o in ok)
+            messagebox.showinfo(
+                t("msg.done_title"), t("msg.batch_split_done") + "\n\n" + names, parent=self
+            )
+            return
+        head = _tr("splitter.partial", "{ok} clip(s) saved, {bad} failed:").format(
+            ok=len(ok), bad=len(bad)
+        )
+        lines = "\n".join(f"{os.path.basename(o)}: {e.splitlines()[-1]}" for o, e in bad)
+        messagebox.showwarning(t("msg.done_title"), head + "\n\n" + lines, parent=self)
+
     def _render_all(self):
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
@@ -275,160 +354,53 @@ class MultiSplitterTab(BaseTab):
         if not self.split_rows:
             return
         info = ff.try_probe(self.file_path)
-        total = info.duration if info else 0.0
         base, src_ext = os.path.splitext(self.file_path)
         copy = bool(self.copy_mode.get())
         ext = src_ext if copy else ".mp4"
-        jobs, seen = [], set()
-        for i, data in enumerate(self.split_rows, start=1):
-            try:
-                ss = ff.parse_time(data["start"].get())
-                ee = ff.parse_time(data["end"].get())
-            except ValueError:
-                messagebox.showwarning(
-                    t("common.warning"),
-                    _tr(
-                        "splitter.bad_time",
-                        "Clip {n}: times must look like 12.5, 01:23.4 or 1:02:03.",
-                    ).format(n=i),
-                    parent=self,
-                )
-                return
-            if total:
-                ee = min(ee, total)
-            if ee <= ss:
-                messagebox.showwarning(
-                    t("common.warning"),
-                    _tr("splitter.empty_range", "Clip {n} ends before it starts.").format(n=i),
-                    parent=self,
-                )
-                return
-            out = f"{base}{data['suffix'].get().strip() or f'_clip{i}'}{ext}"
-            key = os.path.normcase(os.path.abspath(out))
-            if key in seen:
-                messagebox.showwarning(
-                    t("common.warning"),
-                    _tr(
-                        "splitter.duplicate_name",
-                        "Two clips would both be saved as\n{p}\nGive them different suffixes.",
-                    ).format(p=out),
-                    parent=self,
-                )
-                return
-            seen.add(key)
-            jobs.append((ss, ee, out))
-        existing = [o for _, _, o in jobs if os.path.exists(o)]
-        if existing:
-            ans = messagebox.askyesnocancel(
-                _tr("splitter.exists_title", "Files already exist"),
-                _tr(
-                    "splitter.exists_msg",
-                    "{n} of the output files already exist.\n\nYes = overwrite them\nNo = save with new names\nCancel = stop",
-                ).format(n=len(existing)),
-                parent=self,
-            )
-            if ans is None:
-                return
-            if ans is False:
-                jobs = [(a, b, outputs.unique_path(o)) for a, b, o in jobs]
+        jobs = self._clips(info.duration if info else 0.0, base, ext)
+        jobs = self._overwrite_or_rename(jobs) if jobs is not None else None
+        if jobs is None:
+            return
         src = self.file_path
-        results = []
+        results: list[tuple[str, str | None]] = []
 
-        def work(progress_cb, cancel_fn, ctx):
-            from tabs.cutting.trimmer import keyframe_at_or_before
-
+        def work(
+            progress_cb: Callable[[str], None], cancel_fn: Callable[[], bool], ctx: TaskContext
+        ) -> int:
             n = len(jobs)
             for i, (ss, ee, out) in enumerate(jobs):
                 if cancel_fn():
                     return -1
+                key = _copy_start(src, ss) if copy else None
+                cmd, seconds = clip_command(src, ss, ee, ext, keyframe=key)
                 part = os.path.splitext(out)[0] + ".part" + os.path.splitext(out)[1]
-                if copy:
-                    k = keyframe_at_or_before(src, ss)
-                    k = ss if k is None else k
-                    cmd = [
-                        ff.ffmpeg_path(),
-                        "-y",
-                        "-ss",
-                        ff.ts(k),
-                        "-i",
-                        src,
-                        "-t",
-                        ff.ts(ee - k),
-                        "-map",
-                        "0:v:0?",
-                        "-map",
-                        "0:a?",
-                        "-c",
-                        "copy",
-                        "-sn",
-                        "-dn",
-                    ]
-                    seconds = ee - k
-                else:
-                    cmd = [
-                        ff.ffmpeg_path(),
-                        "-y",
-                        "-ss",
-                        ff.ts(ss),
-                        "-i",
-                        src,
-                        "-t",
-                        ff.ts(ee - ss),
-                        "-map",
-                        "0:v:0?",
-                        "-map",
-                        "0:a?",
-                        "-sn",
-                        "-dn",
-                        *enc.video("h264", "very_high", hw="off", container="mp4").args,
-                        *enc.audio("aac", "192k", container="mp4"),
-                    ]
-                    seconds = ee - ss
-                if ext.lower() in (".mp4", ".mov", ".m4v") and "-movflags" not in cmd:
-                    cmd += ["-movflags", "+faststart"]
-                cmd.append(part)
                 progress_cb(
                     f"\u25b6 {i + 1}/{n}: {ff.format_time(ss)} \u2013 {ff.format_time(ee)} \u2192 {os.path.basename(out)}"
                 )
-                res = ctx.span(i / n, (i + 1) / n).run(cmd, duration=seconds, check=False)
-                if res.cancelled:
-                    if os.path.exists(part):
-                        os.remove(part)
-                    return -1
-                if res.ok and os.path.exists(part) and os.path.getsize(part) > 0:
+                res = ctx.span(i / n, (i + 1) / n).run([*cmd, part], duration=seconds, check=False)
+                if (
+                    res.ok
+                    and not res.cancelled
+                    and os.path.exists(part)
+                    and os.path.getsize(part) > 0
+                ):
                     os.replace(part, out)
                     results.append((out, None))
-                else:
-                    if os.path.exists(part):
-                        os.remove(part)
-                    results.append((out, res.error_summary))
+                    continue
+                if os.path.exists(part):
+                    os.remove(part)
+                if res.cancelled:
+                    return -1
+                results.append((out, res.error_summary))
             return 0 if all(err is None for _, err in results) else 1
 
         label = self.btn_render.cget("text")
         self.btn_render.config(state="disabled")
 
-        def done(task_id, rc):
+        def done(_task_id: str, rc: int) -> None:
             self.btn_render.config(state="normal", text=label)
-            if rc == -1:
-                return
-            ok = [o for o, e in results if e is None]
-            bad = [(o, e) for o, e in results if e is not None]
-            if not bad:
-                messagebox.showinfo(
-                    t("msg.done_title"),
-                    t("msg.batch_split_done") + "\n\n" + "\n".join(os.path.basename(o) for o in ok),
-                    parent=self,
-                )
-            else:
-                messagebox.showwarning(
-                    t("msg.done_title"),
-                    _tr("splitter.partial", "{ok} clip(s) saved, {bad} failed:").format(
-                        ok=len(ok), bad=len(bad)
-                    )
-                    + "\n\n"
-                    + "\n".join(f"{os.path.basename(o)}: {e.splitlines()[-1]}" for o, e in bad),
-                    parent=self,
-                )
+            if rc != -1:
+                self._report(results)
 
         self.enqueue_render(
             "Multi-Splitter",
@@ -436,6 +408,6 @@ class MultiSplitterTab(BaseTab):
             work=work,
             inputs=[src],
             hooks=Hooks(
-                on_progress=lambda tid, line: self.log(self.console, line), on_complete=done
+                on_progress=lambda _tid, line: self.log(self.console, line), on_complete=done
             ),
         )
