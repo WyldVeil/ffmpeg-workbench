@@ -12,15 +12,88 @@ Produces a high-quality MIDI re-render of any song.
 
 import os
 import tkinter as tk
+from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import midi, tasks
 from core.i18n import t
 from core.ops.shared import AUDIO_ONLY_EXTS, audio_encoder_args
+from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
 from tabs.kit import dialogs
+
+
+@dataclass(frozen=True)
+class _Settings:
+    threshold: float
+    min_dur: float
+    gain: float
+    rate: int
+    program: int
+
+
+@dataclass(frozen=True)
+class _Midify:
+    """Find the notes (unless it's MIDI already), play them with FluidSynth, encode."""
+
+    src: str
+    out: str
+    is_midi: bool
+    save_midi: bool
+    fluidsynth: str
+    soundfont: str
+    length: float | None
+    settings: _Settings
+
+    def run(self, _p: object, _c: object, ctx: TaskContext) -> int:
+        job = ctx.tempdir()
+        midi_path = self.src if self.is_midi else self._transcribe(ctx, job)
+        ctx.log(f"Stage 2/3: playing it with {os.path.basename(self.soundfont)}…")
+        wav = os.path.join(job, "rendered.wav")
+        s = self.settings
+        ctx.span(0.5, 0.8).run(
+            midi.render_cmd(
+                self.fluidsynth, self.soundfont, midi_path, wav, rate=s.rate, gain=s.gain
+            )
+        )
+        if not os.path.isfile(wav) or os.path.getsize(wav) < 1000:
+            raise RuntimeError("FluidSynth produced no audio.")
+        ctx.log("Stage 3/3: encoding…")
+        cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", wav]
+        if self.length:  # FluidSynth adds a few seconds of release tail
+            cmd += [
+                "-t",
+                f"{self.length + 1.0:.3f}",
+                "-af",
+                f"afade=t=out:st={self.length:.3f}:d=1",
+            ]
+        mp3 = self.out.lower().endswith(".mp3")
+        cmd += ["-c:a", "libmp3lame", "-b:a", "256k"] if mp3 else audio_encoder_args(self.out)
+        ctx.span(0.8, 1.0).run([*cmd, ctx.output(self.out)], duration=self.length)
+        return 0
+
+    def _transcribe(self, ctx: TaskContext, job: str) -> str:
+        """Stage 1: the notes, as a MIDI file in *job* (and next to the output when asked)."""
+        ctx.log("Stage 1/3: finding the notes…")
+        with open(os.path.join(job, "graph.txt"), "w", encoding="utf-8") as fh:
+            fh.write(midi.analysis_graph())
+        ctx.span(0.0, 0.5).run(
+            midi.analysis_cmd(self.src, "graph.txt"), duration=self.length, cwd=job
+        )
+        s = self.settings
+        notes = midi.transcribe(midi.read_levels(job), threshold=s.threshold, min_dur=s.min_dur)
+        if not notes:
+            raise RuntimeError("No notes were found - try a lower note threshold.")
+        midi_path = os.path.join(job, "transcription.mid")
+        midi.write_midi(midi_path, notes, program=s.program)
+        ctx.log(f"  {len(notes)} notes")
+        if self.save_midi:
+            final_mid = os.path.splitext(self.out)[0] + ".mid"
+            midi.write_midi(ctx.output(final_mid), notes, program=s.program)
+            ctx.log(f"  MIDI saved: {os.path.basename(final_mid)}")
+        return midi_path
 
 
 class MIDIfierTab(BaseTab):
@@ -336,6 +409,32 @@ class MIDIfierTab(BaseTab):
 
     # ── Main pipeline ────────────────────────────────────────────────────
 
+    def _audio_source(self, src: str) -> ff.MediaInfo | None:
+        """*src*'s details when it has sound (else says why)."""
+        from tabs import common
+
+        info = common.check_source(self, src, need_video=False)
+        if info is not None and not info.has_audio:
+            messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+            return None
+        return info
+
+    def _player(self) -> tuple[str, str] | None:
+        """(FluidSynth, SoundFont) when both are here (else says what's missing)."""
+        if self._fs_path and self._sf2_path:
+            return self._fs_path, self._sf2_path
+        missing = (
+            "On Linux, install the 'fluidsynth' package."
+            if not self._fs_path
+            else "Choose a SoundFont (.sf2) file."
+        )
+        messagebox.showwarning(
+            t("midifier.missing_deps"),
+            "FluidSynth and a SoundFont are needed to play the notes back.\n\n" + missing,
+            parent=self,
+        )
+        return None
+
     def _run(self):
         from tabs import common
 
@@ -347,25 +446,9 @@ class MIDIfierTab(BaseTab):
             messagebox.showwarning(t("midifier.no_input"), t("midifier.no_input"), parent=self)
             return
         is_midi = src.lower().endswith((".mid", ".midi"))
-        info = None
-        if not is_midi:
-            info = common.check_source(self, src, need_video=False)
-            if info is None:
-                return
-            if not info.has_audio:
-                messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
-                return
-        if not (self._fs_path and self._sf2_path):
-            messagebox.showwarning(
-                t("midifier.missing_deps"),
-                "FluidSynth and a SoundFont are needed to play the notes back.\n\n"
-                + (
-                    "On Linux, install the 'fluidsynth' package."
-                    if not self._fs_path
-                    else "Choose a SoundFont (.sf2) file."
-                ),
-                parent=self,
-            )
+        info = None if is_midi else self._audio_source(src)
+        player = self._player() if is_midi or info is not None else None
+        if player is None:
             return
         try:
             threshold = common.number(
@@ -388,51 +471,24 @@ class MIDIfierTab(BaseTab):
             return
         self.out_var.set(out)
         save_midi = self.save_midi_var.get() and not is_midi
-        fs_exe, sf2 = self._fs_path, self._sf2_path
+        fs_exe, sf2 = player
         length = info.duration if info else None
 
-        def work(_p, _c, ctx):
-            job = ctx.tempdir()
-            midi_path = src
-            if not is_midi:
-                ctx.log("Stage 1/3: finding the notes…")
-                with open(os.path.join(job, "graph.txt"), "w", encoding="utf-8") as fh:
-                    fh.write(midi.analysis_graph())
-                ctx.span(0.0, 0.5).run(
-                    midi.analysis_cmd(src, "graph.txt"), duration=length, cwd=job
-                )
-                notes = midi.transcribe(midi.read_levels(job), threshold=threshold, min_dur=min_dur)
-                if not notes:
-                    raise RuntimeError("No notes were found - try a lower note threshold.")
-                midi_path = os.path.join(job, "transcription.mid")
-                midi.write_midi(midi_path, notes, program=program)
-                ctx.log(f"  {len(notes)} notes")
-                if save_midi:
-                    final_mid = os.path.splitext(out)[0] + ".mid"
-                    midi.write_midi(ctx.output(final_mid), notes, program=program)
-                    ctx.log(f"  MIDI saved: {os.path.basename(final_mid)}")
-            ctx.log(f"Stage 2/3: playing it with {os.path.basename(sf2)}…")
-            wav = os.path.join(job, "rendered.wav")
-            ctx.span(0.5, 0.8).run(
-                midi.render_cmd(fs_exe, sf2, midi_path, wav, rate=rate, gain=gain)
-            )
-            if not os.path.isfile(wav) or os.path.getsize(wav) < 1000:
-                raise RuntimeError("FluidSynth produced no audio.")
-            ctx.log("Stage 3/3: encoding…")
-            cmd = [ff.ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-i", wav]
-            if length:  # FluidSynth adds a few seconds of release tail
-                cmd += ["-t", f"{length + 1.0:.3f}", "-af", f"afade=t=out:st={length:.3f}:d=1"]
-            if out.lower().endswith(".mp3"):
-                cmd += ["-c:a", "libmp3lame", "-b:a", "256k"]
-            else:
-                cmd += audio_encoder_args(out)
-            ctx.span(0.8, 1.0).run([*cmd, ctx.output(out)], duration=length)
-            return 0
+        job = _Midify(
+            src,
+            out,
+            is_midi,
+            save_midi,
+            fs_exe,
+            sf2,
+            length,
+            _Settings(threshold, min_dur, gain, rate, program),
+        )
 
         self.log_tagged(self.console, t("midifier.starting"), "info")
         common.queue_job(
             self,
-            common.Job(name="MIDIfier", out=out, work=work, duration=length, inputs=[src]),
+            common.Job(name="MIDIfier", out=out, work=job.run, duration=length, inputs=[src]),
             btn=self.btn_render,
             console=self.console,
         )
