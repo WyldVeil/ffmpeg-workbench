@@ -23,22 +23,22 @@ import json
 import logging
 import os
 import re
-import shlex
 import shutil
 import tempfile
 import time
 import tkinter as tk
 import webbrowser
 from datetime import datetime
-from enum import StrEnum
 from functools import partial
 from tkinter import messagebox, ttk
 
 from core import proc as _proc
 from core import tasks
+from core import ytdlp as ytdlp_core
 from core.errors import ToolError
 from core.hardware import get_binary_path
 from core.i18n import t
+from core.ops import youtube as yto
 from core.queue_manager import Hooks
 from core.scaling import px
 from core.timecode import Timecode
@@ -54,45 +54,10 @@ logger = logging.getLogger("crossfader.social.youtube")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _find_ytdlp() -> str | None:
-    """Return the path to the yt-dlp executable, or None if not found."""
-    from core.ytdlp import ytdlp_path
-
-    return ytdlp_path()
-
-
-def _yt(ytdlp, url="https://www.youtube.com/"):
-    """yt-dlp argv prefix: JS runtime, FFmpeg location and the network route for *url*
-    (auto-config, proxy, offline/strict checks, Tails, wrapper command)."""
-    from core.ytdlp import base_argv
-
-    return base_argv(ytdlp, url=url)
-
-
-def _ffmpeg_dir() -> str:
-    """Directory that contains the bundled ffmpeg binary."""
-    try:
-        return os.path.dirname(get_binary_path("ffmpeg"))
-    except Exception:
-        logger.debug("_ffmpeg_dir: best-effort step failed", exc_info=True)
-        return ""
-
-
-def _ffmpeg_exe() -> str:
-    try:
-        p = get_binary_path("ffmpeg")
-        if os.path.isfile(p):
-            return p
-    except Exception:
-        logger.debug("_ffmpeg_exe: best-effort step failed", exc_info=True)
-    return shutil.which("ffmpeg") or "ffmpeg"
-
-
 def _fmt_dur(seconds) -> str:
     return f"{Timecode.of(seconds):H.0}"
 
 
-_VIDEO_CODECS = ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "prores_ks", "copy"]
 _X264_PRESETS = [
     "ultrafast",
     "superfast",
@@ -116,7 +81,6 @@ _FORMAT_FILTERS = {
     "audio": "Audio only",
 }
 
-_HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".qve_yt_history.json")
 
 _DL_PROGRESS_RE = re.compile(
     r"\[download\]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\s*\S+)\s+at\s+(\S+)\s+ETA\s+(\S+)"
@@ -125,87 +89,11 @@ _DL_PROGRESS_RE = re.compile(
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):([\d.]+)")
 
 
-def _ytdlp_version(ytdlp: str) -> str:
-    """Worker: the installed yt-dlp's version."""
-    return _proc.run([ytdlp, "--version"], timeout=30).stdout.strip()
+def _history_file() -> str:
+    """The download history, with the app's other settings."""
+    from core.paths import config_dir
 
-
-def _fetch_info(ytdlp: str, url: str, *, playlist: bool) -> dict:
-    """Worker: ask yt-dlp about *url* (no Tk here - the caller read the settings)."""
-    from core import network as _net
-
-    cmd = [*_yt(ytdlp, url), "--yes-playlist" if playlist else "--no-playlist", "-J", url]
-    r = _proc.run(cmd, timeout=45, env=_net.subprocess_env(url=url))
-    if not r.ok:
-        raise ToolError("yt-dlp error:\n" + (r.stderr or r.stdout or "")[:600])
-    return json.loads(r.stdout)
-
-
-def _video_codec_args(vcodec: str, crf: int, preset: str, container: str) -> list[str]:
-    """Re-encoding after download: the codec, its quality, playable 8-bit pixels."""
-    by_codec = {
-        "copy": ["-c:v", "copy"],
-        "prores_ks": ["-c:v", "prores_ks", "-profile:v", "3"],
-        "libsvtav1": ["-c:v", "libsvtav1", "-preset", "4", "-crf", str(crf)],
-        "libvpx-vp9": [
-            "-c:v",
-            "libvpx-vp9",
-            "-crf",
-            str(crf),
-            "-b:v",
-            "0",
-            "-deadline",
-            "good",
-            "-cpu-used",
-            "2",
-        ],
-    }
-    args = by_codec.get(vcodec, ["-c:v", vcodec, "-crf", str(crf), "-preset", preset])
-    if vcodec in ("libx264", "libx265", "libsvtav1", "libvpx-vp9"):
-        args = [*args, "-pix_fmt", "yuv420p"]  # 10-bit sources -> playable 8-bit
-    if vcodec == "libx265" and container.lower() in ("mp4", "mov", "m4v"):
-        args = [*args, "-tag:v", "hvc1"]
-    return args
-
-
-class Resolution(StrEnum):
-    ORIGINAL = "original"
-    R2160 = "3840x2160"
-    R1440 = "2560x1440"
-    R1080 = "1920x1080"
-    R720 = "1280x720"
-    R480 = "854x480"
-    R360 = "640x360"
-    CUSTOM = "custom"
-
-
-def _scale_filter(res: Resolution, custom: str) -> str | None:
-    """The scale filter for a resolution choice (*custom*: the typed size)."""
-    if res is Resolution.ORIGINAL:
-        return None
-    if res is Resolution.CUSTOM:
-        parts = custom.strip().replace("×", "x").split("x")  # 1280x720 or 1280×720
-        return f"scale={parts[0].strip()}:{parts[1].strip()}" if len(parts) == 2 else None
-    parts = res.value.split("x")
-    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-        return f"scale={parts[0]}:{parts[1]}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1"
-    return None
-
-
-def _subtitles(sub_path: str) -> str | None:
-    if not sub_path or not os.path.isfile(sub_path):
-        return None
-    from core.filters import subtitles_filter
-
-    return subtitles_filter(sub_path)
-
-
-def _audio_args(acodec: str, bitrate: str, sample_rate: str) -> list[str]:
-    if acodec == "copy":
-        return ["-c:a", "copy"]
-    args = ["-c:a", acodec]
-    args += ["-b:a", bitrate] if acodec in ("aac", "libmp3lame", "libopus", "libvorbis") else []
-    return args + (["-ar", sample_rate] if acodec != "flac" else [])
+    return os.path.join(config_dir(), "download_history.json")
 
 
 class YouTubeDownloaderTab(BaseTab):
@@ -239,15 +127,15 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _load_history(self):
         try:
-            if os.path.isfile(_HISTORY_FILE):
-                with open(_HISTORY_FILE, encoding="utf-8") as f:
+            if os.path.isfile(_history_file()):
+                with open(_history_file(), encoding="utf-8") as f:
                     self._history = json.load(f)
         except (OSError, ValueError):
             self._history = []
 
     def _save_history(self):
         try:
-            with open(_HISTORY_FILE, "w", encoding="utf-8") as f:
+            with open(_history_file(), "w", encoding="utf-8") as f:
                 json.dump(self._history, f, indent=2, ensure_ascii=False)
         except (OSError, ValueError):
             pass
@@ -761,7 +649,7 @@ class YouTubeDownloaderTab(BaseTab):
         _row(
             col_left,
             "Video codec:",
-            lambda p: _combo(p, self._vcodec_var, _VIDEO_CODECS),
+            lambda p: _combo(p, self._vcodec_var, yto.VIDEO_CODECS),
         )
 
         self._acodec_var = tk.StringVar(value="aac")
@@ -789,7 +677,7 @@ class YouTubeDownloaderTab(BaseTab):
         return _combo, _row, col_left, col_right
 
     def _show_custom_res(self, _e=None):
-        if self._res.value is Resolution.CUSTOM:
+        if self._res.value is yto.Resolution.CUSTOM:
             self._custom_res_entry.pack(side="left", padx=px(4))
         else:
             self._custom_res_entry.pack_forget()
@@ -806,13 +694,13 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["bg"],
             fg=CLR["fgdim"],
         ).pack(side="left")
-        sizes = {r: r.value.replace("x", "×") for r in Resolution}
+        sizes = {r: r.value.replace("x", "×") for r in yto.Resolution}
         sizes |= {
-            Resolution.ORIGINAL: "Original",
-            Resolution.CUSTOM: t("youtube.smart_reframe_custom"),
+            yto.Resolution.ORIGINAL: "Original",
+            yto.Resolution.CUSTOM: t("youtube.smart_reframe_custom"),
         }
         self._res = ChoiceBox(
-            res_row, sizes, Resolution.ORIGINAL, width=14, on_change=self._show_custom_res
+            res_row, sizes, yto.Resolution.ORIGINAL, width=14, on_change=self._show_custom_res
         )
         self._res.configure(font=(UI_FONT, 9))
         self._res.pack(side="left", padx=px(6))
@@ -1625,10 +1513,10 @@ class YouTubeDownloaderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _check_ytdlp(self):
-        p = _find_ytdlp()
+        p = ytdlp_core.ytdlp_path()
         if p:
             tasks.submit(
-                partial(_ytdlp_version, p),
+                partial(ytdlp_core.version, p),
                 on_done=partial(self._ytdlp_found, p),
                 on_error=lambda _e: self.log_tagged(self.console, "✔ yt-dlp found.", "success"),
                 name="yt-dlp version",
@@ -1768,29 +1656,8 @@ class YouTubeDownloaderTab(BaseTab):
             messagebox.showwarning(t("common.warning"), "Fetch video info first.", parent=self)
             return
 
-        from core import ffmpeg as ff
-
-        codec = (
-            ["-c:v", "mjpeg", "-q:v", "2"]
-            if p.lower().endswith((".jpg", ".jpeg"))
-            else ["-c:v", "png"]
-        )
         res = _proc.run(
-            [
-                ff.ffmpeg_path(),
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                "pipe:0",
-                "-frames:v",
-                "1",
-                *codec,
-                "-update",
-                "1",
-                p,
-            ],
+            yto.thumbnail_save_cmd(p),
             timeout=30,
             text=False,
             input=data,
@@ -1837,7 +1704,7 @@ class YouTubeDownloaderTab(BaseTab):
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
             return
-        ytdlp = _find_ytdlp()
+        ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
             messagebox.showerror(
                 t("common.error"),
@@ -1849,7 +1716,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._btn_fetch.config(state="disabled", text=t("youtube.fetching"))
         self.log(self.console, f"↳ Fetching info: {url}")
         tasks.submit(
-            partial(_fetch_info, ytdlp, url, playlist=bool(self._playlist_var.get())),
+            partial(ytdlp_core.fetch_info, ytdlp, url, playlist=bool(self._playlist_var.get())),
             on_done=self._fetched,
             on_error=self._fetch_failed,
             name="yt-dlp info",
@@ -1994,7 +1861,6 @@ class YouTubeDownloaderTab(BaseTab):
         and let FFmpeg decode it - Tk shows PNG natively, so no Pillow needed."""
         import base64
 
-        from core import ffmpeg as ff
         from core import network as _net
 
         try:
@@ -2003,24 +1869,7 @@ class YouTubeDownloaderTab(BaseTab):
             self._thumb_bytes = data
             tw, th = px(256), px(144)  # the thumbnail box, in screen pixels
             res = _proc.run(
-                [
-                    ff.ffmpeg_path(),
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-i",
-                    "pipe:0",
-                    "-frames:v",
-                    "1",
-                    "-vf",
-                    f"scale={tw}:{th}:force_original_aspect_ratio=decrease,"
-                    f"pad={tw}:{th}:-1:-1:color=black",
-                    "-f",
-                    "image2pipe",
-                    "-c:v",
-                    "png",
-                    "pipe:1",
-                ],
+                yto.thumbnail_preview_cmd(tw, th),
                 timeout=20,
                 text=False,
                 input=data,
@@ -2070,7 +1919,7 @@ class YouTubeDownloaderTab(BaseTab):
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
             return
-        ytdlp = _find_ytdlp()
+        ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
             self._open_browser()
             return
@@ -2094,14 +1943,7 @@ class YouTubeDownloaderTab(BaseTab):
                     )
                     return
                 r = _proc.run(
-                    [
-                        *_yt(ytdlp, url),
-                        playlist_flag,
-                        "-g",
-                        "-f",
-                        "best[height<=720][ext=mp4]/best[height<=720]/best",
-                        url,
-                    ],
+                    yto.stream_url_argv(ytdlp, url, playlist_flag),
                     timeout=25,
                     env=_net.subprocess_env(url=url),
                 )
@@ -2152,7 +1994,7 @@ class YouTubeDownloaderTab(BaseTab):
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a live stream URL first.")
             return
-        ytdlp = _find_ytdlp()
+        ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
             messagebox.showerror(t("common.error"), "Install yt-dlp first.")
             return
@@ -2163,7 +2005,7 @@ class YouTubeDownloaderTab(BaseTab):
         from core import network as _net
 
         try:
-            cmd = [*_yt(ytdlp, url), "-f", "best", "--live-from-start", "-o", out_template, url]
+            cmd = yto.live_record_argv(ytdlp, url, out_template)
         except OSError as exc:
             messagebox.showwarning(t("common.warning"), _net.explain_error(exc), parent=self)
             return
@@ -2385,54 +2227,23 @@ class YouTubeDownloaderTab(BaseTab):
     #  Build extra yt-dlp args
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_common_ytdlp_args(self) -> list:
-        # Start with the app-wide network settings (proxy, rate limit,
-        # timeout, IP version, source address, user agent, SSL verify).
-        # Any per-tab overrides below come later in the argv so yt-dlp
-        # picks them up as the winning value.
-        args = []
-        # Auth / Network (the app-wide route is already in the command from _yt())
-        cookies = self._cookies_var.get().strip()
-        if cookies and os.path.isfile(cookies):
-            args += ["--cookies", cookies]
-        username = self._username_var.get().strip()
-        if username:
-            args += ["--username", username]
-        password = self._password_var.get().strip()
-        if password:
-            args += ["--password", password]
-        ratelimit = self._ratelimit_var.get().strip()
-        if ratelimit:
-            args += ["--rate-limit", ratelimit]
-        proxy = self._proxy_var.get().strip()
-        if proxy:
-            args += ["--proxy", proxy]
-
-        # Advanced Networking
-        if self._use_aria2c_var.get():
-            args += ["--downloader", "aria2c", "--downloader-args", "aria2c:-x 16 -s 16 -k 1M"]
-
-        # Metadata
-        if self._embed_chapters_var.get():
-            args += ["--embed-chapters"]
-        if self._embed_metadata_var.get():
-            args += ["--embed-metadata"]
-
-        # SponsorBlock
-        sb_cats = [k for k, v in self._sb_vars.items() if v.get()]
-        if sb_cats:
-            cat_str = ",".join(sb_cats)
-            if self._sb_action_var.get() == "mark":
-                args += ["--sponsorblock-mark", cat_str]
-            else:
-                args += ["--sponsorblock-remove", cat_str]
-
-        # Custom arguments
-        custom_args = self._custom_args_var.get().strip()
-        if custom_args:
-            args += shlex.split(custom_args)
-
-        return args
+    def _build_common_ytdlp_args(self) -> list[str]:
+        """The tab's own options, after the app-wide network route (later wins)."""
+        return yto.common_args(
+            yto.Options(
+                cookies=self._cookies_var.get().strip(),
+                username=self._username_var.get().strip(),
+                password=self._password_var.get().strip(),
+                rate_limit=self._ratelimit_var.get().strip(),
+                proxy=self._proxy_var.get().strip(),
+                aria2c=self._use_aria2c_var.get(),
+                chapters=self._embed_chapters_var.get(),
+                metadata=self._embed_metadata_var.get(),
+                sponsorblock=tuple(k for k, v in self._sb_vars.items() if v.get()),
+                sponsorblock_mark=self._sb_action_var.get() == "mark",
+                custom=self._custom_args_var.get().strip(),
+            )
+        )
 
     def _build_trim_args(self) -> list | None:
         """Returns trim args or None. Returns False-y empty list if no trim."""
@@ -2446,32 +2257,25 @@ class YouTubeDownloaderTab(BaseTab):
         if s1 is None:
             messagebox.showwarning(t("common.warning"), "Say where the section ends.")
             return None
-        return ["--download-sections", f"*{s0:.3f}-{s1:.3f}", "--force-keyframes-at-cuts"]
+        return yto.section_args(s0, s1)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  FFmpeg encode command builder
     # ─────────────────────────────────────────────────────────────────────────
 
     def _build_encode_cmd(self, inp: str, out: str, sub_path: str = "") -> list[str]:
-        vcodec, container = self._vcodec_var.get(), self._container_var.get()
-        cmd = [_ffmpeg_exe(), "-i", inp]
-        cmd += _video_codec_args(
-            vcodec, int(self._crf_var.get()), self._preset_var.get(), container
+        encode = yto.Encode(
+            vcodec=self._vcodec_var.get(),
+            crf=int(self._crf_var.get()),
+            preset=self._preset_var.get(),
+            container=self._container_var.get(),
+            resolution=self._res.value,
+            custom_size=self._custom_res_var.get(),
+            acodec=self._acodec_var.get(),
+            abitrate=self._abitrate_var.get(),
+            sample_rate=self._asamplerate_var.get(),
         )
-        filters = [
-            f
-            for f in (
-                _scale_filter(self._res.value, self._custom_res_var.get()),
-                _subtitles(sub_path),
-            )
-            if f
-        ]
-        cmd += ["-vf", ",".join(filters)] if filters else []
-        cmd += _audio_args(
-            self._acodec_var.get(), self._abitrate_var.get(), self._asamplerate_var.get()
-        )
-        cmd += ["-movflags", "+faststart"] if container == "mp4" else []
-        return [*cmd, out, "-y"]
+        return yto.encode_cmd(inp, out, encode, sub_path)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Main download entry point
@@ -2496,7 +2300,7 @@ class YouTubeDownloaderTab(BaseTab):
             return
         self._out_var.set(out)
 
-        ytdlp = _find_ytdlp()
+        ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
             messagebox.showerror(
                 t("common.error"),
@@ -2508,7 +2312,7 @@ class YouTubeDownloaderTab(BaseTab):
         if trim_args is None:
             return
         try:
-            _yt(ytdlp, url)  # offline? strict proxy not set up? say so now
+            yto.check_route(ytdlp, url)  # offline? strict proxy not set up? say so now
         except OSError as exc:
             from core import network as _net
 
@@ -2541,24 +2345,14 @@ class YouTubeDownloaderTab(BaseTab):
         container = self._container_var.get()
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [
-            *_yt(ytdlp, url),
-            playlist_flag,
-            "-f",
-            fmt_str,
-            "--merge-output-format",
-            container,
-            "--no-overwrites",
-        ]
-
-        # Subtitles
+        cmd = yto.download_argv(ytdlp, url, playlist_flag, fmt_str, container)
         if self._dl_subs_var.get():
-            lang = self._sub_lang_var.get().replace("(auto) ", "")
-            cmd += ["--write-sub", "--sub-lang", lang, "--sub-format", self._sub_fmt_var.get()]
-            if self._sub_auto_var.get():
-                cmd += ["--write-auto-sub"]
-            if self._embed_subs_var.get():
-                cmd += ["--embed-subs"]
+            cmd += yto.subtitle_args(
+                self._sub_lang_var.get().replace("(auto) ", ""),
+                self._sub_fmt_var.get(),
+                auto=self._sub_auto_var.get(),
+                embed=self._embed_subs_var.get(),
+            )
 
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
@@ -2583,20 +2377,9 @@ class YouTubeDownloaderTab(BaseTab):
         audio_out = base + "." + audio_fmt
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [
-            *_yt(ytdlp, url),
-            playlist_flag,
-            "-x",
-            "--audio-format",
-            audio_fmt,
-            "--audio-quality",
-            quality,
-            "--no-overwrites",
-        ]
-        if self._embed_thumb_var.get():
-            cmd += ["--embed-thumbnail"]
-        if self._add_metadata_var.get():
-            cmd += ["--add-metadata"]
+        cmd = yto.audio_argv(ytdlp, url, playlist_flag, audio_fmt, quality)
+        cmd += ["--embed-thumbnail"] if self._embed_thumb_var.get() else []
+        cmd += ["--add-metadata"] if self._add_metadata_var.get() else []
 
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
@@ -2623,15 +2406,7 @@ class YouTubeDownloaderTab(BaseTab):
         tmp = os.path.join(tempfile.gettempdir(), f"_cf_yt_tmp_{os.getpid()}.mkv")
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [
-            *_yt(ytdlp, url),
-            playlist_flag,
-            "-f",
-            "bv*+ba/b",
-            "--merge-output-format",
-            "mkv",
-            "--no-overwrites",
-        ]
+        cmd = yto.download_argv(ytdlp, url, playlist_flag, "bv*+ba/b", "mkv")
         cmd += self._build_common_ytdlp_args()
         cmd += trim_args
         cmd += ["-o", tmp, url]
@@ -2674,19 +2449,7 @@ class YouTubeDownloaderTab(BaseTab):
         from core import network as _net
 
         playlist_flag = "--yes-playlist" if self._playlist_var.get() else "--no-playlist"
-        cmd = [
-            *_yt(ytdlp),
-            playlist_flag,
-            "--write-sub",
-            "--skip-download",
-            "--sub-lang",
-            lang,
-            "--sub-format",
-            sub_fmt,
-            "-o",
-            tmp_base,
-            url,
-        ]
+        cmd = yto.subtitles_only_argv(ytdlp, url, playlist_flag, lang, sub_fmt, tmp_base)
         if self._sub_auto_var.get():
             cmd.insert(-3, "--write-auto-sub")
         try:
@@ -2799,7 +2562,7 @@ class YouTubeDownloaderTab(BaseTab):
         if not items:
             messagebox.showwarning(t("common.warning"), "Add URLs to the queue first.")
             return
-        ytdlp = _find_ytdlp()
+        ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
             messagebox.showerror(t("common.error"), "Install yt-dlp first.")
             return
@@ -2831,7 +2594,7 @@ class YouTubeDownloaderTab(BaseTab):
                 from core import network as _net
 
                 r = _proc.run(
-                    [*_yt(ytdlp, url), "--no-playlist", "--get-title", url],
+                    yto.title_argv(ytdlp, url),
                     timeout=20,
                     env=_net.subprocess_env(url=url),
                 )
@@ -2851,15 +2614,9 @@ class YouTubeDownloaderTab(BaseTab):
             out_path = os.path.join(dl_dir, "%(title)s.%(ext)s")
 
             try:
-                cmd = [
-                    *_yt(ytdlp, url),
-                    "--yes-playlist",
-                    "-f",
-                    "bv*+ba/b",
-                    "--merge-output-format",
-                    self._container_var.get(),
-                    "--no-overwrites",
-                ]
+                cmd = yto.download_argv(
+                    ytdlp, url, "--yes-playlist", "bv*+ba/b", self._container_var.get()
+                )
             except OSError as exc:
                 from core import network as _net
 

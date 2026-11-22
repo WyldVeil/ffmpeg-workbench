@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
+from typing import Any, cast
 
 from core.hardware import find_binary
 
@@ -78,3 +79,24 @@ def redact(argv: Sequence[str]) -> list[str]:
         out.append(a)
         hide = a in secret
     return out
+
+
+def version(ytdlp: str) -> str:
+    """Worker: the installed yt-dlp's version."""
+    from core import proc
+
+    return proc.run([ytdlp, "--version"], timeout=30).stdout.strip()
+
+
+def fetch_info(ytdlp: str, url: str, *, playlist: bool) -> dict[str, Any]:
+    """Worker: everything yt-dlp knows about *url* (its JSON)."""
+    import json
+
+    from core import network, proc
+    from core.errors import ToolError
+
+    cmd = [*base_argv(ytdlp, url=url), "--yes-playlist" if playlist else "--no-playlist", "-J", url]
+    r = proc.run(cmd, timeout=45, env=network.subprocess_env(url=url))
+    if not r.ok:
+        raise ToolError("yt-dlp error:\n" + (r.stderr or r.stdout or "")[:600])
+    return cast("dict[str, Any]", json.loads(r.stdout))
