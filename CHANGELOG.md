@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.7
+
+### Fixed
+
+- TTS Voice-Over: the offline voice gave up whenever it took more than half a
+  second, which on Windows it nearly always does. It now waits for the voice
+  as long as it needs (up to its usual time limit).
+- Screen Recorder: a recording that didn't stop when asked kept running; it
+  is now stopped.
+
 ## 1.2.6
 
 ### A new name: FFmpeg Workbench

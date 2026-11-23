@@ -23,8 +23,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.6_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.6-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.7_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.7-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -36,11 +36,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.6_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `ffmpeg-workbench_1.2.6_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.6_ubuntu_amd64.deb` |
-| **Debian** | `ffmpeg-workbench_1.2.6_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.6_debian_amd64.deb` |
-| **Fedora** | `ffmpeg-workbench-1.2.6-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `ffmpeg-workbench-1.2.6-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.7_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `ffmpeg-workbench_1.2.7_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.7_ubuntu_amd64.deb` |
+| **Debian** | `ffmpeg-workbench_1.2.7_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.7_debian_amd64.deb` |
+| **Fedora** | `ffmpeg-workbench-1.2.7-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `ffmpeg-workbench-1.2.7-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
