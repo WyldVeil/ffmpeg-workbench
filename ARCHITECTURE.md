@@ -118,7 +118,29 @@ name **(enforced: ruff SLF001)**.
 ### Typed widgets
 
 `tabs/kit/widgets.py`: `ChoiceBox[E]` shows labels but its value is an enum
-member, so code never compares against displayed (or translated) text.
+member, so code never compares against displayed (or translated) text;
+`ColourButton` is the one colour picker (swatch, picker, readable text,
+`#RRGGBB`).
+
+### Page scaffolding
+
+Every page is assembled from the same pieces, so they look and behave alike
+and a fix in one place reaches every tool **(each enforced by a test in
+`tests/test_architecture.py`)**:
+
+| Piece | Where | Instead of |
+|---|---|---|
+| `make_header` | `BaseTab` | a hand-made title, subtitle and icon |
+| `scroll_body(parent, height=, on_resize=)` | `tabs/widgets.py` | a canvas, scrollbar and frame window wired by hand (page bodies and fixed-height lists) |
+| `form_row(parent, row, label, *widgets)` | `BaseTab` | a label and its controls gridded by hand |
+| `FileRow`, `FolderRow`, `SaveRow` | `tabs/widgets.py` | entry + Browse button pairs |
+| `output_section` / `save_section` / `output_box` | `tabs/widgets.py` | the "Output" box: encoder and where the result goes |
+| `make_render_btn`, `make_console_block` | `BaseTab` | the green render button and the log |
+| `ColourButton` | `tabs/kit/widgets.py` | a button wired to `askcolor` |
+| `linked_scrollbar`, `selected_rows`, `on_write`, `set_scale`... | `tabs/kit/tktyped.py` | Tk calls whose type stubs are incomplete (so pages stay strictly typed) |
+
+Pages never build FFmpeg commands: every command comes from `core/ops`
+(`test_pages_never_build_commands`), and a page never imports another page.
 
 ## 4. The window (`shell/`)
 
@@ -155,9 +177,9 @@ overwritten.
 
 | Gate | Where | Rule |
 |---|---|---|
-| ruff | CI | the book-recommended rule set with **no exceptions**: every function under complexity 15, 8 parameters and 50 statements; `ruff format` is the one style |
-| pyright | CI (`scripts/check_types.py`) | **zero errors**: standard mode everywhere, **strict** for the foundation modules listed in `pyrightconfig.json`; the baseline (`tests/typing_baseline.json`) is empty, so any new error fails CI |
-| architecture | `tests/test_architecture.py` | layers (no engine exceptions), process gateway, task service and its pools, pages read times through `tabs/kit/time_fields.py`, drop-downs read by value not label, no function over 120 lines, lambdas do one thing, no hidden imports |
+| ruff | CI | the book-recommended rule set with **no exceptions**: every function under complexity 15, 8 parameters and 35 statements; `ruff format` is the one style |
+| pyright | CI (`scripts/check_types.py`) | **zero errors**: **strict** for the whole app (`core`, `shell`, `tabs`, `main.py`), standard mode for tests and tools; the baseline (`tests/typing_baseline.json`) is empty, so any new error fails CI. Every function in the app is annotated (ruff ANN) |
+| architecture | `tests/test_architecture.py` | layers (no engine exceptions), process gateway, task service and its pools, pages read times through `tabs/kit/time_fields.py`, drop-downs read by value not label, no function over 80 lines, lambdas do one thing, pages build no commands and use the kit's scaffolding, no hidden imports |
 | settings | `tests/test_settings_keys.py` | every key the code reads is declared |
 | performance | `tests/test_perf.py` | no program on the UI thread; start-up budget; no heavy imports |
 | properties | `tests/test_properties.py` | Hypothesis: Timecode round-trips and rounding, tool-id parsing, a stateful model of the settings store |

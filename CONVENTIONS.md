@@ -7,10 +7,17 @@ structure they protect. **(enforced)** means a test or CI checks it.
 
 * **Python 3.11+.** `from __future__ import annotations` at the top of every
   module. A module docstring says what belongs in the module.
-* **Type every public function.** Prefer precise types: `ToolId` not `str`,
-  `Timecode` not `float`, `Mapping` for read-only arguments, `Literal` /
-  `StrEnum` for closed sets, frozen `@dataclass(slots=True)` for values.
-  pyright stays at zero errors **(enforced)**; strict files stay strict.
+* **Type every function** - parameters and return - in `core`, `shell`,
+  `tabs` and `main.py` **(enforced: ruff ANN)**. The whole app is in pyright's
+  strict mode with zero errors **(enforced)**. Prefer precise types: `ToolId`
+  not `str`, `Timecode` not `float`, `Mapping` for read-only arguments,
+  `Literal` / `StrEnum` for closed sets, frozen `@dataclass(slots=True)` for
+  values. A row of widgets is a small class or dataclass, never a dict of
+  mixed values; JSON from outside (yt-dlp) is `dict[str, Any]`.
+* **Tk calls the stubs leave untyped** (`yview`, `curselection`, `lift`,
+  `create_image`, a `Notebook`'s tab...) go through `tabs/kit/tktyped.py`;
+  watch a variable with `on_write(var, callback)`, not `trace_add` with a
+  lambda.
 * **Values are immutable** unless they must change. `MediaInfo`, `Stream`,
   `ProcResult`, `ToolSpec`, `Timecode` and `Setting` are frozen.
 * **Parse at the boundary.** Data from outside (settings.json, ffprobe JSON,
@@ -22,7 +29,7 @@ structure they protect. **(enforced)** means a test or CI checks it.
   **(enforced: SLF001)**; no `__dunder` mangling.
 * **No compatibility shims** inside the codebase: when a name changes,
   change every caller (we own them all).
-* **Small functions.** Complexity 15, 8 parameters, 50 statements and 120
+* **Small functions.** Complexity 15, 8 parameters, 35 statements and 80
   lines at most **(enforced, no exceptions)**. Past that, split into named
   steps, group the options into a spec dataclass, or move the logic to
   `core/ops` - never add an ignore.
@@ -72,6 +79,11 @@ structure they protect. **(enforced)** means a test or CI checks it.
   **(enforced: tests/test_tools.py)**.
 * Build FFmpeg commands in `core/ops/<tool>.py` as pure functions; the page
   maps widgets to arguments and calls them. The CLI uses the same functions.
+  A page never builds a command or imports another page **(enforced)**.
+* Build a page from the kit: `make_header`, `scroll_body`, `form_row`,
+  `FileRow` / `FolderRow` / `SaveRow`, `output_section` / `save_section` /
+  `output_box`, `make_render_btn`, `make_console_block`, `ColourButton`
+  **(enforced)**. If a page needs something the kit lacks, add it to the kit.
 * Offer abilities through the protocols in `tabs/kit/contracts.py`
   (`transport()`, `mark_in()`, `render()`, `load_file()`...). The window
   never looks at anything else.

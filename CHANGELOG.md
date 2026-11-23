@@ -56,21 +56,38 @@ installer replaces 1.2.5; on Linux the package has a new name, so remove
 - Screen Recorder: "Auto (GPU when available)" was the starting codec but
   missing from the list, so it couldn't be chosen again.
 - TTS Voice-Over: a saved AAC file now gets the usual .m4a extension.
+- Start page: long goal names ("Convert to another format", "Inspect, batch &
+  automate") were cut off; they now wrap.
+- The Output box's title is translated like the rest of the page, and a few
+  labels (mostly in Settings) that showed an internal name instead of their
+  text now read properly in every language.
+- Audio Converter: asking for variable bitrate on a format that has none no
+  longer produces a broken command.
 
 ### Under the hood
 
-- No function in the app is longer than 120 lines or 50 statements, more
-  complex than 15 or takes more than 8 settings, and CI keeps it that way
-  with no exceptions. The biggest pages were split into named steps, and
-  what they build moved to the engine (`core/ops`): Animated Titles, the
-  Media Generator, the Batch Processor's job, the collage and side-by-side
-  graphs. Each move was checked by comparing the old and new FFmpeg
-  commands over thousands of combinations.
+- **Pages only build the window.** Every FFmpeg command now comes from the
+  engine (`core/ops`), so the window and the command line share one version
+  of each; a page never builds a command or imports another page, and tests
+  keep it that way. Every move was checked by comparing the old and new
+  commands.
+- **One kit for every page**: the title, the scrolling body, form rows, file
+  and folder rows, the Output box (encoder and where the result goes), the
+  render button, the log and the colour picker each come from one place,
+  checked by tests - a fix there reaches all 83 tools.
+- **Short, named steps**: no function is longer than 80 lines or 35
+  statements, more complex than 15 or takes more than 8 settings, with no
+  exceptions. Pure logic found inside pages moved to the engine: chapter
+  parsing and YouTube's chapter rules, the media inspector's notes, the
+  built-in LUT looks, preset import checks, subtitle encoding fixes, the
+  audio converter's formats and the voice presets.
+- **Strictly typed**: the whole app (engine, window and every page) passes
+  pyright's strict mode with zero errors, and every function's parameters
+  and result are annotated - both checked in CI. Lists of widgets are small
+  typed classes instead of dictionaries.
 - Lambdas are one step; anything more has a name (checked by a test).
 - Every drop-down that the code acts on is read by what was chosen, never by
   its (translated) text - checked by a test.
-- The engine (`core/`) has no exceptions to its layering rules, and
-  `core`, `shell` and `tabs/kit` are type-checked in strict mode.
 
 ## 1.2.5
 
