@@ -393,7 +393,7 @@ class Recording:
                 pass
             try:
                 self.proc.wait(timeout=timeout)
-            except _proc.ProcessTimeout:
+            except _proc.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait()
         return self.proc.returncode

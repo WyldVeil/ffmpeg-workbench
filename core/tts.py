@@ -217,7 +217,7 @@ def _run(cmd: list[str], cancelled: Cancelled, timeout: float = 600) -> None:
             try:
                 out, err = proc.communicate(timeout=0.5)
                 break
-            except _proc.ProcessTimeout:
+            except _proc.TimeoutExpired:
                 waited += 0.5
                 if (cancelled and cancelled()) or waited > timeout:
                     proc.kill()
