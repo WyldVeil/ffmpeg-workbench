@@ -52,10 +52,10 @@ class HomeTab(BaseTab):
     _MIN_COLS = 2
     _MAX_COLS = 6
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._navigate: Callable[[ToolId], object] | None = None
-        self._sections_frame = None
+        self._sections_frame: tk.Frame | None = None
         self._fav_section_frame = None
         self._build_ui()
         # Re-render when window is resized so the grid reflows.
@@ -84,7 +84,7 @@ class HomeTab(BaseTab):
         self._refresh()
 
     # ── UI build ─────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # Header
         column = make_header(
             self,
@@ -112,14 +112,14 @@ class HomeTab(BaseTab):
         self._render_sections()
 
     # ── Render / refresh ─────────────────────────────────────────────────────
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._render_sections()
 
-    def _on_resize(self, _e):
+    def _on_resize(self, _e: tk.Event[tk.Misc]) -> None:
         # Debounce-ish: re-render on configure events. Cheap to redraw.
         self._render_sections()
 
-    def _render_sections(self):
+    def _render_sections(self) -> None:
         body = self._sections_frame
         if body is None or not body.winfo_exists():
             return
@@ -152,7 +152,9 @@ class HomeTab(BaseTab):
             self._render_grid(body, visible)
             tk.Frame(body, bg=CLR["bg"], height=px(10)).pack(fill="x")
 
-    def _render_section_header(self, parent, label, accent=None):
+    def _render_section_header(
+        self, parent: tk.Misc, label: str, accent: str | None = None
+    ) -> None:
         if accent is None:
             accent = CLR["accent"]
         row = tk.Frame(parent, bg=CLR["bg"])
@@ -169,7 +171,7 @@ class HomeTab(BaseTab):
         rule = tk.Frame(parent, bg=CLR["border"], height=px(1))
         rule.pack(fill="x", padx=px(20))
 
-    def _render_grid(self, parent, items: Sequence[Card]) -> None:
+    def _render_grid(self, parent: tk.Misc, items: Sequence[Card]) -> None:
         """Cards for *items*: tools, or (tool, card text) pairs."""
         if not items:
             return
@@ -255,7 +257,7 @@ class HomeTab(BaseTab):
         hover_bg = CLR.get("sb_hover") or "#2A2A2A"
         normal_bg = CLR["panel"]
 
-        def on_enter(_e):
+        def on_enter(_e: object) -> None:
             try:
                 card.config(bg=hover_bg, highlightbackground=CLR["accent"])
                 name_lbl.config(bg=hover_bg)
@@ -263,7 +265,7 @@ class HomeTab(BaseTab):
             except tk.TclError:
                 pass
 
-        def on_leave(_e):
+        def on_leave(_e: object) -> None:
             try:
                 card.config(bg=normal_bg, highlightbackground=CLR["border"])
                 name_lbl.config(bg=normal_bg)

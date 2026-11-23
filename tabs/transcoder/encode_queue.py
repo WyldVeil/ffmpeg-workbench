@@ -8,11 +8,14 @@ Left panel  - queue treeview (all tasks, live-refreshed)
 Right panel - job settings editor for queueing new encode jobs from here
 """
 
+from __future__ import annotations
+
 import contextlib
 import os
 import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core.i18n import t
@@ -21,7 +24,11 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import add_pane, linked_scrollbar
 from tabs.widgets import FileRow, SaveRow, scroll_body
+
+if TYPE_CHECKING:
+    from core.queue_manager import RenderTask
 
 RESOLUTIONS = ["Source", "3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "640x360"]
 
@@ -33,7 +40,7 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{m}m {s:02d}s"
 
 
-def progress_text(task) -> str:
+def progress_text(task: RenderTask) -> str:
     """What the Progress column shows: a bar and percentage while it runs (the
     raw FFmpeg log line it used to show meant nothing to most people)."""
     status = task.status
@@ -60,7 +67,7 @@ def progress_text(task) -> str:
 
 
 class EncodeQueueTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.editor: dict[str, tk.StringVar] = {}  # the job editor's fields, by name
         self._editor_job: eq.EncodeJob | None = None
@@ -75,7 +82,7 @@ class EncodeQueueTab(BaseTab):
         self._refresh_queue_tree()
 
     # ═══════════════════════════════════════════════════════════════════════
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # Header
         make_header(self, t("tab.encode_queue"), t("encode_queue.subtitle"), icon="📋")
 
@@ -84,15 +91,15 @@ class EncodeQueueTab(BaseTab):
         paned.pack(fill="both", expand=True, padx=px(10), pady=px(8))
 
         left = tk.Frame(paned, width=px(540))
-        paned.add(left, minsize=px(340))
+        add_pane(paned, left, px(340))
         right = tk.Frame(paned, width=px(480))
-        paned.add(right, minsize=px(320))
+        add_pane(paned, right, px(320))
 
         self._build_queue_panel(left)
         self._build_editor_panel(right)
 
     # ── Queue list panel ──────────────────────────────────────────────────
-    def _build_queue_panel(self, parent):
+    def _build_queue_panel(self, parent: tk.Misc) -> None:
         tk.Label(
             parent, text=t("encode_queue.queue_section"), font=(UI_FONT, 9, "bold"), fg=CLR["fgdim"]
         ).pack(anchor="w", padx=px(8), pady=px(6, 2))
@@ -117,8 +124,7 @@ class EncodeQueueTab(BaseTab):
         self.tree.tag_configure("active", foreground="#4FC3F7")
         self.tree.tag_configure("pending", foreground="#EEEEEE")
 
-        tsb = ttk.Scrollbar(parent, command=self.tree.yview)
-        self.tree.config(yscrollcommand=tsb.set)
+        tsb = linked_scrollbar(parent, self.tree)
         self.tree.pack(side="left", fill="both", expand=True)
         tsb.pack(side="right", fill="y")
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
@@ -161,7 +167,7 @@ class EncodeQueueTab(BaseTab):
         self.console.pack(fill="both", expand=True, padx=px(4), pady=px(4))
 
     # ── eq.EncodeJob editor panel ─────────────────────────────────────────────────
-    def _build_editor_panel(self, parent):
+    def _build_editor_panel(self, parent: tk.Misc) -> None:
         tk.Label(
             parent,
             text=t("encode_queue.editor_section"),
@@ -191,7 +197,7 @@ class EncodeQueueTab(BaseTab):
         self._build_editor_fields(ef)
         self._build_editor_buttons(ef)
 
-    def _build_editor_fields(self, ef):
+    def _build_editor_fields(self, ef: tk.Frame) -> None:
         """Codec, quality and the other encode settings, and extra filters and arguments."""
         # Codec / quality fields
         fields = [
@@ -234,7 +240,7 @@ class EncodeQueueTab(BaseTab):
             tk.Label(f, text=label, width=14, anchor="e").pack(side="left")
             tk.Entry(f, textvariable=var, width=34, relief="flat").pack(side="left", padx=px(4))
 
-    def _build_editor_buttons(self, ef):
+    def _build_editor_buttons(self, ef: tk.Frame) -> None:
         """Add to queue, and add a whole folder."""
         # Submit button
         tk.Button(
@@ -259,7 +265,7 @@ class EncodeQueueTab(BaseTab):
     # ═══════════════════════════════════════════════════════════════════════
     #  Queue tree refresh  (called by RenderQueueManager update callback)
     # ═══════════════════════════════════════════════════════════════════════
-    def _refresh_queue_tree(self):
+    def _refresh_queue_tree(self) -> None:
         tasks = self._qmgr.get_all_tasks()
 
         # Preserve selection
@@ -296,7 +302,7 @@ class EncodeQueueTab(BaseTab):
             f"·  {done} done  ·  {failed} failed"
         )
 
-    def _on_tree_select(self, _event=None):
+    def _on_tree_select(self, _event: object = None) -> None:
         sel = self.tree.selection()
         if not sel:
             return
@@ -310,7 +316,7 @@ class EncodeQueueTab(BaseTab):
                     self.console.insert(tk.END, f"[{task.name}]\n{task.progress}\n")
                 break
 
-    def _cancel_selected(self):
+    def _cancel_selected(self) -> None:
         sel = self.tree.selection()
         if not sel:
             messagebox.showinfo(
@@ -319,17 +325,17 @@ class EncodeQueueTab(BaseTab):
             return
         self._qmgr.cancel(sel[0])
 
-    def _clear_finished(self):
+    def _clear_finished(self) -> None:
         self._qmgr.clear_finished()
 
     # ═══════════════════════════════════════════════════════════════════════
     #  Editor: add new encode jobs
     # ═══════════════════════════════════════════════════════════════════════
-    def _ed_source_chosen(self, path):
+    def _ed_source_chosen(self, path: str) -> None:
         if path and not self.ed_out_var.get():
             self.ed_out_var.set(os.path.splitext(path)[0] + "_encoded.mp4")
 
-    def _queue_job(self, src, out) -> bool:
+    def _queue_job(self, src: str, out: str) -> bool:
         j = self._read_editor()
         j.src, j.out = src, out
         try:
@@ -352,10 +358,10 @@ class EncodeQueueTab(BaseTab):
         )
         return True
 
-    def _default_ext(self):
+    def _default_ext(self) -> str:
         return eq.DEFAULT_EXT.get(self.editor["ed_vcodec_var"].get(), ".mp4")
 
-    def _add_to_queue(self):
+    def _add_to_queue(self) -> None:
         src = self.ed_src_var.get().strip()
         if not src or not os.path.isfile(src):
             messagebox.showwarning(
@@ -371,7 +377,7 @@ class EncodeQueueTab(BaseTab):
         self.ed_out_var.set(out)
         self._queue_job(src, out)
 
-    def _add_folder(self):
+    def _add_folder(self) -> None:
         from core.outputs import free_name
 
         folder = dialogs.askdirectory()
@@ -379,7 +385,8 @@ class EncodeQueueTab(BaseTab):
             return
         exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".m4v", ".mts", ".m2ts", ".mxf"}
         ext = self._default_ext()
-        count, taken = 0, set()
+        count = 0
+        taken: set[str] = set()
         for fn in sorted(os.listdir(folder)):
             stem, e = os.path.splitext(fn)
             src = os.path.join(folder, fn)
@@ -419,7 +426,7 @@ class EncodeQueueTab(BaseTab):
         j.extra_args = self.editor["ed_eargs_var"].get()
         return j
 
-    def _on_task_progress(self, task_id, line):
+    def _on_task_progress(self, task_id: str, line: str) -> None:
         if self._selected_task_id == task_id:
             try:
                 self.console.insert(tk.END, line + "\n")
@@ -427,7 +434,7 @@ class EncodeQueueTab(BaseTab):
             except tk.TclError:
                 pass
 
-    def _on_task_complete(self, task_id, returncode, out_path):
+    def _on_task_complete(self, task_id: str, returncode: int, out_path: str) -> None:
         if returncode != 0:
             messagebox.showerror(
                 "Encode Failed",

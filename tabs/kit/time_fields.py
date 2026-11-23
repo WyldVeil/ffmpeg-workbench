@@ -63,7 +63,7 @@ class MomentPicker(tk.Frame):
         here: Here | None = None,
         on_change: Callable[[], object] | None = None,
         tip: str = "Use the frame shown in the preview",
-    ):
+    ) -> None:
         super().__init__(parent)
         self.var = tk.StringVar(value=value)
         self._source, self._here, self._on_change = source, here, on_change
@@ -127,7 +127,7 @@ class RangePicker(tk.Frame):
         source: Source | None = None,
         here: Here | None = None,
         on_change: Callable[[], object] | None = None,
-    ):
+    ) -> None:
         super().__init__(parent)
         self.start = MomentPicker(
             self,

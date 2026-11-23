@@ -134,7 +134,9 @@ def _mean_db(path, start, dur):
 def _effects():
     code = open(os.path.join(ROOT, "tabs", "visuals", "effects.py"), encoding="utf-8").read()
     out = []
-    for m in re.finditer(r"    def (_render_\w+)\(self\):(.*?)(?=\n    def |\Z)", code, re.S):
+    for m in re.finditer(
+        r"    def (_render_\w+)\(self\)(?: -> None)?:(.*?)(?=\n    def |\Z)", code, re.S
+    ):
         src = re.search(r"self\.(_\w+?)_src\b", m.group(2))
         dst = re.search(r"self\.(_\w+?)_out\b", m.group(2))
         assert src is not None and dst is not None, m.group(1)

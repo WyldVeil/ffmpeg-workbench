@@ -26,12 +26,12 @@ CONTAINERS = ("auto", "mp4", "mkv", "mov", "webm")
 
 
 class CodecCruncherTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.codec_cruncher"), t("codec.desc_subtitle"), icon="🔩")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_file"), on_change=self._source_changed)
@@ -104,7 +104,7 @@ class CodecCruncherTab(BaseTab):
     def _ext(self) -> str:
         return "." + self._container()
 
-    def _update_ext(self, *_a):
+    def _update_ext(self, *_a: object) -> None:
         if not hasattr(self, "out_row"):  # called while the page is still being built
             return
         out = self.out_row.path
@@ -113,7 +113,7 @@ class CodecCruncherTab(BaseTab):
             if not out.lower().endswith(want):
                 self.out_row.set(os.path.splitext(out)[0] + want)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             v = info.require_video()
@@ -129,7 +129,7 @@ class CodecCruncherTab(BaseTab):
         else:
             self._update_ext()
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

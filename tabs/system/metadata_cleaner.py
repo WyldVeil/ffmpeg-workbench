@@ -23,6 +23,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar
 from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.system.metadata_cleaner")
@@ -75,13 +76,13 @@ def _clean_one(
 
 
 class MetadataCleanerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.files: list = []
-        self.findings: dict = {}
+        self.files: list[str] = []
+        self.findings: dict[str, list[mc.Finding]] = {}
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             "Metadata Cleaner",
@@ -107,8 +108,7 @@ class MetadataCleanerTab(BaseTab):
         self.tree.heading("what", text="Value")
         self.tree.column("#0", width=px(420))
         self.tree.column("what", width=px(420))
-        sb = ttk.Scrollbar(mid, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sb.set)
+        sb = linked_scrollbar(mid, self.tree)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
@@ -151,7 +151,7 @@ class MetadataCleanerTab(BaseTab):
         self.console = self.make_console_block(self, height=5, expand=False)
 
     # ── Files ─────────────────────────────────────────────────────────
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         if not os.path.isfile(path) or path in self.files:
             return True
         info = ff.try_probe(path)
@@ -178,11 +178,11 @@ class MetadataCleanerTab(BaseTab):
             )
         return True
 
-    def _add(self):
+    def _add(self) -> None:
         for p in dialogs.ask_open_many("media", title="Files to clean", parent=self):
             self.load_file(p)
 
-    def _remove(self):
+    def _remove(self) -> None:
         for iid in self.tree.selection():
             root = iid if iid in self.files else self.tree.parent(iid)
             if root in self.files:
@@ -190,13 +190,13 @@ class MetadataCleanerTab(BaseTab):
                 self.findings.pop(root, None)
                 self.tree.delete(root)
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.files.clear()
         self.findings.clear()
         self.tree.delete(*self.tree.get_children())
 
     # ── Clean ─────────────────────────────────────────────────────────
-    def _clean(self):
+    def _clean(self) -> None:
         if not self.files:
             messagebox.showwarning("Nothing to clean", "Add some files first.", parent=self)
             return

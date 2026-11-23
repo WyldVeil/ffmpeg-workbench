@@ -9,6 +9,8 @@ Advanced mode features:
   • Auto-stop after configurable duration (adds -t to FFmpeg)
 """
 
+from __future__ import annotations
+
 import contextlib
 import ctypes
 import ctypes.wintypes
@@ -16,14 +18,18 @@ import os
 import sys
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from enum import StrEnum
 from tkinter import messagebox, ttk
 from typing import ClassVar
 
 from core import tasks
+from core.encoders import VideoEncode
 from core.i18n import t
+from core.recorder import Recording, Region
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.tktyped import current_tab, overlay
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FolderRow
 
@@ -67,9 +73,9 @@ RECORD_CODECS = {
 class AreaSelector(tk.Toplevel):
     """Transparent overlay for clicking and dragging to select a screen region."""
 
-    def __init__(self, master, callback):
+    def __init__(self, master: tk.Misc, callback: Callable[[int, int, int, int], object]) -> None:
         super().__init__(master)
-        self.attributes("-alpha", 0.3, "-fullscreen", True, "-topmost", True)
+        overlay(self, 0.3)
         self.config(bg="black", cursor="cross")
         self.overrideredirect(True)
 
@@ -85,16 +91,16 @@ class AreaSelector(tk.Toplevel):
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.bind("<Escape>", lambda e: self.destroy())
 
-    def on_press(self, event):
+    def on_press(self, event: tk.Event[tk.Misc]) -> None:
         self.start_x, self.start_y = event.x, event.y
         self.rect = self.canvas.create_rectangle(
             self.start_x, self.start_y, 1, 1, outline="red", width=px(3)
         )
 
-    def on_drag(self, event):
+    def on_drag(self, event: tk.Event[tk.Misc]) -> None:
         self.canvas.coords(self.rect, self.start_x, self.start_y, event.x, event.y)
 
-    def on_release(self, event):
+    def on_release(self, event: tk.Event[tk.Misc]) -> None:
         x1, y1 = self.start_x, self.start_y
         x2, y2 = event.x, event.y
         rx, ry = min(x1, x2), min(y1, y2)
@@ -117,12 +123,12 @@ class WindowPicker(tk.Toplevel):
     window (not the overlay) is identified.
     """
 
-    def __init__(self, master, callback):
+    def __init__(self, master: tk.Misc, callback: Callable[[str, Region | None], object]) -> None:
         super().__init__(master)
         self._master = master
         self.callback = callback
 
-        self.attributes("-alpha", 0.05, "-fullscreen", True, "-topmost", True)
+        overlay(self, 0.05)
         self.config(bg="#000000", cursor="hand2")
         self.overrideredirect(True)
 
@@ -147,14 +153,14 @@ class WindowPicker(tk.Toplevel):
         self.bind("<ButtonPress-1>", self._on_click)
         self.bind("<Escape>", lambda e: self.destroy())
 
-    def _on_click(self, event):
+    def _on_click(self, event: tk.Event[tk.Misc]) -> None:
         sx, sy = event.x_root, event.y_root
         # Destroy FIRST so the overlay is gone before WindowFromPoint runs
         self.destroy()
         # Give Windows a couple frames to remove the overlay from z-order
         self._master.after(120, lambda: self._resolve_window(sx, sy))
 
-    def _resolve_window(self, sx, sy):
+    def _resolve_window(self, sx: int, sy: int) -> None:
         if sys.platform != "win32":
             return
 
@@ -202,12 +208,12 @@ class WindowPicker(tk.Toplevel):
 #  Main tab
 # ─────────────────────────────────────────────────────────────────────────────
 class ScreenRecorderTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.record_proc = None
+        self.record_proc: Recording | None = None
         self.output_path = ""
         self.selected_region = None  # (x, y, w, h) - screen area
-        self._window_rect = None  # (x, y, w, h) - picked window bounds
+        self._window_rect: Region | None = None  # picked window bounds
         self._recording = False
         self._rec_counter = 0  # increments each recording for {counter} token
         self._hotkey_active = False
@@ -247,7 +253,7 @@ class ScreenRecorderTab(BaseTab):
         self._build_ui()
 
     # ─────────────────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.screen_recorder"), t("screen_recorder.subtitle"), icon="🖥️")
 
         nb_frame = tk.Frame(self, bg=CLR["bg"])
@@ -286,7 +292,7 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Express Tab
     # ─────────────────────────────────────────────────────────────────────────
-    def _build_express_tab(self):
+    def _build_express_tab(self) -> None:
         tk.Label(
             self.tab_express,
             text=t("screen_recorder.instant_screen_capture_with_sensible_defaults"),
@@ -345,7 +351,7 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Pro Studio Tab
     # ─────────────────────────────────────────────────────────────────────────
-    def _build_studio_tab(self):
+    def _build_studio_tab(self) -> None:
         self._build_capture_source()
         self._build_video_settings()
         self._build_audio_devices()
@@ -354,7 +360,7 @@ class ScreenRecorderTab(BaseTab):
         self._build_auto_stop()
         self._build_start_button()
 
-    def _build_capture_source(self):
+    def _build_capture_source(self) -> None:
         # ── Capture source ────────────────────────────────────────────────────
         src_f = tk.LabelFrame(
             self.tab_studio,
@@ -394,7 +400,7 @@ class ScreenRecorderTab(BaseTab):
         self._build_window_row(src_f)
         self._on_mode_change()  # set initial visibility
 
-    def _build_region_row(self, src_f):
+    def _build_region_row(self, src_f: tk.LabelFrame) -> None:
         """Desktop mode: the region to record."""
         # Row 1: Region selector (visible in desktop mode)
         self.region_row = tk.Frame(src_f, bg=CLR["bg"])
@@ -427,7 +433,7 @@ class ScreenRecorderTab(BaseTab):
             command=self._reset_area,
         ).pack(side="left")
 
-    def _build_window_row(self, src_f):
+    def _build_window_row(self, src_f: tk.LabelFrame) -> None:
         """Window mode: the window to record."""
         # Row 2: Window picker (visible in window mode)
         self.window_row = tk.Frame(src_f, bg=CLR["bg"])
@@ -462,7 +468,7 @@ class ScreenRecorderTab(BaseTab):
         )
         self.lbl_window.pack(side="left", padx=px(4))
 
-    def _build_video_settings(self):
+    def _build_video_settings(self) -> None:
         """Video Settings."""
         tk.Frame(self.tab_studio, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(6))
         vid_f = tk.LabelFrame(
@@ -502,7 +508,7 @@ class ScreenRecorderTab(BaseTab):
         self._build_quality_row(vid_f)
         self._build_colour_options(vid_f)
 
-    def _build_quality_row(self, vid_f):
+    def _build_quality_row(self, vid_f: tk.LabelFrame) -> None:
         """Quality: the CRF slider and its value."""
         crf_row = tk.Frame(vid_f, bg=CLR["bg"])
         self.form_row(vid_f, 1, t("codec.lbl_crf_quality"), crf_row, label_width=12, pady=4)
@@ -525,7 +531,7 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(5))
 
-    def _build_colour_options(self, vid_f):
+    def _build_colour_options(self, vid_f: tk.LabelFrame) -> None:
         """Chroma, pixel format and encoder preset."""
         self.chroma = ChoiceBox(
             vid_f,
@@ -561,7 +567,7 @@ class ScreenRecorderTab(BaseTab):
             pady=4,
         )
 
-    def _build_audio_devices(self):
+    def _build_audio_devices(self) -> None:
         """Which microphones and system sound to record."""
         # ── Audio Devices (Dynamic) ────────────────────────────────────────────
         aud_f = tk.LabelFrame(
@@ -631,7 +637,7 @@ class ScreenRecorderTab(BaseTab):
         self.cb_audio1.set(LOADING_DEVICES)
         tasks.submit(self._load_audio_devices)
 
-    def _build_hotkey(self):
+    def _build_hotkey(self) -> None:
         """A global hotkey to start and stop."""
 
         hotkey_f = tk.LabelFrame(
@@ -673,7 +679,7 @@ class ScreenRecorderTab(BaseTab):
         )
         self.lbl_hotkey_status.pack(side="left", padx=px(8))
 
-    def _build_output_path(self):
+    def _build_output_path(self) -> None:
         """Where recordings are saved."""
 
         path_f = tk.LabelFrame(
@@ -710,7 +716,7 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(4))
 
-    def _build_auto_stop(self):
+    def _build_auto_stop(self) -> None:
         """Stop by itself after a set time."""
 
         timer_f = tk.LabelFrame(
@@ -733,7 +739,7 @@ class ScreenRecorderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left")
 
-        def _hms_entry(var, label):
+        def _hms_entry(var: tk.StringVar, label: str) -> tk.Entry:
             tk.Label(timer_f, text=label, bg=CLR["bg"], fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(
                 side="left", padx=px(8, 2)
             )
@@ -760,7 +766,7 @@ class ScreenRecorderTab(BaseTab):
             fg=CLR["fgdim"],
         ).pack(side="left", padx=px(6))
 
-    def _build_start_button(self):
+    def _build_start_button(self) -> None:
         """Start button."""
         self.btn_start_pro = tk.Button(
             self.tab_studio,
@@ -776,14 +782,14 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Audio Hardware Scanning
     # ─────────────────────────────────────────────────────────────────────────
-    def _load_audio_devices(self):
+    def _load_audio_devices(self) -> None:
         """Worker thread: find audio sources (incl. the computer's own sound)."""
         from core import recorder
 
         sources = recorder.audio_sources()
         self.after(0, lambda: self._update_audio_dropdowns(sources))
 
-    def _update_audio_dropdowns(self, sources):
+    def _update_audio_dropdowns(self, sources: list[tuple[str, str]]) -> None:
         from core import recorder
 
         self._audio_ids = {label: sid for sid, label in sources}
@@ -799,7 +805,7 @@ class ScreenRecorderTab(BaseTab):
         except tk.TclError:
             pass
 
-    def _audio_choice(self, var) -> str:
+    def _audio_choice(self, var: tk.StringVar) -> str:
         label = var.get()
         if not label or label in (NO_AUDIO, LOADING_DEVICES):
             return ""
@@ -808,7 +814,7 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Mode toggle (desktop vs window)
     # ─────────────────────────────────────────────────────────────────────────
-    def _on_mode_change(self):
+    def _on_mode_change(self) -> None:
         if self.capture_mode_var.get() == "desktop":
             self.region_row.pack(fill="x", pady=px(6, 0))
             self.window_row.pack_forget()
@@ -819,28 +825,28 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Region selection
     # ─────────────────────────────────────────────────────────────────────────
-    def _pick_area(self):
+    def _pick_area(self) -> None:
         AreaSelector(self, self._set_region)
 
-    def _set_region(self, x, y, w, h):
+    def _set_region(self, x: int, y: int, w: int, h: int) -> None:
         self.selected_region = (x, y, w, h)
         self.lbl_region.config(text=f"  {w}×{h} at ({x}, {y})", fg=CLR["green"])
         self.log(self.console, f"Target region: {w}×{h} at offset ({x}, {y})")
 
-    def _reset_area(self):
+    def _reset_area(self) -> None:
         self.selected_region = None
         self.lbl_region.config(text=t("screen_recorder.current_full_screen"), fg=CLR["fgdim"])
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Window click-to-pick
     # ─────────────────────────────────────────────────────────────────────────
-    def _pick_window_studio(self):
+    def _pick_window_studio(self) -> None:
         if sys.platform != "win32":
             messagebox.showinfo(t("msg.os_limitation_title"), t("msg.window_capture_windows_only"))
             return
         WindowPicker(self, self._set_window_title)
 
-    def _set_window_title(self, title: str, rect=None):
+    def _set_window_title(self, title: str, rect: Region | None = None) -> None:
         self.window_title_var.set(title)
         self._window_rect = rect
         self.lbl_window.config(text=f"✔ {title[:40]}")
@@ -866,13 +872,13 @@ class ScreenRecorderTab(BaseTab):
         "Ctrl+Alt+R": (0x0003, 0x52),  # MOD_ALT|CTRL, VK_R
     }
 
-    def _on_hotkey_toggle(self):
+    def _on_hotkey_toggle(self) -> None:
         if self.hotkey_enabled_var.get():
             self._start_hotkey_listener()
         else:
             self._stop_hotkey_listener()
 
-    def _start_hotkey_listener(self):
+    def _start_hotkey_listener(self) -> None:
         if sys.platform != "win32":
             messagebox.showinfo(
                 t("msg.unsupported_title"), t("msg.hotkeys_windows_only"), parent=self
@@ -887,7 +893,7 @@ class ScreenRecorderTab(BaseTab):
         result = {}
         ready = threading.Event()
 
-        def _listen():
+        def _listen() -> None:
             # The hotkey message is posted to the thread that registered it.
             user32 = ctypes.windll.user32
             result["ok"] = bool(user32.RegisterHotKey(None, 9901, mod | 0x4000, vk))  # MOD_NOREPEAT
@@ -916,7 +922,7 @@ class ScreenRecorderTab(BaseTab):
         self.lbl_hotkey_status.config(text=f"  ● {key_name} active", fg=CLR["green"])
         self.log(self.console, f"Global hotkey {key_name} registered.")
 
-    def _stop_hotkey_listener(self):
+    def _stop_hotkey_listener(self) -> None:
         was_active = getattr(self, "_hotkey_active", False)
         self._hotkey_active = False
         tid = getattr(self, "_hotkey_tid", None)
@@ -928,12 +934,12 @@ class ScreenRecorderTab(BaseTab):
         if was_active:
             self.log(self.console, t("log.screen_recorder.global_hotkey_unregistered"))
 
-    def _hotkey_triggered(self):
+    def _hotkey_triggered(self) -> None:
         if self._recording:
             self._stop()
         else:
             # Hotkey only toggles Advanced mode when on that tab
-            if self.notebook.index(self.notebook.select()) == 1:
+            if current_tab(self.notebook) == 1:
                 self._start_pro()
             else:
                 self._start_express()
@@ -963,22 +969,22 @@ class ScreenRecorderTab(BaseTab):
             return ""
         return None
 
-    def _express_encode(self, ext=".mp4"):
+    def _express_encode(self, ext: str = ".mp4") -> VideoEncode:
         from core import encoders as enc
 
         return enc.video("h264", "high", speed="fastest", hw="auto", container=ext.lstrip("."))
 
     def _start_capture(
         self,
-        mode_name,
-        video_in,
+        mode_name: str,
+        video_in: list[str],
         *,
-        out_ext=".mp4",
-        venc=None,
-        region=None,
-        seconds=None,
-        audio=None,
-    ):
+        out_ext: str = ".mp4",
+        venc: VideoEncode | None = None,
+        region: Region | None = None,
+        seconds: int | None = None,
+        audio: list[str] | None = None,
+    ) -> None:
         from core import recorder
 
         tool = self._wayland_check()
@@ -1019,12 +1025,12 @@ class ScreenRecorderTab(BaseTab):
             )
         self._execute(cmd, out, mode_name, seconds)
 
-    def _start_express(self):
+    def _start_express(self) -> None:
         from core import recorder
 
         self._start_capture("Full screen", recorder.screen_input("30"))
 
-    def _start_express_area(self):
+    def _start_express_area(self) -> None:
         from core import recorder
 
         if recorder.session() == "wayland" and recorder.wayland_tool():
@@ -1032,7 +1038,7 @@ class ScreenRecorderTab(BaseTab):
             return
         AreaSelector(self, self._execute_express_area)
 
-    def _execute_express_area(self, x, y, w, h):
+    def _execute_express_area(self, x: int, y: int, w: int, h: int) -> None:
         from core import recorder
 
         if w < 16 or h < 16:
@@ -1044,7 +1050,7 @@ class ScreenRecorderTab(BaseTab):
             "Area", recorder.screen_input("30", region=(x, y, w, h)), region=(x, y, w, h)
         )
 
-    def _start_express_window(self):
+    def _start_express_window(self) -> None:
         from core import recorder
 
         if recorder.session() == "wayland" and recorder.wayland_tool():
@@ -1057,7 +1063,7 @@ class ScreenRecorderTab(BaseTab):
             return
         WindowPicker(self, self._execute_express_window)
 
-    def _execute_express_window(self, title: str, rect=None):
+    def _execute_express_window(self, title: str, rect: Region | None = None) -> None:
         from core import recorder
 
         if rect:
@@ -1067,7 +1073,7 @@ class ScreenRecorderTab(BaseTab):
         self.log(self.console, f'Window: "{title}"')
         self._start_capture("Window", video)
 
-    def _start_pro(self):
+    def _start_pro(self) -> None:
         from core import encoders as enc
         from core import recorder
 
@@ -1144,7 +1150,7 @@ class ScreenRecorderTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────────
     #  Execution & teardown
     # ─────────────────────────────────────────────────────────────────────────
-    def _set_buttons(self, recording: bool):
+    def _set_buttons(self, recording: bool) -> None:
         state = "disabled" if recording else "normal"
         for b in (
             self.btn_start_express,
@@ -1164,7 +1170,9 @@ class ScreenRecorderTab(BaseTab):
             fg="white" if recording else CLR["fg"],
         )
 
-    def _execute(self, cmd, out, mode_name, seconds=None):
+    def _execute(
+        self, cmd: list[str], out: str, mode_name: str, seconds: int | None = None
+    ) -> None:
         from core import recorder
 
         self.output_path = out
@@ -1186,7 +1194,7 @@ class ScreenRecorderTab(BaseTab):
         self.log(self.console, f"[{mode_name}] Recording → {out}")
         self._tick()
 
-    def _tick(self):
+    def _tick(self) -> None:
         rec = self.record_proc
         if rec is None or not self._recording:
             return
@@ -1197,7 +1205,7 @@ class ScreenRecorderTab(BaseTab):
             return
         self.after(500, self._tick)
 
-    def _ended(self, rec, rc):
+    def _ended(self, rec: Recording, rc: int) -> None:
         """The recorder process finished - on request or by itself."""
         if rec is not self.record_proc and self.record_proc is not None:
             return
@@ -1220,7 +1228,7 @@ class ScreenRecorderTab(BaseTab):
             t("common.error"), "The recording stopped unexpectedly:\n\n" + detail, parent=self
         )
 
-    def _stop(self):
+    def _stop(self) -> None:
         rec = self.record_proc
         if rec is None:
             return

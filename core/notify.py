@@ -30,7 +30,7 @@ def _enabled() -> bool:
     return settings.NOTIFY_ON_COMPLETE.get()
 
 
-def _root():
+def _root() -> Any:
     from core import ui
 
     return ui.tk_default_root()
@@ -67,7 +67,7 @@ def desktop_notify(title: str, body: str, *, urgency: str = "normal") -> None:
             )
         elif sys.platform == "darwin":
 
-            def esc(s):
+            def esc(s: str) -> str:
                 return s.replace("\\", "\\\\").replace('"', '\\"')
 
             _proc.spawn(
@@ -108,7 +108,7 @@ def job_finished(task: RenderTask) -> None:
         return
     root = _root()
 
-    def _go():
+    def _go() -> None:
         if _window_focused(root):
             return
         name = os.path.basename(task.output_path) if task.output_path else task.name

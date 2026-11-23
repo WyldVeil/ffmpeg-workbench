@@ -44,13 +44,13 @@ MODES = {
 
 
 class SmartReframeTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.smart_reframe"),
@@ -110,15 +110,15 @@ class SmartReframeTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
 
-    def _ratio_key(self):
+    def _ratio_key(self) -> str:
         return next((k for k, v in RATIOS.items() if v[0] == self.ratio_var.get()), "9:16")
 
-    def _ratio_changed(self):
+    def _ratio_changed(self) -> None:
         ow, oh = RATIOS[self._ratio_key()][2]
         self.ow_var.set(str(ow))
         self.oh_var.set(str(oh))
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         if self._info is not None and self._info.has_video:
             w, h = self._info.require_video().display_size
@@ -126,7 +126,7 @@ class SmartReframeTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "reframed"))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

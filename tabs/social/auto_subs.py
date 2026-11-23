@@ -111,20 +111,20 @@ class _Transcription:
 
 
 class AutoSubsTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._last_subs = None
         self._last_lang = ""
         self._downloading = False
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, eng = self._build_header()
         self._build_output(body, eng)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
             t("tab.auto_subtitles"),
@@ -195,7 +195,7 @@ class AutoSubsTab(BaseTab):
         )
         return body, eng
 
-    def _build_output(self, body, eng):
+    def _build_output(self, body: tk.Frame, eng: tk.LabelFrame) -> None:
         self.prompt_var = tk.StringVar()
         self.form_row(
             eng,
@@ -253,8 +253,8 @@ class AutoSubsTab(BaseTab):
 
     # ── models ───────────────────────────────────────────────────────────────
 
-    def _fill_models(self, keep=None):
-        labels = []
+    def _fill_models(self, keep: str | None = None) -> None:
+        labels: list[str] = []
         for m in whisper.MODELS.values():
             labels.append(m.label + ("   ✓" if whisper.is_installed(m.key) else ""))
         self.model_box.config(values=labels)
@@ -262,11 +262,11 @@ class AutoSubsTab(BaseTab):
         self.model_var.set(labels[list(whisper.MODELS).index(key)])
         self._model_status()
 
-    def model_key(self):
+    def model_key(self) -> str | None:
         label = self.model_var.get().replace("   ✓", "")
         return next((k for k, m in whisper.MODELS.items() if m.label == label), None)
 
-    def _model_status(self):
+    def _model_status(self) -> None:
         key = self.model_key() or whisper.DEFAULT_MODEL
         if whisper.is_installed(key):
             self.model_lbl.config(text="Downloaded - ready to use offline.")
@@ -279,17 +279,17 @@ class AutoSubsTab(BaseTab):
             )
             self.dl_btn.config(state="normal" if not self._downloading else "disabled")
 
-    def _download(self, then=None):
+    def _download(self, then: Callable[[], object] | None = None) -> None:
         key = self.model_key() or whisper.DEFAULT_MODEL
         if self._downloading:
             return
         self._downloading = True
         self.dl_btn.config(state="disabled", text="Downloading… 0%")
 
-        def progress(f):
+        def progress(f: float) -> None:
             self.call_ui(lambda: self.dl_btn.config(text=f"Downloading… {f * 100:.0f}%"))
 
-        def done(_path):
+        def done(_path: str) -> None:
             self._downloading = False
             self.dl_btn.config(text="Download")
             self._fill_models(key)
@@ -297,7 +297,7 @@ class AutoSubsTab(BaseTab):
             if then is not None:
                 then()
 
-        def failed(exc):
+        def failed(exc: BaseException) -> None:
             self._downloading = False
             self.dl_btn.config(text="Download", state="normal")
             messagebox.showerror(
@@ -313,9 +313,9 @@ class AutoSubsTab(BaseTab):
 
     # ── source ───────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
-        tracks = []
+        tracks: list[str] = []
         if self._info is not None:
             for i, a in enumerate(self._info.audio_streams):
                 desc = f"Track {i + 1}: {a.codec}, {a.channels} ch"
@@ -331,10 +331,10 @@ class AutoSubsTab(BaseTab):
         self.burn_btn.config(state="disabled")
         self.mux_btn.config(state="disabled")
 
-    def _fmt(self):
+    def _fmt(self) -> str:
         return next((k for k, v in FORMATS.items() if v == self.fmt_var.get()), "srt")
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         src = self.src_row.path
         if not src:
             return ""
@@ -362,7 +362,7 @@ class AutoSubsTab(BaseTab):
             return None
         return info
 
-    def _run(self):
+    def _run(self) -> None:
         src = self.src_row.path
         info = self._transcribable(src)
         if info is None:
@@ -399,7 +399,7 @@ class AutoSubsTab(BaseTab):
             f"({'auto language' if lang == 'auto' else lang})…",
         )
 
-    def _outputs(self, src, fmt):
+    def _outputs(self, src: str, fmt: str) -> list[str] | None:
         """The subtitle files to write (two for SRT + VTT); None if the user backs out."""
         exts = {"srt": [".srt"], "vtt": [".vtt"], "both": [".srt", ".vtt"], "txt": [".txt"]}[fmt]
         base = os.path.splitext(self.out_row.path or self._suggest())[0]
@@ -411,7 +411,7 @@ class AutoSubsTab(BaseTab):
         self.out_row.set(outputs[0])
         return outputs
 
-    def _transcribed(self, job, key, tid, rc):
+    def _transcribed(self, job: _Transcription, key: str, tid: str, rc: int) -> None:
         """Back to ready; on success, the follow-up buttons light up."""
         self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
         self._fill_models(key)
@@ -428,7 +428,7 @@ class AutoSubsTab(BaseTab):
 
     # ── follow-ups ───────────────────────────────────────────────────────────
 
-    def _burn(self):
+    def _burn(self) -> None:
         subs, src = self._last_subs, self.src_row.path
         if not subs or not os.path.isfile(subs):
             return
@@ -436,7 +436,7 @@ class AutoSubsTab(BaseTab):
         if isinstance(page, TakesSubtitles):
             page.take_subtitles(src, subs)
 
-    def _mux(self):
+    def _mux(self) -> None:
         subs, src = self._last_subs, self.src_row.path
         info = common.check_source(self, src)
         if info is None or not subs:

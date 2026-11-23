@@ -9,6 +9,8 @@ so file names can't inject commands; shell operators (&&, |, >) are refused.
 User presets live in the app's config folder.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import tkinter as tk
@@ -20,6 +22,7 @@ from core.ops import presets as pr
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import add_pane, linked_scrollbar, on_write
 from tabs.widgets import SaveRow
 
 #: the category filter's "show every category" entry (the others are the presets' own)
@@ -27,18 +30,18 @@ ALL_CATEGORIES = "All"
 
 
 class PresetManagerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.editor: dict[str, tk.StringVar] = {}  # the preset editor's fields, by name
         self.presets, warning = pr.load_presets()
-        self._selected_idx = None
+        self._selected_idx: int | None = None
         self._build_ui()
         if warning:
             self.after(
                 300, lambda: messagebox.showwarning(t("common.warning"), warning, parent=self)
             )
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         make_header(self, t("tab.preset_manager"), t("presets.subtitle"), icon="💾")
 
         # ── Main paned layout ─────────────────────────────────────────────
@@ -47,8 +50,8 @@ class PresetManagerTab(BaseTab):
 
         left = tk.Frame(paned, width=px(420))
         right = tk.Frame(paned, width=px(560))
-        paned.add(left, minsize=px(280))
-        paned.add(right, minsize=px(320))
+        add_pane(paned, left, px(280))
+        add_pane(paned, right, px(320))
 
         self._build_list(left)
         self._build_editor(right)
@@ -57,7 +60,7 @@ class PresetManagerTab(BaseTab):
         self._refresh_list()
 
     # ── Preset list ───────────────────────────────────────────────────────
-    def _build_list(self, parent):
+    def _build_list(self, parent: tk.Misc) -> None:
         tk.Label(parent, text="PRESETS", font=(UI_FONT, 9, "bold"), fg=CLR["fgdim"]).pack(
             anchor="w", padx=px(8), pady=px(6, 2)
         )
@@ -67,7 +70,7 @@ class PresetManagerTab(BaseTab):
         search_f.pack(fill="x", padx=px(6), pady=px(2))
         tk.Label(search_f, text="🔍").pack(side="left")
         self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._refresh_list())
+        on_write(self.search_var, lambda: self._refresh_list())
         tk.Entry(search_f, textvariable=self.search_var, width=30).pack(side="left", padx=px(4))
         tk.Label(search_f, text=t("presets.category_label")).pack(side="left", padx=px(12, 4))
         self.cat_filter_var = tk.StringVar(value=ALL_CATEGORIES)
@@ -79,7 +82,7 @@ class PresetManagerTab(BaseTab):
             width=12,
         )
         self.cat_cb.pack(side="left")
-        self.cat_filter_var.trace_add("write", lambda *_: self._refresh_list())
+        on_write(self.cat_filter_var, lambda: self._refresh_list())
 
         # Treeview
         cols = ("name", "category")
@@ -93,8 +96,7 @@ class PresetManagerTab(BaseTab):
         self.tree.tag_configure("builtin", foreground="#888888")
         self.tree.tag_configure("custom", foreground="#EEEEEE")
 
-        tsb = ttk.Scrollbar(parent, command=self.tree.yview)
-        self.tree.config(yscrollcommand=tsb.set)
+        tsb = linked_scrollbar(parent, self.tree)
         self.tree.pack(side="left", fill="both", expand=True, padx=px(6, 0))
         tsb.pack(side="right", fill="y")
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -115,11 +117,11 @@ class PresetManagerTab(BaseTab):
             )
 
     # ── Editor panel ──────────────────────────────────────────────────────
-    def _build_editor(self, parent):
+    def _build_editor(self, parent: tk.Misc) -> None:
         ef = self._build_preset_form(parent)
         self._build_quick_run(ef)
 
-    def _build_preset_form(self, parent):
+    def _build_preset_form(self, parent: tk.Misc) -> tk.Frame:
         tk.Label(
             parent, text=t("presets.editor_section"), font=(UI_FONT, 9, "bold"), fg=CLR["fgdim"]
         ).pack(anchor="w", padx=px(8), pady=px(6, 2))
@@ -155,7 +157,7 @@ class PresetManagerTab(BaseTab):
         self._build_preset_buttons(ef)
         return ef
 
-    def _build_command_editor(self, ef):
+    def _build_command_editor(self, ef: tk.Frame) -> None:
         """The FFmpeg command, with snippets to insert."""
         # FFmpeg command template
         cmd_lbl = tk.Frame(ef)
@@ -190,7 +192,7 @@ class PresetManagerTab(BaseTab):
                 command=lambda s=snippet: self._insert_snippet(s),
             ).pack(side="left", padx=px(2))
 
-    def _build_preset_buttons(self, ef):
+    def _build_preset_buttons(self, ef: tk.Frame) -> None:
         """Save, delete and test."""
         # Buttons
         act_f = tk.Frame(ef)
@@ -218,7 +220,7 @@ class PresetManagerTab(BaseTab):
             command=self._clear_editor,
         ).pack(side="left", padx=px(4))
 
-    def _build_quick_run(self, ef):
+    def _build_quick_run(self, ef: tk.Frame) -> None:
         """Quick Run section."""
         run_lf = tk.LabelFrame(
             ef, text=f"  {t('presets.quick_run_section')}  ", padx=px(10), pady=px(8)
@@ -253,7 +255,7 @@ class PresetManagerTab(BaseTab):
     # ═══════════════════════════════════════════════════════════════════════
     #  List logic
     # ═══════════════════════════════════════════════════════════════════════
-    def _refresh_list(self):
+    def _refresh_list(self) -> None:
         search = self.search_var.get().lower()
         cat = self.cat_filter_var.get()
 
@@ -277,7 +279,7 @@ class PresetManagerTab(BaseTab):
                 "", tk.END, iid=str(i), values=(p["name"], p.get("category", "Custom")), tags=(tag,)
             )
 
-    def _on_select(self, _=None):
+    def _on_select(self, _: object = None) -> None:
         sel = self.tree.selection()
         if not sel:
             return
@@ -295,20 +297,20 @@ class PresetManagerTab(BaseTab):
             base = os.path.splitext(src)[0]
             self.run_out_var.set(base + "_preset.mp4")
 
-    def _new_preset(self):
+    def _new_preset(self) -> None:
         self._selected_idx = None
         self._clear_editor()
 
-    def _clear_editor(self):
+    def _clear_editor(self) -> None:
         self.editor["ed_name_var"].set("")
         self.editor["ed_cat_var"].set("Custom")
         self.editor["ed_desc_var"].set("")
         self.ed_cmd_text.delete("1.0", tk.END)
 
-    def _insert_snippet(self, s):
+    def _insert_snippet(self, s: str) -> None:
         self.ed_cmd_text.insert(tk.INSERT, " " + s + " ")
 
-    def _save_preset(self):
+    def _save_preset(self) -> None:
         name = self.editor["ed_name_var"].get().strip()
         cmd = self.ed_cmd_text.get("1.0", tk.END).strip()
         if not name:
@@ -357,7 +359,7 @@ class PresetManagerTab(BaseTab):
         else:
             messagebox.showinfo("Saved", f'Preset "{name}" saved.', parent=self)
 
-    def _delete_selected(self):
+    def _delete_selected(self) -> None:
         if self._selected_idx is None:
             return
         p = self.presets[self._selected_idx]
@@ -375,7 +377,7 @@ class PresetManagerTab(BaseTab):
                     t("common.error"), f"Could not save the change:\n{err}", parent=self
                 )
 
-    def _duplicate(self):
+    def _duplicate(self) -> None:
         if self._selected_idx is None:
             return
         p = dict(self.presets[self._selected_idx])
@@ -393,7 +395,7 @@ class PresetManagerTab(BaseTab):
                 t("common.error"), f"Could not save the change:\n{err}", parent=self
             )
 
-    def _export_presets(self):
+    def _export_presets(self) -> None:
         path = dialogs.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
         if not path:
             return
@@ -409,41 +411,18 @@ class PresetManagerTab(BaseTab):
             "Exported", f"{len(mine)} preset(s) exported to {os.path.basename(path)}", parent=self
         )
 
-    def _import_presets(self):
+    def _import_presets(self) -> None:
         path = dialogs.askopenfilename(filetypes=[("JSON", "*.json")])
         if not path:
             return
         try:
             with open(path, encoding="utf-8") as f:
-                imported = json.load(f)
-            if not isinstance(imported, list):
-                raise ValueError("the file does not contain a list of presets")
+                new, skipped = pr.read_import(json.load(f), {p["name"] for p in self.presets})
         except (OSError, ValueError) as exc:
             messagebox.showerror(t("common.error"), f"Could not read the file:\n{exc}", parent=self)
             return
-        added, skipped = 0, []
-        existing = {p["name"] for p in self.presets}
-        for p in imported:
-            if not (
-                isinstance(p, dict)
-                and isinstance(p.get("name"), str)
-                and isinstance(p.get("cmd"), str)
-            ):
-                continue
-            try:
-                pr.check_template(p["cmd"])
-            except ValueError:
-                skipped.append(p["name"])
-                continue
-            if p["name"] not in existing:
-                self.presets.append(
-                    {
-                        k: str(p.get(k, ""))
-                        for k in ("name", "category", "description", "cmd", "ext")
-                    }
-                )
-                existing.add(p["name"])
-                added += 1
+        self.presets.extend(new)
+        added = len(new)
         err = pr.save_user_presets(self.presets)
         self._refresh_list()
         msg = f"Added {added} new preset(s)."
@@ -457,7 +436,7 @@ class PresetManagerTab(BaseTab):
         messagebox.showinfo("Imported", msg, parent=self)
 
     # ── Quick run ─────────────────────────────────────────────────────────
-    def _browse_run_src(self):
+    def _browse_run_src(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))]
         )
@@ -468,7 +447,7 @@ class PresetManagerTab(BaseTab):
                 ext = self.presets[self._selected_idx].get("ext") or ".mp4"
             self.run_out_var.set(self.suggest_output(p, "preset", ext))
 
-    def _quick_run(self):
+    def _quick_run(self) -> None:
         if self._selected_idx is None:
             messagebox.showinfo(t("msg.no_preset_title"), t("msg.select_preset"), parent=self)
             return

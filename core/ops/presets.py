@@ -189,3 +189,31 @@ def save_user_presets(presets: Sequence[Preset]) -> str:
         return ""
     except OSError as exc:
         return str(exc)
+
+
+def read_import(raw: object, existing: set[str]) -> tuple[list[Preset], list[str]]:
+    """The presets in an imported file's JSON *raw* (a list of objects with a
+    "name" and a "cmd"): (new presets whose names aren't in *existing*, names
+    skipped because their command is unsafe or has no {INPUT}/{OUTPUT})."""
+    if not isinstance(raw, list):
+        raise ValueError("the file does not contain a list of presets")
+    added: list[Preset] = []
+    skipped: list[str] = []
+    seen = set(existing)
+    for item in cast("list[object]", raw):
+        if not isinstance(item, dict):
+            continue
+        entry = cast("dict[str, object]", item)
+        name, cmd = entry.get("name"), entry.get("cmd")
+        if not isinstance(name, str) or not isinstance(cmd, str):
+            continue
+        try:
+            check_template(cmd)
+        except ValueError:
+            skipped.append(name)
+            continue
+        if name not in seen:
+            keys = ("name", "category", "description", "cmd", "ext")
+            added.append({k: str(entry.get(k, "")) for k in keys})
+            seen.add(name)
+    return added, skipped

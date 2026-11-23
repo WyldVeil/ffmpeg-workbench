@@ -92,7 +92,7 @@ PREVIEW_W, PREVIEW_H = 880, 520
 
 
 class ContactSheetTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._info: ff.MediaInfo | None = None
         self._variant = 0
@@ -104,7 +104,7 @@ class ContactSheetTab(BaseTab):
 
     # ── UI ────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.contact_sheet"),
@@ -122,7 +122,7 @@ class ContactSheetTab(BaseTab):
         self._build_text(cols)
         self._build_output(body)
 
-    def _build_preview(self, body):
+    def _build_preview(self, body: tk.Frame) -> None:
         self.preview = FramePreview(body, PREVIEW_W, PREVIEW_H, show_time=False)
         self.preview.pack(pady=px(6, 0))
         nav = tk.Frame(body)
@@ -149,7 +149,18 @@ class ContactSheetTab(BaseTab):
         )
         self.status_lbl.pack(pady=px(2, 0))
 
-    def _spin(self, parent, row, label, value, low, high, *, step=1, unit=""):
+    def _spin(
+        self,
+        parent: tk.Misc,
+        row: int,
+        label: str,
+        value: int,
+        low: int,
+        high: int,
+        *,
+        step: int = 1,
+        unit: str = "",
+    ) -> tk.StringVar:
         """A labelled number box on *row* of *parent*'s grid; its StringVar."""
         var = tk.StringVar(value=str(value))
         box = tk.Spinbox(parent, from_=low, to=high, increment=step, textvariable=var, width=6)
@@ -159,7 +170,7 @@ class ContactSheetTab(BaseTab):
         var.trace_add("write", self._changed)
         return var
 
-    def _build_grid(self, cols):
+    def _build_grid(self, cols: tk.Frame) -> None:
         f = tk.LabelFrame(cols, text="  Grid  ", padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True, padx=px(0, 6))
         presets = tk.Frame(f)
@@ -186,7 +197,7 @@ class ContactSheetTab(BaseTab):
         )
         self.border_btn.pack(side="left")
 
-    def _build_frames(self, cols):
+    def _build_frames(self, cols: tk.Frame) -> None:
         f = tk.LabelFrame(cols, text="  Frames  ", padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True, padx=px(0, 6))
         tk.Label(f, text="Take frames:", anchor="w").grid(row=0, column=0, columnspan=3, sticky="w")
@@ -213,7 +224,7 @@ class ContactSheetTab(BaseTab):
         ).grid(row=6, column=0, columnspan=3, sticky="w", pady=px(4, 0))
         self._sampling_changed()
 
-    def _build_text(self, cols):
+    def _build_text(self, cols: tk.Frame) -> None:
         f = tk.LabelFrame(cols, text="  Text  ", padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True)
         ticks = tk.Frame(f)
@@ -246,7 +257,7 @@ class ContactSheetTab(BaseTab):
         )
         self._build_font(f)
 
-    def _build_font(self, f):
+    def _build_font(self, f: tk.LabelFrame) -> None:
         self.font_var = tk.StringVar(value="Montserrat")
         fonts = tk.OptionMenu(f, self.font_var, *ass.families())
         fonts.configure(relief="flat", width=14)
@@ -260,7 +271,7 @@ class ContactSheetTab(BaseTab):
         )
         self.text_btn.grid(row=5, column=0, columnspan=2, sticky="w", pady=px(4, 0))
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         out_lf = output_box(body)
         self.out_row = SaveRow(
             out_lf, t("common.output_file"), kind="image", ext=".png", suggest=self._suggest
@@ -284,19 +295,19 @@ class ContactSheetTab(BaseTab):
 
     # ── Settings ──────────────────────────────────────────────────────────
 
-    def _grid(self, cols, rows):
+    def _grid(self, cols: int, rows: int) -> None:
         self.cols_var.set(str(cols))
         self.rows_var.set(str(rows))
 
     def _recolour(self, _colour: str) -> None:
         self._changed()
 
-    def _sampling_changed(self, *_):
+    def _sampling_changed(self, *_: object) -> None:
         scenes = self.sampling.value is cs.Sampling.SCENES
         self.sensitivity.configure(state="readonly" if scenes else "disabled")
         self._changed()
 
-    def _picture_changed(self, picture):
+    def _picture_changed(self, picture: Picture) -> None:
         path = self.out_row.path
         if path:
             self.out_row.set(os.path.splitext(path)[0] + "." + picture.value)
@@ -332,7 +343,7 @@ class ContactSheetTab(BaseTab):
 
     # ── The preview ───────────────────────────────────────────────────────
 
-    def _load(self, path):
+    def _load(self, path: str) -> None:
         self._info = ff.try_probe(path) if path else None
         self._variant = 0
         if self._info is not None and not self._info.has_video:
@@ -340,15 +351,15 @@ class ContactSheetTab(BaseTab):
             self.status_lbl.config(text="That file has no picture - choose a video.", fg=CLR["red"])
         self._changed()
 
-    def _step(self, by):
+    def _step(self, by: int) -> None:
         self._variant = max(0, self._variant + by)
         self._changed()
 
-    def _first_set(self):
+    def _first_set(self) -> None:
         self._variant = 0
         self._changed()
 
-    def _changed(self, *_):
+    def _changed(self, *_: str) -> None:
         """Any setting changed: make a new preview once the typing stops."""
         self.set_lbl.config(text=f"Set {self._variant + 1}")
         self.btn_prev.config(state="normal" if self._variant > 0 else "disabled")
@@ -356,7 +367,7 @@ class ContactSheetTab(BaseTab):
             self.after_cancel(self._after)
         self._after = self.after(350, self._preview)
 
-    def _preview(self):
+    def _preview(self) -> None:
         self._after = None
         info = self._info
         if info is None:
@@ -399,7 +410,7 @@ class ContactSheetTab(BaseTab):
             return None
         return THRESHOLDS[self.sensitivity.value]
 
-    def _preview_ready(self, gen, frames, full, path):
+    def _preview_ready(self, gen: int, frames: int, full: cs.Geometry, path: str) -> None:
         if gen != self._gen or not self.winfo_exists():
             return
         self.preview.load(path, duration=0.0)
@@ -407,14 +418,14 @@ class ContactSheetTab(BaseTab):
             text=f"{frames} frames  ·  saved at {full.width} × {full.height} px", fg=CLR["fgdim"]
         )
 
-    def _preview_failed(self, gen, exc):
+    def _preview_failed(self, gen: int, exc: BaseException) -> None:
         if gen != self._gen or isinstance(exc, Cancelled):
             return
         self.status_lbl.config(text=f"No preview: {exc}", fg=CLR["red"])
 
     # ── Saving ────────────────────────────────────────────────────────────
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         src = self.src_row.path
         return (
             self.suggest_output(src, "contact_sheet", "." + self.picture.value.value) if src else ""
@@ -430,7 +441,7 @@ class ContactSheetTab(BaseTab):
             self.out_row.set(out)
         return out
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -462,7 +473,7 @@ class ContactSheetTab(BaseTab):
             console=self.console,
         )
 
-    def on_app_closing(self):
+    def on_app_closing(self) -> None:
         if self._folder:
             shutil.rmtree(self._folder, ignore_errors=True)
             self._folder = None  # a new one is made if the page is used again

@@ -33,24 +33,24 @@ MODES = [
 
 class ClipLooperTab(BaseTab):
     # i / o (and the buttons): the section starts / ends at the frame shown
-    def mark_in(self):
+    def mark_in(self) -> None:
         self.section.start.use_here()
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         self.section.end.use_here()
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opt = self._build_header()
         self._build_output(body, opt)
         self._build_console(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(self, t("tab.clip_looper"), "Repeat, stutter or echo a moment.", icon="🔁")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -95,7 +95,7 @@ class ClipLooperTab(BaseTab):
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
         return body, opt
 
-    def _build_output(self, body, opt):
+    def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="Section from").pack(side="left")
@@ -127,16 +127,16 @@ class ClipLooperTab(BaseTab):
         )
         self.btn_render = self.make_render_btn(body, "🔁  CREATE", self._render, width=22)
 
-    def _build_console(self, body):
+    def _build_console(self, body: tk.Frame) -> None:
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
         self._mode_changed()
 
-    def _mode_changed(self):
+    def _mode_changed(self) -> None:
         stutter = self.mode_var.get() == "stutter"
         self.section.end.entry.config(state="disabled" if stutter else "normal")
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -168,7 +168,7 @@ class ClipLooperTab(BaseTab):
             return None
         return start, min(end, info.duration), count, factor
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         section = self._section(info) if info is not None else None

@@ -143,7 +143,7 @@ class TaskContext:
 
     def __init__(
         self, manager: RenderQueueManager, task: RenderTask, progress_cb: Callable[[str], None]
-    ):
+    ) -> None:
         self._m = manager
         self.task = task
         self._progress_cb = progress_cb
@@ -231,7 +231,7 @@ class RenderQueueManager:
                     cls._instance = cls()
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._tasks: list[RenderTask] = []
         self._lock = threading.RLock()
         self._work = threading.Condition(self._lock)
@@ -352,7 +352,7 @@ class RenderQueueManager:
         with self._lock:
             return [t for t in self._tasks if t.status in (PENDING, ACTIVE)]
 
-    def get_stats(self):
+    def get_stats(self) -> tuple[int, int, int, int]:
         """(active, pending, done, failed_or_cancelled)."""
         with self._lock:
             active = sum(1 for t in self._tasks if t.status == ACTIVE)

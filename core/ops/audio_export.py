@@ -10,7 +10,6 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
 from core import ffmpeg as ff
 from core.queue_manager import TaskContext
@@ -29,47 +28,69 @@ class AudioFormat(StrEnum):
     AC3 = "ac3"
 
 
-FORMAT_DEFS: dict[AudioFormat, dict[str, Any]] = {
-    AudioFormat.MP3: {
-        "label": "MP3",
-        "ext": ".mp3",
-        "codec": ["-c:a", "libmp3lame"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "224k", "256k", "320k"],
-        "default_br": "320k",
-        "vbr_flag": "-q:a",
-        "vbr_range": (0, 9),  # 0 = best
-        "vbr_default": 2,
-        "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
-    },
-    AudioFormat.AAC: {
-        "label": "AAC (M4A)",
-        "ext": ".m4a",
-        "codec": ["-c:a", "aac"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-        "default_br": "256k",
-        "vbr_flag": None,
-        "sample_rates": [22050, 32000, 44100, 48000, 96000],
-    },
-    AudioFormat.VORBIS: {
-        "label": "OGG Vorbis",
-        "ext": ".ogg",
-        "codec": ["-c:a", "libvorbis"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-        "default_br": "192k",
-        "vbr_flag": "-q:a",
-        "vbr_range": (0, 10),  # 10 = best
-        "vbr_default": 6,
-        "sample_rates": [8000, 11025, 16000, 22050, 32000, 44100, 48000],
-    },
-    AudioFormat.OPUS: {
-        "label": "Opus",
-        "ext": ".opus",
-        "codec": ["-c:a", "libopus"],
-        "lossy": True,
-        "bitrates": [
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FormatDef:
+    """What the converter offers for one output format."""
+
+    label: str
+    ext: str
+    codec: tuple[str, ...]  # empty: set from the bit depth (WAV, AIFF)
+    lossy: bool
+    sample_rates: tuple[int, ...]
+    bitrates: tuple[str, ...] = ()  # lossy formats
+    default_br: str = ""
+    vbr_flag: str | None = None  # the encoder's quality option, if it has one
+    vbr_range: tuple[int, int] = (0, 9)
+    vbr_default: int = 0
+    bit_depths: Mapping[str, str] = field(
+        default_factory=dict[str, str]
+    )  # lossless: label -> sample format
+    default_depth: str = "16-bit"
+    compression_range: tuple[int, int] = (0, 12)  # FLAC
+    compression_default: int = 5
+
+
+FORMAT_DEFS: dict[AudioFormat, FormatDef] = {
+    AudioFormat.MP3: FormatDef(
+        label="MP3",
+        ext=".mp3",
+        codec=("-c:a", "libmp3lame"),
+        lossy=True,
+        sample_rates=(8000, 11025, 16000, 22050, 32000, 44100, 48000),
+        bitrates=("64k", "96k", "128k", "160k", "192k", "224k", "256k", "320k"),
+        default_br="320k",
+        vbr_flag="-q:a",
+        vbr_range=(0, 9),
+        vbr_default=2,
+    ),
+    AudioFormat.AAC: FormatDef(
+        label="AAC (M4A)",
+        ext=".m4a",
+        codec=("-c:a", "aac"),
+        lossy=True,
+        sample_rates=(22050, 32000, 44100, 48000, 96000),
+        bitrates=("64k", "96k", "128k", "160k", "192k", "256k", "320k"),
+        default_br="256k",
+    ),
+    AudioFormat.VORBIS: FormatDef(
+        label="OGG Vorbis",
+        ext=".ogg",
+        codec=("-c:a", "libvorbis"),
+        lossy=True,
+        sample_rates=(8000, 11025, 16000, 22050, 32000, 44100, 48000),
+        bitrates=("64k", "96k", "128k", "160k", "192k", "256k", "320k"),
+        default_br="192k",
+        vbr_flag="-q:a",
+        vbr_range=(0, 10),
+        vbr_default=6,
+    ),
+    AudioFormat.OPUS: FormatDef(
+        label="Opus",
+        ext=".opus",
+        codec=("-c:a", "libopus"),
+        lossy=True,
+        sample_rates=(8000, 12000, 16000, 24000, 48000),
+        bitrates=(
             "32k",
             "48k",
             "64k",
@@ -81,91 +102,74 @@ FORMAT_DEFS: dict[AudioFormat, dict[str, Any]] = {
             "320k",
             "450k",
             "510k",
-        ],
-        "default_br": "128k",
-        "vbr_flag": None,
-        "sample_rates": [8000, 12000, 16000, 24000, 48000],
-    },
-    AudioFormat.WAV: {
-        "label": "WAV",
-        "ext": ".wav",
-        "codec": [],  # set dynamically from bit depth
-        "lossy": False,
-        "bit_depths": {
+        ),
+        default_br="128k",
+    ),
+    AudioFormat.WAV: FormatDef(
+        label="WAV",
+        ext=".wav",
+        codec=(),
+        lossy=False,
+        sample_rates=(8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000),
+        bit_depths={
             "16-bit": "pcm_s16le",
             "24-bit": "pcm_s24le",
             "32-bit": "pcm_s32le",
             "32-bit float": "pcm_f32le",
         },
-        "default_depth": "16-bit",
-        "sample_rates": [
-            8000,
-            11025,
-            16000,
-            22050,
-            32000,
-            44100,
-            48000,
-            88200,
-            96000,
-            176400,
-            192000,
-        ],
-    },
-    AudioFormat.FLAC: {
-        "label": "FLAC",
-        "ext": ".flac",
-        "codec": ["-c:a", "flac"],
-        "lossy": False,
-        # the FLAC encoder takes s16/s32; 24-bit = s32 marked as 24 significant bits
-        "bit_depths": {"16-bit": "s16", "24-bit": "s32:24", "32-bit": "s32"},
-        "default_depth": "16-bit",
-        "compression_range": (0, 12),  # 0 = fastest, 12 = smallest
-        "compression_default": 5,
-        "sample_rates": [8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000],
-    },
-    AudioFormat.ALAC: {
-        "label": "ALAC (M4A)",
-        "ext": ".m4a",
-        "codec": ["-c:a", "alac"],
-        "lossy": False,
-        "bit_depths": {"16-bit": "s16p", "24-bit": "s32p:24"},  # ALAC stores at most 24 bits here
-        "default_depth": "16-bit",
-        "sample_rates": [44100, 48000, 88200, 96000, 176400, 192000],
-    },
-    AudioFormat.AIFF: {
-        "label": "AIFF",
-        "ext": ".aiff",
-        "codec": [],  # set from bit depth
-        "lossy": False,
-        "bit_depths": {"16-bit": "pcm_s16be", "24-bit": "pcm_s24be", "32-bit": "pcm_s32be"},
-        "default_depth": "16-bit",
-        "sample_rates": [22050, 32000, 44100, 48000, 88200, 96000],
-    },
-    AudioFormat.WMA: {
-        "label": "WMA",
-        "ext": ".wma",
-        "codec": ["-c:a", "wmav2"],
-        "lossy": True,
-        "bitrates": ["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-        "default_br": "192k",
-        "vbr_flag": None,
-        "sample_rates": [22050, 32000, 44100, 48000],
-    },
-    AudioFormat.AC3: {
-        "label": "AC3",
-        "ext": ".ac3",
-        "codec": ["-c:a", "ac3"],
-        "lossy": True,
-        "bitrates": ["128k", "192k", "224k", "256k", "320k", "384k", "448k", "640k"],
-        "default_br": "384k",
-        "vbr_flag": None,
-        "sample_rates": [32000, 44100, 48000],
-    },
+        default_depth="16-bit",
+    ),
+    AudioFormat.FLAC: FormatDef(
+        label="FLAC",
+        ext=".flac",
+        codec=("-c:a", "flac"),
+        lossy=False,
+        sample_rates=(8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000),
+        bit_depths={"16-bit": "s16", "24-bit": "s32:24", "32-bit": "s32"},
+        default_depth="16-bit",
+        compression_range=(0, 12),
+        compression_default=5,
+    ),
+    AudioFormat.ALAC: FormatDef(
+        label="ALAC (M4A)",
+        ext=".m4a",
+        codec=("-c:a", "alac"),
+        lossy=False,
+        sample_rates=(44100, 48000, 88200, 96000, 176400, 192000),
+        bit_depths={"16-bit": "s16p", "24-bit": "s32p:24"},
+        default_depth="16-bit",
+    ),
+    AudioFormat.AIFF: FormatDef(
+        label="AIFF",
+        ext=".aiff",
+        codec=(),
+        lossy=False,
+        sample_rates=(22050, 32000, 44100, 48000, 88200, 96000),
+        bit_depths={"16-bit": "pcm_s16be", "24-bit": "pcm_s24be", "32-bit": "pcm_s32be"},
+        default_depth="16-bit",
+    ),
+    AudioFormat.WMA: FormatDef(
+        label="WMA",
+        ext=".wma",
+        codec=("-c:a", "wmav2"),
+        lossy=True,
+        sample_rates=(22050, 32000, 44100, 48000),
+        bitrates=("64k", "96k", "128k", "160k", "192k", "256k", "320k"),
+        default_br="192k",
+    ),
+    AudioFormat.AC3: FormatDef(
+        label="AC3",
+        ext=".ac3",
+        codec=("-c:a", "ac3"),
+        lossy=True,
+        sample_rates=(32000, 44100, 48000),
+        bitrates=("128k", "192k", "224k", "256k", "320k", "384k", "448k", "640k"),
+        default_br="384k",
+    ),
 }
 
 #: what the drop-down shows for each format
-FORMATS = {fmt: str(spec["label"]) for fmt, spec in FORMAT_DEFS.items()}
+FORMATS = {fmt: spec.label for fmt, spec in FORMAT_DEFS.items()}
 
 
 class Normalise(StrEnum):
@@ -213,8 +217,8 @@ class Export:
 def codec_args(e: Export, seconds: float) -> list[str]:
     fmt = e.fmt
     fd = FORMAT_DEFS[fmt]
-    if fd["lossy"]:
-        args = list(fd["codec"])
+    if fd.lossy:
+        args = list(fd.codec)
         if e.size_bytes is not None:
             lo, hi = BITRATE_LIMITS_K.get(fmt, (8, 640))
             kbps = int(e.size_bytes * 8 * 0.97 / max(seconds, 0.1) / 1000)
@@ -224,15 +228,15 @@ def codec_args(e: Export, seconds: float) -> list[str]:
                     f"(it would need {kbps} kbps; the minimum is {lo})."
                 )
             args += ["-b:a", f"{min(kbps, hi)}k"]
-        elif e.vbr is not None:
-            args += [fd["vbr_flag"], e.vbr]
+        elif e.vbr is not None and fd.vbr_flag:
+            args += [fd.vbr_flag, e.vbr]
         else:
             args += ["-b:a", e.bitrate or "192k"]
         return args
     depth = e.depth
     if fmt in (AudioFormat.WAV, AudioFormat.AIFF):
         return ["-c:a", depth or ("pcm_s16le" if fmt is AudioFormat.WAV else "pcm_s16be")]
-    args = list(fd["codec"])
+    args = list(fd.codec)
     if depth:
         sample_fmt, _, bits = depth.partition(":")
         args += ["-sample_fmt", sample_fmt] + (["-bits_per_raw_sample", bits] if bits else [])

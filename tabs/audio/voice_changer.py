@@ -23,13 +23,13 @@ from tabs.widgets import FileRow, save_section, scroll_body
 
 
 class VoiceChangerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.voice_changer"), t("voice_changer.subtitle"), icon="🎙️")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -90,21 +90,21 @@ class VoiceChangerTab(BaseTab):
         self.btn_render.pack(pady=px(10))
         self.console = self.make_console_block(body, height=5)
 
-    def chain(self, info) -> str:
+    def chain(self, info: ff.MediaInfo | None) -> str:
         key = next((k for k, v in vc.PRESETS.items() if v[0] == self.preset_var.get()), "chipmunk")
         sr = info.require_audio().sample_rate if info is not None and info.audio else 48000
         return vc.voice_filter(
             key, float(self.semi_var.get()), sr, self.formant_var.get(), vc.rubberband_available()
         )
 
-    def _preview(self):
+    def _preview(self) -> None:
         src = self.src_row.path
         info = ff.try_probe(src) if src else None
         common.preview_audio(
             self, src, self.chain(info), start=min(5.0, (info.duration / 3) if info else 0)
         )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:

@@ -13,6 +13,7 @@ import os
 import tkinter as tk
 from enum import StrEnum
 from tkinter import messagebox, ttk
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core.i18n import t
@@ -24,6 +25,9 @@ from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import MomentPicker
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FileRow, FramePreview, save_section, scroll_body
+
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
 
 DITHERS = {
     "sierra2_4a": "Sierra (smooth, recommended)",
@@ -44,10 +48,10 @@ ANIM_FORMATS = {AnimFormat.GIF: "GIF", AnimFormat.WEBP: "Animated WebP"}
 
 class GIFMakerTab(BaseTab):
     # i / o (and the buttons): the GIF starts / ends at the frame shown
-    def mark_in(self):
+    def mark_in(self) -> None:
         self.start.use_here()
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         try:
             start = self.start.seconds(0.0) or 0.0
         except ValueError:
@@ -56,18 +60,18 @@ class GIFMakerTab(BaseTab):
         if length > 0:
             self.dur_var.set(f"{length:.3f}".rstrip("0").rstrip("."))
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opt = self._build_header()
         self._build_output(body, opt)
         self._build_render(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(self, t("tab.pro_gif_maker"), t("gif_maker.subtitle"), icon="🎞")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -131,7 +135,7 @@ class GIFMakerTab(BaseTab):
         )
         return body, opt
 
-    def _build_output(self, body, opt):
+    def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         self.colours_var = tk.StringVar(value="256")
         self.dither_var = tk.StringVar(value=DITHERS["sierra2_4a"])
         self.form_row(
@@ -184,19 +188,19 @@ class GIFMakerTab(BaseTab):
         self.size_lbl = tk.Label(out_lf, text="", fg=CLR["accent"])
         self.size_lbl.pack(anchor="w")
 
-    def _build_render(self, body):
+    def _build_render(self, body: tk.Frame) -> None:
         self.btn_render = self.make_render_btn(
             body, t("gif_maker.create_button"), self._render, width=22
         )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         src = self.src_row.path
         ext = "." + self.format.value.value
         return self.suggest_output(src, "anim", ext) if src else ""
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -204,7 +208,7 @@ class GIFMakerTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self._suggest())
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -239,8 +243,8 @@ class GIFMakerTab(BaseTab):
         loops = {"forever": 0, "once": -1, "twice": 1, "3 times": 2}[self.loop_var.get()]
         cap = int(limit * 1024 * 1024) if limit else 0
 
-        def work(_p, _c, ctx):
-            def runner(cmd, duration, lo, hi):
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
+            def runner(cmd: list[str], duration: float, lo: float, hi: float) -> None:
                 ctx.span(lo, hi).run(cmd, duration=duration)
 
             look = Animation(fps, width, colours, dither, loops, cap, webp)

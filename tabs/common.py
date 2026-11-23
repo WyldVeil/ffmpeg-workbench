@@ -15,21 +15,28 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from tkinter import messagebox
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core import ffmpeg as ff
 from core import tasks
 from core.i18n import t
 from core.ops.shared import RenderJob, preview_audio_cmd
+from core.proc import ProcResult
 from core.queue_manager import Hooks, WorkerFn
 from tabs.kit.job_button import JobButton
+
+if TYPE_CHECKING:
+    from tabs.base_tab import BaseTab
+    from tabs.widgets import SaveRow
 
 
 def container_of(path: str) -> str:
     return os.path.splitext(path)[1].lower().lstrip(".") or "mp4"
 
 
-def check_source(tab, path: str, *, need_video: bool = True, what: str = "") -> ff.MediaInfo | None:
+def check_source(
+    tab: BaseTab, path: str, *, need_video: bool = True, what: str = ""
+) -> ff.MediaInfo | None:
     """Probe *path*; explain the problem and return None when unusable."""
     label = what or t("common.source_video")
     if not path:
@@ -49,7 +56,7 @@ def check_source(tab, path: str, *, need_video: bool = True, what: str = "") -> 
     return info
 
 
-def number(value, label: str, lo: float | None = None, hi: float | None = None) -> float:
+def number(value: str, label: str, lo: float | None = None, hi: float | None = None) -> float:
     """Parse a user number ('1,5' accepted); ValueError names the field."""
     try:
         val = float(str(value).strip().replace(",", "."))
@@ -99,7 +106,9 @@ def render(
     )
 
 
-def output_for(tab, out_row, src: str, suffix: str, inputs: Sequence[str] = ()) -> str | None:
+def output_for(
+    tab: BaseTab, out_row: SaveRow, src: str, suffix: str, inputs: Sequence[str] = ()
+) -> str | None:
     """Final output path from *out_row* (suggested when empty), confirmed
     against overwriting; None if the user backed out."""
     out = out_row.path or tab.suggest_output(src, suffix, ".mp4")
@@ -164,7 +173,9 @@ def queue_job(
 # ── Audio tools ──────────────────────────────────────────────────────────────
 
 
-def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 12.0) -> None:
+def preview_audio(
+    tab: tk.Misc, src: str, af: str, start: float = 0.0, seconds: float = 12.0
+) -> None:
     """Render a short processed WAV in the background and play it."""
     from core.hardware import launch_preview
     from core.paths import temp_dir
@@ -175,7 +186,7 @@ def preview_audio(tab, src: str, af: str, start: float = 0.0, seconds: float = 1
     wav = os.path.join(temp_dir("preview_"), "preview.wav")
     cmd = preview_audio_cmd(src, af, start, seconds, wav)
 
-    def done(res):
+    def done(res: ProcResult[str]) -> None:
         if res.returncode != 0 or not os.path.isfile(wav):
             messagebox.showerror(
                 t("common.error"),

@@ -45,21 +45,21 @@ BACKGROUNDS = {
 
 
 class GreenKeyerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opts = self._build_header()
         self._build_output(body, opts)
         self._build_encoder(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(self, t("tab.green_screen_keyer"), t("green_key.subtitle"), icon="🟩")
         body = scroll_body(self)
 
@@ -117,7 +117,7 @@ class GreenKeyerTab(BaseTab):
         opts.pack(fill="x", padx=px(20), pady=px(4))
         return body, opts
 
-    def _build_output(self, body, opts):
+    def _build_output(self, body: tk.Frame, opts: tk.LabelFrame) -> None:
         r0 = tk.Frame(opts)
         r0.pack(fill="x", pady=px(2))
         tk.Label(r0, text="Method:", font=(UI_FONT, 10, "bold")).pack(side="left")
@@ -175,7 +175,7 @@ class GreenKeyerTab(BaseTab):
             command=self._schedule,
         ).pack(anchor="w")
 
-    def _build_encoder(self, body):
+    def _build_encoder(self, body: tk.Frame) -> None:
         self.encoder, self.out_row = output_section(
             body,
             t("common.output_file"),
@@ -225,25 +225,25 @@ class GreenKeyerTab(BaseTab):
             kind, self.keyer(), common.even_size(info), frame_rate(info), bg, self.bg_colour
         )
 
-    def _suggest(self, src):
+    def _suggest(self, src: str) -> str:
         return self.suggest_output(src, "keyed", ".mov" if self.bg_kind() == "alpha" else ".mp4")
 
     # ── Behaviour ────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.compare.load(path)
         self._auto_sample()
         if not self.out_row.path:
             self.out_row.set(self._suggest(path))
 
-    def _auto_sample(self, force=False):
+    def _auto_sample(self, force: bool = False) -> None:
         path = self.src_row.path
         if not path or not os.path.isfile(path):
             return
         at = (self._info.duration * 0.1) if self._info else 0.0
 
-        def done(colour):
+        def done(colour: str | None) -> None:
             if colour and (force or gk.spill_type(colour)):
                 self._set_key(colour)
                 self.log(self.console, f"Key colour sampled from the frame edges: #{colour}")
@@ -257,7 +257,7 @@ class GreenKeyerTab(BaseTab):
 
         tasks.submit(partial(gk.sample_border_colour, path, at), on_done=done, name="KeySample")
 
-    def _eyedropper(self, event):
+    def _eyedropper(self, event: tk.Event[tk.Misc]) -> None:
         info, path = self._info, self.src_row.path
         if info is None or not info.has_video or not path:
             return
@@ -271,7 +271,7 @@ class GreenKeyerTab(BaseTab):
             return
         x, y = min(max(x, 2), vw - 3), min(max(y, 2), vh - 3)
 
-        def done(colour):
+        def done(colour: str | None) -> None:
             if colour:
                 self._set_key(colour)
                 self._schedule()
@@ -291,10 +291,10 @@ class GreenKeyerTab(BaseTab):
     def bg_colour(self) -> str:
         return self.bg_swatch.rgb
 
-    def _set_key(self, colour):
+    def _set_key(self, colour: str) -> None:
         self.swatch.set(colour)
 
-    def _bg_mode_changed(self):
+    def _bg_mode_changed(self) -> None:
         kind = self.bg_kind()
         self.bg_row.pack_forget()
         self.loop_chk.pack_forget()
@@ -316,18 +316,18 @@ class GreenKeyerTab(BaseTab):
                 self.out_row.set(base + ".mp4")
         self._schedule()
 
-    def _schedule(self):
+    def _schedule(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(200, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         self.compare.set_filter(self.preview_chain())
 
     # ── Render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, what=t("green_key.foreground_label"))
         if info is None:

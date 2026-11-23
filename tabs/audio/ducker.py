@@ -6,6 +6,8 @@ in the main video track, using FFmpeg's sidechaincompress filter.
 Classic YouTube workflow: voice commentary ducks the background music.
 """
 
+from __future__ import annotations
+
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -15,6 +17,7 @@ from core.ops import duck as dk
 from core.scaling import px
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import on_write
 from tabs.widgets import SaveRow
 
 PRESETS = {
@@ -26,12 +29,12 @@ PRESETS = {
 
 
 class AudioDuckerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._build_ui()
 
     # ─── UI ───────────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         lw = self._build_header()
         self._build_source_video(lw)
         self._build_music_file(lw)
@@ -42,7 +45,7 @@ class AudioDuckerTab(BaseTab):
         self._build_render_button()
         self._build_console()
 
-    def _build_header(self):
+    def _build_header(self) -> int:
         # Header
         make_header(self, t("tab.music_ducker"), t("ducker.desc_header"), icon="🎚")
 
@@ -59,7 +62,7 @@ class AudioDuckerTab(BaseTab):
         )
         return lw
 
-    def _build_source_video(self, lw):
+    def _build_source_video(self, lw: int) -> None:
         """Source video."""
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(16), pady=px(8))
@@ -74,7 +77,7 @@ class AudioDuckerTab(BaseTab):
             sf, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat"
         ).pack(side="left")
 
-    def _build_music_file(self, lw):
+    def _build_music_file(self, lw: int) -> None:
         """Music file."""
         mf = tk.Frame(self)
         mf.pack(fill="x", padx=px(16), pady=px(4))
@@ -89,7 +92,7 @@ class AudioDuckerTab(BaseTab):
             mf, text=t("btn.browse"), command=self._browse_music, cursor="hand2", relief="flat"
         ).pack(side="left")
 
-    def _build_preset_selector(self, lw):
+    def _build_preset_selector(self, lw: int) -> None:
         """Preset selector."""
         pf = tk.Frame(self)
         pf.pack(fill="x", padx=px(16), pady=px(6))
@@ -115,7 +118,7 @@ class AudioDuckerTab(BaseTab):
             relief="flat",
         ).pack(side="left", padx=px(4))
 
-    def _build_duck_settings(self):
+    def _build_duck_settings(self) -> None:
         """Duck settings."""
         settings_f = tk.LabelFrame(
             self, text=t("ducker.sect_duck_settings"), padx=px(16), pady=px(10)
@@ -126,7 +129,7 @@ class AudioDuckerTab(BaseTab):
         self._intensity_row(settings_f)
         self._timing_row(settings_f)
 
-    def _music_volume_row(self, settings_f):
+    def _music_volume_row(self, settings_f: tk.LabelFrame) -> None:
         """How loud the music plays under the voice."""
         # Music volume
         r1 = tk.Frame(settings_f)
@@ -144,9 +147,9 @@ class AudioDuckerTab(BaseTab):
         ).pack(side="left", padx=px(8))
         self._music_vol_lbl = tk.Label(r1, text="80%", width=5, fg=CLR["accent"])
         self._music_vol_lbl.pack(side="left")
-        self._music_vol.trace_add(
-            "write",
-            lambda *_: self._music_vol_lbl.config(
+        on_write(
+            self._music_vol,
+            lambda: self._music_vol_lbl.config(
                 text=t("ducker.item").format(int(self._music_vol.get() * 100))
             ),
         )
@@ -154,7 +157,7 @@ class AudioDuckerTab(BaseTab):
             side="left", padx=px(12)
         )
 
-    def _sensitivity_row(self, settings_f):
+    def _sensitivity_row(self, settings_f: tk.LabelFrame) -> None:
         """How loud the voice must be to duck the music."""
         # Sensitivity / threshold
         r2 = tk.Frame(settings_f)
@@ -172,14 +175,14 @@ class AudioDuckerTab(BaseTab):
         ).pack(side="left", padx=px(8))
         self._thresh_lbl = tk.Label(r2, text="0.015", width=6, fg=CLR["accent"])
         self._thresh_lbl.pack(side="left")
-        self._threshold.trace_add(
-            "write", lambda *_: self._thresh_lbl.config(text=f"{self._threshold.get():.3f}")
+        on_write(
+            self._threshold, lambda: self._thresh_lbl.config(text=f"{self._threshold.get():.3f}")
         )
         tk.Label(r2, text=t("ducker.desc_sensitivity"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(
             side="left", padx=px(12)
         )
 
-    def _intensity_row(self, settings_f):
+    def _intensity_row(self, settings_f: tk.LabelFrame) -> None:
         """How far the music ducks."""
         # Duck intensity / ratio
         r3 = tk.Frame(settings_f)
@@ -197,15 +200,15 @@ class AudioDuckerTab(BaseTab):
         ).pack(side="left", padx=px(8))
         self._ratio_lbl = tk.Label(r3, text="8:1", width=5, fg=CLR["accent"])
         self._ratio_lbl.pack(side="left")
-        self._ratio.trace_add(
-            "write",
-            lambda *_: self._ratio_lbl.config(text=t("ducker.1").format(int(self._ratio.get()))),
+        on_write(
+            self._ratio,
+            lambda: self._ratio_lbl.config(text=t("ducker.1").format(int(self._ratio.get()))),
         )
         tk.Label(r3, text=t("ducker.desc_duck_intensity"), fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(
             side="left", padx=px(12)
         )
 
-    def _timing_row(self, settings_f):
+    def _timing_row(self, settings_f: tk.LabelFrame) -> None:
         """How fast the music ducks and comes back."""
         # Attack / release
         r4 = tk.Frame(settings_f)
@@ -224,7 +227,7 @@ class AudioDuckerTab(BaseTab):
             side="left", padx=px(12)
         )
 
-    def _build_options(self):
+    def _build_options(self) -> None:
         """Options."""
         opt_f = tk.Frame(self)
         opt_f.pack(anchor="w", padx=px(16), pady=px(4))
@@ -237,26 +240,26 @@ class AudioDuckerTab(BaseTab):
             side="left"
         )
 
-    def _build_output(self, lw):
+    def _build_output(self, lw: int) -> None:
         """Output."""
         self._out_var = tk.StringVar()
         SaveRow(self, t("common.output_file"), self._out_var).pack(
             fill="x", padx=px(16), pady=px(6)
         )
 
-    def _build_render_button(self):
+    def _build_render_button(self) -> None:
         """Render button."""
         self.btn_render = self.make_render_btn(
             self, t("ducker.btn_duck_render"), self._render, width=30
         )
         self.btn_render.pack(pady=px(10))
 
-    def _build_console(self):
+    def _build_console(self) -> None:
         """Console."""
         self.console = self.make_console_block(self, height=7, padx=px(16), pady=px(4))
 
     # ─── Callbacks ────────────────────────────────────────────────────────────
-    def _apply_preset(self, _event=None):
+    def _apply_preset(self, _event: object = None) -> None:
         p = PRESETS.get(self._preset_var.get())
         if p:
             self._threshold.set(p["threshold"])
@@ -264,7 +267,7 @@ class AudioDuckerTab(BaseTab):
             self._attack.set(str(p["attack"]))
             self._release.set(str(p["release"]))
 
-    def _browse_src(self):
+    def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
             title="Select source video (with voice/speech)",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
@@ -274,7 +277,7 @@ class AudioDuckerTab(BaseTab):
             if not self._out_var.get():
                 self._out_var.set(os.path.splitext(p)[0] + "_ducked.mp4")
 
-    def _browse_music(self):
+    def _browse_music(self) -> None:
         p = dialogs.askopenfilename(
             title="Select background music",
             filetypes=[
@@ -287,7 +290,7 @@ class AudioDuckerTab(BaseTab):
             self._music_var.set(p)
 
     # ─── Render ───────────────────────────────────────────────────────────────
-    def _render(self):
+    def _render(self) -> None:
         src = self._src_var.get().strip()
         music = self._music_var.get().strip()
         out = self._out_var.get().strip()

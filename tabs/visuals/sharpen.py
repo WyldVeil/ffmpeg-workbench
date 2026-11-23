@@ -32,17 +32,17 @@ PRESETS = {"Subtle": 0.25, "Light": 0.45, "Medium": 0.65, "Strong": 0.85}
 
 
 class SharpenTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._job = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _preset(self, value):
+    def _preset(self, value: float) -> None:
         self.amount_var.set(value)
         self._changed()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.sharpen"), "Bring back detail in soft or upscaled video.", icon="🔪"
         )
@@ -110,31 +110,31 @@ class SharpenTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
         self._changed()
 
-    def _method(self):
+    def _method(self) -> str:
         return next((k for k, v in METHODS.items() if v == self.method_var.get()), "cas")
 
-    def _chain(self):
+    def _chain(self) -> str:
         return sharpen_chain(
             self._method(), float(self.amount_var.get()), int(self.radius_var.get())
         )
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self.compare.load(path)
         self._changed()
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "sharp"))
 
-    def _show_filter(self):
+    def _show_filter(self) -> None:
         self._job = None
         self.compare.set_filter(self._chain())
 
-    def _changed(self):
+    def _changed(self) -> None:
         self.radius_scale.config(state="normal" if self._method() == "unsharp" else "disabled")
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._show_filter)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

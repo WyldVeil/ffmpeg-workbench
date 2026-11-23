@@ -6,10 +6,13 @@ developer tools.  All settings I/O is delegated to core.settings -
 no duplicated load/save logic.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import os
 import tkinter as tk
+from collections.abc import Callable
 from functools import partial
 from tkinter import messagebox, scrolledtext, ttk
 from typing import Any
@@ -27,8 +30,9 @@ from core.network import local_addresses
 from core.scaling import px, scale_drawing
 from core.settings import load_settings, update
 from core.skins import (
-    _CUSTOM_DEFAULTS,
+    CUSTOM_DEFAULTS,
     SKINS,
+    Skin,
     get_skin,
     load_skin_name,
     save_custom_color,
@@ -37,13 +41,14 @@ from core.skins import (
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.stars import set_star_count, set_star_speed
+from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton, normal_colour
 from tabs.widgets import FolderRow, scroll_body
 
 logger = logging.getLogger("crossfader.system.advanced_settings")
 
 
-def _custom_sections():
+def _custom_sections() -> list[tuple[str, list[tuple[str, str]]]]:
     """The custom skin's colours by section: (title, [(label, colour key), ...])."""
     return [
         (
@@ -93,18 +98,29 @@ def _custom_sections():
     ]
 
 
+FormVar = tk.StringVar | tk.BooleanVar  # a network setting: text, or a tick box
+
+
+def _set_form(var: FormVar, value: object) -> None:
+    """Put a setting's *value* in its form variable (a tick box takes a bool)."""
+    if isinstance(var, tk.BooleanVar):
+        var.set(bool(value))
+    else:
+        var.set(str(value))
+
+
 class _NetForm:
     """What every section of the Network tab builds with: the scrolling body,
     the saved settings, one Tk variable per setting (kept in *variables*)."""
 
-    def __init__(self, body: tk.Frame, cfg: dict[str, Any], variables: dict[str, tk.Variable]):
+    def __init__(self, body: tk.Frame, cfg: dict[str, Any], variables: dict[str, FormVar]) -> None:
         self.body, self.cfg, self.variables = body, cfg, variables
 
-    def var(self, key: str) -> tk.Variable:
+    def var(self, key: str) -> FormVar:
         from core import network as _net
 
         default = _net.DEFAULTS[key]
-        v: tk.Variable = (
+        v: FormVar = (
             tk.BooleanVar(value=bool(self.cfg.get(key, default)))
             if isinstance(default, bool)
             else tk.StringVar(value=str(self.cfg.get(key, default) or ""))
@@ -139,12 +155,12 @@ class AdvancedSettingsTab(BaseTab):
     _net_app_var: tk.StringVar
     _net_tor_var: tk.StringVar
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.settings = load_settings()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         make_header(self, t("tab.advanced_settings"), icon="⚙")
 
         nb = ttk.Notebook(self)
@@ -159,7 +175,7 @@ class AdvancedSettingsTab(BaseTab):
         self._build_dev_tab(nb)
 
     # ─── FFmpeg Management ────────────────────────────────────────────────────
-    def _build_ffmpeg_tab(self, nb):
+    def _build_ffmpeg_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
         nb.add(f, text="  FFmpeg  ")
 
@@ -222,7 +238,7 @@ class AdvancedSettingsTab(BaseTab):
 
         tasks.submit(self._check_versions)
 
-    def _check_versions(self):
+    def _check_versions(self) -> None:
         from core import updater
         from core.hardware import find_binary
 
@@ -232,12 +248,12 @@ class AdvancedSettingsTab(BaseTab):
         self.after(0, lambda: self.local_ver_lbl.config(text=f"FFmpeg {local}"))
         self.after(0, lambda: self.online_ver_lbl.config(text=where))
 
-    def _open_bin(self):
+    def _open_bin(self) -> None:
         bin_dir = binaries_dir()
         if not open_in_explorer(bin_dir):
             messagebox.showinfo("Bin folder", bin_dir)
 
-    def _browse_binary(self, key, var):
+    def _browse_binary(self, key: str, var: tk.StringVar) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Program", "*.exe")] if os.name == "nt" else [("All files", "*")]
         )
@@ -247,7 +263,7 @@ class AdvancedSettingsTab(BaseTab):
             update({key: p})
 
     # ─── Defaults ─────────────────────────────────────────────────────────────
-    def _build_defaults_tab(self, nb):
+    def _build_defaults_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
         nb.add(f, text="  Defaults  ")
         tk.Label(f, text=t("adv.encoding_defaults"), font=(UI_FONT, 12, "bold")).pack(
@@ -285,7 +301,7 @@ class AdvancedSettingsTab(BaseTab):
             ),
         ]
 
-        self._settings_vars = {}
+        self._settings_vars: dict[str, tk.StringVar] = {}
         for i, (label, key, default, choices) in enumerate(rows):
             var = tk.StringVar(value=self.settings.get(key, default))
             self._settings_vars[key] = var
@@ -313,8 +329,8 @@ class AdvancedSettingsTab(BaseTab):
         self.save_lbl = tk.Label(f, text="", fg=CLR["green"])
         self.save_lbl.pack()
 
-    def _save_settings(self):
-        changes = {key: var.get() for key, var in self._settings_vars.items()}
+    def _save_settings(self) -> None:
+        changes: dict[str, object] = {key: var.get() for key, var in self._settings_vars.items()}
         changes["default_output_folder"] = self.out_folder_var.get()
         changes["auto_open_output"] = self.auto_open_var.get()
         changes["ffmpeg_path_override"] = self.ffmpeg_path_var.get()
@@ -329,13 +345,13 @@ class AdvancedSettingsTab(BaseTab):
             self.save_lbl.config(text=t("advanced_settings.save_failed"), fg=CLR["red"])
 
     # ─── Networking ───────────────────────────────────────────────────────────
-    def _build_networking_tab(self, nb):
+    def _build_networking_tab(self, nb: ttk.Notebook) -> None:
         from core import network as _net
 
         f = ttk.Frame(nb)
         nb.add(f, text="  Network  ")
         body = scroll_body(f)
-        self._net_vars = {}
+        self._net_vars: dict[str, FormVar] = {}
         form = _NetForm(body, _net.get(), self._net_vars)
         for build in (
             self._net_now,
@@ -386,7 +402,7 @@ class AdvancedSettingsTab(BaseTab):
         if special:
             self._build_tor_system_section(body, special)
 
-    def _net_pick(self, situation):
+    def _net_pick(self, situation: str) -> None:
         self._net_situation_var.set(situation)
         self._net_choose(situation)
 
@@ -416,13 +432,13 @@ class AdvancedSettingsTab(BaseTab):
         )
         self._net_situation_var = tk.StringVar(value=kind)
 
-        def app_box(parent):
+        def app_box(parent: tk.Misc) -> None:
             self._net_app_var = self._net_pick_list(
                 parent, "app", self._net_app_labels, current, 44
             )
             tk.Button(parent, text="Find…", command=self._net_find_local).pack(side="left")
 
-        def tor_box(parent):
+        def tor_box(parent: tk.Misc) -> None:
             self._net_tor_var = self._net_pick_list(
                 parent, "tor", self._net_tor_labels, current, 34
             )
@@ -452,7 +468,14 @@ class AdvancedSettingsTab(BaseTab):
         self._net_found_frame = tk.Frame(sit)
         self._net_found_frame.pack(anchor="w", padx=px(24, 0))
 
-    def _net_radio(self, sit, value, text, desc="", extra=None):
+    def _net_radio(
+        self,
+        sit: tk.LabelFrame,
+        value: str,
+        text: str,
+        desc: str = "",
+        extra: Callable[[tk.Frame], object] | None = None,
+    ) -> None:
         """One way of connecting: its radio button, any extra controls beside it, and a note."""
         r = tk.Frame(sit)
         r.pack(anchor="w", fill="x", pady=px(2))
@@ -472,7 +495,9 @@ class AdvancedSettingsTab(BaseTab):
                 r, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 8), wraplength=px(720), justify="left"
             ).pack(anchor="w", padx=px(24, 0))
 
-    def _net_pick_list(self, parent, kind, labels, current, width):
+    def _net_pick_list(
+        self, parent: tk.Misc, kind: str, labels: dict[str, str], current: str, width: int
+    ) -> tk.StringVar:
         """Which proxy app (or which Tor): the current one, else the first."""
         var = tk.StringVar(
             value=next((t_ for t_, i in labels.items() if i == current), next(iter(labels)))
@@ -540,11 +565,9 @@ class AdvancedSettingsTab(BaseTab):
             "command line.",
         )
         for key in ("network.proxy_scheme", "network.proxy_host", "network.proxy_port"):
-            self._net_vars[key].trace_add(
-                "write", lambda *_a: self._net_situation_var.set("custom")
-            )
+            on_write(self._net_vars[key], lambda: self._net_situation_var.set("custom"))
 
-    def _choose_certificate(self, ca):
+    def _choose_certificate(self, ca: tk.StringVar) -> None:
         path = dialogs.askopenfilename(
             filetypes=[("Certificates", "*.pem *.crt *.cer"), ("All files", "*")]
         )
@@ -681,7 +704,7 @@ class AdvancedSettingsTab(BaseTab):
                 var(key)
         self._net_refresh_now()
 
-    def _net_choose(self, kind):
+    def _net_choose(self, kind: str) -> None:
         if kind == "app":
             self._net_apply_preset(self._net_app_labels.get(self._net_app_var.get(), "clash"))
         elif kind == "tor":
@@ -689,7 +712,7 @@ class AdvancedSettingsTab(BaseTab):
         else:
             self._net_apply_preset(kind)
 
-    def _net_situation(self, cfg) -> str:
+    def _net_situation(self, cfg: dict[str, bool | str]) -> str:
         from core import network as _net
 
         m = _net.mode(cfg)
@@ -702,11 +725,11 @@ class AdvancedSettingsTab(BaseTab):
                 return sid
         return "custom"
 
-    def _net_refresh_now(self):
+    def _net_refresh_now(self) -> None:
         from core import network as _net
         from core import sysproxy
 
-        def work():
+        def work() -> tuple[str, str]:
             try:
                 now = _net.describe()
                 system = sysproxy.system_config(refresh=True).describe()
@@ -715,7 +738,7 @@ class AdvancedSettingsTab(BaseTab):
                 now, system = f"Couldn't check: {exc}", ""
             return now, system
 
-        def done(res):
+        def done(res: tuple[str, str]) -> None:
             try:
                 self._net_now_lbl.config(text=res[0])
                 self._net_sys_lbl.config(
@@ -726,14 +749,14 @@ class AdvancedSettingsTab(BaseTab):
 
         tasks.submit(work, on_done=done, on_error=lambda e: None, name="NetDescribe")
 
-    def _net_find_local(self):
+    def _net_find_local(self) -> None:
         from core import network as _net
 
         self._net_found_lbl.config(text="Looking…")
         for w in self._net_found_frame.winfo_children():
             w.destroy()
 
-        def done(found):
+        def done(found: list[tuple[int, str, str]]) -> None:
             if not found:
                 self._net_found_lbl.config(text="No proxy apps found on the usual ports.")
                 return
@@ -743,7 +766,7 @@ class AdvancedSettingsTab(BaseTab):
                     self._net_found_frame,
                     text=f"Use {label} - {scheme} 127.0.0.1:{port}",
                     relief="flat",
-                    command=lambda p=port, sc=scheme: self._net_use_local(sc, p),
+                    command=partial(self._net_use_local, scheme, port),
                 ).pack(anchor="w")
 
         tasks.submit(
@@ -753,16 +776,16 @@ class AdvancedSettingsTab(BaseTab):
             name="ProxyProbe",
         )
 
-    def _net_use_local(self, scheme, port):
-        self._net_vars["network.mode"].set("manual")
-        self._net_vars["network.proxy_enabled"].set(True)
-        self._net_vars["network.proxy_scheme"].set(scheme)
-        self._net_vars["network.proxy_host"].set("127.0.0.1")
-        self._net_vars["network.proxy_port"].set(str(port))
+    def _net_use_local(self, scheme: str, port: int) -> None:
+        _set_form(self._net_vars["network.mode"], "manual")
+        _set_form(self._net_vars["network.proxy_enabled"], True)
+        _set_form(self._net_vars["network.proxy_scheme"], scheme)
+        _set_form(self._net_vars["network.proxy_host"], "127.0.0.1")
+        _set_form(self._net_vars["network.proxy_port"], str(port))
         self._net_situation_var.set("custom")
         self._net_status_lbl.config(text="Filled in - click Test, then Save.", fg=CLR["fgdim"])
 
-    def _build_tor_system_section(self, body, special):
+    def _build_tor_system_section(self, body: tk.Frame, special: str) -> None:
         lf = tk.LabelFrame(
             body,
             text="  " + ("Tails" if special == "tails" else "Whonix") + "  ",
@@ -800,7 +823,7 @@ class AdvancedSettingsTab(BaseTab):
         tk.Button(r, text="Turn off", command=self._tails_disable).pack(side="left", padx=px(6))
         self._tails_refresh()
 
-    def _tails_refresh(self):
+    def _tails_refresh(self) -> None:
         from core import tails
 
         if tails.direct_enabled():
@@ -815,7 +838,7 @@ class AdvancedSettingsTab(BaseTab):
             colour = CLR["fgdim"]
         self._tails_lbl.config(text=text, fg=colour)
 
-    def _tails_enable(self):
+    def _tails_enable(self) -> None:
         from core import tails
 
         issues = tails.problems()
@@ -848,7 +871,7 @@ class AdvancedSettingsTab(BaseTab):
         msg = tk.Label(dlg, text="", fg=CLR["red"])
         msg.pack()
 
-        def ok(_e=None):
+        def ok(_e: object = None) -> None:
             done, text = tails.enable(pw.get(), remember.get())
             pw.set("")
             if done:
@@ -862,7 +885,7 @@ class AdvancedSettingsTab(BaseTab):
         bf.pack(pady=px(10))
         tk.Button(bf, text="Turn on", command=ok).pack(side="left", padx=px(4))
 
-        def cancel():
+        def cancel() -> None:
             pw.set("")
             dlg.destroy()
 
@@ -871,17 +894,17 @@ class AdvancedSettingsTab(BaseTab):
         entry.focus_set()
         dlg.grab_set()
 
-    def _tails_disable(self):
+    def _tails_disable(self) -> None:
         from core import tails
 
         tails.disable()
         self._tails_refresh()
 
-    def _net_collect(self):
+    def _net_collect(self) -> dict[str, object]:
         """Read every form variable into a settings-ready dict."""
         from core import network as _net
 
-        out = {}
+        out: dict[str, object] = {}
         for key, var in self._net_vars.items():
             default = _net.DEFAULTS[key]
             v = var.get()
@@ -891,7 +914,7 @@ class AdvancedSettingsTab(BaseTab):
                 out[key] = v
         return out
 
-    def _net_save(self):
+    def _net_save(self) -> None:
         values = self._net_collect()
         if self._net_situation_var.get() == "custom" or values.get("network.mode") == "manual":
             values["network.mode"] = (
@@ -904,7 +927,7 @@ class AdvancedSettingsTab(BaseTab):
             text=("Saved." if ok else "Save failed."), fg=(CLR["green"] if ok else CLR["red"])
         )
 
-    def _net_test(self):
+    def _net_test(self) -> None:
         from core import network as _net
 
         # Test against the *form* values, not the saved ones, so the user
@@ -914,7 +937,7 @@ class AdvancedSettingsTab(BaseTab):
         self._net_status_lbl.config(text="Testing…", fg=CLR["fgdim"])
         self.update_idletasks()
 
-        def _work():
+        def _work() -> None:
             ok, msg = _net.test(cfg=cfg)
             colour = CLR["green"] if ok else CLR["red"]
             text = ("Connection OK: " + msg) if ok else ("Connection failed: " + msg)
@@ -922,7 +945,7 @@ class AdvancedSettingsTab(BaseTab):
 
         tasks.submit(_work)
 
-    def _net_reset_field(self, key):
+    def _net_reset_field(self, key: str) -> None:
         from core import network as _net
 
         if key not in _net.DEFAULTS:
@@ -931,13 +954,10 @@ class AdvancedSettingsTab(BaseTab):
         var = self._net_vars.get(key)
         if var is None:
             return
-        if isinstance(default, bool):
-            var.set(bool(default))
-        else:
-            var.set(str(default))
+        _set_form(var, default)
         self._net_status_lbl.config(text=f"{key} reset (not saved yet).", fg=CLR["fgdim"])
 
-    def _net_reset_all(self):
+    def _net_reset_all(self) -> None:
         from core import network as _net
 
         if not messagebox.askyesno(
@@ -953,20 +973,17 @@ class AdvancedSettingsTab(BaseTab):
             var = self._net_vars.get(key)
             if var is None:
                 continue
-            if isinstance(default, bool):
-                var.set(bool(default))
-            else:
-                var.set(str(default))
+            _set_form(var, default)
         self._net_status_lbl.config(
             text="All networking settings reset to defaults and saved.", fg=CLR["green"]
         )
 
-    def _net_apply_preset(self, preset_id):
+    def _net_apply_preset(self, preset_id: str) -> None:
         from core import network as _net
 
         if preset_id == "custom":
-            self._net_vars["network.mode"].set("manual")
-            self._net_vars["network.proxy_enabled"].set(True)
+            _set_form(self._net_vars["network.mode"], "manual")
+            _set_form(self._net_vars["network.proxy_enabled"], True)
             return
         preset = _net.PRESETS.get(preset_id, {})
         if not preset:
@@ -977,14 +994,11 @@ class AdvancedSettingsTab(BaseTab):
             var = self._net_vars.get(key)
             if var is None:
                 continue
-            if isinstance(_net.DEFAULTS.get(key), bool):
-                var.set(bool(value))
-            else:
-                var.set(str(value))
+            _set_form(var, value)
         self._net_status_lbl.config(text="Chosen - click Save (or Test first).", fg=CLR["fgdim"])
 
     # ─── Skins ────────────────────────────────────────────────────────────────
-    def _build_skins_tab(self, nb):
+    def _build_skins_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("advanced_settings.skins"))
 
@@ -996,13 +1010,13 @@ class AdvancedSettingsTab(BaseTab):
         self._build_custom_subtab(inner_nb)
 
     # ── Themes sub-tab ────────────────────────────────────────────────────────
-    def _build_themes_subtab(self, inner_nb):
+    def _build_themes_subtab(self, inner_nb: ttk.Notebook) -> None:
         current_skin, f = self._build_skin_cards(inner_nb)
         self._build_skin_apply(f)
         self._build_star_speed(f)
         self._build_star_density(current_skin)
 
-    def _build_skin_cards(self, inner_nb):
+    def _build_skin_cards(self, inner_nb: ttk.Notebook) -> tuple[str, ttk.Frame]:
         f = ttk.Frame(inner_nb)
         inner_nb.add(f, text="  Themes  ")
 
@@ -1020,13 +1034,13 @@ class AdvancedSettingsTab(BaseTab):
         # Theme cards (exclude "Custom" - it lives in the Custom tab)
         theme_names = [n for n in SKINS if n != "Custom"]
         COLS = 3
-        self._skin_previews = {}
+        self._skin_previews: dict[str, tk.Canvas] = {}
 
         for idx, name in enumerate(theme_names):
             self._skin_card(grid_host, idx, name, COLS)
         return current_skin, f
 
-    def _skin_card(self, grid_host, idx, name, cols):
+    def _skin_card(self, grid_host: tk.Frame, idx: int, name: str, cols: int) -> None:
         """One theme: its preview, name, description and Select button, in skin colours."""
         skin = SKINS[name]
         row, col = divmod(idx, cols)
@@ -1072,7 +1086,7 @@ class AdvancedSettingsTab(BaseTab):
         rb.pack(pady=px(0, 8))
 
     @staticmethod
-    def _skin_preview(card, name, skin):
+    def _skin_preview(card: tk.Frame, name: str, skin: dict[str, str]) -> tk.Canvas:
         """A miniature of the window in this skin: sidebar, buttons, title bar (and stars)."""
         c = tk.Canvas(card, width=px(180), height=px(80), bg=skin["sb_bg"], highlightthickness=0)
         c.pack(pady=px(8, 4))
@@ -1096,7 +1110,7 @@ class AdvancedSettingsTab(BaseTab):
         scale_drawing(c)
         return c
 
-    def _build_skin_apply(self, f):
+    def _build_skin_apply(self, f: ttk.Frame) -> None:
         apply_f = tk.Frame(f)
         apply_f.pack(pady=px(10))
         tk.Button(
@@ -1120,7 +1134,7 @@ class AdvancedSettingsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(pady=px(2, 6))
 
-    def _build_star_speed(self, f):
+    def _build_star_speed(self, f: ttk.Frame) -> None:
         """Star speed control (only visible when Mystical is active)."""
         self._star_speed_frame = tk.LabelFrame(
             f, text=t("advanced_settings.star_speed"), padx=px(16), pady=px(10)
@@ -1162,7 +1176,7 @@ class AdvancedSettingsTab(BaseTab):
         )
         self._star_speed_lbl.pack()
 
-    def _build_star_density(self, current_skin):
+    def _build_star_density(self, current_skin: str) -> None:
         """Star density (count)."""
         tk.Frame(self._star_speed_frame, height=px(6)).pack()  # spacer
 
@@ -1202,13 +1216,15 @@ class AdvancedSettingsTab(BaseTab):
         self._update_star_speed_visibility(current_skin)
 
     # ── Custom skin sub-tab ───────────────────────────────────────────────────
-    def _build_custom_subtab(self, inner_nb):
+    def _build_custom_subtab(self, inner_nb: ttk.Notebook) -> None:
         """Scrollable color-property editor for the 'Custom' skin."""
         current_custom, inner, sections = self._build_custom_header(inner_nb)
         self._build_custom_colour_rows(current_custom, inner, sections)
         self._build_custom_reset(inner)
 
-    def _build_custom_header(self, inner_nb):
+    def _build_custom_header(
+        self, inner_nb: ttk.Notebook
+    ) -> tuple[Skin, tk.Frame, list[tuple[str, list[tuple[str, str]]]]]:
         f = ttk.Frame(inner_nb)
         inner_nb.add(f, text="  Custom  ")
 
@@ -1245,15 +1261,20 @@ class AdvancedSettingsTab(BaseTab):
         sections = _custom_sections()
         return current_custom, inner, sections
 
-    def _build_custom_colour_rows(self, current_custom, inner, sections):
+    def _build_custom_colour_rows(
+        self,
+        current_custom: dict[str, str],
+        inner: tk.Frame,
+        sections: list[tuple[str, list[tuple[str, str]]]],
+    ) -> None:
         for section_title, props in sections:
             sec_frame = tk.LabelFrame(inner, text=f"  {section_title}  ", padx=px(12), pady=px(10))
             sec_frame.pack(fill="x", padx=px(8), pady=px(8, 4))
             for label_text, key in props:
-                initial = current_custom.get(key, _CUSTOM_DEFAULTS.get(key, "#222222"))
+                initial = current_custom.get(key) or CUSTOM_DEFAULTS.get(key) or "#222222"
                 self._custom_colour_row(sec_frame, key, label_text, initial)
 
-    def _custom_colour_row(self, parent, key: str, label_text: str, initial: str) -> None:
+    def _custom_colour_row(self, parent: tk.Misc, key: str, label_text: str, initial: str) -> None:
         """One colour of the custom skin: name, swatch (click to pick), hex field."""
         row = tk.Frame(parent)
         row.pack(fill="x", pady=px(3))
@@ -1290,7 +1311,7 @@ class AdvancedSettingsTab(BaseTab):
         save_custom_color(key, colour)
         self._custom_status.config(text=t("advanced_settings.saved"), fg=CLR["green"])
 
-    def _build_custom_reset(self, inner):
+    def _build_custom_reset(self, inner: tk.Frame) -> None:
         # Reset to defaults button
         reset_row = tk.Frame(inner)
         reset_row.pack(fill="x", padx=px(8), pady=px(12, 8))
@@ -1303,16 +1324,16 @@ class AdvancedSettingsTab(BaseTab):
             command=self._reset_custom_defaults,
         ).pack(side="left")
 
-    def _apply_custom_skin(self):
+    def _apply_custom_skin(self) -> None:
         """Select 'Custom' and apply it live."""
         self._skin_var.set("Custom")
         self._on_skin_select("Custom")
 
-    def _reset_custom_defaults(self):
-        """Reset all custom color vars to _CUSTOM_DEFAULTS."""
+    def _reset_custom_defaults(self) -> None:
+        """Reset all custom color vars to CUSTOM_DEFAULTS."""
         prefix = "custom_color_"
-        changes = {}
-        for key, val in _CUSTOM_DEFAULTS.items():
+        changes: dict[str, object] = {}
+        for key, val in CUSTOM_DEFAULTS.items():
             if isinstance(val, str) and val.startswith("#"):
                 self._custom_vars[key].set(val)
                 if key in self._custom_swatches:
@@ -1326,7 +1347,7 @@ class AdvancedSettingsTab(BaseTab):
         except Exception:
             logger.debug("_reset_custom_defaults: best-effort step failed", exc_info=True)
 
-    def _on_skin_select(self, name):
+    def _on_skin_select(self, name: str) -> None:
         """Save and apply the selected skin live, immediately."""
         save_skin_name(name)
         self._update_star_speed_visibility(name)
@@ -1339,10 +1360,10 @@ class AdvancedSettingsTab(BaseTab):
                 text=t("advanced_settings.saved_reopen_to_see_full_effect"), fg=CLR["green"]
             )
 
-    def _apply_skin(self):
+    def _apply_skin(self) -> None:
         self._on_skin_select(self._skin_var.get())
 
-    def _update_star_speed_visibility(self, skin_name: str):
+    def _update_star_speed_visibility(self, skin_name: str) -> None:
         """Show the star-speed panel only when a stars-enabled skin is active."""
         try:
             skin = get_skin(skin_name)
@@ -1365,7 +1386,7 @@ class AdvancedSettingsTab(BaseTab):
             return "Fast"
         return "Very fast"
 
-    def _on_star_speed_change(self, value):
+    def _on_star_speed_change(self, value: str) -> None:
         mult = float(value)
         set_star_speed(mult)
         try:
@@ -1374,7 +1395,7 @@ class AdvancedSettingsTab(BaseTab):
             logger.debug("_on_star_speed_change: best-effort step failed", exc_info=True)
         settings.STAR_SPEED.set(float(mult))
 
-    def _on_star_count_change(self, value):
+    def _on_star_count_change(self, value: str) -> None:
         count = int(float(value))
         set_star_count(count)
         with contextlib.suppress(tk.TclError):
@@ -1386,7 +1407,7 @@ class AdvancedSettingsTab(BaseTab):
             shell.apply_theme(load_skin_name())
 
     # ─── Language ─────────────────────────────────────────────────────────────
-    def _build_language_tab(self, nb):
+    def _build_language_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
         nb.add(f, text=t("advanced_settings.language"))
 
@@ -1430,7 +1451,7 @@ class AdvancedSettingsTab(BaseTab):
         lang_cb.pack(side="left")
 
         # Save button
-        def _save_language():
+        def _save_language() -> None:
             chosen_name = self._lang_var.get()
             # Reverse look up: name → code
             code = next(
@@ -1468,7 +1489,7 @@ class AdvancedSettingsTab(BaseTab):
         msg_lbl.pack()
 
     # ─── System Info ──────────────────────────────────────────────────────────
-    def _build_system_tab(self, nb):
+    def _build_system_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
         nb.add(f, text=t("advanced_settings.system_info"))
         self.system_info_page = (nb, f)  # Help → System Info selects it by widget
@@ -1512,7 +1533,7 @@ class AdvancedSettingsTab(BaseTab):
         area.config(state="disabled")
 
     # ─── Developer ────────────────────────────────────────────────────────────
-    def _build_dev_tab(self, nb):
+    def _build_dev_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
         nb.add(f, text="  Developer  ")
 
@@ -1567,18 +1588,18 @@ class AdvancedSettingsTab(BaseTab):
         )
         self.dev_console.pack(fill="both", expand=True, padx=px(20), pady=px(4))
 
-    def _dev_print(self, text):
+    def _dev_print(self, text: str) -> None:
         self.dev_console.insert(tk.END, text)
         self.dev_console.see(tk.END)
 
-    def _run_dev_cmd(self):
+    def _run_dev_cmd(self) -> None:
         cmd_str = self.dev_cmd_var.get().strip()
         if not cmd_str:
             return
         self.dev_console.insert(tk.END, f"$ {cmd_str}\n")
         self.dev_console.see(tk.END)
 
-        def _work():
+        def _work() -> None:
             import shlex
 
             try:

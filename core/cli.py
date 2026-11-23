@@ -84,7 +84,7 @@ def operation(
 class Ctx:
     """What an operation needs: paths, progress, a scratch folder."""
 
-    def __init__(self, args: argparse.Namespace):
+    def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
         self.notes: list[str] = []
         self._tmp: str | None = None

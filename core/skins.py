@@ -19,7 +19,7 @@ SKIN_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 
 # ── Platform-aware font selection ─────────────────────────────────────────────
-def _detect_ui_font():
+def _detect_ui_font() -> str:
     if sys.platform == "win32":
         return "Segoe UI"
     elif sys.platform == "darwin":
@@ -27,7 +27,7 @@ def _detect_ui_font():
     return "Ubuntu"
 
 
-def _detect_mono_font():
+def _detect_mono_font() -> str:
     if sys.platform == "win32":
         return "Consolas"
     elif sys.platform == "darwin":
@@ -42,7 +42,7 @@ MONO_FONT = _detect_mono_font()
 #: A colour scheme: colour names -> "#RRGGBB", plus "stars" (bool) and "desc" (text)
 Skin = dict[str, Any]
 
-_CUSTOM_DEFAULTS: Skin = {
+CUSTOM_DEFAULTS: Skin = {
     "sb_bg": "#111111",
     "sb_cat": "#424242",
     "sb_btn": "#B0B0B0",
@@ -207,7 +207,7 @@ SKINS: dict[str, dict[str, Any]] = {
         "desc": "Fantasy purple with falling star particles ✨",
     },
     "Custom": {
-        **_CUSTOM_DEFAULTS,
+        **CUSTOM_DEFAULTS,
     },
 }
 
@@ -243,7 +243,7 @@ def get_skin(name: str) -> Skin:
     For "Custom", overlay saved user colours from settings.json on top of defaults.
     """
     if name == "Custom":
-        skin = dict(_CUSTOM_DEFAULTS)
+        skin = dict(CUSTOM_DEFAULTS)
         from core import settings
 
         prefix = "custom_color_"

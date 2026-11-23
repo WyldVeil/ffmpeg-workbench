@@ -27,24 +27,24 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar, selected_rows
 from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.transcoder.converter")
 
 
 class FormatConverterTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.file_paths = []
+        self.file_paths: list[str] = []
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.format_converter"), t("converter.desc_subtitle"), icon="🔄")
         lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(10), pady=px(6))
         lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
         self.listbox = tk.Listbox(lf, height=7, font=(MONO_FONT, 10), selectmode="extended")
-        sb = ttk.Scrollbar(lf, command=self.listbox.yview)
-        self.listbox.config(yscrollcommand=sb.set)
+        sb = linked_scrollbar(lf, self.listbox)
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         btn_f = tk.Frame(self)
@@ -95,29 +95,29 @@ class FormatConverterTab(BaseTab):
         self.btn_render.pack(pady=px(10))
         self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4))
 
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         if os.path.isfile(path) and path not in self.file_paths:
             self.file_paths.append(path)
             self.listbox.insert(tk.END, f"  {os.path.basename(path)}")
         return True
 
-    def _add(self):
+    def _add(self) -> None:
         for p in dialogs.ask_open_many("media", title="Add files", parent=self):
             self.load_file(p)
 
-    def _remove(self):
-        for i in reversed(self.listbox.curselection()):
+    def _remove(self) -> None:
+        for i in reversed(selected_rows(self.listbox)):
             self.file_paths.pop(i)
             self.listbox.delete(i)
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.file_paths.clear()
         self.listbox.delete(0, tk.END)
 
     def _fmt(self) -> str:
         return next((k for k, v in FORMATS.items() if v[0] == self.fmt_var.get()), "mp4")
 
-    def _render(self):
+    def _render(self) -> None:
         if not self.file_paths:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
@@ -133,8 +133,8 @@ class FormatConverterTab(BaseTab):
                 return
         smart = self.copy_var.get()
         paths = self.file_paths[:]
-        taken: set = set()
-        jobs = []
+        taken: set[str] = set()
+        jobs: list[tuple[str, str]] = []
         for src in paths:
             base = os.path.splitext(os.path.basename(src))[0]
             out = free_name(

@@ -30,12 +30,12 @@ MODES = {
 
 
 class AudioReplacerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.audio_replacer"), "Replace or mix a video's soundtrack.", icon="🎼"
         )
@@ -99,7 +99,7 @@ class AudioReplacerTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

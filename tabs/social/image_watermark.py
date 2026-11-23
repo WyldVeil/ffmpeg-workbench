@@ -21,18 +21,19 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import on_write
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 
 class ImageWatermarkTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.image_watermark"), "Add a logo or badge on top of a video.", icon="🖼"
         )
@@ -50,7 +51,7 @@ class ImageWatermarkTab(BaseTab):
         self._build_placement(body)
         self._build_output(body)
 
-    def _build_placement(self, body):
+    def _build_placement(self, body: tk.Frame) -> None:
         """Where the logo goes, its size, opacity and margin, and when it shows."""
         opt = tk.LabelFrame(body, text="  Placement  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -70,7 +71,7 @@ class ImageWatermarkTab(BaseTab):
         for label, var in (("X %", self.cx_var), ("Y %", self.cy_var)):
             tk.Label(r, text=label).pack(side="left", padx=px(4, 2))
             tk.Entry(r, textvariable=var, width=5).pack(side="left")
-            var.trace_add("write", lambda *_a: self._changed())
+            on_write(var, lambda: self._changed())
         self.size_var = tk.DoubleVar(value=15)
         tk.Scale(
             opt,
@@ -120,7 +121,7 @@ class ImageWatermarkTab(BaseTab):
         self.fade_var = tk.StringVar(value="0.5")
         tk.Entry(tr, textvariable=self.fade_var, width=5).pack(side="left")
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Encoder, where the result goes, the button and the log."""
         self.encoder, self.out_row = output_section(
             body,
@@ -132,7 +133,7 @@ class ImageWatermarkTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def graph(self, info, logo_input="[1:v]"):
+    def graph(self, info: ff.MediaInfo, logo_input: str = "[1:v]") -> str:
         w, h = common.even_size(info)
         place = next((k for k, v in POSITIONS.items() if v[0] == self.place_var.get()), "br")
         window = None
@@ -153,30 +154,30 @@ class ImageWatermarkTab(BaseTab):
         )
         return logo_graph(w, h, spec, logo_input)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.compare.load(path)
         self._changed()
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "logo"))
 
-    def _window_on(self):
+    def _window_on(self) -> None:
         self.window_var.set(True)
         self._changed()
 
     # i / o: the logo shows from / to the frame shown
-    def mark_in(self):
+    def mark_in(self) -> None:
         self.window.start.use_here()
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         self.window.end.use_here()
 
-    def _changed(self):
+    def _changed(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         logo = self.logo_row.path
         if self._info is None or not logo:
@@ -187,7 +188,7 @@ class ImageWatermarkTab(BaseTab):
             return
         self.compare.set_filter(g.replace("[0:v]", "[in]").replace("[v]", ""), keep_time=True)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

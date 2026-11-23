@@ -48,7 +48,7 @@ def first_visible_time(path: str, scan: float = 10.0) -> float:
         return 0.0
 
 
-def fadein_graph(fade: float, still_at: float):
+def fadein_graph(fade: float, still_at: float) -> str:
     graph = (
         f"[0:v]setpts=PTS-STARTPTS,split[m][s];"
         f"[s]trim=start={still_at:.3f},setpts=PTS-STARTPTS,trim=end_frame=1,"
@@ -59,7 +59,7 @@ def fadein_graph(fade: float, still_at: float):
     return graph
 
 
-def watermark_cmd(crf: str, filter_str: str, out: str, src: str):
+def watermark_cmd(crf: str, filter_str: str, out: str, src: str) -> list[str]:
     cmd = [
         ff.ffmpeg_path(),
         "-y",
@@ -82,7 +82,7 @@ def watermark_cmd(crf: str, filter_str: str, out: str, src: str):
     return cmd
 
 
-def cinebars_graph(bar: int, fps: str, h: int, w: int, ybot: str, ytop: str):
+def cinebars_graph(bar: int, fps: str, h: int, w: int, ybot: str, ytop: str) -> str:
     graph = (
         f"color=c=black:s={w}x{bar}:r={fps}[tb];color=c=black:s={w}x{bar}:r={fps}[bb];"
         f"[0:v]scale={w}:{h}[base];"
@@ -92,7 +92,7 @@ def cinebars_graph(bar: int, fps: str, h: int, w: int, ybot: str, ytop: str):
     return graph
 
 
-def meme_cmd(crf: str, filters: list[str], out: str, src: str):
+def meme_cmd(crf: str, filters: list[str], out: str, src: str) -> list[str]:
     cmd = [
         ff.ffmpeg_path(),
         "-y",
@@ -115,17 +115,17 @@ def meme_cmd(crf: str, filters: list[str], out: str, src: str):
     return cmd
 
 
-def whippan_graph(at: float, d: float, sx: int, sy: int):
+def whippan_graph(at: float, d: float, sx: int, sy: int) -> str:
     graph = f"avgblur=sizeX={sx}:sizeY={sy}:enable='between(t,{at:.3f},{at + d:.3f})',{FX_GUARD}"
     return graph
 
 
-def kenburns_graph(fps: str, h: int, p: str, w: int, x: str, y: str, z0: float, z1: float):
+def kenburns_graph(fps: str, h: int, p: str, w: int, x: str, y: str, z0: float, z1: float) -> str:
     graph = f"zoompan=z='{z0}+({z1}-{z0})*{p}':x='{x}':y='{y}':d=1:s={w}x{h}:fps={fps},{FX_GUARD}"
     return graph
 
 
-def zoompunch_graph(fps: str, h: int, w: int, zexpr: str):
+def zoompunch_graph(fps: str, h: int, w: int, zexpr: str) -> str:
     graph = (
         f"zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:"
         f"s={w}x{h}:fps={fps},{FX_GUARD}"
@@ -133,7 +133,9 @@ def zoompunch_graph(fps: str, h: int, w: int, zexpr: str):
     return graph
 
 
-def lightleak_graph(colour: str, dur: float, fps: str, h: int, half: float, start: float, w: int):
+def lightleak_graph(
+    colour: str, dur: float, fps: str, h: int, half: float, start: float, w: int
+) -> str:
     graph = (
         f"gradients=s={w}x{h}:r={fps}:c0=0x{colour}:c1=0x000000:x0=0:y0=0:x1={w}:y1={h // 3}:"
         f"nb_colors=2:speed=0:d={dur:.3f},format=gbrp,"
@@ -145,7 +147,7 @@ def lightleak_graph(colour: str, dur: float, fps: str, h: int, half: float, star
     return graph
 
 
-def vignette_cmd(angle: str, crf: str, out: str, src: str):
+def vignette_cmd(angle: str, crf: str, out: str, src: str) -> list[str]:
     cmd = [
         ff.ffmpeg_path(),
         "-y",
@@ -168,7 +170,7 @@ def vignette_cmd(angle: str, crf: str, out: str, src: str):
     return cmd
 
 
-def grain_cmd(amount: int, crf: str, out: str, src: str):
+def grain_cmd(amount: int, crf: str, out: str, src: str) -> list[str]:
     cmd = [
         ff.ffmpeg_path(),
         "-y",
@@ -193,7 +195,7 @@ def grain_cmd(amount: int, crf: str, out: str, src: str):
 
 def vhs_cmd(
     chroma_blur: int, crf: str, luma_blur: float, noise: int, out: str, scan_alpha: float, src: str
-):
+) -> list[str]:
     filter_str = (
         # Chroma blur simulates colour bleed
         "split=2[main][cb];"
@@ -235,7 +237,7 @@ def vhs_cmd(
     return cmd
 
 
-def rgb_cmd(crf: str, enable: str, offset: int, out: str, src: str):
+def rgb_cmd(crf: str, enable: str, offset: int, out: str, src: str) -> list[str]:
     filter_str = (
         "[0:v]split=3[r0][g0][b0];"
         "[r0]geq=r='r(X,Y)':g=0:b=0[r];"
@@ -277,7 +279,7 @@ def rgb_cmd(crf: str, enable: str, offset: int, out: str, src: str):
     return cmd
 
 
-def progressbar_graph(bar_h: int, colour: str, dur: float, fps: str, w: int, y: int):
+def progressbar_graph(bar_h: int, colour: str, dur: float, fps: str, w: int, y: int) -> str:
     graph = (
         f"color=c=0x{colour}:s={w}x{bar_h}:r={fps}[bar];"
         f"[0:v][bar]overlay=x='-w+w*t/{max(dur, 0.1):.3f}':y={y}:shortest=1,{FX_GUARD}[v]"
@@ -287,7 +289,7 @@ def progressbar_graph(bar_h: int, colour: str, dur: float, fps: str, w: int, y: 
 
 def countdown_cmd(
     count_from: int, crf: str, end: float, out: str, size: int, src: str, start: float
-):
+) -> list[str]:
     filter_str = (
         "drawtext="
         f"text='%{{eif\\:{count_from}-(t-{start})\\:d}}':"
@@ -323,7 +325,7 @@ def countdown_cmd(
 
 def lowerthird_graph(
     bar_h: int, colour: str, enable: str, fps: str, slide: str, sub: str, title: str, w: int
-):
+) -> str:
     graph = (
         f"color=c=0x{colour}@0.85:s={w}x{bar_h}:r={fps},format=rgba[bar];"
         f"[0:v][bar]overlay=x=0:y='{slide}':enable='{enable}':shortest=1,"
@@ -334,7 +336,7 @@ def lowerthird_graph(
 
 def irisclose_graph(
     d: float, dur: float, fps: str, h: int, info: ff.MediaInfo, start: float, w: int
-):
+) -> tuple[list[str], str]:
     graph = (
         f"[0:v]setpts=PTS-STARTPTS,trim=duration={dur:.3f},scale={w}:{h},fps={fps},"
         f"format=yuv420p,setsar=1,settb=AVTB[v0];"
@@ -358,7 +360,7 @@ def irisclose_graph(
 
 def freezezoom_graph(
     dur: float, extra: float, fade: float, fps: str, h: int, hold: float, info: ff.MediaInfo, w: int
-):
+) -> tuple[list[str], str]:
     graph = (
         f"[0:v]setpts=PTS-STARTPTS,trim=duration={dur:.3f},tpad=stop_mode=clone:stop_duration={extra:.3f},"
         f"zoompan=z='if(gte(it,{dur:.3f}),max(1,1.1-0.1*(it-{dur:.3f})/{max(hold, 0.1):.3f}),1)':"
@@ -375,7 +377,7 @@ def freezezoom_graph(
     return audio, graph
 
 
-def fadeout_cmd(crf: str, dur: float, out: str, src: str, start: float):
+def fadeout_cmd(crf: str, dur: float, out: str, src: str, start: float) -> list[str]:
     cmd = [
         ff.ffmpeg_path(),
         "-y",
@@ -398,7 +400,7 @@ def fadeout_cmd(crf: str, dur: float, out: str, src: str, start: float):
     return cmd
 
 
-def splitopen_graph(d: float, fps: str, h: int, trans: str, w: int):
+def splitopen_graph(d: float, fps: str, h: int, trans: str, w: int) -> str:
     graph = (
         f"color=c=black:s={w}x{h}:r={fps}:d={d:.3f},format=yuv420p,setsar=1,settb=AVTB[blk];"
         f"[0:v]setpts=PTS-STARTPTS,scale={w}:{h},fps={fps},format=yuv420p,setsar=1,settb=AVTB[vid];"
@@ -407,7 +409,7 @@ def splitopen_graph(d: float, fps: str, h: int, trans: str, w: int):
     return graph
 
 
-def spinin_graph(d: float, k: str, turns: float):
+def spinin_graph(d: float, k: str, turns: float) -> str:
     graph = (
         f"[0:v]setpts=PTS-STARTPTS,split[a][b];[a]drawbox=c=black:t=fill[bg];"
         f"[b]format=rgba,rotate=a='if(lte(t,{d:.3f}),{turns}*2*PI*(1-pow(t/{d:.3f},2)),0)':c=none,"
@@ -417,7 +419,7 @@ def spinin_graph(d: float, k: str, turns: float):
     return graph
 
 
-def slidein_graph(x: str, y: str):
+def slidein_graph(x: str, y: str) -> str:
     graph = (
         f"[0:v]setpts=PTS-STARTPTS,split[a][b];[a]drawbox=c=black:t=fill[bg];"
         f"[bg][b]overlay=x='{x}':y='{y}':eval=frame,{FX_GUARD}[v]"
@@ -425,7 +427,7 @@ def slidein_graph(x: str, y: str):
     return graph
 
 
-def zoomburst_graph(fps: str, h: int, n: int, w: int, z: float):
+def zoomburst_graph(fps: str, h: int, n: int, w: int, z: float) -> str:
     graph = (
         f"zoompan=z='if(lte(on,{n}),{z}-({z}-1)*on/{n},1)':x='iw/2-(iw/zoom/2)':"
         f"y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps},{FX_GUARD}"

@@ -23,11 +23,12 @@ from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar, set_scale
 from tabs.widgets import FramePreview
 
 
 class MediaInspectorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self.info: ff.MediaInfo | None = None
@@ -35,7 +36,7 @@ class MediaInspectorTab(BaseTab):
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t_or("tab.media_inspector", "Media Inspector"),
@@ -72,7 +73,7 @@ class MediaInspectorTab(BaseTab):
         self._build_overview()
         self._build_pages()
 
-    def _build_overview(self):
+    def _build_overview(self) -> None:
         """The frame preview beside the summary, the notes and a scrubber."""
         top = tk.Frame(self, bg=CLR["bg"])
         top.pack(fill="x", padx=px(20), pady=px(4))
@@ -124,7 +125,7 @@ class MediaInspectorTab(BaseTab):
         self.scrub.pack(side="left", fill="x", expand=True, padx=px(6))
         framestep.slider(self.scrub, self.preview)  # , and . step a frame
 
-    def _build_pages(self):
+    def _build_pages(self) -> None:
         """Streams, Container, Chapters, Tags and Raw JSON, in tabs."""
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=px(20), pady=px(8, 12))
@@ -145,8 +146,7 @@ class MediaInspectorTab(BaseTab):
         for c, h, w in zip(cols, heads, widths, strict=False):
             self.tree.heading(c, text=h)
             self.tree.column(c, width=px(w), anchor="w", stretch=c == "detail")
-        ysb = ttk.Scrollbar(streams, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=ysb.set)
+        ysb = linked_scrollbar(streams, self.tree)
         self.tree.pack(side="left", fill="both", expand=True)
         ysb.pack(side="right", fill="y")
         self.nb.add(streams, text=t_or("inspector.tab_streams", "Streams"))
@@ -164,7 +164,7 @@ class MediaInspectorTab(BaseTab):
 
     # ── actions ──────────────────────────────────────────────────────────────
 
-    def _browse(self):
+    def _browse(self) -> None:
         path = dialogs.ask_open("any", title=t_or("inspector.open_title", "Inspect a media file"))
         if path:
             self.load_file(path)
@@ -210,7 +210,7 @@ class MediaInspectorTab(BaseTab):
         widget.insert("1.0", text)
         widget.configure(state="disabled")
 
-    def _fill_notes(self, notes):
+    def _fill_notes(self, notes: list[tuple[str, str]]) -> None:
         self.notes.configure(state="normal")
         self.notes.delete("1.0", "end")
         for level, msg in notes:
@@ -234,7 +234,7 @@ class MediaInspectorTab(BaseTab):
         if info.has_video:
             self.scrub.configure(to=max(info.duration, 0.01))
             mid = 0.0 if info.is_image else min(info.duration * 0.25, 10.0)
-            self.scrub.set(mid)
+            set_scale(self.scrub, mid)
             self.preview.load(info.path, duration=info.duration, at=mid)
         else:
             self.preview.load(info.path, duration=info.duration)
@@ -255,14 +255,14 @@ class MediaInspectorTab(BaseTab):
         parts += ["", "Notes:", self.notes.get("1.0", "end-1c")]
         return "\n".join(parts)
 
-    def _copy_report(self):
+    def _copy_report(self) -> None:
         text = self.report_text()
         if text:
             self.clipboard_clear()
             self.clipboard_append(text)
             self.log_debug("Media report copied")
 
-    def _export_json(self):
+    def _export_json(self) -> None:
         if not self.info:
             return
         default = os.path.splitext(os.path.basename(self.info.path))[0] + "_probe.json"

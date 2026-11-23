@@ -34,6 +34,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterable, Mapping, Sequence
 from http.client import HTTPResponse
+from types import ModuleType
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -341,7 +342,7 @@ def system_ca_file() -> str | None:
     return None
 
 
-def _truststore():
+def _truststore() -> ModuleType | None:
     try:
         from core.deps import require
 
@@ -436,7 +437,7 @@ def ca_bundle_for_tools(cfg: NetConfig | None = None) -> str | None:
 # ── The app's own downloads ───────────────────────────────────────────────────
 
 
-def _socks_handler(pu: str):
+def _socks_handler(pu: str) -> urllib.request.BaseHandler | None:
     try:
         import socks  # PySocks
         from sockshandler import SocksiPyHandler
@@ -463,7 +464,7 @@ def _socks_handler(pu: str):
     )
 
 
-def _opener(proxy: str, ctx: ssl.SSLContext):
+def _opener(proxy: str, ctx: ssl.SSLContext) -> urllib.request.OpenerDirector:
     handlers: list[urllib.request.BaseHandler] = [urllib.request.HTTPSHandler(context=ctx)]
     if proxy == DIRECT:
         handlers.append(urllib.request.ProxyHandler({}))

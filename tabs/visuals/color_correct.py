@@ -29,16 +29,16 @@ GROUPS = [
 
 
 class ColorCorrectorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self.vars: dict[str, tk.DoubleVar] = {}
-        self._preview_job = None
+        self._preview_job: str | None = None
         self._build_ui()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.basic_color_corrector"),
@@ -100,11 +100,11 @@ class ColorCorrectorTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5, bg=CLR["bg"])
 
-    def _reset_slider(self, var, default):
+    def _reset_slider(self, var: tk.DoubleVar, default: float) -> None:
         var.set(default)
         self._schedule_preview()
 
-    def _group(self, parent, title, keys):
+    def _group(self, parent: tk.Misc, title: str, keys: tuple[str, ...]) -> tk.LabelFrame:
         lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=px(10), pady=px(4))
         for row, key in enumerate(keys):
             label, lo, hi, default, res = cc.CONTROLS[key]
@@ -139,32 +139,32 @@ class ColorCorrectorTab(BaseTab):
 
     # ── Behaviour ────────────────────────────────────────────────────────────
 
-    def values(self) -> dict:
+    def values(self) -> dict[str, float]:
         return {k: v.get() for k, v in self.vars.items()}
 
-    def _apply_look(self, name):
+    def _apply_look(self, name: str) -> None:
         merged = dict(cc.DEFAULTS)
         merged.update(cc.LOOKS.get(name, {}))
         for key, var in self.vars.items():
             var.set(merged[key])
         self._schedule_preview()
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self.compare.load(path)
         self.compare.set_filter(cc.build_chain(self.values()))
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "graded"))
 
-    def _schedule_preview(self):
+    def _schedule_preview(self) -> None:
         if self._preview_job is not None:
             self.after_cancel(self._preview_job)
         self._preview_job = self.after(150, self._update_preview)
 
-    def _update_preview(self):
+    def _update_preview(self) -> None:
         self._preview_job = None
         self.compare.set_filter(cc.build_chain(self.values()))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

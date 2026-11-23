@@ -23,26 +23,27 @@ from core.ops.text_watermark import PLACES, TextMark, build_script, parse_ranges
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 
 class TextBurnerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
-        self._pdir = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
+        self._pdir: str | None = None
         self._pn = 0
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body = self._build_header()
         self._build_position_motion(body)
         self._build_render(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tk.Frame:
         self.make_header(
             self,
             t("tab.watermarker"),
@@ -107,7 +108,7 @@ class TextBurnerTab(BaseTab):
         )
         return body
 
-    def _build_position_motion(self, body):
+    def _build_position_motion(self, body: tk.Frame) -> None:
         self.col_btn.pack(side="left", padx=px(8))
 
         pos = tk.LabelFrame(body, text="  Position & motion  ", padx=px(12), pady=px(6))
@@ -135,7 +136,7 @@ class TextBurnerTab(BaseTab):
         ):
             tk.Label(row, text=label).pack(side="left", padx=px(6, 2))
             tk.Entry(row, textvariable=var, width=w).pack(side="left")
-            var.trace_add("write", lambda *_a: self._changed())
+            on_write(var, lambda: self._changed())
         tk.Checkbutton(
             row, text="random (1-2× that)", variable=self.rand_var, command=self._changed
         ).pack(side="left", padx=px(6))
@@ -159,7 +160,7 @@ class TextBurnerTab(BaseTab):
             tm, text="Fade in and out", variable=self.fade_var, command=self._changed
         ).grid(row=2, column=0, sticky="w")
         for var in (self.text_var, self.font_var, self.ranges_var):
-            var.trace_add("write", lambda *_a: self._changed())
+            on_write(var, lambda: self._changed())
 
         self.encoder, self.out_row = output_section(
             body,
@@ -168,12 +169,12 @@ class TextBurnerTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "watermarked"),
         )
 
-    def _build_render(self, body):
+    def _build_render(self, body: tk.Frame) -> None:
         self.btn_render = self.make_render_btn(body, "©  BURN WATERMARK", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def script(self, w, h, duration) -> ass.Script:
+    def script(self, w: int, h: int, duration: float) -> ass.Script:
         place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
         every = common.number(self.every_var.get() or "3", "Jump every", 0.2, 3600)
         mark = TextMark(
@@ -199,19 +200,19 @@ class TextBurnerTab(BaseTab):
         )
         return build_script(mark, w, h, duration)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.compare.load(path)
         self._changed()
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "watermarked"))
 
-    def _changed(self):
+    def _changed(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         info = self._info
         if info is None or not info.has_video or not self.text_var.get().strip():
@@ -229,7 +230,7 @@ class TextBurnerTab(BaseTab):
         path = sc.write(os.path.join(self._pdir, f"p{self._pn}.ass"))
         self.compare.set_filter(ass.subtitles_filter(path), keep_time=True)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -251,7 +252,7 @@ class TextBurnerTab(BaseTab):
         work = temp_dir("wm_")
         path = sc.write(os.path.join(work, "watermark.ass"))
 
-        def done(rc):
+        def done(rc: int) -> None:
             shutil.rmtree(work, ignore_errors=True)
             self.show_result(rc, out)
 
@@ -266,13 +267,13 @@ class TextBurnerTab(BaseTab):
             on_done=done,
         )
 
-    def load_file(self, path=None):
+    def load_file(self, path: str | None = None) -> bool:
         if path:
             self.src_var.set(path)
             return True
         return False
 
-    def on_app_closing(self):
+    def on_app_closing(self) -> None:
         if self._pdir:
             shutil.rmtree(self._pdir, ignore_errors=True)
             self._pdir = None  # a new one is made if the page is used again

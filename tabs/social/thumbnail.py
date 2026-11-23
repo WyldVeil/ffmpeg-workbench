@@ -11,6 +11,8 @@ image suitable for YouTube/TikTok thumbnails.  Options for:
   • Batch: export a frame every N seconds for selection
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import tkinter as tk
@@ -27,12 +29,13 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.contracts import ScrubTransport, Transport
+from tabs.kit.tktyped import on_write
 from tabs.widgets import FramePreview, SaveRow
 
 logger = logging.getLogger("crossfader.social.thumbnail")
 
 
-def _fmt(seconds):
+def _fmt(seconds: float) -> str:
     return f"{Timecode.of(seconds):.2}"
 
 
@@ -47,7 +50,7 @@ PRESETS = {  # stable id: (label, (width, height)); (0, 0) = original size
 
 
 class ThumbnailMakerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self.duration = 0.0
@@ -58,7 +61,7 @@ class ThumbnailMakerTab(BaseTab):
     def transport(self) -> Transport | None:  # tabs/kit/contracts.py
         return ScrubTransport(self._scrub, lambda: self.duration)
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self._build_header()
         self._build_source()
         self._build_frame_selection()
@@ -70,10 +73,10 @@ class ThumbnailMakerTab(BaseTab):
         self._build_run()
         self._build_console()
 
-    def _build_header(self):
+    def _build_header(self) -> None:
         self.make_header(self, t("tab.thumbnail_maker"), t("thumbnail.subtitle"), icon="🖼")
 
-    def _build_source(self):
+    def _build_source(self) -> None:
         """Source."""
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(20), pady=px(14, 4))
@@ -82,7 +85,7 @@ class ThumbnailMakerTab(BaseTab):
         tk.Entry(sf, textvariable=self._src_var, width=55, relief="flat", font=(UI_FONT, 10)).pack(
             side="left", padx=px(8)
         )
-        self._src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
+        on_write(self._src_var, lambda: self.after(400, self._src_typed))
         tk.Button(
             sf,
             text=t("btn.browse"),
@@ -94,7 +97,7 @@ class ThumbnailMakerTab(BaseTab):
         self._dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"], font=(MONO_FONT, 9))
         self._dur_lbl.pack(side="left", padx=px(10))
 
-    def _build_frame_selection(self):
+    def _build_frame_selection(self) -> None:
         """Frame selection."""
         frame_lf = tk.LabelFrame(
             self,
@@ -108,16 +111,16 @@ class ThumbnailMakerTab(BaseTab):
         self._build_scrubber(frame_lf)
         self._build_jump_buttons(frame_lf)
 
-    def _build_frame_preview(self, frame_lf):
+    def _build_frame_preview(self, frame_lf: tk.LabelFrame) -> None:
         """Live preview of the thumbnail itself: the export's own filters (size, adjustments, text) on the chosen frame."""
         # Live preview of the thumbnail itself: the export's own filters (size,
         # adjustments, text) on the chosen frame
         self._preview = FramePreview(frame_lf, 320, 180, show_time=False)
         self._preview.pack(side="right", padx=px(10, 0))
         self._preview.canvas.configure(bg=CLR["bg"])
-        self._preview_job = None
+        self._preview_job: str | None = None
 
-    def _build_scrubber(self, frame_lf):
+    def _build_scrubber(self, frame_lf: tk.LabelFrame) -> None:
         """The frame slider and its time."""
         fr1 = tk.Frame(frame_lf)
         fr1.pack(fill="x", pady=px(3))
@@ -145,7 +148,7 @@ class ThumbnailMakerTab(BaseTab):
         )
         self._time_lbl.pack(side="left")
 
-    def _build_jump_buttons(self, frame_lf):
+    def _build_jump_buttons(self, frame_lf: tk.LabelFrame) -> None:
         """Preview, and steps of a second or a tenth back and forward."""
         fr2 = tk.Frame(frame_lf)
         fr2.pack(fill="x", pady=px(3))
@@ -200,7 +203,7 @@ class ThumbnailMakerTab(BaseTab):
             command=lambda: self._nudge(1.0),
         ).pack(side="left", padx=px(2))
 
-    def _build_size_preset(self):
+    def _build_size_preset(self) -> None:
         """Size preset."""
         size_lf = tk.LabelFrame(
             self,
@@ -219,7 +222,7 @@ class ThumbnailMakerTab(BaseTab):
                 sz_row, text=label, variable=self._size_var, value=key, font=(UI_FONT, 9)
             ).pack(anchor="w")
 
-    def _build_image_adjustments(self):
+    def _build_image_adjustments(self) -> None:
         """Image adjustments."""
         adj_lf = tk.LabelFrame(
             self,
@@ -284,7 +287,7 @@ class ThumbnailMakerTab(BaseTab):
             highlightthickness=0,
         ).pack(side="left", padx=px(4))
 
-    def _build_text_overlay(self):
+    def _build_text_overlay(self) -> None:
         """Text overlay."""
         txt_lf = tk.LabelFrame(
             self,
@@ -350,7 +353,7 @@ class ThumbnailMakerTab(BaseTab):
             tr2, text=t("thumbnail.stroke_checkbox"), variable=self._text_stroke, font=(UI_FONT, 10)
         ).pack(side="left", padx=px(12))
 
-    def _build_batch_mode(self):
+    def _build_batch_mode(self) -> None:
         """Batch mode."""
         batch_lf = tk.LabelFrame(
             self,
@@ -378,7 +381,7 @@ class ThumbnailMakerTab(BaseTab):
             br, text=t("thumbnail.seconds_to_folder_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left")
 
-    def _build_output(self):
+    def _build_output(self) -> None:
         """Output."""
         self._out_var = tk.StringVar()
         SaveRow(
@@ -394,7 +397,7 @@ class ThumbnailMakerTab(BaseTab):
                 fmt_f, text=label, variable=self._fmt_var, value=code, font=(UI_FONT, 10)
             ).pack(side="left", padx=px(8))
 
-    def _build_run(self):
+    def _build_run(self) -> None:
         """Run."""
         bf = tk.Frame(self)
         bf.pack(pady=px(8))
@@ -403,18 +406,18 @@ class ThumbnailMakerTab(BaseTab):
         )
         self.btn_render.pack()
 
-    def _build_console(self):
+    def _build_console(self) -> None:
         """Console."""
         self.console = self.make_console_block(self, height=4, padx=px(20), pady=px(4, 10))
 
     # ── Callbacks ──────────────────────────────────────────────────────
-    def _browse(self):
+    def _browse(self) -> None:
         p = dialogs.ask_open("video", parent=self)
         if p:
             self._src_var.set(p)
             self._src_typed()
 
-    def _watch_look(self):
+    def _watch_look(self) -> None:
         for var in (
             self._size_var,
             self._brightness,
@@ -429,12 +432,12 @@ class ThumbnailMakerTab(BaseTab):
         ):
             var.trace_add("write", self._look_changed)
 
-    def on_source_loaded(self, path):
+    def on_source_loaded(self, path: str) -> None:
         """Drag and drop / File > Open: the shared loader has already set the
         path, so load it here (the typed-path check would think it was done)."""
         self._src_typed(force=True)
 
-    def _src_typed(self, force=False):
+    def _src_typed(self, force: bool = False) -> None:
         p = self._src_var.get().strip()
         if p and os.path.isfile(p) and (force or p != getattr(self, "file_path", "")):
             from core import ffmpeg as ff
@@ -450,31 +453,31 @@ class ThumbnailMakerTab(BaseTab):
             self._preview.load(p, self.duration, float(self._scrub_var.get()))
             self._look_changed()
 
-    def _look_changed(self, *_a):
+    def _look_changed(self, *_a: str) -> None:
         """Size, adjustments or text changed: refresh the preview (debounced)."""
         if self._preview_job is not None:
             self.after_cancel(self._preview_job)
         self._preview_job = self.after(250, self._refresh_preview)
 
-    def _refresh_preview(self):
+    def _refresh_preview(self) -> None:
         self._preview_job = None
         if getattr(self, "file_path", ""):
             self._preview.set_filter(",".join(self._build_vf()))
 
-    def _on_scrub(self, val):
+    def _on_scrub(self, val: str) -> None:
         try:
             self._time_lbl.config(text=_fmt(float(val)))
             self._preview.show(float(val))
         except (ValueError, tk.TclError):
             pass
 
-    def _nudge(self, delta):
+    def _nudge(self, delta: float) -> None:
         pos = max(0.0, min(self._scrub_var.get() + delta, self.duration))
         self._scrub_var.set(pos)
         self._time_lbl.config(text=_fmt(pos))
         self._preview.show(pos)
 
-    def _preview_frame(self):
+    def _preview_frame(self) -> None:
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
@@ -486,7 +489,7 @@ class ThumbnailMakerTab(BaseTab):
                 logger.debug("_preview_frame: best-effort step failed", exc_info=True)
         self.preview_proc = launch_preview(self.file_path, start_time=pos)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self._src_var.get().strip()
         if not src or not os.path.isfile(src):
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
@@ -576,8 +579,8 @@ class ThumbnailMakerTab(BaseTab):
         )
         return th.look_filters(look, self._tmp if caption else "")
 
-    def _get_ext(self):
+    def _get_ext(self) -> str:
         return th.PICTURE_FORMATS[self._fmt_var.get()][1]
 
-    def _get_format_args(self):
+    def _get_format_args(self) -> list[str]:
         return list(th.PICTURE_FORMATS[self._fmt_var.get()][2])

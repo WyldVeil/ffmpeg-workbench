@@ -25,13 +25,13 @@ from tabs.widgets import FileRow, save_section, scroll_body
 
 
 class AudioSyncTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.audio_sync_shifter"), "Fix out-of-sync sound.", icon="⏱")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -77,14 +77,14 @@ class AudioSyncTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _nudge(self, d):
+    def _nudge(self, d: float) -> None:
         try:
             v = float(self.offset_var.get() or 0)
         except ValueError:
             v = 0.0
         self.offset_var.set(f"{v + d:.3f}")
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         tracks = (
             [
@@ -99,7 +99,7 @@ class AudioSyncTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "synced"))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

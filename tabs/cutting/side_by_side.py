@@ -51,17 +51,17 @@ LENGTH = {
 
 
 class SideBySideTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, lay = self._build_header()
         self._build_output(body, lay)
         self._build_render(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
             t("tab.side_by_side"),
@@ -71,7 +71,9 @@ class SideBySideTab(BaseTab):
         body = scroll_body(self)
         clips = tk.LabelFrame(body, text="  Clips  ", padx=px(12), pady=px(6))
         clips.pack(fill="x", padx=px(20), pady=px(10, 4))
-        self.rows, self.label_vars, self.speed_vars = [], [], []
+        self.rows: list[FileRow] = []
+        self.label_vars: list[tk.StringVar] = []
+        self.speed_vars: list[tk.StringVar] = []
         for i in range(4):
             line = tk.Frame(clips)
             line.pack(fill="x", pady=px(2))
@@ -122,7 +124,7 @@ class SideBySideTab(BaseTab):
         )
         return body, lay
 
-    def _build_output(self, body, lay):
+    def _build_output(self, body: tk.Frame, lay: tk.LabelFrame) -> None:
         self.fill_var = tk.BooleanVar(value=False)
         self.divider_var = tk.BooleanVar(value=True)
         self.labels_on = tk.BooleanVar(value=True)
@@ -196,17 +198,17 @@ class SideBySideTab(BaseTab):
             suggest=lambda: self.suggest_output(self.rows[0].path, "side_by_side"),
         )
 
-    def _build_render(self, body):
+    def _build_render(self, body: tk.Frame) -> None:
         self.btn_render = self.make_render_btn(body, "◫  CREATE", self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _key(self, table, var, default):
+    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
-    def _clips(self, layout):
+    def _clips(self, layout: str) -> list[Clip] | None:
         """The clips to show (two, or up to four in a grid); None after saying what's wrong."""
-        clips = []
+        clips: list[Clip] = []
         for i, fr in enumerate(self.rows[: 4 if layout == "grid" else 2]):
             path = fr.path
             if not path and layout == "grid" and i >= 2:
@@ -222,7 +224,7 @@ class SideBySideTab(BaseTab):
             clips.append(Clip(path, info.duration, info.has_audio, self.label_vars[i].get(), speed))
         return clips
 
-    def _render(self):
+    def _render(self) -> None:
         layout = self._key(LAYOUTS, self.layout_var, "side")
         clips = self._clips(layout)
         if clips is None:
@@ -270,7 +272,7 @@ class SideBySideTab(BaseTab):
         loop_to = longest if length == "loop" else None
         cmd = sbs_cmd(clips, graph, venc, container, total, out, audio=has_audio, loop_to=loop_to)
 
-        def done(rc):
+        def done(rc: int) -> None:
             shutil.rmtree(work, ignore_errors=True)
             self.show_result(rc, out)
 

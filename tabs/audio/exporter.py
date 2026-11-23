@@ -16,6 +16,8 @@ video-with-audio) file and re-save it with full control over:
   • ReplayGain tagging
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import tkinter as tk
@@ -65,14 +67,14 @@ SAMPLE_RATES = {"Auto": ""} | {
 
 
 class AudioExporterTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # -- header --
         self.make_header(
             self, t("tab.audio_converter"), subtitle=t("exporter.subtitle"), icon="\U0001f4be"
@@ -94,13 +96,13 @@ class AudioExporterTab(BaseTab):
 
     # ── Source ────────────────────────────────────────────────────────────────
 
-    def _build_source_section(self):
+    def _build_source_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.source"))
         self.src_var = tk.StringVar()
         row = self.make_file_row(sec, t("exporter.input_file"), self.src_var, self._browse_src)
         row.pack(fill="x", pady=px(4))
 
-    def _build_source_info_section(self):
+    def _build_source_info_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.source_info"))
         self._info_lbl = tk.Label(
             sec,
@@ -115,7 +117,7 @@ class AudioExporterTab(BaseTab):
 
     # ── Format ───────────────────────────────────────────────────────────────
 
-    def _build_format_section(self):
+    def _build_format_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.format"))
         row = tk.Frame(sec, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
@@ -143,12 +145,12 @@ class AudioExporterTab(BaseTab):
 
     # ── Quality / Bitrate ────────────────────────────────────────────────────
 
-    def _build_quality_section(self):
+    def _build_quality_section(self) -> None:
         self._build_quality_section_qual_sec()
         self._build_quality_section_vbr()
         self._build_quality_compression()
 
-    def _build_quality_section_qual_sec(self):
+    def _build_quality_section_qual_sec(self) -> None:
         self._qual_sec = self.make_section(self._inner, title=t("exporter.section.quality"))
 
         # Bitrate mode row
@@ -197,7 +199,7 @@ class AudioExporterTab(BaseTab):
         self._br_cb = ttk.Combobox(
             self._cbr_row,
             textvariable=self.bitrate_var,
-            values=ae.FORMAT_DEFS[ae.AudioFormat.MP3]["bitrates"],
+            values=list(ae.FORMAT_DEFS[ae.AudioFormat.MP3].bitrates),
             state="readonly",
             width=8,
         )
@@ -213,7 +215,7 @@ class AudioExporterTab(BaseTab):
             fg=CLR["fg"],
         ).pack(side="left")
 
-    def _build_quality_section_vbr(self):
+    def _build_quality_section_vbr(self) -> None:
         self.vbr_var = tk.IntVar(value=2)
         self._vbr_scale = tk.Scale(
             self._vbr_row,
@@ -277,7 +279,7 @@ class AudioExporterTab(BaseTab):
             highlightthickness=0,
         )
 
-    def _build_quality_compression(self):
+    def _build_quality_compression(self) -> None:
         self._comp_scale.pack(side="left", padx=px(8))
         tk.Label(
             self._comp_row,
@@ -292,7 +294,7 @@ class AudioExporterTab(BaseTab):
 
     # ── Sample rate & channels ───────────────────────────────────────────────
 
-    def _build_sample_section(self):
+    def _build_sample_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.sample"))
 
         r0 = tk.Frame(sec, bg=CLR["bg"])
@@ -325,7 +327,7 @@ class AudioExporterTab(BaseTab):
 
     # ── Trim ─────────────────────────────────────────────────────────────────
 
-    def _build_trim_section(self):
+    def _build_trim_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.trim"))
         row = tk.Frame(sec, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
@@ -372,12 +374,12 @@ class AudioExporterTab(BaseTab):
 
     # ── Effects (fade, normalize) ────────────────────────────────────────────
 
-    def _build_effects_section(self):
+    def _build_effects_section(self) -> None:
         r1, sec = self._build_effects_section_fade_in()
         r3 = self._build_effects_section_norm(r1, sec)
         self._build_effects_section_replay_gain(r3)
 
-    def _build_effects_section_fade_in(self):
+    def _build_effects_section_fade_in(self) -> tuple[tk.Frame, tk.LabelFrame]:
         sec = self.make_section(self._inner, title=t("exporter.section.effects"))
 
         # Fades
@@ -442,7 +444,7 @@ class AudioExporterTab(BaseTab):
         ).pack(side="left", padx=px(4))
         return r1, sec
 
-    def _build_effects_section_norm(self, r1, sec):
+    def _build_effects_section_norm(self, r1: tk.Frame, sec: tk.LabelFrame) -> tk.Frame:
         tk.Label(
             r1, text=t("exporter.volume_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left")
@@ -504,7 +506,7 @@ class AudioExporterTab(BaseTab):
         self.strip_silence_var = tk.BooleanVar(value=False)
         return r3
 
-    def _build_effects_section_replay_gain(self, r3):
+    def _build_effects_section_replay_gain(self, r3: tk.Frame) -> None:
         tk.Checkbutton(
             r3,
             text=t("exporter.strip_silence"),
@@ -528,7 +530,7 @@ class AudioExporterTab(BaseTab):
 
     # ── Max file size ────────────────────────────────────────────────────────
 
-    def _build_size_section(self):
+    def _build_size_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.size"))
         row = tk.Frame(sec, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
@@ -563,10 +565,10 @@ class AudioExporterTab(BaseTab):
 
     # ── Metadata ─────────────────────────────────────────────────────────────
 
-    def _build_metadata_section(self):
+    def _build_metadata_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.metadata"))
 
-        self.meta_vars = {}
+        self.meta_vars: dict[str, tk.StringVar] = {}
         fields = [
             ("Title", "title", 30),
             ("Artist", "artist", 30),
@@ -633,7 +635,7 @@ class AudioExporterTab(BaseTab):
 
     # ── Output ───────────────────────────────────────────────────────────────
 
-    def _build_output_section(self):
+    def _build_output_section(self) -> None:
         sec = self.make_section(self._inner, title=t("exporter.section.output"))
         self.out_var = tk.StringVar()
         row = self.make_file_row(sec, t("exporter.save_as"), self.out_var, self._browse_out)
@@ -673,14 +675,14 @@ class AudioExporterTab(BaseTab):
 
     # ── Console ──────────────────────────────────────────────────────────────
 
-    def _build_console_section(self):
+    def _build_console_section(self) -> None:
         self.console = self.make_console_block(
             self._inner, height=8, bg=CLR["bg"], padx=px(20), pady=px(4, 14)
         )
 
     # ── Callbacks ────────────────────────────────────────────────────────────
 
-    def _browse_src(self):
+    def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
             title="Open audio / video file",
             filetypes=[
@@ -698,9 +700,9 @@ class AudioExporterTab(BaseTab):
             self.src_var.set(p)
             self._probe_source(p)
 
-    def _browse_out(self):
+    def _browse_out(self) -> None:
         fmt_def = ae.FORMAT_DEFS[self.fmt_box.value]
-        ext = fmt_def["ext"]
+        ext = fmt_def.ext
         p = dialogs.asksaveasfilename(
             title="Save audio as",
             defaultextension=ext,
@@ -709,10 +711,10 @@ class AudioExporterTab(BaseTab):
         if p:
             self.out_var.set(p)
 
-    def _probe_source(self, path):
+    def _probe_source(self, path: str) -> None:
         """Read the source in the background and show what it is."""
 
-        def _do():
+        def _do() -> None:
             info = ff.try_probe(path)
             if info is None:
                 self.after(
@@ -742,7 +744,7 @@ class AudioExporterTab(BaseTab):
             for key, var in self.meta_vars.items():
                 val = tags.get(key, tags.get(key.upper(), ""))
                 if val and not var.get():
-                    self.after(0, lambda v=var, x=val: v.set(str(x)))
+                    self.after(0, partial(var.set, str(val)))
             self.after(0, lambda: self._info_lbl.config(text=text, fg=CLR["accent"]))
             self.after(
                 0,
@@ -751,13 +753,13 @@ class AudioExporterTab(BaseTab):
 
         tasks.submit(_do)
 
-    def _on_format_change(self, *_):
+    def _on_format_change(self, *_: object) -> None:
         """Reconfigure quality section when format changes."""
         fmt = self.fmt_box.value
         fd = ae.FORMAT_DEFS[fmt]
 
         # Update format note
-        if fd["lossy"]:
+        if fd.lossy:
             self._fmt_note.config(text=t("exporter.lossy_note"))
         else:
             self._fmt_note.config(
@@ -768,7 +770,7 @@ class AudioExporterTab(BaseTab):
 
         self._toggle_br_mode()
 
-    def _toggle_br_mode(self):
+    def _toggle_br_mode(self) -> None:
         """Show/hide quality controls based on format + mode."""
         fmt = self.fmt_box.value
         fd = ae.FORMAT_DEFS[fmt]
@@ -779,21 +781,21 @@ class AudioExporterTab(BaseTab):
         self._depth_row.pack_forget()
         self._comp_row.pack_forget()
 
-        if fd["lossy"]:
+        if fd.lossy:
             self._show_lossy_controls(fd)
         else:
             self._show_lossless_controls(fmt, fd)
 
-    def _show_lossy_controls(self, fd):
+    def _show_lossy_controls(self, fd: ae.FormatDef) -> None:
         """CBR/VBR choice, and the bitrate list or the VBR quality scale."""
         self._rb_cbr.pack(side="left", padx=px(12, 4))
         self._rb_vbr.pack(side="left", padx=px(4))
 
         # Update bitrate list
-        self._br_cb.config(values=fd["bitrates"])
-        self.bitrate_var.set(fd["default_br"])
+        self._br_cb.config(values=fd.bitrates)
+        self.bitrate_var.set(fd.default_br)
 
-        has_vbr = fd.get("vbr_flag") is not None
+        has_vbr = fd.vbr_flag is not None
 
         if not has_vbr:
             self.br_mode_var.set("CBR")
@@ -803,31 +805,31 @@ class AudioExporterTab(BaseTab):
             self._cbr_row.pack(fill="x", pady=px(4))
         else:
             self._vbr_row.pack(fill="x", pady=px(4))
-            vr = fd.get("vbr_range", (0, 9))
+            vr = fd.vbr_range
             self._vbr_scale.config(from_=vr[0], to=vr[1])
-            self.vbr_var.set(fd.get("vbr_default", vr[0]))
+            self.vbr_var.set(fd.vbr_default)
             self._vbr_hint.config(
-                text=f"{vr[0]} = {'best' if fd.get('ext') != '.ogg' else 'worst'}, "
-                f"{vr[1]} = {'smallest' if fd.get('ext') != '.ogg' else 'best'}"
+                text=f"{vr[0]} = {'best' if fd.ext != '.ogg' else 'worst'}, "
+                f"{vr[1]} = {'smallest' if fd.ext != '.ogg' else 'best'}"
             )
 
-    def _show_lossless_controls(self, fmt, fd):
+    def _show_lossless_controls(self, fmt: ae.AudioFormat, fd: ae.FormatDef) -> None:
         """Bit depth, and FLAC's compression level."""
         self._rb_cbr.pack_forget()
         self._rb_vbr.pack_forget()
 
-        depths = fd.get("bit_depths", {})
+        depths = fd.bit_depths
         if depths:
             self._depth_row.pack(fill="x", pady=px(4))
             self._depth_cb.config(values=list(depths.keys()))
-            self.depth_var.set(fd.get("default_depth", "16-bit"))
+            self.depth_var.set(fd.default_depth)
 
         # FLAC compression
         if fmt is ae.AudioFormat.FLAC:
             self._comp_row.pack(fill="x", pady=px(4))
-            cr = fd.get("compression_range", (0, 12))
+            cr = fd.compression_range
             self._comp_scale.config(from_=cr[0], to=cr[1])
-            self.comp_var.set(fd.get("compression_default", 5))
+            self.comp_var.set(fd.compression_default)
 
     # ── Build FFmpeg command ─────────────────────────────────────────────────
 
@@ -841,7 +843,7 @@ class AudioExporterTab(BaseTab):
         if end is not None and end <= start:
             raise ValueError("The end time must be after the start time.")
 
-        def num(var, label, lo, hi):
+        def num(var: tk.StringVar, label: str, lo: float, hi: float) -> float:
             v = var.get().strip() or "0"
             try:
                 x = float(v.replace("dB", "").replace("db", ""))
@@ -854,11 +856,11 @@ class AudioExporterTab(BaseTab):
         size_bytes: float | None = None
         vbr: str | None = None
         bitrate: str | None = None
-        if fd["lossy"]:
+        if fd.lossy:
             if self.limit_enabled.get():
                 unit = 1024 * 1024 if self.size_unit.value is SizeUnit.MB else 1024
                 size_bytes = num(self.max_size_var, "Maximum size", 0.001, 1e6) * unit
-            elif self.br_mode_var.get() == "VBR" and fd.get("vbr_flag"):
+            elif self.br_mode_var.get() == "VBR" and fd.vbr_flag:
                 vbr = str(self.vbr_var.get())
             else:
                 bitrate = self.bitrate_var.get()
@@ -893,11 +895,11 @@ class AudioExporterTab(BaseTab):
             size_bytes=size_bytes,
             vbr=vbr,
             bitrate=bitrate,
-            depth="" if fd["lossy"] else fd.get("bit_depths", {}).get(self.depth_var.get(), ""),
+            depth="" if fd.lossy else fd.bit_depths.get(self.depth_var.get(), ""),
             compression=str(self.comp_var.get()) if fmt is ae.AudioFormat.FLAC else "5",
         )
 
-    def _export(self):
+    def _export(self) -> None:
         typed = self.src_var.get().strip()
         if typed and os.path.isfile(typed):
             self.file_path = typed
@@ -915,7 +917,7 @@ class AudioExporterTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        ext = ae.FORMAT_DEFS[cfg.fmt]["ext"]
+        ext = ae.FORMAT_DEFS[cfg.fmt].ext
         out = self.out_var.get().strip() or self.suggest_output(src, "export", ext)
         if os.path.splitext(out)[1].lower() != ext:
             out = os.path.splitext(out)[0] + ext

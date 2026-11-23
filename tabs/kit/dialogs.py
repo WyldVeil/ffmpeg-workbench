@@ -184,7 +184,7 @@ def _run_blocking_keep_ui(cmd: list[str], parent: Parent = None) -> str | None:
     result: dict[str, Any] = {}
     finished = threading.Event()
 
-    def _worker():
+    def _worker() -> None:
         # Never touch Tk from this thread: the main thread is inside
         # wait_variable(), not mainloop(), so cross-thread Tk calls fail.
         try:
@@ -203,7 +203,7 @@ def _run_blocking_keep_ui(cmd: list[str], parent: Parent = None) -> str | None:
     else:
         done = tk.IntVar(root, value=0)
 
-        def _poll():
+        def _poll() -> None:
             if finished.is_set():
                 done.set(1)
             else:

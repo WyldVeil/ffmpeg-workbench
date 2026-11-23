@@ -372,7 +372,7 @@ def _windows() -> SystemProxy:
     except OSError:
         return sp
 
-    def val(name, default=None):
+    def val(name: str, default: object = None) -> object:
         try:
             return winreg.QueryValueEx(key, name)[0]
         except OSError:

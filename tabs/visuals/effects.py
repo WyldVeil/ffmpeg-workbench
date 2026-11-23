@@ -18,6 +18,8 @@ shortened unless the user explicitly chooses to trim - intro and outro
 effects overlay onto the existing video so no content is lost.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import tkinter as tk
@@ -25,6 +27,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -37,7 +40,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
-from tabs.kit.time_fields import frame_button, seconds_text
+from tabs.kit.time_fields import Source, frame_button, seconds_text
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
 logger = logging.getLogger("crossfader.visuals.effects")
@@ -52,12 +55,12 @@ VIDEO_TYPES = [
 ]
 
 
-def _probe_duration(path):
+def _probe_duration(path: str) -> float:
     """Duration of *path* in seconds, or 0.0."""
     return ff.duration_of(path)
 
 
-def _probe_wh(path):
+def _probe_wh(path: str) -> tuple[int, int]:
     """Display width/height (rotation applied, even), or (1920, 1080)."""
     info = ff.try_probe(path)
     if info is None or not info.has_video:
@@ -66,7 +69,7 @@ def _probe_wh(path):
     return max(2, w // 2 * 2), max(2, h // 2 * 2)
 
 
-def _probe_length_and_size(src):
+def _probe_length_and_size(src: str) -> tuple[float, tuple[int, int]]:
     return _probe_duration(src), _probe_wh(src)
 
 
@@ -75,7 +78,7 @@ def _probe_length_and_size(src):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _lf(parent, title, **kw):
+def _lf(parent: tk.Misc, title: str, **kw: Any) -> tk.LabelFrame:
     return tk.LabelFrame(
         parent,
         text=f"  {title}  ",
@@ -88,7 +91,17 @@ def _lf(parent, title, **kw):
     )
 
 
-def _spin(parent, label, var, from_, to, resolution=0.5, width=6, *, source=None):
+def _spin(
+    parent: tk.Misc,
+    label: str,
+    var: tk.StringVar,
+    from_: float,
+    to: float,
+    resolution: float = 0.5,
+    width: int = 6,
+    *,
+    source: Source | None = None,
+) -> tk.Frame:
     """``Label [spinbox]`` - with a 🎞 frame picker when it holds a time in the video *source()*."""
     f = tk.Frame(parent, bg=CLR["bg"])
     tk.Label(f, text=label, bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10)).pack(side="left")
@@ -109,7 +122,9 @@ def _spin(parent, label, var, from_, to, resolution=0.5, width=6, *, source=None
     return f
 
 
-def _combo(parent, label, var, values, width=18):
+def _combo(
+    parent: tk.Misc, label: str, var: tk.StringVar, values: list[str], width: int = 18
+) -> tk.Frame:
     f = tk.Frame(parent, bg=CLR["bg"])
     tk.Label(f, text=label, bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10)).pack(side="left")
     ttk.Combobox(
@@ -122,7 +137,7 @@ def _combo(parent, label, var, values, width=18):
     return f
 
 
-def _hint(parent, text):
+def _hint(parent: tk.Misc, text: str) -> None:
     tk.Label(
         parent,
         text=text,
@@ -155,7 +170,7 @@ class SpecialEffectsTab(BaseTab):
     each in its own sub-tab.
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._build_ui()
 
@@ -195,7 +210,9 @@ class SpecialEffectsTab(BaseTab):
             cmd, console, on_done, btn, duration=duration, output=output, inputs=inputs, name=name
         )
 
-    def _fx_num(self, var, label, lo=None, hi=None):
+    def _fx_num(
+        self, var: tk.StringVar, label: str, lo: float | None = None, hi: int | None = None
+    ) -> float:
         """Parse a numeric field ('1,5', '00:12.5' accepted); raises ValueError
         with a message naming the field."""
         try:
@@ -209,7 +226,9 @@ class SpecialEffectsTab(BaseTab):
             raise ValueError(f"'{label}' must be between {lo} and {hi}.")
         return val
 
-    def _fx_begin(self, src_var, out_var, suffix="fx"):
+    def _fx_begin(
+        self, src_var: tk.StringVar, out_var: tk.StringVar, suffix: str = "fx"
+    ) -> tuple[str, str, ff.MediaInfo] | None:
         """Validate source/output; returns (src, out, info) or None."""
         src = src_var.get().strip()
         if not src or not os.path.exists(src):
@@ -227,7 +246,7 @@ class SpecialEffectsTab(BaseTab):
         return src, out, info
 
     def _fx_run(
-        self, job: RenderJob, crf_var: tk.Variable, btn: tk.Button, console: tk.Text
+        self, job: RenderJob, crf_var: tk.StringVar, btn: tk.Button, console: tk.Text
     ) -> None:
         """Queue *job* encoded with x264 at the CRF in *crf_var* (the audio is
         copied when it can be)."""
@@ -238,7 +257,7 @@ class SpecialEffectsTab(BaseTab):
         venc = VideoEncode("libx264", "h264", args=fx.x264_args(str(crf_var.get())))
         common.render(self, job, encoder=venc, console=console, btn=btn)
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # ── Header ────────────────────────────────────────────────────────
         make_header(
             self, t("tab.special_effects"), t("effects.top_youtube_social_media_effects"), icon="✨"
@@ -259,7 +278,7 @@ class SpecialEffectsTab(BaseTab):
     #  TAB 1 - INTROS
     # ═════════════════════════════════════════════════════════════════════
 
-    def _build_intros_tab(self, nb):
+    def _build_intros_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("effects.intros"))
 
@@ -274,7 +293,7 @@ class SpecialEffectsTab(BaseTab):
 
     # ── Intro 1: Fade-In from Static Frame ───────────────────────────────
 
-    def _build_intro_fadein(self, nb):
+    def _build_intro_fadein(self, nb: ttk.Notebook) -> None:
         inner, self._fi_src, self._fi_out = self._effect_page(
             nb,
             "  Fade-In  ",
@@ -331,7 +350,7 @@ class SpecialEffectsTab(BaseTab):
         self._fi_btn.pack(pady=px(10))
         self._fi_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_fadein(self):
+    def _render_fadein(self) -> None:
         begun = self._fx_begin(self._fi_src, self._fi_out, "fadein")
         if not begun:
             return
@@ -360,7 +379,7 @@ class SpecialEffectsTab(BaseTab):
 
     # ── Intro 2: Zoom Burst ───────────────────────────────────────────────
 
-    def _build_intro_zoomburst(self, nb):
+    def _build_intro_zoomburst(self, nb: ttk.Notebook) -> None:
         inner, self._zb_src, self._zb_out = self._effect_page(
             nb,
             t("effects.zoom_burst"),
@@ -390,7 +409,7 @@ class SpecialEffectsTab(BaseTab):
         self._zb_btn.pack(pady=px(10))
         self._zb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_zoomburst(self):
+    def _render_zoomburst(self) -> None:
         begun = self._fx_begin(self._zb_src, self._zb_out, "zoomburst")
         if not begun:
             return
@@ -413,7 +432,7 @@ class SpecialEffectsTab(BaseTab):
 
     # ── Intro 3: Slide In ─────────────────────────────────────────────────
 
-    def _build_intro_slidein(self, nb):
+    def _build_intro_slidein(self, nb: ttk.Notebook) -> None:
         inner, self._sl_src, self._sl_out = self._effect_page(
             nb,
             t("effects.slide_in"),
@@ -442,7 +461,7 @@ class SpecialEffectsTab(BaseTab):
         self._sl_btn.pack(pady=px(10))
         self._sl_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_slidein(self):
+    def _render_slidein(self) -> None:
         begun = self._fx_begin(self._sl_src, self._sl_out, "slidein")
         if not begun:
             return
@@ -473,7 +492,7 @@ class SpecialEffectsTab(BaseTab):
 
     # ── Intro 4: Spin In ──────────────────────────────────────────────────
 
-    def _build_intro_spin(self, nb):
+    def _build_intro_spin(self, nb: ttk.Notebook) -> None:
         inner, self._sp_src, self._sp_out = self._effect_page(
             nb,
             t("effects.spin_in"),
@@ -501,7 +520,7 @@ class SpecialEffectsTab(BaseTab):
         self._sp_btn.pack(pady=px(10))
         self._sp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_spinin(self):
+    def _render_spinin(self) -> None:
         begun = self._fx_begin(self._sp_src, self._sp_out, "spinin")
         if not begun:
             return
@@ -523,7 +542,7 @@ class SpecialEffectsTab(BaseTab):
 
     # ── Intro 5: Split Open ───────────────────────────────────────────────
 
-    def _build_intro_splitopen(self, nb):
+    def _build_intro_splitopen(self, nb: ttk.Notebook) -> None:
         inner, self._spo_src, self._spo_out = self._effect_page(
             nb,
             t("effects.split_open"),
@@ -557,7 +576,7 @@ class SpecialEffectsTab(BaseTab):
         self._spo_btn.pack(pady=px(10))
         self._spo_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_splitopen(self):
+    def _render_splitopen(self) -> None:
         begun = self._fx_begin(self._spo_src, self._spo_out, "splitopen")
         if not begun:
             return
@@ -577,7 +596,7 @@ class SpecialEffectsTab(BaseTab):
             self._spo_console,
         )
 
-    def _build_outros_tab(self, nb):
+    def _build_outros_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("effects.outros"))
         outro_nb = ttk.Notebook(outer)
@@ -586,7 +605,7 @@ class SpecialEffectsTab(BaseTab):
         self._build_outro_freezezoom(outro_nb)
         self._build_outro_irisclose(outro_nb)
 
-    def _build_outro_fadeout(self, nb):
+    def _build_outro_fadeout(self, nb: ttk.Notebook) -> None:
         inner, self._fo_src, self._fo_out = self._effect_page(
             nb,
             t("effects.fade_out"),
@@ -609,7 +628,7 @@ class SpecialEffectsTab(BaseTab):
         self._fo_btn.pack(pady=px(10))
         self._fo_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_fadeout(self):
+    def _render_fadeout(self) -> None:
         src = self._fo_src.get().strip()
         out = self._fo_out.get().strip()
         if not src or not os.path.exists(src):
@@ -632,7 +651,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._fo_btn,
         )
 
-    def _build_outro_freezezoom(self, nb):
+    def _build_outro_freezezoom(self, nb: ttk.Notebook) -> None:
         inner, self._fz_src, self._fz_out = self._effect_page(
             nb,
             t("effects.freeze_zoom_out"),
@@ -657,7 +676,7 @@ class SpecialEffectsTab(BaseTab):
         self._fz_btn.pack(pady=px(10))
         self._fz_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_freezezoom(self):
+    def _render_freezezoom(self) -> None:
         begun = self._fx_begin(self._fz_src, self._fz_out, "freezezoom")
         if not begun:
             return
@@ -686,7 +705,7 @@ class SpecialEffectsTab(BaseTab):
             self._fz_console,
         )
 
-    def _build_outro_irisclose(self, nb):
+    def _build_outro_irisclose(self, nb: ttk.Notebook) -> None:
         inner, self._ir_src, self._ir_out = self._effect_page(
             nb,
             t("effects.iris_close"),
@@ -709,7 +728,7 @@ class SpecialEffectsTab(BaseTab):
         self._ir_btn.pack(pady=px(10))
         self._ir_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_irisclose(self):
+    def _render_irisclose(self) -> None:
         begun = self._fx_begin(self._ir_src, self._ir_out, "irisclose")
         if not begun:
             return
@@ -732,7 +751,7 @@ class SpecialEffectsTab(BaseTab):
             self._ir_console,
         )
 
-    def _build_overlays_tab(self, nb):
+    def _build_overlays_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("effects.overlays"))
         ov_nb = ttk.Notebook(outer)
@@ -743,7 +762,7 @@ class SpecialEffectsTab(BaseTab):
         self._build_ov_countdown(ov_nb)
         self._build_ov_progressbar(ov_nb)
 
-    def _build_ov_emoji(self, nb):
+    def _build_ov_emoji(self, nb: ttk.Notebook) -> None:
         inner, self._em_src, self._em_out = self._effect_page(
             nb,
             t("effects.emoji_burst"),
@@ -767,7 +786,7 @@ class SpecialEffectsTab(BaseTab):
         self._build_emoji_text_row(opts)
         self._build_emoji_timing(inner, opts)
 
-    def _build_emoji_text_row(self, opts):
+    def _build_emoji_text_row(self, opts: tk.LabelFrame) -> None:
         """The emoji or text, its size, and where it goes on the frame."""
         r0 = tk.Frame(opts, bg=CLR["bg"])
         r0.pack(anchor="w", pady=px(3))
@@ -820,7 +839,7 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
 
-    def _build_emoji_timing(self, inner, opts):
+    def _build_emoji_timing(self, inner: tk.Frame, opts: tk.LabelFrame) -> None:
         """When it appears, how long it stays, quality, and the button."""
         _spin(
             opts,
@@ -840,7 +859,7 @@ class SpecialEffectsTab(BaseTab):
         self._em_btn.pack(pady=px(10))
         self._em_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_emoji(self):
+    def _render_emoji(self) -> None:
         src = self._em_src.get().strip()
         out = self._em_out.get().strip()
         if not src or not os.path.exists(src):
@@ -865,7 +884,7 @@ class SpecialEffectsTab(BaseTab):
 
         pop = fx.Pop(text=text, size=size, xpct=xpct, ypct=ypct, start=start, hold=hold, crf=crf)
 
-        def _start(probed):
+        def _start(probed: tuple[int, int]) -> None:
             cmd = fx.emoji_cmd(src, out, probed, pop)
             self.run_ffmpeg(
                 cmd,
@@ -876,7 +895,7 @@ class SpecialEffectsTab(BaseTab):
 
         tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_emoji")
 
-    def _build_ov_lowerthird(self, nb):
+    def _build_ov_lowerthird(self, nb: ttk.Notebook) -> None:
         inner, self._lt_src, self._lt_out = self._effect_page(
             nb,
             t("effects.lower_third"),
@@ -934,7 +953,7 @@ class SpecialEffectsTab(BaseTab):
         self._lt_btn.pack(pady=px(10))
         self._lt_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_lowerthird(self):
+    def _render_lowerthird(self) -> None:
         begun = self._fx_begin(self._lt_src, self._lt_out, "lowerthird")
         if not begun:
             return
@@ -980,7 +999,7 @@ class SpecialEffectsTab(BaseTab):
             self._lt_console,
         )
 
-    def _build_ov_subscribe(self, nb):
+    def _build_ov_subscribe(self, nb: ttk.Notebook) -> None:
         inner, self._sub_src, self._sub_out = self._effect_page(
             nb,
             t("effects.subscribe_bump"),
@@ -1040,7 +1059,7 @@ class SpecialEffectsTab(BaseTab):
         self._sub_btn.pack(pady=px(10))
         self._sub_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_subscribe(self):
+    def _render_subscribe(self) -> None:
         src = self._sub_src.get().strip()
         out = self._sub_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1065,7 +1084,7 @@ class SpecialEffectsTab(BaseTab):
 
         banner = fx.Banner(text=text, size=size, start=start, end=end, position=pos, crf=crf)
 
-        def _start(_probed):
+        def _start(_probed: tuple[int, int]) -> None:
             cmd = fx.subscribe_cmd(src, out, banner)
             self.run_ffmpeg(
                 cmd,
@@ -1076,7 +1095,7 @@ class SpecialEffectsTab(BaseTab):
 
         tasks.submit(lambda: _probe_wh(src), on_done=_start, name="render_subscribe")
 
-    def _build_ov_countdown(self, nb):
+    def _build_ov_countdown(self, nb: ttk.Notebook) -> None:
         inner, self._cd_src, self._cd_out = self._effect_page(
             nb,
             "  Countdown  ",
@@ -1114,7 +1133,7 @@ class SpecialEffectsTab(BaseTab):
         self._cd_btn.pack(pady=px(10))
         self._cd_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_countdown(self):
+    def _render_countdown(self) -> None:
         src = self._cd_src.get().strip()
         out = self._cd_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1143,7 +1162,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._cd_btn,
         )
 
-    def _build_ov_progressbar(self, nb):
+    def _build_ov_progressbar(self, nb: ttk.Notebook) -> None:
         inner, self._pb_src, self._pb_out = self._effect_page(
             nb,
             t("effects.progress_bar"),
@@ -1188,7 +1207,7 @@ class SpecialEffectsTab(BaseTab):
         self._pb_btn.pack(pady=px(10))
         self._pb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_progressbar(self):
+    def _render_progressbar(self) -> None:
         begun = self._fx_begin(self._pb_src, self._pb_out, "progress")
         if not begun:
             return
@@ -1209,7 +1228,7 @@ class SpecialEffectsTab(BaseTab):
             self._pb_console,
         )
 
-    def _build_glitch_tab(self, nb):
+    def _build_glitch_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("effects.glitch_vibe"))
         gl_nb = ttk.Notebook(outer)
@@ -1220,7 +1239,7 @@ class SpecialEffectsTab(BaseTab):
         self._build_gl_vignette(gl_nb)
         self._build_gl_lightleak(gl_nb)
 
-    def _build_gl_rgb(self, nb):
+    def _build_gl_rgb(self, nb: ttk.Notebook) -> None:
         inner, self._rgb_src, self._rgb_out = self._effect_page(
             nb,
             "  RGB Glitch  ",
@@ -1275,7 +1294,7 @@ class SpecialEffectsTab(BaseTab):
         self._rgb_btn.pack(pady=px(10))
         self._rgb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_rgb(self):
+    def _render_rgb(self) -> None:
         src = self._rgb_src.get().strip()
         out = self._rgb_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1309,7 +1328,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._rgb_btn,
         )
 
-    def _build_gl_vhs(self, nb):
+    def _build_gl_vhs(self, nb: ttk.Notebook) -> None:
         inner, self._vhs_src, self._vhs_out = self._effect_page(
             nb,
             t("effects.vhs_retro"),
@@ -1336,7 +1355,7 @@ class SpecialEffectsTab(BaseTab):
         self._vhs_btn.pack(pady=px(10))
         self._vhs_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_vhs(self):
+    def _render_vhs(self) -> None:
         src = self._vhs_src.get().strip()
         out = self._vhs_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1366,7 +1385,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._vhs_btn,
         )
 
-    def _build_gl_grain(self, nb):
+    def _build_gl_grain(self, nb: ttk.Notebook) -> None:
         inner, self._gr_src, self._gr_out = self._effect_page(
             nb,
             t("effects.film_grain"),
@@ -1392,7 +1411,7 @@ class SpecialEffectsTab(BaseTab):
         self._gr_btn.pack(pady=px(10))
         self._gr_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_grain(self):
+    def _render_grain(self) -> None:
         src = self._gr_src.get().strip()
         out = self._gr_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1416,7 +1435,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._gr_btn,
         )
 
-    def _build_gl_vignette(self, nb):
+    def _build_gl_vignette(self, nb: ttk.Notebook) -> None:
         inner, self._vi_src, self._vi_out = self._effect_page(
             nb,
             "  Vignette  ",
@@ -1441,7 +1460,7 @@ class SpecialEffectsTab(BaseTab):
         self._vi_btn.pack(pady=px(10))
         self._vi_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_vignette(self):
+    def _render_vignette(self) -> None:
         src = self._vi_src.get().strip()
         out = self._vi_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1461,7 +1480,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._vi_btn,
         )
 
-    def _build_gl_lightleak(self, nb):
+    def _build_gl_lightleak(self, nb: ttk.Notebook) -> None:
         inner, self._ll_src, self._ll_out = self._effect_page(
             nb,
             t("effects.light_leak"),
@@ -1504,7 +1523,7 @@ class SpecialEffectsTab(BaseTab):
         self._ll_btn.pack(pady=px(10))
         self._ll_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_lightleak(self):
+    def _render_lightleak(self) -> None:
         begun = self._fx_begin(self._ll_src, self._ll_out, "lightleak")
         if not begun:
             return
@@ -1532,7 +1551,7 @@ class SpecialEffectsTab(BaseTab):
             self._ll_console,
         )
 
-    def _build_motion_tab(self, nb):
+    def _build_motion_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("effects.motion"))
         mo_nb = ttk.Notebook(outer)
@@ -1542,7 +1561,7 @@ class SpecialEffectsTab(BaseTab):
         self._build_mo_kenburns(mo_nb)
         self._build_mo_whippan(mo_nb)
 
-    def _build_mo_shake(self, nb):
+    def _build_mo_shake(self, nb: ttk.Notebook) -> None:
         inner, self._sh_src, self._sh_out = self._effect_page(
             nb,
             t("effects.camera_shake"),
@@ -1598,7 +1617,7 @@ class SpecialEffectsTab(BaseTab):
         self._sh_btn.pack(pady=px(10))
         self._sh_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_shake(self):
+    def _render_shake(self) -> None:
         src = self._sh_src.get().strip()
         out = self._sh_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1630,7 +1649,7 @@ class SpecialEffectsTab(BaseTab):
 
         shake = fx.Shake(amp=amp, start=start, span=span, freq1=freq1, freq2=freq2, crf=crf)
 
-        def _start(probed):
+        def _start(probed: tuple[float, tuple[int, int]]) -> None:
             total, size = probed
             cmd = fx.shake_cmd(src, out, size, total, shake)
             self.run_ffmpeg(
@@ -1642,7 +1661,7 @@ class SpecialEffectsTab(BaseTab):
 
         tasks.submit(partial(_probe_length_and_size, src), on_done=_start, name="render_shake")
 
-    def _build_mo_zoompunch(self, nb):
+    def _build_mo_zoompunch(self, nb: ttk.Notebook) -> None:
         inner, self._zp_src, self._zp_out = self._effect_page(
             nb,
             t("effects.zoom_punch"),
@@ -1685,7 +1704,7 @@ class SpecialEffectsTab(BaseTab):
         self._zp_btn.pack(pady=px(10))
         self._zp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_zoompunch(self):
+    def _render_zoompunch(self) -> None:
         begun = self._fx_begin(self._zp_src, self._zp_out, "zoompunch")
         if not begun:
             return
@@ -1713,7 +1732,7 @@ class SpecialEffectsTab(BaseTab):
             self._zp_console,
         )
 
-    def _build_mo_kenburns(self, nb):
+    def _build_mo_kenburns(self, nb: ttk.Notebook) -> None:
         inner, self._kb_src, self._kb_out = self._effect_page(
             nb,
             "  Ken Burns  ",
@@ -1750,7 +1769,7 @@ class SpecialEffectsTab(BaseTab):
         self._kb_btn.pack(pady=px(10))
         self._kb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_kenburns(self):
+    def _render_kenburns(self) -> None:
         begun = self._fx_begin(self._kb_src, self._kb_out, "kenburns")
         if not begun:
             return
@@ -1781,7 +1800,7 @@ class SpecialEffectsTab(BaseTab):
             self._kb_console,
         )
 
-    def _build_mo_whippan(self, nb):
+    def _build_mo_whippan(self, nb: ttk.Notebook) -> None:
         inner, self._wp_src, self._wp_out = self._effect_page(
             nb,
             t("effects.whip_pan_blur"),
@@ -1823,7 +1842,7 @@ class SpecialEffectsTab(BaseTab):
         self._wp_btn.pack(pady=px(10))
         self._wp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_whippan(self):
+    def _render_whippan(self) -> None:
         begun = self._fx_begin(self._wp_src, self._wp_out, "whippan")
         if not begun:
             return
@@ -1847,7 +1866,7 @@ class SpecialEffectsTab(BaseTab):
             self._wp_console,
         )
 
-    def _build_branding_tab(self, nb):
+    def _build_branding_tab(self, nb: ttk.Notebook) -> None:
         outer = ttk.Frame(nb)
         nb.add(outer, text=t("effects.branding"))
         br_nb = ttk.Notebook(outer)
@@ -1856,7 +1875,7 @@ class SpecialEffectsTab(BaseTab):
         self._build_br_cinebars(br_nb)
         self._build_br_watermark(br_nb)
 
-    def _build_br_meme(self, nb):
+    def _build_br_meme(self, nb: ttk.Notebook) -> None:
         inner, self._mc_src, self._mc_out = self._effect_page(
             nb,
             t("effects.meme_caption"),
@@ -1927,7 +1946,7 @@ class SpecialEffectsTab(BaseTab):
         self._mc_btn.pack(pady=px(10))
         self._mc_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_meme(self):
+    def _render_meme(self) -> None:
         src = self._mc_src.get().strip()
         out = self._mc_out.get().strip()
         if not src or not os.path.exists(src):
@@ -1952,7 +1971,7 @@ class SpecialEffectsTab(BaseTab):
         end = total if whole else (start + float(dur_s))
         enable = f"between(t,{start},{end})"
 
-        filters = []
+        filters: list[str] = []
         for caption, y in ((top, "20"), (bot, "h-text_h-20")):
             if caption.strip():
                 filters.append(
@@ -1981,7 +2000,7 @@ class SpecialEffectsTab(BaseTab):
             btn=self._mc_btn,
         )
 
-    def _build_br_cinebars(self, nb):
+    def _build_br_cinebars(self, nb: ttk.Notebook) -> None:
         inner, self._cb_src, self._cb_out = self._effect_page(
             nb,
             t("effects.cinematic_bars"),
@@ -2028,7 +2047,7 @@ class SpecialEffectsTab(BaseTab):
         self._cb_btn.pack(pady=px(10))
         self._cb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_cinebars(self):
+    def _render_cinebars(self) -> None:
         begun = self._fx_begin(self._cb_src, self._cb_out, "cinebars")
         if not begun:
             return
@@ -2061,7 +2080,7 @@ class SpecialEffectsTab(BaseTab):
             self._cb_console,
         )
 
-    def _build_br_watermark(self, nb):
+    def _build_br_watermark(self, nb: ttk.Notebook) -> None:
         inner, self._wm_src, self._wm_out = self._effect_page(
             nb,
             t("effects.social_watermark"),
@@ -2113,7 +2132,7 @@ class SpecialEffectsTab(BaseTab):
         self._wm_btn.pack(pady=px(10))
         self._wm_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
 
-    def _render_watermark(self):
+    def _render_watermark(self) -> None:
         src = self._wm_src.get().strip()
         out = self._wm_out.get().strip()
         if not src or not os.path.exists(src):
@@ -2167,7 +2186,9 @@ class SpecialEffectsTab(BaseTab):
     #  Shared helpers used by all render methods
     # ═════════════════════════════════════════════════════════════════════
 
-    def _effect_page(self, nb, tab, title, hint, suffix):
+    def _effect_page(
+        self, nb: ttk.Notebook, tab: str, title: str, hint: str, suffix: str
+    ) -> tuple[tk.Frame, tk.StringVar, tk.StringVar]:
         """One effect's tab: its title and what it does, the source video and
         where the result goes (suggested from the source with *suffix*).
         Returns (the frame to add options to, source var, output var)."""

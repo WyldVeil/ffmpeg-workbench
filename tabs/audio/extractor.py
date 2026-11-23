@@ -23,13 +23,13 @@ from tabs.widgets import FileRow, save_section, scroll_body
 
 
 class AudioExtractorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.audio_extractor"), "Save a video's soundtrack as its own file.", icon="🎵"
         )
@@ -70,26 +70,26 @@ class AudioExtractorTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _key(self):
+    def _key(self) -> str:
         return next((k for k, v in xo.FORMATS.items() if v[0] == self.fmt_var.get()), "copy")
 
-    def _stream(self):
+    def _stream(self) -> int:
         values = list(self.track_box.cget("values"))
         return values.index(self.track_var.get()) if self.track_var.get() in values else 0
 
-    def _ext(self):
+    def _ext(self) -> str:
         key = self._key()
         if key == "copy" and not self.norm_var.get():
-            streams = self._info.audio_streams if self._info else []
+            streams = self._info.audio_streams if self._info else ()
             return xo.copy_extension(streams[self._stream()].codec) if streams else ".mka"
         return xo.FORMATS[key][1] or ".m4a"
 
-    def _suggest_name(self, force=False):
+    def _suggest_name(self, force: bool = False) -> None:
         src = self.src_row.path
         if src and (force or not self.out_row.path):
             self.out_row.set(self.suggest_output(src, "audio", self._ext()))
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         tracks = (
             [
@@ -105,7 +105,7 @@ class AudioExtractorTab(BaseTab):
         self.track_var.set(tracks[0] if tracks else "(no audio)")
         self._suggest_name(force=True)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:

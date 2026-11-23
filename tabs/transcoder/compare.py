@@ -14,6 +14,7 @@ import math
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core import quality as q
@@ -23,7 +24,11 @@ from core.timecode import Timecode
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, FramePreview, scroll_body
+
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
 
 SPEEDS = {1: "Every frame (most exact)", 2: "Every 2nd frame", 5: "Every 5th frame (fastest)"}
 
@@ -39,11 +44,11 @@ def _size(n: int) -> str:
 class ABView(tk.Frame):
     """The original and the copy side by side at the same moment."""
 
-    def __init__(self, parent, width=400, height=225):
+    def __init__(self, parent: tk.Misc, width: int = 400, height: int = 225) -> None:
         super().__init__(parent, bg=CLR["bg"])
         row = tk.Frame(self, bg=CLR["bg"])
         row.pack()
-        self.views = []
+        self.views: list[FramePreview] = []
         for label in ("Original", "Encoded"):
             col = tk.Frame(row, bg=CLR["bg"])
             col.pack(side="left", padx=px(4))
@@ -69,7 +74,7 @@ class ABView(tk.Frame):
         self.skip_dist = 0.0
         self.duration = 0.0
 
-    def load(self, ref, dist, ref_dur, dist_dur):
+    def load(self, ref: str | None, dist: str | None, ref_dur: float, dist_dur: float) -> None:
         self.duration = ref_dur or dist_dur or 0.0
         self.scale.configure(to=max(0.01, self.duration))
         at = self.duration * 0.25
@@ -81,7 +86,7 @@ class ABView(tk.Frame):
     def _dist_time(self, at: float) -> float:
         return max(0.0, at - self.skip_ref + self.skip_dist)
 
-    def show(self, at: float):
+    def show(self, at: float) -> None:
         at = max(0.0, min(float(at), self.duration))
         self.pos.set(at)
         self.time_lbl.config(text=_fmt(at))
@@ -92,17 +97,17 @@ class ABView(tk.Frame):
 
 
 class CompareQualityTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.result = None
+        self.result: q.Result | None = None
         self._infos = (None, None)
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opt, r3 = self._build_header()
         self._build_results(body, opt, r3)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame, tk.Frame]:
         self.make_header(
             self,
             "Compare & Quality",
@@ -166,13 +171,13 @@ class CompareQualityTab(BaseTab):
         tk.Entry(r3, textvariable=self.skip_ref_var, width=6).pack(side="left", padx=px(4))
         return body, opt, r3
 
-    def _build_results(self, body, opt, r3):
+    def _build_results(self, body: tk.Frame, opt: tk.LabelFrame, r3: tk.Frame) -> None:
         tk.Label(r3, text="s   encoded:").pack(side="left")
         self.skip_dist_var = tk.StringVar(value="0")
         tk.Entry(r3, textvariable=self.skip_dist_var, width=6).pack(side="left", padx=px(4))
         tk.Label(r3, text="s   (if one was trimmed)").pack(side="left")
         for v in (self.skip_ref_var, self.skip_dist_var):
-            v.trace_add("write", lambda *_a: self._skips_changed())
+            on_write(v, lambda: self._skips_changed())
         r4 = tk.Frame(opt)
         r4.pack(fill="x", pady=px(6, 0))
         self.limit_on = tk.BooleanVar(value=False)
@@ -185,13 +190,13 @@ class CompareQualityTab(BaseTab):
         self.btn.pack(pady=px(8))
         self._build_scores(body)
 
-    def _build_scores(self, body):
+    def _build_scores(self, body: tk.Frame) -> None:
         """The scores, the verdict, the graph over time and the worst moments."""
         self.res = tk.LabelFrame(body, text="  Results  ", padx=px(12), pady=px(8))
         self.res.pack(fill="x", padx=px(20), pady=px(4))
         scores = tk.Frame(self.res)
         scores.pack(fill="x")
-        self.score_lbls = {}
+        self.score_lbls: dict[str, tuple[tk.Label, tk.Label]] = {}
         for m, title in (("vmaf", "VMAF"), ("ssim", "SSIM"), ("psnr", "PSNR")):
             card = tk.Frame(scores, bg=CLR["panel"], padx=px(14), pady=px(8))
             card.pack(side="left", padx=px(0, 10), fill="y")
@@ -223,7 +228,7 @@ class CompareQualityTab(BaseTab):
         self.console = self.make_console_block(body, height=4, pady=px(4, 10))
 
     # ── Files ─────────────────────────────────────────────────────────
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         """Dropped files: the first is the original, the next the copy."""
         if not self.ref_row.path or (self.ref_row.path and self.dist_row.path):
             self.ref_row.set(path)
@@ -233,12 +238,12 @@ class CompareQualityTab(BaseTab):
         self._files_changed()
         return True
 
-    def _files_changed(self):
+    def _files_changed(self) -> None:
         ref, dist = self.ref_row.path, self.dist_row.path
         ri = ff.try_probe(ref) if ref and os.path.isfile(ref) else None
         di = ff.try_probe(dist) if dist and os.path.isfile(dist) else None
         self._infos = (ri, di)
-        parts = []
+        parts: list[str] = []
         for label, info, _path in (("Original", ri, ref), ("Copy", di, dist)):
             if info is not None and info.has_video:
                 v = info.require_video()
@@ -259,7 +264,7 @@ class CompareQualityTab(BaseTab):
             di.duration if di else 0,
         )
 
-    def _skips_changed(self):
+    def _skips_changed(self) -> None:
         try:
             self.ab.skip_ref = max(0.0, float(self.skip_ref_var.get() or 0))
             self.ab.skip_dist = max(0.0, float(self.skip_dist_var.get() or 0))
@@ -271,7 +276,7 @@ class CompareQualityTab(BaseTab):
     def _model(self) -> str:
         return next((k for k, v in q.MODELS.items() if v[0] == self.model_var.get()), "hd")
 
-    def _run(self):
+    def _run(self) -> None:
         ref, dist = self.ref_row.path, self.dist_row.path
         ri = common.check_source(self, ref, what="Original")
         if ri is None:
@@ -315,7 +320,7 @@ class CompareQualityTab(BaseTab):
                 "Note: VMAF is made for normal (SDR) video - scores for HDR are only a rough guide.",
             )
 
-        def work(_p, _c, ctx):
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
             tmp = ctx.tempdir()
             ctx.log(f"Measuring {_fmt(span)} ({', '.join(files)})…")
             ctx.run(argv, duration=span, cwd=tmp)
@@ -332,12 +337,12 @@ class CompareQualityTab(BaseTab):
             console=self.console,
         )
 
-    def show_result(self, returncode, out_path=""):
+    def show_result(self, returncode: int, out_path: str = "") -> None:
         if returncode != 0:  # success: the scores are shown in the page
             super().show_result(returncode, out_path)
 
     # ── Results ───────────────────────────────────────────────────────
-    def _show(self, res: q.Result):
+    def _show(self, res: q.Result) -> None:
         self.result = res
         summary = res.summary()
         for m, (big, small) in self.score_lbls.items():
@@ -380,7 +385,7 @@ class CompareQualityTab(BaseTab):
         self._draw_graph()
         self.log(self.console, "Scores: " + json.dumps(summary))
 
-    def _draw_graph(self):
+    def _draw_graph(self) -> None:
         c = self.graph
         c.delete("all")
         res = self.result
@@ -407,7 +412,7 @@ class CompareQualityTab(BaseTab):
         t0, t1 = series.times[0], series.times[-1] or 1.0
         pad_l, pad_r, pad_y = px(34), px(8), px(8)
 
-        def xy(t, v):
+        def xy(t: float, v: float) -> tuple[float, float]:
             x = pad_l + (t - t0) / max(1e-6, t1 - t0) * (w - pad_l - pad_r)
             y = pad_y + (hi - min(hi, max(lo, v))) / (hi - lo) * (h - 2 * pad_y)
             return x, y
@@ -445,7 +450,7 @@ class CompareQualityTab(BaseTab):
         )
         self._graph_span = (t0, t1, pad_l, pad_r, w)
 
-    def _graph_click(self, event):
+    def _graph_click(self, event: tk.Event[tk.Misc]) -> None:
         span = getattr(self, "_graph_span", None)
         if not span:
             return
@@ -453,7 +458,7 @@ class CompareQualityTab(BaseTab):
         frac = (event.x - pad_l) / max(1, w - pad_l - pad_r)
         self.ab.show(t0 + max(0.0, min(1.0, frac)) * (t1 - t0))
 
-    def _export(self):
+    def _export(self) -> None:
         if not self.result:
             messagebox.showinfo("Compare & Quality", "Measure first.", parent=self)
             return

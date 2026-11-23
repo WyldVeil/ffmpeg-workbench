@@ -27,14 +27,14 @@ from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 
 class AutoCropperTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._info: ff.MediaInfo | None = None
         self.box: tuple[int, int, int, int] | None = None  # the picture inside the bars: x, y, w, h
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.auto_cropper"), "Find and remove black bars automatically.", icon="✂"
         )
@@ -68,7 +68,7 @@ class AutoCropperTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.box = None
         self.compare.load(path)
@@ -76,14 +76,14 @@ class AutoCropperTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "nobars"))
         self._detect()
 
-    def _detect(self):
+    def _detect(self) -> None:
         path, info = self.src_row.path, self._info
         if not path or info is None or not info.has_video:
             return
         self.result_lbl.config(text="Looking for black bars…")
         self.btn_detect.config(state="disabled")
 
-        def done(box):
+        def done(box: tuple[int, int, int, int] | None) -> None:
             self.btn_detect.config(state="normal")
             w, h = info.require_video().display_size
             if not box or (box[2] >= w - 2 and box[3] >= h - 2):
@@ -105,7 +105,7 @@ class AutoCropperTab(BaseTab):
             name="AutoCrop",
         )
 
-    def _draw_bars(self):
+    def _draw_bars(self) -> None:
         view = self.compare.view_before
         c = view.canvas
         c.delete("bars")
@@ -138,7 +138,7 @@ class AutoCropperTab(BaseTab):
             kx0, ky0, kx1, ky1, outline=CLR["accent"], width=px(2), dash=px(4, 3), tags="bars"
         )
 
-    def _outline_result(self):
+    def _outline_result(self) -> None:
         view = self.compare.view_after
         view.canvas.delete("edge")
         shown = view.image_box()
@@ -148,7 +148,7 @@ class AutoCropperTab(BaseTab):
                 x, y, x + w, y + h, outline=CLR["accent"], width=px(1), tags="edge"
             )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

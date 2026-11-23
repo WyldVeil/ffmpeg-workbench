@@ -22,6 +22,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import ModuleType
 
 from core import proc as _proc
 from core.errors import ToolError
@@ -39,7 +40,7 @@ class TTSError(ToolError):
     """A voice couldn't speak (missing engine, offline, bad text)."""
 
 
-def _edge():
+def _edge() -> ModuleType | None:
     try:
         from core.deps import require
 
@@ -167,7 +168,7 @@ def _edge_synth(
     except Exception:
         logger.debug("_edge_synth: best-effort step failed", exc_info=True)
 
-    async def run():
+    async def run() -> str | None:
         comm = edge_tts.Communicate(
             text,
             voice.name,

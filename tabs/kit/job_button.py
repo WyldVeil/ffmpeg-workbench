@@ -25,7 +25,7 @@ class JobButton:
     """Drives *button* (may be None: then nothing is shown) for one job;
     *cancel()* stops the job."""
 
-    def __init__(self, button: tk.Button | None, cancel: Callable[[], object]):
+    def __init__(self, button: tk.Button | None, cancel: Callable[[], object]) -> None:
         self._button = button
         self._cancel = cancel
         self._clicked = time.monotonic()
@@ -39,7 +39,7 @@ class JobButton:
                 state="normal", text="⏳ " + t("app.status.queued_btn"), command=self._click
             )
         except tk.TclError:
-            self._button = None
+            self._button: tk.Button | None = None
 
     def _click(self) -> None:
         if time.monotonic() - self._clicked >= 0.8:

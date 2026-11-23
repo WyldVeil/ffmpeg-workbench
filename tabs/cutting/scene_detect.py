@@ -16,6 +16,7 @@ import csv
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -28,16 +29,19 @@ from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FolderRow, FramePreview, scroll_body
 
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
+
 
 class SceneDetectTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self.scenes: list = []
+        self._info: ff.MediaInfo | None = None
+        self.scenes: list[tuple[float, float]] = []
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.scene_detector"),
@@ -53,7 +57,7 @@ class SceneDetectTab(BaseTab):
         self._build_scene_list(body)
         self._build_actions(body)
 
-    def _build_detection(self, body):
+    def _build_detection(self, body: tk.Frame) -> None:
         """Sensitivity, shortest scene and the Find button."""
         det = tk.Frame(body)
         det.pack(fill="x", padx=px(20), pady=px(4))
@@ -76,7 +80,7 @@ class SceneDetectTab(BaseTab):
         )
         self.btn_detect.pack(side="left", padx=px(10))
 
-    def _build_scene_list(self, body):
+    def _build_scene_list(self, body: tk.Frame) -> None:
         """The scenes found, with a preview of the one chosen."""
         mid = tk.Frame(body)
         mid.pack(fill="x", padx=px(20), pady=px(4))
@@ -96,7 +100,7 @@ class SceneDetectTab(BaseTab):
         self.preview = FramePreview(mid, 400, 225)
         self.preview.pack(side="left", padx=px(10))
 
-    def _build_actions(self, body):
+    def _build_actions(self, body: tk.Frame) -> None:
         """Split into files, add chapters, or save the list."""
         act = tk.LabelFrame(body, text="  Use the scenes  ", padx=px(12), pady=px(8))
         act.pack(fill="x", padx=px(20), pady=px(6))
@@ -128,7 +132,7 @@ class SceneDetectTab(BaseTab):
 
     # ── detection ────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.scenes = []
         self._fill()
@@ -139,7 +143,7 @@ class SceneDetectTab(BaseTab):
 
             self.dir_var.set(default_output_folder(path))
 
-    def _detect(self):
+    def _detect(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -150,15 +154,15 @@ class SceneDetectTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         thr = float(self.sens_var.get())
-        result = {}
+        result: dict[str, list[float]] = {}
 
-        def work(_p, _c, ctx):
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
             result["starts"] = scenes.detect(ctx, src, thr, min_len, info.duration)
             return 0
 
         orig = self.btn_detect.cget("command")
 
-        def on_complete(tid, rc):
+        def on_complete(tid: str, rc: int) -> None:
             self.btn_detect.config(text="🔍 Find scenes", command=orig)
             if rc == 0:
                 self.scenes = scenes.scene_ranges(result.get("starts", [0.0]), info.duration)
@@ -178,7 +182,7 @@ class SceneDetectTab(BaseTab):
         )
         self.btn_detect.config(text="✖ Stop", command=lambda: self.cancel_render(tid))
 
-    def _fill(self):
+    def _fill(self) -> None:
         self.tree.delete(*self.tree.get_children())
         for i, (a, b) in enumerate(self.scenes):
             self.tree.insert(
@@ -188,7 +192,7 @@ class SceneDetectTab(BaseTab):
                 values=(i + 1, ff.format_time(a), ff.format_time(b), f"{b - a:.2f}s"),
             )
 
-    def _selected(self):
+    def _selected(self) -> None:
         sel = self.tree.selection()
         if sel:
             a, b = self.scenes[int(sel[0])]
@@ -196,13 +200,13 @@ class SceneDetectTab(BaseTab):
 
     # ── actions ──────────────────────────────────────────────────────────────
 
-    def _need_scenes(self):
+    def _need_scenes(self) -> bool:
         if not self.scenes:
             messagebox.showwarning(t("common.warning"), "Find the scenes first.", parent=self)
             return False
         return True
 
-    def _split(self):
+    def _split(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None or not self._need_scenes():
@@ -241,7 +245,7 @@ class SceneDetectTab(BaseTab):
             name="Scene split",
         )
 
-    def _chapters(self):
+    def _chapters(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None or not self._need_scenes():
@@ -270,7 +274,7 @@ class SceneDetectTab(BaseTab):
             name="Add chapters",
         )
 
-    def _save_csv(self):
+    def _save_csv(self) -> None:
         if not self._need_scenes():
             return
         from tabs.kit import dialogs

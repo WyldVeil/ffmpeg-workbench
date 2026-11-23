@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core.i18n import t
@@ -30,7 +31,11 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, save_section, scroll_body
+
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
 
 TARGETS = [
     ("8 MB", 8),
@@ -55,18 +60,18 @@ AUDIO_MODES = {
 
 
 class UniversalDownsizerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, cb, opt, tb = self._build_header()
         self._build_output(body, cb, opt, tb)
         self._changed()
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, ttk.Combobox, tk.LabelFrame, ttk.Combobox]:
         self.make_header(
             self,
             t("tab.universal_downsizer"),
@@ -125,7 +130,9 @@ class UniversalDownsizerTab(BaseTab):
         self.audio_var = tk.StringVar(value=AUDIO_MODES["auto"])
         return body, cb, opt, tb
 
-    def _build_output(self, body, cb, opt, tb):
+    def _build_output(
+        self, body: tk.Frame, cb: ttk.Combobox, opt: tk.LabelFrame, tb: ttk.Combobox
+    ) -> None:
         ab = ttk.Combobox(
             opt,
             textvariable=self.audio_var,
@@ -157,7 +164,7 @@ class UniversalDownsizerTab(BaseTab):
         for w in (tb, cb, ab):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         for v in (self._target_mb, self.trim.start.var, self.trim.end.var):
-            v.trace_add("write", lambda *_a: self._changed())
+            on_write(v, lambda: self._changed())
         self.plan_lbl = tk.Label(
             opt, text="", fg=CLR["accent"], justify="left", anchor="w", wraplength=px(640)
         )
@@ -177,7 +184,7 @@ class UniversalDownsizerTab(BaseTab):
         self.console = self.make_console_block(body, height=7, padx=0, pady=0)
 
     # ── State ─────────────────────────────────────────────────────────
-    def _key(self, table, var, default):
+    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
     def _target_bytes(self) -> int:
@@ -186,14 +193,14 @@ class UniversalDownsizerTab(BaseTab):
             mb = common.number(self._target_mb.get(), "Size limit", 0.1, 100000)
         return int(mb * 1_000_000)  # decimal MB: also fits limits counted in MiB
 
-    def _trim(self, info):
+    def _trim(self, info: ff.MediaInfo) -> tuple[float, float]:
         a, end = self.trim.span(info.duration)
         b = info.duration if end is None else end
         if b - a < 0.5:
             raise ValueError("The trimmed part must be at least half a second long.")
         return a, b
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         info = self._info
         if info is None or not info.has_video:
@@ -235,7 +242,7 @@ class UniversalDownsizerTab(BaseTab):
         )
         return p, (a, b)
 
-    def _changed(self):
+    def _changed(self) -> None:
         self.custom_entry.config(
             state="normal" if dict(TARGETS).get(self.target_var.get(), 0) == 0 else "disabled"
         )
@@ -243,7 +250,7 @@ class UniversalDownsizerTab(BaseTab):
             self.after_cancel(self._job)
         self._job = self.after(150, self._show_plan)
 
-    def _show_plan(self):
+    def _show_plan(self) -> None:
         self._job = None
         if self._info is None:
             self.plan_lbl.config(text="")
@@ -267,7 +274,7 @@ class UniversalDownsizerTab(BaseTab):
         self.plan_lbl.config(text=msg, fg=CLR["accent"])
 
     # ── Render ────────────────────────────────────────────────────────
-    def _start_render(self):
+    def _start_render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -296,8 +303,8 @@ class UniversalDownsizerTab(BaseTab):
             self.log(self.console, "  " + note)
         length = end - start
 
-        def work(_p, _c, ctx):
-            def runner(cmd, duration, lo, hi):
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
+            def runner(cmd: list[str], duration: float, lo: float, hi: float) -> None:
                 ctx.span(lo, hi).run(cmd, duration=duration)
 
             steps = Steps(runner, ctx.log, ctx.tempdir())

@@ -19,7 +19,8 @@ from __future__ import annotations
 import contextlib
 import os
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 from core import catalog, tools
 from core import settings as _settings
@@ -28,6 +29,9 @@ from core.tools import ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.contracts import AcceptsFiles
 from tabs.widgets import scroll_body
+
+if TYPE_CHECKING:
+    from core import ffmpeg as ff
 
 MAX_WIDTH = 1080
 PLACEHOLDER = "Search - e.g. too big, vertical, subtitles, background noise, slow motion"
@@ -51,13 +55,13 @@ class Card(tk.Frame):
 
 
 class StartTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._navigate: Callable[[ToolId], object] | None = None
-        self._file: tuple | None = None  # (path, MediaInfo) to suggest tools for
+        self._file: tuple[str, ff.MediaInfo] | None = None  # (path, MediaInfo) to suggest tools for
         self._goal: str | None = None
         self._cols = 0
-        self._search_job = None
+        self._search_job: str | None = None
         self._hover = _mix(CLR["panel"], CLR["accent"], 0.14)
         self._build_ui()
 
@@ -65,12 +69,12 @@ class StartTab(BaseTab):
     def set_navigator(self, navigate: Callable[[ToolId], object]) -> None:
         self._navigate = navigate
 
-    def on_show(self):
+    def on_show(self) -> None:
         """Called each time the page is shown: recent lists may have changed."""
         self._render_recent()
 
     # ── Layout ────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # Centre on the visible width (the scroll canvas), not the inner frame:
         # the padding changes the frame's own width, so reacting to that fed
         # back into itself and grew without end when the content was wider
@@ -86,7 +90,7 @@ class StartTab(BaseTab):
         self._render_recent()
         self._render_results()
 
-    def _build_intro(self):
+    def _build_intro(self) -> None:
         """The page title and what it is for."""
         tk.Label(
             self._col, text="START", font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["accent"]
@@ -109,7 +113,7 @@ class StartTab(BaseTab):
             anchor="w",
         ).pack(anchor="w")
 
-    def _build_search(self):
+    def _build_search(self) -> None:
         """The search box."""
         # Search
         box = tk.Frame(
@@ -143,7 +147,7 @@ class StartTab(BaseTab):
         self._search.bind("<Escape>", lambda _e: self.clear_search())
         self._search.bind("<Down>", lambda _e: self._focus_first_result())
 
-    def _build_file_area(self):
+    def _build_file_area(self) -> None:
         """The file drop area, the recent files, and where suggestions and results go."""
         # File drop area + recent
         row = tk.Frame(self._col, bg=CLR["bg"])
@@ -163,7 +167,7 @@ class StartTab(BaseTab):
         self._results = tk.Frame(self._col, bg=CLR["bg"])
         self._results.pack(fill="x", pady=px(14, 0))
 
-    def _build_footer(self):
+    def _build_footer(self) -> None:
         """Browse all tools, and a tip."""
         foot = tk.Frame(self._col, bg=CLR["bg"])
         foot.pack(fill="x", pady=px(22, 0))
@@ -215,54 +219,54 @@ class StartTab(BaseTab):
         text = self._search_var.get()
         return "" if text == PLACEHOLDER else text.strip()
 
-    def _search_focus(self, _e=None):
+    def _search_focus(self, _e: object = None) -> None:
         if self._search_var.get() == PLACEHOLDER:
             self._search.delete(0, "end")
             self._search.config(fg=CLR["fg"])
 
-    def _search_blur(self, _e=None):
+    def _search_blur(self, _e: object = None) -> None:
         if not self._search_var.get():
             self._search.insert(0, PLACEHOLDER)
             self._search.config(fg=CLR["fgdim"])
 
-    def _search_typed(self, event=None):
+    def _search_typed(self, event: tk.Event[tk.Misc] | None = None) -> None:
         if event is not None and event.keysym in ("Return", "Escape", "Down", "Up", "Tab"):
             return
         if self._search_job is not None:
             self.after_cancel(self._search_job)
         self._search_job = self.after(120, self._render_results)
 
-    def _search_enter(self, _e=None):
+    def _search_enter(self, _e: object = None) -> None:
         hits = catalog.search(self._query())
         if hits:
             self.open_tool(hits[0])
 
-    def search(self, text: str) -> list:
+    def search(self, text: str) -> list[str]:
         """Type *text* into the search box (used by tests); returns the results shown."""
         self._search_focus()
         self._search_var.set(text)
         self._render_results()
         return catalog.search(text) if text.strip() else []
 
-    def clear_search(self):
+    def clear_search(self) -> None:
         self._search_var.set("")
         self._search_blur()
         self._render_results()
 
-    def _focus_first_result(self):
+    def _focus_first_result(self) -> None:
         rows = [w for w in self._results.winfo_children() if getattr(w, "_tool", None)]
         if rows:
             rows[0].focus_set()
 
     # ── Files ─────────────────────────────────────────────────────────────
-    def _choose_file(self):
+    def _choose_file(self) -> None:
         from tabs.kit import dialogs
 
         path = dialogs.ask_open("media", title="Choose a file", parent=self)
         if path:
             self.load_file(path)
 
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         from core import ffmpeg as ff
 
         info = ff.try_probe(path)
@@ -279,12 +283,12 @@ class StartTab(BaseTab):
         self.after_idle(self._render_recent)  # the shell adds it to the recent files
         return True
 
-    def clear_file(self):
+    def clear_file(self) -> None:
         self._file = None
         self._draw_drop()
         self._render_suggestions()
 
-    def _draw_drop(self, error: str = ""):
+    def _draw_drop(self, error: str = "") -> None:
         c = self._drop
         c.delete("all")
         w, h = max(c.winfo_width(), px(200)), int(c["height"])
@@ -357,7 +361,7 @@ class StartTab(BaseTab):
             fill=CLR["red"] if error else CLR["fgdim"],
         )
 
-    def _render_suggestions(self):
+    def _render_suggestions(self) -> None:
         for w in self._suggest_frame.winfo_children():
             w.destroy()
         if not self._file:
@@ -376,7 +380,7 @@ class StartTab(BaseTab):
             grid.grid_columnconfigure(c, weight=1, uniform="s")
 
     # ── Recent ────────────────────────────────────────────────────────────
-    def _render_recent(self):
+    def _render_recent(self) -> None:
         for w in self._recent.winfo_children():
             w.destroy()
         shell = self.shell()
@@ -386,9 +390,7 @@ class StartTab(BaseTab):
             else tools.parse_all(_settings.RECENT_TOOLS.get())
         )
         recent = [t for t in used if tools.spec(t).name in catalog.TOOLS][:4]
-        files = [
-            p for p in _settings.RECENT_FILES.get() if isinstance(p, str) and os.path.isfile(p)
-        ][:3]
+        files = [p for p in _settings.RECENT_FILES.get() if os.path.isfile(p)][:3]
         if not recent and not files:
             tk.Label(
                 self._recent,
@@ -448,11 +450,11 @@ class StartTab(BaseTab):
                 lbl.bind("<Button-1>", lambda _e, f=p: self.load_file(f))
 
     # ── Goals / results ───────────────────────────────────────────────────
-    def show_goal(self, key: str | None):
+    def show_goal(self, key: str | None) -> None:
         self._goal = key
         self._render_results()
 
-    def _render_results(self):
+    def _render_results(self) -> None:
         self._search_job = None
         for w in self._results.winfo_children():
             w.destroy()
@@ -490,7 +492,7 @@ class StartTab(BaseTab):
         self._section(self._results, "Goals")
         self._goal_grid()
 
-    def _goal_grid(self):
+    def _goal_grid(self) -> None:
         grid = tk.Frame(self._results, bg=CLR["bg"])
         grid.pack(fill="x")
         cols = self._cols or 3
@@ -501,7 +503,7 @@ class StartTab(BaseTab):
         for c in range(cols):
             grid.grid_columnconfigure(c, weight=1, uniform="g")
 
-    def _tool_list(self, names):
+    def _tool_list(self, names: Sequence[str]) -> None:
         grid = tk.Frame(self._results, bg=CLR["bg"])
         grid.pack(fill="x")
         cols = 2 if (self._cols or 3) >= 2 else 1
@@ -513,7 +515,7 @@ class StartTab(BaseTab):
             grid.grid_columnconfigure(c, weight=1, uniform="t")
 
     # ── Pieces ────────────────────────────────────────────────────────────
-    def _section(self, parent, title: str, sub: str = ""):
+    def _section(self, parent: tk.Misc, title: str, sub: str = "") -> None:
         tk.Label(parent, text=title, font=(UI_FONT, 13, "bold"), bg=CLR["bg"], fg=CLR["fg"]).pack(
             anchor="w", pady=px(16, 2 if sub else 8)
         )
@@ -522,7 +524,7 @@ class StartTab(BaseTab):
                 anchor="w", pady=px(0, 8)
             )
 
-    def _card(self, parent) -> Card:
+    def _card(self, parent: tk.Misc) -> Card:
         return Card(
             parent,
             bg=CLR["panel"],
@@ -533,18 +535,19 @@ class StartTab(BaseTab):
             highlightcolor=CLR["accent"],
         )
 
-    def _wire(self, card, on_click):
+    def _wire(self, card: Card, on_click: Callable[[], object]) -> Card:
         """Click, hover and keyboard behaviour for a card and everything in it."""
-        widgets, todo = [], [card]
+        widgets: list[tk.Misc] = []
+        todo: list[tk.Misc] = [card]
         while todo:
             w = todo.pop()
             widgets.append(w)
             todo.extend(w.winfo_children())
 
-        def paint(bg, border):
+        def paint(bg: str, border: str) -> None:
             for w in widgets:
                 with contextlib.suppress(tk.TclError):
-                    w.config(bg=bg)
+                    w["bg"] = bg
             card.config(highlightbackground=border)
 
         for w in widgets:
@@ -557,7 +560,7 @@ class StartTab(BaseTab):
         card.bind("<FocusOut>", lambda _e: paint(CLR["panel"], CLR["border"]))
         return card
 
-    def _goal_card(self, parent, g: catalog.Goal):
+    def _goal_card(self, parent: tk.Misc, g: catalog.Goal) -> Card:
         card = self._card(parent)
         card.goal = g.key
         tk.Label(card, text=g.icon, font=(UI_FONT, 22), bg=CLR["panel"], fg=CLR["fg"]).pack(
@@ -590,7 +593,7 @@ class StartTab(BaseTab):
         self._wrap(text, title, blurb)
         return self._wire(card, lambda: self.show_goal(g.key))
 
-    def _tool_row(self, parent, name: str, reason: str = ""):
+    def _tool_row(self, parent: tk.Misc, name: str, reason: str = "") -> Card:
         info = catalog.TOOLS.get(name)
         icon, about = (info.icon, info.blurb) if info is not None else ("•", "")
         card = self._card(parent)
@@ -621,10 +624,10 @@ class StartTab(BaseTab):
         return self._wire(card, lambda: self.open_tool(name))
 
     @staticmethod
-    def _wrap(frame, *labels):
+    def _wrap(frame: tk.Frame, *labels: tk.Label) -> None:
         """Wrap *labels* to the width their card actually has."""
 
-        def fit(event):
+        def fit(event: tk.Event[tk.Misc]) -> None:
             width = max(px(120), event.width - px(6))
             for label in labels:
                 if int(label.cget("wraplength")) != width:

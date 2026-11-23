@@ -24,6 +24,7 @@ from core.ops import crossfader as xf
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
+from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, output_section, scroll_body
 
 FAMILIES = {
@@ -88,13 +89,13 @@ CURVES = {
 
 
 class TransitionStudioTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._preview_dir = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.transition_studio"),
@@ -119,7 +120,7 @@ class TransitionStudioTab(BaseTab):
         self._build_output(body)
         self._family_changed()
 
-    def _build_transition_options(self, body):
+    def _build_transition_options(self, body: tk.Frame) -> None:
         """Which transition, its length, the sound under it, and a preview."""
         opt = tk.LabelFrame(body, text="  Transition  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
@@ -169,7 +170,7 @@ class TransitionStudioTab(BaseTab):
         )
         self.btn_preview.pack(anchor="w", pady=px(4))
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Encoder, where the result goes, the button and the log."""
         self.encoder, self.out_row = output_section(
             body,
@@ -183,7 +184,7 @@ class TransitionStudioTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _family_changed(self):
+    def _family_changed(self) -> None:
         self.trans_list.delete(0, "end")
         for _key, label in FAMILIES[self.family_var.get()]:
             self.trans_list.insert("end", label)
@@ -191,10 +192,10 @@ class TransitionStudioTab(BaseTab):
 
     def _transition(self) -> str:
         items = FAMILIES[self.family_var.get()]
-        sel = self.trans_list.curselection()
+        sel = selected_rows(self.trans_list)
         return items[sel[0] if sel else 0][0]
 
-    def _settings(self):
+    def _settings(self) -> tuple[list[xf.Clip], float, str]:
         a, b = self.a_row.path, self.b_row.path
         for path, what in ((a, "First clip"), (b, "Second clip")):
             if not path or not os.path.isfile(path):
@@ -208,7 +209,7 @@ class TransitionStudioTab(BaseTab):
         return clips, T, curve
 
     # ── Preview: only the seconds around the cut, small and fast ───────
-    def _preview(self):
+    def _preview(self) -> None:
         try:
             clips, T, curve = self._settings()
         except ValueError as exc:
@@ -220,15 +221,15 @@ class TransitionStudioTab(BaseTab):
         trans, freeze, audio = self._transition(), self.freeze_var.get(), self.audio_var.get()
         self.btn_preview.config(state="disabled", text="Making the preview…")
 
-        def make():
+        def make() -> str:
             fade = xf.Crossfade(T, [trans], freeze, audio, curve)
             return xf.preview_cut(clips, fade, tmp)
 
-        def done(path):
+        def done(path: str) -> None:
             self.btn_preview.config(state="normal", text="▶  Preview the cut")
             launch_preview(path)
 
-        def failed(exc):
+        def failed(exc: BaseException) -> None:
             self.btn_preview.config(state="normal", text="▶  Preview the cut")
             messagebox.showerror(
                 t("common.error"), f"The preview could not be made:\n{exc}", parent=self
@@ -236,13 +237,13 @@ class TransitionStudioTab(BaseTab):
 
         tasks.submit(make, on_done=done, on_error=failed, name="TransitionPreview")
 
-    def destroy(self):
+    def destroy(self) -> None:
         if self._preview_dir:
             shutil.rmtree(self._preview_dir, ignore_errors=True)
         super().destroy()
 
     # ── Render ────────────────────────────────────────────────────────
-    def _render(self):
+    def _render(self) -> None:
         try:
             clips, T, curve = self._settings()
         except ValueError as exc:

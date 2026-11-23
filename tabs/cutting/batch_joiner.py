@@ -4,6 +4,8 @@ Drag-and-drop queue of video files, optionally re-encode to a uniform
 spec, then concatenate them all in order into a single output file.
 """
 
+from __future__ import annotations
+
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -15,21 +17,22 @@ from core.i18n import t, t_or
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar, row_text, selected_rows
 from tabs.widgets import SaveRow
 
 
 class BatchJoinerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.file_paths = []
+        self.file_paths: list[str] = []
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         opt_lf = self._build_listbox()
         self._build_reencode(opt_lf)
         self._build_out()
 
-    def _build_listbox(self):
+    def _build_listbox(self) -> tk.LabelFrame:
         make_header(self, t("tab.batch_joiner"), t("batch_joiner.desc"), icon="📎")
 
         # File list
@@ -49,8 +52,7 @@ class BatchJoinerTab(BaseTab):
             selectbackground=CLR["accent"],
             selectforeground="black",
         )
-        sb = ttk.Scrollbar(lf, orient="vertical", command=self.listbox.yview)
-        self.listbox.config(yscrollcommand=sb.set)
+        sb = linked_scrollbar(lf, self.listbox)
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
@@ -74,7 +76,7 @@ class BatchJoinerTab(BaseTab):
         opt_lf.pack(fill="x", padx=px(20), pady=px(5))
         return opt_lf
 
-    def _build_reencode(self, opt_lf):
+    def _build_reencode(self, opt_lf: tk.LabelFrame) -> None:
         # Row 1
         r1 = tk.Frame(opt_lf)
         r1.pack(fill="x", pady=px(3))
@@ -139,7 +141,7 @@ class BatchJoinerTab(BaseTab):
             state="readonly",
         ).pack(side="left", padx=px(4))
 
-    def _build_out(self):
+    def _build_out(self) -> None:
         # Output
         self.out_var = tk.StringVar()
         SaveRow(self, t("common.output_file"), self.out_var).pack(pady=px(5), fill="x")
@@ -153,13 +155,13 @@ class BatchJoinerTab(BaseTab):
         # Console
         self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4))
 
-    def _toggle_encode_opts(self):
+    def _toggle_encode_opts(self) -> None:
         if self.reencode_var.get():
             self.enc_frame.pack(fill="x", pady=px(4))
         else:
             self.enc_frame.pack_forget()
 
-    def _add_files(self):
+    def _add_files(self) -> None:
         paths = dialogs.askopenfilenames(
             filetypes=[
                 ("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv"),
@@ -171,7 +173,7 @@ class BatchJoinerTab(BaseTab):
                 self.file_paths.append(p)
                 self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
 
-    def _add_folder(self):
+    def _add_folder(self) -> None:
         folder = dialogs.askdirectory()
         if not folder:
             return
@@ -183,54 +185,54 @@ class BatchJoinerTab(BaseTab):
                     self.file_paths.append(full)
                     self.listbox.insert(tk.END, f"  {f}")
 
-    def _move_up(self):
-        sel = self.listbox.curselection()
+    def _move_up(self) -> None:
+        sel = selected_rows(self.listbox)
         if not sel or sel[0] == 0:
             return
         i = sel[0]
         self.file_paths[i], self.file_paths[i - 1] = self.file_paths[i - 1], self.file_paths[i]
-        txt = self.listbox.get(i)
-        prev = self.listbox.get(i - 1)
+        txt = row_text(self.listbox, i)
+        prev = row_text(self.listbox, i - 1)
         self.listbox.delete(i - 1, i)
         self.listbox.insert(i - 1, txt)
         self.listbox.insert(i, prev)
         self.listbox.selection_set(i - 1)
 
-    def _move_down(self):
-        sel = self.listbox.curselection()
+    def _move_down(self) -> None:
+        sel = selected_rows(self.listbox)
         if not sel or sel[0] >= self.listbox.size() - 1:
             return
         i = sel[0]
         self.file_paths[i], self.file_paths[i + 1] = self.file_paths[i + 1], self.file_paths[i]
-        txt = self.listbox.get(i)
-        nxt = self.listbox.get(i + 1)
+        txt = row_text(self.listbox, i)
+        nxt = row_text(self.listbox, i + 1)
         self.listbox.delete(i, i + 1)
         self.listbox.insert(i, nxt)
         self.listbox.insert(i + 1, txt)
         self.listbox.selection_set(i + 1)
 
-    def _remove_sel(self):
-        sel = self.listbox.curselection()
+    def _remove_sel(self) -> None:
+        sel = selected_rows(self.listbox)
         if sel:
             i = sel[0]
             self.file_paths.pop(i)
             self.listbox.delete(i)
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.file_paths.clear()
         self.listbox.delete(0, tk.END)
 
-    def _choice(self, var, choices):
+    def _choice(self, var: tk.StringVar, choices: list[tuple[str, str]]) -> str:
         return {lbl: key for key, lbl in choices}.get(var.get(), choices[0][0])
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         self.file_paths.append(path)
         self.listbox.insert(tk.END, os.path.basename(path))
         if not self.out_var.get().strip():
             self.out_var.set(self.suggest_output(path, "joined", ".mp4"))
         return True
 
-    def _render(self):
+    def _render(self) -> None:
         if len(self.file_paths) < 2:
             messagebox.showwarning(
                 t("common.warning"), t("batch_joiner.msg_too_few_files"), parent=self
@@ -257,7 +259,7 @@ class BatchJoinerTab(BaseTab):
                 return
         self._join_reencode(pieces, out)
 
-    def _agree_to_reencode(self, problems):
+    def _agree_to_reencode(self, problems: list[str]) -> bool:
         """Say why the files can't be joined losslessly; offer to re-encode (and switch to it)."""
         msg = (
             t_or(
@@ -280,7 +282,7 @@ class BatchJoinerTab(BaseTab):
         self._toggle_encode_opts()
         return True
 
-    def _join_copy(self, pieces, out):
+    def _join_copy(self, pieces: list[concat.Piece], out: str) -> None:
         """Lossless: the streams copied one after another."""
         from core.paths import temp_dir
 
@@ -300,7 +302,7 @@ class BatchJoinerTab(BaseTab):
             name="Batch Joiner",
         )
 
-    def _join_reencode(self, pieces, out):
+    def _join_reencode(self, pieces: list[concat.Piece], out: str) -> None:
         """Every file made alike (size, rate, sound) and joined in one encode."""
         res_mode = self._choice(self.res_var, self._res_choices)
         fps_mode = self._choice(self.fps_var, self._fps_choices)

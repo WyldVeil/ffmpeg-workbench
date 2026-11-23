@@ -24,9 +24,15 @@ import logging
 import tkinter as tk
 import weakref
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from tabs.kit.contracts import Shell
+from tabs.kit.tktyped import set_scale
+
+if TYPE_CHECKING:
+    from tkinter.ttk import Scale
+
 
 logger = logging.getLogger("crossfader.framestep")
 
@@ -34,9 +40,10 @@ DEFAULT_FPS = 30.0
 HINT = "Drag, or press , and . to step one frame (with Shift, one second)"
 TYPING_CLASSES = {"Entry", "TEntry", "Text", "Spinbox", "TSpinbox", "TCombobox", "Listbox"}
 
-_steppers: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
-_order: list = []  # weakrefs, in registration order
-_last: weakref.ref | None = None
+_Entry = tuple[Callable[[int], None], Callable[[], float]]
+_steppers: weakref.WeakKeyDictionary[tk.Misc, _Entry] = weakref.WeakKeyDictionary()
+_order: list[weakref.ref[tk.Misc]] = []  # in registration order
+_last: weakref.ref[tk.Misc] | None = None
 
 
 def fps_of(path: str | None) -> float:
@@ -53,7 +60,7 @@ def snap(t: float, fps: float, frames: int = 0) -> float:
     return (round(t * fps) + frames) / fps
 
 
-def register(widget, step: Callable[[int], None], fps: FpsSource = DEFAULT_FPS) -> None:
+def register(widget: tk.Misc, step: Callable[[int], None], fps: FpsSource = DEFAULT_FPS) -> None:
     """*step(n)* moves the control *n* frames (negative = back); *fps* (as for
     :func:`slider`) turns Shift's one second into frames."""
     entry = (step, _fps_getter(fps))
@@ -66,7 +73,7 @@ def register(widget, step: Callable[[int], None], fps: FpsSource = DEFAULT_FPS) 
         widget.bind(seq, lambda _e, w=widget: touch(w), add=True)
 
 
-def touch(widget) -> None:
+def touch(widget: tk.Misc) -> None:
     """Make *widget* the one the keys move (it was just used)."""
     global _last
     _last = weakref.ref(widget)
@@ -83,7 +90,7 @@ def _fps_getter(source: FpsSource) -> Callable[[], float]:
     return lambda: fps_of(getattr(source, "path", None))  # a FramePreview / CompareView
 
 
-def slider(scale, fps: FpsSource) -> None:
+def slider(scale: tk.Scale | Scale, fps: FpsSource) -> None:
     """A position slider in seconds (tk or ttk ``Scale``).  *fps*: a number, a
     callable, or a preview widget whose loaded file gives the frame rate.
     Setting the slider runs its command, so the preview follows."""
@@ -93,7 +100,7 @@ def slider(scale, fps: FpsSource) -> None:
         rate = get_fps()
         lo, hi = sorted((float(scale.cget("from")), float(scale.cget("to"))))
         last = max(lo, hi - 1.0 / rate)  # the last frame, not the end of the video
-        scale.set(min(last, max(lo, snap(float(scale.get()), rate, n))))
+        set_scale(scale, min(last, max(lo, snap(float(scale.get()), rate, n))))
 
     register(scale, step, get_fps)
     from tabs.base_tab import add_tooltip
@@ -101,8 +108,8 @@ def slider(scale, fps: FpsSource) -> None:
     add_tooltip(scale, HINT)
 
 
-def _inside(widget, ancestor) -> bool:
-    w = widget
+def _inside(widget: tk.Misc, ancestor: tk.Misc) -> bool:
+    w: tk.Misc | None = widget
     while w is not None:
         if w is ancestor:
             return True
@@ -110,7 +117,7 @@ def _inside(widget, ancestor) -> bool:
     return False
 
 
-def _usable(widget, page) -> bool:
+def _usable(widget: tk.Misc, page: tk.Misc) -> bool:
     try:
         return bool(widget.winfo_exists() and widget.winfo_viewable() and _inside(widget, page))
     except Exception:
@@ -118,7 +125,7 @@ def _usable(widget, page) -> bool:
         return False
 
 
-def target(page):
+def target(page: tk.Misc) -> tk.Misc | None:
     """The control the keys would move on *page* (None if there is none)."""
     last = _last() if _last is not None else None
     if last is not None and _usable(last, page):
@@ -156,7 +163,7 @@ def on_key(app: tk.Misc, event: object, direction: int, second: bool = False) ->
     return "break"
 
 
-def step(widget, frames: int = 0, seconds: int = 0) -> None:
+def step(widget: tk.Misc, frames: int = 0, seconds: int = 0) -> None:
     """Move a registered control (for on-screen ◀ ▶ buttons): *frames* frames
     plus *seconds* seconds, landing on a frame."""
     entry = _steppers.get(widget)

@@ -3,10 +3,13 @@ tab_multisplitter.py  ─  Manual Multi-Splitter
 Extract multiple different segments from a single video into separate files.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import tkinter as tk
 from collections.abc import Callable
+from dataclasses import dataclass
 from tkinter import messagebox
 
 from core import ffmpeg as ff
@@ -23,12 +26,12 @@ from tabs.kit.contracts import Transport
 from tabs.widgets import FileRow
 
 
-def _ts(seconds):
+def _ts(seconds: float) -> str:
     """HH:MM:SS.mmm - exact enough for any frame."""
     return f"{Timecode.of(seconds):H.3}"
 
 
-def _fmt(seconds):
+def _fmt(seconds: float) -> str:
     if seconds < 0:
         seconds = 0
     m, s = divmod(seconds, 60)
@@ -46,12 +49,23 @@ def _copy_start(path: str, at: float) -> float:
     return at if k is None else k
 
 
+@dataclass(eq=False)
+class _SplitRow:
+    """One clip to cut out: its row, times, file-name suffix and number label."""
+
+    frame: tk.Frame
+    start: tk.StringVar
+    end: tk.StringVar
+    suffix: tk.StringVar
+    label: tk.Label
+
+
 class MultiSplitterTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self.duration = 0.0
-        self.split_rows = []
+        self.split_rows: list[_SplitRow] = []
         self._build_ui()
 
     # ── Contracts (tabs/kit/contracts.py): the playhead is the timeline's ──
@@ -64,7 +78,7 @@ class MultiSplitterTab(BaseTab):
     def mark_out(self) -> None:
         self._timeline.mark_out()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.manual_multi_splitter"), t("splitter.subtitle"), icon="✂️")
 
         # Source File
@@ -75,7 +89,7 @@ class MultiSplitterTab(BaseTab):
         self._build_splits()
         self._build_output()
 
-    def _build_timeline(self):
+    def _build_timeline(self) -> None:
         """The timeline to pick the parts on."""
         # Timeline
         tl_frame = tk.LabelFrame(
@@ -106,7 +120,7 @@ class MultiSplitterTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w", padx=px(4))
 
-    def _build_splits(self):
+    def _build_splits(self) -> None:
         """Copy or re-encode, and the list of parts (one to start with)."""
         # Options
         opt_f = tk.Frame(self, bg=CLR["bg"])
@@ -148,7 +162,7 @@ class MultiSplitterTab(BaseTab):
         # Add first row by default
         self._add_row()
 
-    def _build_output(self):
+    def _build_output(self) -> None:
         """The button and the log."""
         # Render Button & Console
         self.btn_render = self.make_render_btn(
@@ -159,7 +173,7 @@ class MultiSplitterTab(BaseTab):
             self, height=8, bg=CLR["bg"], padx=px(20), pady=px(4)
         )
 
-    def on_source_loaded(self, p):
+    def on_source_loaded(self, p: str) -> None:
         """Browse, drag and drop and File > Open all come here."""
         self.file_path = p
         if self.src_var.get() != p:  # not when it came from the row itself
@@ -170,16 +184,16 @@ class MultiSplitterTab(BaseTab):
         self._tl_info.config(text=f"{os.path.basename(p)}  ·  {_fmt(self.duration)} total")
         # A row nobody has edited yet covers the whole new video
         for r in self.split_rows:
-            if (r["start"].get(), r["end"].get()) == ("00:00:00", "00:00:10"):
-                r["start"].set(_ts(0))
-                r["end"].set(_ts(self.duration))
+            if (r.start.get(), r.end.get()) == ("00:00:00", "00:00:10"):
+                r.start.set(_ts(0))
+                r.end.set(_ts(self.duration))
 
-    def _on_timeline_change(self, start, end, playhead):
+    def _on_timeline_change(self, start: float, end: float, playhead: float) -> None:
         self._tl_info.config(
             text=f"Start {_fmt(start)}  ·  End {_fmt(end)}  ·  Playhead {_fmt(playhead)}"
         )
 
-    def _add_row(self):
+    def _add_row(self) -> None:
         if len(self.split_rows) >= 10:
             messagebox.showwarning(
                 t("splitter.limit_reached_title"), t("splitter.limit_reached_message")
@@ -234,25 +248,23 @@ class MultiSplitterTab(BaseTab):
         )
         btn_rm.pack(side="left", padx=px(10))
 
-        self.split_rows.append(
-            {"frame": row, "start": start_var, "end": end_var, "suffix": suffix_var, "label": num}
-        )
+        self.split_rows.append(_SplitRow(row, start_var, end_var, suffix_var, num))
 
-    def _from_timeline(self, start_var, end_var):
+    def _from_timeline(self, start_var: tk.StringVar, end_var: tk.StringVar) -> None:
         if self.duration <= 0:
             return
         a, b = self._timeline.get_range()
         start_var.set(_ts(a))
         end_var.set(_ts(b))
 
-    def _remove_row(self, row_frame):
+    def _remove_row(self, row_frame: tk.Frame) -> None:
         row_frame.destroy()
-        self.split_rows = [r for r in self.split_rows if r["frame"] != row_frame]
+        self.split_rows = [r for r in self.split_rows if r.frame != row_frame]
         # Number the clips 1, 2, 3... again (and their suffixes, unless edited)
         for i, r in enumerate(self.split_rows, 1):
-            r["label"].config(text=f"Clip {i}:")
-            if re.fullmatch(r"_clip\d+", r["suffix"].get()):
-                r["suffix"].set(f"_clip{i}")
+            r.label.config(text=f"Clip {i}:")
+            if re.fullmatch(r"_clip\d+", r.suffix.get()):
+                r.suffix.set(f"_clip{i}")
 
     def _warn(self, key: str, fallback: str, **values: object) -> None:
         messagebox.showwarning(
@@ -265,7 +277,7 @@ class MultiSplitterTab(BaseTab):
         seen: set[str] = set()
         for i, data in enumerate(self.split_rows, start=1):
             try:
-                ss, ee = ff.parse_time(data["start"].get()), ff.parse_time(data["end"].get())
+                ss, ee = ff.parse_time(data.start.get()), ff.parse_time(data.end.get())
             except ValueError:
                 self._warn(
                     "splitter.bad_time",
@@ -277,7 +289,7 @@ class MultiSplitterTab(BaseTab):
             if ee <= ss:
                 self._warn("splitter.empty_range", "Clip {n} ends before it starts.", n=i)
                 return None
-            out = f"{base}{data['suffix'].get().strip() or f'_clip{i}'}{ext}"
+            out = f"{base}{data.suffix.get().strip() or f'_clip{i}'}{ext}"
             key = os.path.normcase(os.path.abspath(out))
             if key in seen:
                 self._warn(
@@ -324,7 +336,7 @@ class MultiSplitterTab(BaseTab):
         lines = "\n".join(f"{os.path.basename(o)}: {e.splitlines()[-1]}" for o, e in bad)
         messagebox.showwarning(t("msg.done_title"), head + "\n\n" + lines, parent=self)
 
-    def _render_all(self):
+    def _render_all(self) -> None:
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return

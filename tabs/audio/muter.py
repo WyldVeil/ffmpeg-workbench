@@ -20,6 +20,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, FramePreview, save_section, scroll_body
 
 MODES = {
@@ -31,14 +32,14 @@ MODES = {
 
 
 class MuterTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.ranges: list = []
-        self._info = None
+        self.ranges: list[tuple[float, float]] = []
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.the_muter"), "Silence or bleep moments, or remove the sound.", icon="🔇"
         )
@@ -55,7 +56,7 @@ class MuterTab(BaseTab):
         self._build_mode(body)
         self._build_output(body)
 
-    def _build_moments(self, body):
+    def _build_moments(self, body: tk.Frame) -> None:
         """The picture, the moment picker and the list of moments."""
         top = tk.Frame(body)
         top.pack(fill="x", padx=px(20), pady=px(4))
@@ -89,7 +90,7 @@ class MuterTab(BaseTab):
             anchor="w"
         )
 
-    def _build_mode(self, body):
+    def _build_mode(self, body: tk.Frame) -> None:
         """What to do with the moments."""
         opt = tk.LabelFrame(body, text="  What to do  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -102,7 +103,7 @@ class MuterTab(BaseTab):
         self.fade_var = tk.StringVar(value="0.05")
         tk.Entry(fr, textvariable=self.fade_var, width=6).pack(side="left", padx=px(4))
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Where the result goes, the button and the log."""
         self.out_row = save_section(
             body,
@@ -114,7 +115,7 @@ class MuterTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -122,7 +123,7 @@ class MuterTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "muted"))
 
-    def add_range(self, a: float, b: float):
+    def add_range(self, a: float, b: float) -> None:
         if b <= a:
             raise ValueError("The end must be after the start.")
         self.ranges.append((a, b))
@@ -134,13 +135,13 @@ class MuterTab(BaseTab):
             )
 
     # i / o (and the buttons): the moment starts / ends at the frame shown
-    def mark_in(self):
+    def mark_in(self) -> None:
         self.span.start.use_here()
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         self.span.end.use_here()
 
-    def _add(self):
+    def _add(self) -> None:
         try:
             start, end = self.span.span()
             if end is None:
@@ -149,13 +150,13 @@ class MuterTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 
-    def _remove(self):
-        sel = self.listbox.curselection()
+    def _remove(self) -> None:
+        sel = selected_rows(self.listbox)
         if sel:
             del self.ranges[sel[0]]
             self.listbox.delete(sel[0])
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:

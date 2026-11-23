@@ -37,18 +37,18 @@ AUDIO = {
 
 
 class FreezeFrameTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opt = self._build_header()
         self._build_output(body, opt)
         self._build_render(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
             t("tab.freeze_frame"),
@@ -88,7 +88,7 @@ class FreezeFrameTab(BaseTab):
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
         return body, opt
 
-    def _build_output(self, body, opt):
+    def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
         tk.Label(r, text="At:").pack(side="left")
@@ -124,12 +124,12 @@ class FreezeFrameTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "freeze"),
         )
 
-    def _build_render(self, body):
+    def _build_render(self, body: tk.Frame) -> None:
         self.btn_render = self.make_render_btn(body, "⏸  CREATE", self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -139,12 +139,12 @@ class FreezeFrameTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "freeze"))
 
-    def _moved(self):
+    def _moved(self) -> None:
         pos = float(self.pos_var.get())
         self.at.set(pos)
         self.preview.show(pos)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -187,7 +187,7 @@ class FreezeFrameTab(BaseTab):
         container = common.container_of(out)
         audio = encoded_audio(container, audio_out)
 
-        def done(rc):
+        def done(rc: int) -> None:
             if work_dir:
                 shutil.rmtree(work_dir, ignore_errors=True)
             self.show_result(rc, out)

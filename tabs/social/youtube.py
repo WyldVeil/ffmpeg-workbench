@@ -18,6 +18,8 @@ Requirements
     2. yt-dlp on the system PATH  (pip install yt-dlp)
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 import logging
@@ -27,9 +29,11 @@ import tempfile
 import time
 import tkinter as tk
 import webbrowser
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core import proc as _proc
 from core import tasks
@@ -43,6 +47,7 @@ from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import draw_image, linked_scrollbar, selected_rows
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import SaveRow, scroll_body
 
@@ -53,7 +58,7 @@ logger = logging.getLogger("crossfader.social.youtube")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _fmt_dur(seconds) -> str:
+def _fmt_dur(seconds: float) -> str:
     return f"{Timecode.of(seconds):H.0}"
 
 
@@ -95,14 +100,15 @@ def _history_file() -> str:
     return os.path.join(config_dir(), "download_history.json")
 
 
-def _labeled_entry(parent_row, lbl, var, width=32, show=None):
+def _labeled_entry(
+    parent_row: tk.Misc, lbl: str, var: tk.StringVar, width: int = 32, show: str | None = None
+) -> tk.Frame:
     """A right-aligned label and a flat entry on their own row (returned)."""
     r = tk.Frame(parent_row, bg=CLR["bg"])
     r.pack(fill="x", pady=px(3))
     tk.Label(
         r, text=lbl, font=(UI_FONT, 9), width=14, anchor="e", bg=CLR["bg"], fg=CLR["fgdim"]
     ).pack(side="left")
-    kw = {"show": show} if show else {}
     tk.Entry(
         r,
         textvariable=var,
@@ -115,24 +121,24 @@ def _labeled_entry(parent_row, lbl, var, width=32, show=None):
         highlightthickness=px(1),
         highlightbackground=CLR["border"],
         highlightcolor=CLR["accent"],
-        **kw,
+        show=show or "",
     ).pack(side="left", padx=px(6))
     return r
 
 
 class YouTubeDownloaderTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         # Bug fix: Removed self.configure(bg=CLR["bg"]) to prevent ttk styling crash
 
-        self._video_info: dict = {}
+        self._video_info: dict[str, Any] = {}
         self._format_options: list[tuple[str, str]] = []
         self._thumb_photo = None
-        self._active_proc = None
+        self._active_proc: _proc.Popen[str] | None = None
         self._batch_running = False
-        self._record_proc = None
+        self._record_proc: _proc.Popen[str] | None = None
         self._record_start: float = 0.0
-        self._history: list[dict] = []
+        self._history: list[dict[str, Any]] = []
         self._history_visible = True
         self._batch_visible = False
         # Last value we auto-suggested into the "Save to" box. Used to detect
@@ -149,7 +155,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  History persistence
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _load_history(self):
+    def _load_history(self) -> None:
         try:
             if os.path.isfile(_history_file()):
                 with open(_history_file(), encoding="utf-8") as f:
@@ -157,14 +163,14 @@ class YouTubeDownloaderTab(BaseTab):
         except (OSError, ValueError):
             self._history = []
 
-    def _save_history(self):
+    def _save_history(self) -> None:
         try:
             with open(_history_file(), "w", encoding="utf-8") as f:
                 json.dump(self._history, f, indent=2, ensure_ascii=False)
         except (OSError, ValueError):
             pass
 
-    def _append_history(self, title: str, duration: str, url: str, file_path: str):
+    def _append_history(self, title: str, duration: str, url: str, file_path: str) -> None:
         entry = {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "title": title,
@@ -180,7 +186,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  UI Build
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # Tails: a clear warning while downloads bypass Tor (Settings → Network)
         self._route_banner = tk.Label(
             self,
@@ -239,7 +245,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Legal disclaimer ─────────────────────────────────────────────────────
 
-    def _build_disclaimer(self, root):
+    def _build_disclaimer(self, root: tk.Frame) -> None:
         """
         Always-visible legal notice. Distances FFmpeg Workbench from
         the third-party yt-dlp tool and the platforms it interacts with,
@@ -317,7 +323,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── URL row ──────────────────────────────────────────────────────────────
 
-    def _build_url_row(self, root):
+    def _build_url_row(self, root: tk.Frame) -> None:
         url_f = tk.Frame(root, bg=CLR["bg"])
         url_f.pack(fill="x", padx=px(20), pady=px(14, 8))
 
@@ -356,7 +362,7 @@ class YouTubeDownloaderTab(BaseTab):
             cursor="hand2",
         ).pack(side="left", padx=px(0, 8))
 
-        def _btn(text, cmd, bg=None):
+        def _btn(text: str, cmd: Callable[[], object], bg: str | None = None) -> tk.Button:
             b = tk.Button(
                 url_f,
                 text=text,
@@ -396,7 +402,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Info panel ───────────────────────────────────────────────────────────
 
-    def _build_info_panel(self, root):
+    def _build_info_panel(self, root: tk.Frame) -> None:
         info_lf = tk.LabelFrame(
             root,
             text=t("youtube.video_info"),
@@ -424,7 +430,7 @@ class YouTubeDownloaderTab(BaseTab):
         )
         self._build_video_facts(info_lf)
 
-    def _build_video_facts(self, info_lf):
+    def _build_video_facts(self, info_lf: tk.LabelFrame) -> None:
         """Title, duration, channel, views, the live badge and Save thumbnail."""
         meta_right = tk.Frame(info_lf, bg=CLR["bg"])
         meta_right.pack(side="left", fill="both", expand=True, anchor="n")
@@ -491,7 +497,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Settings notebook ────────────────────────────────────────────────────
 
-    def _build_settings_notebook(self, root):
+    def _build_settings_notebook(self, root: tk.Frame) -> None:
         nb_frame = tk.Frame(root, bg=CLR["bg"])
         nb_frame.pack(fill="x", padx=px(20), pady=px(0, 8))
 
@@ -535,7 +541,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._settings_nb.add(self._tab_auth, text=t("youtube.network_advanced"))
         self._build_auth_tab(self._tab_auth)
 
-    def _build_quality_tab(self, parent):
+    def _build_quality_tab(self, parent: tk.Misc) -> None:
         # Format filter radios
         filter_row = tk.Frame(parent, bg=CLR["bg"])
         filter_row.pack(fill="x", pady=px(0, 6))
@@ -612,7 +618,7 @@ class YouTubeDownloaderTab(BaseTab):
                 selectcolor=CLR["panel"],
             ).pack(anchor="w", pady=px(1))
 
-    def _build_encode_tab(self, parent):
+    def _build_encode_tab(self, parent: tk.Misc) -> None:
         left = tk.Frame(parent, bg=CLR["bg"])
         left.pack(side="left", fill="both", expand=True, padx=px(0, 16))
         right = tk.Frame(parent, bg=CLR["bg"])
@@ -621,7 +627,9 @@ class YouTubeDownloaderTab(BaseTab):
         self._build_encode_quality(right)
 
     @staticmethod
-    def _encode_choice(parent, var, values, width=22):
+    def _encode_choice(
+        parent: tk.Misc, var: tk.StringVar, values: list[str], width: int = 22
+    ) -> ttk.Combobox:
         return ttk.Combobox(
             parent,
             textvariable=var,
@@ -631,7 +639,7 @@ class YouTubeDownloaderTab(BaseTab):
             font=(UI_FONT, 9),
         )
 
-    def _build_encode_video(self, col):
+    def _build_encode_video(self, col: tk.Frame) -> None:
         """Codecs, container, preset and size of the re-encode."""
         self._vcodec_var = tk.StringVar(value="libx264")
         self._acodec_var = tk.StringVar(value="aac")
@@ -675,7 +683,7 @@ class YouTubeDownloaderTab(BaseTab):
         )
         self._show_custom_res()
 
-    def _show_custom_res(self, _e=None):
+    def _show_custom_res(self, _e: object = None) -> None:
         """The size box only for a custom resolution."""
         for w in (self._custom_res_label, self._custom_res_entry):
             if self._res.value is yto.Resolution.CUSTOM:
@@ -683,7 +691,7 @@ class YouTubeDownloaderTab(BaseTab):
             else:
                 w.grid_remove()
 
-    def _build_encode_quality(self, col):
+    def _build_encode_quality(self, col: tk.Frame) -> None:
         """Quality (CRF) and the sound's bitrate and sample rate."""
         self._crf_var = tk.IntVar(value=18)
         self._crf_entry_var = tk.StringVar(value="18")
@@ -732,7 +740,7 @@ class YouTubeDownloaderTab(BaseTab):
             label_width=16,
         )
 
-    def _build_audio_tab(self, parent):
+    def _build_audio_tab(self, parent: tk.Misc) -> None:
         r1 = tk.Frame(parent, bg=CLR["bg"])
         r1.pack(fill="x", pady=px(4))
         tk.Label(
@@ -795,7 +803,7 @@ class YouTubeDownloaderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
-    def _build_subs_tab(self, parent):
+    def _build_subs_tab(self, parent: tk.Misc) -> None:
         # Subtitles logic
         r1 = tk.Frame(parent, bg=CLR["bg"])
         r1.pack(fill="x", pady=px(4))
@@ -840,7 +848,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._build_subs_format(parent)
         self._build_metadata_options(parent)
 
-    def _build_subs_format(self, parent):
+    def _build_subs_format(self, parent: tk.Misc) -> None:
         """Subtitle file format, and embedding or burning them in."""
         r3 = tk.Frame(parent, bg=CLR["bg"])
         r3.pack(fill="x", pady=px(4))
@@ -882,7 +890,7 @@ class YouTubeDownloaderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
-    def _build_metadata_options(self, parent):
+    def _build_metadata_options(self, parent: tk.Misc) -> None:
         """Metadata and chapters written into the file."""
         # Metadata & Chapters (Upgraded features)
         tk.Frame(parent, bg=CLR["border"], height=px(1)).pack(fill="x", pady=px(8))
@@ -920,7 +928,7 @@ class YouTubeDownloaderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(16))
 
-    def _build_sponsorblock_tab(self, parent):
+    def _build_sponsorblock_tab(self, parent: tk.Misc) -> None:
         tk.Label(
             parent,
             text=t("youtube.skip_remove_these_segment_types"),
@@ -984,7 +992,7 @@ class YouTubeDownloaderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(4))
 
-    def _build_auth_tab(self, parent):
+    def _build_auth_tab(self, parent: tk.Misc) -> None:
 
         self._cookies_var = tk.StringVar()
         self._username_var = tk.StringVar()
@@ -1055,7 +1063,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Time range / chapters ────────────────────────────────────────────────
 
-    def _build_time_range(self, root):
+    def _build_time_range(self, root: tk.Frame) -> None:
         trim_lf = tk.LabelFrame(
             root,
             text=t("youtube.time_range"),
@@ -1077,7 +1085,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._build_trim_controls(left_f)
         self._build_chapter_list(right_f)
 
-    def _build_trim_controls(self, left_f):
+    def _build_trim_controls(self, left_f: tk.Frame) -> None:
         """Download only a section: on/off and its start and end."""
         # Trim controls
         trim_row = tk.Frame(left_f, bg=CLR["bg"])
@@ -1111,7 +1119,7 @@ class YouTubeDownloaderTab(BaseTab):
             trim_row, text=t("youtube.hh_mm_ss"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left", padx=px(4, 0))
 
-    def _build_chapter_list(self, right_f):
+    def _build_chapter_list(self, right_f: tk.Frame) -> None:
         """The video's chapters, to pick a section from."""
         # Chapters listbox
         tk.Label(
@@ -1136,16 +1144,15 @@ class YouTubeDownloaderTab(BaseTab):
             highlightthickness=px(1),
             highlightbackground=CLR["border"],
         )
-        ch_sb = ttk.Scrollbar(ch_box_f, orient="vertical", command=self._chapters_lb.yview)
-        self._chapters_lb.configure(yscrollcommand=ch_sb.set)
+        ch_sb = linked_scrollbar(ch_box_f, self._chapters_lb)
         self._chapters_lb.pack(side="left", fill="both", expand=True)
         ch_sb.pack(side="right", fill="y")
         self._chapters_lb.bind("<<ListboxSelect>>", self._on_chapter_select)
-        self._chapters_data: list[dict] = []
+        self._chapters_data: list[dict[str, Any]] = []
 
     # ── Output row ───────────────────────────────────────────────────────────
 
-    def _build_output_row(self, root):
+    def _build_output_row(self, root: tk.Frame) -> None:
         self._out_var = tk.StringVar()
         out_row = SaveRow(root, t("youtube.save_to"), self._out_var)
         out_row.pack(fill="x", padx=px(20), pady=px(0, 8))
@@ -1159,7 +1166,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Progress row ─────────────────────────────────────────────────────────
 
-    def _build_progress_row(self, root):
+    def _build_progress_row(self, root: tk.Frame) -> None:
         prog_f = tk.Frame(root, bg=CLR["bg"])
         prog_f.pack(fill="x", padx=px(20), pady=px(0, 6))
         self._progress = ttk.Progressbar(
@@ -1179,7 +1186,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Action buttons ───────────────────────────────────────────────────────
 
-    def _build_action_buttons(self, root):
+    def _build_action_buttons(self, root: tk.Frame) -> None:
         btn_f = tk.Frame(root, bg=CLR["bg"])
         btn_f.pack(pady=px(8))
 
@@ -1221,7 +1228,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Batch panel ──────────────────────────────────────────────────────────
 
-    def _build_batch_panel(self, root):
+    def _build_batch_panel(self, root: tk.Frame) -> None:
         self._batch_frame = tk.LabelFrame(
             root,
             text=t("youtube.batch_queue"),
@@ -1236,7 +1243,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._build_batch_urls()
         self._build_batch_queue()
 
-    def _build_batch_urls(self):
+    def _build_batch_urls(self) -> None:
         """The pasted list of links and the buttons that fill the queue."""
         # URL textarea
         url_area_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
@@ -1289,7 +1296,7 @@ class YouTubeDownloaderTab(BaseTab):
             command=self._batch_clear,
         ).pack(side="left")
 
-    def _build_batch_queue(self):
+    def _build_batch_queue(self) -> None:
         """The queue (title, link, status) and Download all / Stop."""
         # Queue treeview
         tree_f = tk.Frame(self._batch_frame, bg=CLR["bg"])
@@ -1301,8 +1308,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._batch_tree.column("Title", width=px(220))
         self._batch_tree.column("URL", width=px(280))
         self._batch_tree.column("Status", width=px(120))
-        b_sb = ttk.Scrollbar(tree_f, orient="vertical", command=self._batch_tree.yview)
-        self._batch_tree.configure(yscrollcommand=b_sb.set)
+        b_sb = linked_scrollbar(tree_f, self._batch_tree)
         self._batch_tree.pack(side="left", fill="both", expand=True)
         b_sb.pack(side="right", fill="y")
 
@@ -1338,7 +1344,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── History panel ────────────────────────────────────────────────────────
 
-    def _build_history_panel(self, root):
+    def _build_history_panel(self, root: tk.Frame) -> None:
         hist_hdr = tk.Frame(root, bg=CLR["panel"])
         hist_hdr.pack(fill="x", padx=px(20), pady=px(8, 0))
         self._hist_toggle_btn = tk.Button(
@@ -1381,8 +1387,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._hist_tree.column("Title", width=px(260))
         self._hist_tree.column("Duration", width=px(80))
         self._hist_tree.column("File", width=px(220))
-        hist_sb = ttk.Scrollbar(self._hist_body, orient="vertical", command=self._hist_tree.yview)
-        self._hist_tree.configure(yscrollcommand=hist_sb.set)
+        hist_sb = linked_scrollbar(self._hist_body, self._hist_tree)
         self._hist_tree.pack(side="left", fill="both", expand=True)
         hist_sb.pack(side="right", fill="y")
         self._hist_tree.bind("<Double-1>", self._on_history_dclick)
@@ -1392,7 +1397,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Startup check
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _check_ytdlp(self):
+    def _check_ytdlp(self) -> None:
         p = ytdlp_core.ytdlp_path()
         if p:
             tasks.submit(
@@ -1427,17 +1432,17 @@ class YouTubeDownloaderTab(BaseTab):
     #  Event handlers - simple
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _on_trim_toggle(self):
+    def _on_trim_toggle(self) -> None:
         state = "normal" if self._trim_var.get() else "disabled"
         self._start_ent.config(state=state)
         self._end_ent.config(state=state)
 
-    def _open_browser(self):
+    def _open_browser(self) -> None:
         url = self._url_var.get().strip()
         if url:
             webbrowser.open(url)
 
-    def _browse_cookies(self):
+    def _browse_cookies(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[
                 (t("youtube.text_cookies"), "*.txt"),
@@ -1447,7 +1452,7 @@ class YouTubeDownloaderTab(BaseTab):
         if p:
             self._cookies_var.set(p)
 
-    def _open_output_folder(self):
+    def _open_output_folder(self) -> None:
         p = self._out_var.get().strip()
         if p:
             folder = os.path.dirname(p) if not os.path.isdir(p) else p
@@ -1456,10 +1461,10 @@ class YouTubeDownloaderTab(BaseTab):
 
                 open_in_explorer(folder)
 
-    def _on_paste(self, event):
+    def _on_paste(self, event: object) -> None:
         self.after(200, self._auto_fetch_after_paste)
 
-    def _auto_fetch_after_paste(self):
+    def _auto_fetch_after_paste(self) -> None:
         url = self._url_var.get().strip()
         if url and (
             "youtube.com" in url
@@ -1471,7 +1476,7 @@ class YouTubeDownloaderTab(BaseTab):
         ):
             self._on_fetch()
 
-    def _on_format_selected(self, event=None):
+    def _on_format_selected(self, event: object = None) -> None:
         idx = self._format_cb.current()
         if 0 <= idx < len(self._format_options):
             label, _ = self._format_options[idx]
@@ -1481,8 +1486,8 @@ class YouTubeDownloaderTab(BaseTab):
             else:
                 self._size_var.set("")
 
-    def _on_chapter_select(self, event=None):
-        sel = self._chapters_lb.curselection()
+    def _on_chapter_select(self, event: object = None) -> None:
+        sel = selected_rows(self._chapters_lb)
         if not sel:
             return
         idx = sel[0]
@@ -1493,14 +1498,14 @@ class YouTubeDownloaderTab(BaseTab):
             self._start_var.set(_fmt_dur(chap.get("start_time", 0)))
             self._end_var.set(_fmt_dur(chap.get("end_time", 0)))
 
-    def _toggle_batch(self):
+    def _toggle_batch(self) -> None:
         self._batch_visible = not self._batch_visible
         if self._batch_visible:
             self._batch_frame.pack(fill="x", padx=px(20), pady=px(0, 8))
         else:
             self._batch_frame.pack_forget()
 
-    def _toggle_history(self):
+    def _toggle_history(self) -> None:
         self._history_visible = not self._history_visible
         if self._history_visible:
             self._hist_body.pack(fill="x")
@@ -1509,7 +1514,7 @@ class YouTubeDownloaderTab(BaseTab):
             self._hist_body.pack_forget()
             self._hist_toggle_btn.config(text="▶  " + t("tab.youtube_downloader"))
 
-    def _save_thumbnail(self):
+    def _save_thumbnail(self) -> None:
         if self._thumb_photo is None:
             messagebox.showwarning(t("common.warning"), "Fetch video info first.")
             return
@@ -1543,7 +1548,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Format filter
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _apply_format_filter(self):
+    def _apply_format_filter(self) -> None:
         flt = self._filter_var.get()
         if not self._format_options:
             return
@@ -1566,7 +1571,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Fetch video info
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _on_fetch(self):
+    def _on_fetch(self) -> None:
         url = self._url_var.get().strip()
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
@@ -1589,7 +1594,7 @@ class YouTubeDownloaderTab(BaseTab):
             name="yt-dlp info",
         )
 
-    def _fetched(self, info: dict) -> None:
+    def _fetched(self, info: dict[str, Any]) -> None:
         self._btn_fetch.config(state="normal", text=t("youtube.fetch_info"))
         self._populate_info(info)
 
@@ -1603,7 +1608,7 @@ class YouTubeDownloaderTab(BaseTab):
             msg = f"⚠ Fetch error: {exc}"
         self.log_tagged(self.console, msg, "error")
 
-    def _populate_info(self, info: dict):
+    def _populate_info(self, info: dict[str, Any]) -> None:
         self._video_info = info
         title = info.get("title") or "Unknown"
         dur = info.get("duration") or 0
@@ -1642,7 +1647,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         self.log_tagged(self.console, f"✔ {title}  [{_fmt_dur(dur)}]", "success")
 
-    def _suggest_out(self, title):
+    def _suggest_out(self, title: str) -> None:
         """Name the download after the video (or the playlist pattern)."""
         # Auto-suggest output filename. Refresh on every fetch unless the
         # user has manually edited the field since our last suggestion -
@@ -1659,7 +1664,7 @@ class YouTubeDownloaderTab(BaseTab):
             self._out_var.set(new_out)
             self._last_auto_out = new_out
 
-    def _populate_formats(self, formats: list):
+    def _populate_formats(self, formats: list[dict[str, Any]]) -> None:
         if not formats:
             return
 
@@ -1675,7 +1680,7 @@ class YouTubeDownloaderTab(BaseTab):
                 "bestvideo+bestaudio/best",
             ),
         ]
-        seen: set = set()
+        seen: set[tuple[int, int, str, str]] = set()
         for f in vfmts:
             fid = f.get("format_id", "?")
             h = f.get("height", 0)
@@ -1702,7 +1707,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._format_cb.current(0)
         self._size_var.set("")
 
-    def _populate_chapters(self, chapters: list):
+    def _populate_chapters(self, chapters: list[dict[str, Any]]) -> None:
         self._chapters_data = chapters
         self._chapters_lb.delete(0, tk.END)
         for ch in chapters:
@@ -1710,11 +1715,11 @@ class YouTubeDownloaderTab(BaseTab):
             title = ch.get("title", "")
             self._chapters_lb.insert(tk.END, f"{st}  {title}")
 
-    def _populate_subtitle_langs(self, info: dict):
+    def _populate_subtitle_langs(self, info: dict[str, Any]) -> None:
         manual_langs = set(info.get("subtitles", {}).keys())
         auto_langs = set(info.get("automatic_captions", {}).keys())
         all_langs = sorted(manual_langs | auto_langs)
-        labeled = []
+        labeled: list[str] = []
         for lang in all_langs:
             if lang in manual_langs:
                 labeled.append(lang)
@@ -1727,7 +1732,7 @@ class YouTubeDownloaderTab(BaseTab):
             elif labeled:
                 self._sub_lang_var.set(labeled[0])
 
-    def _load_thumbnail(self, thumb_url: str):
+    def _load_thumbnail(self, thumb_url: str) -> None:
         """Worker thread: fetch the thumbnail (through the app's network settings)
         and let FFmpeg decode it - Tk shows PNG natively, so no Pillow needed."""
         import base64
@@ -1754,18 +1759,18 @@ class YouTubeDownloaderTab(BaseTab):
         except Exception as exc:
             logger.debug("_load_thumbnail: best-effort step failed", exc_info=True)
             err = str(exc) or type(exc).__name__
-            self.after(0, lambda e=err: self._set_thumbnail_message(f"Thumbnail failed:\n{e[:80]}"))
+            self.after(0, partial(self._set_thumbnail_message, f"Thumbnail failed:\n{err[:80]}"))
             self.after(
                 0,
-                lambda e=err: self.log_tagged(self.console, f"⚠ Thumbnail load error: {e}", "warn"),
+                partial(self.log_tagged, self.console, f"⚠ Thumbnail load error: {err}", "warn"),
             )
 
-    def _set_thumbnail(self, photo):
+    def _set_thumbnail(self, photo: tk.PhotoImage) -> None:
         self._thumb_photo = photo
         self._thumb_canvas.delete("all")
-        self._thumb_canvas.create_image(0, 0, anchor="nw", image=photo)
+        draw_image(self._thumb_canvas, 0, 0, photo, anchor="nw")
 
-    def _set_thumbnail_message(self, msg: str):
+    def _set_thumbnail_message(self, msg: str) -> None:
         """Render a short status message into the thumbnail canvas."""
         try:
             self._thumb_canvas.delete("all")
@@ -1785,7 +1790,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Preview
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _preview(self):
+    def _preview(self) -> None:
         url = self._url_var.get().strip()
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
@@ -1797,7 +1802,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._btn_preview.config(state="disabled", text=t("youtube.loading"))
         self.log(self.console, t("log.youtube.resolving_stream_for_preview"))
 
-        def _worker():
+        def _worker() -> None:
             try:
                 from core import network as _net
 
@@ -1836,7 +1841,7 @@ class YouTubeDownloaderTab(BaseTab):
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(
-                    0, lambda e=exc: self.log_tagged(self.console, f"⚠ Preview error: {e}", "error")
+                    0, partial(self.log_tagged, self.console, f"⚠ Preview error: {exc}", "error")
                 )
             finally:
                 self.after(
@@ -1849,7 +1854,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Live recording
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _start_record(self):
+    def _start_record(self) -> None:
         url = self._url_var.get().strip()
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a live stream URL first.")
@@ -1874,7 +1879,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._btn_record.config(state="disabled", text=t("youtube.recording"))
         self._record_start = time.time()
 
-        def _worker():
+        def _worker() -> None:
             try:
                 self._record_proc = _proc.spawn(
                     cmd,
@@ -1891,11 +1896,11 @@ class YouTubeDownloaderTab(BaseTab):
                         h, r = divmod(elapsed, 3600)
                         m, s = divmod(r, 60)
                         et = f"[{h:02d}:{m:02d}:{s:02d}]"
-                        self.after(0, lambda msg=f"{et} {stripped}": self.log(self.console, msg))
+                        self.after(0, partial(self.log, self.console, f"{et} {stripped}"))
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(
-                    0, lambda e=exc: self.log_tagged(self.console, f"⚠ Record error: {e}", "error")
+                    0, partial(self.log_tagged, self.console, f"⚠ Record error: {exc}", "error")
                 )
             finally:
                 self.after(
@@ -1911,21 +1916,27 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _stream_ytdlp(
         self,
-        cmd: list,
-        on_line=None,
-        on_progress=None,
-        on_done=None,
+        cmd: list[str],
+        on_line: Callable[[str], object] | None = None,
+        on_progress: Callable[[float, str, str, str], object] | None = None,
+        on_done: Callable[[int], object] | None = None,
         url: str = "https://www.youtube.com/",
-    ):
+    ) -> None:
         """Run yt-dlp; parse progress lines; call callbacks. Blocks until done.
         Behind a Tor proxy, a block (bot check, 403/429) is retried through
         fresh Tor circuits - as many as set under Settings → Network."""
         rc = self._run_with_fresh_circuits(cmd, url, on_line=on_line, on_progress=on_progress)
         if on_done:
-            self.after(0, lambda c=rc: on_done(c))
+            self.after(0, partial(on_done, rc))
 
     def _run_with_fresh_circuits(
-        self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False
+        self,
+        cmd: list[str],
+        url: str,
+        *,
+        on_line: Callable[[str], object] | None = None,
+        on_progress: Callable[[float, str, str, str], object] | None = None,
+        batch: bool = False,
     ) -> int:
         from core import network as _net
 
@@ -1971,15 +1982,21 @@ class YouTubeDownloaderTab(BaseTab):
             cmd = yto.with_proxy(cmd, _net.fresh_circuit(tor, attempt))
 
     def _run_ytdlp_once(
-        self, cmd: list, url: str, *, on_line=None, on_progress=None, batch: bool = False
-    ):
+        self,
+        cmd: list[str],
+        url: str,
+        *,
+        on_line: Callable[[str], object] | None = None,
+        on_progress: Callable[[float, str, str, str], object] | None = None,
+        batch: bool = False,
+    ) -> tuple[int, list[str]]:
         """(returncode, last output lines)"""
         from collections import deque
 
         from core import network as _net
         from core.ytdlp import redact
 
-        tail = deque(maxlen=40)
+        tail: deque[str] = deque(maxlen=40)
         prefix = "BATCH CMD: " if batch else "CMD: "
         self.after(
             0, lambda: self.log(self.console, prefix + " ".join(str(c) for c in redact(cmd)))
@@ -2003,35 +2020,29 @@ class YouTubeDownloaderTab(BaseTab):
                     pct = float(m.group(1))
                     size, spd, eta = m.group(2).strip(), m.group(3).strip(), m.group(4).strip()
                     if batch:
-                        self.after(
-                            0, lambda p_=pct, s_=spd: self._on_progress_update(p_, "-", s_, "-")
-                        )
+                        self.after(0, partial(self._on_progress_update, pct, "-", spd, "-"))
                     elif on_progress is not None:
-                        self.after(
-                            0, lambda p_=pct, sz=size, sp=spd, et=eta: on_progress(p_, sz, sp, et)
-                        )
+                        self.after(0, partial(on_progress, pct, size, spd, eta))
                 else:
                     tail.append(stripped)
                     if on_line is not None:
-                        self.after(0, lambda s_=stripped, show=on_line: show(s_))
+                        self.after(0, partial(on_line, stripped))
                     else:
-                        self.after(0, lambda s_=stripped: self.log(self.console, s_))
+                        self.after(0, partial(self.log, self.console, stripped))
             rc = proc.returncode
         except Exception as exc:
             logger.debug("_run_ytdlp_once: best-effort step failed", exc_info=True)
-            self.after(
-                0, lambda e=exc: self.log_tagged(self.console, f"⚠ yt-dlp error: {e}", "error")
-            )
+            self.after(0, partial(self.log_tagged, self.console, f"⚠ yt-dlp error: {exc}", "error"))
             rc = 1
         finally:
             self._active_proc = None
         return rc, list(tail)
 
-    def _on_progress_update(self, pct: float, size: str, speed: str, eta: str):
+    def _on_progress_update(self, pct: float, size: str, speed: str, eta: str) -> None:
         self._progress["value"] = pct
         self._prog_status_var.set(f"{pct:.1f}%  {size}  {speed}/s  ETA {eta}")
 
-    def _poll_route_banner(self):
+    def _poll_route_banner(self) -> None:
         try:
             from core import tails
 
@@ -2051,7 +2062,7 @@ class YouTubeDownloaderTab(BaseTab):
         except tk.TclError:
             pass
 
-    def _cancel_download(self):
+    def _cancel_download(self) -> None:
         # yt-dlp typically spawns ffmpeg (and optionally aria2c) as child
         # processes. proc.terminate() only kills yt-dlp itself, leaving the
         # children running and the download effectively continuing. Kill
@@ -2068,14 +2079,14 @@ class YouTubeDownloaderTab(BaseTab):
         self.log_tagged(self.console, "⏹ Download cancelled.", "warn")
         self._reset_download_ui()
 
-    def _kill_process_tree(self, proc):
+    def _kill_process_tree(self, proc: _proc.Popen[str]) -> None:
         """Stop *proc* and every child it started (never our own process
         group - the old killpg() on POSIX terminated the whole app)."""
         from core import ffmpeg as _ff
 
         _ff.kill_tree(proc)
 
-    def _reset_download_ui(self):
+    def _reset_download_ui(self) -> None:
         self._btn_dl.config(state="normal", text=t("youtube.download"))
         self._btn_cancel.config(state="disabled")
         self._progress["value"] = 0
@@ -2103,7 +2114,7 @@ class YouTubeDownloaderTab(BaseTab):
             )
         )
 
-    def _build_trim_args(self) -> list | None:
+    def _build_trim_args(self) -> list[str] | None:
         """Returns trim args or None. Returns False-y empty list if no trim."""
         if not self._trim_var.get():
             return []
@@ -2139,7 +2150,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Main download entry point
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _download(self):
+    def _download(self) -> None:
         url = self._url_var.get().strip()
         if not url:
             messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
@@ -2193,7 +2204,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Direct copy ──────────────────────────────────────────────────────────
 
-    def _run_direct_copy(self, url: str, out: str, ytdlp: str, trim_args: list):
+    def _run_direct_copy(self, url: str, out: str, ytdlp: str, trim_args: list[str]) -> None:
         idx = self._format_cb.current()
         fmt_str = (
             self._format_options[idx][1]
@@ -2225,7 +2236,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Audio only ───────────────────────────────────────────────────────────
 
-    def _run_audio_only(self, url: str, out: str, ytdlp: str, trim_args: list):
+    def _run_audio_only(self, url: str, out: str, ytdlp: str, trim_args: list[str]) -> None:
         audio_fmt = self._audio_fmt_var.get()
         quality = self._audio_quality_var.get().split()[0]
 
@@ -2249,7 +2260,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         # Mirror the post-processed audio path back into the box, and treat
         # it as still auto-managed so the next fetched URL refreshes it.
-        def _sync_audio_out(p=audio_out):
+        def _sync_audio_out(p: str = audio_out) -> None:
             self._out_var.set(p)
             self._last_auto_out = p
 
@@ -2264,7 +2275,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     # ── Re-encode ────────────────────────────────────────────────────────────
 
-    def _run_reencode(self, url: str, out: str, ytdlp: str, trim_args: list):
+    def _run_reencode(self, url: str, out: str, ytdlp: str, trim_args: list[str]) -> None:
         tmp = os.path.join(tempfile.gettempdir(), f"_cf_yt_tmp_{os.getpid()}.mkv")
 
         cmd = yto.download_argv(ytdlp, url, yto.BEST, "mkv", playlist=self._playlist_var.get())
@@ -2275,7 +2286,7 @@ class YouTubeDownloaderTab(BaseTab):
         # Phase 1: download
         self.after(0, lambda: self.log(self.console, t("log.youtube.downloading_best_quality")))
 
-        def _dl_done(rc: int):
+        def _dl_done(rc: int) -> None:
             if rc != 0:
                 self.log_tagged(self.console, f"⚠ Download failed (code {rc})", "error")
                 self._reset_download_ui()
@@ -2328,10 +2339,10 @@ class YouTubeDownloaderTab(BaseTab):
                 return os.path.join(tmp_dir, fname)
         return ""
 
-    def _run_ffmpeg_encode(self, cmd: list, tmp: str, out: str):
+    def _run_ffmpeg_encode(self, cmd: list[str], tmp: str, out: str) -> None:
         total_dur = self._video_info.get("duration", 0) or 0
 
-        def _worker(progress_cb, cancel_fn):
+        def _worker(progress_cb: Callable[[str], None], cancel_fn: Callable[[], bool]) -> int:
             try:
                 proc = _proc.spawn(
                     cmd, stdout=_proc.PIPE, stderr=_proc.STDOUT, text=True, bufsize=1
@@ -2349,40 +2360,36 @@ class YouTubeDownloaderTab(BaseTab):
                     if m and total_dur > 0:
                         elapsed = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
                         pct = min(100.0, (elapsed / total_dur) * 100)
-                        self.after(
-                            0, lambda p=pct, t=elapsed: self._on_encode_progress(p, t, total_dur)
-                        )
+                        self.after(0, partial(self._on_encode_progress, pct, elapsed, total_dur))
                     else:
                         progress_cb(stripped)
                 rc = proc.returncode
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(
-                    0, lambda e=exc: self.log_tagged(self.console, f"⚠ Encode error: {e}", "error")
+                    0, partial(self.log_tagged, self.console, f"⚠ Encode error: {exc}", "error")
                 )
                 rc = 1
             finally:
                 self._active_proc = None
             return rc
 
-        def _on_done(task_id, rc):
+        def _on_done(task_id: str, rc: int) -> None:
             with contextlib.suppress(OSError):
                 os.remove(tmp)
-            self.after(0, lambda c=rc: self._on_single_done(c, out))
+            self.after(0, partial(self._on_single_done, rc, out))
 
         self.enqueue_render(
             f"YT Encode: {os.path.basename(out)}",
             output_path=out,
             work=_worker,
             hooks=Hooks(
-                on_progress=lambda tid, line: self.after(
-                    0, lambda s=line: self.log(self.console, s)
-                ),
+                on_progress=lambda tid, line: self.after(0, partial(self.log, self.console, line)),
                 on_complete=_on_done,
             ),
         )
 
-    def _on_encode_progress(self, pct: float, elapsed: float, total: float):
+    def _on_encode_progress(self, pct: float, elapsed: float, total: float) -> None:
         self._progress["value"] = pct
         remaining = max(0, total - elapsed)
         h, r = divmod(int(remaining), 3600)
@@ -2393,7 +2400,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  Post-download
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _on_single_done(self, rc: int, out_path: str):
+    def _on_single_done(self, rc: int, out_path: str) -> None:
         self._reset_download_ui()
         if rc == 0:
             self._progress["value"] = 100
@@ -2412,18 +2419,18 @@ class YouTubeDownloaderTab(BaseTab):
     #  Batch queue
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _batch_add_urls(self):
+    def _batch_add_urls(self) -> None:
         raw = self._batch_text.get("1.0", tk.END).strip()
         urls = [ln.strip() for ln in raw.splitlines() if ln.strip()]
         for url in urls:
             self._batch_tree.insert("", tk.END, values=("-", url, "Queued"))
         self._batch_text.delete("1.0", tk.END)
 
-    def _batch_clear(self):
+    def _batch_clear(self) -> None:
         for item in self._batch_tree.get_children():
             self._batch_tree.delete(item)
 
-    def _batch_download_all(self):
+    def _batch_download_all(self) -> None:
         items = self._batch_tree.get_children()
         if not items:
             messagebox.showwarning(t("common.warning"), "Add URLs to the queue first.")
@@ -2438,12 +2445,17 @@ class YouTubeDownloaderTab(BaseTab):
         self._btn_stop_batch.config(state="normal")
         tasks.submit(partial(self._batch_worker, items, ytdlp))
 
-    def _batch_status(self, item, status):
+    def _batch_row(self, item: str, title: str, status: str) -> None:
+        """Show *title* and *status* in batch row *item* (its link stays)."""
+        url = self._batch_tree.item(item, "values")[1]
+        self._batch_tree.item(item, values=(title, url, status))
+
+    def _batch_status(self, item: str, status: str) -> None:
         """Set the status column of a batch row (its URL and title stay)."""
         url, title = self._batch_tree.item(item, "values")[:2]
         self._batch_tree.item(item, values=(url, title, status))
 
-    def _batch_worker(self, items, ytdlp: str):
+    def _batch_worker(self, items: Sequence[str], ytdlp: str) -> None:
         for item in items:
             if not self._batch_running:
                 break
@@ -2471,9 +2483,7 @@ class YouTubeDownloaderTab(BaseTab):
 
             self.after(
                 0,
-                lambda i=item, t=title: self._batch_tree.item(
-                    i, values=(t, self._batch_tree.item(i, "values")[1], "Downloading…")
-                ),
+                partial(self._batch_row, item, title, "Downloading…"),
             )
 
             dl_dir = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -2487,7 +2497,7 @@ class YouTubeDownloaderTab(BaseTab):
                 from core import network as _net
 
                 self.after(
-                    0, lambda e=exc: self.log_tagged(self.console, _net.explain_error(e), "error")
+                    0, partial(self.log_tagged, self.console, _net.explain_error(exc), "error")
                 )
                 break
             cmd += self._build_common_ytdlp_args()
@@ -2498,19 +2508,17 @@ class YouTubeDownloaderTab(BaseTab):
 
             self.after(
                 0,
-                lambda i=item, t=title, s=status: self._batch_tree.item(
-                    i, values=(t, self._batch_tree.item(i, "values")[1], s)
-                ),
+                partial(self._batch_row, item, title, status),
             )
             if rc == 0:
                 self._append_history(title, "-", url, dl_dir)
 
         self.after(0, self._batch_finished)
 
-    def _run_ytdlp_sync_batch(self, cmd: list, url: str = "https://www.youtube.com/") -> int:
+    def _run_ytdlp_sync_batch(self, cmd: list[str], url: str = "https://www.youtube.com/") -> int:
         return self._run_with_fresh_circuits(cmd, url, batch=True)
 
-    def _batch_stop(self):
+    def _batch_stop(self) -> None:
         self._batch_running = False
         proc = self._active_proc
         if proc:
@@ -2520,7 +2528,7 @@ class YouTubeDownloaderTab(BaseTab):
                 logger.debug("_batch_stop: best-effort step failed", exc_info=True)
         self.log_tagged(self.console, "⏹ Batch stopped.", "warn")
 
-    def _batch_finished(self):
+    def _batch_finished(self) -> None:
         self._batch_running = False
         self._btn_dl_all.config(state="normal")
         self._btn_stop_batch.config(state="disabled")
@@ -2532,7 +2540,7 @@ class YouTubeDownloaderTab(BaseTab):
     #  History
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _refresh_history_tree(self):
+    def _refresh_history_tree(self) -> None:
         for item in self._hist_tree.get_children():
             self._hist_tree.delete(item)
         for entry in reversed(self._history[-200:]):
@@ -2542,7 +2550,7 @@ class YouTubeDownloaderTab(BaseTab):
             fpath = entry.get("file", "")
             self._hist_tree.insert("", tk.END, values=(ts, title[:50], dur, fpath), tags=("entry",))
 
-    def _on_history_dclick(self, event):
+    def _on_history_dclick(self, event: object) -> None:
         sel = self._hist_tree.selection()
         if not sel:
             return
@@ -2557,7 +2565,7 @@ class YouTubeDownloaderTab(BaseTab):
         elif os.path.isdir(fpath):
             open_in_explorer(fpath)
 
-    def _clear_history(self):
+    def _clear_history(self) -> None:
         if messagebox.askyesno(t("msg.clear_history_title"), t("msg.delete_all_history")):
             self._history = []
             self._save_history()

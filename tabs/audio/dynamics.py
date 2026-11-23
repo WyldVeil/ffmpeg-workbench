@@ -14,17 +14,26 @@ Each stage can be bypassed independently.
 Preview by exporting a short clip with the chain applied.
 """
 
+from __future__ import annotations
+
 import os
 import tkinter as tk
+from functools import partial
 from tkinter import ttk
+from typing import TYPE_CHECKING
 
 from core.i18n import t
 from core.ops import dynamics as dyn
+from core.ops.dynamics import VoicePreset
 from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import on_write
 from tabs.widgets import SaveRow, scroll_body
+
+if TYPE_CHECKING:
+    from core.ffmpeg import MediaInfo
 
 # ── EQ Band definitions ───────────────────────────────────────────────────
 EQ_BANDS = [
@@ -35,59 +44,65 @@ EQ_BANDS = [
     ("High-shelf", "highshelf", 10000, t("dynamics.top_end_air")),
 ]
 
-VOICE_PRESETS = {
+VOICE_PRESETS: dict[str, VoicePreset | None] = {
     t("dynamics.flat_bypass_all"): None,
-    t("dynamics.podcast_voice_warm_clear"): {
-        "gate_thresh": -40,
-        "gate_ratio": 4,
-        "comp_thresh": -18,
-        "comp_ratio": 3,
-        "comp_attack": 5,
-        "comp_release": 80,
-        "eq": [(80, -2), (300, -3), (2500, 3), (5000, 1), (10000, 0)],
-        "limit_thresh": -1,
-    },
-    "YouTube voiceover: punchy": {
-        "gate_thresh": -45,
-        "gate_ratio": 6,
-        "comp_thresh": -15,
-        "comp_ratio": 4,
-        "comp_attack": 3,
-        "comp_release": 60,
-        "eq": [(80, 2), (300, -4), (2500, 4), (5000, 2), (10000, 1)],
-        "limit_thresh": -0.5,
-    },
-    "Music mastering: balanced": {
-        "gate_thresh": -60,
-        "gate_ratio": 2,
-        "comp_thresh": -12,
-        "comp_ratio": 2,
-        "comp_attack": 20,
-        "comp_release": 200,
-        "eq": [(80, 0), (300, -1), (2500, 0), (5000, 1), (10000, 2)],
-        "limit_thresh": -0.1,
-    },
-    "De-harsh: reduce harshness": {
-        "gate_thresh": -50,
-        "gate_ratio": 2,
-        "comp_thresh": -20,
-        "comp_ratio": 3,
-        "comp_attack": 10,
-        "comp_release": 100,
-        "eq": [(80, 0), (300, -2), (2500, -3), (5000, -2), (10000, 0)],
-        "limit_thresh": -1,
-    },
+    t("dynamics.podcast_voice_warm_clear"): VoicePreset(
+        gate_thresh=-40,
+        gate_ratio=4,
+        comp_thresh=-18,
+        comp_ratio=3,
+        comp_attack=5,
+        comp_release=80,
+        eq=((80, -2), (300, -3), (2500, 3), (5000, 1), (10000, 0)),
+        limit_thresh=-1,
+    ),
+    "YouTube voiceover: punchy": VoicePreset(
+        gate_thresh=-45,
+        gate_ratio=6,
+        comp_thresh=-15,
+        comp_ratio=4,
+        comp_attack=3,
+        comp_release=60,
+        eq=((80, 2), (300, -4), (2500, 4), (5000, 2), (10000, 1)),
+        limit_thresh=-0.5,
+    ),
+    "Music mastering: balanced": VoicePreset(
+        gate_thresh=-60,
+        gate_ratio=2,
+        comp_thresh=-12,
+        comp_ratio=2,
+        comp_attack=20,
+        comp_release=200,
+        eq=((80, 0), (300, -1), (2500, 0), (5000, 1), (10000, 2)),
+        limit_thresh=-0.1,
+    ),
+    "De-harsh: reduce harshness": VoicePreset(
+        gate_thresh=-50,
+        gate_ratio=2,
+        comp_thresh=-20,
+        comp_ratio=3,
+        comp_attack=10,
+        comp_release=100,
+        eq=((80, 0), (300, -2), (2500, -3), (5000, -2), (10000, 0)),
+        limit_thresh=-1,
+    ),
 }
 
 
+def _show_value(label: tk.Label, var: tk.DoubleVar, fmt: str) -> None:
+    """Show *var* in *label*, formatted with *fmt*."""
+    label.config(text=fmt.format(var.get()))
+
+
 class AudioDynamicsTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.controls: dict[str, tk.Variable] = {}  # every knob, by name (gate_thresh...)
+        self.controls: dict[str, tk.DoubleVar] = {}  # every knob, by name (gate_thresh...)
+        self.switches: dict[str, tk.BooleanVar] = {}  # each stage on or off (gate_on...)
         self.file_path = ""
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self._build_src()
         inner = self._build_scrollable_chain()
         self._build_1_noise_gate(inner)
@@ -98,7 +113,7 @@ class AudioDynamicsTab(BaseTab):
         self._build_filter_preview(inner)
         self._build_output_render(inner)
 
-    def _build_src(self):
+    def _build_src(self) -> None:
         make_header(self, t("tab.audio_dynamics"), t("dynamics.desc_header"), icon="🎛")
 
         # Source
@@ -130,38 +145,38 @@ class AudioDynamicsTab(BaseTab):
         preset_cb.pack(side="left", padx=px(8))
         preset_cb.bind("<<ComboboxSelected>>", self._apply_preset)
 
-    def _build_scrollable_chain(self):
+    def _build_scrollable_chain(self) -> tk.Frame:
         """Scrollable chain."""
         return scroll_body(self)
 
-    def _build_1_noise_gate(self, inner):
+    def _build_1_noise_gate(self, inner: tk.Frame) -> None:
         """1. Noise Gate."""
         self._build_gate(inner)
 
-    def _build_2_eq(self, inner):
+    def _build_2_eq(self, inner: tk.Frame) -> None:
         """2. EQ."""
         self._build_eq(inner)
 
-    def _build_3_compressor(self, inner):
+    def _build_3_compressor(self, inner: tk.Frame) -> None:
         """3. Compressor."""
         self._build_compressor(inner)
 
-    def _build_4_de_esser(self, inner):
+    def _build_4_de_esser(self, inner: tk.Frame) -> None:
         """4. De-esser."""
         self._build_deesser(inner)
 
-    def _build_5_limiter(self, inner):
+    def _build_5_limiter(self, inner: tk.Frame) -> None:
         """5. Limiter."""
         self._build_limiter(inner)
 
-    def _build_filter_preview(self, inner):
+    def _build_filter_preview(self, inner: tk.Frame) -> None:
         """Filter preview."""
         self.filter_preview = tk.Label(
             inner, text="", fg=CLR["fgdim"], font=(MONO_FONT, 8), wraplength=px(860), justify="left"
         )
         self.filter_preview.pack(anchor="w", padx=px(16), pady=px(4))
 
-    def _build_output_render(self, inner):
+    def _build_output_render(self, inner: tk.Frame) -> None:
         """Output & render."""
         self.out_var = tk.StringVar()
         SaveRow(inner, t("common.output_file"), self.out_var, kind="media").pack(
@@ -189,17 +204,27 @@ class AudioDynamicsTab(BaseTab):
         )
 
     # ── Stage builders ────────────────────────────────────────────────────
-    def _stage_frame(self, parent, title, bypass_attr):
+    def _stage_frame(self, parent: tk.Misc, title: str, bypass_attr: str) -> tk.LabelFrame:
         lf = tk.LabelFrame(parent, text=f"  {title}  ", padx=px(14), pady=px(8))
         lf.pack(fill="x", padx=px(16), pady=px(4))
         var = tk.BooleanVar(value=True)
-        self.controls[bypass_attr] = var
+        self.switches[bypass_attr] = var
         tk.Checkbutton(
             lf, text=t("common.enable"), variable=var, command=self._update_filter_preview
         ).pack(anchor="e")
         return lf
 
-    def _slider_row(self, parent, label, attr, lo, hi, default, res, unit=""):
+    def _slider_row(
+        self,
+        parent: tk.Misc,
+        label: str,
+        attr: str,
+        lo: float,
+        hi: int,
+        default: float,
+        res: float,
+        unit: str = "",
+    ) -> None:
         row = tk.Frame(parent)
         row.pack(fill="x", pady=px(2))
         tk.Label(row, text=label, width=22, anchor="e").pack(side="left")
@@ -218,11 +243,9 @@ class AudioDynamicsTab(BaseTab):
         sl.pack(side="left", padx=px(6))
         lbl = tk.Label(row, text=f"{default}{unit}", width=8, fg=CLR["accent"])
         lbl.pack(side="left")
-        var.trace_add(
-            "write", lambda *_, label=lbl, v=var, u=unit: label.config(text=f"{v.get():.2f}{u}")
-        )
+        on_write(var, partial(_show_value, lbl, var, "{:.2f}" + unit))
 
-    def _build_gate(self, parent):
+    def _build_gate(self, parent: tk.Misc) -> None:
         lf = self._stage_frame(parent, "🚪  1. Noise Gate", "gate_on")
         self._slider_row(lf, "Threshold (dB):", "gate_thresh", -80, 0, -40, 0.5, " dB")
         self._slider_row(lf, "Ratio:", "gate_ratio", 1, 10, 4, 0.5, ":1")
@@ -235,9 +258,9 @@ class AudioDynamicsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-    def _build_eq(self, parent):
+    def _build_eq(self, parent: tk.Misc) -> None:
         lf = self._stage_frame(parent, "🎚  2. Parametric EQ  (5 bands)", "eq_on")
-        self._eq_vars = {}
+        self._eq_vars: dict[int, tuple[tk.DoubleVar, str, int]] = {}
         for i, (name, ftype, freq, tip) in enumerate(EQ_BANDS):
             row = tk.Frame(lf)
             row.pack(fill="x", pady=px(2))
@@ -257,14 +280,12 @@ class AudioDynamicsTab(BaseTab):
             sl.pack(side="left", padx=px(6))
             lbl = tk.Label(row, text=t("dynamics.0_0_db"), width=8, fg=CLR["accent"])
             lbl.pack(side="left")
-            var.trace_add(
-                "write", lambda *_, label=lbl, v=var: label.config(text=f"{v.get():.1f} dB")
-            )
+            on_write(var, partial(_show_value, lbl, var, "{:.1f} dB"))
             tk.Label(row, text=tip, fg=CLR["fgdim"], font=(UI_FONT, 7)).pack(
                 side="left", padx=px(6)
             )
 
-    def _build_compressor(self, parent):
+    def _build_compressor(self, parent: tk.Misc) -> None:
         lf = self._stage_frame(parent, "🗜  3. Compressor", "comp_on")
         self._slider_row(lf, "Threshold (dB):", "comp_thresh", -60, 0, -18, 0.5, " dB")
         self._slider_row(lf, "Ratio:", "comp_ratio", 1, 20, 3, 0.5, ":1")
@@ -278,7 +299,7 @@ class AudioDynamicsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-    def _build_deesser(self, parent):
+    def _build_deesser(self, parent: tk.Misc) -> None:
         lf = self._stage_frame(parent, "🐍  4. De-esser", "deess_on")
         self._slider_row(lf, "Frequency (Hz):", "deess_freq", 2000, 16000, 6000, 100, " Hz")
         self._slider_row(lf, "Threshold:", "deess_thresh", 0, 1, 0.1, 0.01, "")
@@ -289,7 +310,7 @@ class AudioDynamicsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-    def _build_limiter(self, parent):
+    def _build_limiter(self, parent: tk.Misc) -> None:
         lf = self._stage_frame(parent, "🔔  5. Limiter", "limit_on")
         self._slider_row(lf, "Ceiling (dBFS):", "limit_thresh", -12, 0, -1, 0.1, " dBFS")
         tk.Label(
@@ -300,25 +321,25 @@ class AudioDynamicsTab(BaseTab):
         ).pack(anchor="w")
 
     # ── Preset ────────────────────────────────────────────────────────────
-    def _apply_preset(self, *_):
+    def _apply_preset(self, *_: object) -> None:
         p = VOICE_PRESETS.get(self.preset_var.get())
         if not p:
             return
-        self.controls["gate_thresh"].set(p["gate_thresh"])
-        self.controls["gate_ratio"].set(p["gate_ratio"])
-        self.controls["comp_thresh"].set(p["comp_thresh"])
-        self.controls["comp_ratio"].set(p["comp_ratio"])
-        self.controls["comp_attack"].set(p["comp_attack"])
-        self.controls["comp_release"].set(p["comp_release"])
-        self.controls["limit_thresh"].set(p["limit_thresh"])
-        for i, gain in enumerate(p["eq"]):
+        self.controls["gate_thresh"].set(p.gate_thresh)
+        self.controls["gate_ratio"].set(p.gate_ratio)
+        self.controls["comp_thresh"].set(p.comp_thresh)
+        self.controls["comp_ratio"].set(p.comp_ratio)
+        self.controls["comp_attack"].set(p.comp_attack)
+        self.controls["comp_release"].set(p.comp_release)
+        self.controls["limit_thresh"].set(p.limit_thresh)
+        for i, gain in enumerate(p.eq):
             if i < len(EQ_BANDS):
                 self._eq_vars[i][0].set(gain[1])
         self._update_filter_preview()
 
     # ── Filter string ─────────────────────────────────────────────────────
     def _build_filter(self) -> str:
-        c = self.controls
+        c, on = self.controls, self.switches
         eq = [
             (ftype, freq, max(-24.0, min(24.0, float(var.get()))))
             for var, ftype, freq in self._eq_vars.values()
@@ -330,9 +351,9 @@ class AudioDynamicsTab(BaseTab):
                 c["gate_attack"].get(),
                 c["gate_release"].get(),
             )
-            if c["gate_on"].get()
+            if on["gate_on"].get()
             else None,
-            eq=eq if c["eq_on"].get() else [],
+            eq=eq if on["eq_on"].get() else [],
             compressor=dyn.Compressor(
                 c["comp_thresh"].get(),
                 c["comp_ratio"].get(),
@@ -340,23 +361,23 @@ class AudioDynamicsTab(BaseTab):
                 c["comp_release"].get(),
                 c["comp_makeup"].get(),
             )
-            if c["comp_on"].get()
+            if on["comp_on"].get()
             else None,
             deesser=(float(c["deess_freq"].get()), float(c["deess_thresh"].get()))
-            if c["deess_on"].get()
+            if on["deess_on"].get()
             else None,
-            limit=c["limit_thresh"].get() if c["limit_on"].get() else None,
+            limit=c["limit_thresh"].get() if on["limit_on"].get() else None,
             sample_rate=getattr(self, "_sample_rate", 0) or 48000,
         )
         return dyn.dynamics_filter(spec)
 
-    def _update_filter_preview(self):
+    def _update_filter_preview(self) -> None:
         filt = self._build_filter()
         short = filt[:180] + "…" if len(filt) > 180 else filt
         self.filter_preview.config(text=f"Filter chain:  {short}")
 
     # ─────────────────────────────────────────────────────────────────────
-    def _browse(self):
+    def _browse(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[
                 ("Media", "*.mp4 *.mov *.mkv *.avi *.mp3 *.wav *.aac *.flac"),
@@ -370,7 +391,7 @@ class AudioDynamicsTab(BaseTab):
             self.out_var.set(base + "_dynamics.mp4")
         self._update_filter_preview()
 
-    def _preview(self):
+    def _preview(self) -> None:
         """Listen to 12 seconds with the chain applied (in-app, no files left behind)."""
         from tabs import common
 
@@ -378,7 +399,7 @@ class AudioDynamicsTab(BaseTab):
         self._probe_rate(src)
         common.preview_audio(self, src, self._build_filter())
 
-    def _probe_rate(self, src):
+    def _probe_rate(self, src: str) -> MediaInfo | None:
         from core import ffmpeg as ff
 
         info = ff.try_probe(src) if src else None
@@ -387,7 +408,7 @@ class AudioDynamicsTab(BaseTab):
         )
         return info
 
-    def _render(self):
+    def _render(self) -> None:
         from tabs import common
 
         src = self.src_var.get().strip()

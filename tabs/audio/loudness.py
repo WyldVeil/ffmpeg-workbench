@@ -13,6 +13,7 @@ from __future__ import annotations
 import tkinter as tk
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core import loudness as ln
@@ -24,14 +25,17 @@ from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, save_section, scroll_body
 
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
+
 
 class LoudnessNormTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.loudness_normalizer"), t("loudness.subtitle"), icon="📢")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -93,14 +97,14 @@ class LoudnessNormTab(BaseTab):
         self.btn_render.pack(side="left", padx=px(6))
         self.console = self.make_console_block(body, height=6)
 
-    def _preset(self):
+    def _preset(self) -> None:
         key = next((k for k, v in ln.TARGETS.items() if v[0] == self.preset_var.get()), "youtube")
         _l, i, tp, lra = ln.TARGETS[key]
         self.i_var.set(f"{i:g}")
         self.tp_var.set(f"{tp:g}")
         self.lra_var.set(f"{lra:g}")
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         info = ff.try_probe(path)
         tracks = (
             [
@@ -116,18 +120,18 @@ class LoudnessNormTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "normalised"))
 
-    def _targets(self):
+    def _targets(self) -> tuple[float, float, float]:
         return (
             common.number(self.i_var.get(), "Loudness", -70, -5),
             common.number(self.tp_var.get(), "True peak", -9, 0),
             common.number(self.lra_var.get(), "Range", 1, 50),
         )
 
-    def _stream(self):
+    def _stream(self) -> int:
         values = list(self.track_box.cget("values"))
         return values.index(self.track_var.get()) if self.track_var.get() in values else 0
 
-    def _analyse(self):
+    def _analyse(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:
@@ -135,14 +139,14 @@ class LoudnessNormTab(BaseTab):
         stream = self._stream()
         self.btn_analyse.config(state="disabled", text="Measuring…")
 
-        def done(m):
+        def done(m: ln.Measurement) -> None:
             self.btn_analyse.config(state="normal", text="📏  ANALYSE")
             self.report.config(
                 text=f"Integrated {m.input_i:.1f} LUFS   ·   true peak {m.input_tp:.1f} dBTP   ·   "
                 f"range {m.input_lra:.1f} LU"
             )
 
-        def failed(exc):
+        def failed(exc: BaseException) -> None:
             self.btn_analyse.config(state="normal", text="📏  ANALYSE")
             messagebox.showerror(t("common.error"), f"Measurement failed:\n{exc}", parent=self)
 
@@ -153,7 +157,7 @@ class LoudnessNormTab(BaseTab):
             name="LoudnessMeasure",
         )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:
@@ -174,7 +178,7 @@ class LoudnessNormTab(BaseTab):
         dur = info.duration or None
         result = {}
 
-        def work(_p, _c, ctx):
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
             ctx.log("Pass 1 of 2: measuring…")
             m = ln.measure(src, i, tp, lra, stream=stream, ctx=ctx.span(0.0, 0.45))
             result["before"] = m

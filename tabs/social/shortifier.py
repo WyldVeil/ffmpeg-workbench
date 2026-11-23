@@ -19,6 +19,7 @@ from core.ops.shortifier import ANCHORS, PLATFORMS, reframe_graph
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
@@ -41,14 +42,14 @@ def platform_label(key: str) -> str:
 
 
 class ShortifierTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.the_shortifier"),
@@ -65,7 +66,7 @@ class ShortifierTab(BaseTab):
         self._build_format(body)
         self._build_output(body)
 
-    def _build_format(self, body):
+    def _build_format(self, body: tk.Frame) -> None:
         """Platform, layout, framing and length."""
         opt = tk.LabelFrame(body, text="  Format  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -136,9 +137,9 @@ class ShortifierTab(BaseTab):
             pady=2,
         )
         for var in (self.cw_var, self.ch_var):
-            var.trace_add("write", lambda *_a: self._changed())
+            on_write(var, lambda: self._changed())
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Encoder, where the result goes, the button and the log."""
         self.encoder, self.out_row = output_section(
             body,
@@ -151,12 +152,12 @@ class ShortifierTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _key(self):
+    def _key(self) -> str:
         return next(
             (k for k in PLATFORMS if platform_label(k) == self.platform_var.get()), "shorts"
         )
 
-    def size(self):
+    def size(self) -> tuple[int, int]:
         key = self._key()
         if key == "custom":
             w = int(common.number(self.cw_var.get(), "Width", 16, 8192))
@@ -164,7 +165,7 @@ class ShortifierTab(BaseTab):
             return w // 2 * 2, h // 2 * 2
         return PLATFORMS[key][1], PLATFORMS[key][2]
 
-    def graph(self):
+    def graph(self) -> str:
         tw, th = self.size()
         mode = next((k for k, v in BACKGROUNDS.items() if v == self.bg_var.get()), "blur")
         anchor = next((k for k, v in ANCHORS.items() if v[0] == self.anchor_var.get()), "center")
@@ -175,19 +176,19 @@ class ShortifierTab(BaseTab):
         self.bg_var.set(BACKGROUNDS["colour"])
         self._changed()
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.compare.load(path)
         self._changed()
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, self._key()))
 
-    def _changed(self):
+    def _changed(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(200, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         try:
             g = self.graph()
@@ -196,7 +197,7 @@ class ShortifierTab(BaseTab):
         # the preview takes a -vf chain: drop the [0:v] / [v] labels
         self.compare.set_filter(g.replace("[0:v]", "").replace("[v]", ""))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

@@ -31,6 +31,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, BaseTab
+from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, output_section, scroll_body
 
 ORDERS = {
@@ -47,19 +48,19 @@ SIZES = {
 
 
 class BeatSyncCutterTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.clips: list = []
-        self.beats: list = []
+        self.clips: list[tuple[str, float]] = []
+        self.beats: list[float] = []
         self._music_dur = 0.0
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, cl = self._build_header()
         self._build_output(body, cl)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self, t("tab.beat_sync_cutter"), "Music montages that cut on the beat.", icon="🥁"
         )
@@ -123,7 +124,7 @@ class BeatSyncCutterTab(BaseTab):
         cl.pack(fill="x", padx=px(20), pady=px(4))
         return body, cl
 
-    def _build_output(self, body, cl):
+    def _build_output(self, body: tk.Frame, cl: tk.LabelFrame) -> None:
         top = tk.Frame(cl)
         top.pack(fill="x")
         self.listbox = tk.Listbox(top, height=6)
@@ -164,13 +165,13 @@ class BeatSyncCutterTab(BaseTab):
         self.btn_render = self.make_render_btn(body, "🥁  BUILD MONTAGE", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
-        self._onset = None
-        self._period = None
-        self._job = None
+        self._onset: list[float] | None = None
+        self._period: float | None = None
+        self._job: str | None = None
 
     # ── clips ────────────────────────────────────────────────────────────────
 
-    def _add(self):
+    def _add(self) -> None:
         for p in self.pick_sources("video"):
             info = ff.try_probe(p)
             if info is not None and info.has_video and info.duration > 0.2:
@@ -179,17 +180,17 @@ class BeatSyncCutterTab(BaseTab):
                     "end", f"{os.path.basename(p)}   ({ff.format_time(info.duration)})"
                 )
 
-    def _remove(self):
-        sel = self.listbox.curselection()
+    def _remove(self) -> None:
+        sel = selected_rows(self.listbox)
         if sel:
             del self.clips[sel[0]]
             self.listbox.delete(sel[0])
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.clips.clear()
         self.listbox.delete(0, "end")
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         info = ff.try_probe(path)
         if info is None:
             return False
@@ -204,12 +205,12 @@ class BeatSyncCutterTab(BaseTab):
 
     # ── analysis ─────────────────────────────────────────────────────────────
 
-    def _schedule(self):
+    def _schedule(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._pick_beats)
 
-    def _analyse(self):
+    def _analyse(self) -> None:
         path = self.music_row.path
         info = ff.try_probe(path) if path else None
         if info is None or not info.has_audio:
@@ -218,20 +219,20 @@ class BeatSyncCutterTab(BaseTab):
         self._music_dur = info.duration
         self.bpm_lbl.config(text="Listening for the beat…")
 
-        def work():
+        def work() -> tuple[list[float], float]:
             on = onset_strength(envelope(path))
             return on, estimate_tempo(on)
 
-        def done(res):
+        def done(res: tuple[list[float], float]) -> None:
             self._onset, self._period = res
             self._pick_beats()
 
-        def failed(exc):
+        def failed(exc: BaseException) -> None:
             self.bpm_lbl.config(text=f"Beat detection failed: {exc}")
 
         tasks.submit(work, on_done=done, on_error=failed, name="BeatDetect")
 
-    def _pick_beats(self):
+    def _pick_beats(self) -> None:
         self._job = None
         if self._onset is None or self._period is None:
             return
@@ -244,7 +245,7 @@ class BeatSyncCutterTab(BaseTab):
             self.bpm_lbl.config(text=f"{len(self.beats)} hits")
         self._draw()
 
-    def _draw(self):
+    def _draw(self) -> None:
         c = self.canvas
         c.delete("all")
         w, h = max(c.winfo_width(), px(100)), int(c.cget("height"))
@@ -263,7 +264,7 @@ class BeatSyncCutterTab(BaseTab):
                 x, 0, x, h, fill=CLR["accent"] if i % every == 0 else "#444444", width=px(1)
             )
 
-    def _save_beats(self):
+    def _save_beats(self) -> None:
         if not self.beats:
             return
         from tabs.kit import dialogs
@@ -276,7 +277,7 @@ class BeatSyncCutterTab(BaseTab):
 
     # ── render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         music = self.music_row.path
         minfo = common.check_source(self, music, need_video=False, what="Music")
         if minfo is None:

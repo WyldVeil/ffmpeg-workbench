@@ -34,12 +34,12 @@ def test_drop_event_with_spaces_and_uri(ui, media):
     app.show_page("Crossfader")
     tab = app.page(ToolId.CROSSFADER)
     for r in tab.clip_rows:
-        r["var"].set("")
-        r["clip"] = None
+        r.var.set("")
+        r.clip = None
     data = "{{{}}} file://{}".format(media["nasty"], media["h264_b"])
     app.files._dropped(types.SimpleNamespace(data=data, action="copy"))
     ui.pump(0.3)
-    paths = [r["var"].get() for r in tab.clip_rows if r["var"].get()]
+    paths = [r.var.get() for r in tab.clip_rows if r.var.get()]
     assert paths == [media["nasty"], media["h264_b"]]
 
 

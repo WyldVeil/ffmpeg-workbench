@@ -49,21 +49,21 @@ def _inspect(path: str) -> tuple[ff.MediaInfo | None, hdr.HdrInfo]:
 
 
 class HdrToSdrTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._inspecting: str | None = None  # the file being read in the background
         self._hdr = hdr.HdrInfo()
-        self._job = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, known, opt = self._build_header()
         self._build_gpu_note(known, opt)
         self._build_output(body, opt)
         self._build_console(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, bool, tk.LabelFrame]:
         self.make_header(
             self,
             "HDR to SDR",
@@ -102,7 +102,7 @@ class HdrToSdrTab(BaseTab):
         )
         return body, known, opt
 
-    def _build_gpu_note(self, known, opt):
+    def _build_gpu_note(self, known: bool | None, opt: tk.LabelFrame) -> None:
         self.gpu_radio.grid(row=0, column=0, columnspan=2, sticky="w")
         tk.Radiobutton(
             opt,
@@ -138,7 +138,7 @@ class HdrToSdrTab(BaseTab):
         self.adaptive_cb.grid(row=3, column=0, columnspan=2, sticky="w", pady=px(4, 0))
         self.assume_var = tk.StringVar(value=ASSUME[""])
 
-    def _build_output(self, body, opt):
+    def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         ab = ttk.Combobox(
             opt,
             textvariable=self.assume_var,
@@ -163,7 +163,7 @@ class HdrToSdrTab(BaseTab):
         self.btn_render = self.make_render_btn(body, "🌗  CONVERT TO SDR", self._render, width=24)
         self.btn_render.pack(pady=px(8))
 
-    def _build_console(self, body):
+    def _build_console(self, body: tk.Frame) -> None:
         self.console = self.make_console_block(body, height=5)
         self._changed()
 
@@ -176,7 +176,7 @@ class HdrToSdrTab(BaseTab):
         self._changed()
 
     # ── State ─────────────────────────────────────────────────────────
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         self.src_row.set(path)
         self._source_changed(path)
         return True
@@ -199,7 +199,7 @@ class HdrToSdrTab(BaseTab):
             assume=self._assume(),
         )
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info, self._hdr, self._inspecting = (
             None,
             hdr.HdrInfo(),
@@ -241,13 +241,13 @@ class HdrToSdrTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "sdr", ".mp4"))
         self._changed()
 
-    def _changed(self):
+    def _changed(self) -> None:
         self.adaptive_cb.config(state="normal" if self._gpu() else "disabled")
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         if self._hdr.is_hdr or self._assume():
             self.compare.set_filter(self.chain())
@@ -255,7 +255,7 @@ class HdrToSdrTab(BaseTab):
             self.compare.set_filter("")
 
     # ── Render ────────────────────────────────────────────────────────
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         if self._inspecting:
             messagebox.showinfo(

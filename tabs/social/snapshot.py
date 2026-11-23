@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from collections.abc import Mapping
 from functools import partial
 from tkinter import ttk
+from typing import TypeVar
 
 from core import ffmpeg as ff
 from core import filters as fl
@@ -31,12 +33,15 @@ from core import proc as _proc
 from core import tasks
 from core.hardware import reveal_file
 from core.i18n import t
-from core.ops.snapshot import Picture, build_chain, frame_name, out_size, sar, save_command
+from core.ops.snapshot import Box, Picture, build_chain, frame_name, out_size, sar, save_command
 from core.procenv import child_env
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, add_tooltip
+from tabs.kit.tktyped import set_scale
 from tabs.widgets import FileRow, FramePreview, scroll_body
+
+K = TypeVar("K")
 
 SIZES = {"own": "The video's own size", "half": "Half size", "double": "Double size (upscaled)"}
 SHARPEN = {0.0: "Off", 0.3: "Subtle", 0.6: "Medium", 0.9: "Strong"}
@@ -45,23 +50,23 @@ LOOK = {"sharpen": 0.0, "denoise": 0, "brightness": 0.0, "contrast": 1.0, "satur
 
 
 class SnapshotTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self._info: ff.MediaInfo | None = None
         self._fps = framestep.DEFAULT_FPS
-        self._bars = None
-        self._job = None
+        self._bars: Box | tuple[()] | None = None  # None: not measured yet; (): no bars
+        self._job: str | None = None
         self._last_dir = ""
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, row = self._build_header()
         adj, pic = self._build_picture(body, row)
         self._build_sharpen(adj, body, pic)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.Frame]:
         self.make_header(
             self,
             t("tab.snapshot"),
@@ -78,7 +83,7 @@ class SnapshotTab(BaseTab):
 
         views = tk.Frame(body)
         views.pack(pady=px(6, 0))
-        self.views = []
+        self.views: list[FramePreview] = []
         for label in ("In the video", "Your screenshot"):
             col = tk.Frame(views)
             col.pack(side="left", padx=px(6))
@@ -86,7 +91,7 @@ class SnapshotTab(BaseTab):
             view = FramePreview(col, 460, 259, show_time=False)
             view.pack()
             self.views.append(view)
-        self.view_frame, self.view_shot = self.views
+        self.view_frame, self.view_shot = self.views[0], self.views[1]
         # The picture is drawn on the page colour with an outline, so its real
         # shape shows (a cropped or tall picture on black looked letterboxed)
         self.view_shot.canvas.configure(bg=CLR["bg"])
@@ -125,7 +130,7 @@ class SnapshotTab(BaseTab):
         self.goto_var = tk.StringVar()
         return body, row
 
-    def _build_picture(self, body, row):
+    def _build_picture(self, body: tk.Frame, row: tk.Frame) -> tuple[tk.Frame, tk.LabelFrame]:
         goto = tk.Entry(row, textvariable=self.goto_var, width=13, relief="flat")
         goto.pack(side="left")
         goto.bind("<Return>", lambda _e: self._goto())
@@ -175,7 +180,7 @@ class SnapshotTab(BaseTab):
                 "Keeps every shade of 10-bit and HDR video (bigger file)",
             ),
         )
-        self._checks = {}
+        self._checks: dict[str, tk.Checkbutton] = {}
         grid = tk.Frame(pic)
         grid.pack(fill="x")
         for i, (var, text, tip) in enumerate(checks):
@@ -189,7 +194,7 @@ class SnapshotTab(BaseTab):
         self.size_var = tk.StringVar(value=SIZES["own"])
         return adj, pic
 
-    def _build_sharpen(self, adj, body, pic):
+    def _build_sharpen(self, adj: tk.Frame, body: tk.Frame, pic: tk.LabelFrame) -> None:
         self.sharpen_var = tk.StringVar(value=SHARPEN[0.0])
         self.denoise_var = tk.StringVar(value=DENOISE[0])
         for label, var, values, width in (
@@ -248,7 +253,7 @@ class SnapshotTab(BaseTab):
     def _loaded_from_row(self, path: str) -> None:
         self.load_file(path)
 
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         info = ff.try_probe(path) if path else None
         if info is None or not info.has_video or info.is_image:
             if path:
@@ -283,12 +288,12 @@ class SnapshotTab(BaseTab):
         self._focus_slider()
         return True
 
-    def _focus_slider(self):
+    def _focus_slider(self) -> None:
         """Keyboard to the slider, so , and . step frames straight away."""
         self.slider.focus_set()
         framestep.touch(self.slider)
 
-    def _outline_shot(self):
+    def _outline_shot(self) -> None:
         c = self.view_shot.canvas
         c.delete("edge")
         box = self.view_shot.image_box()
@@ -305,7 +310,7 @@ class SnapshotTab(BaseTab):
         FFmpeg's "first frame at or after" always lands on that frame."""
         return max(0.0, t_ - 0.5 / self._fps)
 
-    def _moved(self):
+    def _moved(self) -> None:
         if self._info is None:
             return
         n = self._frame()
@@ -314,7 +319,7 @@ class SnapshotTab(BaseTab):
         for view in self.views:
             view.show(self._seek(at))
 
-    def _goto(self):
+    def _goto(self) -> None:
         text = self.goto_var.get().strip()
         if not text or self._info is None:
             return
@@ -327,11 +332,13 @@ class SnapshotTab(BaseTab):
         except ValueError:
             self.goto_var.set("")
             return
-        self.slider.set(min(float(self.slider.cget("to")), max(0.0, framestep.snap(at, self._fps))))
+        set_scale(
+            self.slider, min(float(self.slider.cget("to")), max(0.0, framestep.snap(at, self._fps)))
+        )
         framestep.touch(self.slider)
 
     # ── Picture ───────────────────────────────────────────────────────
-    def _reset_look(self):
+    def _reset_look(self) -> None:
         self.brightness_var.set(0.0)
         self.contrast_var.set(1.0)
         self.saturation_var.set(1.0)
@@ -339,7 +346,7 @@ class SnapshotTab(BaseTab):
         self.denoise_var.set(DENOISE[0])
         self._options_changed()
 
-    def _key(self, table: dict, var: tk.StringVar):
+    def _key(self, table: Mapping[K, str], var: tk.StringVar) -> K:
         return next((k for k, v in table.items() if v == var.get()), next(iter(table)))
 
     def chain(self) -> str:
@@ -351,7 +358,7 @@ class SnapshotTab(BaseTab):
             square_pixels=self.square_var.get(),
             tonemap=self.tonemap_var.get(),
             deinterlace=self.deint_var.get(),
-            crop=self._bars if self.crop_var.get() else None,
+            crop=(self._bars or None) if self.crop_var.get() else None,
             size=self._key(SIZES, self.size_var),
             sharpen=self._key(SHARPEN, self.sharpen_var),
             denoise=self._key(DENOISE, self.denoise_var),
@@ -363,7 +370,7 @@ class SnapshotTab(BaseTab):
         )
         return build_chain(info, pic)
 
-    def _options_changed(self):
+    def _options_changed(self) -> None:
         if self._info is None:
             return
         if self.crop_var.get() and self._bars is None:
@@ -373,7 +380,7 @@ class SnapshotTab(BaseTab):
             self.after_cancel(self._job)
         self._job = self.after(200, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         if self._info is None:
             return
@@ -387,7 +394,7 @@ class SnapshotTab(BaseTab):
         bits = "16-bit" if self.deep_var.get() else "8-bit"
         self.size_lbl.config(text=f"{w}×{h} PNG, {bits}")
 
-    def _detect_bars(self):
+    def _detect_bars(self) -> None:
         from core.ops.auto_cropper import detect_bars
 
         path, info = self.file_path, self._info
@@ -395,7 +402,7 @@ class SnapshotTab(BaseTab):
             return
         v = info.video
 
-        def done(box):
+        def done(box: Box | None) -> None:
             if path != self.file_path:
                 return
             self._bars = box if box and (box[2], box[3]) != (v.width, v.height) else ()
@@ -410,7 +417,7 @@ class SnapshotTab(BaseTab):
         )
 
     # ── Saving ────────────────────────────────────────────────────────
-    def _save_as(self):
+    def _save_as(self) -> None:
         if self._info is None:
             self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
             return
@@ -428,7 +435,7 @@ class SnapshotTab(BaseTab):
         if out:
             self._save(out)
 
-    def _quick_save(self):
+    def _quick_save(self) -> None:
         if self._info is None:
             self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
             return
@@ -442,7 +449,7 @@ class SnapshotTab(BaseTab):
             n += 1
         self._save(out)
 
-    def _save(self, out: str):
+    def _save(self, out: str) -> None:
         if not out.lower().endswith(".png"):
             out += ".png"
         at = self._frame() / self._fps
@@ -450,13 +457,13 @@ class SnapshotTab(BaseTab):
         self.result_lbl.config(text="Saving…", fg=CLR["fgdim"])
         self.btn_render.config(state="disabled")
 
-        def work():
+        def work() -> str:
             r = _proc.run(cmd, timeout=180, env=child_env())
             if r.returncode != 0 or not os.path.isfile(out):
                 raise RuntimeError((r.stderr or "FFmpeg failed").strip().splitlines()[-1][:200])
             return out
 
-        def done(path):
+        def done(path: str) -> None:
             self.btn_render.config(state="normal")
             self._last_dir = os.path.dirname(path)
             self._saved = path
@@ -466,12 +473,12 @@ class SnapshotTab(BaseTab):
                 fg=CLR["green"],
             )
 
-        def failed(exc):
+        def failed(exc: BaseException) -> None:
             self.btn_render.config(state="normal")
             self.result_lbl.config(text=f"Couldn't save: {exc}", fg=CLR["red"])
 
         tasks.submit(work, on_done=done, on_error=failed, name="Snapshot")
 
-    def _reveal(self):
+    def _reveal(self) -> None:
         if self._saved and os.path.isfile(self._saved):
             reveal_file(self._saved)

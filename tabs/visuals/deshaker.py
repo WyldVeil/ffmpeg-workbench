@@ -30,16 +30,16 @@ EDGE_MODES = {"Keep previous frame at edges": "keep", "Black edges": "black"}
 
 
 class DeshakerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opts = self._build_header()
         self._build_output(body, opts)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(self, t("tab.deshaker"), t("deshaker.subtitle"), icon="🎥")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -52,7 +52,7 @@ class DeshakerTab(BaseTab):
         )
         opts.pack(fill="x", padx=px(20), pady=px(6))
 
-        def scale(row, label, var, lo, hi, hint=""):
+        def scale(row: int, label: str, var: tk.IntVar, lo: int, hi: int, hint: str = "") -> None:
             self.form_row(
                 opts,
                 row,
@@ -115,7 +115,7 @@ class DeshakerTab(BaseTab):
         )
         return body, opts
 
-    def _build_output(self, body, opts):
+    def _build_output(self, body: tk.Frame, opts: tk.LabelFrame) -> None:
         self.zoom_var = tk.StringVar(value="0")
         self.form_row(
             opts,
@@ -172,11 +172,11 @@ class DeshakerTab(BaseTab):
         self.status_lbl.pack()
         self.console = self.make_console_block(body, height=7)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "stabilised"))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -221,7 +221,7 @@ class DeshakerTab(BaseTab):
             duration=duration,
         )
 
-        def on_start(_tid):
+        def on_start(_tid: str) -> None:
             self.status_lbl.config(
                 text="Stabilising… (analysis pass first)" if two_pass else "Stabilising…"
             )

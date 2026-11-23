@@ -338,7 +338,7 @@ class Recording:
         *,
         on_exit: Callable[[Recording, int], object] | None = None,
         seconds: int | None = None,
-    ):
+    ) -> None:
         self.cmd, self.out, self.on_exit = cmd, out, on_exit
         self.tail: deque[str] = deque(maxlen=60)
         self.started = time.monotonic()

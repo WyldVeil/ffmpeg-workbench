@@ -22,6 +22,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar, selected_rows
 from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.transcoder.proxy")
@@ -43,18 +44,17 @@ VIDEO_EXTS = (
 
 
 class ProxyGenTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.file_paths = []
+        self.file_paths: list[str] = []
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.proxy_generator"), t("proxy.subtitle"), icon="⚙")
         lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(10), pady=px(6))
         lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
         self.listbox = tk.Listbox(lf, height=7, font=(MONO_FONT, 10), selectmode="extended")
-        sb = ttk.Scrollbar(lf, command=self.listbox.yview)
-        self.listbox.config(yscrollcommand=sb.set)
+        sb = linked_scrollbar(lf, self.listbox)
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         bf = tk.Frame(self)
@@ -70,7 +70,7 @@ class ProxyGenTab(BaseTab):
             )
         self._build_options()
 
-    def _build_options(self):
+    def _build_options(self) -> None:
         """Proxy format, size, sound and where the proxies go."""
         opt = tk.LabelFrame(
             self, text=f"  {t('proxy.proxy_options_section')}  ", padx=px(15), pady=px(8)
@@ -134,17 +134,17 @@ class ProxyGenTab(BaseTab):
         self.btn_render.pack(pady=px(10))
         self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4))
 
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         if os.path.isfile(path) and path not in self.file_paths:
             self.file_paths.append(path)
             self.listbox.insert(tk.END, f"  {os.path.basename(path)}")
         return True
 
-    def _add(self):
+    def _add(self) -> None:
         for p in dialogs.ask_open_many("video", title="Add camera files", parent=self):
             self.load_file(p)
 
-    def _add_folder(self):
+    def _add_folder(self) -> None:
         folder = dialogs.ask_directory(parent=self)
         if not folder:
             return
@@ -157,12 +157,12 @@ class ProxyGenTab(BaseTab):
             ):
                 self.load_file(path)
 
-    def _remove(self):
-        for i in reversed(self.listbox.curselection()):
+    def _remove(self) -> None:
+        for i in reversed(selected_rows(self.listbox)):
             self.file_paths.pop(i)
             self.listbox.delete(i)
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.file_paths.clear()
         self.listbox.delete(0, tk.END)
 
@@ -183,7 +183,7 @@ class ProxyGenTab(BaseTab):
             )
         return os.path.join(os.path.dirname(src), base + suffix + ext)
 
-    def _render(self):
+    def _render(self) -> None:
         if not self.file_paths:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
@@ -193,7 +193,8 @@ class ProxyGenTab(BaseTab):
         size_key = next((k for k, v in px_ops.SIZES.items() if v[0] == self.size_var.get()), "half")
         ext = px_ops.PRESETS[preset][1]
         sources = {os.path.normcase(os.path.abspath(p)) for p in self.file_paths}
-        jobs, taken = [], set()
+        jobs: list[tuple[str, str]] = []
+        taken: set[str] = set()
         try:
             for src in self.file_paths:
                 out = free_name(self._target(src, ext), taken | sources)

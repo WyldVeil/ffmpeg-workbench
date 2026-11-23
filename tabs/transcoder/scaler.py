@@ -31,6 +31,7 @@ from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab
+from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, output_section, scroll_body
 
 SIZES = [
@@ -65,12 +66,12 @@ METHODS.update({key: "Upscale: " + spec[0] for key, spec in upscale.SHADERS.item
 
 
 class ResolutionScalerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.resolution_scaler"), t("scaler.subtitle"), icon="📐")
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_video"), on_change=self._source_changed)
@@ -81,7 +82,7 @@ class ResolutionScalerTab(BaseTab):
         self._build_size_options(body)
         self._build_output(body)
 
-    def _build_size_options(self, body):
+    def _build_size_options(self, body: tk.Frame) -> None:
         """Size, shape, method and sharpening."""
         opt = tk.LabelFrame(
             body, text=f"  {t('scaler.scale_options_section')}  ", padx=px(12), pady=px(8)
@@ -122,7 +123,7 @@ class ResolutionScalerTab(BaseTab):
             label_width=10,
         )
         self.method_var = tk.StringVar(value=METHODS["auto"])
-        have = set(upscale.available()) if fl.vulkan_ok() else set()
+        have: set[str] = set(upscale.available()) if fl.vulkan_ok() else set()
         methods = [
             v
             for k, v in METHODS.items()
@@ -157,9 +158,9 @@ class ResolutionScalerTab(BaseTab):
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
         self.result_lbl.grid(row=4, column=0, columnspan=5, sticky="w", pady=px(4, 0))
         for v in (self.size_var, self.shape_var, self.w_var, self.h_var):
-            v.trace_add("write", lambda *_a: self._update())
+            on_write(v, lambda: self._update())
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Encoder, where the result goes, the button and the log."""
         self.encoder, self.out_row = output_section(
             body,
@@ -172,7 +173,7 @@ class ResolutionScalerTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
 
-    def _box(self, info) -> tuple:
+    def _box(self, info: ff.MediaInfo) -> tuple[float, float]:
         label = self.size_var.get()
         _l, a, b = next((s for s in SIZES if s[0] == label), SIZES[3])
         sw, sh = common.even_size(info)
@@ -186,13 +187,13 @@ class ResolutionScalerTab(BaseTab):
             return sw * f, sh * f
         return (b, a) if sh > sw else (a, b)  # portrait videos turn the preset round
 
-    def _shape(self):
+    def _shape(self) -> str:
         return next((k for k, v in SHAPES.items() if v == self.shape_var.get()), "fit")
 
-    def _method(self):
+    def _method(self) -> str:
         return next((k for k, v in METHODS.items() if v == self.method_var.get()), "auto")
 
-    def _suffix(self):
+    def _suffix(self) -> str:
         info = self._info
         if info is None or not info.has_video:
             return "scaled"
@@ -202,7 +203,7 @@ class ResolutionScalerTab(BaseTab):
         except ValueError:
             return "scaled"
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             w, h = common.even_size(info)
@@ -212,7 +213,7 @@ class ResolutionScalerTab(BaseTab):
         self.out_row.set(self.suggest_output(path, self._suffix()))
         self._update()
 
-    def _update(self):
+    def _update(self) -> None:
         info = self._info
         if info is None or not info.has_video:
             return
@@ -225,7 +226,7 @@ class ResolutionScalerTab(BaseTab):
         verb = "Upscale" if w * h > sw * sh else "Downscale" if w * h < sw * sh else "Same size"
         self.result_lbl.config(text=f"{verb}: {sw}×{sh} → {ow}×{oh}")
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -289,12 +290,12 @@ FPS_METHODS = {
 
 
 class FPSInterpolatorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.framerate_interpolator"),
@@ -310,7 +311,7 @@ class FPSInterpolatorTab(BaseTab):
         self._build_rate_options(body)
         self._build_output(body)
 
-    def _build_rate_options(self, body):
+    def _build_rate_options(self, body: tk.Frame) -> None:
         """The new rate, how frames are made, and slow motion."""
         opt = tk.LabelFrame(body, text="  Frame rate  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
@@ -357,7 +358,7 @@ class FPSInterpolatorTab(BaseTab):
             variable=self.parallel_var,
         ).pack(anchor="w")
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Encoder, where the result goes, the button and the log."""
         self.encoder, self.out_row = output_section(
             body,
@@ -370,7 +371,7 @@ class FPSInterpolatorTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             self.info_lbl.config(
@@ -379,7 +380,7 @@ class FPSInterpolatorTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "interp"))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

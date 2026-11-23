@@ -79,3 +79,18 @@ def dynamics_filter(d: Dynamics) -> str:
             f"alimiter=level_in=1:level_out={_linear(d.limit):.6f}:limit=1:attack=5:release=50"
         )
     return ",".join(parts) if parts else "anull"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class VoicePreset:
+    """A starting point for the Audio Dynamics page: gate, compressor, EQ gains
+    (one (Hz, dB) per band) and limiter."""
+
+    gate_thresh: float
+    gate_ratio: float
+    comp_thresh: float
+    comp_ratio: float
+    comp_attack: float
+    comp_release: float
+    eq: tuple[tuple[int, float], ...]
+    limit_thresh: float

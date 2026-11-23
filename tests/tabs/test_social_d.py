@@ -7,20 +7,20 @@ import pytest
 
 from core import ffmpeg as ff
 from core import grid
-from tabs.social import chapter_markers, collage
+from core.ops import chapters
+from tabs.social import collage
 
 
 def test_chapter_parsing_and_rules():
-    found = chapter_markers.parse_chapter_text("0:00 Intro\n1:02:03.5 - Deep dive\n(12:30) Outro")
+    found = chapters.parse_chapter_text("0:00 Intro\n1:02:03.5 - Deep dive\n(12:30) Outro")
     assert found == [(0.0, "Intro"), (3723.5, "Deep dive"), (750.0, "Outro")]
-    C = chapter_markers.Chapter
-    assert chapter_markers.youtube_issues([C(0, "a"), C(15, "b"), C(30, "c")], 60) == []
+    C = chapters.Chapter
+    assert chapters.youtube_issues([C(0, "a"), C(15, "b"), C(30, "c")], 60) == []
     assert any(
-        "10 seconds" in i
-        for i in chapter_markers.youtube_issues([C(0, "a"), C(5, "b"), C(30, "c")], 60)
+        "10 seconds" in i for i in chapters.youtube_issues([C(0, "a"), C(5, "b"), C(30, "c")], 60)
     )
     assert any(
-        "0:00" in i for i in chapter_markers.youtube_issues([C(3, "a"), C(15, "b"), C(30, "c")], 60)
+        "0:00" in i for i in chapters.youtube_issues([C(3, "a"), C(15, "b"), C(30, "c")], 60)
     )
 
 
@@ -98,7 +98,7 @@ def test_collage(ui, media, outdir, layout, mode):
     tab._clear_all()
     for key in ("h264", "vertical_noaudio", "hevc10", "vp9"):
         tab.load_file(media[key])
-    tab._layout_var.set(collage.LAYOUTS[layout]["label"])
+    tab._layout_var.set(collage.LAYOUTS[layout].label)
     tab._length_var.set(collage.LENGTHS[mode])
     tab._loop_var.set(False)
     tab._audio_mode.set(collage.AUDIO_MODES["mix"])
@@ -108,7 +108,7 @@ def test_collage(ui, media, outdir, layout, mode):
     ui.wait_idle(240)
     _ok(ui)
     info = ff.probe(out, use_cache=False)
-    n = collage.LAYOUTS[layout]["slots"]
+    n = collage.LAYOUTS[layout].slots
     durs = [ff.duration_of(media[k]) for k in ("h264", "vertical_noaudio", "hevc10", "vp9")[:n]]
     assert info.duration == pytest.approx(max(durs) if mode == "longest" else min(durs), abs=0.15)
     assert (info.width, info.height) == (1920, 1080) and info.has_audio
@@ -145,7 +145,7 @@ def test_collage_auto_loops_to_longest(ui, media, outdir):
     keys = ("h264", "h264_b", "vertical_noaudio", "vp9", "hevc10")
     for key in keys:
         tab.load_file(media[key])
-    tab._layout_var.set(collage.LAYOUTS["auto"]["label"])
+    tab._layout_var.set(collage.LAYOUTS["auto"].label)
     tab._length_var.set(collage.LENGTHS["longest"])
     tab._loop_var.set(True)
     tab._mode_var.set("fit")
@@ -219,7 +219,7 @@ def test_collage_end_behaviours(ui, outdir, tmp_path, end, expect_left_after):
     tab._clear_all()
     tab.load_file(red)
     tab.load_file(blue)
-    tab._layout_var.set(collage.LAYOUTS["auto"]["label"])
+    tab._layout_var.set(collage.LAYOUTS["auto"].label)
     tab._length_var.set(collage.LENGTHS["longest"])
     tab._mode_var.set("fit")
     tab._loop_var.set(False)
@@ -281,7 +281,7 @@ def test_collage_odd_custom_canvas(ui, media, outdir):
     tab._clear_all()
     for key in ("vertical_noaudio", "vp9", "h264_1080p25"):  # 1080x1920, 640x360, 1920x1080
         tab.load_file(media[key])
-    tab._layout_var.set(collage.LAYOUTS["auto"]["label"])
+    tab._layout_var.set(collage.LAYOUTS["auto"].label)
     tab._length_var.set(collage.LENGTHS["shortest"])
     tab._mode_var.set("fill")
     tab._out_w.set("1001")

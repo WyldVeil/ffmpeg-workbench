@@ -253,8 +253,8 @@ def test_timeline_handles_step_by_frame(ui, media):
     assert start == pytest.approx(0.1) and end == pytest.approx(tl._duration - 1.0, abs=1 / 30)
     tab._add_row()
     row = tab.split_rows[-1]
-    assert row["start"].get() == "00:00:00.100"  # the new range comes from the timeline
-    assert ff.parse_time(row["end"].get()) == pytest.approx(end, abs=0.001)
+    assert row.start.get() == "00:00:00.100"  # the new range comes from the timeline
+    assert ff.parse_time(row.end.get()) == pytest.approx(end, abs=0.001)
 
 
 @pytest.mark.gui
@@ -348,7 +348,12 @@ def test_i_and_o_use_the_frame_shown(ui, media, tool):
     ui.pump(0.6)
     assert hasattr(tab, "mark_in"), tool
     before = _variables(ui, tab)
-    target = next(w for w in framestep._order if w() is not None and framestep._inside(w(), tab))()
+    alive = [w() for w in framestep._order]
+    target = next(x for x in alive if x is not None and framestep._inside(x, tab))
+    import tkinter as tk
+    from tkinter import ttk
+
+    assert isinstance(target, (tk.Scale, ttk.Scale)), target
     framestep.touch(target)
     start = float(target.get())  # previews start part-way in
     want = framestep.snap(start, 30, 36)  # + 1 s + 6 frames at 30 fps
@@ -362,7 +367,8 @@ def test_i_and_o_use_the_frame_shown(ui, media, tool):
     if tool == "Chapter Markers":
         assert any(abs(c.time - want) < 0.01 for c in tab.chapters), tab.chapters
     elif tool == "Animated Titles":
-        assert ff.parse_time(tab._card()["vars"]["start"].get()) == pytest.approx(want)
+        card = tab._card()
+        assert card is not None and ff.parse_time(card.start.get()) == pytest.approx(want)
     elif tool == "Animated Zoom":
         assert ff.parse_time(tab.vars["p_start"].get()) == pytest.approx(want)
     else:
@@ -397,11 +403,11 @@ def test_splitter_renumbers_clips(ui, media):
     tab.load_file(media["h264"])
     ui.pump(0.3)
     for r in list(tab.split_rows):  # the tab is reused between tests
-        tab._remove_row(r["frame"])
+        tab._remove_row(r.frame)
     for a, b in ((5.0, 5.5), (0.0, 1.0), (2.0, 3.0)):
         tab._timeline.set_range(a, b)
         tab._add_row()
-    tab._remove_row(tab.split_rows[0]["frame"])
-    assert [r["label"].cget("text") for r in tab.split_rows] == ["Clip 1:", "Clip 2:"]
-    assert [r["suffix"].get() for r in tab.split_rows] == ["_clip1", "_clip2"]
-    assert tab.split_rows[0]["start"].get() == "00:00:00.000"
+    tab._remove_row(tab.split_rows[0].frame)
+    assert [r.label.cget("text") for r in tab.split_rows] == ["Clip 1:", "Clip 2:"]
+    assert [r.suffix.get() for r in tab.split_rows] == ["_clip1", "_clip2"]
+    assert tab.split_rows[0].start.get() == "00:00:00.000"

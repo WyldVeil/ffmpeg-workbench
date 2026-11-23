@@ -43,18 +43,18 @@ MODES = {
 
 
 class FrameExtractorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, opts, p = self._build_header()
         self._build_every(opts, p)
         self._build_dir(body, opts)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame, tk.Frame]:
         self.make_header(
             self,
             t("tab.frame_extractor"),
@@ -112,13 +112,13 @@ class FrameExtractorTab(BaseTab):
                 mrow, text=label, value=key, variable=self.mode_var, command=self._mode_changed
             ).pack(side="left", padx=px(6))
 
-        self.panels = {}
+        self.panels: dict[str, tk.Frame] = {}
         p = self.panels["single"] = tk.Frame(opts)
         tk.Label(p, text="Time:").pack(side="left")
         self.moment = MomentPicker(p, value="0", width=14, on_change=self._time_typed)
         return body, opts, p
 
-    def _build_every(self, opts, p):
+    def _build_every(self, opts: tk.LabelFrame, p: tk.Frame) -> None:
         self.moment.pack(side="left", padx=px(6))
         tk.Label(
             p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"], font=(UI_FONT, 8)
@@ -181,7 +181,7 @@ class FrameExtractorTab(BaseTab):
             frow, variable=self.quality_var, from_=1, to=100, orient="horizontal", length=px(160)
         ).pack(side="left")
 
-    def _build_dir(self, body, opts):
+    def _build_dir(self, body: tk.Frame, opts: tk.LabelFrame) -> None:
         self.dir_var = tk.StringVar()
         FolderRow(opts, "Save to folder:", self.dir_var, width=50, label_width=14).pack(
             fill="x", pady=px(6, 0)
@@ -196,12 +196,12 @@ class FrameExtractorTab(BaseTab):
 
     # ── interaction ──────────────────────────────────────────────────────────
 
-    def _mode_changed(self):
+    def _mode_changed(self) -> None:
         for p in self.panels.values():
             p.pack_forget()
         self.panels[self.mode_var.get()].pack(fill="x", pady=px(6, 0))
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -216,14 +216,14 @@ class FrameExtractorTab(BaseTab):
     def _fps(self) -> float:
         return (self._info.require_video().fps if self._info and self._info.video else 0) or 30.0
 
-    def _moved(self):
+    def _moved(self) -> None:
         pos = float(self.pos_var.get())
         self._syncing = True
         self.moment.set(pos)
         self._syncing = False
         self.preview.show(pos)
 
-    def _time_typed(self):
+    def _time_typed(self) -> None:
         if getattr(self, "_syncing", False):
             return
         try:
@@ -237,7 +237,7 @@ class FrameExtractorTab(BaseTab):
 
     # ── render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -265,7 +265,9 @@ class FrameExtractorTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 
-    def _single(self, src, info, folder, base, ext, q):
+    def _single(
+        self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, q: list[str]
+    ) -> None:
         at = self.moment.seconds(0.0, "Time") or 0.0
         at = max(0.0, min(at, max(0.0, info.duration - 1.0 / self._fps())))
         stamp = ff.format_time(at).replace(":", "-")
@@ -284,7 +286,9 @@ class FrameExtractorTab(BaseTab):
             name="Frame Extractor",
         )
 
-    def _interval(self, src, info, folder, base, ext, q):
+    def _interval(
+        self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, q: list[str]
+    ) -> None:
         every = common.number(self.every_var.get(), "Every", 0.01, 3600)
         start, until = self.part.span(info.duration)
         end = info.duration if until is None else until
@@ -304,7 +308,9 @@ class FrameExtractorTab(BaseTab):
             name="Frame Extractor",
         )
 
-    def _scenes(self, src, info, folder, base, ext, q):
+    def _scenes(
+        self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, q: list[str]
+    ) -> None:
         threshold = float(self.scene_var.get())
         min_len = common.number(self.min_scene_var.get() or "0", "Min. scene", 0, 3600)
         out_dir = fresh_folder(folder, f"{base} scenes")
@@ -328,7 +334,9 @@ class FrameExtractorTab(BaseTab):
             console=self.console,
         )
 
-    def _sheet(self, src, info, folder, base, ext, _q):
+    def _sheet(
+        self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, _q: list[str]
+    ) -> None:
         """A contact sheet (the Contact Sheet tool's engine, its default look)."""
         from core.outputs import unique_path
 

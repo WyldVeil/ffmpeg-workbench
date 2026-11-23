@@ -44,14 +44,14 @@ ORDERS = {"auto": "From the file", "tff": "Top field first", "bff": "Bottom fiel
 
 
 class DeinterlaceTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.deinterlace"), "Remove the comb lines from interlaced video.", icon="〰"
         )
@@ -67,7 +67,7 @@ class DeinterlaceTab(BaseTab):
         opt = tk.LabelFrame(body, text="  Deinterlace  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
-        def choice(var, values, width):
+        def choice(var: tk.StringVar, values: list[str], width: int) -> ttk.Combobox:
             cb = ttk.Combobox(opt, textvariable=var, values=values, state="readonly", width=width)
             cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
             return cb
@@ -98,16 +98,16 @@ class DeinterlaceTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _keys(self):
+    def _keys(self) -> tuple[str, str, str]:
         mode = next((k for k, v in MODES.items() if v == self.mode_var.get()), "smart")
         engine = next((k for k, v in ENGINES.items() if v == self.engine_var.get()), "bwdif")
         order = next((k for k, v in ORDERS.items() if v == self.order_var.get()), "auto")
         return mode, engine, order
 
-    def _chain(self):
+    def _chain(self) -> str:
         return deinterlace_chain(*self._keys())
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             fo = info.require_video().field_order or "unknown"
@@ -127,16 +127,16 @@ class DeinterlaceTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "progressive"))
 
-    def _show_filter(self):
+    def _show_filter(self) -> None:
         self._job = None
         self.compare.set_filter(self._chain())
 
-    def _changed(self):
+    def _changed(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._show_filter)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

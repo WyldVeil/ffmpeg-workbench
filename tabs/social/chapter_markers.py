@@ -16,97 +16,32 @@ Features:
   • Validates YouTube's requirements (≥3 chapters, first at 0:00)
 """
 
+from __future__ import annotations
+
 import json
 import os
-import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core.i18n import t
+from core.ops.chapters import Chapter, fmt_srt_tc, fmt_yt, parse_chapter_text, youtube_issues
 from core.scaling import px
 from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar, on_write, set_scale
 from tabs.widgets import scroll_body
 
 
-def _fmt_yt(secs: float) -> str:
-    """Format seconds as M:SS or H:MM:SS for YouTube."""
-    secs = int(secs)
-    h = secs // 3600
-    m = (secs % 3600) // 60
-    s = secs % 60
-    if h:
-        return f"{h}:{m:02d}:{s:02d}"
-    return f"{m}:{s:02d}"
-
-
-def _fmt_srt_tc(secs: float) -> str:
-    """Format seconds as HH:MM:SS,000 for SRT."""
-    h = int(secs) // 3600
-    m = (int(secs) % 3600) // 60
-    s = int(secs) % 60
-    ms = min(999, round((secs - int(secs)) * 1000))
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-
-class Chapter:
-    def __init__(self, time_secs: float, title: str, auto: bool = False):
-        self.time = time_secs
-        self.title = title
-        self.auto = auto  # auto-numbered: renumbered after every change
-
-
-def parse_chapter_text(content: str) -> list:
-    """[(seconds, title)] from SRT/VTT cues or 'H:MM:SS Title' / 'MM:SS - Title' lines."""
-    out = []
-    cue = re.compile(r"(\d+:\d{2}:\d{2}(?:[.,]\d{1,3})?)\s*-->.*\n(.+)")
-    found = cue.findall(content)
-    if found:
-        for tc, title in found:
-            out.append((_parse_tc(tc), re.sub(r"<[^>]+>", "", title).strip()))
-        return out
-    line_re = re.compile(r"^\s*\(?((?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d+)?)\)?\s*[-–—:|]?\s*(.*)$")
-    for line in content.splitlines():
-        m = line_re.match(line)
-        if m and m.group(2).strip():
-            out.append((_parse_tc(m.group(1)), m.group(2).strip()))
-    return out
-
-
-def _parse_tc(tc: str) -> float:
-    from core import ffmpeg as ff
-
-    return ff.parse_time(tc.replace(",", "."))
-
-
-def youtube_issues(chapters, duration: float) -> list:
-    """Why YouTube would reject these chapters (empty list = fine)."""
-    issues = []
-    if len(chapters) < 3:
-        issues.append(f"YouTube needs at least 3 chapters (you have {len(chapters)}).")
-    if chapters and int(chapters[0].time) != 0:
-        issues.append("The first chapter must start at 0:00.")
-    secs = [int(c.time) for c in chapters]
-    if len(set(secs)) != len(secs):
-        issues.append("Two chapters share the same second.")
-    for i, c in enumerate(chapters):
-        end = chapters[i + 1].time if i + 1 < len(chapters) else (duration or c.time + 10)
-        if end - c.time < 10:
-            issues.append(f"'{c.title}' is shorter than 10 seconds.")
-            break
-    return issues
-
-
 class ChapterMarkersTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self._duration = 0.0
         self.chapters: list[Chapter] = []
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body = self._build_header()
         self._build_source_video(body)
         self._build_timeline_scrubber(body)
@@ -115,13 +50,13 @@ class ChapterMarkersTab(BaseTab):
         self._build_preview_pane(body)
         self._build_export(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tk.Frame:
         make_header(self, t("tab.chapter_markers"), t("chapter_markers.subtitle"), icon="📑")
 
         body = scroll_body(self)
         return body
 
-    def _build_source_video(self, body):
+    def _build_source_video(self, body: tk.Frame) -> None:
         """Source video."""
         sf = tk.Frame(body)
         sf.pack(pady=px(10))
@@ -130,14 +65,14 @@ class ChapterMarkersTab(BaseTab):
         tk.Entry(sf, textvariable=self.src_var, width=58, relief="flat").pack(
             side="left", padx=px(8)
         )
-        self.src_var.trace_add("write", lambda *_a: self.after(400, self._src_typed))
+        on_write(self.src_var, lambda: self.after(400, self._src_typed))
         tk.Button(
             sf, text=t("btn.browse"), command=self._browse, cursor="hand2", relief="flat"
         ).pack(side="left")
         self.dur_lbl = tk.Label(sf, text="", fg=CLR["fgdim"])
         self.dur_lbl.pack(side="left", padx=px(8))
 
-    def _build_timeline_scrubber(self, body):
+    def _build_timeline_scrubber(self, body: tk.Frame) -> None:
         """Timeline scrubber."""
         scrub_lf = tk.LabelFrame(
             body, text=f"  {t('chapter_markers.timeline_section')}  ", padx=px(14), pady=px(10)
@@ -185,7 +120,7 @@ class ChapterMarkersTab(BaseTab):
                 command=lambda p=pct: self._jump_pct(p),
             ).pack(side="left", padx=px(1))
 
-    def _build_mark_name(self, body):
+    def _build_mark_name(self, body: tk.Frame) -> None:
         """Mark + name."""
         mark_row = tk.Frame(body)
         mark_row.pack(fill="x", padx=px(16), pady=px(4))
@@ -224,7 +159,7 @@ class ChapterMarkersTab(BaseTab):
             side="left", padx=px(6)
         )
 
-    def _build_chapter_list(self, body):
+    def _build_chapter_list(self, body: tk.Frame) -> None:
         """Chapter list."""
         list_hdr = tk.Frame(body)
         list_hdr.pack(fill="x", padx=px(16), pady=px(8, 0))
@@ -251,8 +186,7 @@ class ChapterMarkersTab(BaseTab):
         self.tree.heading("title", text=t("chapter_markers.title_col"))
         self.tree.column("timestamp", width=px(120), anchor="center")
         self.tree.column("title", width=px(500))
-        tree_sb = ttk.Scrollbar(list_row, command=self.tree.yview)
-        self.tree.config(yscrollcommand=tree_sb.set)
+        tree_sb = linked_scrollbar(list_row, self.tree)
         self.tree.pack(side="left", fill="both", expand=False, padx=px(16, 0), pady=px(4))
         tree_sb.pack(side="left", fill="y", pady=px(4))
         self.tree.bind("<Double-Button-1>", self._edit_selected)
@@ -273,7 +207,7 @@ class ChapterMarkersTab(BaseTab):
                 pady=px(2)
             )
 
-    def _build_preview_pane(self, body):
+    def _build_preview_pane(self, body: tk.Frame) -> None:
         """Preview pane."""
         # ── Validation ────────────────────────────────────────────────────
         self.valid_lbl = tk.Label(
@@ -281,7 +215,7 @@ class ChapterMarkersTab(BaseTab):
         )
         self.valid_lbl.pack(anchor="w", padx=px(16))
 
-    def _build_export(self, body):
+    def _build_export(self, body: tk.Frame) -> None:
         """Export."""
         export_lf = tk.LabelFrame(
             body, text=f"  {t('chapter_markers.export_section')}  ", padx=px(14), pady=px(8)
@@ -319,18 +253,18 @@ class ChapterMarkersTab(BaseTab):
         self.preview_text.pack(fill="x")
 
     # ─────────────────────────────────────────────────────────────────────
-    def _browse(self):
+    def _browse(self) -> None:
         p = dialogs.ask_open("video", parent=self)
         if p:
             self.src_var.set(p)
             self._src_typed()
 
-    def on_source_loaded(self, path):
+    def on_source_loaded(self, path: str) -> None:
         """Drag and drop / File > Open: the shared loader has already set the
         path, so load it here (the typed-path check would think it was done)."""
         self._src_typed(force=True)
 
-    def _src_typed(self, force=False):
+    def _src_typed(self, force: bool = False) -> None:
         p = self.src_var.get().strip()
         if p and os.path.isfile(p) and (force or p != getattr(self, "file_path", "")):
             from core import ffmpeg as ff
@@ -342,37 +276,37 @@ class ChapterMarkersTab(BaseTab):
             self.timeline.config(to=max(self._duration, 0.01))
             self._validate()
 
-    def _on_scrub(self, val):
-        self.pos_lbl.config(text=_fmt_yt(float(val)))
+    def _on_scrub(self, val: str) -> None:
+        self.pos_lbl.config(text=fmt_yt(float(val)))
 
-    def _jump(self):
+    def _jump(self) -> None:
         from core import ffmpeg as ff
 
         try:
             secs = ff.parse_time(self.jump_var.get())
-            self.timeline.set(min(secs, self._duration))
+            set_scale(self.timeline, min(secs, self._duration))
         except ValueError:
             pass
 
-    def _jump_pct(self, pct):
-        self.timeline.set(self._duration * pct / 100)
+    def _jump_pct(self, pct: float) -> None:
+        set_scale(self.timeline, self._duration * pct / 100)
 
-    def mark_in(self):
+    def mark_in(self) -> None:
         """i: a chapter starts at the position shown."""
         self._mark_here()
 
-    def _mark_here(self):
+    def _mark_here(self) -> None:
         secs = float(self.timeline.get())
         title = self.new_title_var.get().strip()
         prefix = self.prefix_var.get().strip() or "Chapter"
         auto = self.autonumber_var.get() and (not title or title == prefix)
         self._add_chapter(secs, title or prefix, auto=auto)
 
-    def _add_chapter(self, ts: float, title: str, auto: bool = False):
+    def _add_chapter(self, ts: float, title: str, auto: bool = False) -> None:
         # Prevent duplicate timestamps
         if any(abs(c.time - ts) < 0.5 for c in self.chapters):
             messagebox.showwarning(
-                t("common.warning"), f"A chapter already exists near {_fmt_yt(ts)}."
+                t("common.warning"), f"A chapter already exists near {fmt_yt(ts)}."
             )
             return
         c = Chapter(ts, title, auto)
@@ -380,20 +314,20 @@ class ChapterMarkersTab(BaseTab):
         self.chapters.sort(key=lambda x: x.time)
         self._refresh_tree()
 
-    def _refresh_tree(self):
+    def _refresh_tree(self) -> None:
         prefix = self.prefix_var.get().strip() or "Chapter"
         for i, c in enumerate(self.chapters, 1):
             if c.auto:
                 c.title = f"{prefix} {i}"
         self.tree.delete(*self.tree.get_children())
         for i, c in enumerate(self.chapters):
-            self.tree.insert("", tk.END, iid=str(i), values=(_fmt_yt(c.time), c.title))
+            self.tree.insert("", tk.END, iid=str(i), values=(fmt_yt(c.time), c.title))
         n = len(self.chapters)
         self.count_lbl.config(text=f"{n} chapter{'s' if n != 1 else ''}")
         self._validate()
         self._update_preview()
 
-    def _validate(self):
+    def _validate(self) -> None:
         issues = youtube_issues(self.chapters, self._duration)
         if not issues:
             self.valid_lbl.config(
@@ -402,14 +336,14 @@ class ChapterMarkersTab(BaseTab):
         else:
             self.valid_lbl.config(text="\n".join("⚠  " + i for i in issues), fg=CLR["orange"])
 
-    def _update_preview(self):
+    def _update_preview(self) -> None:
         self.preview_text.config(state="normal")
         self.preview_text.delete("1.0", tk.END)
         for c in self.chapters:
-            self.preview_text.insert(tk.END, f"{_fmt_yt(c.time)} {c.title}\n")
+            self.preview_text.insert(tk.END, f"{fmt_yt(c.time)} {c.title}\n")
         self.preview_text.config(state="disabled")
 
-    def _edit_selected(self, _=None):
+    def _edit_selected(self, _: object = None) -> None:
         sel = self.tree.selection()
         if not sel:
             return
@@ -426,7 +360,7 @@ class ChapterMarkersTab(BaseTab):
         ti_var = tk.StringVar(value=c.title)
         tk.Entry(dlg, textvariable=ti_var, width=34).pack()
 
-        def _save():
+        def _save() -> None:
             from core import ffmpeg as ff
 
             try:
@@ -449,13 +383,13 @@ class ChapterMarkersTab(BaseTab):
             relief="flat",
         ).pack(pady=px(10))
 
-    def _remove_selected(self):
+    def _remove_selected(self) -> None:
         sel = self.tree.selection()
         if sel:
             del self.chapters[int(sel[0])]
             self._refresh_tree()
 
-    def _move_up(self):
+    def _move_up(self) -> None:
         sel = self.tree.selection()
         if not sel or int(sel[0]) == 0:
             return
@@ -464,7 +398,7 @@ class ChapterMarkersTab(BaseTab):
         self._refresh_tree()
         self.tree.selection_set(str(i - 1))
 
-    def _move_down(self):
+    def _move_down(self) -> None:
         sel = self.tree.selection()
         if not sel or int(sel[0]) >= len(self.chapters) - 1:
             return
@@ -473,12 +407,12 @@ class ChapterMarkersTab(BaseTab):
         self._refresh_tree()
         self.tree.selection_set(str(i + 1))
 
-    def _clear_all(self):
+    def _clear_all(self) -> None:
         if messagebox.askyesno(t("msg.clear_title"), t("msg.remove_all_chapters")):
             self.chapters.clear()
             self._refresh_tree()
 
-    def _import_srt(self):
+    def _import_srt(self) -> None:
         p = dialogs.ask_open("subtitle", parent=self)
         if not p:
             return
@@ -500,7 +434,7 @@ class ChapterMarkersTab(BaseTab):
         self.chapters.sort(key=lambda x: x.time)
         self._refresh_tree()
 
-    def _embed(self):
+    def _embed(self) -> None:
         """Write the chapters into a copy of the video (lossless remux)."""
         from core import ffmpeg as ff
         from core import filters as fl
@@ -521,7 +455,7 @@ class ChapterMarkersTab(BaseTab):
         if not out:
             return
         dur = self._duration or ff.duration_of(src)
-        chaps = []
+        chaps: list[tuple[float, float, str]] = []
         for i, c in enumerate(self.chapters):
             end = self.chapters[i + 1].time if i + 1 < len(self.chapters) else dur
             chaps.append((c.time, max(end, c.time + 0.001), c.title))
@@ -538,27 +472,27 @@ class ChapterMarkersTab(BaseTab):
         )
 
     # ── Export methods ────────────────────────────────────────────────────
-    def _yt_text(self):
-        return "\n".join(f"{_fmt_yt(c.time)} {c.title}" for c in self.chapters)
+    def _yt_text(self) -> str:
+        return "\n".join(f"{fmt_yt(c.time)} {c.title}" for c in self.chapters)
 
-    def _copy_youtube(self):
+    def _copy_youtube(self) -> None:
         txt = self._yt_text()
         self.clipboard_clear()
         self.clipboard_append(txt)
         messagebox.showinfo(t("msg.copied_title"), t("msg.chapters_copied"))
 
-    def _save_txt(self):
+    def _save_txt(self) -> None:
         p = dialogs.asksaveasfilename(defaultextension=".txt", filetypes=[("Text", "*.txt")])
         if p:
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(self._yt_text() + "\n")
             messagebox.showinfo("Saved", f"Saved to {os.path.basename(p)}")
 
-    def _save_srt(self):
+    def _save_srt(self) -> None:
         p = dialogs.asksaveasfilename(defaultextension=".srt", filetypes=[("SRT", "*.srt")])
         if not p:
             return
-        lines = []
+        lines: list[str] = []
         for i, c in enumerate(self.chapters):
             end_t = (
                 self.chapters[i + 1].time - 0.001
@@ -566,14 +500,14 @@ class ChapterMarkersTab(BaseTab):
                 else self._duration or c.time + 10
             )
             lines.append(str(i + 1))
-            lines.append(f"{_fmt_srt_tc(c.time)} --> {_fmt_srt_tc(end_t)}")
+            lines.append(f"{fmt_srt_tc(c.time)} --> {fmt_srt_tc(end_t)}")
             lines.append(c.title)
             lines.append("")
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
         messagebox.showinfo("Saved", f"SRT saved to {os.path.basename(p)}", parent=self)
 
-    def _save_vtt(self):
+    def _save_vtt(self) -> None:
         p = dialogs.asksaveasfilename(defaultextension=".vtt", filetypes=[("WebVTT", "*.vtt")])
         if not p:
             return
@@ -585,7 +519,7 @@ class ChapterMarkersTab(BaseTab):
                 else self._duration or c.time + 10
             )
 
-            def vtt_tc(s):
+            def vtt_tc(s: float) -> str:
                 h = int(s) // 3600
                 m = (int(s) % 3600) // 60
                 sec = int(s) % 60
@@ -599,14 +533,14 @@ class ChapterMarkersTab(BaseTab):
             f.write("\n".join(lines))
         messagebox.showinfo("Saved", f"VTT saved to {os.path.basename(p)}", parent=self)
 
-    def _save_json(self):
+    def _save_json(self) -> None:
         p = dialogs.asksaveasfilename(
             defaultextension=".json", filetypes=[("JSON", t("chapter_markers.json"))]
         )
         if not p:
             return
         data = [
-            {"time": c.time, "timestamp": _fmt_yt(c.time), "title": c.title} for c in self.chapters
+            {"time": c.time, "timestamp": fmt_yt(c.time), "title": c.title} for c in self.chapters
         ]
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)

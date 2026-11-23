@@ -33,13 +33,13 @@ LOSSLESS_CONTAINERS = ("mp4", "m4v", "mov", "mkv", "3gp")
 
 
 class RotateFlipTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.rotate_flip"), t("rotate_flip.subtitle"), icon="🔄")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -110,10 +110,10 @@ class RotateFlipTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _suggest(self, src):
+    def _suggest(self, src: str) -> str:
         return self.suggest_output(src, "rotated") if src else ""
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         if self._info is not None and self._info.video is not None:
             v = self._info.require_video()
@@ -125,18 +125,18 @@ class RotateFlipTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self._suggest(path))
 
-    def _method_changed(self):
+    def _method_changed(self) -> None:
         if self.lossless_var.get():
             self.encoder.pack_forget()
         else:
             self.encoder.pack(anchor="w", pady=px(6, 0))
 
-    def _changed(self):
+    def _changed(self) -> None:
         self.compare.set_filter(
             reencode_chain(self.rot_var.get(), self.hflip_var.get(), self.vflip_var.get())
         )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

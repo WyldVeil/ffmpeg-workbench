@@ -16,6 +16,7 @@ transfer, applied per RGB channel).
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox
 
 from core import tasks
@@ -29,7 +30,7 @@ from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
 
 class ColorMatchTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._stats = None  # (src_path, ref_path, src_stats, ref_stats)
@@ -38,7 +39,7 @@ class ColorMatchTab(BaseTab):
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.colour_match"), t("color_match.subtitle"), icon="🎨")
         body = scroll_body(self)
         self._build_inputs(body)
@@ -46,7 +47,7 @@ class ColorMatchTab(BaseTab):
         self._build_stats(body)
         self._build_output(body)
 
-    def _build_inputs(self, body):
+    def _build_inputs(self, body: tk.Frame) -> None:
         """The clip to fix and the reference to match, and the before/after view."""
         inp = tk.LabelFrame(body, text=f"  {t('section.input_clips')}  ", padx=px(12), pady=px(8))
         inp.pack(fill="x", padx=px(20), pady=px(10, 4))
@@ -66,7 +67,7 @@ class ColorMatchTab(BaseTab):
         self.compare = CompareView(body, 400, 225, after_label="Matched")
         self.compare.pack(pady=px(6))
 
-    def _build_match_options(self, body):
+    def _build_match_options(self, body: tk.Frame) -> None:
         """Strength, channels and contrast."""
         opts = tk.LabelFrame(
             body, text=f"  {t('color_match.match_options_section')}  ", padx=px(12), pady=px(8)
@@ -93,7 +94,7 @@ class ColorMatchTab(BaseTab):
         tk.Label(r1, text=t("color_match.channels_label"), font=(UI_FONT, 10, "bold")).pack(
             side="left"
         )
-        self.ch_vars = {}
+        self.ch_vars: dict[str, tk.BooleanVar] = {}
         for ch in "RGB":
             var = tk.BooleanVar(value=True)
             self.ch_vars[ch] = var
@@ -105,7 +106,7 @@ class ColorMatchTab(BaseTab):
             r1, text="Match contrast too", variable=self.contrast_var, command=self._update_filter
         ).pack(side="left", padx=px(16, 0))
 
-    def _build_stats(self, body):
+    def _build_stats(self, body: tk.Frame) -> None:
         """What the analysis found, and the Analyse button."""
         stats_lf = tk.LabelFrame(
             body, text=f"  {t('color_match.statistics_section')}  ", padx=px(12), pady=px(6)
@@ -125,7 +126,7 @@ class ColorMatchTab(BaseTab):
         )
         self.btn_analyse.pack(anchor="w", pady=px(6, 0))
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Encoder, where the result goes, the button and the log."""
         self.encoder, self.out_row = output_section(
             body,
@@ -142,7 +143,7 @@ class ColorMatchTab(BaseTab):
 
     # ── Behaviour ────────────────────────────────────────────────────────────
 
-    def _inputs_changed(self, _path=None):
+    def _inputs_changed(self, _path: str | None = None) -> None:
         src = self.src_row.path
         if src and src != self.compare.view_before.path:
             self.compare.load(src)
@@ -150,7 +151,7 @@ class ColorMatchTab(BaseTab):
                 self.out_row.set(self.suggest_output(src, "matched"))
         self._update_filter()
 
-    def _current_stats(self):
+    def _current_stats(self) -> tuple[cm.Stats, cm.Stats] | None:
         if (
             self._stats
             and self._stats[0] == self.src_row.path
@@ -171,16 +172,16 @@ class ColorMatchTab(BaseTab):
             contrast=self.contrast_var.get(),
         )
 
-    def _update_filter(self):
+    def _update_filter(self) -> None:
         self.compare.set_filter(self.current_filter())
 
-    def _show_stats(self, text):
+    def _show_stats(self, text: str) -> None:
         self.stats_text.config(state="normal")
         self.stats_text.delete("1.0", tk.END)
         self.stats_text.insert(tk.END, text)
         self.stats_text.config(state="disabled")
 
-    def _analyse(self, then=None):
+    def _analyse(self, then: Callable[[], object] | None = None) -> None:
         src, ref = self.src_row.path, self.ref_row.path
         if common.check_source(self, src, what="Clip to fix") is None:
             return
@@ -192,10 +193,12 @@ class ColorMatchTab(BaseTab):
         self.btn_analyse.config(state="disabled", text=t("loudness.analysing_2"))
         self.log(self.console, t("log.color_match.extracting_colour_statistics"))
 
-        def work():
+        def work() -> tuple[cm.Stats, cm.Stats]:
             return cm.rgb_stats(src), cm.rgb_stats(ref)
 
-        def done(result, error=None):
+        def done(
+            result: tuple[cm.Stats, cm.Stats] | None, error: BaseException | None = None
+        ) -> None:
             self._analysing = False
             self.btn_analyse.config(state="normal", text=t("color_match.analyse_button"))
             if error is not None or result is None:
@@ -220,7 +223,7 @@ class ColorMatchTab(BaseTab):
             work, on_done=done, on_error=lambda exc: done(None, exc), name="ColourMatchAnalyse"
         )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, what="Clip to fix")
         if info is None:

@@ -36,18 +36,18 @@ PRESETS = {"Light": 2.5, "Medium": 5.0, "Strong": 7.5, "Very strong": 10.0}
 
 
 class DenoiseTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _preset(self, value):
+    def _preset(self, value: float) -> None:
         self.strength_var.set(value)
         self._changed()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.denoise"), "Clean up noisy, grainy or blocky video.", icon="✨"
         )
@@ -104,17 +104,17 @@ class DenoiseTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
         self._changed()
 
-    def _method(self):
+    def _method(self) -> str:
         return next((k for k, v in METHODS.items() if v == self.method_var.get()), "fast")
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self.compare.load(path)
         self._changed()
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "denoised"))
 
-    def _changed(self):
+    def _changed(self) -> None:
         nlm = self._method() == "nlm"
         self.gpu_lbl.config(
             text=("GPU (Vulkan) will be used" if fl.vulkan_ok() else "CPU - slow on long clips")
@@ -125,11 +125,11 @@ class DenoiseTab(BaseTab):
             self.after_cancel(self._job)
         self._job = self.after(300, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         self.compare.set_filter(denoise_chain(self._method(), float(self.strength_var.get())))
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

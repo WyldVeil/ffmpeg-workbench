@@ -35,13 +35,13 @@ MODES = [
 
 
 class ReverserTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.video_reverser"),
@@ -99,13 +99,13 @@ class ReverserTab(BaseTab):
         self.console = self.make_console_block(body, height=6)
         self._mode_changed()
 
-    def _mode_changed(self):
+    def _mode_changed(self) -> None:
         if self.mode_var.get() == "full":
             self.range_f.pack_forget()
         else:
             self.range_f.pack(fill="x", pady=px(4, 0))
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         if self._info is not None and self._info.has_video:
             w, h = self._info.require_video().display_size
@@ -127,7 +127,7 @@ class ReverserTab(BaseTab):
             return None
         return start, min(end, dur), repeats
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         section = self._section(info) if info is not None else None

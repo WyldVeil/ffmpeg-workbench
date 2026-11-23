@@ -5,30 +5,33 @@ Remove or reduce canned laugh tracks from sitcoms using either
 classic FFmpeg DSP filters, or state-of-the-art AI Stem Separation.
 """
 
+from __future__ import annotations
+
 import os
 import shutil
 import sys
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
 from core import proc as _proc
 from core.hardware import detect_gpu
 from core.i18n import t
 from core.ops import laugh_track as lt
-from core.queue_manager import Hooks
+from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar
 from tabs.widgets import SaveRow, output_box
 
 
-def _fmt(seconds):
+def _fmt(seconds: float) -> str:
     return f"{Timecode.of(seconds):.2}"
 
 
 class LaughTrackRemoverTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self.duration = 0.0
@@ -49,7 +52,7 @@ class LaughTrackRemoverTab(BaseTab):
     def _out_ext(self) -> str:
         return ".mp4" if self._export_mode.get() == "video" else ".wav"
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self._build_header()
         self._build_source()
         self._build_engine_selector()
@@ -63,10 +66,10 @@ class LaughTrackRemoverTab(BaseTab):
         self._build_action_buttons()
         self._build_console()
 
-    def _build_header(self):
+    def _build_header(self) -> None:
         self.make_header(self, t("tab.laugh_track_remover"), t("laugh_track.subtitle"))
 
-    def _build_source(self):
+    def _build_source(self) -> None:
         """Source."""
         sf = tk.Frame(self)
         sf.pack(fill="x", padx=px(20), pady=px(10, 4))
@@ -86,7 +89,7 @@ class LaughTrackRemoverTab(BaseTab):
         self._info_lbl = tk.Label(sf, text="", fg=CLR.get("fgdim", "#888888"), font=(MONO_FONT, 9))
         self._info_lbl.pack(side="left", padx=px(10))
 
-    def _build_engine_selector(self):
+    def _build_engine_selector(self) -> None:
         """Engine Selector."""
         eng_f = tk.Frame(self)
         eng_f.pack(fill="x", padx=px(20), pady=px(4, 8))
@@ -113,7 +116,7 @@ class LaughTrackRemoverTab(BaseTab):
             command=self._toggle_engine_ui,
         ).pack(side="left")
 
-    def _build_engine_container_frame(self):
+    def _build_engine_container_frame(self) -> tuple[str, tk.Frame]:
         """Engine Container Frame."""
         # This prevents Tkinter layout crashes when swapping sections
         self.engine_container = tk.Frame(self)
@@ -180,12 +183,8 @@ class LaughTrackRemoverTab(BaseTab):
         txt_container = tk.Frame(self.ai_instructions_f, bg=CLR.get("panel", "#222222"))
         return instr_text, txt_container
 
-    def _build_ai_model_f(self, instr_text, txt_container):
+    def _build_ai_model_f(self, instr_text: str, txt_container: tk.Frame) -> None:
         txt_container.pack(anchor="w", pady=px(5))  # <-- Removed fill="x"
-
-        # Create the vertical scrollbar
-        txt_scroll = ttk.Scrollbar(txt_container, orient="vertical")
-        txt_scroll.pack(side="right", fill="y")
 
         # Create the text widget
         txt = tk.Text(
@@ -196,14 +195,11 @@ class LaughTrackRemoverTab(BaseTab):
             fg=CLR.get("fg", "#FFFFFF"),
             font=(MONO_FONT, 9),
             relief="flat",
-            yscrollcommand=txt_scroll.set,
         )
         txt.insert("1.0", instr_text)
         txt.config(state="disabled")
-        txt.pack(side="left")  # <-- Removed fill="both" and expand=True
-
-        # Link the scrollbar to the text widget's vertical view
-        txt_scroll.config(command=txt.yview)
+        txt.pack(side="left")
+        linked_scrollbar(txt_container, txt).pack(side="right", fill="y")
 
         tk.Button(
             self.ai_instructions_f,
@@ -242,7 +238,7 @@ class LaughTrackRemoverTab(BaseTab):
             fg=CLR.get("fgdim", "#888888"),
         )
 
-    def _build_1_noise_profile(self):
+    def _build_1_noise_profile(self) -> None:
         """1. Noise Profile."""
         # --- 1. Noise Profile ---
         self._use_profile = tk.BooleanVar(value=True)
@@ -286,7 +282,7 @@ class LaughTrackRemoverTab(BaseTab):
             pr3, variable=self._noise_floor, from_=-60, to=-10, resolution=1, orient="horizontal"
         ).pack(side="left", padx=px(6))
 
-    def _build_2_center_channel(self):
+    def _build_2_center_channel(self) -> None:
         """2. Center Channel."""
         # --- 2. Center Channel ---
         self._use_center = tk.BooleanVar(value=False)
@@ -316,7 +312,7 @@ class LaughTrackRemoverTab(BaseTab):
             self._center_f, text=t("laugh_track.aggressive_checkbox"), variable=self._stereo_cancel
         ).pack(anchor="w", padx=px(120))
 
-    def _build_3_frequency_sculpt(self):
+    def _build_3_frequency_sculpt(self) -> None:
         """3. Frequency Sculpt."""
         # --- 3. Frequency Sculpt ---
         self._use_eq = tk.BooleanVar(value=False)
@@ -348,7 +344,7 @@ class LaughTrackRemoverTab(BaseTab):
             er2, variable=self._eq_depth, from_=2, to=24, resolution=1, orient="horizontal"
         ).pack(side="left", padx=px(6))
 
-    def _build_4_smart_gate(self):
+    def _build_4_smart_gate(self) -> None:
         """4. Smart Gate."""
         # --- 4. Smart Gate ---
         self._use_gate = tk.BooleanVar(value=False)
@@ -383,7 +379,7 @@ class LaughTrackRemoverTab(BaseTab):
             gr2, variable=self._gate_ratio, from_=2, to=20, resolution=0.5, orient="horizontal"
         ).pack(side="left", padx=px(6))
 
-    def _build_output(self):
+    def _build_output(self) -> None:
         """Output."""
         out_lf = output_box(self)
 
@@ -402,7 +398,7 @@ class LaughTrackRemoverTab(BaseTab):
             of2, text=t("laugh_track.audio_option"), variable=self._export_mode, value="audio"
         ).pack(side="left")
 
-    def _build_action_buttons(self):
+    def _build_action_buttons(self) -> None:
         """Action buttons."""
         bf = tk.Frame(self)
         bf.pack(pady=px(10))
@@ -422,7 +418,7 @@ class LaughTrackRemoverTab(BaseTab):
         )
         self.btn_render.pack(side="left", padx=px(8))
 
-    def _build_console(self):
+    def _build_console(self) -> None:
         """Console."""
         self.console = self.make_console_block(self, height=6, padx=px(20), pady=px(4, 10))
 
@@ -433,7 +429,7 @@ class LaughTrackRemoverTab(BaseTab):
         self._toggle_engine_ui()
 
     # ── UI Toggles ────────────────────────────────────────────────────
-    def _toggle_engine_ui(self):
+    def _toggle_engine_ui(self) -> None:
         """Show/hide sections safely inside the container."""
         if self._engine_var.get() == "ai":
             self.ffmpeg_lf.pack_forget()
@@ -444,7 +440,7 @@ class LaughTrackRemoverTab(BaseTab):
             self.ffmpeg_lf.pack(fill="x", padx=px(20), pady=px(4))
             self._btn_preview.config(state="normal")
 
-    def _toggle_sections(self):
+    def _toggle_sections(self) -> None:
         """Unpack all and repack in order to maintain layout integrity."""
         for f in [self._profile_f, self._center_f, self._eq_f, self._gate_f]:
             f.pack_forget()
@@ -459,7 +455,7 @@ class LaughTrackRemoverTab(BaseTab):
                 frame.pack(fill="x", padx=px(20), pady=px(2))
 
     # ── AI Tools Management ───────────────────────────────────────────
-    def _find_ai_cli(self):
+    def _find_ai_cli(self) -> str | None:
         """Prioritizes the bundled /bin/ exe, then falls back to hunting system paths."""
         import glob
 
@@ -515,7 +511,7 @@ class LaughTrackRemoverTab(BaseTab):
 
         return None
 
-    def _check_ai_tools(self):
+    def _check_ai_tools(self) -> None:
         """Checks for the CLI wrapper using the wildcard hunter."""
         if self._find_ai_cli():
             self.ai_status_lbl.config(
@@ -529,18 +525,18 @@ class LaughTrackRemoverTab(BaseTab):
             self.ai_instructions_f.pack(fill="x", pady=px(5))
 
     # ── File browsing ─────────────────────────────────────────────────
-    def _browse(self):
+    def _browse(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Media", "*.mp4 *.mkv *.mp3 *.wav *.aac"), ("All", t("ducker.item_2"))]
         )
         if p:
             self._load(p)
 
-    def on_source_loaded(self, path):
+    def on_source_loaded(self, path: str) -> None:
         """Drag and drop / File > Open land here (the shared loader set the path)."""
         self._load(path)
 
-    def _load(self, p):
+    def _load(self, p: str) -> None:
         from core import ffmpeg as ff
 
         info = ff.try_probe(p)
@@ -570,11 +566,11 @@ class LaughTrackRemoverTab(BaseTab):
             gate_ratio=self._gate_ratio.get(),
         )
 
-    def _build_af(self):
+    def _build_af(self) -> str | None:
         """The combined audio filter for the FFmpeg engine (None: nothing ticked)."""
         return lt.filter_chain(self._cleanup())
 
-    def _preview_result(self):
+    def _preview_result(self) -> None:
         if not self.file_path or self._engine_var.get() == "ai":
             return
         af = self._build_af()
@@ -583,7 +579,7 @@ class LaughTrackRemoverTab(BaseTab):
         cmd = lt.preview_cmd(self.file_path, af, t("laugh_track.ffmpeg_preview"))
         self.preview_proc = _proc.spawn(cmd)
 
-    def _render(self):
+    def _render(self) -> None:
         typed = self._src_var.get().strip()
         if typed and os.path.isfile(typed) and typed != self.file_path:
             self._load(typed)
@@ -604,10 +600,10 @@ class LaughTrackRemoverTab(BaseTab):
         else:
             _out = out
 
-            def _ai_worker_fn(progress_cb, cancel_fn, ctx):
+            def _ai_worker_fn(progress_cb: object, cancel_fn: object, ctx: TaskContext) -> int:
                 return self._render_ai(_out, ctx)
 
-            def _done(_tid, rc):
+            def _done(_tid: str, rc: int) -> None:
                 self.btn_render.config(state="normal")
                 self.last_task = self.task(_tid)
                 self.show_result(rc, _out)
@@ -622,7 +618,7 @@ class LaughTrackRemoverTab(BaseTab):
                 ),
             )
 
-    def _render_ffmpeg(self, out):
+    def _render_ffmpeg(self, out: str) -> None:
         af = self._build_af()
         if not af:
             self.btn_render.config(state="normal")
@@ -641,7 +637,7 @@ class LaughTrackRemoverTab(BaseTab):
             name="Laugh Track",
         )
 
-    def _render_ai(self, out, ctx):
+    def _render_ai(self, out: str, ctx: TaskContext) -> int:
         """AI stem separation (audio-separator) inside a private job folder."""
         ai_cli = self._find_ai_cli()
         if not ai_cli:

@@ -4,6 +4,8 @@ Precise clip trimmer with a visual dual-handle canvas timeline,
 inline ffplay preview, and lossless or re-encoded export.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import os
@@ -29,19 +31,19 @@ from tabs.widgets import FramePreview, SaveRow
 logger = logging.getLogger("crossfader.cutting.trimmer")
 
 
-def fmt_time(seconds):
+def fmt_time(seconds: float) -> str:
     """Seconds -> MM:SS.mmm (or HH:MM:SS.mmm)."""
     return ff.format_time(seconds)
 
 
-def parse_time(time_str):
+def parse_time(time_str: str) -> float:
     """HH:MM:SS.ms, MM:SS.ms, seconds (',' accepted as decimal point).
     Raises ValueError on anything else - never silently returns 0."""
     return ff.parse_time(time_str)
 
 
 class TrimmerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self.duration = 0.0
@@ -71,13 +73,13 @@ class TrimmerTab(BaseTab):
         self._end_var.set(fmt_time(self._scrub.get()))
         self._apply_typed_times()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         mk = self._build_src()
         r3 = self._build_start_ent(mk)
         bf, prev_btn = self._build_scrub(r3)
         self._build_render(bf, prev_btn)
 
-    def _build_src(self):
+    def _build_src(self) -> tk.LabelFrame:
         make_header(self, t("tab.quick_trimmer"), t("trimmer.subtitle"), icon="✂")
 
         # Source row
@@ -122,12 +124,12 @@ class TrimmerTab(BaseTab):
         self._preview_t = 0.0
         return mk
 
-    def _mark_here(self, var):
+    def _mark_here(self, var: tk.StringVar) -> None:
         """Set a mark (start or end) to the scrubber's position."""
         var.set(fmt_time(self._scrub.get()))
         self._apply_typed_times()
 
-    def _build_start_ent(self, mk):
+    def _build_start_ent(self, mk: tk.LabelFrame) -> tk.Frame:
         r1 = tk.Frame(mk)
         r1.pack(fill="x", pady=px(2))
         tk.Label(
@@ -193,7 +195,7 @@ class TrimmerTab(BaseTab):
         ).pack(side="right", padx=px(8))
         return r3
 
-    def _build_scrub(self, r3):
+    def _build_scrub(self, r3: tk.Frame) -> tuple[tk.Frame, tk.Button]:
         self._scrub_lbl = tk.Label(
             r3, text="00:00.00", fg=CLR["accent"], font=(MONO_FONT, 10), width=9
         )
@@ -252,7 +254,7 @@ class TrimmerTab(BaseTab):
         )
         return bf, prev_btn
 
-    def _build_render(self, bf, prev_btn):
+    def _build_render(self, bf: tk.Frame, prev_btn: tk.Button) -> None:
         prev_btn.pack(side="left", padx=px(8))
         add_tooltip(prev_btn, "Preview the selected region in ffplay (Space)")
         self.btn_render = self.make_render_btn(
@@ -265,7 +267,7 @@ class TrimmerTab(BaseTab):
         self.console = self.make_console_block(self, height=5, padx=px(20), pady=px(4))
 
     # ─── File loading ─────────────────────────────────────────────────────
-    def _browse(self):
+    def _browse(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[
                 (
@@ -278,16 +280,16 @@ class TrimmerTab(BaseTab):
         if p:
             self.load_file(p)
 
-    def _load_typed_source(self):
+    def _load_typed_source(self) -> None:
         p = self._src_var.get().strip().strip('"')
         if p and p != self.file_path and os.path.isfile(p):
             self.load_file(p)
 
-    def _default_out(self, src):
+    def _default_out(self, src: str) -> str:
         ext = os.path.splitext(src)[1] if self._copy_mode.get() else ".mp4"
         return self.suggest_output(src, "trimmed", ext or ".mp4")
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         p = path
         info = ff.try_probe(p)
         if info is None or not info.duration:
@@ -314,19 +316,19 @@ class TrimmerTab(BaseTab):
     # ─── Canvas timeline ──────────────────────────────────────────────────
     _HR = 9  # handle radius
 
-    def _t2x(self, t, w):
+    def _t2x(self, t: float, w: int) -> int:
         p = px(24)
         if self.duration <= 0:
             return p
         return p + int((t / self.duration) * (w - 2 * p))
 
-    def _x2t(self, x, w):
+    def _x2t(self, x: float, w: int) -> float:
         p = px(24)
         if self.duration <= 0:
             return 0.0
         return max(0.0, min(1.0, (x - p) / max(1, w - 2 * p))) * self.duration
 
-    def _apply_typed_times(self, *_):
+    def _apply_typed_times(self, *_: object) -> None:
         """Called when user types a time and hits Enter or clicks away."""
         try:
             s_sec = parse_time(self._start_var.get())
@@ -347,18 +349,18 @@ class TrimmerTab(BaseTab):
         self._update_dur()
         self._draw()
 
-    def _tv(self, var, default=0.0):
+    def _tv(self, var: tk.StringVar, default: float = 0.0) -> float:
         try:
             return parse_time(var.get())
         except ValueError:
             return default
 
-    def _show_frame(self, at):
+    def _show_frame(self, at: float) -> None:
         self._preview_t = float(at)
         if self.file_path:
             self._preview_soon()
 
-    def _draw(self, *_):
+    def _draw(self, *_: object) -> None:
         c = self._canvas
         w = c.winfo_width()
         h = c.winfo_height()
@@ -386,7 +388,7 @@ class TrimmerTab(BaseTab):
             logger.debug("_draw: best-effort step failed", exc_info=True)
             self.log_debug(f"Canvas draw error: {e}")
 
-    def _draw_track(self, w, cy, xs, xe):
+    def _draw_track(self, w: int, cy: int, xs: int, xe: int) -> None:
         """The track, the selection on it, and a tick (with its time) every tenth."""
         c = self._canvas
         c.create_rectangle(px(24), cy - px(4), w - px(24), cy + px(4), fill="#2A2A2A", outline="")
@@ -403,7 +405,7 @@ class TrimmerTab(BaseTab):
                 font=(UI_FONT, 7),
             )
 
-    def _draw_playhead(self, xp, cy):
+    def _draw_playhead(self, xp: int, cy: int) -> None:
         """A yellow line through the track, with a triangle on top."""
         c = self._canvas
         c.create_line(xp, cy - px(18), xp, cy + px(18), fill="#FFEB3B", width=px(2))
@@ -419,7 +421,7 @@ class TrimmerTab(BaseTab):
             width=px(1),
         )
 
-    def _draw_handles(self, cy, start, end):
+    def _draw_handles(self, cy: int, start: tuple[int, float], end: tuple[int, float]) -> None:
         """The start (green) and end (red) handles with their times, and the length above."""
         c = self._canvas
         hr = px(self._HR)
@@ -452,7 +454,7 @@ class TrimmerTab(BaseTab):
             font=(UI_FONT, 9, "bold"),
         )
 
-    def _on_press(self, ev):
+    def _on_press(self, ev: tk.Event[tk.Misc]) -> None:
         w = self._canvas.winfo_width()
 
         s_sec = self._tv(self._start_var, 0.0)
@@ -465,7 +467,7 @@ class TrimmerTab(BaseTab):
         except (ValueError, tk.TclError):
             return
 
-        def near(a, b):
+        def near(a: float, b: float) -> bool:
             return abs(a - b) < px(14)
 
         if near(ev.x, xs):
@@ -479,7 +481,7 @@ class TrimmerTab(BaseTab):
             self._scrub.set(self._x2t(ev.x, w))
             self._draw()
 
-    def _on_drag(self, ev):
+    def _on_drag(self, ev: tk.Event[tk.Misc]) -> None:
         if not self._dragging:
             return
         w = self._canvas.winfo_width()
@@ -503,10 +505,10 @@ class TrimmerTab(BaseTab):
         self._update_dur()
         self._draw()
 
-    def _release(self):
+    def _release(self) -> None:
         self._dragging = None
 
-    def _update_dur(self):
+    def _update_dur(self) -> None:
         try:
             s_sec = self._tv(self._start_var, 0.0)
             e_sec = self._tv(self._end_var, self.duration)
@@ -515,20 +517,20 @@ class TrimmerTab(BaseTab):
         except Exception:
             logger.debug("_update_dur: best-effort step failed", exc_info=True)
 
-    def _on_scrub(self, val):
+    def _on_scrub(self, val: str) -> None:
         self._show_frame(float(val))
         with contextlib.suppress(ValueError, tk.TclError):
             self._scrub_lbl.config(text=fmt_time(float(val)))
         self._draw()
 
-    def _toggle_enc(self):
+    def _toggle_enc(self) -> None:
         if self._copy_mode.get():
             self._enc_row.pack_forget()
         else:
             self._enc_row.pack(fill="x", pady=px(4))
 
     # ─── Preview ─────────────────────────────────────────────────────────
-    def _preview_at_scrub(self):
+    def _preview_at_scrub(self) -> None:
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
@@ -539,7 +541,7 @@ class TrimmerTab(BaseTab):
                 logger.debug("_preview_at_scrub: best-effort step failed", exc_info=True)
         self.preview_proc = launch_preview(self.file_path, start_time=self._scrub.get())
 
-    def _preview_selection(self):
+    def _preview_selection(self) -> None:
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
@@ -604,7 +606,7 @@ class TrimmerTab(BaseTab):
         )
         return cmd, end - ss
 
-    def _run_trim(self):
+    def _run_trim(self) -> None:
         if not self.file_path:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return

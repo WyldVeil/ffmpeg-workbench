@@ -22,6 +22,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.tktyped import draw_image
 from tabs.widgets import FileRow, output_section, scroll_body
 
 ASPECTS = [
@@ -36,26 +37,26 @@ ASPECTS = [
 
 
 class ManualCropTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self.vid_w, self.vid_h = 0, 0
         self.duration = 0.0
         self._cx, self._cy, self._cw, self._ch = (tk.IntVar(value=0) for _ in range(4))
         self._drag = None
-        self._photo = None
-        self._frame_job = None
+        self._photo: tk.PhotoImage | None = None
+        self._frame_job: str | None = None
         self._frame_gen = 0
         self._build_ui()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         ar, body, ctrl = self._build_header()
         sc = self._build_crop_region(ar, ctrl)
         self._build_output(body, sc)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.LabelFrame, tk.Frame, tk.Frame]:
         self.make_header(self, t("tab.manual_crop"), t("crop.subtitle"), icon="🔲")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -96,7 +97,7 @@ class ManualCropTab(BaseTab):
         )
         return ar, body, ctrl
 
-    def _build_crop_region(self, ar, ctrl):
+    def _build_crop_region(self, ar: tk.LabelFrame, ctrl: tk.Frame) -> tk.LabelFrame:
         ar.pack(fill="x")
         self.aspect_var = tk.StringVar(value="free")
         for key, label, _ratio in ASPECTS:
@@ -137,7 +138,7 @@ class ManualCropTab(BaseTab):
         ).pack(anchor="w")
         return sc
 
-    def _build_output(self, body, sc):
+    def _build_output(self, body: tk.Frame, sc: tk.LabelFrame) -> None:
         sr = tk.Frame(sc)
         sr.pack(fill="x")
         tk.Radiobutton(sr, text="Scale to", value="scale", variable=self.scale_var).pack(
@@ -162,7 +163,7 @@ class ManualCropTab(BaseTab):
 
     # ── geometry ─────────────────────────────────────────────────────────────
 
-    def _view(self):
+    def _view(self) -> tuple[float, float, float]:
         """(scale, offset_x, offset_y) mapping video pixels onto the canvas."""
         cw, ch = max(self.canvas.winfo_width(), 2), max(self.canvas.winfo_height(), 2)
         if not self.vid_w:
@@ -170,19 +171,21 @@ class ManualCropTab(BaseTab):
         s = min(cw / self.vid_w, ch / self.vid_h)
         return s, (cw - self.vid_w * s) / 2, (ch - self.vid_h * s) / 2
 
-    def rect(self):
+    def rect(self) -> tuple[int, int, int, int]:
         return self._cx.get(), self._cy.get(), self._cw.get(), self._ch.get()
 
-    def set_rect(self, x, y, w, h):
-        w = max(16, min(int(w), self.vid_w))
-        h = max(16, min(int(h), self.vid_h))
-        x = max(0, min(int(x), self.vid_w - w))
-        y = max(0, min(int(y), self.vid_h - h))
-        for var, val in zip((self._cx, self._cy, self._cw, self._ch), (x, y, w, h), strict=False):
+    def set_rect(self, x: float, y: float, w: float, h: float) -> None:
+        wi = max(16, min(int(w), self.vid_w))
+        hi = max(16, min(int(h), self.vid_h))
+        xi = max(0, min(int(x), self.vid_w - wi))
+        yi = max(0, min(int(y), self.vid_h - hi))
+        for var, val in zip(
+            (self._cx, self._cy, self._cw, self._ch), (xi, yi, wi, hi), strict=False
+        ):
             var.set(val)
         self._draw()
 
-    def _clamp_and_draw(self):
+    def _clamp_and_draw(self) -> None:
         try:
             self.set_rect(*self.rect())
         except (tk.TclError, ValueError):
@@ -190,13 +193,13 @@ class ManualCropTab(BaseTab):
 
     # ── drawing ──────────────────────────────────────────────────────────────
 
-    def _schedule_frame(self):
+    def _schedule_frame(self) -> None:
         self._draw()
         if self._frame_job is not None:
             self.after_cancel(self._frame_job)
         self._frame_job = self.after(200, self._load_frame)
 
-    def _load_frame(self):
+    def _load_frame(self) -> None:
         self._frame_job = None
         path = self.src_row.path
         if not path or not self.vid_w:
@@ -206,13 +209,13 @@ class ManualCropTab(BaseTab):
         self._frame_gen += 1
         gen, at = self._frame_gen, float(self.pos_var.get())
 
-        def work():
+        def work() -> None:
             png = ff.grab_frame_png(path, at, width=w, height=h)
             self.call_ui(self._show_frame, gen, png)
 
         tasks.submit(work, name="CropFrame", pool="preview")
 
-    def _show_frame(self, gen, png):
+    def _show_frame(self, gen: int, png: bytes) -> None:
         if gen != self._frame_gen or not png:
             return
         try:
@@ -221,7 +224,7 @@ class ManualCropTab(BaseTab):
             self._photo = None
         self._draw()
 
-    def _draw(self):
+    def _draw(self) -> None:
         c = self.canvas
         c.delete("all")
         if not self.vid_w:
@@ -235,7 +238,7 @@ class ManualCropTab(BaseTab):
             return
         s, ox, oy = self._view()
         if self._photo is not None:
-            c.create_image(ox, oy, image=self._photo, anchor="nw")
+            draw_image(c, ox, oy, self._photo, anchor="nw")
         else:
             c.create_rectangle(ox, oy, ox + self.vid_w * s, oy + self.vid_h * s, fill="#222222")
         x, y, w, h = self.rect()
@@ -283,14 +286,14 @@ class ManualCropTab(BaseTab):
 
     # ── mouse ────────────────────────────────────────────────────────────────
 
-    def _press(self, ev):
+    def _press(self, ev: tk.Event[tk.Misc]) -> None:
         if not self.vid_w:
             return
         s, ox, oy = self._view()
         x, y, w, h = self.rect()
         x1, y1, x2, y2 = ox + x * s, oy + y * s, ox + (x + w) * s, oy + (y + h) * s
 
-        def near(a, b):
+        def near(a: float, b: float) -> bool:
             return abs(a - b) < px(10)
 
         corners = {"tl": (x1, y1), "tr": (x2, y1), "bl": (x1, y2), "br": (x2, y2)}
@@ -301,7 +304,7 @@ class ManualCropTab(BaseTab):
             kind = "move"
         self._drag = (kind, ev.x, ev.y, (x, y, w, h)) if kind else None
 
-    def _move(self, ev):
+    def _move(self, ev: tk.Event[tk.Misc]) -> None:
         if not self._drag:
             return
         kind, sx, sy, (x, y, w, h) = self._drag
@@ -329,7 +332,7 @@ class ManualCropTab(BaseTab):
 
     # ── actions ──────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         info = ff.try_probe(path)
         if info is None or not info.has_video:
             self.vid_w = self.vid_h = 0
@@ -354,26 +357,26 @@ class ManualCropTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "cropped"))
 
-    def _reset(self):
+    def _reset(self) -> None:
         self.aspect_var.set("free")
         if self.vid_w:
             self.set_rect(0, 0, self.vid_w, self.vid_h)
 
-    def _aspect_changed(self):
+    def _aspect_changed(self) -> None:
         ratio = next((r for k, _l, r in ASPECTS if k == self.aspect_var.get()), None)
         if ratio and self.vid_w:
             self.set_rect(*fit_aspect(self.vid_w, self.vid_h, *ratio))
 
-    def _detect_bars(self):
+    def _detect_bars(self) -> None:
         path = self.src_row.path
         if not path or not self.vid_w:
             return
         self.detect_btn.config(state="disabled", text="Detecting…")
 
-        def work():
+        def work() -> tuple[int, int, int, int] | None:
             return detect_bars(path, self.duration)
 
-        def done(found):
+        def done(found: tuple[int, int, int, int] | None) -> None:
             self.detect_btn.config(state="normal", text="Detect black bars")
             if not found:
                 messagebox.showinfo(t("common.warning"), "No black bars found.", parent=self)
@@ -388,7 +391,7 @@ class ManualCropTab(BaseTab):
 
         tasks.submit(work, on_done=done, on_error=lambda _e: done(None), name="CropDetect")
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

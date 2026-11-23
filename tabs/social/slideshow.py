@@ -27,9 +27,11 @@ import random
 import re
 import shutil
 import tkinter as tk
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import TypeVar
 
 from core import ass, proc, tasks
 from core import beats as beats_core
@@ -45,6 +47,7 @@ from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker, RangePicker
+from tabs.kit.tktyped import linked_scrollbar, selected_rows
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import output_section, scroll_body
 
@@ -121,7 +124,7 @@ class Slide:
         return os.path.basename(self.path)
 
 
-def natural_key(path: str):
+def natural_key(path: str) -> list[int | str]:
     return [
         int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", os.path.basename(path))
     ]
@@ -132,8 +135,11 @@ def _probe(path: str) -> tuple[float, bool]:
     return (info.duration, info.has_audio) if info else (0.0, False)
 
 
+V = TypeVar("V", bound=tk.Variable)
+
+
 class SlideshowMakerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.slides: list[Slide] = []
         self.tracks: list[tuple[str, float]] = []  # music: (file, length)
@@ -142,7 +148,7 @@ class SlideshowMakerTab(BaseTab):
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.slideshow_maker"),
@@ -157,7 +163,7 @@ class SlideshowMakerTab(BaseTab):
         self._build_output(body)
         self._selected()
 
-    def _build_list(self, body):
+    def _build_list(self, body: tk.Frame) -> None:
         top = tk.Frame(body)
         top.pack(fill="x", padx=px(20), pady=px(10, 4))
         left = tk.Frame(top)
@@ -171,9 +177,8 @@ class SlideshowMakerTab(BaseTab):
             self.tree.heading(c, text=label)
             self.tree.column(c, width=px(w), anchor="w", stretch=c in ("file", "caption"))
         self.tree.pack(side="left", fill="both", expand=True)
-        sb = ttk.Scrollbar(left, command=self.tree.yview)
+        sb = linked_scrollbar(left, self.tree)
         sb.pack(side="left", fill="y")
-        self.tree.config(yscrollcommand=sb.set)
         self.tree.bind("<<TreeviewSelect>>", self._selected)
         btns = tk.Frame(top)
         btns.pack(side="left", fill="y", padx=px(8, 0))
@@ -195,7 +200,7 @@ class SlideshowMakerTab(BaseTab):
         self.count_lbl = tk.Label(btns, text="0 slides", fg=CLR["fgdim"])
         self.count_lbl.pack(pady=px(6, 0))
 
-    def _build_editor(self, body):
+    def _build_editor(self, body: tk.Frame) -> None:
         self.editor = tk.LabelFrame(body, text="  Selected slide  ", padx=px(10), pady=px(6))
         self.editor.pack(fill="x", padx=px(20), pady=px(4))
         row = tk.Frame(self.editor)
@@ -224,7 +229,7 @@ class SlideshowMakerTab(BaseTab):
         )
         self._build_kind_rows()
 
-    def _build_kind_rows(self):
+    def _build_kind_rows(self) -> None:
         """The rows that only some kinds of slide have (shown for those)."""
         self.motion_row = tk.Frame(self.editor)
         tk.Label(self.motion_row, text="Motion:", width=12, anchor="w").pack(side="left")
@@ -262,12 +267,14 @@ class SlideshowMakerTab(BaseTab):
         )
         self.card_bg_btn.pack(side="left", padx=px(10, 0))
 
-    def _combo(self, parent, var, values, width):
+    def _combo(
+        self, parent: tk.Misc, var: tk.StringVar, values: Iterable[str], width: int
+    ) -> ttk.Combobox:
         return ttk.Combobox(
             parent, textvariable=var, values=list(values), state="readonly", width=width
         )
 
-    def _build_settings(self, body):
+    def _build_settings(self, body: tk.Frame) -> None:
         opt = tk.LabelFrame(body, text="  Slideshow  ", padx=px(10), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         self.dur_var, self.trans_dur_var = tk.StringVar(value="4"), tk.StringVar(value="1.0")
@@ -342,7 +349,7 @@ class SlideshowMakerTab(BaseTab):
             pady=2,
         )
 
-    def _build_music(self, body):
+    def _build_music(self, body: tk.Frame) -> None:
         box = tk.LabelFrame(body, text="  Music (optional)  ", padx=px(10), pady=px(6))
         box.pack(fill="x", padx=px(20), pady=px(4))
         top = tk.Frame(box)
@@ -409,7 +416,7 @@ class SlideshowMakerTab(BaseTab):
             cb.pack(side="left", padx=px(0, 12))
             add_tooltip(cb, tip)
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         self.encoder, self.out_row = output_section(
             body, t("common.output_file"), ("h264", "hevc", "av1", "vp9"), suggest=self._suggest
         )
@@ -426,7 +433,7 @@ class SlideshowMakerTab(BaseTab):
             return "…" if s.length is None else f"{self._part_length(s):.1f}s"
         return "default"
 
-    def _refresh_list(self, select=None):
+    def _refresh_list(self, select: int | None = None) -> None:
         self.tree.delete(*self.tree.get_children())
         for i, s in enumerate(self.slides):
             trans = (
@@ -442,11 +449,11 @@ class SlideshowMakerTab(BaseTab):
         n = len(self.slides)
         self.count_lbl.config(text=f"{n} slide{'s' if n != 1 else ''}")
 
-    def _index(self):
+    def _index(self) -> int | None:
         sel = self.tree.selection()
         return int(sel[0]) if sel else None
 
-    def add_paths(self, paths):
+    def add_paths(self, paths: list[str]) -> int:
         new = [
             Slide(p, kind)
             for p in paths
@@ -461,19 +468,19 @@ class SlideshowMakerTab(BaseTab):
         self._refresh_list(len(self.slides) - 1 if new else None)
         return len(new)
 
-    def _probed(self, slide: Slide, facts: tuple[float, bool]):
+    def _probed(self, slide: Slide, facts: tuple[float, bool]) -> None:
         slide.length, slide.has_audio = facts
         slide.sound = slide.sound and slide.has_audio
         if self.winfo_exists():
             self._refresh_list(self._index())
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         return self.add_paths([path]) > 0
 
-    def _add_files(self):
+    def _add_files(self) -> None:
         self.add_paths(self.pick_sources("media"))
 
-    def _add_folder(self):
+    def _add_folder(self) -> None:
         from tabs.kit import dialogs
 
         d = dialogs.ask_directory(parent=self)
@@ -486,48 +493,48 @@ class SlideshowMakerTab(BaseTab):
                     parent=self,
                 )
 
-    def _add_card(self):
+    def _add_card(self) -> None:
         i = self._index()
         at = 0 if i is None else i + 1
         self.slides.insert(at, Slide("", ss.Kind.CARD, card=ss.Card("Title", "")))
         self._refresh_list(at)
 
-    def _move(self, delta):
+    def _move(self, delta: int) -> None:
         i = self._index()
         if i is None or not 0 <= i + delta < len(self.slides):
             return
         self.slides[i], self.slides[i + delta] = self.slides[i + delta], self.slides[i]
         self._refresh_list(i + delta)
 
-    def _remove(self):
+    def _remove(self) -> None:
         i = self._index()
         if i is not None:
             del self.slides[i]
             self._refresh_list(min(i, len(self.slides) - 1))
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.slides.clear()
         self._refresh_list()
 
-    def _sort_name(self):
+    def _sort_name(self) -> None:
         self.slides.sort(key=_name_key)
         self._refresh_list()
 
-    def _sort_date(self):
+    def _sort_date(self) -> None:
         self.slides.sort(key=_date_key)
         self._refresh_list()
 
-    def _shuffle(self):
+    def _shuffle(self) -> None:
         random.shuffle(self.slides)
         self._refresh_list()
 
     # ── The selected slide ───────────────────────────────────────────────────
 
-    def _traced(self, var):
+    def _traced(self, var: V) -> V:
         var.trace_add("write", self._edited)
         return var
 
-    def _selected(self, *_):
+    def _selected(self, *_: tk.Event[tk.Misc]) -> None:
         i = self._index()
         slide = self.slides[i] if i is not None else None
         self._loading = True
@@ -545,7 +552,7 @@ class SlideshowMakerTab(BaseTab):
             else:
                 row.pack_forget()
 
-    def _fill_editor(self, s: Slide | None):
+    def _fill_editor(self, s: Slide | None) -> None:
         self.cap_var.set(s.caption if s else "")
         self.slide_secs_var.set(f"{s.seconds:g}" if s and s.seconds is not None else "")
         self.slide_trans_var.set(TRANSITION_NAMES.get(s.transition or "", SAME) if s else SAME)
@@ -557,7 +564,7 @@ class SlideshowMakerTab(BaseTab):
         self.card_sub_var.set(card.subtitle if card else "")
         self.card_bg_btn.set(card.background if card else "#101010")
 
-    def _edited(self, *_):
+    def _edited(self, *_: str) -> None:
         """A field of the selected slide changed: store it (bad numbers wait for render)."""
         i = self._index()
         if self._loading or i is None:
@@ -577,7 +584,7 @@ class SlideshowMakerTab(BaseTab):
             )
         self._refresh_row(i)
 
-    def _refresh_row(self, i):
+    def _refresh_row(self, i: int) -> None:
         s = self.slides[i]
         trans = (
             "" if i == len(self.slides) - 1 else TRANSITION_NAMES.get(s.transition or "", "default")
@@ -588,7 +595,7 @@ class SlideshowMakerTab(BaseTab):
 
     # ── Music ────────────────────────────────────────────────────────────────
 
-    def _add_music(self):
+    def _add_music(self) -> None:
         for path in self.pick_sources("audio"):
             tasks.submit(
                 partial(_probe, path),
@@ -596,13 +603,13 @@ class SlideshowMakerTab(BaseTab):
                 name="SlideshowMusic",
             )
 
-    def _music_probed(self, path, facts):
+    def _music_probed(self, path: str, facts: tuple[float, bool]) -> None:
         length, _audio = facts
         if length > 0:
             self.tracks.append((path, length))
             self._refresh_tracks(len(self.tracks) - 1)
 
-    def _refresh_tracks(self, select=None):
+    def _refresh_tracks(self, select: int | None = None) -> None:
         self.music_list.delete(0, tk.END)
         for path, length in self.tracks:
             self.music_list.insert(
@@ -611,27 +618,27 @@ class SlideshowMakerTab(BaseTab):
         if select is not None and 0 <= select < len(self.tracks):
             self.music_list.selection_set(select)
 
-    def _move_track(self, delta):
-        sel = self.music_list.curselection()
+    def _move_track(self, delta: int) -> None:
+        sel = selected_rows(self.music_list)
         if sel and 0 <= sel[0] + delta < len(self.tracks):
             i = sel[0]
             self.tracks[i], self.tracks[i + delta] = self.tracks[i + delta], self.tracks[i]
             self._refresh_tracks(i + delta)
 
-    def _remove_track(self):
-        sel = self.music_list.curselection()
+    def _remove_track(self) -> None:
+        sel = selected_rows(self.music_list)
         if sel:
             del self.tracks[sel[0]]
             self._refresh_tracks()
 
-    def set_music(self, paths_and_lengths):
+    def set_music(self, paths_and_lengths: list[tuple[str, float]]) -> None:
         """Use these (file, length) tracks (tests, and drops onto the page)."""
         self.tracks = list(paths_and_lengths)
         self._refresh_tracks()
 
     # ── Planning ─────────────────────────────────────────────────────────────
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         first = next((s.path for s in self.slides if s.path), "")
         if first:
             return os.path.join(os.path.dirname(first), "slideshow.mp4")
@@ -671,7 +678,7 @@ class SlideshowMakerTab(BaseTab):
     def _joins(self, rng: random.Random) -> list[ss.Join]:
         default = TRANSITIONS.get(self.trans_var.get(), "fade")
         secs = common.number(self.trans_dur_var.get(), "Transition", 0.1, 10)
-        joins = []
+        joins: list[ss.Join] = []
         for s in self.slides[:-1]:
             name = s.transition or default
             name = rng.choice(tr.EVERYDAY) if name == RANDOM else name
@@ -728,7 +735,7 @@ class SlideshowMakerTab(BaseTab):
 
     # ── Render and preview ───────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         if not self.slides:
             messagebox.showwarning(
                 t("common.warning"), "Add some photos, GIFs or videos first.", parent=self
@@ -785,7 +792,7 @@ class SlideshowMakerTab(BaseTab):
             console=self.console,
         )
 
-    def _preview_transition(self):
+    def _preview_transition(self) -> None:
         """Play the selected slide into the next with its transition (small and quick)."""
         i = self._index()
         if i is None or i + 1 >= len(self.slides):
@@ -817,11 +824,11 @@ class SlideshowMakerTab(BaseTab):
             name="SlideshowPreview",
         )
 
-    def _preview_failed(self, exc):
+    def _preview_failed(self, exc: BaseException) -> None:
         self.log(self.console, f"Preview failed: {exc}")
 
 
-def _name_key(s: Slide):
+def _name_key(s: Slide) -> list[int | str]:
     return natural_key(s.path or s.name)
 
 
@@ -847,7 +854,7 @@ def _motion(name: str, moves: list[str], rng: random.Random) -> str:
 def _make_preview(pair: list[ss.Slide], join: ss.Join, look: ss.Look) -> str:
     """Two slides and their join as a small video (worker thread); its path."""
     folder = temp_dir("slideshow_preview_")
-    clips = []
+    clips: list[str] = []
     for k, slide in enumerate(pair):
         clip = ss.clip_name(folder, k, slide)
         card = (
@@ -895,7 +902,7 @@ class _SlideshowJob:
         tmp = ctx.tempdir()
         slides = self._beat_slides(ctx)
         n = len(slides)
-        clips = []
+        clips: list[str] = []
         for i, slide in enumerate(slides):
             ctx.log(f"Slide {i + 1}/{n}: {os.path.basename(slide.path) or 'card'}")
             clip = ss.clip_name(tmp, i, slide)

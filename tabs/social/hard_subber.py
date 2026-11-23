@@ -16,7 +16,6 @@ import logging
 import os
 import shutil
 import tkinter as tk
-from pathlib import Path
 from tkinter import messagebox, ttk
 
 from core import ass
@@ -24,98 +23,27 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core.i18n import t
 from core.ops.shared import RenderJob
+from core.ops.subtitles import POSITIONS, force_style, to_utf8_copy
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import UI_FONT, BaseTab
+from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
 logger = logging.getLogger("crossfader.social.hard_subber")
 
-POSITIONS = {
-    "bottom": ("Bottom centre", 2),
-    "top": ("Top centre", 8),
-    "middle": ("Middle", 5),
-    "bottom_left": ("Bottom left", 1),
-    "bottom_right": ("Bottom right", 3),
-}
 _EXTERNAL = "External subtitle file"
 
 
-def to_utf8_copy(path: str, folder: str) -> str:
-    """Copy a subtitle file into *folder* as UTF-8 with a safe name."""
-    raw = Path(path).read_bytes()
-    text = None
-    for enc in ("utf-8-sig", "utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else ("utf-8-sig",):
-        try:
-            text = raw.decode(enc)
-            break
-        except UnicodeDecodeError:
-            continue
-    if text is None:
-        try:
-            from charset_normalizer import from_bytes  # optional, better guesses
-
-            best = from_bytes(raw).best()
-            text = str(best) if best is not None else None
-        except Exception:
-            logger.debug("to_utf8_copy: best-effort step failed", exc_info=True)
-            text = None
-    if text is None:
-        text = raw.decode("cp1252", errors="replace")
-    ext = os.path.splitext(path)[1].lower() or ".srt"
-    out = os.path.join(folder, f"subs{ext}")
-    with open(out, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(text.replace("\r\n", "\n"))
-    return out
-
-
-def force_style(
-    *,
-    font: str,
-    size: int,
-    colour: str,
-    outline_colour: str,
-    outline: float,
-    box: bool,
-    position: str,
-    margin: int,
-) -> str:
-    align = POSITIONS.get(position, POSITIONS["bottom"])[1]
-    parts = [
-        f"FontName={font}",
-        f"FontSize={size}",
-        f"PrimaryColour={ass.colour(colour)}",
-        f"OutlineColour={ass.colour(outline_colour)}",
-        f"Alignment={align}",
-        f"MarginV={margin}",
-        "Bold=0",
-    ]
-    if box:
-        parts += [
-            "BorderStyle=3",
-            f"Outline={max(1.0, outline):g}",
-            "Shadow=0",
-            f"BackColour={ass.colour(outline_colour, 0.35)}",
-        ]
-    else:
-        parts += [
-            "BorderStyle=1",
-            f"Outline={outline:g}",
-            "Shadow=1",
-            f"BackColour={ass.colour('#000000', 0.5)}",
-        ]
-    return ",".join(parts)
-
-
 class HardSubberTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._tracks: list = []
-        self._work = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._tracks: list[tuple[str, int, str]] = []  # (label, stream index, codec)
+        self._work: str | None = None
+        self._job: str | None = None
         self._build_ui()
 
     def take_subtitles(self, video: str, subtitles: str) -> None:
@@ -123,12 +51,12 @@ class HardSubberTab(BaseTab):
         self.src_var.set(video)
         self.sub_row.set(subtitles)
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, r0, st = self._build_header()
         self._build_output(body, r0, st)
         self._build_out(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
             t("tab.hard_subber"),
@@ -198,7 +126,7 @@ class HardSubberTab(BaseTab):
         ).pack(side="left", padx=px(4))
         return body, r0, st
 
-    def _build_output(self, body, r0, st):
+    def _build_output(self, body: tk.Frame, r0: tk.Frame, st: tk.LabelFrame) -> None:
         self.col_btn = ColourButton(
             r0, "#FFFFFF", text="Text", width=8, on_change=lambda _c: self._schedule()
         )
@@ -255,9 +183,9 @@ class HardSubberTab(BaseTab):
             command=self._schedule,
         ).pack(anchor="w")
         for var in (self.font_var,):
-            var.trace_add("write", lambda *_a: self._schedule())
+            on_write(var, lambda: self._schedule())
 
-    def _build_out(self, body):
+    def _build_out(self, body: tk.Frame) -> None:
         self.encoder, self.out_row = output_section(
             body,
             t("common.output_file"),
@@ -270,7 +198,7 @@ class HardSubberTab(BaseTab):
 
     # ── state ────────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         info = self._info
         self._tracks = []
@@ -298,7 +226,7 @@ class HardSubberTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "subbed"))
         self._schedule()
 
-    def _subs_changed(self):
+    def _subs_changed(self) -> None:
         self.track_var.set(_EXTERNAL)
         self._schedule()
 
@@ -339,12 +267,12 @@ class HardSubberTab(BaseTab):
         style = self._style() if (not is_ass or self.override_var.get()) else ""
         return fl.subtitles_filter(copy, force_style=style, fonts_dir=ass.fonts_dir())
 
-    def _schedule(self):
+    def _schedule(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(300, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         if not self.src_row.path:
             return
@@ -361,7 +289,7 @@ class HardSubberTab(BaseTab):
 
     # ── render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -386,7 +314,7 @@ class HardSubberTab(BaseTab):
             shutil.rmtree(work, ignore_errors=True)
             return
 
-        def done(rc):
+        def done(rc: int) -> None:
             shutil.rmtree(work, ignore_errors=True)
             self.show_result(rc, out)
 
@@ -399,7 +327,7 @@ class HardSubberTab(BaseTab):
             on_done=done,
         )
 
-    def on_app_closing(self):
+    def on_app_closing(self) -> None:
         if self._work:
             shutil.rmtree(self._work, ignore_errors=True)
             self._work = None  # a new one is made if the page is used again

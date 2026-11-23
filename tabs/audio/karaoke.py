@@ -12,6 +12,8 @@ Turns any music video into a singalong karaoke track in three steps:
        • ass= filter burns the karaoke subtitles at the bottom of the frame
 """
 
+from __future__ import annotations
+
 import os
 import threading
 import tkinter as tk
@@ -80,7 +82,7 @@ LANG_CODES = {
 # ── Tab ───────────────────────────────────────────────────────────────────────
 
 
-def _whisper_ok():
+def _whisper_ok() -> bool:
     """The bundled whisper.cpp engine is present (models download on demand)."""
     from core import whisper
 
@@ -88,13 +90,13 @@ def _whisper_ok():
 
 
 class KaraokeTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._cancel = threading.Event()
         self._build_ui()
 
     # ─── UI ───────────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self._build_header()
         self._build_whisper_status_banner()
         self._build_source()
@@ -102,11 +104,11 @@ class KaraokeTab(BaseTab):
         self._build_output()
         self._build_action_buttons()
 
-    def _build_header(self):
+    def _build_header(self) -> None:
         # Header
         make_header(self, t("tab.karaoke_generator"), t("karaoke.subtitle"), icon="🎤")
 
-    def _build_whisper_status_banner(self):
+    def _build_whisper_status_banner(self) -> None:
         """Whisper status banner."""
         self._banner = tk.Frame(self, bg="#1A2A1A", relief="groove", bd=px(1))
         self._banner.pack(fill="x", padx=px(16), pady=px(8, 4))
@@ -127,7 +129,7 @@ class KaraokeTab(BaseTab):
         ).pack(side="right", padx=px(8), pady=px(4))
         self.after(120, self._check_whisper)
 
-    def _build_source(self):
+    def _build_source(self) -> None:
         """Source."""
         r1 = tk.Frame(self)
         r1.pack(fill="x", padx=px(16), pady=px(8))
@@ -146,7 +148,7 @@ class KaraokeTab(BaseTab):
             r1, text=t("btn.browse"), command=self._browse_src, cursor="hand2", relief="flat"
         ).pack(side="left")
 
-    def _build_settings(self):
+    def _build_settings(self) -> None:
         """Settings."""
         sf = tk.LabelFrame(
             self, text=f"  {t('karaoke.karaoke_settings_section')}  ", padx=px(16), pady=px(10)
@@ -157,7 +159,7 @@ class KaraokeTab(BaseTab):
         self._lyrics_style_row(sf)
         self._vocals_row(sf)
 
-    def _model_row(self, sf):
+    def _model_row(self, sf: tk.LabelFrame) -> None:
         """Speech model and language."""
         # Whisper model + language
         ra = tk.Frame(sf)
@@ -173,7 +175,7 @@ class KaraokeTab(BaseTab):
             ra, textvariable=self._lang_var, values=LANGUAGES, state="readonly", width=14
         ).pack(side="left", padx=px(8))
 
-    def _darkness_row(self, sf):
+    def _darkness_row(self, sf: tk.LabelFrame) -> None:
         """How dark the video goes under the lyrics."""
         # Video darkness
         rb = tk.Frame(sf)
@@ -197,7 +199,7 @@ class KaraokeTab(BaseTab):
             rb, text=t("karaoke.max_brightness_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left", padx=px(12))
 
-    def _lyrics_style_row(self, sf):
+    def _lyrics_style_row(self, sf: tk.LabelFrame) -> None:
         """Lyric size and colours."""
         # Font size + colours
         rc = tk.Frame(sf)
@@ -231,7 +233,7 @@ class KaraokeTab(BaseTab):
             rc, text=t("karaoke.colour_as_sung_hint"), fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left", padx=px(8))
 
-    def _vocals_row(self, sf):
+    def _vocals_row(self, sf: tk.LabelFrame) -> None:
         """Remove the singer."""
         # Vocal removal checkbox
         rd = tk.Frame(sf)
@@ -243,14 +245,14 @@ class KaraokeTab(BaseTab):
             variable=self._rm_vocals,
         ).pack(side="left")
 
-    def _build_output(self):
+    def _build_output(self) -> None:
         """Output."""
         self._out_var = tk.StringVar()
         SaveRow(self, t("common.output_file"), self._out_var).pack(
             fill="x", padx=px(16), pady=px(6)
         )
 
-    def _build_action_buttons(self):
+    def _build_action_buttons(self) -> None:
         """Action buttons."""
         btn_row = tk.Frame(self)
         btn_row.pack(pady=px(8))
@@ -281,11 +283,11 @@ class KaraokeTab(BaseTab):
         self.console = self.make_console_block(self, height=8, padx=px(16), pady=px(4))
 
     # ─── Helpers ──────────────────────────────────────────────────────────────
-    def _update_dark_lbl(self, *_):
+    def _update_dark_lbl(self, *_: object) -> None:
         pct = int(self._darkness.get() * 100)
         self._dark_lbl.config(text=t("karaoke.bright").format(pct))
 
-    def _check_whisper(self):
+    def _check_whisper(self) -> None:
         from core import whisper
 
         key = MODELS.get(self._model_var.get(), "base")
@@ -303,11 +305,11 @@ class KaraokeTab(BaseTab):
                 fg=CLR["fgdim"],
             )
 
-    def _model_ready(self, _path):
+    def _model_ready(self, _path: str) -> None:
         self._log("✅  Model ready.")
         self._check_whisper()
 
-    def _install_whisper(self):
+    def _install_whisper(self) -> None:
         from core import whisper
 
         key = MODELS.get(self._model_var.get(), "base")
@@ -319,7 +321,7 @@ class KaraokeTab(BaseTab):
             name="KaraokeModel",
         )
 
-    def _browse_src(self):
+    def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
             title="Select music video",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
@@ -329,24 +331,24 @@ class KaraokeTab(BaseTab):
             if not self._out_var.get():
                 self._out_var.set(os.path.splitext(p)[0] + "_karaoke.mp4")
 
-    def _append_log(self, msg):
+    def _append_log(self, msg: str) -> None:
         self.console.insert(tk.END, msg + "\n")
         self.console.see(tk.END)
 
-    def _log(self, msg):
+    def _log(self, msg: str) -> None:
         self.after(0, self._append_log, msg)
 
-    def _status(self, msg):
-        self.after(0, lambda m=msg: self._prog_lbl.config(text=m))
+    def _status(self, msg: str) -> None:
+        self.after(0, lambda: self._prog_lbl.config(text=msg))
 
-    def _stop(self):
+    def _stop(self) -> None:
         self._cancel.set()
         if getattr(self, "_task", None):
             self.cancel_render(self._task)
         self._log(t("log.karaoke.cancelling"))
 
     # ─── Generate ─────────────────────────────────────────────────────────────
-    def _generate(self):
+    def _generate(self) -> None:
         src = self._src_var.get().strip()
         out = self._out_var.get().strip()
 
@@ -382,7 +384,7 @@ class KaraokeTab(BaseTab):
         self._progress.start(10)
         self.console.delete("1.0", tk.END)
 
-        def done(tid, rc):
+        def done(tid: str, rc: int) -> None:
             self._finish()
             self.last_task = self.task(tid)
             self.show_result(rc, out)
@@ -395,7 +397,7 @@ class KaraokeTab(BaseTab):
             hooks=Hooks(on_progress=lambda _t, line: self._log(line), on_complete=done),
         )
 
-    def _finish(self):
+    def _finish(self) -> None:
         self._btn_go.config(state="normal", text=t("karaoke.generate_button"))
         self._btn_stop.config(state="disabled")
         self._progress.stop()

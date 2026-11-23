@@ -10,6 +10,8 @@ A .mid/.midi source skips stage 1 (plain MIDI rendering).
 Produces a high-quality MIDI re-render of any song.
 """
 
+from __future__ import annotations
+
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -26,18 +28,18 @@ from tabs.widgets import scroll_body
 
 
 class MIDIfierTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self._deps_ok = False
-        self._fs_path = None  # resolved fluidsynth path
-        self._sf2_path = None  # resolved soundfont path
+        self._fs_path: str | None = None  # resolved fluidsynth path
+        self._sf2_path: str | None = None  # resolved soundfont path
         self._build_ui()
         tasks.submit(self._check_deps)
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self._build_header()
         self._build_dependencies_status()
         self._build_source()
@@ -48,14 +50,14 @@ class MIDIfierTab(BaseTab):
         self._build_run_button()
         self._build_console()
 
-    def _build_header(self):
+    def _build_header(self) -> None:
         self.make_header(
             self, t("tab.midifier"), subtitle=t("midifier.subtitle"), icon="\U0001f3b9"
         )
 
         self._inner = scroll_body(self)
 
-    def _build_dependencies_status(self):
+    def _build_dependencies_status(self) -> None:
         """Dependencies status."""
         dep_sec = self.make_section(self._inner, title=t("midifier.section.deps"))
         self._dep_lbl = tk.Label(
@@ -80,14 +82,14 @@ class MIDIfierTab(BaseTab):
         )
         add_tooltip(self._dep_btn, "Use any General MIDI SoundFont (.sf2 / .sf3) you have.")
 
-    def _build_source(self):
+    def _build_source(self) -> None:
         """Source."""
         src_sec = self.make_section(self._inner, title=t("midifier.section.source"))
         self.src_var = tk.StringVar()
         row = self.make_file_row(src_sec, t("midifier.input_file"), self.src_var, self._browse_src)
         row.pack(fill="x", pady=px(4))
 
-    def _build_pipeline_overview(self):
+    def _build_pipeline_overview(self) -> None:
         """Pipeline overview."""
         pipe_sec = self.make_section(self._inner, title=t("midifier.section.pipeline"))
         steps = [
@@ -121,7 +123,7 @@ class MIDIfierTab(BaseTab):
                 wraplength=px(500),
             ).pack(fill="x")
 
-    def _build_options(self):
+    def _build_options(self) -> tuple[tk.LabelFrame, tk.Frame]:
         """Options."""
         opt_sec = self.make_section(self._inner, title=t("midifier.section.options"))
 
@@ -192,7 +194,7 @@ class MIDIfierTab(BaseTab):
         ).pack(side="left", padx=px(8))
         return opt_sec, r2
 
-    def _build_save_midi(self, opt_sec, r2):
+    def _build_save_midi(self, opt_sec: tk.LabelFrame, r2: tk.Frame) -> None:
         tk.Label(r2, text="Hz", font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]).pack(side="left")
 
         r3 = tk.Frame(opt_sec, bg=CLR["bg"])
@@ -256,14 +258,14 @@ class MIDIfierTab(BaseTab):
             r5, text=t("midifier.min_note_hint"), font=(UI_FONT, 8), bg=CLR["bg"], fg=CLR["fgdim"]
         ).pack(side="left", padx=px(4))
 
-    def _build_output(self):
+    def _build_output(self) -> None:
         """Output."""
         out_sec = self.make_section(self._inner, title=t("midifier.section.output"))
         self.out_var = tk.StringVar()
         out_row = self.make_file_row(out_sec, t("midifier.save_as"), self.out_var, self._browse_out)
         out_row.pack(fill="x", pady=px(4))
 
-    def _build_run_button(self):
+    def _build_run_button(self) -> None:
         """Run button."""
         btn_f = tk.Frame(self._inner, bg=CLR["bg"])
         btn_f.pack(fill="x", pady=px(12, 6))
@@ -271,7 +273,7 @@ class MIDIfierTab(BaseTab):
         self.btn_render.pack(pady=px(4))
         add_tooltip(self.btn_render, t("midifier.run_tooltip"))
 
-    def _build_console(self):
+    def _build_console(self) -> None:
         """Console."""
         self.console = self.make_console_block(
             self._inner, height=10, bg=CLR["bg"], padx=px(20), pady=px(4, 14)
@@ -279,7 +281,7 @@ class MIDIfierTab(BaseTab):
 
     # ── Browse ────────────────────────────────────────────────────────────
 
-    def _browse_src(self):
+    def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
             title="Open audio file",
             filetypes=[
@@ -298,7 +300,7 @@ class MIDIfierTab(BaseTab):
             if not self.out_var.get():
                 self.out_var.set(base + "_midified.mp3")
 
-    def _browse_out(self):
+    def _browse_out(self) -> None:
         p = dialogs.asksaveasfilename(
             title="Save MP3 as",
             defaultextension=".mp3",
@@ -309,7 +311,7 @@ class MIDIfierTab(BaseTab):
 
     # ── Dependency check ─────────────────────────────────────────────────
 
-    def _check_deps(self):
+    def _check_deps(self) -> None:
         """Find FluidSynth and a SoundFont (worker thread)."""
         status = ["  ✓  Audio → MIDI: built in (FFmpeg filter bank)"]
         self._fs_path = midi.find_fluidsynth()
@@ -328,13 +330,13 @@ class MIDIfierTab(BaseTab):
         self._deps_ok = ok
         info = "\n".join(status)
 
-        def _update():
+        def _update() -> None:
             self._dep_lbl.config(text=info, fg=CLR["green"] if ok else CLR["orange"])
             self._dep_btn.pack(fill="x", padx=px(4), pady=px(6, 4))
 
         self.after(0, _update)
 
-    def _choose_soundfont(self):
+    def _choose_soundfont(self) -> None:
         p = dialogs.askopenfilename(
             title="Choose a SoundFont",
             filetypes=[("SoundFont", "*.sf2 *.sf3"), ("All files", "*.*")],
@@ -371,7 +373,7 @@ class MIDIfierTab(BaseTab):
         )
         return None
 
-    def _run(self):
+    def _run(self) -> None:
         from tabs import common
 
         typed = self.src_var.get().strip()

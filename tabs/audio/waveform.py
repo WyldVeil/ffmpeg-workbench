@@ -29,38 +29,39 @@ from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from core.timecode import Timecode
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, SaveRow
 
 COLOURS = {"mute": "red", "boost": "green", "duck": "orange"}
 
 
-def _fmt(seconds):
+def _fmt(seconds: float) -> str:
     return f"{Timecode.of(seconds):.2}"
 
 
 class WaveformEditorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.file_path = ""
         self.duration = 0.0
-        self._info = None
-        self._peaks = []  # linear 0..1, one per slice
+        self._info: ff.MediaInfo | None = None
+        self._peaks: list[float] = []  # linear 0..1, one per slice
         self._view = (0.0, 0.0)  # visible time range
         self._mark_in = 0.0
         self._mark_out = 0.0
-        self._regions = []  # (start, end, action, dB)
+        self._regions: list[wf.Region] = []  # (start, end, action, dB)
         self._drag_from = None
         self._prev_out = 0.0
         self._load_id = 0
         self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         mk = self._build_header()
         self._build_region_actions(mk)
         self._build_export_mode()
 
-    def _build_header(self):
+    def _build_header(self) -> tk.Frame:
         self.make_header(self, t("tab.waveform_editor"), t("waveform.subtitle"), icon="🎵")
         self.src_row = FileRow(self, t("common.source_file"), kind="media", on_change=self._load)
         self.src_row.pack(fill="x", padx=px(20), pady=px(12, 2))
@@ -70,7 +71,7 @@ class WaveformEditorTab(BaseTab):
         self._build_waveform_view()
         return self._build_marks()
 
-    def _build_waveform_view(self):
+    def _build_waveform_view(self) -> None:
         """The waveform: click and drag to select, the wheel zooms."""
         wf_lf = tk.LabelFrame(
             self,
@@ -106,7 +107,7 @@ class WaveformEditorTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-    def _build_marks(self):
+    def _build_marks(self) -> tk.Frame:
         """In and out marks, the selection's length, zoom to it."""
         mk = tk.Frame(self)
         mk.pack(fill="x", padx=px(20), pady=px(4))
@@ -132,7 +133,7 @@ class WaveformEditorTab(BaseTab):
         )
         return mk
 
-    def _build_region_actions(self, mk):
+    def _build_region_actions(self, mk: tk.Frame) -> None:
         tk.Button(mk, text="Show all", relief="flat", command=self._zoom_all).pack(side="left")
 
         act = tk.LabelFrame(
@@ -196,7 +197,7 @@ class WaveformEditorTab(BaseTab):
             pady=px(2), fill="x"
         )
 
-    def _build_export_mode(self):
+    def _build_export_mode(self) -> None:
         of = tk.Frame(self)
         of.pack(fill="x", padx=px(20), pady=px(6))
         self._export_mode = tk.StringVar(value="video")
@@ -225,18 +226,18 @@ class WaveformEditorTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(self, height=5, padx=px(20), pady=px(4, 10))
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         if not self.file_path:
             return ""
         audio = self._export_mode.get() == "audio" or not (self._info and self._info.has_video)
         return self.suggest_output(self.file_path, "edited", ".wav" if audio else None)
 
-    def _mode_changed(self):
+    def _mode_changed(self) -> None:
         if self.file_path:
             self.out_row.set(self._suggest())
 
     # ── Loading ───────────────────────────────────────────────────────
-    def _load(self, path):
+    def _load(self, path: str) -> None:
         """New file: forget everything about the previous one, then analyse."""
         self._load_id += 1
         my_id = self._load_id
@@ -255,7 +256,7 @@ class WaveformEditorTab(BaseTab):
         )
 
     @staticmethod
-    def _analyse(path):
+    def _analyse(path: str) -> tuple[ff.MediaInfo, list[float], float]:
         info = ff.probe(path)
         if not info.has_audio:
             raise ValueError("This file has no audio.")
@@ -276,7 +277,7 @@ class WaveformEditorTab(BaseTab):
             shutil.rmtree(tmp, ignore_errors=True)
         return info, peaks, slice_samples / rate
 
-    def _loaded(self, my_id, res):
+    def _loaded(self, my_id: int, res: tuple[ff.MediaInfo, list[float], float]) -> None:
         if my_id != self._load_id:
             return  # a newer file was chosen meanwhile
         info, peaks, slice_s = res
@@ -284,7 +285,7 @@ class WaveformEditorTab(BaseTab):
         self.duration = info.duration or len(peaks) * slice_s
         self._mark_out = self.duration
         self._view = (0.0, self.duration)
-        a = info.audio
+        a = info.require_audio()
         self._info_lbl.config(
             text=f"{_fmt(self.duration)}   {a.codec}  {a.sample_rate} Hz  "
             f"{a.channel_layout or str(a.channels) + ' ch'}"
@@ -294,7 +295,7 @@ class WaveformEditorTab(BaseTab):
             self.out_row.set(self._suggest())
         self.log(self.console, f"Waveform ready: {len(peaks)} slices of {slice_s * 1000:.0f} ms")
 
-    def _failed(self, my_id, exc):
+    def _failed(self, my_id: int, exc: BaseException) -> None:
         if my_id != self._load_id:
             return
         self.file_path = ""
@@ -304,16 +305,16 @@ class WaveformEditorTab(BaseTab):
         messagebox.showwarning(t("common.warning"), str(exc), parent=self)
 
     # ── Drawing ───────────────────────────────────────────────────────
-    def _x(self, sec, w):
+    def _x(self, sec: float, w: int) -> float:
         a, b = self._view
         return (sec - a) / max(b - a, 1e-6) * w
 
-    def _sec(self, x):
+    def _sec(self, x: float) -> float:
         a, b = self._view
         w = max(1, self._canvas.winfo_width())
         return max(0.0, min(self.duration, a + (x / w) * (b - a)))
 
-    def _draw(self):
+    def _draw(self) -> None:
         c = self._canvas
         c.delete("all")
         w, h = c.winfo_width(), c.winfo_height()
@@ -365,20 +366,20 @@ class WaveformEditorTab(BaseTab):
             )
 
     # ── Mouse / marks ─────────────────────────────────────────────────
-    def _press(self, ev):
+    def _press(self, ev: tk.Event[tk.Misc]) -> None:
         if self.duration <= 0:
             return
         self._drag_from = self._sec(ev.x)
         self._prev_out = self._mark_out
 
-    def _drag(self, ev):
+    def _drag(self, ev: tk.Event[tk.Misc]) -> None:
         if self._drag_from is None:
             return
         cur = self._sec(ev.x)
         self._mark_in, self._mark_out = min(self._drag_from, cur), max(self._drag_from, cur)
         self._sync_marks()
 
-    def _release(self, ev):
+    def _release(self, ev: tk.Event[tk.Misc]) -> None:
         if self._drag_from is None:
             return
         if abs(self._sec(ev.x) - self._drag_from) < 1e-3:  # a plain click moves In only
@@ -387,7 +388,7 @@ class WaveformEditorTab(BaseTab):
             self._sync_marks()
         self._drag_from = None
 
-    def _shift_click(self, ev):
+    def _shift_click(self, ev: tk.Event[tk.Misc]) -> str:
         if self.duration > 0:
             self._mark_out = self._sec(ev.x)
             if self._mark_out < self._mark_in:
@@ -395,7 +396,7 @@ class WaveformEditorTab(BaseTab):
             self._sync_marks()
         return "break"
 
-    def _typed_marks(self):
+    def _typed_marks(self) -> None:
         try:
             a = ff.parse_time(self._in_var.get() or "0")
             b = ff.parse_time(self._out_var_t.get() or "0")
@@ -406,13 +407,13 @@ class WaveformEditorTab(BaseTab):
         self._mark_in, self._mark_out = min(a, b), max(a, b)
         self._sync_marks()
 
-    def _sync_marks(self):
+    def _sync_marks(self) -> None:
         self._in_var.set(_fmt(self._mark_in))
         self._out_var_t.set(_fmt(self._mark_out))
         self._sel_lbl.config(text=f"{self._mark_out - self._mark_in:.2f}s")
         self._draw()
 
-    def _wheel(self, ev, step, scroll=False):
+    def _wheel(self, ev: tk.Event[tk.Misc], step: int | None, scroll: bool = False) -> str:
         if self.duration <= 0:
             return "break"
         direction = step if step is not None else (1 if ev.delta > 0 else -1)
@@ -436,18 +437,18 @@ class WaveformEditorTab(BaseTab):
         self._draw()
         return "break"
 
-    def _zoom_sel(self):
+    def _zoom_sel(self) -> None:
         if self._mark_out - self._mark_in > 0.05:
             pad = (self._mark_out - self._mark_in) * 0.1
             self._view = (max(0.0, self._mark_in - pad), min(self.duration, self._mark_out + pad))
             self._draw()
 
-    def _zoom_all(self):
+    def _zoom_all(self) -> None:
         self._view = (0.0, self.duration)
         self._draw()
 
     # ── Regions ───────────────────────────────────────────────────────
-    def _add_region(self, action):
+    def _add_region(self, action: str) -> None:
         s, e = self._mark_in, self._mark_out
         if e - s < 0.01:
             messagebox.showwarning(
@@ -471,20 +472,20 @@ class WaveformEditorTab(BaseTab):
         self._draw()
         self.log(self.console, f"Region added: {label} at {_fmt(s)} → {_fmt(e)}")
 
-    def _remove_region(self):
-        sel = self._region_list.curselection()
+    def _remove_region(self) -> None:
+        sel = selected_rows(self._region_list)
         if sel and sel[0] < len(self._regions):
             self._region_list.delete(sel[0])
             self._regions.pop(sel[0])
             self._draw()
 
-    def _clear_regions(self):
+    def _clear_regions(self) -> None:
         self._regions.clear()
         self._region_list.delete(0, "end")
         self._draw()
 
     # ── Export ────────────────────────────────────────────────────────
-    def _render(self):
+    def _render(self) -> None:
         src, info = self.file_path, self._info
         if not src or info is None:
             messagebox.showwarning(t("waveform.no_file_title"), t("common.no_input"), parent=self)

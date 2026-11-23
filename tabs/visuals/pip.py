@@ -11,6 +11,7 @@ sound are kept (or the inset's sound, or both mixed).
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
@@ -50,25 +51,27 @@ AUDIO = {"bg": "Background's sound", "fg": "Inset's sound", "mix": "Both mixed",
 
 class PIPTab(BaseTab):
     # i / o: the inset shows from / until the frame shown
-    def mark_in(self):
+    def mark_in(self) -> None:
         self.window.start.use_here()
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         self.window.end.use_here()
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._bg = self._fg = None
-        self._job = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, ch, opt, pb, pr = self._build_header()
         self._build_output(body, ch, opt, pb, pr)
         self._build_console(body)
 
-    def _build_header(self):
+    def _build_header(
+        self,
+    ) -> tuple[tk.Frame, Callable[..., None], tk.LabelFrame, ttk.Combobox, tk.Frame]:
         self.make_header(
             self, t("tab.picture_in_picture"), "Put one video inside another.", icon="🖼"
         )
@@ -85,7 +88,7 @@ class PIPTab(BaseTab):
         opt = tk.LabelFrame(body, text="  Inset  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
-        def ch(*_a):
+        def ch(*_a: object) -> None:
             self._changed()
 
         self.size_var = tk.DoubleVar(value=30)
@@ -136,7 +139,14 @@ class PIPTab(BaseTab):
         )
         return body, ch, opt, pb, pr
 
-    def _build_output(self, body, ch, opt, pb, pr):
+    def _build_output(
+        self,
+        body: tk.Frame,
+        ch: Callable[..., None],
+        opt: tk.LabelFrame,
+        pb: ttk.Combobox,
+        pr: tk.Frame,
+    ) -> None:
         pb.pack(side="left", padx=px(4))
         pb.bind("<<ComboboxSelected>>", ch)
         self.cx_var, self.cy_var = tk.StringVar(value="50"), tk.StringVar(value="50")
@@ -194,18 +204,18 @@ class PIPTab(BaseTab):
             body, "🖼  MAKE PICTURE-IN-PICTURE", self._render, width=28
         )
 
-    def _build_console(self, body):
+    def _build_console(self, body: tk.Frame) -> None:
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _bg_changed(self, path):
+    def _bg_changed(self, path: str) -> None:
         self._bg = ff.try_probe(path)
         self.compare.load(path)
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "pip"))
         self._changed()
 
-    def _fg_changed(self, path):
+    def _fg_changed(self, path: str) -> None:
         self._fg = ff.try_probe(path)
         self._changed()
 
@@ -235,12 +245,12 @@ class PIPTab(BaseTab):
             anim_dur=common.number(self.anim_dur_var.get() or "0.5", "Animation length", 0.05, 10),
         )
 
-    def _changed(self, *_a):
+    def _changed(self, *_a: object) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(300, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         try:
             spec = self.spec()
@@ -250,7 +260,7 @@ class PIPTab(BaseTab):
         g = pip_ops.pip_graph(spec, "[in]", fg, "")
         self.compare.set_filter(g, keep_time=True)
 
-    def _render(self):
+    def _render(self) -> None:
         src, fg = self.bg_row.path, self.fg_row.path
         info = common.check_source(self, src)
         if info is None:

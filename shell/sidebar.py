@@ -10,7 +10,6 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
-from tkinter import ttk
 from typing import Any
 
 from core import APP_VERSION
@@ -21,6 +20,7 @@ from core.skins import UI_FONT
 from core.tools import Category, ToolId, sidebar
 from shell.wheel import yview
 from tabs.kit import labels
+from tabs.kit.tktyped import linked_scrollbar
 
 WIDTH = 272  # design pixels
 _SEARCH_DELAY_MS = 80
@@ -154,7 +154,7 @@ class Sidebar(tk.Frame):
         holder = tk.Frame(self, bg=bg)
         holder.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(holder, bg=bg, highlightthickness=0, yscrollincrement=px(20))
-        bar = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType] - stub gap
+        bar = linked_scrollbar(holder, self.canvas)
         self.inner = tk.Frame(self.canvas, bg=bg)
         window = self.canvas.create_window(
             (0, 0), window=self.inner, anchor="nw", width=px(WIDTH - 18)
@@ -164,7 +164,6 @@ class Sidebar(tk.Frame):
             "<Configure>", lambda e: self.canvas.itemconfigure(window, width=e.width), add=True
         )
         self.inner.bind("<Configure>", lambda _e: self._update_scrollregion())
-        self.canvas.configure(yscrollcommand=bar.set)
         self.canvas.unbind_class("Canvas", "<<FocusIn>>")
         bar.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)

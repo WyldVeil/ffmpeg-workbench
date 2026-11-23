@@ -24,11 +24,15 @@ Sections (all optional, all combinable):
   ⚙   Encode          - codec, CRF, preset, audio bitrate
 """
 
+from __future__ import annotations
+
 import os
 import shlex
 import tkinter as tk
+from collections.abc import Callable
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import Any, cast
 
 from core import ffmpeg as ff
 from core import tasks
@@ -38,6 +42,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import linked_scrollbar, on_write
 from tabs.widgets import scroll_body
 
 # ── Constants reused from other tabs ─────────────────────────────────────────
@@ -105,7 +110,7 @@ _TEXT_POSITIONS = {  # (x, y) drawtext expressions; margins scale with the frame
 }
 
 
-def _num(var: tk.Variable, default: float) -> float:
+def _num(var: tk.StringVar, default: float) -> float:
     try:
         return float(var.get())
     except ValueError:
@@ -117,13 +122,13 @@ def _num(var: tk.Variable, default: float) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _lbl(parent, text, bold=False, dim=False):
+def _lbl(parent: tk.Misc, text: str, bold: bool = False, dim: bool = False) -> tk.Label:
     fg = CLR["fgdim"] if dim else CLR["fg"]
     font = (UI_FONT, 9, "bold") if bold else (UI_FONT, 9)
     return tk.Label(parent, text=text, bg=CLR["bg"], fg=fg, font=font)
 
 
-def _entry(parent, var, width=10):
+def _entry(parent: tk.Misc, var: tk.StringVar, width: int = 10) -> tk.Entry:
     return tk.Entry(
         parent,
         textvariable=var,
@@ -136,12 +141,16 @@ def _entry(parent, var, width=10):
     )
 
 
-def _combo(parent, var, values, width=18, state="readonly"):
+def _combo(
+    parent: tk.Misc, var: tk.StringVar, values: list[str], width: int = 18, state: str = "readonly"
+) -> ttk.Combobox:
     cb = ttk.Combobox(parent, textvariable=var, values=values, state=state, width=width)
     return cb
 
 
-def _spin(parent, var, from_, to, inc=0.5, width=7):
+def _spin(
+    parent: tk.Misc, var: tk.StringVar, from_: float, to: float, inc: float = 0.5, width: int = 7
+) -> tk.Spinbox:
     return tk.Spinbox(
         parent,
         from_=from_,
@@ -157,17 +166,11 @@ def _spin(parent, var, from_, to, inc=0.5, width=7):
     )
 
 
-def _line(parent, pady=3):
+def _line(parent: tk.Misc, pady: int = 3) -> tk.Frame:
     """A strip for controls laid out like a sentence ("Width [ ] Height [ ]")."""
     f = tk.Frame(parent, bg=CLR["bg"])
     f.pack(fill="x", pady=px(pady))
     return f
-
-
-def _pack_lr(*widgets, padx=6):
-    """Pack a sequence of widgets left-to-right."""
-    for w in widgets:
-        w.pack(side="left", padx=px(padx))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -182,7 +185,9 @@ class _Section(tk.Frame):
     Calls *on_toggle* whenever the enabled state changes.
     """
 
-    def __init__(self, parent, title, on_toggle, **kw):
+    def __init__(
+        self, parent: tk.Misc, title: str, on_toggle: Callable[[], object], **kw: Any
+    ) -> None:
         super().__init__(parent, bg=CLR["bg"], **kw)
         self.enabled = tk.BooleanVar(value=False)
         self._cb = on_toggle
@@ -207,10 +212,10 @@ class _Section(tk.Frame):
         self.body.pack(fill="x")
         self._set_body_state("disabled")
 
-    def get(self):
+    def get(self) -> bool:
         return self.enabled.get()
 
-    def _toggled(self):
+    def _toggled(self) -> None:
         self._set_body_state("normal" if self.enabled.get() else "disabled")
         self._cb()
 
@@ -219,19 +224,19 @@ class _Section(tk.Frame):
         self.enabled.set(on)
         self._set_body_state("normal" if on else "disabled")
 
-    def _set_body_state(self, state):
+    def _set_body_state(self, state: str) -> None:
         fg = CLR["fg"] if state == "normal" else CLR["fgdim"]
         self._walk(self.body, state, fg)
 
-    def _walk(self, widget, state, fg):
+    def _walk(self, widget: tk.Misc, state: str, fg: str) -> None:
         cls = widget.winfo_class()
         try:
             if cls in ("Entry", "Spinbox", "Button", "Checkbutton", "Radiobutton"):
-                widget.config(state=state)
+                widget["state"] = state
             if cls in ("Label",):
-                widget.config(fg=fg)
+                widget["fg"] = fg
             if cls == "TCombobox":
-                widget.config(state="readonly" if state == "normal" else "disabled")
+                widget["state"] = "readonly" if state == "normal" else "disabled"
         except tk.TclError:
             pass
         for child in widget.winfo_children():
@@ -246,18 +251,18 @@ class _Section(tk.Frame):
 class AllInOneTab(BaseTab):
     """Pipeline builder - combine any processing steps into one FFmpeg pass."""
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._probed_path: str | None = None
         self._duration = 0.0  # loaded video duration - needed for fade-out math
-        self._last_cmd = []  # most recently built command list
+        self._last_cmd: list[str] = []  # most recently built command list
         self._build_ui()
 
     # ─────────────────────────────────────────────────────────────────────
     #  Top-level layout
     # ─────────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # ── Fixed header ──────────────────────────────────────────────────
         make_header(self, t("tab.all_in_one"), t("all_in_one.subtitle"), icon="🎛")
 
@@ -278,7 +283,7 @@ class AllInOneTab(BaseTab):
     #  Source / Output
     # ─────────────────────────────────────────────────────────────────────
 
-    def _build_io(self, parent):
+    def _build_io(self, parent: tk.Misc) -> None:
         self._src_var = tk.StringVar()
         self._out_var = tk.StringVar()
 
@@ -291,8 +296,8 @@ class AllInOneTab(BaseTab):
         self._dur_lbl = tk.Label(r1, text="", bg=CLR["bg"], fg=CLR["accent"], font=(MONO_FONT, 9))
         self._dur_lbl.pack(side="left", padx=px(10))
 
-        self._src_job = None
-        self._src_var.trace_add("write", lambda *_a: self._src_typed())
+        self._src_job: str | None = None
+        on_write(self._src_var, lambda: self._src_typed())
 
         r2 = _line(parent, pady=2)
         _lbl(r2, t("common.output_file"), bold=True).pack(side="left")
@@ -301,7 +306,7 @@ class AllInOneTab(BaseTab):
             r2, text=t("common.save_as"), command=self._browse_out, bg=CLR["panel"], fg=CLR["fg"]
         ).pack(side="left")
 
-    def _browse_src(self):
+    def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"), ("All", "*.*")]
         )
@@ -315,12 +320,12 @@ class AllInOneTab(BaseTab):
         tasks.submit(partial(self._load_duration, p))
         self._rebuild_cmd()
 
-    def _src_typed(self):
+    def _src_typed(self) -> None:
         """Typed / pasted / dropped paths are probed too (debounced)."""
         if self._src_job is not None:
             self.after_cancel(self._src_job)
 
-        def go():
+        def go() -> None:
             self._src_job = None
             p = self._src_var.get().strip()
             if p and os.path.isfile(p) and p != self._probed_path:
@@ -331,7 +336,7 @@ class AllInOneTab(BaseTab):
 
         self._src_job = self.after(400, go)
 
-    def _load_duration(self, path):
+    def _load_duration(self, path: str) -> None:
         from core import ffmpeg as _ff
 
         info = _ff.try_probe(path)
@@ -343,7 +348,7 @@ class AllInOneTab(BaseTab):
         self.after(0, lambda: self._dur_lbl.config(text=f"{dur:.2f}s" if dur else ""))
         self.after(0, self._rebuild_cmd)
 
-    def _browse_out(self):
+    def _browse_out(self) -> None:
         p = dialogs.asksaveasfilename(
             defaultextension=".mp4",
             filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"), ("MOV", "*.mov"), ("All", "*.*")],
@@ -356,10 +361,10 @@ class AllInOneTab(BaseTab):
     #  Sections
     # ─────────────────────────────────────────────────────────────────────
 
-    def _build_sections(self, parent):
+    def _build_sections(self, parent: tk.Misc) -> None:
         """Build all optional processing sections inside the scrollable area."""
 
-        def sep():
+        def sep() -> None:
             tk.Frame(parent, bg=CLR["panel"], height=px(2)).pack(fill="x", pady=px(2))
 
         self._build_trim(parent)
@@ -388,7 +393,7 @@ class AllInOneTab(BaseTab):
 
     # ── ✂ Trim ────────────────────────────────────────────────────────────
 
-    def _build_trim(self, parent):
+    def _build_trim(self, parent: tk.Misc) -> None:
         self._sec_trim = _Section(parent, "✂  Trim", self._rebuild_cmd)
         self._sec_trim.pack(fill="x", pady=px(1))
         b = self._sec_trim.body
@@ -407,7 +412,7 @@ class AllInOneTab(BaseTab):
 
     # ── 📐 Scale ──────────────────────────────────────────────────────────
 
-    def _build_scale(self, parent):
+    def _build_scale(self, parent: tk.Misc) -> None:
         self._sec_scale = _Section(parent, "📐  Scale / Resolution", self._rebuild_cmd)
         self._sec_scale.pack(fill="x", pady=px(1))
         b = self._sec_scale.body
@@ -419,8 +424,8 @@ class AllInOneTab(BaseTab):
         self._scale_pad = tk.BooleanVar(value=False)
 
         for v in (self._scale_preset, self._scale_w, self._scale_h, self._scale_algo):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
-        self._scale_pad.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
+        on_write(self._scale_pad, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
         _lbl(r1, "Preset:").pack(side="left")
@@ -451,7 +456,7 @@ class AllInOneTab(BaseTab):
             command=self._rebuild_cmd,
         ).pack(side="left", padx=px(10))
 
-    def _on_res_preset(self, *_):
+    def _on_res_preset(self, *_: object) -> None:
         size = _RES_PRESETS.get(self._scale_preset.get())
         if size is not None:
             self._scale_w.set(str(size[0]))
@@ -460,13 +465,13 @@ class AllInOneTab(BaseTab):
 
     # ── 🎬 Frame Rate ─────────────────────────────────────────────────────
 
-    def _build_fps(self, parent):
+    def _build_fps(self, parent: tk.Misc) -> None:
         self._sec_fps = _Section(parent, "🎬  Frame Rate", self._rebuild_cmd)
         self._sec_fps.pack(fill="x", pady=px(1))
         b = self._sec_fps.body
 
         self._fps_val = tk.StringVar(value="30")
-        self._fps_val.trace_add("write", lambda *_: self._rebuild_cmd())
+        on_write(self._fps_val, lambda: self._rebuild_cmd())
 
         r = _line(b)
         _lbl(r, "Target FPS:").pack(side="left")
@@ -476,7 +481,7 @@ class AllInOneTab(BaseTab):
 
     # ── 🔄 Rotate & Flip ─────────────────────────────────────────────────
 
-    def _build_rotate(self, parent):
+    def _build_rotate(self, parent: tk.Misc) -> None:
         self._sec_rotate = _Section(parent, "🔄  Rotate & Flip", self._rebuild_cmd)
         self._sec_rotate.pack(fill="x", pady=px(1))
         b = self._sec_rotate.body
@@ -486,7 +491,7 @@ class AllInOneTab(BaseTab):
         self._flip_v = tk.BooleanVar(value=False)
 
         for v in (self._rotate_val, self._flip_h, self._flip_v):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
         _lbl(r, "Rotation:").pack(side="left")
@@ -527,7 +532,7 @@ class AllInOneTab(BaseTab):
 
     # ── ⚡ Speed ──────────────────────────────────────────────────────────
 
-    def _build_speed(self, parent):
+    def _build_speed(self, parent: tk.Misc) -> None:
         self._sec_speed = _Section(parent, "⚡  Speed", self._rebuild_cmd)
         self._sec_speed.pack(fill="x", pady=px(1))
         b = self._sec_speed.body
@@ -535,7 +540,7 @@ class AllInOneTab(BaseTab):
         self._speed_val = tk.StringVar(value="2.0")
         self._speed_pitch = tk.BooleanVar(value=True)
         for v in (self._speed_val, self._speed_pitch):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
         _lbl(r, "Speed multiplier:").pack(side="left")
@@ -559,18 +564,18 @@ class AllInOneTab(BaseTab):
 
     # ── 🎨 Color & Image ──────────────────────────────────────────────────
 
-    def _slider_moved(self, var, value):
+    def _slider_moved(self, var: tk.StringVar, value: str) -> None:
         var.set(f"{float(value):.2f}")
         self._rebuild_cmd()
 
-    def _build_color(self, parent):
+    def _build_color(self, parent: tk.Misc) -> None:
         self._sec_color = _Section(parent, "🎨  Color & Image", self._rebuild_cmd)
         self._sec_color.pack(fill="x", pady=px(1))
         b = self._sec_color.body
 
-        def _sv(default):
+        def _sv(default: str) -> tk.StringVar:
             v = tk.StringVar(value=str(default))
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
             return v
 
         self._bri = _sv("0.00")
@@ -591,7 +596,7 @@ class AllInOneTab(BaseTab):
             _lbl(r, label, bold=True).pack(side="left")
             sc = tk.Scale(
                 r,
-                variable=var,
+                variable=cast("tk.DoubleVar", var),  # Tk keeps the number as text either way
                 from_=lo,
                 to=hi,
                 resolution=inc,
@@ -614,7 +619,7 @@ class AllInOneTab(BaseTab):
             command=self._reset_color,
         ).pack(side="left")
 
-    def _reset_color(self):
+    def _reset_color(self) -> None:
         self._bri.set("0.00")
         self._con.set("1.00")
         self._sat.set("1.00")
@@ -624,7 +629,7 @@ class AllInOneTab(BaseTab):
 
     # ── 🌫 Denoise ────────────────────────────────────────────────────────
 
-    def _build_denoise(self, parent):
+    def _build_denoise(self, parent: tk.Misc) -> None:
         self._sec_denoise = _Section(parent, "🌫  Denoise", self._rebuild_cmd)
         self._sec_denoise.pack(fill="x", pady=px(1))
         b = self._sec_denoise.body
@@ -632,7 +637,7 @@ class AllInOneTab(BaseTab):
         self._denoise_algo = tk.StringVar(value="hqdn3d")
         self._denoise_str = tk.StringVar(value="Medium")
         for v in (self._denoise_algo, self._denoise_str):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
         _lbl(r, "Algorithm:").pack(side="left")
@@ -657,7 +662,7 @@ class AllInOneTab(BaseTab):
 
     # ── 🔪 Sharpen ────────────────────────────────────────────────────────
 
-    def _build_sharpen(self, parent):
+    def _build_sharpen(self, parent: tk.Misc) -> None:
         self._sec_sharpen = _Section(parent, "🔪  Sharpen", self._rebuild_cmd)
         self._sec_sharpen.pack(fill="x", pady=px(1))
         b = self._sec_sharpen.body
@@ -665,7 +670,7 @@ class AllInOneTab(BaseTab):
         self._sharp_lx = tk.StringVar(value="5")
         self._sharp_la = tk.StringVar(value="1.0")
         for v in (self._sharp_lx, self._sharp_la):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
         _lbl(r, "Kernel size (odd):").pack(side="left")
@@ -678,7 +683,7 @@ class AllInOneTab(BaseTab):
 
     # ── 🔊 Audio ──────────────────────────────────────────────────────────
 
-    def _build_audio(self, parent):
+    def _build_audio(self, parent: tk.Misc) -> None:
         self._sec_audio = _Section(parent, "🔊  Audio Processing", self._rebuild_cmd)
         self._sec_audio.pack(fill="x", pady=px(1))
         b = self._sec_audio.body
@@ -689,7 +694,7 @@ class AllInOneTab(BaseTab):
         self._norm_lufs = tk.StringVar(value="-23")
 
         for v in (self._vol_en, self._vol_val, self._norm_en, self._norm_lufs):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
         tk.Checkbutton(
@@ -723,7 +728,7 @@ class AllInOneTab(BaseTab):
 
     # ── 💬 Text Overlay ───────────────────────────────────────────────────
 
-    def _build_text(self, parent):
+    def _build_text(self, parent: tk.Misc) -> None:
         self._sec_text = _Section(parent, "💬  Text / Watermark Overlay", self._rebuild_cmd)
         self._sec_text.pack(fill="x", pady=px(1))
         b = self._sec_text.body
@@ -733,7 +738,7 @@ class AllInOneTab(BaseTab):
         self._text_color = tk.StringVar(value="white")
         self._text_pos = tk.StringVar(value="Bottom Right")
         for v in (self._text_val, self._text_size, self._text_color, self._text_pos):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
         _lbl(r1, "Text:").pack(side="left")
@@ -759,7 +764,7 @@ class AllInOneTab(BaseTab):
 
     # ── 🌅 Fade In / Out ─────────────────────────────────────────────────
 
-    def _build_fade(self, parent):
+    def _build_fade(self, parent: tk.Misc) -> None:
         self._sec_fade = _Section(parent, "🌅  Fade In / Fade Out", self._rebuild_cmd)
         self._sec_fade.pack(fill="x", pady=px(1))
         b = self._sec_fade.body
@@ -771,7 +776,7 @@ class AllInOneTab(BaseTab):
         self._fade_audio = tk.BooleanVar(value=True)
 
         for v in (self._fi_en, self._fi_dur, self._fo_en, self._fo_dur, self._fade_audio):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
         tk.Checkbutton(
@@ -814,7 +819,7 @@ class AllInOneTab(BaseTab):
 
     # ── ⚙ Encode Settings ─────────────────────────────────────────────────
 
-    def _build_encode(self, parent):
+    def _build_encode(self, parent: tk.Misc) -> None:
         self._sec_encode = _Section(parent, "⚙  Encode Settings", self._rebuild_cmd)
         self._sec_encode.pack(fill="x", pady=px(1))
         # Default ON - you almost always want to set these
@@ -828,7 +833,7 @@ class AllInOneTab(BaseTab):
         self._abitrate = tk.StringVar(value="192k")
 
         for v in (self._vcodec, self._crf, self._preset, self._acodec, self._abitrate):
-            v.trace_add("write", lambda *_: self._rebuild_cmd())
+            on_write(v, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
         _lbl(r1, "Video codec:").pack(side="left")
@@ -851,14 +856,14 @@ class AllInOneTab(BaseTab):
     #  Fixed bottom bar: command display + render
     # ─────────────────────────────────────────────────────────────────────
 
-    def _build_bottom(self):
+    def _build_bottom(self) -> None:
         bottom = tk.Frame(self, bg=CLR["panel"])
         bottom.pack(side="bottom", fill="x")
         self._build_command_view(bottom)
         self._build_actions(bottom)
         self._rebuild_cmd()  # the first command
 
-    def _build_command_view(self, bottom):
+    def _build_command_view(self, bottom: tk.Frame) -> None:
         """The FFmpeg command: its heading, Copy and Reset, and the editable text."""
         # ── Command label + copy button ────────────────────────────────────
         cmd_hdr = tk.Frame(bottom, bg=CLR["panel"])
@@ -895,15 +900,14 @@ class AllInOneTab(BaseTab):
             relief="flat",
             bd=px(4),
         )
-        cmd_sb_x = ttk.Scrollbar(cmd_frame, orient="horizontal", command=self._cmd_text.xview)
-        cmd_sb_y = ttk.Scrollbar(cmd_frame, orient="vertical", command=self._cmd_text.yview)
-        self._cmd_text.configure(xscrollcommand=cmd_sb_x.set, yscrollcommand=cmd_sb_y.set)
+        cmd_sb_x = linked_scrollbar(cmd_frame, self._cmd_text, "horizontal")
+        cmd_sb_y = linked_scrollbar(cmd_frame, self._cmd_text)
         cmd_sb_y.pack(side="right", fill="y")
         self._cmd_text.pack(side="left", fill="x", expand=True)
         self._cmd_text.bind("<<Modified>>", self._on_cmd_modified)
         cmd_sb_x.pack(side="bottom", fill="x")
 
-    def _build_actions(self, bottom):
+    def _build_actions(self, bottom: tk.Frame) -> None:
         """Render, Stop and the other buttons, and the log."""
         # ── Action buttons ────────────────────────────────────────────────
         btn_row = tk.Frame(bottom, bg=CLR["panel"])
@@ -956,7 +960,7 @@ class AllInOneTab(BaseTab):
     def _source(self) -> str:
         return self._src_var.get().strip()
 
-    def _rebuild_cmd(self, *_):
+    def _rebuild_cmd(self, *_: object) -> None:
         """Show the FFmpeg command for every enabled section (core/ops/all_in_one.py)."""
         if not hasattr(self, "_cmd_text"):
             return
@@ -1116,7 +1120,7 @@ class AllInOneTab(BaseTab):
     #  Command display helpers
     # ─────────────────────────────────────────────────────────────────────
 
-    def _set_cmd_text(self, text):
+    def _set_cmd_text(self, text: str) -> None:
         self._setting_text = True
         self._cmd_text.config(state="normal")
         self._cmd_text.delete("1.0", "end")
@@ -1124,7 +1128,7 @@ class AllInOneTab(BaseTab):
         self._cmd_text.edit_modified(False)
         self._setting_text = False
 
-    def _on_cmd_modified(self, _event=None):
+    def _on_cmd_modified(self, _event: tk.Event[tk.Misc] | None = None) -> None:
         if self._cmd_text.edit_modified() and not getattr(self, "_setting_text", False):
             self._cmd_dirty = True
             self._edit_lbl.config(
@@ -1132,11 +1136,11 @@ class AllInOneTab(BaseTab):
             )
         self._cmd_text.edit_modified(False)
 
-    def _reset_cmd(self):
+    def _reset_cmd(self) -> None:
         self._cmd_dirty = False
         self._rebuild_cmd()
 
-    def _get_cmd_from_text(self):
+    def _get_cmd_from_text(self) -> list[str]:
         """The exact argv list, or the user's edited text parsed back."""
         if not getattr(self, "_cmd_dirty", False):
             return list(getattr(self, "_last_cmd", []) or [])
@@ -1158,7 +1162,7 @@ class AllInOneTab(BaseTab):
     #  Actions
     # ─────────────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         cmd = self._get_cmd_from_text()
         if not cmd:
             return
@@ -1180,7 +1184,7 @@ class AllInOneTab(BaseTab):
         self._btn_stop.config(state="normal")
 
         # A little wrapper to re-disable the STOP button when FFmpeg finishes
-        def _on_done_wrapper(rc):
+        def _on_done_wrapper(rc: int) -> None:
             self._btn_stop.config(state="disabled")
             self.show_result(rc, out)
 
@@ -1203,7 +1207,7 @@ class AllInOneTab(BaseTab):
             name="All-in-One",
         )
 
-    def _stop_render(self):
+    def _stop_render(self) -> None:
         """Cancel this tab's queued/running jobs (kills only their own FFmpeg)."""
         self.cancel_render()
 
@@ -1211,13 +1215,13 @@ class AllInOneTab(BaseTab):
         self._btn_stop.config(state="disabled")
         self.btn_render.config(state="normal", text="▶  RENDER")
 
-    def _copy_cmd(self):
+    def _copy_cmd(self) -> None:
         raw = self._cmd_text.get("1.0", "end").strip()
         self.clipboard_clear()
         self.clipboard_append(raw)
         self.log(self.console, t("log.all_in_one.command_copied_to_clipboard"))
 
-    def _save_bat(self):
+    def _save_bat(self) -> None:
         argv = self._get_cmd_from_text()
         if not argv:
             return
@@ -1235,7 +1239,7 @@ class AllInOneTab(BaseTab):
         except OSError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)
 
-    def _save_sh(self):
+    def _save_sh(self) -> None:
         argv = self._get_cmd_from_text()
         if not argv:
             return

@@ -31,6 +31,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit.tktyped import draw_image, on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import FileRow, output_section, scroll_body
 
@@ -71,21 +72,21 @@ ATTACH = {
 
 
 class IntroMakerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._photo = None
-        self._preview_job = None
+        self._photo: tk.PhotoImage | None = None
+        self._preview_job: str | None = None
         self._build_ui()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, design = self._build_header()
         self._build_text(design)
         self._build_attach_to_a_video_optional(body, design)
         self._build_render(body)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
             t("tab.intro_outro_maker"),
@@ -109,7 +110,7 @@ class IntroMakerTab(BaseTab):
         self.canvas.pack(side="right", padx=px(10, 0))
         return self._build_card_text(body, left)
 
-    def _build_card_text(self, body, left):
+    def _build_card_text(self, body: tk.Frame, left: tk.Frame) -> tuple[tk.Frame, tk.LabelFrame]:
         """The card's text, font, size, animation and position."""
         design = tk.LabelFrame(left, text="  Card  ", padx=px(10), pady=px(6))
         design.pack(fill="x")
@@ -176,7 +177,7 @@ class IntroMakerTab(BaseTab):
         )
         return body, design
 
-    def _build_text(self, design):
+    def _build_text(self, design: tk.LabelFrame) -> None:
         self.text_btn = ColourButton(
             design, "#FFFFFF", text="Text colour", width=12, on_change=self._recolour
         )
@@ -236,7 +237,7 @@ class IntroMakerTab(BaseTab):
             pady=2,
         )
 
-    def _build_attach_to_a_video_optional(self, body, design):
+    def _build_attach_to_a_video_optional(self, body: tk.Frame, design: tk.LabelFrame) -> None:
         self.res_var = tk.StringVar(value=next(iter(RESOLUTIONS)))
         self.form_row(
             design,
@@ -278,7 +279,7 @@ class IntroMakerTab(BaseTab):
             self.dur_var,
             self.res_var,
         ):
-            var.trace_add("write", lambda *_a: self._schedule())
+            on_write(var, lambda: self._schedule())
 
         att = tk.LabelFrame(body, text="  Attach to a video (optional)  ", padx=px(10), pady=px(6))
         att.pack(fill="x", padx=px(20), pady=px(6))
@@ -306,7 +307,7 @@ class IntroMakerTab(BaseTab):
             suggest=self._suggest,
         )
 
-    def _build_render(self, body):
+    def _build_render(self, body: tk.Frame) -> None:
         self.btn_render = self.make_render_btn(body, "🎬  CREATE", self._render, width=24)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
@@ -315,7 +316,7 @@ class IntroMakerTab(BaseTab):
     def _recolour(self, _colour: str) -> None:
         self._schedule()
 
-    def _bg_changed(self):
+    def _bg_changed(self) -> None:
         kind = self.bg_kind()
         states: dict[str, tuple[Literal["normal", "disabled"], ...]] = {
             "gradient": ("normal", "normal", "normal"),
@@ -330,7 +331,7 @@ class IntroMakerTab(BaseTab):
         self.bg_row.entry.config(state="normal" if kind == "file" else "disabled")
         self._schedule()
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         main = self.main_row.path
         if main and self.attach_key() != "none":
             return self.suggest_output(
@@ -342,13 +343,13 @@ class IntroMakerTab(BaseTab):
 
     # ── settings ─────────────────────────────────────────────────────────────
 
-    def _key(self, table, var, default):
+    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
-    def bg_kind(self):
+    def bg_kind(self) -> str:
         return self._key(BACKGROUNDS, self.bg_var, "solid")
 
-    def attach_key(self):
+    def attach_key(self) -> str:
         return self._key(ATTACH, self.attach_var, "none")
 
     def _card(self) -> ic.CardLook:
@@ -361,14 +362,14 @@ class IntroMakerTab(BaseTab):
         )
         return ic.CardLook(background=bg, fade=self.fade_var.get(), music=self.music_row.path)
 
-    def settings(self):
+    def settings(self) -> float:
         dur = common.number(self.dur_var.get(), "Length", 0.5, 120)
         title = self.title_var.get()
         if not title.strip() and not self.sub_var.get().strip():
             raise ValueError("Enter a title or subtitle.")
         return dur
 
-    def script(self, w, h, dur):
+    def script(self, w: int, h: int, dur: float) -> ass.Script:
         card = Card(
             title=self.title_var.get(),
             subtitle=self.sub_var.get(),
@@ -383,12 +384,12 @@ class IntroMakerTab(BaseTab):
 
     # ── preview ──────────────────────────────────────────────────────────────
 
-    def _schedule(self):
+    def _schedule(self) -> None:
         if self._preview_job is not None:
             self.after_cancel(self._preview_job)
         self._preview_job = self.after(400, self._preview)
 
-    def _preview(self):
+    def _preview(self) -> None:
         self._preview_job = None
         try:
             dur = self.settings()
@@ -411,7 +412,7 @@ class IntroMakerTab(BaseTab):
             (px(384), px(216)),
         )
 
-        def work_fn():
+        def work_fn() -> bytes | None:
             try:
                 r = ff.capture(cmd, timeout=60, text=False)
                 return r.stdout if r.returncode == 0 and r.stdout.startswith(b"\x89PNG") else None
@@ -420,18 +421,18 @@ class IntroMakerTab(BaseTab):
 
                 shutil.rmtree(work, ignore_errors=True)
 
-        def show(png):
+        def show(png: bytes | None) -> None:
             if not png or not self.winfo_exists():
                 return
             self._photo = tk.PhotoImage(master=self, data=base64.b64encode(png).decode("ascii"))
             self.canvas.delete("all")
-            self.canvas.create_image(px(192), px(108), image=self._photo)
+            draw_image(self.canvas, px(192), px(108), self._photo)
 
         tasks.submit(work_fn, on_done=show, name="IntroPreview")
 
     # ── render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         try:
             dur = self.settings()
         except ValueError as exc:

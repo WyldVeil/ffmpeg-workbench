@@ -99,8 +99,8 @@ def test_splicer_segments_from_mixed_sources(ui, media, outdir):
     ):
         ui.answer_open(path)
         tab._add_segment()
-        tab.segments[-1]["start"].set(start)
-        tab.segments[-1]["end"].set(end)
+        tab.segments[-1].start.set(start)
+        tab.segments[-1].end.set(end)
     out = str(outdir / "spliced.mp4")
     tab.out_var.set(out)
     ui.click_text(tab, "SPLICE")
@@ -120,11 +120,11 @@ def test_multi_splitter_reports_and_names(ui, media, tmp_path):
     ui.answer_open(str(src))
     ui.click_text(tab, "Browse")
     for r in list(tab.split_rows):
-        tab._remove_row(r["frame"])
+        tab._remove_row(r.frame)
     for a, b in (("0", "2"), ("00:02", "00:04.5")):
         tab._add_row()
-        tab.split_rows[-1]["start"].set(a)
-        tab.split_rows[-1]["end"].set(b)
+        tab.split_rows[-1].start.set(a)
+        tab.split_rows[-1].end.set(b)
     tab.copy_mode.set(False)
     ui.click_text(tab, "EXTRACT")
     ui.wait_idle(180)
@@ -133,6 +133,6 @@ def test_multi_splitter_reports_and_names(ui, media, tmp_path):
     ui.assert_media(str(tmp_path / outs[1]), min_duration=2.4, max_duration=2.6)
     assert ui.dialogs.log[-1][0] == "showinfo"
     # duplicate suffixes are refused up-front
-    tab.split_rows[1]["suffix"].set(tab.split_rows[0]["suffix"].get())
+    tab.split_rows[1].suffix.set(tab.split_rows[0].suffix.get())
     ui.click_text(tab, "EXTRACT")
     assert "different suffixes" in ui.dialogs.warnings()[-1][2]

@@ -69,11 +69,11 @@ RATES = {
 
 
 class MediaGeneratorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("mgen.title"),
@@ -86,7 +86,7 @@ class MediaGeneratorTab(BaseTab):
         self._pattern_changed()
         self._audio_changed()
 
-    def _build_generate_options(self, body):
+    def _build_generate_options(self, body: tk.Frame) -> None:
         """Pattern, size, rate, length and sound."""
         f = tk.LabelFrame(body, text="  What to generate  ", padx=px(12), pady=px(8))
         f.pack(fill="x", padx=px(20), pady=px(10, 4))
@@ -147,7 +147,7 @@ class MediaGeneratorTab(BaseTab):
         )
         self.hint.grid(row=5, column=0, columnspan=3, sticky="w")
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Where it goes (the extension picks the format), the button and the log."""
         self.out_row = save_section(body, t("common.output_file"), suggest=self._suggest_name)
         out_lf = self.out_row.master
@@ -177,7 +177,7 @@ class MediaGeneratorTab(BaseTab):
         ext = ".wav" if self.pattern() == "none" else ".mp4"
         return os.path.join(user_videos_dir(), f"{self.pattern()}{ext}")
 
-    def _pattern_changed(self):
+    def _pattern_changed(self) -> None:
         p = self.pattern()
         if p == "color":
             self.colour_btn.grid()
@@ -198,7 +198,7 @@ class MediaGeneratorTab(BaseTab):
             self.hint.config(text="")
         self._audio_changed()
 
-    def _audio_changed(self):
+    def _audio_changed(self) -> None:
         if self.audio() == "tone":
             self.freq_row.grid()
         else:
@@ -206,7 +206,7 @@ class MediaGeneratorTab(BaseTab):
 
     # ── render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         pattern, audio = self.pattern(), self.audio()
         try:
             dur = common.number(self.dur_var.get(), "Duration", 0.1, 3600)
@@ -247,7 +247,7 @@ class MediaGeneratorTab(BaseTab):
             f"Generating {self.pattern_var.get()} · {w}×{h} @ {self.rate_var.get()} fps · {dur:g}s",
         )
 
-        def done(rc):
+        def done(rc: int) -> None:
             if textfile:
                 with contextlib.suppress(OSError):
                     os.remove(textfile)

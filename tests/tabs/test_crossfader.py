@@ -82,8 +82,8 @@ def test_validation_messages(media):
 def test_tab_end_to_end(ui, media, outdir):
     tab = ui.open("Crossfader")
     for row in list(tab.clip_rows):
-        row["var"].set("")
-        row["clip"] = None
+        row.var.set("")
+        row.clip = None
     assert tab.load_file(media["h264"]) and tab.load_file(media["h264_1080p25"])
     ui.pump(0.2)
     out = str(outdir / "tab.mp4")

@@ -61,7 +61,7 @@ class _Star:
 class StarField:
     """Stars falling over *app* until :meth:`stop`; *speed* can change live."""
 
-    def __init__(self, app: tk.Tk, background: str, count: int, speed: float):
+    def __init__(self, app: tk.Tk, background: str, count: int, speed: float) -> None:
         self.app, self.count, self.speed = app, count, speed
         self.stars: list[_Star] = []
         self._after: str | None = None

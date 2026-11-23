@@ -7,6 +7,8 @@ Reads and writes the same settings.json as AdvancedSettingsTab via the
 centralised core.settings module (no duplicated load/save logic).
 """
 
+from __future__ import annotations
+
 import tkinter as tk
 from tkinter import ttk
 
@@ -26,12 +28,12 @@ START_CHOICES: dict[StartPage, str] = {
 
 
 class SettingsTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.settings = load_settings()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         make_header(self, t("tab.settings"), t("settings.subtitle"), icon="⚙")
 
         lf = tk.LabelFrame(
@@ -65,7 +67,7 @@ class SettingsTab(BaseTab):
             ),
         ]
 
-        self._vars = {}
+        self._vars: dict[str, tk.StringVar] = {}
         for i, (label, key, default, choices) in enumerate(rows):
             var = tk.StringVar(value=self.settings.get(key, default))
             self._vars[key] = var
@@ -111,10 +113,10 @@ class SettingsTab(BaseTab):
             font=(UI_FONT, 9),
         ).pack(pady=px(8))
 
-    def _save(self):
+    def _save(self) -> None:
         # Only the values on this page: settings changed elsewhere since it was
         # opened (favourites, language, network...) must not be reverted.
-        changes = {key: var.get() for key, var in self._vars.items()}
+        changes: dict[str, object] = {key: var.get() for key, var in self._vars.items()}
         changes["default_output_folder"] = self._out_var.get()
         changes["auto_open_output"] = self._auto_open.get()
         changes["start_page"] = self.start_box.value.value

@@ -17,6 +17,7 @@ import contextlib
 import os
 import shutil
 import tkinter as tk
+from collections.abc import Iterator
 from tkinter import messagebox, ttk
 
 from core import ass
@@ -28,6 +29,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker
+from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
@@ -49,26 +51,40 @@ ACCENTS = {
 SIZES = {"Small": 0.8, "Medium": 1.0, "Large": 1.25}
 
 
-def _walk(widget):
+def _walk(widget: tk.Misc) -> Iterator[tk.Misc]:
     yield widget
     for child in widget.winfo_children():
         yield from _walk(child)
 
 
+class _CardRow:
+    """One title card on the page: its frame, its fields and its colour."""
+
+    swatch: ColourButton
+
+    def __init__(self, frame: tk.LabelFrame, card: Card) -> None:
+        self.frame = frame
+        self.style = tk.StringVar(value=STYLES.get(card.style, STYLES["lower_third"]))
+        self.line1 = tk.StringVar(value=card.line1)
+        self.line2 = tk.StringVar(value=card.line2)
+        self.start = tk.StringVar(value=f"{card.start:g}")
+        self.duration = tk.StringVar(value=f"{card.duration:g}")
+
+
 class TitlesGeneratorTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self.rows: list = []
-        self._info = None
-        self._job = None
-        self._preview_dir = None
+        self.rows: list[_CardRow] = []
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
+        self._preview_dir: str | None = None
         self._preview_n = 0
         self._build_ui()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.animated_titles"), t("titles.subtitle"), icon="🎬")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -79,7 +95,7 @@ class TitlesGeneratorTab(BaseTab):
         self._build_look(body)
         self._build_cards(body)
 
-    def _build_preview(self, body):
+    def _build_preview(self, body: tk.Frame) -> None:
         """The frame the titles are previewed on."""
         pv = tk.Frame(body)
         pv.pack(pady=px(4))
@@ -97,7 +113,7 @@ class TitlesGeneratorTab(BaseTab):
         self.slider.pack(fill="x")
         framestep.slider(self.slider, self.preview)  # , and . step a frame
 
-    def _build_look(self, body):
+    def _build_look(self, body: tk.Frame) -> None:
         """Font, text size and animation length for every card."""
         look = tk.Frame(body)
         look.pack(fill="x", padx=px(20), pady=px(4))
@@ -118,9 +134,9 @@ class TitlesGeneratorTab(BaseTab):
         tk.Label(look, text="Animation (s):").pack(side="left", padx=px(12, 0))
         self.anim_var = tk.StringVar(value="0.35")
         tk.Entry(look, textvariable=self.anim_var, width=5).pack(side="left", padx=px(6))
-        self.anim_var.trace_add("write", lambda *_a: self._schedule())
+        on_write(self.anim_var, lambda: self._schedule())
 
-    def _build_cards(self, body):
+    def _build_cards(self, body: tk.Frame) -> None:
         """The cards, the output, the button and the log."""
         cards_hdr = tk.Frame(body)
         cards_hdr.pack(fill="x", padx=px(20), pady=px(8, 0))
@@ -152,29 +168,17 @@ class TitlesGeneratorTab(BaseTab):
         self.add_card(Card("lower_third", "Jane Smith", "Director of Photography", 1.0, 4.0))
         self.add_card(Card("chapter", "Chapter One", "The beginning", 6.0, 4.0, "#FFB300"))
 
-    def add_card(self, card: Card | None = None):
-        card = card or Card(start=(self.rows[-1]["vars"]["start"].get() if self.rows else 1.0))
-        if not isinstance(card.start, (int, float)):
-            try:
-                card.start = ff.parse_time(card.start) + 5
-            except ValueError:
-                card.start = 1.0
+    def add_card(self, card: Card | None = None) -> _CardRow:
+        card = card or Card(start=self._next_start())
         frame = tk.LabelFrame(
             self.cards_frame, text=f"  Card {len(self.rows) + 1}  ", padx=px(8), pady=px(4)
         )
         frame.pack(fill="x", pady=px(3))
-        v = {
-            "style": tk.StringVar(value=STYLES.get(card.style, STYLES["lower_third"])),
-            "line1": tk.StringVar(value=card.line1),
-            "line2": tk.StringVar(value=card.line2),
-            "start": tk.StringVar(value=f"{card.start:g}"),
-            "duration": tk.StringVar(value=f"{card.duration:g}"),
-        }
-        row = {"frame": frame, "vars": v}
+        row = _CardRow(frame, card)
         self._card_controls(frame, row, card)
-        self._card_lines(frame, v)
-        for var in v.values():
-            var.trace_add("write", lambda *_a: self._schedule())
+        self._card_lines(frame, row)
+        for var in (row.style, row.line1, row.line2, row.start, row.duration):
+            on_write(var, lambda: self._schedule())
         for w in _walk(frame):
             if isinstance(w, tk.Entry):
                 w.bind("<FocusIn>", lambda _e, r=row: self._use(r), add=True)
@@ -183,27 +187,36 @@ class TitlesGeneratorTab(BaseTab):
         self._schedule()
         return row
 
-    def _card_controls(self, frame, row, card):
+    def _next_start(self) -> float:
+        """A new card's start: five seconds after the last card's, else 1 s."""
+        if not self.rows:
+            return 1.0
+        try:
+            return ff.parse_time(self.rows[-1].start.get()) + 5
+        except ValueError:
+            return 1.0
+
+    def _card_controls(self, frame: tk.LabelFrame, row: _CardRow, card: Card) -> None:
         """Style, start (with the i button), duration (and ◉ to end here), colour, show, remove."""
-        v = row["vars"]
+        v = row
         r1 = tk.Frame(frame)
         r1.pack(fill="x")
         ttk.Combobox(
-            r1, textvariable=v["style"], values=list(STYLES.values()), state="readonly", width=30
+            r1, textvariable=v.style, values=list(STYLES.values()), state="readonly", width=30
         ).pack(side="left")
         tk.Label(r1, text=t("titles.start_label")).pack(side="left", padx=px(10, 2))
         start = MomentPicker(
             r1,
-            value=v["start"].get(),
+            value=v.start.get(),
             width=8,
             here=lambda: float(self.pos_var.get()),
             on_change=lambda r=row: self._use(r),
             tip="Start at the frame shown (i)",
         )
         start.pack(side="left")
-        v["start"] = start.var
+        v.start = start.var
         tk.Label(r1, text=t("titles.duration_label")).pack(side="left", padx=px(10, 2))
-        tk.Entry(r1, textvariable=v["duration"], width=6).pack(side="left")
+        tk.Entry(r1, textvariable=v.duration, width=6).pack(side="left")
         end_btn = tk.Button(
             r1,
             text="◉",
@@ -216,7 +229,7 @@ class TitlesGeneratorTab(BaseTab):
         add_tooltip(end_btn, "End at the frame shown (o) - sets the duration")
         swatch = ColourButton(r1, card.accent, width=3, on_change=lambda _c: self._schedule())
         swatch.pack(side="left", padx=px(10))
-        row["swatch"] = swatch
+        row.swatch = swatch
         tk.Button(
             r1, text="👁", relief="flat", cursor="hand2", command=lambda r=row: self._show_card(r)
         ).pack(side="left")
@@ -225,55 +238,55 @@ class TitlesGeneratorTab(BaseTab):
         ).pack(side="right")
 
     @staticmethod
-    def _card_lines(frame, v):
+    def _card_lines(frame: tk.LabelFrame, v: _CardRow) -> None:
         """The card's two lines of text."""
         r2 = tk.Frame(frame)
         r2.pack(fill="x", pady=px(3, 0))
         tk.Label(r2, text=t("titles.line_1_label"), width=7, anchor="w").pack(side="left")
-        tk.Entry(r2, textvariable=v["line1"], width=34).pack(side="left", padx=px(0, 10))
+        tk.Entry(r2, textvariable=v.line1, width=34).pack(side="left", padx=px(0, 10))
         tk.Label(r2, text=t("titles.line_2_label"), width=7, anchor="w").pack(side="left")
-        tk.Entry(r2, textvariable=v["line2"], width=34).pack(side="left")
+        tk.Entry(r2, textvariable=v.line2, width=34).pack(side="left")
 
     # ── i / o and the ◉ buttons: a card starts / ends at the frame shown ──
-    def _use(self, row):
+    def _use(self, row: _CardRow) -> None:
         self._active = row
 
-    def _card(self):
+    def _card(self) -> _CardRow | None:
         row = getattr(self, "_active", None)
         return row if row in self.rows else (self.rows[-1] if self.rows else None)
 
-    def _end_here(self, row):
+    def _end_here(self, row: _CardRow) -> None:
         self._use(row)
         try:
-            start = ff.parse_time(row["vars"]["start"].get())
+            start = ff.parse_time(row.start.get())
         except ValueError:
             return
         length = float(self.pos_var.get()) - start
         if length > 0:
-            row["vars"]["duration"].set(f"{length:.3f}".rstrip("0").rstrip("."))
+            row.duration.set(f"{length:.3f}".rstrip("0").rstrip("."))
 
-    def mark_in(self):
+    def mark_in(self) -> None:
         row = self._card()
         if row is not None:
-            row["vars"]["start"].set(ff.format_time(float(self.pos_var.get())))
+            row.start.set(ff.format_time(float(self.pos_var.get())))
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         row = self._card()
         if row is not None:
             self._end_here(row)
 
-    def _remove(self, row):
+    def _remove(self, row: _CardRow) -> None:
         if row in self.rows:
             self.rows.remove(row)
-            row["frame"].destroy()
+            row.frame.destroy()
             for i, r in enumerate(self.rows, 1):
-                r["frame"].config(text=f"  Card {i}  ")
+                r.frame.config(text=f"  Card {i}  ")
             self._schedule()
 
-    def _show_card(self, row):
+    def _show_card(self, row: _CardRow) -> None:
         try:
-            start = ff.parse_time(row["vars"]["start"].get())
-            dur = float(row["vars"]["duration"].get())
+            start = ff.parse_time(row.start.get())
+            dur = float(row.duration.get())
         except ValueError:
             return
         at = start + min(1.0, dur / 2)
@@ -282,22 +295,18 @@ class TitlesGeneratorTab(BaseTab):
 
     # ── Model ────────────────────────────────────────────────────────────────
 
-    def cards(self) -> list:
+    def cards(self) -> list[Card]:
         """Cards from the UI; raises ValueError naming the bad field."""
-        out = []
+        out: list[Card] = []
         for i, r in enumerate(self.rows, 1):
-            v = r["vars"]
+            v = r
             try:
-                start = ff.parse_time(v["start"].get())
+                start = ff.parse_time(v.start.get())
             except ValueError:
-                raise ValueError(
-                    f"Card {i}: start time '{v['start'].get()}' is not a time."
-                ) from None
-            dur = common.number(v["duration"].get(), f"Card {i} duration", 0.2, 3600)
-            style = next((k for k, lbl in STYLES.items() if lbl == v["style"].get()), "lower_third")
-            out.append(
-                Card(style, v["line1"].get(), v["line2"].get(), start, dur, r["swatch"].colour)
-            )
+                raise ValueError(f"Card {i}: start time '{v.start.get()}' is not a time.") from None
+            dur = common.number(v.duration.get(), f"Card {i} duration", 0.2, 3600)
+            style = next((k for k, lbl in STYLES.items() if lbl == v.style.get()), "lower_third")
+            out.append(Card(style, v.line1.get(), v.line2.get(), start, dur, r.swatch.colour))
         return out
 
     def script(self, width: int, height: int) -> ass.Script:
@@ -316,7 +325,7 @@ class TitlesGeneratorTab(BaseTab):
 
     # ── Preview ──────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -328,12 +337,12 @@ class TitlesGeneratorTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "titled"))
         self._schedule()
 
-    def _schedule(self):
+    def _schedule(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(250, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         info = self._info
         if info is None or not info.has_video:
@@ -358,7 +367,7 @@ class TitlesGeneratorTab(BaseTab):
 
     # ── Render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -389,7 +398,7 @@ class TitlesGeneratorTab(BaseTab):
         path = self.script(w, h).write(os.path.join(work, "titles.ass"))
         chain = ass.subtitles_filter(path)
 
-        def done(rc):
+        def done(rc: int) -> None:
             shutil.rmtree(work, ignore_errors=True)
             self.show_result(rc, out)
 
@@ -402,7 +411,7 @@ class TitlesGeneratorTab(BaseTab):
             on_done=done,
         )
 
-    def on_app_closing(self):
+    def on_app_closing(self) -> None:
         if self._preview_dir:
             shutil.rmtree(self._preview_dir, ignore_errors=True)
             self._preview_dir = None  # a new one is made if the page is used again

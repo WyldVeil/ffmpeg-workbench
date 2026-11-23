@@ -13,10 +13,13 @@ This is the DaVinci Resolve Fairlight use case for creators:
 The result is the original video re-encoded with the new mixed audio.
 """
 
+from __future__ import annotations
+
 import os
 import tkinter as tk
 from collections.abc import Callable
 from enum import StrEnum
+from functools import partial
 from tkinter import messagebox, ttk
 from typing import Any
 
@@ -26,6 +29,7 @@ from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import SaveRow, scroll_body
 
@@ -62,8 +66,17 @@ MIX_OUTPUTS = {
 AUDIO_ONLY = {MixOutput.MP3: ".mp3", MixOutput.WAV: ".wav", MixOutput.FLAC: ".flac"}
 
 
+def _show_volume(label: tk.Label, var: tk.DoubleVar) -> None:
+    label.config(text=f"{int(var.get() * 100)}%")
+
+
+def _show_pan(label: tk.Label, var: tk.DoubleVar) -> None:
+    pan = var.get()
+    label.config(text="L" if pan < -0.1 else ("R" if pan > 0.1 else "C"))
+
+
 class Track:
-    def __init__(self, idx):
+    def __init__(self, idx: int) -> None:
         self.idx = idx
         self.path = ""
         self.path_var = tk.StringVar()
@@ -82,21 +95,21 @@ class Track:
 
 
 class AudioMixerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.video_path = ""
-        self.tracks = []
+        self.tracks: list[Track] = []
         self._build_ui()
 
     def _out_ext(self) -> str:
         return AUDIO_ONLY.get(self.out_fmt.value, ".mp4")
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self._build_vid()
         self._build_track_grid()
         self._build_master_output()
 
-    def _build_vid(self):
+    def _build_vid(self) -> None:
         make_header(self, t("tab.audio_mixer"), t("mixer.subtitle"), icon="🎚")
 
         # Video source
@@ -132,7 +145,7 @@ class AudioMixerTab(BaseTab):
             length=px(120),
         ).pack(side="left")
 
-    def _build_track_grid(self):
+    def _build_track_grid(self) -> None:
         """Track grid."""
         tk.Frame(self, bg="#333", height=px(1)).pack(fill="x", padx=px(16), pady=px(4))
 
@@ -185,7 +198,7 @@ class AudioMixerTab(BaseTab):
         for _ in range(3):
             self._add_track()
 
-    def _build_master_output(self):
+    def _build_master_output(self) -> None:
         """Master output."""
         tk.Frame(self, bg="#333", height=px(1)).pack(fill="x", padx=px(16), pady=px(4))
         master_f = tk.Frame(self)
@@ -205,9 +218,9 @@ class AudioMixerTab(BaseTab):
         ).pack(side="left", padx=px(8))
         self.master_lbl = tk.Label(master_f, text="100%", width=5, fg=CLR["accent"])
         self.master_lbl.pack(side="left")
-        self.master_vol_var.trace_add(
-            "write",
-            lambda *_: self.master_lbl.config(text=f"{int(self.master_vol_var.get() * 100)}%"),
+        on_write(
+            self.master_vol_var,
+            lambda: self.master_lbl.config(text=f"{int(self.master_vol_var.get() * 100)}%"),
         )
 
         norm_row = tk.Frame(self)
@@ -234,7 +247,7 @@ class AudioMixerTab(BaseTab):
         self.console = self.make_console_block(self, height=5, padx=px(16), pady=px(4))
 
     # ─────────────────────────────────────────────────────────────────────
-    def _add_track(self):
+    def _add_track(self) -> None:
         if len(self.tracks) >= MAX_TRACKS:
             messagebox.showinfo("Max tracks", f"Maximum {MAX_TRACKS} tracks supported.")
             return
@@ -243,7 +256,7 @@ class AudioMixerTab(BaseTab):
         self._draw_track_row(trk)
         self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
 
-    def _draw_track_row(self, trk: Track):
+    def _draw_track_row(self, trk: Track) -> None:
         row = tk.Frame(self.track_frame, relief="groove", bd=px(1))
         row.pack(fill="x", pady=px(2))
         trk.row = row
@@ -252,7 +265,7 @@ class AudioMixerTab(BaseTab):
         self._track_levels(row, trk)
         self._track_timing(row, trk)
 
-    def _track_head(self, row, trk):
+    def _track_head(self, row: tk.Frame, trk: Track) -> None:
         """The number and on/off switch."""
         # Track number + enable
         head = tk.Frame(row, width=px(140))
@@ -262,13 +275,13 @@ class AudioMixerTab(BaseTab):
         ).pack(side="left")
         tk.Checkbutton(head, variable=trk.enabled).pack(side="left")
 
-    def _track_file(self, row, trk):
+    def _track_file(self, row: tk.Frame, trk: Track) -> None:
         """The track's file."""
         # File browse
         file_entry = tk.Entry(row, textvariable=trk.path_var, width=22, font=(MONO_FONT, 8))
         file_entry.pack(side="left", padx=px(2))
 
-        def _browse(tr=trk):
+        def _browse(tr: Track = trk) -> None:
             p = dialogs.askopenfilename(
                 filetypes=[
                     (t("mixer.audio_video"), "*.mp3 *.wav *.aac *.flac *.ogg *.mp4 *.mov"),
@@ -284,7 +297,7 @@ class AudioMixerTab(BaseTab):
             side="left", padx=px(1)
         )
 
-    def _track_levels(self, row, trk):
+    def _track_levels(self, row: tk.Frame, trk: Track) -> None:
         """Type, volume and pan."""
         # Type
         ttk.Combobox(
@@ -305,10 +318,7 @@ class AudioMixerTab(BaseTab):
         ).pack()
         vol_lbl = tk.Label(vol_f, text="100%", width=4, fg=CLR["accent"], font=(UI_FONT, 7))
         vol_lbl.pack()
-        trk.vol_var.trace_add(
-            "write",
-            lambda *_, label=vol_lbl, v=trk.vol_var: label.config(text=f"{int(v.get() * 100)}%"),
-        )
+        on_write(trk.vol_var, partial(_show_volume, vol_lbl, trk.vol_var))
 
         # Pan
         pan_f = tk.Frame(row)
@@ -324,14 +334,9 @@ class AudioMixerTab(BaseTab):
         ).pack()
         pan_lbl = tk.Label(pan_f, text="C", width=3, fg=CLR["fgdim"], font=(UI_FONT, 7))
         pan_lbl.pack()
-        trk.pan_var.trace_add(
-            "write",
-            lambda *_, label=pan_lbl, v=trk.pan_var: label.config(
-                text="L" if v.get() < -0.1 else ("R" if v.get() > 0.1 else "C")
-            ),
-        )
+        on_write(trk.pan_var, partial(_show_pan, pan_lbl, trk.pan_var))
 
-    def _track_timing(self, row, trk):
+    def _track_timing(self, row: tk.Frame, trk: Track) -> None:
         """Offset, fades, loop and mute."""
         # Offset, fade in, fade out
         for var, w in [(trk.offset_var, 6), (trk.fadein_var, 4), (trk.fadeout_var, 4)]:
@@ -345,13 +350,14 @@ class AudioMixerTab(BaseTab):
             row, variable=trk.mute_var, text="M", font=(UI_FONT, 8, "bold"), fg=CLR["red"]
         ).pack(side="left")
 
-    def _remove_last_track(self):
+    def _remove_last_track(self) -> None:
         if self.tracks:
             trk = self.tracks.pop()
-            trk.row.destroy()
+            if trk.row is not None:
+                trk.row.destroy()
             self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
 
-    def _browse_video(self):
+    def _browse_video(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))]
         )
@@ -405,7 +411,7 @@ class AudioMixerTab(BaseTab):
             )
         return specs
 
-    def _render(self):
+    def _render(self) -> None:
         from tabs import common
 
         video = (self.vid_var.get() or getattr(self, "video_path", "")).strip()
@@ -413,7 +419,7 @@ class AudioMixerTab(BaseTab):
         if info is None:
             return
 
-        def track_path(trk):
+        def track_path(trk: Track) -> str:
             typed = trk.path_var.get().strip()
             return typed if os.path.isfile(typed) else getattr(trk, "full_path", trk.path)
 

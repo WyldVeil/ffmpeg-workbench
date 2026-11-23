@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
+from dataclasses import dataclass
 from functools import partial
 from tkinter import messagebox, ttk
 
@@ -25,6 +26,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, output_section, scroll_body
 
 MIN_SPEED, MAX_SPEED = 0.1, 16.0
@@ -56,25 +58,35 @@ PRESETS = {
 # ── Tab ──────────────────────────────────────────────────────────────────────
 
 
+@dataclass(eq=False)
+class _Point:
+    """A speed change on the ramp: when, how fast, and its row on the page."""
+
+    time: tk.StringVar
+    speed: tk.StringVar
+    row: tk.Frame
+    idx: tk.Label
+
+
 class SpeedRamperTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self.duration = 0.0
-        self.ramp_points: list = []
-        self._job = None
+        self.ramp_points: list[_Point] = []
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body = self._build_header()
         self._build_ramp_points(body)
         self._build_out(body)
 
-    def _preset(self, value):
+    def _preset(self, value: float) -> None:
         self.speed_var.set(value)
         self._schedule()
 
-    def _build_header(self):
+    def _build_header(self) -> tk.Frame:
         self.make_header(self, t("tab.speed_ramper"), t("speed_ramp.subtitle"), icon="⚡")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -138,7 +150,7 @@ class SpeedRamperTab(BaseTab):
             ).pack(side="left", padx=px(1))
         return body
 
-    def _build_ramp_points(self, body):
+    def _build_ramp_points(self, body: tk.Frame) -> None:
         # ramp
         self.ramp_f = tk.LabelFrame(
             body, text=f"  {t('speed_ramp.ramp_points_section')}  ", padx=px(10), pady=px(8)
@@ -197,7 +209,7 @@ class SpeedRamperTab(BaseTab):
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"], font=(MONO_FONT, 10))
         self.result_lbl.pack(anchor="w", pady=px(4, 0))
 
-    def _build_out(self, body):
+    def _build_out(self, body: tk.Frame) -> None:
         self.encoder, self.out_row = output_section(
             body,
             t("common.output_file"),
@@ -216,9 +228,9 @@ class SpeedRamperTab(BaseTab):
 
     # ── Points ───────────────────────────────────────────────────────────────
 
-    def _add_point(self, at=None, speed=1.0):
+    def _add_point(self, at: float | None = None, speed: float = 1.0) -> None:
         if at is None:
-            last = self.ramp_points[-1]["time"].get() if self.ramp_points else "0"
+            last = self.ramp_points[-1].time.get() if self.ramp_points else "0"
             try:
                 at = ff.parse_time(last) + 1.0
             except ValueError:
@@ -232,47 +244,47 @@ class SpeedRamperTab(BaseTab):
         for var, w in ((tv, 16), (sv, 10)):
             e = tk.Entry(row, textvariable=var, width=w, relief="flat")
             e.pack(side="left", padx=px(2))
-            var.trace_add("write", lambda *_a: self._schedule())
-        point = {"time": tv, "speed": sv, "row": row, "idx": idx}
+            on_write(var, lambda: self._schedule())
+        point = _Point(tv, sv, row, idx)
         tk.Button(
             row,
             text="✕",
             relief="flat",
             width=2,
             cursor="hand2",
-            command=lambda p=point: self._remove_point(p),
+            command=partial(self._remove_point, point),
         ).pack(side="left", padx=px(4))
         self.ramp_points.append(point)
         self._schedule()
 
-    def _remove_point(self, point):
+    def _remove_point(self, point: _Point) -> None:
         if point in self.ramp_points:
             self.ramp_points.remove(point)
-            point["row"].destroy()
+            point.row.destroy()
             for i, p in enumerate(self.ramp_points, 1):
-                p["idx"].config(text=str(i))
+                p.idx.config(text=str(i))
             self._schedule()
 
-    def _apply_preset(self, name=None):
+    def _apply_preset(self, name: str | None = None) -> None:
         name = name or self.preset_var.get()
         if name not in PRESETS:
             return
         for p in list(self.ramp_points):
-            p["row"].destroy()
+            p.row.destroy()
         self.ramp_points.clear()
         dur = self.duration or 10.0
         for frac, speed in PRESETS[name]:
             self._add_point(frac * dur, speed)
 
-    def parsed_points(self):
+    def parsed_points(self) -> list[tuple[float, float]]:
         """[(time, speed)] from the rows; raises ValueError with a clear message."""
-        pts = []
+        pts: list[tuple[float, float]] = []
         for i, p in enumerate(self.ramp_points, 1):
             try:
-                tm = ff.parse_time(p["time"].get())
+                tm = ff.parse_time(p.time.get())
             except ValueError:
-                raise ValueError(f"Point {i}: '{p['time'].get()}' is not a time.") from None
-            sp = common.number(p["speed"].get(), f"Point {i} speed", MIN_SPEED, MAX_SPEED)
+                raise ValueError(f"Point {i}: '{p.time.get()}' is not a time.") from None
+            sp = common.number(p.speed.get(), f"Point {i} speed", MIN_SPEED, MAX_SPEED)
             pts.append((tm, sp))
         if not pts:
             raise ValueError("Add at least one point.")
@@ -280,7 +292,7 @@ class SpeedRamperTab(BaseTab):
 
     # ── Display ──────────────────────────────────────────────────────────────
 
-    def _on_mode(self):
+    def _on_mode(self) -> None:
         for w in self._mode_widgets:
             w.pack_forget()
         target = self.const_f if self.mode_var.get() == "constant" else self.ramp_f
@@ -293,7 +305,7 @@ class SpeedRamperTab(BaseTab):
             self.audio_var.set(AUDIO["tempo"])
         self._schedule()
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         info = ff.try_probe(path)
         old = self.duration
         self.duration = info.duration if info else 0.0
@@ -303,12 +315,12 @@ class SpeedRamperTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "speed"))
         self._schedule()
 
-    def _schedule(self):
+    def _schedule(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(120, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         self._draw()
         dur = self.duration
@@ -327,7 +339,7 @@ class SpeedRamperTab(BaseTab):
             text=f"Result: {ff.format_time(new)}   (source {ff.format_time(dur)})"
         )
 
-    def _draw(self):
+    def _draw(self) -> None:
         c = self.graph
         c.delete("all")
         w, h = max(c.winfo_width(), px(200)), int(c.cget("height"))
@@ -339,7 +351,7 @@ class SpeedRamperTab(BaseTab):
             return
         lo, hi = math.log2(MIN_SPEED), math.log2(MAX_SPEED)
 
-        def y_of(speed):
+        def y_of(speed: float) -> float:
             return h - edge - (math.log2(speed) - lo) / (hi - lo) * (h - 2 * edge)
 
         for ref in (0.25, 0.5, 1, 2, 4, 8):
@@ -356,7 +368,7 @@ class SpeedRamperTab(BaseTab):
             c.create_text(
                 px(4), y, text=f"{ref:g}×", anchor="w", fill="#777777", font=(MONO_FONT, 7)
             )
-        xy = []
+        xy: list[float] = []
         steps = 200
         for i in range(steps + 1):
             tm = dur * i / steps
@@ -369,7 +381,7 @@ class SpeedRamperTab(BaseTab):
 
     # ── Render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

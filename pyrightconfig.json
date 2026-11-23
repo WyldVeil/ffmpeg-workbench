@@ -27,6 +27,7 @@
   "strict": [
     "core",
     "shell",
-    "tabs/kit"
+    "tabs",
+    "main.py"
   ]
 }

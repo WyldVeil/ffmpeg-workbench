@@ -44,12 +44,12 @@ def anlmdn_works() -> bool:
 
 
 class VoiceIsolationTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self, t("tab.voice_isolation"), "Remove background noise from speech.", icon="🎤"
         )
@@ -68,7 +68,7 @@ class VoiceIsolationTab(BaseTab):
         self._build_method_options(opt)
         self._build_output(body)
 
-    def _build_methods(self, body):
+    def _build_methods(self, body: tk.Frame) -> tk.LabelFrame:
         """Which method cleans the voice."""
         opt = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -94,7 +94,7 @@ class VoiceIsolationTab(BaseTab):
             capabilities.on_ready("anlmdn", _offer)
         return opt
 
-    def _build_method_options(self, opt):
+    def _build_method_options(self, opt: tk.LabelFrame) -> None:
         """The chosen method's settings and a preview."""
         mr = tk.Frame(opt)
         mr.pack(fill="x", pady=px(4))
@@ -136,7 +136,7 @@ class VoiceIsolationTab(BaseTab):
             anchor="w", pady=px(4)
         )
 
-    def _build_output(self, body):
+    def _build_output(self, body: tk.Frame) -> None:
         """Where the result goes, the button and the log."""
         self.out_row = save_section(
             body,
@@ -148,7 +148,7 @@ class VoiceIsolationTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _model_changed(self):
+    def _model_changed(self) -> None:
         if self.model_var.get() == _CUSTOM:
             self.custom_row.pack(fill="x", pady=px(2))
         else:
@@ -176,7 +176,7 @@ class VoiceIsolationTab(BaseTab):
             rumble=self.rumble_var.get(),
         )
 
-    def _preview(self):
+    def _preview(self) -> None:
         try:
             af = self._filter()
         except ValueError as exc:
@@ -184,7 +184,7 @@ class VoiceIsolationTab(BaseTab):
             return
         common.preview_audio(self, self.src_row.path, af)
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:

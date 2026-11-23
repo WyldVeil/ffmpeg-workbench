@@ -536,7 +536,7 @@ class CancelledError(errors.Cancelled, RuntimeError):
 class CommandError(errors.CommandError):
     """Raised by :func:`check` when a command fails."""
 
-    def __init__(self, result: RunResult, cmd: Sequence[str]):
+    def __init__(self, result: RunResult, cmd: Sequence[str]) -> None:
         self.result = result
         self.cmd = list(cmd)
         super().__init__(result.error_summary)
@@ -764,7 +764,7 @@ class _Reader:
         duration: float | None,
         on_line: Callable[[str], None] | None,
         on_progress: Callable[[Progress], None] | None,
-    ):
+    ) -> None:
         self.lines: deque[str] = deque(maxlen=tail)
         self.duration = duration
         self.started = time.monotonic()

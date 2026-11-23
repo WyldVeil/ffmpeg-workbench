@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox
+from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
 from core import tasks
@@ -24,16 +26,19 @@ from tabs import common
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.widgets import FileRow, output_section, scroll_body
 
+if TYPE_CHECKING:
+    from core.queue_manager import TaskContext
+
 
 class SilenceTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._zones = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.silence_remover"),
@@ -87,28 +92,36 @@ class SilenceTab(BaseTab):
         self.btn_render.pack(side="left", padx=px(6))
         self.console = self.make_console_block(body, height=6)
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         self._zones = None
         self.report.config(text="")
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "tight"))
 
-    def _params(self):
+    def _params(self) -> tuple[float, float, float]:
         return (
             common.number(self.thr_var.get(), "Silence threshold", -90, -5),
             common.number(self.min_var.get(), "Shortest pause", 0.05, 60),
             common.number(self.pad_var.get(), "Keep around speech", 0, 5),
         )
 
-    def _detect(self, src, info, thr, min_s, pad, runner):
+    def _detect(
+        self,
+        src: str,
+        info: ff.MediaInfo,
+        thr: float,
+        min_s: float,
+        pad: float,
+        runner: Callable[[list[str]], ff.RunResult],
+    ) -> list[tuple[float, float]]:
         return sil.find_zones(src, info, thr, min_s, pad, runner)
 
-    def _analyse_failed(self, exc):
+    def _analyse_failed(self, exc: BaseException) -> None:
         self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
         messagebox.showerror(t("common.error"), str(exc), parent=self)
 
-    def _analyse(self):
+    def _analyse(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:
@@ -120,10 +133,10 @@ class SilenceTab(BaseTab):
             return
         self.btn_analyse.config(state="disabled", text="Listening…")
 
-        def work():
+        def work() -> list[sil.Span]:
             return self._detect(src, info, thr, min_s, pad, lambda c: ff.run(c, tail=100000))
 
-        def done(zones):
+        def done(zones: list[sil.Span]) -> None:
             self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
             self._zones = (src, (thr, min_s, pad), zones)
             kept = sum(b - a for a, b in zones)
@@ -139,7 +152,7 @@ class SilenceTab(BaseTab):
             name="SilenceDetect",
         )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src, need_video=False)
         if info is None:
@@ -161,7 +174,7 @@ class SilenceTab(BaseTab):
         audio_only = not info.has_video or out.lower().endswith(AUDIO_ONLY_EXTS)
         venc = None if audio_only else self.encoder.video_encode(container)
 
-        def work(_p, _c, ctx):
+        def work(_p: object, _c: object, ctx: TaskContext) -> int:
             tmp = ctx.tempdir()
             zones = self._detect(
                 src,

@@ -5,6 +5,8 @@ Supports: re-encode, resize, extract audio, convert format.
 Progress is shown per-file in the console.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import threading
@@ -16,6 +18,7 @@ from core.ops import batch as batch_ops
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
+from tabs.kit.tktyped import linked_scrollbar, selected_rows
 from tabs.widgets import FolderRow, output_box
 
 logger = logging.getLogger("crossfader.system.batch")
@@ -51,21 +54,21 @@ RESOLUTIONS = ["3840x2160", "2560x1440", "1920x1080", "1280x720", "854x480", "64
 
 
 class BatchTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.input_files: list[str] = []
         self._cancel_flag = threading.Event()
         self._build_ui()
 
     # ─────────────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         make_header(self, t("tab.batch_processor"), t("batch.desc_subtitle"), icon="🗂")
         self._build_input_files()
         self._build_operation()
         self._build_output_folder()
         self._build_controls()
 
-    def _build_input_files(self):
+    def _build_input_files(self) -> None:
         """Input files."""
         inp_lf = tk.LabelFrame(self, text=t("section.input_files"), padx=px(12), pady=px(8))
         inp_lf.pack(fill="both", expand=True, padx=px(20), pady=px(8))
@@ -81,8 +84,7 @@ class BatchTab(BaseTab):
             selectforeground="black",
             activestyle="dotbox",
         )
-        sb = ttk.Scrollbar(inp_lf, command=self.listbox.yview)
-        self.listbox.config(yscrollcommand=sb.set)
+        sb = linked_scrollbar(inp_lf, self.listbox)
         self.listbox.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
@@ -103,7 +105,7 @@ class BatchTab(BaseTab):
         )
         self._count_lbl.pack()
 
-    def _build_operation(self):
+    def _build_operation(self) -> None:
         """Operation."""
         op_lf = tk.LabelFrame(
             self, text=f"  {t('batch.operation_section')}  ", padx=px(14), pady=px(10)
@@ -164,7 +166,7 @@ class BatchTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(side="left")
 
-    def _build_output_folder(self):
+    def _build_output_folder(self) -> None:
         """Output folder."""
         out_lf = output_box(self)
 
@@ -177,7 +179,7 @@ class BatchTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w")
 
-    def _build_controls(self):
+    def _build_controls(self) -> None:
         """Controls."""
         ctrl_f = tk.Frame(self)
         ctrl_f.pack(pady=px(8))
@@ -202,14 +204,14 @@ class BatchTab(BaseTab):
         self._on_op_change()
 
     # ─── File management ──────────────────────────────────────────────────
-    def _add_files(self):
+    def _add_files(self) -> None:
         for p in dialogs.ask_open_many("media", title="Add files", parent=self):
             if p not in self.input_files:
                 self.input_files.append(p)
                 self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
         self._update_count()
 
-    def _add_folder(self):
+    def _add_folder(self) -> None:
         folder = dialogs.askdirectory()
         if not folder:
             return
@@ -221,29 +223,29 @@ class BatchTab(BaseTab):
                     self.listbox.insert(tk.END, f"  {fn}")
         self._update_count()
 
-    def _remove_sel(self):
-        for i in reversed(self.listbox.curselection()):
+    def _remove_sel(self) -> None:
+        for i in reversed(selected_rows(self.listbox)):
             self.input_files.pop(i)
             self.listbox.delete(i)
         self._update_count()
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.input_files.clear()
         self.listbox.delete(0, tk.END)
         self._update_count()
 
-    def _update_count(self):
+    def _update_count(self) -> None:
         n = len(self.input_files)
         self._count_lbl.config(text=f"{n} file{'s' if n != 1 else ''} queued")
 
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         if os.path.isfile(path) and path not in self.input_files:
             self.input_files.append(path)
             self.listbox.insert(tk.END, f"  {os.path.basename(path)}")
             self._update_count()
         return True
 
-    def _cancel(self):
+    def _cancel(self) -> None:
         tid = getattr(self, "_batch_tid", None)
         if tid:
             self.cancel_render(tid)  # stops the running file at once
@@ -257,7 +259,7 @@ class BatchTab(BaseTab):
         except ValueError:
             return "reencode"
 
-    def _on_op_change(self, *_):
+    def _on_op_change(self, *_: object) -> None:
         op = self._op()
         self._enc_row.pack_forget()
         self._res_row.pack_forget()
@@ -268,7 +270,7 @@ class BatchTab(BaseTab):
             self._enc_row.pack(fill="x", pady=px(2))
 
     # ─── Render ──────────────────────────────────────────────────────────
-    def _run(self):
+    def _run(self) -> None:
         from tabs import common
 
         if not self.input_files:

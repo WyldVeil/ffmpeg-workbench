@@ -8,12 +8,15 @@ Dependencies are auto-installed into  <project_root>/libs/  on first run.
 No manual pip install required.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import os
 import tempfile
 import time
 import tkinter as tk
+from collections.abc import Callable
 from functools import partial
 from tkinter import messagebox, ttk
 
@@ -27,6 +30,7 @@ from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
 from tabs.kit import dialogs
 from tabs.kit.time_fields import MomentPicker
+from tabs.kit.tktyped import linked_scrollbar, on_write
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import SaveRow, scroll_body
 
@@ -122,7 +126,7 @@ SPEECH_FORMATS = {
 
 
 class TTSVoiceOverTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._tts_audio_path = ""  # last generated TTS audio file
         self._build_ui()
@@ -132,7 +136,7 @@ class TTSVoiceOverTab(BaseTab):
         return ".mp4" if self.mode_var.get() == "video" else vo.SPEECH_EXT[self.audio_fmt.value]
 
     # ─────────────────────────────────────────────────────────────────────
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         # ── Header ───────────────────────────────────────────────────────
         make_header(self, t("tab.tts_voice_over"), t("tts.subtitle"), icon="🗣")
 
@@ -154,7 +158,7 @@ class TTSVoiceOverTab(BaseTab):
         self._update_stats()
 
     # ── Engine banner ─────────────────────────────────────────────────────
-    def _build_engine_banner(self):
+    def _build_engine_banner(self) -> None:
         engines = [e for e in (ENGINE_EDGE if EDGE_TTS_OK else "", ENGINE_SYSTEM) if e]
         ok = bool(engines)
         banner = tk.Frame(self, bg="#1A2A1A" if ok else "#2A1A1A", pady=px(4))
@@ -187,7 +191,7 @@ class TTSVoiceOverTab(BaseTab):
     def _engine(self) -> str:
         return "edge" if self._engine_var.get() == ENGINE_EDGE else "system"
 
-    def _engine_changed(self):
+    def _engine_changed(self) -> None:
         if not hasattr(self, "_engine_note"):
             return
         if self._engine() == "edge":
@@ -198,7 +202,7 @@ class TTSVoiceOverTab(BaseTab):
             )
 
     # ── Text section ──────────────────────────────────────────────────────
-    def _build_text_section(self, parent):
+    def _build_text_section(self, parent: tk.Misc) -> None:
         lf = tk.LabelFrame(
             parent, text=f"  📝  {t('tts.script_section')}  ", padx=px(14), pady=px(8)
         )
@@ -232,8 +236,7 @@ class TTSVoiceOverTab(BaseTab):
             bd=px(1),
             undo=True,
         )
-        txt_sb = ttk.Scrollbar(txt_frame, command=self.text_box.yview)
-        self.text_box.configure(yscrollcommand=txt_sb.set)
+        txt_sb = linked_scrollbar(txt_frame, self.text_box)
         self.text_box.pack(side="left", fill="both", expand=True)
         txt_sb.pack(side="right", fill="y")
         # Every change counts (typing, any paste, drag and drop, a loaded file),
@@ -250,7 +253,7 @@ class TTSVoiceOverTab(BaseTab):
         self.text_box.bind("<FocusIn>", self._clear_placeholder)
 
     # ── Voice section ─────────────────────────────────────────────────────
-    def _build_voice_section(self, parent):
+    def _build_voice_section(self, parent: tk.Misc) -> None:
         lf = tk.LabelFrame(parent, text=f"  {t('tts.voice_section')}  ", padx=px(14), pady=px(8))
         lf.pack(fill="x", padx=px(16), pady=px(4))
 
@@ -300,13 +303,22 @@ class TTSVoiceOverTab(BaseTab):
         ).pack(side="left", padx=px(4))
 
     # ── Settings section ──────────────────────────────────────────────────
-    def _build_settings_section(self, parent):
+    def _build_settings_section(self, parent: tk.Misc) -> None:
         lf = tk.LabelFrame(
             parent, text=f"  ⚙  {t('tts.voice_settings_section')}  ", padx=px(14), pady=px(8)
         )
         lf.pack(fill="x", padx=px(16), pady=px(4))
 
-        def _slider_row(frame, label, var, lo, hi, default, fmt_fn, unit=""):
+        def _slider_row(
+            frame: tk.LabelFrame,
+            label: str,
+            var: tk.IntVar,
+            lo: int,
+            hi: int,
+            default: int,
+            fmt_fn: Callable[[int], str],
+            unit: str = "",
+        ) -> tk.Scale:
             row = tk.Frame(frame)
             row.pack(fill="x", pady=px(3))
             tk.Label(row, text=label, width=16, anchor="e", font=(UI_FONT, 9)).pack(side="left")
@@ -324,10 +336,7 @@ class TTSVoiceOverTab(BaseTab):
                 row, text=fmt_fn(default) + unit, width=9, fg=CLR["accent"], font=(MONO_FONT, 9)
             )
             lbl.pack(side="left")
-            var.trace_add(
-                "write",
-                lambda *_, label=lbl, v=var, f=fmt_fn, u=unit: label.config(text=f(v.get()) + u),
-            )
+            on_write(var, lambda: lbl.config(text=fmt_fn(var.get()) + unit))
             return sl
 
         # Rate:   -50 … +100  (percent)
@@ -337,13 +346,13 @@ class TTSVoiceOverTab(BaseTab):
         # Volume: -50 … +50   (percent)
         self.vol_var = tk.IntVar(value=0)
 
-        def rate_fmt(v):
+        def rate_fmt(v: int) -> str:
             return f"+{v}%" if v >= 0 else f"{v}%"
 
-        def pitch_fmt(v):
+        def pitch_fmt(v: int) -> str:
             return f"+{v}Hz" if v >= 0 else f"{v}Hz"
 
-        def vol_fmt(v):
+        def vol_fmt(v: int) -> str:
             return f"+{v}%" if v >= 0 else f"{v}%"
 
         _slider_row(lf, t("tts.speed_label"), self.rate_var, -50, 100, 0, rate_fmt)
@@ -360,7 +369,7 @@ class TTSVoiceOverTab(BaseTab):
         ).pack(anchor="w")
 
     # ── Output section ────────────────────────────────────────────────────
-    def _build_output_section(self, parent):
+    def _build_output_section(self, parent: tk.Misc) -> None:
         lf = tk.LabelFrame(
             parent, text=f"  🎧  {t('tts.output_mode_section')}  ", padx=px(14), pady=px(8)
         )
@@ -400,7 +409,7 @@ class TTSVoiceOverTab(BaseTab):
         )
 
     # ── Video section ─────────────────────────────────────────────────────
-    def _build_video_section(self, parent):
+    def _build_video_section(self, parent: tk.Misc) -> None:
         self._video_lf = tk.LabelFrame(
             parent, text=f"  🎬  {t('tts.video_section')}  ", padx=px(14), pady=px(8)
         )
@@ -454,8 +463,9 @@ class TTSVoiceOverTab(BaseTab):
         ).pack(side="left", padx=px(8))
         orig_lbl = tk.Label(orig_row, text="50%", fg=CLR["accent"], font=(MONO_FONT, 9), width=6)
         orig_lbl.pack(side="left")
-        self.orig_vol_var.trace_add(
-            "write", lambda *_: orig_lbl.config(text=f"{int(self.orig_vol_var.get() * 100)}%")
+        on_write(
+            self.orig_vol_var,
+            lambda: orig_lbl.config(text=f"{int(self.orig_vol_var.get() * 100)}%"),
         )
         tk.Label(
             orig_row,
@@ -477,7 +487,7 @@ class TTSVoiceOverTab(BaseTab):
         self.vid_fmt.pack(side="left", padx=px(8))
 
     # ── Extras section ────────────────────────────────────────────────────
-    def _build_extras_section(self, parent):
+    def _build_extras_section(self, parent: tk.Misc) -> None:
         lf = tk.LabelFrame(
             parent, text=f"  {t('tts.extra_options_section')}  ", padx=px(14), pady=px(8)
         )
@@ -521,7 +531,7 @@ class TTSVoiceOverTab(BaseTab):
         ).pack(side="left", padx=px(8))
 
     # ── Action buttons ────────────────────────────────────────────────────
-    def _build_action_buttons(self, parent):
+    def _build_action_buttons(self, parent: tk.Misc) -> None:
         btn_row = tk.Frame(parent)
         btn_row.pack(pady=px(10, 4), padx=px(16), fill="x")
 
@@ -597,27 +607,27 @@ class TTSVoiceOverTab(BaseTab):
         )
         self._player_file_lbl.pack(side="left", padx=px(4), fill="x", expand=True)
 
-        self._player_proc = None  # ffplay subprocess
+        self._player_proc: _proc.Popen[bytes] | None = None  # ffplay subprocess
         self._player_path = ""  # path to currently loaded audio
-        self._player_timer = None  # after() id for clock update
+        self._player_timer: str | None = None  # after() id for clock update
 
     # ── Console ───────────────────────────────────────────────────────────
-    def _build_console_section(self, parent):
+    def _build_console_section(self, parent: tk.Misc) -> None:
         self.console = self.make_console_block(parent, height=5, padx=px(16), pady=px(6))
 
     # ─────────────────────────────────────────────────────────────────────
     #  Helpers
     # ─────────────────────────────────────────────────────────────────────
-    def _clear_placeholder(self, event):
+    def _clear_placeholder(self, event: object) -> None:
         content = self.text_box.get("1.0", "end-1c")
         if content.startswith("Type or paste your script here"):
             self.text_box.delete("1.0", "end")
 
-    def _clear_text(self):
+    def _clear_text(self) -> None:
         self.text_box.delete("1.0", "end")
         self._update_stats()
 
-    def _paste_text(self):
+    def _paste_text(self) -> None:
         try:
             text = self.clipboard_get()
             self.text_box.insert(tk.INSERT, text)
@@ -625,7 +635,7 @@ class TTSVoiceOverTab(BaseTab):
         except Exception:
             logger.debug("_paste_text: best-effort step failed", exc_info=True)
 
-    def _load_text_file(self):
+    def _load_text_file(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[(t("tts.text_files"), "*.txt *.srt *.md"), ("All", t("ducker.item_2"))]
         )
@@ -635,12 +645,12 @@ class TTSVoiceOverTab(BaseTab):
                 self.text_box.insert("1.0", f.read())
             self._update_stats()
 
-    def _text_modified(self, _event=None):
+    def _text_modified(self, _event: tk.Event[tk.Misc] | None = None) -> None:
         if self.text_box.edit_modified():
             self.text_box.edit_modified(False)
             self._update_stats()
 
-    def _update_stats(self):
+    def _update_stats(self) -> None:
         content = self._get_text()
         chars = len(content)
         words = len(content.split()) if content.strip() else 0
@@ -656,21 +666,21 @@ class TTSVoiceOverTab(BaseTab):
         dur_str = f"{m}m {s:02d}s" if m else f"{s}s"
         self._stats_lbl.config(text=f"{chars:,} chars  │  {words:,} words  │  ~{dur_str}")
 
-    def _get_text(self):
+    def _get_text(self) -> str:
         t = self.text_box.get("1.0", "end-1c").strip()
         if t.startswith("Type or paste your script here"):
             return ""
         return t
 
-    def _on_voice_change(self, *_):
+    def _on_voice_change(self, *_: object) -> None:
         name = self.voice_var.get()
         self._voice_desc_lbl.config(text=VOICE_DESCS.get(name, ""))
 
-    def _apply_preset(self, *_):
+    def _apply_preset(self, *_: object) -> None:
         p = STYLE_PRESETS.get(self.preset_var.get(), {})
         if p:
 
-            def parse_int(s):
+            def parse_int(s: str) -> int:
                 return int(s.replace("%", "").replace("Hz", "").replace("+", ""))
 
             if hasattr(self, "rate_var"):
@@ -678,7 +688,7 @@ class TTSVoiceOverTab(BaseTab):
                 self.pitch_var.set(parse_int(p["pitch"]))
                 self.vol_var.set(parse_int(p["volume"]))
 
-    def _on_mode_change(self):
+    def _on_mode_change(self) -> None:
         if self.mode_var.get() == "video":
             self._video_lf.pack(
                 fill="x",
@@ -691,7 +701,7 @@ class TTSVoiceOverTab(BaseTab):
         else:
             self._video_lf.pack_forget()
 
-    def _browse_video(self):
+    def _browse_video(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))]
         )
@@ -705,7 +715,7 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  TTS generation
     # ─────────────────────────────────────────────────────────────────────
-    def _edge_voice_str(self):
+    def _edge_voice_str(self) -> tuple[str, str, str, str]:
         name = self.voice_var.get()
         vid = VOICE_IDS.get(name, "en-US-BrianMultilingualNeural")
         rate = self.rate_var.get()
@@ -720,14 +730,20 @@ class TTSVoiceOverTab(BaseTab):
         voice_id, rate, pitch, volume = self._edge_voice_str()
         return tts_core.Voice(self._engine(), voice_id, rate, pitch, volume)
 
-    def _synth_async(self, text, out_path, with_subs, on_ready):
+    def _synth_async(
+        self,
+        text: str,
+        out_path: str,
+        with_subs: bool,
+        on_ready: Callable[[str, str | None], object],
+    ) -> None:
         """Speak *text* in a worker thread, then call on_ready(path, srt) on the UI thread."""
         if not self._engine_var.get():
             self._on_tts_error("No voice engine is available.")
             return
         cfg = self._synth_settings()
 
-        def ready(srt):
+        def ready(srt: str | None) -> None:
             self._on_tts_done(out_path, srt)
             on_ready(out_path, srt)
 
@@ -738,13 +754,13 @@ class TTSVoiceOverTab(BaseTab):
             name="TTS",
         )
 
-    def _scratch(self, name):
+    def _scratch(self, name: str) -> str:
         if not getattr(self, "_scratch_dir", None):
             self._scratch_dir = tempfile.mkdtemp(prefix="wme_tts_preview_")
         ext = ".mp3" if self._engine() == "edge" else ".wav"
         return os.path.join(self._scratch_dir, name + ext)
 
-    def _on_tts_done(self, audio_path, srt_text):
+    def _on_tts_done(self, audio_path: str, srt_text: str | None) -> None:
         self._tts_audio_path = audio_path
         self._pending_srt = srt_text
         self._gen_status.config(text=t("tts.tts_generated"), fg="#66BB6A")
@@ -752,7 +768,7 @@ class TTSVoiceOverTab(BaseTab):
         if srt_text:
             self.log(self.console, t("log.tts.srt_subtitle_data_captured"))
 
-    def _on_tts_error(self, msg):
+    def _on_tts_error(self, msg: str) -> None:
         self._gen_status.config(text=f"❌  {msg}", fg="#EF9A9A")
         self.log(self.console, f"[TTS ERROR] {msg}")
         self.btn_render.config(state="normal", text=t("tts.generate_export"))
@@ -760,7 +776,7 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  In-tab player (ffplay -nodisp)
     # ─────────────────────────────────────────────────────────────────────
-    def _player_load(self, path: str):
+    def _player_load(self, path: str) -> None:
         """Load a generated audio file into the in-tab player."""
         self._player_stop()
         self._player_path = path
@@ -770,7 +786,7 @@ class TTSVoiceOverTab(BaseTab):
         self._btn_stop.config(state="disabled")
         self._player_time_lbl.config(text="00:00")
 
-    def _player_play(self):
+    def _player_play(self) -> None:
         """Play _player_path via ffplay -nodisp (no window, audio only)."""
         if not self._player_path or not os.path.exists(self._player_path):
             return
@@ -786,7 +802,7 @@ class TTSVoiceOverTab(BaseTab):
         self._btn_stop.config(state="normal")
         self._player_tick()
 
-    def _player_stop(self):
+    def _player_stop(self) -> None:
         """Stop playback and reset the timer."""
         if self._player_proc:
             _proc.kill_tree(self._player_proc)
@@ -800,7 +816,7 @@ class TTSVoiceOverTab(BaseTab):
             self._btn_play.config(state="normal")
         self._btn_stop.config(state="disabled")
 
-    def _player_tick(self):
+    def _player_tick(self) -> None:
         """Update the elapsed-time counter every second."""
         if self._player_proc and self._player_proc.poll() is None:
             elapsed = int(time.monotonic() - self._player_start_time)
@@ -814,11 +830,11 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  Preview (generate + load into player, no export)
     # ─────────────────────────────────────────────────────────────────────
-    def _play_sample(self, path, _srt):
+    def _play_sample(self, path: str, _srt: str | None) -> None:
         self._player_load(path)
         self._player_play()
 
-    def _preview_voice(self):
+    def _preview_voice(self) -> None:
         """Speak a short sample sentence in the chosen voice."""
         name = self.voice_var.get().split("(")[0].strip()
         sample = (
@@ -833,7 +849,7 @@ class TTSVoiceOverTab(BaseTab):
             self._play_sample,
         )
 
-    def _generate_preview(self):
+    def _generate_preview(self) -> None:
         """Speak the whole script into the in-tab player (nothing is exported)."""
         text = self._get_text()
         if not text:
@@ -842,7 +858,7 @@ class TTSVoiceOverTab(BaseTab):
         self._gen_status.config(text=t("tts.generating"), fg=CLR["accent"])
         self.log(self.console, t("log.tts.generating_tts_preview"))
 
-        def ready(path, _srt):
+        def ready(path: str, _srt: str | None) -> None:
             self._player_load(path)
             self._player_play()
             self.log(self.console, t("log.tts.loaded_into_in_tab_player_press_play_to_replay"))
@@ -852,7 +868,7 @@ class TTSVoiceOverTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     #  Main render
     # ─────────────────────────────────────────────────────────────────────
-    def _voiceover_source(self):
+    def _voiceover_source(self) -> tuple[ff.MediaInfo | None, list[str], str] | None:
         """(video info or None, inputs, default output) - None after saying why it can't go on."""
         from tabs import common
 
@@ -894,7 +910,7 @@ class TTSVoiceOverTab(BaseTab):
             video_out=self.vid_fmt.value,
         )
 
-    def _render(self):
+    def _render(self) -> None:
         from tabs import common
 
         text = self._get_text()

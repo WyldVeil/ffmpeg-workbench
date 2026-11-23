@@ -18,6 +18,7 @@ import ast
 import json
 import os
 import re
+import tomllib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUI_MODULES = ("tkinter", "tkinterdnd2", "tabs", "main", "shell")
@@ -614,12 +615,16 @@ def test_form_rows_come_from_the_kit():
     assert not hits, f"use self.form_row(parent, row, label, *widgets): {hits}"
 
 
-def test_the_whole_engine_is_type_checked_strictly():
-    """pyright's strict mode covers the engine, the window shell and the page kit;
-    CI fails on any error, so this list may only grow."""
+def test_the_whole_app_is_type_checked_strictly():
+    """pyright's strict mode covers the whole app: the engine, the window shell
+    and every page (CI fails on any error); ruff's ANN rules make every function
+    in it annotated."""
     with open(os.path.join(ROOT, "pyrightconfig.json"), encoding="utf-8") as fh:
         config = json.load(fh)
-    assert {"core", "shell", "tabs/kit"} <= set(config["strict"])
+    assert {"core", "shell", "tabs", "main.py"} <= set(config["strict"])
+    with open(os.path.join(ROOT, "pyproject.toml"), "rb") as fh:
+        lint = tomllib.load(fh)["tool"]["ruff"]["lint"]
+    assert {"ANN001", "ANN201", "ANN202", "ANN204"} <= set(lint["select"])
 
 
 MAX_FUNCTION_LINES = 80

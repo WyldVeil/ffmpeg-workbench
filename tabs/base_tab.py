@@ -32,11 +32,12 @@ from core.tools import ToolId
 from tabs.kit import dialogs
 from tabs.kit.contracts import Shell, Transport
 from tabs.kit.job_button import JobButton
+from tabs.kit.tktyped import linked_scrollbar, raise_above, tool_window
 
 logger = logging.getLogger("crossfader.base_tab")
 
 
-def _load_clr():
+def _load_clr() -> dict[str, str]:
     try:
         from core.skins import get_skin, load_skin_name
 
@@ -85,7 +86,7 @@ CLR = _load_clr()
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def make_header(parent, title, subtitle="", icon=""):
+def make_header(parent: tk.Misc, title: str, subtitle: str = "", icon: str = "") -> tk.Frame:
     """
     Every page's header (tests/test_architecture.py checks they all use it):
       ┌───────────────────────────────────────────┐
@@ -123,7 +124,9 @@ def make_header(parent, title, subtitle="", icon=""):
     return left
 
 
-def make_section(parent, title="", padx=20, pady=(8, 4)):
+def make_section(
+    parent: tk.Misc, title: str = "", padx: int = 20, pady: tuple[int, int] = (8, 4)
+) -> tk.LabelFrame:
     """
     Return a styled LabelFrame for grouping related controls.
     Matches the professional card appearance.
@@ -145,7 +148,7 @@ def make_section(parent, title="", padx=20, pady=(8, 4)):
     return lf
 
 
-def make_console(parent, height=8):
+def make_console(parent: tk.Misc, height: int = 8) -> tuple[tk.Text, ttk.Scrollbar]:
     """
     Styled console text widget + scrollbar.
     Returns (Text, Scrollbar) - caller packs them.
@@ -173,24 +176,33 @@ def make_console(parent, height=8):
     c.tag_configure("info", foreground=CLR["accent"])
     c.tag_configure("dim", foreground=CLR["fgdim"])
 
-    sb = ttk.Scrollbar(parent, command=c.yview)
-    c.configure(yscrollcommand=sb.set)
+    sb = linked_scrollbar(parent, c)
     return c, sb
 
 
-def make_console_block(parent, height=5, bg=None, **pack):
+def make_console_block(
+    parent: tk.Misc, height: int = 5, bg: str | None = None, **pack: Any
+) -> tk.Text:
     """Every page's console: a console with its scrollbar in a frame (background
     *bg*), packed under the page's controls (*pack* overrides fill="both",
     expand=True, padx=20, pady=(0, 10)); returns the console."""
     frame = tk.Frame(parent, bg=bg) if bg else tk.Frame(parent)
-    frame.pack(**{"fill": "both", "expand": True, "padx": px(20), "pady": px(0, 10), **pack})
+    options: dict[str, Any] = {"fill": "both", "expand": True, "padx": px(20), "pady": px(0, 10)}
+    frame.pack(**(options | pack))
     console, bar = make_console(frame, height=height)
     console.pack(side="left", fill="both", expand=True)
     bar.pack(side="right", fill="y")
     return console
 
 
-def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
+def make_file_row(
+    parent: tk.Misc,
+    label: str,
+    var: tk.StringVar,
+    browse_cmd: Callable[[], object],
+    width: int = 52,
+    label_width: int = 18,
+) -> tk.Frame:
     """
     Standard source/output file row with consistent label alignment.
     Returns the row Frame.
@@ -237,14 +249,14 @@ def make_file_row(parent, label, var, browse_cmd, width=52, label_width=18):
 
 
 def form_row(
-    parent,
-    r,
-    label,
-    *widgets,
+    parent: tk.Misc,
+    r: int,
+    label: str,
+    *widgets: tk.Widget,
     label_width: int | None = None,
     pady: int | tuple[int, int] = 3,
     span: int = 1,
-):
+) -> tk.Label:
     """Row *r* of a form gridded in *parent*: the label (*label_width* characters,
     or as wide as its text), then the widgets.  One widget is gridded in the
     second column; several share a frame there, so a wide widget in one row
@@ -261,11 +273,13 @@ def form_row(
     holder.grid(row=r, column=1, sticky="w", pady=pad)
     for w in widgets:
         w.pack(in_=holder, side="left", padx=px(0, 6))
-        w.lift(holder)
+        raise_above(w, holder)
     return lbl
 
 
-def make_labeled_entry(parent, label, var, width=8, tooltip=""):
+def make_labeled_entry(
+    parent: tk.Misc, label: str, var: tk.Variable, width: int = 8, tooltip: str = ""
+) -> tk.Frame:
     """Inline label + entry, optionally with a dim tooltip/hint."""
     f = tk.Frame(parent, bg=CLR["bg"])
     tk.Label(f, text=label, font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
@@ -287,7 +301,9 @@ def make_labeled_entry(parent, label, var, width=8, tooltip=""):
     return f
 
 
-def make_render_btn(parent, text, command, width=24):
+def make_render_btn(
+    parent: tk.Misc, text: str, command: Callable[[], object], width: int = 24
+) -> tk.Button:
     """Every page's main action ("RENDER", "EXPORT", ...): one look everywhere
     (tests/test_architecture.py checks no page builds its own)."""
     return tk.Button(
@@ -326,29 +342,29 @@ class ToolTip:
     _DELAY = 500  # ms before showing
     _WRAP = 280  # max tooltip width in pixels
 
-    def __init__(self, widget, text):
+    def __init__(self, widget: tk.Misc, text: str) -> None:
         self._widget = widget
         self._text = text
-        self._tip = None
-        self._after = None
+        self._tip: tk.Toplevel | None = None
+        self._after: str | None = None
         widget.bind("<Enter>", self._on_enter, add=True)
         widget.bind("<Leave>", self._on_leave, add=True)
         widget.bind("<Button>", self._on_leave, add=True)
 
-    def _on_enter(self, event=None):
+    def _on_enter(self, event: tk.Event[tk.Misc] | None = None) -> None:
         self._cancel()
         self._after = self._widget.after(self._DELAY, self._show)
 
-    def _on_leave(self, event=None):
+    def _on_leave(self, event: tk.Event[tk.Misc] | None = None) -> None:
         self._cancel()
         self._hide()
 
-    def _cancel(self):
+    def _cancel(self) -> None:
         if self._after:
             self._widget.after_cancel(self._after)
             self._after = None
 
-    def _show(self):
+    def _show(self) -> None:
         if self._tip or not self._text:
             return
         x = self._widget.winfo_rootx() + px(20)
@@ -358,7 +374,7 @@ class ToolTip:
         tw.wm_geometry(f"+{x}+{y}")
         # Attempt to remove from taskbar on Windows
         with contextlib.suppress(tk.TclError):
-            tw.wm_attributes("-toolwindow", True)
+            tool_window(tw)
         lbl = tk.Label(
             tw,
             text=self._text,
@@ -374,7 +390,7 @@ class ToolTip:
         )
         lbl.pack()
 
-    def _hide(self):
+    def _hide(self) -> None:
         if self._tip:
             self._tip.destroy()
             self._tip = None
@@ -390,7 +406,7 @@ def add_tooltip(widget: tk.Misc, text: str) -> ToolTip:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _fmt_tl(seconds):
+def _fmt_tl(seconds: float) -> str:
     """Format seconds for timeline display."""
     return f"{Timecode.of(seconds):.2}"
 
@@ -417,13 +433,19 @@ class VideoTimeline(tk.Frame):
     _HR = 8  # handle radius
     _HEIGHT = 100  # default canvas height
 
-    def __init__(self, parent, on_change=None, height=None, show_handles=True):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        on_change: Callable[[float, float, float], object] | None = None,
+        height: int | None = None,
+        show_handles: bool = True,
+    ) -> None:
         super().__init__(parent, bg=CLR["bg"])
         self._duration = 0.0
         self._start = 0.0
         self._end = 0.0
         self._playhead = 0.0
-        self._dragging = None
+        self._dragging: str | None = None
         self._last_moved = "playhead"  # what , and . move: the handle used last
         self.fps = 30.0  # set by the tab that loads the video
         self._on_change = on_change  # callback(start, end, playhead)
@@ -460,7 +482,7 @@ class VideoTimeline(tk.Frame):
 
     # ── Public API ────────────────────────────────────────────────────────
 
-    def set_duration(self, dur, fps=None):
+    def set_duration(self, dur: float, fps: float | None = None) -> None:
         if fps:
             self.fps = float(fps)
         self._duration = max(0.0, dur)
@@ -469,19 +491,19 @@ class VideoTimeline(tk.Frame):
         self._playhead = 0.0
         self._draw()
 
-    def set_range(self, start, end):
+    def set_range(self, start: float, end: float) -> None:
         self._start = max(0.0, min(start, self._duration))
         self._end = max(self._start, min(end, self._duration))
         self._draw()
         self._fire_change()
 
-    def get_range(self):
+    def get_range(self) -> tuple[float, float]:
         return (self._start, self._end)
 
-    def get_playhead(self):
+    def get_playhead(self) -> float:
         return self._playhead
 
-    def set_playhead(self, t):
+    def set_playhead(self, t: float) -> None:
         self._playhead = max(0.0, min(t, self._duration))
         self._draw()
 
@@ -512,13 +534,13 @@ class VideoTimeline(tk.Frame):
 
     # ── Coordinate helpers ────────────────────────────────────────────────
 
-    def _t2x(self, t, w):
+    def _t2x(self, t: float, w: int) -> int:
         p = px(self._PAD)
         if self._duration <= 0:
             return p
         return p + int((t / self._duration) * (w - 2 * p))
 
-    def _x2t(self, x, w):
+    def _x2t(self, x: float, w: int) -> float:
         p = px(self._PAD)
         if self._duration <= 0:
             return 0.0
@@ -526,7 +548,7 @@ class VideoTimeline(tk.Frame):
 
     # ── Drawing ───────────────────────────────────────────────────────────
 
-    def _draw(self):
+    def _draw(self) -> None:
         c = self._canvas
         w = c.winfo_width()
         h = c.winfo_height()
@@ -563,7 +585,7 @@ class VideoTimeline(tk.Frame):
             self._draw_handles(xs, xe, cy, hr)
         self._update_labels()
 
-    def _draw_ticks(self, w, cy):
+    def _draw_ticks(self, w: int, cy: int) -> None:
         """Tick marks with their times under the track."""
         c = self._canvas
         num_ticks = min(20, max(5, w // px(80)))
@@ -574,7 +596,7 @@ class VideoTimeline(tk.Frame):
             tick_t = self._duration * frac
             c.create_text(tx, cy + px(23), text=_fmt_tl(tick_t), fill="#555555", font=(UI_FONT, 7))
 
-    def _draw_playhead(self, xp, cy):
+    def _draw_playhead(self, xp: int, cy: int) -> None:
         """The yellow playhead line with its marker on top."""
         c = self._canvas
         c.create_line(xp, cy - px(20), xp, cy + px(20), fill="#FFEB3B", width=px(2))
@@ -590,7 +612,7 @@ class VideoTimeline(tk.Frame):
             width=px(1),
         )
 
-    def _draw_handles(self, xs, xe, cy, hr):
+    def _draw_handles(self, xs: int, xe: int, cy: int, hr: int) -> None:
         """IN (green) and OUT (red) handles with their times, and the selection's length."""
         c = self._canvas
         c.create_oval(
@@ -622,7 +644,7 @@ class VideoTimeline(tk.Frame):
             font=(UI_FONT, 9, "bold"),
         )
 
-    def _update_labels(self):
+    def _update_labels(self) -> None:
         """The playhead time, and the selection under the timeline."""
         self._pos_lbl.config(text=_fmt_tl(self._playhead))
         if self._show_handles:
@@ -633,12 +655,12 @@ class VideoTimeline(tk.Frame):
 
     # ── Interaction ───────────────────────────────────────────────────────
 
-    def _on_press(self, ev):
+    def _on_press(self, ev: tk.Event[tk.Misc]) -> None:
         w = self._canvas.winfo_width()
         if self._duration <= 0:
             return
 
-        def near(a, b):
+        def near(a: float, b: float) -> bool:
             return abs(a - b) < px(14)
 
         if self._show_handles:
@@ -657,7 +679,7 @@ class VideoTimeline(tk.Frame):
         self._draw()
         self._fire_change()
 
-    def _on_drag(self, ev):
+    def _on_drag(self, ev: tk.Event[tk.Misc]) -> None:
         if not self._dragging:
             return
         w = self._canvas.winfo_width()
@@ -673,12 +695,12 @@ class VideoTimeline(tk.Frame):
         self._draw()
         self._fire_change()
 
-    def _on_release(self):
+    def _on_release(self) -> None:
         if self._dragging:
             self._last_moved = self._dragging
         self._dragging = None
 
-    def step_frames(self, n):
+    def step_frames(self, n: int) -> None:
         """Move the handle used last (in, out, or the playhead) *n* frames."""
         if self._duration <= 0:
             return
@@ -700,7 +722,7 @@ class VideoTimeline(tk.Frame):
         self._draw()
         self._fire_change()
 
-    def _fire_change(self):
+    def _fire_change(self) -> None:
         if self._on_change:
             self._on_change(self._start, self._end, self._playhead)
 
@@ -764,11 +786,11 @@ class BaseTab(ttk.Frame):
     #: The page's main button (Render, Export...), set by the page: Ctrl+S presses it.
     btn_render: tk.Button
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self._render_thread = None  # last task id (kept for compatibility)
         self.preview_proc: proc.Popen[bytes] | None = None
-        self._active_tasks: set = set()
+        self._active_tasks: set[str] = set()
         self.last_task: RenderTask | None = (
             None  # the most recent finished job (its log, its error)
         )
@@ -802,7 +824,7 @@ class BaseTab(ttk.Frame):
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
-    def _append(self, widget, msg, tag=""):
+    def _append(self, widget: tk.Text, msg: str, tag: str = "") -> None:
         try:
             if not widget.winfo_exists():
                 return
@@ -817,13 +839,13 @@ class BaseTab(ttk.Frame):
         except tk.TclError:
             pass
 
-    def log(self, widget, msg):
+    def log(self, widget: tk.Text | None, msg: str) -> None:
         """Thread-safe append to a console Text widget."""
         if widget is None:
             return
         ui.call_soon(self._append, widget, msg)
 
-    def log_tagged(self, widget, msg, tag=""):
+    def log_tagged(self, widget: tk.Text | None, msg: str, tag: str = "") -> None:
         """Append with a colour tag (success, error, warn, info, dim)."""
         if widget is None:
             return
@@ -837,7 +859,7 @@ class BaseTab(ttk.Frame):
 
     # ── Thread helpers ────────────────────────────────────────────────────────
 
-    def call_ui(self, fn, *args, **kwargs):
+    def call_ui(self, fn: Callable[..., object], *args: object, **kwargs: object) -> None:
         """Schedule *fn* on the Tk thread (safe from worker threads)."""
         ui.call_soon(fn, *args, **kwargs)
 
@@ -857,22 +879,29 @@ class BaseTab(ttk.Frame):
                 ui.call_soon(lambda: tk.Misc.after(self, ms, func, *args))
             return ""  # no id: it was handed to the UI thread
         if func is None:
-            return super().after(ms)  # pyright: ignore[reportCallIssue, reportArgumentType] - Tk's "just wait"
+            super().after(ms)  # pyright: ignore[reportCallIssue, reportArgumentType, reportUnknownVariableType] - Tk's "just wait"
+            return ""
         return super().after(ms, func, *args)
 
     # ── Files ────────────────────────────────────────────────────────────────
 
-    def probe(self, path):
+    def probe(self, path: str) -> ff.MediaInfo | None:
         """Cached :class:`core.ffmpeg.MediaInfo` for *path*, or None."""
         return ff.try_probe(path) if path else None
 
-    def pick_source(self, kind="media", title=None):
+    def pick_source(self, kind: str = "media", title: str | None = None) -> str:
         return dialogs.ask_open(kind, title=title or t("btn.browse"), parent=self)
 
-    def pick_sources(self, kind="media", title=None):
+    def pick_sources(self, kind: str = "media", title: str | None = None) -> list[str]:
         return dialogs.ask_open_many(kind, title=title or t("btn.browse"), parent=self)
 
-    def pick_output(self, default_name="", kind="video", ext=".mp4", title=None):
+    def pick_output(
+        self,
+        default_name: str = "",
+        kind: str = "video",
+        ext: str = ".mp4",
+        title: str | None = None,
+    ) -> str:
         return dialogs.ask_save(
             default_name,
             kind=kind,
@@ -881,10 +910,12 @@ class BaseTab(ttk.Frame):
             parent=self,
         )
 
-    def suggest_output(self, src, suffix="edited", ext=None):
+    def suggest_output(self, src: str, suffix: str = "edited", ext: str | None = None) -> str:
         return outputs.suggest_output(src, suffix, ext)
 
-    def confirm_output(self, out, inputs=(), default_ext=".mp4"):
+    def confirm_output(
+        self, out: str, inputs: Sequence[str] = (), default_ext: str = ".mp4"
+    ) -> str | None:
         """Validate *out* before rendering.  Returns the final path (possibly
         renamed to avoid overwriting) or None if the user cancelled - in
         which case a message has already been shown."""
@@ -902,7 +933,7 @@ class BaseTab(ttk.Frame):
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return None
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         """Load *path* as this tab's source.  Returns True if accepted.
 
         Tabs override this, or implement ``on_source_loaded(path)``; the
@@ -910,7 +941,7 @@ class BaseTab(ttk.Frame):
         loaded = False
         for attr in ("_src_var", "src_var", "source_var", "input_var", "_input_var"):
             var = getattr(self, attr, None)
-            if isinstance(var, tk.Variable):
+            if isinstance(var, tk.StringVar):
                 var.set(path)
                 loaded = True
                 break
@@ -969,13 +1000,13 @@ class BaseTab(ttk.Frame):
         self._render_thread = task_id
         return task_id
 
-    def cancel_render(self, task_id=None):
+    def cancel_render(self, task_id: str | None = None) -> None:
         """Cancel *task_id*, or every job this tab started."""
         q = RenderQueueManager.get_instance()
         for tid in [task_id] if task_id else list(self._active_tasks):
             q.cancel(tid)
 
-    def task(self, task_id):
+    def task(self, task_id: str) -> RenderTask | None:
         return RenderQueueManager.get_instance().get_task(task_id)
 
     # ── FFmpeg runner ─────────────────────────────────────────────────────────
@@ -1068,7 +1099,7 @@ class BaseTab(ttk.Frame):
 
     # ── Result display ────────────────────────────────────────────────────────
 
-    def show_result(self, returncode, out_path=""):
+    def show_result(self, returncode: int, out_path: str = "") -> None:
         """Success / cancelled / error feedback after a render."""
         task = getattr(self, "last_task", None)
         status = task.status if task is not None else ("done" if returncode == 0 else "failed")
@@ -1094,9 +1125,9 @@ class BaseTab(ttk.Frame):
     # ── Convenience ───────────────────────────────────────────────────────────
 
     @staticmethod
-    def open_path(path):
+    def open_path(path: str) -> bool:
         return open_in_explorer(path)
 
     @staticmethod
-    def reveal(path):
+    def reveal(path: str) -> bool:
         return reveal_file(path)

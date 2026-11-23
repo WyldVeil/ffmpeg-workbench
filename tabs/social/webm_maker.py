@@ -7,6 +7,8 @@ Quality presets map to cpu-used + deadline settings for VP8/VP9.
 Resolution sliders lock to original aspect ratio if desired.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 import os
@@ -23,6 +25,7 @@ from core.queue_manager import Hooks
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
 from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import current_tab, on_write
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FileRow, save_section, scroll_body
 
@@ -82,7 +85,7 @@ PIX_FORMATS = {
 
 
 class WebMTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         # Source metadata (populated when a file is chosen, typed, dropped…)
         self._src_path = ""
@@ -100,14 +103,14 @@ class WebMTab(BaseTab):
     # ═════════════════════════════════════════════════════════════════════════
     #  UI
     # ═════════════════════════════════════════════════════════════════════════
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.webm_maker"), t("webm_maker.subtitle"), icon="🌐")
         outer = scroll_body(self)
         self._build_source(outer)
         self._build_settings(outer)
         self._build_output(outer)
 
-    def _build_source(self, outer):
+    def _build_source(self, outer: tk.Frame) -> None:
         """The source file and what it is."""
         src_lf = tk.LabelFrame(outer, text=t("section.source_file"), padx=px(14), pady=px(8))
         src_lf.pack(fill="x", padx=px(18), pady=px(10, 4))
@@ -121,7 +124,7 @@ class WebMTab(BaseTab):
         )
         self.src_info_lbl.pack(anchor="w", pady=px(4, 0))
 
-    def _build_settings(self, outer):
+    def _build_settings(self, outer: tk.Frame) -> None:
         """Simple and Advanced settings, in tabs."""
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill="x", padx=px(18), pady=px(4))
@@ -133,7 +136,7 @@ class WebMTab(BaseTab):
         self._build_advanced_tab(advanced)
         self.notebook.bind("<<NotebookTabChanged>>", lambda _e: self._tab_changed())
 
-    def _build_output(self, outer):
+    def _build_output(self, outer: tk.Frame) -> None:
         """Where the result goes, the buttons, progress and the log."""
         self.out_row = save_section(
             outer, t("webm_maker.save_as"), ext=".webm", suggest=self._suggest_out
@@ -168,7 +171,7 @@ class WebMTab(BaseTab):
         self._on_use_source_res_toggle()
         self._update_simple_estimate()
 
-    def _build_simple_tab(self, parent):
+    def _build_simple_tab(self, parent: tk.Misc) -> None:
         prof = tk.LabelFrame(
             parent, text="  Profile (size · audio · max duration)  ", padx=px(14), pady=px(8)
         )
@@ -212,7 +215,7 @@ class WebMTab(BaseTab):
         )
         self.simple_est_lbl.pack(anchor="w", padx=px(14), pady=px(4, 8))
 
-    def _build_advanced_tab(self, parent):
+    def _build_advanced_tab(self, parent: tk.Misc) -> None:
         left, right = self._build_advanced_columns(parent)
         crf_row = self._build_size_limit(left)
         self._build_advanced_quality_slider(crf_row)
@@ -225,7 +228,7 @@ class WebMTab(BaseTab):
         ex3, tile_cb, tile_lbl = self._build_extra_options(right)
         self._build_threading_options(ex3, tile_cb, tile_lbl)
 
-    def _build_advanced_columns(self, parent):
+    def _build_advanced_columns(self, parent: tk.Misc) -> tuple[tk.Frame, tk.Frame]:
         # ── Two-column layout for the main controls ───────────────────────
         cols = tk.Frame(parent)
         cols.pack(fill="x", padx=px(8), pady=px(4))
@@ -235,7 +238,7 @@ class WebMTab(BaseTab):
         right.pack(side="left", fill="both", expand=True, padx=px(6, 0))
         return left, right
 
-    def _build_size_limit(self, left):
+    def _build_size_limit(self, left: tk.Frame) -> tk.Frame:
         """Size limit."""
         size_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.target_size_section')}  ", padx=px(14), pady=px(10)
@@ -285,7 +288,7 @@ class WebMTab(BaseTab):
         self.budget_lbl = tk.Label(self.size_controls, text="", fg=CLR["fgdim"], font=(UI_FONT, 9))
         self.budget_lbl.pack(anchor="w", pady=px(4, 0))
         # Update budget estimate whenever size or duration changes
-        self.size_limit_var.trace_add("write", lambda *_: self._update_budget_label())
+        on_write(self.size_limit_var, lambda: self._update_budget_label())
 
         # CRF override (visible only when size-limit toggle is OFF) ─────────
         # Seeded by the chosen quality preset's crf_hint, but user can override.
@@ -300,7 +303,7 @@ class WebMTab(BaseTab):
         self.crf_var = tk.IntVar(value=31)  # preset will reseed in _on_quality_change
         return crf_row
 
-    def _build_advanced_quality_slider(self, crf_row):
+    def _build_advanced_quality_slider(self, crf_row: tk.Frame) -> None:
         tk.Scale(
             crf_row,
             variable=self.crf_var,
@@ -309,14 +312,14 @@ class WebMTab(BaseTab):
             resolution=1,
             orient="horizontal",
             length=px(240),
-            command=lambda *_: self._update_budget_label(),
+            command=lambda _v: self._update_budget_label(),
         ).pack(side="left", padx=px(6))
         tk.Entry(crf_row, textvariable=self.crf_var, width=4, justify="center").pack(side="left")
         tk.Label(
             self.crf_controls, text=t("webm_maker.crf_hint"), fg=CLR["fgdim"], font=(UI_FONT, 8)
         ).pack(anchor="w", pady=px(2, 0))
 
-    def _build_quality_preset(self, left):
+    def _build_quality_preset(self, left: tk.Frame) -> None:
         """Quality preset."""
         qual_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.speed_section')}  ", padx=px(14), pady=px(10)
@@ -332,7 +335,7 @@ class WebMTab(BaseTab):
             width=44,
         )
         qual_cb.pack(anchor="w")
-        qual_cb.bind("<<ComboboxSelected>>", lambda *_: self._on_quality_change())
+        qual_cb.bind("<<ComboboxSelected>>", lambda _e: self._on_quality_change())
         tk.Label(
             qual_lf,
             text=t("webm_maker.lower_quality_faster_encode_higher_quality_very"),
@@ -340,7 +343,7 @@ class WebMTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(anchor="w", pady=px(4, 0))
 
-    def _build_codec(self, left):
+    def _build_codec(self, left: tk.Frame) -> None:
         """Codec."""
         codec_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.video_codec_section')}  ", padx=px(14), pady=px(10)
@@ -365,7 +368,7 @@ class WebMTab(BaseTab):
             codec_lf, text=t("webm_maker.two_pass_checkbox"), variable=self.twopass_var
         ).pack(anchor="w", pady=px(6, 0))
 
-    def _build_audio(self, left):
+    def _build_audio(self, left: tk.Frame) -> None:
         """Audio."""
         audio_lf = tk.LabelFrame(
             left, text=f"  {t('webm_maker.audio_section')}  ", padx=px(14), pady=px(10)
@@ -394,7 +397,7 @@ class WebMTab(BaseTab):
         )
         self.audio_br_cb.pack(side="left", padx=px(4))
 
-    def _build_resolution(self, right):
+    def _build_resolution(self, right: tk.Frame) -> tuple[tk.Frame, tk.LabelFrame]:
         """Resolution."""
         res_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.output_resolution_section')}  ", padx=px(14), pady=px(10)
@@ -459,7 +462,7 @@ class WebMTab(BaseTab):
         h_row.pack(fill="x", pady=px(2, 4))
         return h_row, res_lf
 
-    def _build_height_and_presets(self, h_row, res_lf):
+    def _build_height_and_presets(self, h_row: tk.Frame, res_lf: tk.LabelFrame) -> None:
         tk.Label(h_row, text=t("crop.height_label"), width=7, anchor="e").pack(side="left")
         self.res_h_var = tk.IntVar(value=1080)
         self.res_h_entry_var = tk.StringVar(value="1080")
@@ -495,7 +498,7 @@ class WebMTab(BaseTab):
             preset_row, text=t("scene_detect.presets_label"), fg=CLR["fgdim"], font=(UI_FONT, 8)
         )
         self._res_preset_label.pack(side="left", padx=px(0, 4))
-        self._res_preset_btns = []
+        self._res_preset_btns: list[tk.Button] = []
         for label, w, h in [
             ("8K", 7680, 4320),
             ("4K", 3840, 2160),
@@ -517,7 +520,7 @@ class WebMTab(BaseTab):
             btn.pack(side="left", padx=px(1))
             self._res_preset_btns.append(btn)
 
-    def _build_trim(self, right):
+    def _build_trim(self, right: tk.Frame) -> None:
         """Trim."""
         trim_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.trim_section')}  ", padx=px(14), pady=px(8)
@@ -532,7 +535,7 @@ class WebMTab(BaseTab):
         )
         self.trim.pack(side="left", padx=px(4))
 
-    def _build_extra_options(self, right):
+    def _build_extra_options(self, right: tk.Frame) -> tuple[tk.Frame, ttk.Combobox, tk.Label]:
         """Extra options."""
         extra_lf = tk.LabelFrame(
             right, text=f"  {t('webm_maker.extra_options_section')}  ", padx=px(14), pady=px(8)
@@ -585,7 +588,9 @@ class WebMTab(BaseTab):
         )
         return ex3, tile_cb, tile_lbl
 
-    def _build_threading_options(self, ex3, tile_cb, tile_lbl):
+    def _build_threading_options(
+        self, ex3: tk.Frame, tile_cb: ttk.Combobox, tile_lbl: tk.Label
+    ) -> None:
         tile_cb.pack(side="left", padx=px(4))
         self.add_tooltip(tile_lbl, t("webm_maker.tile_columns_tooltip"))
         self.add_tooltip(tile_cb, t("webm_maker.tile_columns_tooltip"))
@@ -603,15 +608,15 @@ class WebMTab(BaseTab):
     # ═════════════════════════════════════════════════════════════════════════
     #  Source
     # ═════════════════════════════════════════════════════════════════════════
-    def _suggest_out(self):
+    def _suggest_out(self) -> str:
         src = self.src_row.path
         return self.suggest_output(src, "web", ".webm") if src else ""
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         self.src_var.set(path)
         return True
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         """Re-probe on every change (browse, typing, paste, drag-and-drop, recent files)."""
         tasks.submit(
             partial(ff.try_probe, path),
@@ -619,7 +624,7 @@ class WebMTab(BaseTab):
             name="WebMProbe",
         )
 
-    def _apply_probe(self, path, info):
+    def _apply_probe(self, path: str, info: ff.MediaInfo | None) -> None:
         if path != self.src_row.path:
             return
         if info is None or not info.has_video:
@@ -649,25 +654,25 @@ class WebMTab(BaseTab):
         if not self.out_row.path:
             self.out_row.set(self._suggest_out())
 
-    def _tab_changed(self):
+    def _tab_changed(self) -> None:
         self.btn_render.config(text=f"▶ ENCODE ({self._mode().title()})")
 
     def _mode(self) -> str:
         try:
-            return "simple" if self.notebook.index(self.notebook.select()) == 0 else "advanced"
+            return "simple" if current_tab(self.notebook) == 0 else "advanced"
         except tk.TclError:
             return "simple"
 
     # ═════════════════════════════════════════════════════════════════════════
     #  Simple estimate
     # ═════════════════════════════════════════════════════════════════════════
-    def _simple_trim(self):
+    def _simple_trim(self) -> tuple[float, float, float]:
         start, until = self.simple_trim.span()
         end = until or 0.0  # 0: to the end
         eff = (end if end > start else self._src_dur) - start
         return start, end, eff
 
-    def _update_simple_estimate(self):
+    def _update_simple_estimate(self) -> None:
         if not hasattr(self, "simple_est_lbl"):
             return
         if not self._src_dur:
@@ -698,7 +703,7 @@ class WebMTab(BaseTab):
             f"{res} · {st.fps_cap:g} fps"
         )
 
-    def _seed_resolution(self, w, h):
+    def _seed_resolution(self, w: int, h: int) -> None:
         self._lock_updating = True
         try:
             self.res_w_var.set(w)
@@ -710,7 +715,7 @@ class WebMTab(BaseTab):
         finally:
             self._lock_updating = False
 
-    def _apply_res_preset(self, w, h):
+    def _apply_res_preset(self, w: int, h: int) -> None:
         self._lock_updating = True
         try:
             self.res_w_var.set(w)
@@ -720,7 +725,7 @@ class WebMTab(BaseTab):
         finally:
             self._lock_updating = False
 
-    def _refresh_pixfmt_dropdown(self):
+    def _refresh_pixfmt_dropdown(self) -> None:
         """Update the dropdown's first entry to show the detected source pix_fmt."""
         detected = (
             f"Source ({self._src_pixfmt})" if self._src_pixfmt else PIX_FORMATS[PixFmt.SOURCE]
@@ -732,20 +737,20 @@ class WebMTab(BaseTab):
         """Tk validatecommand: accept empty or all-digit input only."""
         return proposed == "" or proposed.isdigit()
 
-    def _on_w_slider(self, val):
+    def _on_w_slider(self, val: str) -> None:
         """Slider drag → commit width via the same path as entry-commit."""
         if self._lock_updating:
             return
         with contextlib.suppress(ValueError, TypeError):
             self._apply_w(int(float(val)))
 
-    def _on_h_slider(self, val):
+    def _on_h_slider(self, val: str) -> None:
         if self._lock_updating:
             return
         with contextlib.suppress(ValueError, TypeError):
             self._apply_h(int(float(val)))
 
-    def _commit_w_from_entry(self):
+    def _commit_w_from_entry(self) -> None:
         """User pressed Enter or tabbed away — parse and apply, or revert."""
         raw = self.res_w_entry_var.get().strip()
         if not raw:
@@ -763,7 +768,7 @@ class WebMTab(BaseTab):
             return
         self._apply_w(w)
 
-    def _commit_h_from_entry(self):
+    def _commit_h_from_entry(self) -> None:
         raw = self.res_h_entry_var.get().strip()
         if not raw:
             self.res_h_entry_var.set(str(self.res_h_var.get()))
@@ -778,7 +783,7 @@ class WebMTab(BaseTab):
             return
         self._apply_h(h)
 
-    def _apply_w(self, w: int):
+    def _apply_w(self, w: int) -> None:
         """Snap, set IntVar, and (if lock-aspect on) update height. Single source of truth."""
         if w < 2:
             return
@@ -794,7 +799,7 @@ class WebMTab(BaseTab):
         finally:
             self._lock_updating = False
 
-    def _apply_h(self, h: int):
+    def _apply_h(self, h: int) -> None:
         if h < 2:
             return
         h = _snap_even(h)
@@ -809,7 +814,7 @@ class WebMTab(BaseTab):
         finally:
             self._lock_updating = False
 
-    def _mirror_w_to_entry(self, *_):
+    def _mirror_w_to_entry(self, *_: str) -> None:
         """IntVar changed (from slider or programmatic seed) → mirror to entry,
         unless _apply_* already did it or the entry currently has focus."""
         if self._lock_updating:
@@ -822,7 +827,7 @@ class WebMTab(BaseTab):
             return
         self.res_w_entry_var.set(str(self.res_w_var.get()))
 
-    def _mirror_h_to_entry(self, *_):
+    def _mirror_h_to_entry(self, *_: str) -> None:
         if self._lock_updating:
             return
         try:
@@ -835,7 +840,7 @@ class WebMTab(BaseTab):
     # ═════════════════════════════════════════════════════════════════════════
     #  Budget label
     # ═════════════════════════════════════════════════════════════════════════
-    def _update_budget_label(self):
+    def _update_budget_label(self) -> None:
         try:
             size_mb = float(self.size_limit_var.get())
             dur = self._src_dur
@@ -873,7 +878,7 @@ class WebMTab(BaseTab):
     # ═════════════════════════════════════════════════════════════════════════
     #  Codec / audio change handlers
     # ═════════════════════════════════════════════════════════════════════════
-    def _on_codec_change(self):
+    def _on_codec_change(self) -> None:
         is_vp9 = self.codec_var.get() == "VP9"
         for w in self.vp9_extra_widgets:
             if is_vp9:
@@ -881,7 +886,7 @@ class WebMTab(BaseTab):
             else:
                 w.pack_forget()
 
-    def _on_use_source_res_toggle(self):
+    def _on_use_source_res_toggle(self) -> None:
         """Enable/disable all child controls in the Resolution section."""
         locked = self.use_source_res_var.get()
         state = "disabled" if locked else "normal"
@@ -900,12 +905,12 @@ class WebMTab(BaseTab):
             # Returning to manual mode — make sure aspect lock is on by default
             self.lock_ar_var.set(True)
 
-    def _on_audio_change(self, *_):
+    def _on_audio_change(self, *_: object) -> None:
         has_audio = AUDIO_OPTIONS.get(self.audio_codec_var.get()) is not None
         self.audio_br_cb.config(state="readonly" if has_audio else "disabled")
         self._update_budget_label()
 
-    def _on_size_limit_toggle(self):
+    def _on_size_limit_toggle(self) -> None:
         """Show size controls OR CRF controls — never both."""
         if self.size_limit_enabled_var.get():
             self.crf_controls.pack_forget()
@@ -917,30 +922,30 @@ class WebMTab(BaseTab):
             self.crf_controls.pack(fill="x")
         self._update_budget_label()
 
-    def _on_quality_change(self):
+    def _on_quality_change(self) -> None:
         """When user changes quality preset, reseed CRF if it's user-visible."""
         if not self.size_limit_enabled_var.get():
             self._seed_crf_from_preset()
 
-    def _seed_crf_from_preset(self):
+    def _seed_crf_from_preset(self) -> None:
         preset = next(p for p in QUALITY_PRESETS if p[0] == self.quality_var.get())
         self.crf_var.set(preset[4])  # crf_hint
 
     # ═════════════════════════════════════════════════════════════════════════
     #  Render
     # ═════════════════════════════════════════════════════════════════════════
-    def _cancel(self):
+    def _cancel(self) -> None:
         if self._task_id:
             self.cancel_render(self._task_id)
             self.status_var.set("Cancelling…")
 
-    def _ensure_probe(self, src) -> bool:
+    def _ensure_probe(self, src: str) -> bool:
         """Make sure metadata belongs to *src* (typed paths can be newer than the probe)."""
         if self._src_path != src or not self._src_dur:
             self._apply_probe(src, ff.try_probe(src))
         return bool(self._src_dur)
 
-    def _start_render(self):
+    def _start_render(self) -> None:
         src = self.src_row.path
         if not src or not os.path.exists(src):
             messagebox.showwarning(t("common.warning"), "Load a source file first.", parent=self)
@@ -965,7 +970,7 @@ class WebMTab(BaseTab):
 
     # ── settings snapshots (Tk thread) ───────────────────────────────────────
 
-    def _simple_job(self, src):
+    def _simple_job(self, src: str) -> webm.WebmJob | None:
         start, _end, eff = self._simple_trim()
         profile = self.simple_profile_var.get()
         label = webm.PROFILE_LABELS[profile]
@@ -1059,7 +1064,7 @@ class WebMTab(BaseTab):
             loop=self.loop_var.get(),
         )
 
-    def _advanced_job(self, src):
+    def _advanced_job(self, src: str) -> webm.WebmJob:
         size_limited = self.size_limit_enabled_var.get()
         t_start, eff = self._trim_length()
         choices = self._advanced()
@@ -1085,7 +1090,7 @@ class WebMTab(BaseTab):
 
     # ── the queued job ───────────────────────────────────────────────────────
 
-    def _run_job(self, src, out, job):
+    def _run_job(self, src: str, out: str, job: webm.WebmJob) -> None:
         self.btn_cancel.config(state="normal")
         self.btn_render.config(state="disabled")
         self.progress.config(value=0)
@@ -1099,14 +1104,14 @@ class WebMTab(BaseTab):
             hooks=Hooks(on_progress=self._job_progress, on_complete=partial(self._job_done, out)),
         )
 
-    def _job_progress(self, tid, line):
+    def _job_progress(self, tid: str, line: str) -> None:
         self._log(line)
         task = self.task(tid)
         if task is not None and task.fraction is not None:
             self.progress.config(value=task.fraction * 100)
             self.status_var.set(f"Encoding… {task.fraction * 100:.0f}%")
 
-    def _job_done(self, out, tid, rc):
+    def _job_done(self, out: str, tid: str, rc: int) -> None:
         self._task_id = None
         self.btn_render.config(state="normal")
         self.btn_cancel.config(state="disabled")
@@ -1121,8 +1126,8 @@ class WebMTab(BaseTab):
             self.status_var.set("❌  Encode failed.")
         self.show_result(rc, out)
 
-    def _log(self, msg: str):
+    def _log(self, msg: str) -> None:
         self.log(self.console, msg)
 
-    def _status(self, msg: str):
+    def _status(self, msg: str) -> None:
         self.call_ui(self.status_var.set, msg)

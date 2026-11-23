@@ -39,11 +39,12 @@ from core.i18n import t_or
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from tabs import framestep
+from tabs.kit.tktyped import draw_image, linked_scrollbar
 
 logger = logging.getLogger("crossfader.widgets")
 
 
-def _clr():
+def _clr() -> dict[str, str]:
     from tabs.base_tab import CLR
 
     return CLR
@@ -59,12 +60,12 @@ class FramePreview(tk.Frame):
 
     def __init__(
         self,
-        parent,
+        parent: tk.Misc,
         width: int = 480,
         height: int = 270,
         show_time: bool = True,
         on_click: Callable[[], None] | None = None,
-    ):
+    ) -> None:
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self._pw, self._ph = px(width), px(height)  # design px -> screen px
@@ -90,7 +91,7 @@ class FramePreview(tk.Frame):
             cursor="hand2" if on_click else "",
         )
         self.canvas.pack()
-        self._time_lbl = None
+        self._time_lbl: tk.Label | None = None
         if show_time:
             self._time_lbl = tk.Label(
                 self, text="", bg=clr["bg"], fg=clr["fgdim"], font=(MONO_FONT, 8)
@@ -203,14 +204,14 @@ class FramePreview(tk.Frame):
             return
         self._photo = photo
         self.canvas.delete("all")
-        self.canvas.create_image(self._pw // 2, self._ph // 2, image=photo)
+        draw_image(self.canvas, self._pw // 2, self._ph // 2, photo)
         self._shown_t = at
         if self._time_lbl is not None:
             self._time_lbl.config(text=ff.format_time(at))
         if self.after_draw is not None:
             self.after_draw()
 
-    def image_box(self) -> tuple | None:
+    def image_box(self) -> tuple[int, int, int, int] | None:
         """(x0, y0, width, height) of the frame on the canvas, None before one is shown."""
         if self._photo is None:
             return None
@@ -228,17 +229,17 @@ class CompareView(tk.Frame):
 
     def __init__(
         self,
-        parent,
+        parent: tk.Misc,
         width: int = 360,
         height: int = 203,
         before_label: str = "",
         after_label: str = "",
-    ):
+    ) -> None:
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         row = tk.Frame(self, bg=clr["bg"])
         row.pack()
-        self.views = []
+        self.views: list[FramePreview] = []
         for label in (
             before_label or t_or("preview.before", "Before"),
             after_label or t_or("preview.after", "After"),
@@ -251,7 +252,7 @@ class CompareView(tk.Frame):
             view = FramePreview(col, width, height, show_time=False)
             view.pack()
             self.views.append(view)
-        self.view_before, self.view_after = self.views
+        self.view_before, self.view_after = self.views[0], self.views[1]
         bar = tk.Frame(self, bg=clr["bg"])
         bar.pack(fill="x", pady=px(4, 0))
         self._pos = tk.DoubleVar(value=0.0)
@@ -313,7 +314,7 @@ class FileRow(tk.Frame):
         width: int = 56,
         label_width: int = 16,
         on_change: Callable[[str], object] | None = None,
-    ):
+    ) -> None:
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self.var = var if var is not None else tk.StringVar()
@@ -392,7 +393,7 @@ class SaveRow(FileRow):
         kind: str = "video",
         ext: str | Callable[[], str] = ".mp4",
         suggest: Callable[[], str] | None = None,
-    ):
+    ) -> None:
         self._ext, self._suggest = ext, suggest
         super().__init__(parent, label, var, kind=kind)
 
@@ -421,7 +422,7 @@ class FolderRow(FileRow):
         *,
         width: int = 56,
         label_width: int = 16,
-    ):
+    ) -> None:
         super().__init__(parent, label, var, kind="folder", width=width, label_width=label_width)
 
     def _button_text(self) -> str:
@@ -442,7 +443,7 @@ class FolderRow(FileRow):
 
 
 def scroll_body(
-    parent, *, height: int | None = None, on_resize: Callable[[int], object] | None = None
+    parent: tk.Misc, *, height: int | None = None, on_resize: Callable[[int], object] | None = None
 ) -> tk.Frame:
     """Fill *parent* with a vertically scrolling area and return the inner
     frame to build into.  The mouse wheel works over any child (the app's
@@ -456,7 +457,7 @@ def scroll_body(
     canvas = tk.Canvas(outer, bg=clr["bg"], highlightthickness=0, yscrollincrement=px(20))
     if height:
         canvas.configure(height=px(height))
-    vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+    vsb = linked_scrollbar(outer, canvas)
     inner = tk.Frame(canvas, bg=clr["bg"])
     win = canvas.create_window((0, 0), window=inner, anchor="nw")
     inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
@@ -467,7 +468,6 @@ def scroll_body(
             on_resize(e.width)
 
     canvas.bind("<Configure>", resized)
-    canvas.configure(yscrollcommand=vsb.set)
     vsb.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)
     return inner
@@ -507,15 +507,15 @@ class EncoderPanel(tk.Frame):
 
     def __init__(
         self,
-        parent,
+        parent: tk.Misc,
         *,
-        codecs=("h264", "hevc", "av1", "vp9"),
+        codecs: tuple[str, ...] = ("h264", "hevc", "av1", "vp9"),
         default_codec: str = "h264",
         default_quality: str = "high",
         default_speed: str = "balanced",
         show_ten_bit: bool = True,
         on_change: Callable[[], None] | None = None,
-    ):
+    ) -> None:
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self._on_change = on_change
@@ -558,7 +558,9 @@ class EncoderPanel(tk.Frame):
         tasks.submit(encoders.working_hw_kinds, on_done=self._hw_detected, name="EncoderPanelProbe")
         self._changed(notify=False)  # the owner is still being built: don't call back into it yet
 
-    def _choice(self, row, col, label, var, values, width):
+    def _choice(
+        self, row: int, col: int, label: str, var: tk.StringVar, values: list[str], width: int
+    ) -> ttk.Combobox:
         """A label and its drop-down at (*row*, *col*); a change updates the encoder."""
         clr = _clr()
         first = col == 0
@@ -574,7 +576,7 @@ class EncoderPanel(tk.Frame):
         box.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         return box
 
-    def _hw_detected(self, kinds) -> None:
+    def _hw_detected(self, kinds: list[str]) -> None:
         if not self.winfo_exists():
             return
         for k in kinds:
@@ -582,7 +584,7 @@ class EncoderPanel(tk.Frame):
         self._hw_box.config(values=[v for _, v in self._hw_choices])
         self._changed()
 
-    def _key(self, var, pairs, default):
+    def _key(self, var: tk.StringVar, pairs: list[tuple[str, str]], default: str) -> str:
         rev = {v: k for k, v in pairs}
         return rev.get(var.get(), default)
 
@@ -614,7 +616,9 @@ class EncoderPanel(tk.Frame):
             self._codec_var.set(label)
             self._changed()
 
-    def video_encode(self, container: str = "mp4", **kwargs) -> encoders.VideoEncode:
+    def video_encode(
+        self, container: str = "mp4", rate: encoders.Rate | None = None
+    ) -> encoders.VideoEncode:
         hw = self.hw
         if self.codec in ("prores", "dnxhr", "ffv1"):
             hw = "off"
@@ -625,7 +629,7 @@ class EncoderPanel(tk.Frame):
             hw=hw,
             ten_bit=self.ten_bit,
             container=container,
-            **kwargs,
+            rate=rate,
         )
 
     def _changed(self, notify: bool = True) -> None:
@@ -650,12 +654,12 @@ class FramePicker(tk.Toplevel):
 
     def __init__(
         self,
-        parent,
+        parent: tk.Misc,
         path: str,
         var: tk.StringVar,
         fmt: Callable[[float], str] = ff.format_time,
         title: str = "Pick a frame",
-    ):
+    ) -> None:
         super().__init__(parent)
         clr = _clr()
         self.configure(bg=clr["bg"])
@@ -692,7 +696,7 @@ class FramePicker(tk.Toplevel):
         with contextlib.suppress(tk.TclError):
             self.grab_set()
 
-    def _build_controls(self):
+    def _build_controls(self) -> None:
         """Step buttons, the time, Cancel and Use, and the frame-step keys."""
         clr = _clr()
         bar = tk.Frame(self, bg=clr["bg"])
@@ -735,12 +739,12 @@ class FramePicker(tk.Toplevel):
         ):
             self.bind(key, lambda _e, f=frames, s=seconds: framestep.step(self.slider, f, s))
 
-    def _moved(self):
+    def _moved(self) -> None:
         at = framestep.snap(float(self.pos.get()), self._fps)
         self.time_lbl.config(text=f"{ff.format_time(at)}   ·   frame {round(at * self._fps) + 1:,}")
         self.preview.show(at)
 
-    def _use(self):
+    def _use(self) -> None:
         self._var.set(self._fmt(framestep.snap(float(self.pos.get()), self._fps)))
         self.destroy()
 

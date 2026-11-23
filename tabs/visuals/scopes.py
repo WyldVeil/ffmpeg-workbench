@@ -18,6 +18,7 @@ from core import tasks
 from core.i18n import t
 from core.ops import scopes as sc
 from core.ops.shared import RenderJob
+from core.proc import ProcResult
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
@@ -32,13 +33,13 @@ LAYOUTS = {
 
 
 class VideoScopesTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
+        self._info: ff.MediaInfo | None = None
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(self, t("tab.video_scopes"), t("scopes.subtitle"), icon="📊")
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -51,7 +52,7 @@ class VideoScopesTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
         self._scope_changed()
 
-    def _build_scope_picker(self, body):
+    def _build_scope_picker(self, body: tk.Frame) -> None:
         """Which scope, and what it shows."""
         pick = tk.Frame(body, bg=CLR["bg"])
         pick.pack(fill="x", padx=px(20), pady=px(4))
@@ -82,7 +83,7 @@ class VideoScopesTab(BaseTab):
         )
         self.help_lbl.pack(anchor="w", padx=px(24))
 
-    def _build_views(self, body):
+    def _build_views(self, body: tk.Frame) -> None:
         """The picture beside its scope, and a slider through the video."""
         views = tk.Frame(body, bg=CLR["bg"])
         views.pack(pady=px(6))
@@ -104,7 +105,7 @@ class VideoScopesTab(BaseTab):
             bar, text="Save snapshot…", relief="flat", cursor="hand2", command=self._snapshot
         ).pack(side="left")
 
-    def _build_scope_video(self, body):
+    def _build_scope_video(self, body: tk.Frame) -> None:
         """Render the scope as a video: layout, encoder and where it goes."""
         vid = tk.LabelFrame(
             body, text=f"  {t('scopes.scope_video_section')}  ", padx=px(12), pady=px(8)
@@ -142,7 +143,7 @@ class VideoScopesTab(BaseTab):
 
     # ── Behaviour ────────────────────────────────────────────────────────────
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = ff.try_probe(path)
         dur = self._info.duration if self._info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -152,12 +153,12 @@ class VideoScopesTab(BaseTab):
         self.scope_view.load(path, dur, dur * 0.25)
         self.time_lbl.config(text=ff.format_time(dur * 0.25))
 
-    def _scope_changed(self):
+    def _scope_changed(self) -> None:
         key = self.scope_var.get()
         self.help_lbl.config(text="ℹ  " + sc.SCOPES[key][3])
         self.scope_view.set_filter(sc.SCOPES[key][1])
 
-    def _moved(self):
+    def _moved(self) -> None:
         pos = float(self.pos_var.get())
         self.time_lbl.config(text=ff.format_time(pos))
         self.picture.show(pos)
@@ -167,7 +168,7 @@ class VideoScopesTab(BaseTab):
         label = self.layout_var.get()
         return next((k for k, v in LAYOUTS.items() if v == label), "side")
 
-    def _snapshot(self):
+    def _snapshot(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:
@@ -185,10 +186,10 @@ class VideoScopesTab(BaseTab):
         graph = sc.export_graph(self.scope_var.get(), layout, w, h)
         cmd = sc.snapshot_cmd(src, float(self.pos_var.get()), graph, out)
 
-        def work():
+        def work() -> ProcResult[str]:
             return ff.capture(cmd, timeout=120)
 
-        def done(res):
+        def done(res: ProcResult[str]) -> None:
             if res.returncode == 0 and os.path.isfile(out):
                 self.log_tagged(self.console, f"Snapshot saved: {out}", "success")
             else:
@@ -201,7 +202,7 @@ class VideoScopesTab(BaseTab):
 
         tasks.submit(work, on_done=done, name="ScopeSnapshot")
 
-    def _render_video(self):
+    def _render_video(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

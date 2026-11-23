@@ -13,6 +13,7 @@ its length and frame rate:
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import Any, ClassVar
 
@@ -25,6 +26,7 @@ from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.time_fields import MomentPicker
+from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
 MODES = {
@@ -52,31 +54,31 @@ class AnimatedZoomTab(BaseTab):
         "pulse": ("u_time", None),
     }
 
-    def _mark(self, which):
+    def _mark(self, which: int) -> None:
         key = next((k for k, v in MODES.items() if v == self.mode_var.get()), "")
         name = self._MARKS.get(key, (None, None))[which]
         if name:
             self.vars[name].set(ff.format_time(float(self.pos_var.get())))
 
-    def mark_in(self):
+    def mark_in(self) -> None:
         self._mark(0)
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         self._mark(1)
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.src_var = tk.StringVar()
-        self._info = None
-        self._job = None
+        self._info: ff.MediaInfo | None = None
+        self._job: str | None = None
         self._build_ui()
 
-    def _build_ui(self):
-        body, entry, labelled, opt, time_entry = self._build_header()
-        self._build_kb(entry, labelled, opt, time_entry)
+    def _build_ui(self) -> None:
+        body, opt = self._build_header()
+        self._build_moves(opt)
         self._build_output(body, opt)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self, t("tab.animated_zoom"), "Punch-ins, Ken Burns moves and smooth pans.", icon="🔍"
         )
@@ -115,36 +117,41 @@ class AnimatedZoomTab(BaseTab):
         )
         mb.pack(anchor="w")
         mb.bind("<<ComboboxSelected>>", lambda _e: self._mode_changed())
-        self.frames = {}
-        v = self.vars = {}
+        self.frames: dict[str, tk.Frame] = {}
+        self.vars: dict[str, tk.StringVar] = {}
+        return body, opt
 
-        def entry(parent, key, default, width=6):
-            v[key] = tk.StringVar(value=default)
-            v[key].trace_add("write", lambda *_a: self._changed())
-            return tk.Entry(parent, textvariable=v[key], width=width)
+    def _entry(self, parent: tk.Misc, key: str, default: str, width: int = 6) -> tk.Entry:
+        """A number box whose text is ``self.vars[key]``."""
+        self.vars[key] = var = tk.StringVar(value=default)
+        on_write(var, lambda: self._changed())
+        return tk.Entry(parent, textvariable=var, width=width)
 
-        def time_entry(parent, key, default, width=8):
-            picker = MomentPicker(
-                parent,
-                value=default,
-                width=width,
-                here=lambda: float(self.pos_var.get()),
-                on_change=self._changed,
+    def _time_entry(self, parent: tk.Misc, key: str, default: str, width: int = 8) -> MomentPicker:
+        """A time box (with the frame picker) whose text is ``self.vars[key]``."""
+        picker = MomentPicker(
+            parent,
+            value=default,
+            width=width,
+            here=lambda: float(self.pos_var.get()),
+            on_change=self._changed,
+        )
+        self.vars[key] = picker.var
+        return picker
+
+    @staticmethod
+    def _labelled(parent: tk.Misc, *items: str | Callable[[tk.Misc], tk.Widget]) -> None:
+        """A row of words and boxes: each item is text, or makes its widget in the row."""
+        row = tk.Frame(parent)
+        row.pack(anchor="w", pady=px(2))
+        for item in items:
+            (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(
+                side="left", padx=px(2)
             )
-            v[key] = picker.var
-            return picker
 
-        def labelled(parent, *items):
-            row = tk.Frame(parent)
-            row.pack(anchor="w", pady=px(2))
-            for item in items:
-                (tk.Label(row, text=item) if isinstance(item, str) else item(row)).pack(
-                    side="left", padx=px(2)
-                )
-
-        return body, entry, labelled, opt, time_entry
-
-    def _build_kb(self, entry, labelled, opt, time_entry):
+    def _build_moves(self, opt: tk.LabelFrame) -> None:
+        """The settings of each kind of move, one frame per kind (shown by mode)."""
+        entry, time_entry, labelled = self._entry, self._time_entry, self._labelled
         f = self.frames["punch"] = tk.Frame(opt)
         labelled(
             f,
@@ -211,7 +218,7 @@ class AnimatedZoomTab(BaseTab):
             lambda r: entry(r, "u_y", "50", 5),
         )
 
-    def _build_output(self, body, opt):
+    def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         er = self._ease_row = tk.Frame(opt)
         er.pack(anchor="w", pady=px(4))
         tk.Label(er, text="Motion:").pack(side="left")
@@ -236,10 +243,10 @@ class AnimatedZoomTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
         self._mode_changed()
 
-    def _mode(self):
+    def _mode(self) -> str:
         return next((k for k, v in MODES.items() if v == self.mode_var.get()), "punch")
 
-    def _mode_changed(self):
+    def _mode_changed(self) -> None:
         for key, frame in self.frames.items():
             if key == self._mode():
                 frame.pack(anchor="w", pady=px(4), before=self._ease_row)
@@ -297,7 +304,7 @@ class AnimatedZoomTab(BaseTab):
         p["ease"] = ease
         return p
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         self._info = info = ff.try_probe(path)
         dur = info.duration if info else 0.0
         self.slider.configure(to=max(dur, 0.01))
@@ -306,12 +313,12 @@ class AnimatedZoomTab(BaseTab):
             self.out_row.set(self.suggest_output(path, "zoom"))
         self._changed()
 
-    def _changed(self):
+    def _changed(self) -> None:
         if self._job is not None:
             self.after_cancel(self._job)
         self._job = self.after(300, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self._job = None
         info = self._info
         if info is None or not info.has_video:
@@ -327,7 +334,7 @@ class AnimatedZoomTab(BaseTab):
             keep_time=True,
         )
 
-    def _render(self):
+    def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)
         if info is None:

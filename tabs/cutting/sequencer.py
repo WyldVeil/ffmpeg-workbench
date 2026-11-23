@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
 from core import concat
@@ -31,13 +32,23 @@ SIZES = {
 }
 
 
+@dataclass
+class _Clip:
+    """A clip in the sequence and the part of it to use."""
+
+    path: str
+    duration: float
+    start: float
+    end: float
+
+
 class SequencerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.clips: list = []  # dicts: path, duration, start, end
+        self.clips: list[_Clip] = []
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         self.make_header(
             self,
             t("tab.multi_clip_sequencer"),
@@ -51,7 +62,7 @@ class SequencerTab(BaseTab):
         self._build_viewer(top)
         self._build_join(body)
 
-    def _build_clip_list(self, top):
+    def _build_clip_list(self, top: tk.Frame) -> None:
         """The clips in order, with their buttons and the total length."""
         left = tk.Frame(top)
         left.pack(side="left", fill="both", expand=True)
@@ -86,7 +97,7 @@ class SequencerTab(BaseTab):
         self.total_lbl = tk.Label(bt, text="", fg=CLR["accent"])
         self.total_lbl.pack(side="right")
 
-    def _build_viewer(self, top):
+    def _build_viewer(self, top: tk.Frame) -> None:
         """The chosen clip's picture and its in/out points."""
         right = tk.Frame(top)
         right.pack(side="left", padx=px(10, 0))
@@ -113,7 +124,7 @@ class SequencerTab(BaseTab):
             side="left", padx=px(6)
         )
 
-    def _build_join(self, body):
+    def _build_join(self, body: tk.Frame) -> None:
         """How to join, where the result goes, the button and the log."""
         opt = tk.LabelFrame(body, text="  Join  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -140,25 +151,23 @@ class SequencerTab(BaseTab):
 
     # ── list ─────────────────────────────────────────────────────────────────
 
-    def add_paths(self, paths):
+    def add_paths(self, paths: list[str]) -> int:
         added = 0
         for p in paths:
             info = ff.try_probe(p)
             if info is not None and info.has_video and info.duration > 0:
-                self.clips.append(
-                    {"path": p, "duration": info.duration, "start": 0.0, "end": info.duration}
-                )
+                self.clips.append(_Clip(p, info.duration, 0.0, info.duration))
                 added += 1
         self._fill(len(self.clips) - 1 if added else None)
         return added
 
-    def load_file(self, path):
+    def load_file(self, path: str) -> bool:
         return self.add_paths([path]) > 0
 
-    def _add(self):
+    def _add(self) -> None:
         self.add_paths(self.pick_sources("video"))
 
-    def _fill(self, select=None):
+    def _fill(self, select: int | None = None) -> None:
         self.tree.delete(*self.tree.get_children())
         for i, c in enumerate(self.clips):
             self.tree.insert(
@@ -167,95 +176,95 @@ class SequencerTab(BaseTab):
                 iid=str(i),
                 values=(
                     i + 1,
-                    os.path.basename(c["path"]),
-                    ff.format_time(c["start"]),
-                    ff.format_time(c["end"]),
-                    f"{c['end'] - c['start']:.2f}s",
+                    os.path.basename(c.path),
+                    ff.format_time(c.start),
+                    ff.format_time(c.end),
+                    f"{c.end - c.start:.2f}s",
                 ),
             )
         if select is not None and 0 <= select < len(self.clips):
             self.tree.selection_set(str(select))
-        total = sum(c["end"] - c["start"] for c in self.clips)
+        total = sum(c.end - c.start for c in self.clips)
         self.total_lbl.config(text=f"{len(self.clips)} clips · {ff.format_time(total)}")
 
-    def _index(self):
+    def _index(self) -> int | None:
         sel = self.tree.selection()
         return int(sel[0]) if sel else None
 
-    def _move(self, d):
+    def _move(self, d: int) -> None:
         i = self._index()
         if i is not None and 0 <= i + d < len(self.clips):
             self.clips[i], self.clips[i + d] = self.clips[i + d], self.clips[i]
             self._fill(i + d)
 
-    def _remove(self):
+    def _remove(self) -> None:
         i = self._index()
         if i is not None:
             del self.clips[i]
             self._fill(min(i, len(self.clips) - 1))
 
-    def _clear(self):
+    def _clear(self) -> None:
         self.clips.clear()
         self._fill()
 
-    def _selected(self):
+    def _selected(self) -> None:
         i = self._index()
         if i is None:
             return
         c = self.clips[i]
-        self.slider.configure(to=max(c["duration"], 0.01))
-        self.pos_var.set(c["start"])
-        self.preview.load(c["path"], c["duration"], c["start"])
-        self.trim.set(c["start"], c["end"])
+        self.slider.configure(to=max(c.duration, 0.01))
+        self.pos_var.set(c.start)
+        self.preview.load(c.path, c.duration, c.start)
+        self.trim.set(c.start, c.end)
 
-    def mark_in(self):
+    def mark_in(self) -> None:
         self.trim.start.use_here()
 
-    def mark_out(self):
+    def mark_out(self) -> None:
         self.trim.end.use_here()
 
-    def _apply_trim(self):
+    def _apply_trim(self) -> None:
         i = self._index()
         if i is None:
             return
         c = self.clips[i]
         try:
-            a, until = self.trim.span(c["duration"])
-            b = c["duration"] if until is None else until
+            a, until = self.trim.span(c.duration)
+            b = c.duration if until is None else until
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        b = min(b, c["duration"])
+        b = min(b, c.duration)
         if not 0 <= a < b:
             messagebox.showwarning(
                 t("common.warning"), "'In' must be before 'Out', inside the clip.", parent=self
             )
             return
-        c["start"], c["end"] = a, b
+        c.start, c.end = a, b
         self._fill(i)
 
-    def _suggest(self):
+    def _suggest(self) -> str:
         if self.clips:
-            return self.suggest_output(self.clips[0]["path"], "sequence")
+            return self.suggest_output(self.clips[0].path, "sequence")
         return ""
 
     # ── render ───────────────────────────────────────────────────────────────
 
-    def _render(self):
+    def _render(self) -> None:
         if len(self.clips) < 1:
             messagebox.showwarning(t("common.warning"), "Add at least one clip.", parent=self)
             return
-        missing = [c["path"] for c in self.clips if not os.path.isfile(c["path"])]
+        missing = [c.path for c in self.clips if not os.path.isfile(c.path)]
         if missing:
             messagebox.showwarning(t("common.warning"), f"Missing clip:\n{missing[0]}", parent=self)
             return
         out = self.confirm_output(
-            self.out_row.path or self._suggest(), [c["path"] for c in self.clips]
+            self.out_row.path or self._suggest(), [c.path for c in self.clips]
         )
         if not out:
             return
         self.out_row.set(out)
-        pieces = [concat.Piece.of(c["path"], c["start"], c["end"]) for c in self.clips]
+        pieces = [concat.Piece.of(c.path, c.start, c.end) for c in self.clips]
         total = sum(p.length for p in pieces)
         if self.lossless_var.get():
             problems = concat.copy_compatibility([p.info for p in pieces])
@@ -273,13 +282,11 @@ class SequencerTab(BaseTab):
 
             lst = os.path.join(temp_dir("sequence_"), "list.txt")
             cmd = concat.copy_join_command(
-                [c["path"] for c in self.clips],
+                [c.path for c in self.clips],
                 out,
                 lst,
-                inpoints=[c["start"] or None for c in self.clips],
-                outpoints=[
-                    c["end"] if c["end"] < c["duration"] - 0.01 else None for c in self.clips
-                ],
+                inpoints=[c.start or None for c in self.clips],
+                outpoints=[c.end if c.end < c.duration - 0.01 else None for c in self.clips],
             )
             self.log(self.console, "Joining losslessly (trims snap to keyframes)…")
         else:
@@ -308,6 +315,6 @@ class SequencerTab(BaseTab):
             btn=self.btn_render,
             duration=total,
             output=out,
-            inputs=[c["path"] for c in self.clips],
+            inputs=[c.path for c in self.clips],
             name="Sequencer",
         )

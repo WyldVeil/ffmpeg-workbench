@@ -48,19 +48,19 @@ def lang_code(text: str) -> str:
 
 
 class TracksRemuxTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.plan = remux.Plan()
         self._editing = False
-        self._edit_index = None  # the track whose values the editor shows
+        self._edit_index: int | None = None  # the track whose values the editor shows
         self._build_ui()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         body, lf = self._build_header()
         cb, opt, r1 = self._build_output(body, lf)
         self._build_chapters(body, cb, opt, r1)
 
-    def _build_header(self):
+    def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
             "Tracks & Remux",
@@ -104,7 +104,9 @@ class TracksRemuxTab(BaseTab):
             )
         return body, lf
 
-    def _build_output(self, body, lf):
+    def _build_output(
+        self, body: tk.Frame, lf: tk.LabelFrame
+    ) -> tuple[ttk.Combobox, tk.LabelFrame, tk.Frame]:
         ed = tk.Frame(lf)
         ed.pack(fill="x", pady=px(8, 0))
         tk.Label(ed, text="Language:").pack(side="left")
@@ -143,7 +145,9 @@ class TracksRemuxTab(BaseTab):
         )
         return cb, opt, r1
 
-    def _build_chapters(self, body, cb, opt, r1):
+    def _build_chapters(
+        self, body: tk.Frame, cb: ttk.Combobox, opt: tk.LabelFrame, r1: tk.Frame
+    ) -> None:
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._container_changed())
         self.chapters_var = tk.BooleanVar(value=True)
@@ -166,12 +170,12 @@ class TracksRemuxTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
 
     # ── Files ─────────────────────────────────────────────────────────
-    def load_file(self, path) -> bool:
+    def load_file(self, path: str) -> bool:
         self.src_row.set(path)
         self._source_changed(path)
         return True
 
-    def _source_changed(self, path):
+    def _source_changed(self, path: str) -> None:
         if (
             not path
             or not os.path.isfile(path)
@@ -196,14 +200,14 @@ class TracksRemuxTab(BaseTab):
         src = self.plan.inputs[0] if self.plan.inputs else self.src_row.path
         return self.suggest_output(src, "remux", "." + self._container()) if src else ""
 
-    def _container_changed(self):
+    def _container_changed(self) -> None:
         out = self.out_row.path
         if out:
             self.out_row.set(os.path.splitext(out)[0] + "." + self._container())
         self._update_notes()
 
     # ── Track list ────────────────────────────────────────────────────
-    def _row_values(self, tr) -> tuple:
+    def _row_values(self, tr: remux.Track) -> tuple[str, ...]:
         flags = ", ".join(f for f, on in (("default", tr.default), ("forced", tr.forced)) if on)
         src = (
             os.path.basename(self.plan.inputs[tr.source])
@@ -223,7 +227,7 @@ class TracksRemuxTab(BaseTab):
             src,
         )
 
-    def _refresh(self, select=None):
+    def _refresh(self, select: int | None = None) -> None:
         """Rebuild the list (after loading, moving or adding tracks) and select *select*."""
         sel = self._index() if select is None else select
         self._edit_index = None
@@ -236,24 +240,24 @@ class TracksRemuxTab(BaseTab):
             self._selected()  # the editor follows now, not when the select event arrives
         self._update_notes()
 
-    def _update_rows(self):
+    def _update_rows(self) -> None:
         """Show changed labels/flags without rebuilding the list or touching the selection."""
         for i, tr in enumerate(self.plan.tracks):
             if self.tree.exists(str(i)):
                 self.tree.item(str(i), values=self._row_values(tr))
         self._update_notes()
 
-    def _update_notes(self):
+    def _update_notes(self) -> None:
         probs = remux.problems(self.plan.tracks, self._container())
         self.notes.config(
             text="\n".join(f"⚠  Track {self.plan.tracks.index(tr) + 1}: {why}" for tr, why in probs)
         )
 
-    def _index(self):
+    def _index(self) -> int | None:
         sel = self.tree.selection()
         return int(sel[0]) if sel else None
 
-    def _selected(self):
+    def _selected(self) -> None:
         i = self._index()
         if i is None or i == self._edit_index:
             return
@@ -267,7 +271,7 @@ class TracksRemuxTab(BaseTab):
         self._editing = False
         self._edit_index = i
 
-    def _apply_edit(self):
+    def _apply_edit(self) -> None:
         """Save the editor's values into the track they were loaded from (not the selection: clicking
         another row moves the selection before the title box loses focus)."""
         i = self._edit_index
@@ -282,19 +286,19 @@ class TracksRemuxTab(BaseTab):
         tr.forced = bool(self.forced_var.get())
         self._update_rows()
 
-    def _toggle_keep(self):
+    def _toggle_keep(self) -> None:
         i = self._index()
         if i is not None:
             self.plan.tracks[i].keep = not self.plan.tracks[i].keep
             self._update_rows()
 
-    def _move(self, step):
+    def _move(self, step: int) -> None:
         i = self._index()
         if i is not None:
             self._apply_edit()
             self._refresh(select=self.plan.move(i, step))
 
-    def _add_file(self):
+    def _add_file(self) -> None:
         if not self.plan.inputs:
             messagebox.showwarning("Tracks", "Choose the main file first.", parent=self)
             return
@@ -312,7 +316,7 @@ class TracksRemuxTab(BaseTab):
         self.log(self.console, f"Added {len(added)} track(s) from {os.path.basename(path)}")
         self._refresh(select=len(self.plan.tracks) - 1)
 
-    def _extract(self):
+    def _extract(self) -> None:
         i = self._index()
         if i is None:
             messagebox.showwarning("Tracks", "Select a track first.", parent=self)
@@ -350,7 +354,7 @@ class TracksRemuxTab(BaseTab):
         )
 
     # ── Remux ─────────────────────────────────────────────────────────
-    def _render(self):
+    def _render(self) -> None:
         if not self.plan.inputs:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return

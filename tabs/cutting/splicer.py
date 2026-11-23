@@ -4,8 +4,11 @@ Lets the user pick in/out points from multiple source videos and
 stitches the chosen segments together into a single output file.
 """
 
+from __future__ import annotations
+
 import os
 import tkinter as tk
+from dataclasses import dataclass
 from tkinter import messagebox
 
 from core import concat
@@ -18,14 +21,28 @@ from tabs import framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, VideoTimeline, make_header
 from tabs.kit import dialogs
 from tabs.kit.contracts import Transport
+from tabs.kit.tktyped import on_write
 from tabs.widgets import SaveRow, scroll_body
 
 
+@dataclass(eq=False)
+class _Segment:
+    """One part of a source clip to splice in, with its row on the page."""
+
+    path: str
+    dur: float
+    start: tk.StringVar
+    end: tk.StringVar
+    include: tk.BooleanVar
+    row: tk.Frame | None = None
+    dur_lbl: tk.Label | None = None
+
+
 class SplicerTab(BaseTab):
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self.segments = []  # list of dicts: {path, start, end, dur}
-        self._sel_idx = None
+        self.segments: list[_Segment] = []
+        self._sel_idx: int | None = None
         self._build_ui()
 
     # ─── UI ───────────────────────────────────────────────────────────────────
@@ -40,12 +57,12 @@ class SplicerTab(BaseTab):
     def mark_out(self) -> None:
         self._timeline.mark_out()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         btn_row = self._build_seg_canvas()
         self._build_out(btn_row)
         self._build_console()
 
-    def _build_seg_canvas(self):
+    def _build_seg_canvas(self) -> tk.Frame:
         # Header
         make_header(self, t("tab.the_splicer"), t("splicer.subtitle"), icon="✂")
 
@@ -91,7 +108,7 @@ class SplicerTab(BaseTab):
         btn_row = tk.Frame(self)
         return btn_row
 
-    def _build_out(self, btn_row):
+    def _build_out(self, btn_row: tk.Frame) -> None:
         btn_row.pack(pady=px(8))
         tk.Button(
             btn_row,
@@ -148,14 +165,14 @@ class SplicerTab(BaseTab):
             self, t("splicer.splice_export_button"), self._render, width=30
         )
 
-    def _build_console(self):
+    def _build_console(self) -> None:
         self.btn_render.pack(pady=px(10))
 
         # Console
         self.console = self.make_console_block(self, height=7, padx=px(20), pady=px(5))
 
     # ─── Segment management ───────────────────────────────────────────────────
-    def _add_segment(self):
+    def _add_segment(self) -> None:
         path = dialogs.askopenfilename(
             title="Select source clip",
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
@@ -164,100 +181,99 @@ class SplicerTab(BaseTab):
             return
         dur = get_video_duration(path)
         idx = len(self.segments)
-        seg = {
-            "path": path,
-            "start": tk.StringVar(value="0"),
-            "end": tk.StringVar(value=f"{dur:.3f}"),
-            "dur": dur,
-        }
+        seg = _Segment(
+            path,
+            dur,
+            tk.StringVar(value="0"),
+            tk.StringVar(value=f"{dur:.3f}"),
+            tk.BooleanVar(value=True),
+        )
         self.segments.append(seg)
         self._draw_row(idx, seg)
         self._select_row(idx)
 
-    def _draw_row(self, idx, seg):
+    def _draw_row(self, idx: int, seg: _Segment) -> None:
         row = tk.Frame(self.seg_frame, relief="groove", bd=px(1))
         row.pack(fill="x", pady=px(2))
-        seg["row"] = row
+        seg.row = row
 
         tk.Label(row, text=str(idx + 1), width=3, anchor="w").pack(side="left", padx=px(2))
-        fname = os.path.basename(seg["path"])
+        fname = os.path.basename(seg.path)
         tk.Label(row, text=fname, width=38, anchor="w", fg=CLR["accent"]).pack(
             side="left", padx=px(2)
         )
 
-        for var, tip in [(seg["start"], "Start"), (seg["end"], "End")]:
+        for var, tip in [(seg.start, "Start"), (seg.end, "End")]:
             tk.Label(row, text=tip + ":").pack(side="left")
             tk.Entry(row, textvariable=var, width=8, relief="flat").pack(side="left", padx=px(2))
-            var.trace_add("write", lambda *_: self._refresh_dur(seg))
+            on_write(var, lambda: self._refresh_dur(seg))
 
-        seg["dur_lbl"] = tk.Label(row, text=self._calc_dur(seg), width=9, fg=CLR["fgdim"])
-        seg["dur_lbl"].pack(side="left", padx=px(4))
+        seg.dur_lbl = tk.Label(row, text=self._calc_dur(seg), width=9, fg=CLR["fgdim"])
+        seg.dur_lbl.pack(side="left", padx=px(4))
 
-        if "include" not in seg:
-            seg["include"] = tk.BooleanVar(value=True)
-        sel_btn = tk.Checkbutton(row, text=t("splicer.include"), variable=seg["include"])
+        sel_btn = tk.Checkbutton(row, text=t("splicer.include"), variable=seg.include)
         sel_btn.pack(side="left", padx=px(4))
         row.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
 
-    def _calc_dur(self, seg):
+    def _calc_dur(self, seg: _Segment) -> str:
         try:
-            d = float(seg["end"].get()) - float(seg["start"].get())
+            d = float(seg.end.get()) - float(seg.start.get())
             return f"{d:.2f}s" if d > 0 else "⚠ invalid"
         except (tk.TclError, ValueError, TypeError):
             return "-"
 
-    def _refresh_dur(self, seg):
-        if "dur_lbl" in seg:
-            seg["dur_lbl"].config(text=self._calc_dur(seg))
+    def _refresh_dur(self, seg: _Segment) -> None:
+        if seg.dur_lbl is not None:
+            seg.dur_lbl.config(text=self._calc_dur(seg))
 
-    def _remove_last(self):
+    def _remove_last(self) -> None:
         if self.segments:
             seg = self.segments.pop()
-            seg["row"].destroy()
+            if seg.row is not None:
+                seg.row.destroy()
 
-    def _select_row(self, idx):
+    def _select_row(self, idx: int) -> None:
         if self._sel_idx is not None and self._sel_idx < len(self.segments):
-            old = self.segments[self._sel_idx].get("row")
+            old = self.segments[self._sel_idx].row
             if old and old.winfo_exists():
                 old.config(relief="groove", bd=px(1))
         self._sel_idx = idx
-        new = self.segments[idx].get("row")
+        new = self.segments[idx].row
         if new and new.winfo_exists():
             new.config(relief="solid", bd=px(2))
         self._update_timeline_for_segment(idx)
 
-    def _on_timeline_change(self, start, end, playhead):
+    def _on_timeline_change(self, start: float, end: float, playhead: float) -> None:
         """Called when the user interacts with the timeline widget."""
         self._tl_pos_var.set(f"Playhead: {playhead:.2f}s  |  Range: {start:.2f}s – {end:.2f}s")
         # Sync the timeline range back into the selected segment's in/out fields
         if self._sel_idx is not None and self._sel_idx < len(self.segments):
             seg = self.segments[self._sel_idx]
-            seg["start"].set(f"{start:.3f}")
-            seg["end"].set(f"{end:.3f}")
+            seg.start.set(f"{start:.3f}")
+            seg.end.set(f"{end:.3f}")
 
-    def _update_timeline_for_segment(self, idx):
+    def _update_timeline_for_segment(self, idx: int) -> None:
         """Push the selected segment's duration and range into the timeline."""
-        if idx is not None and idx < len(self.segments):
+        if idx < len(self.segments):
             seg = self.segments[idx]
-            self._timeline.set_duration(seg["dur"], framestep.fps_of(seg["path"]))
+            self._timeline.set_duration(seg.dur, framestep.fps_of(seg.path))
             try:
-                s = float(seg["start"].get())
-                e = float(seg["end"].get())
+                s = float(seg.start.get())
+                e = float(seg.end.get())
             except ValueError:
-                s, e = 0, seg["dur"]
+                s, e = 0, seg.dur
             self._timeline.set_range(s, e)
             self._timeline.set_playhead(s)
 
-    def _rebuild_rows(self):
+    def _rebuild_rows(self) -> None:
         for seg in self.segments:
-            if seg.get("row") and seg["row"].winfo_exists():
-                seg["row"].destroy()
-            seg.pop("row", None)
-            seg.pop("dur_lbl", None)
+            if seg.row is not None and seg.row.winfo_exists():
+                seg.row.destroy()
+            seg.row = seg.dur_lbl = None
         for i, seg in enumerate(self.segments):
             self._draw_row(i, seg)
 
-    def _move(self, direction):
+    def _move(self, direction: int) -> None:
         if self._sel_idx is None:
             messagebox.showinfo(t("splicer.select_row_title"), t("splicer.select_row_message"))
             return
@@ -270,12 +286,12 @@ class SplicerTab(BaseTab):
         self._select_row(new_idx)
 
     # ─── Render ───────────────────────────────────────────────────────────────
-    def _pieces(self, segs):
-        pieces = []
+    def _pieces(self, segs: list[_Segment]) -> list[concat.Piece]:
+        pieces: list[concat.Piece] = []
         for i, seg in enumerate(segs, start=1):
             try:
-                ss = ff.parse_time(seg["start"].get())
-                ee = ff.parse_time(seg["end"].get())
+                ss = ff.parse_time(seg.start.get())
+                ee = ff.parse_time(seg.end.get())
             except ValueError:
                 raise ValueError(
                     t_or(
@@ -287,11 +303,11 @@ class SplicerTab(BaseTab):
                 raise ValueError(
                     t_or("splicer.empty_segment", "Segment {n} ends before it starts.").format(n=i)
                 )
-            pieces.append(concat.Piece.of(seg["path"], ss, ee))
+            pieces.append(concat.Piece.of(seg.path, ss, ee))
         return pieces
 
-    def _render(self):
-        active = [s for s in self.segments if s["include"].get()]
+    def _render(self) -> None:
+        active = [s for s in self.segments if s.include.get()]
         if len(active) < 1:
             messagebox.showwarning(
                 t("splicer.no_segments_title"), t("splicer.no_segments_message"), parent=self
@@ -319,7 +335,7 @@ class SplicerTab(BaseTab):
             self.reencode_var.set(True)
         self._splice_reencode(pieces, out, inputs, container)
 
-    def _agree_to_reencode(self, problems):
+    def _agree_to_reencode(self, problems: list[str]) -> bool:
         return messagebox.askyesno(
             t_or("batch_joiner.files_differ", "Files differ"),
             t_or("splicer.not_copyable", "These segments can't be joined losslessly:")
@@ -330,12 +346,13 @@ class SplicerTab(BaseTab):
             parent=self,
         )
 
-    def _splice_copy(self, pieces, out, inputs):
+    def _splice_copy(self, pieces: list[concat.Piece], out: str, inputs: list[str]) -> None:
         """Lossless: each segment from the keyframe at or before its start (said when it moves)."""
         from core.ops.trim import keyframe_at_or_before
         from core.paths import temp_dir
 
-        ins, outs = [], []
+        ins: list[float] = []
+        outs: list[float] = []
         for p in pieces:
             k = keyframe_at_or_before(p.path, p.start)
             k = p.start if k is None else k
@@ -362,7 +379,9 @@ class SplicerTab(BaseTab):
             name="Splicer",
         )
 
-    def _splice_reencode(self, pieces, out, inputs, container):
+    def _splice_reencode(
+        self, pieces: list[concat.Piece], out: str, inputs: list[str], container: str
+    ) -> None:
         """Every segment cut exactly and made alike, in one encode."""
         venc = enc.video(
             "vp9" if container == "webm" else "h264", "high", hw="auto", container=container
@@ -386,12 +405,12 @@ class SplicerTab(BaseTab):
             name="Splicer",
         )
 
-    def _render_button(self):
+    def _render_button(self) -> tk.Button | None:
         for attr in ("btn_render", "render_btn", "_btn_render", "run_btn"):
             if hasattr(self, attr):
                 return getattr(self, attr)
         return None
 
-    def _render_label(self):
+    def _render_label(self) -> str:
         btn = self._render_button()
         return btn.cget("text") if btn is not None else "Render"
