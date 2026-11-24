@@ -66,6 +66,13 @@ class AcceptsFiles(Protocol):
 
 
 @runtime_checkable
+class TakesLink(Protocol):
+    """Can be handed a web link to a video (pasted on the Start page)."""
+
+    def take_link(self, url: str) -> None: ...
+
+
+@runtime_checkable
 class TakesSubtitles(Protocol):
     """Can be handed a video and a subtitle file for it (Auto Subtitles -> Hard Subber)."""
 

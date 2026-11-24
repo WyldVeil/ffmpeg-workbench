@@ -2019,11 +2019,9 @@ def op_download(ctx: Ctx) -> Result:
     if ctx.args.audio_only:
         argv += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
     else:
-        fmt = (
-            f"bv*[height<={ctx.args.max_height}]+ba/b[height<={ctx.args.max_height}]"
-            if ctx.args.max_height
-            else "bv*+ba/b"
-        )
+        from core.ops.youtube import share_format
+
+        fmt = share_format(ctx.args.max_height)
         argv += ["-f", fmt, "--merge-output-format", ctx.args.format]
     argv += [
         "--no-overwrites",

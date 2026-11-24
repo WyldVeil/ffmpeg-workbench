@@ -13,6 +13,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from urllib.parse import parse_qs, urlsplit
 
 from core import APP_NAME
 from core import ffmpeg as ff
@@ -31,6 +32,101 @@ def check_route(ytdlp: str, url: str) -> None:
 
 
 BEST = "bv*+ba/b"  # the best video with the best sound (or the best single file)
+
+_H264 = "[vcodec~='^(avc|h264)']"
+_AAC = "[acodec~='^(mp4a|aac)']"
+
+
+def share_format(max_height: int = 0) -> str:
+    """The default download: H.264 video with AAC sound, the pair every site,
+    phone and editor takes.  YouTube's best is usually AV1 or VP9 with Opus,
+    which X/Twitter (and older phones and TVs) refuse.  A site without H.264
+    gets its best instead.  *max_height*: no taller than this (0: any)."""
+    h = f"[height<={max_height}]" if max_height else ""
+    return "/".join(
+        (
+            f"bv*{_H264}{h}+ba{_AAC}",
+            f"b{_H264}{_AAC}{h}",
+            f"bv*{_H264}{h}+ba",
+            f"bv*{h}+ba",
+            f"b{h}",
+        )
+    )
+
+
+SHARE = share_format()
+
+
+def with_audio(format_id: str, vcodec: str) -> str:
+    """Video-only format *format_id* with sound added: AAC next to H.264 (so
+    the file stays shareable), else the best sound."""
+    if vcodec.startswith(("avc", "h264")):
+        return f"{format_id}+ba{_AAC}/{format_id}+ba/b"
+    return f"{format_id}+ba/b"
+
+
+# ── Links ────────────────────────────────────────────────────────────────────
+
+#: the sites a pasted link is recognised from (yt-dlp reads 1000+; these are
+#: the ones people paste most)
+VIDEO_SITES = (
+    "youtube.com",
+    "youtu.be",
+    "youtube-nocookie.com",
+    "vimeo.com",
+    "twitch.tv",
+    "twitter.com",
+    "x.com",
+    "tiktok.com",
+)
+
+
+def _host(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower()
+
+
+def _on(host: str, site: str) -> bool:
+    return host == site or host.endswith("." + site)
+
+
+def site_link(text: str) -> str | None:
+    """*text* if it is a link to a page on one of :data:`VIDEO_SITES` (the
+    https:// added when it was left off), else None."""
+    s = text.strip()
+    if not s or any(c.isspace() for c in s):
+        return None
+    if "://" not in s:
+        s = "https://" + s
+    try:
+        parts = urlsplit(s)
+    except ValueError:
+        return None
+    host = (parts.hostname or "").lower()
+    if parts.scheme not in ("http", "https") or len(parts.path.strip("/")) == 0:
+        return None
+    return s if any(_on(host, site) for site in VIDEO_SITES) else None
+
+
+def is_one_video(url: str) -> bool:
+    """Does *url* point at one video (not a playlist, channel or profile, which
+    would download many, nor a live channel)?"""
+    parts = urlsplit(url)
+    host, path = _host(url), parts.path
+    if _on(host, "youtu.be"):
+        return bool(path.strip("/"))
+    if _on(host, "youtube.com") or _on(host, "youtube-nocookie.com"):
+        if path.rstrip("/") == "/watch":
+            return bool(parse_qs(parts.query).get("v"))
+        return path.startswith(("/shorts/", "/live/", "/embed/", "/v/"))
+    if _on(host, "twitter.com") or _on(host, "x.com"):
+        return "/status/" in path
+    if _on(host, "tiktok.com"):
+        return "/video/" in path or host in ("vm.tiktok.com", "vt.tiktok.com")
+    if _on(host, "vimeo.com"):
+        return path.strip("/").split("/")[-1].isdigit()
+    if _on(host, "twitch.tv"):
+        return "/videos/" in path or "/clip/" in path or host == "clips.twitch.tv"
+    return False
 
 
 def playlist_arg(playlist: bool) -> str:

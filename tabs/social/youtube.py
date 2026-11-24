@@ -75,6 +75,19 @@ _X264_PRESETS = [
 ]
 
 
+#: the first two Quality rows (label, yt-dlp format)
+_TOP_CHOICES = (
+    (
+        "⭐  Best for sharing  (MP4-friendly H.264 + AAC: plays and posts everywhere, X/Twitter too)",
+        yto.SHARE,
+    ),
+    (
+        "Highest quality  (often AV1/VP9 + Opus: some sites, phones and editors refuse it)",
+        yto.BEST,
+    ),
+)
+
+
 #: the format list's filter (radio value -> what it shows); numbers are heights
 _FORMAT_FILTERS = {
     "all": "All",
@@ -146,6 +159,7 @@ class YouTubeDownloaderTab(BaseTab):
         # the auto-suggestion, a new fetch is allowed to refresh it; if the
         # user typed/browsed something else, we leave it alone.
         self._last_auto_out: str = ""
+        self._start_after_fetch = False  # a link from the Start page: download once fetched
 
         self._load_history()
         self._build_ui()
@@ -1465,26 +1479,34 @@ class YouTubeDownloaderTab(BaseTab):
         self.after(200, self._auto_fetch_after_paste)
 
     def _auto_fetch_after_paste(self) -> None:
-        url = self._url_var.get().strip()
-        if url and (
-            "youtube.com" in url
-            or "youtu.be" in url
-            or "vimeo.com" in url
-            or "twitch.tv" in url
-            or "twitter.com" in url
-            or "tiktok.com" in url
-        ):
+        if yto.site_link(self._url_var.get()):
             self._on_fetch()
 
+    def take_link(self, url: str) -> None:
+        """A link pasted elsewhere (the Start page): fetch it and, when it is
+        one video, download it with the current settings straight away."""
+        if self._btn_dl.cget("state") == "disabled":  # a download is running
+            self._batch_tree.insert("", tk.END, values=("-", url, "Queued"))
+            self.log_tagged(
+                self.console,
+                f"A download is running, so {url} was added to the Batch queue.",
+                "warn",
+            )
+            return
+        self._url_var.set(url)
+        self._start_after_fetch = yto.is_one_video(url)
+        if not self._start_after_fetch:
+            self.log(self.console, "This link has several videos: choose, then press Download.")
+        self._on_fetch()
+
+    def _chosen_format(self) -> str:
+        """The yt-dlp format of the chosen Quality row, found by its label: the
+        list may be filtered, so its position says nothing."""
+        return dict(self._format_options).get(self._format_cb.get(), yto.SHARE)
+
     def _on_format_selected(self, event: object = None) -> None:
-        idx = self._format_cb.current()
-        if 0 <= idx < len(self._format_options):
-            label, _ = self._format_options[idx]
-            m = re.search(r"~([\d.]+\s*\w+)", label)
-            if m:
-                self._size_var.set(f"~{m.group(1)}")
-            else:
-                self._size_var.set("")
+        m = re.search(r"~([\d.]+\s*\w+)", self._format_cb.get())
+        self._size_var.set(f"~{m.group(1)}" if m else "")
 
     def _on_chapter_select(self, event: object = None) -> None:
         sel = selected_rows(self._chapters_lb)
@@ -1597,9 +1619,13 @@ class YouTubeDownloaderTab(BaseTab):
     def _fetched(self, info: dict[str, Any]) -> None:
         self._btn_fetch.config(state="normal", text=t("youtube.fetch_info"))
         self._populate_info(info)
+        if self._start_after_fetch:
+            self._start_after_fetch = False
+            self._download()
 
     def _fetch_failed(self, exc: BaseException) -> None:
         self._btn_fetch.config(state="normal", text=t("youtube.fetch_info"))
+        self._start_after_fetch = False
         if isinstance(exc, _proc.ProcessTimeout):
             msg = "⚠ Timed out fetching video info."
         elif isinstance(exc, ToolError):
@@ -1674,12 +1700,7 @@ class YouTubeDownloaderTab(BaseTab):
             reverse=True,
         )
 
-        self._format_options = [
-            (
-                "⭐  Best available  (auto-select highest quality video + audio)",
-                "bestvideo+bestaudio/best",
-            ),
-        ]
+        self._format_options = list(_TOP_CHOICES)
         seen: set[tuple[int, int, str, str]] = set()
         for f in vfmts:
             fid = f.get("format_id", "?")
@@ -1700,7 +1721,7 @@ class YouTubeDownloaderTab(BaseTab):
             size_s = f"  ~{fs / 1_000_000:.0f} MB" if fs else ""
             aud_s = "  +audio" if has_audio else "  (video only, audio auto-added)"
             label = f"{h}p{fps_s}  ·  {ext}  ·  {vc}{aud_s}{size_s}  [id {fid}]"
-            fmt_str = fid if has_audio else f"{fid}+bestaudio/best"
+            fmt_str = fid if has_audio else yto.with_audio(fid, vc)
             self._format_options.append((label, fmt_str))
 
         self._format_cb["values"] = [o[0] for o in self._format_options]
@@ -2205,12 +2226,7 @@ class YouTubeDownloaderTab(BaseTab):
     # ── Direct copy ──────────────────────────────────────────────────────────
 
     def _run_direct_copy(self, url: str, out: str, ytdlp: str, trim_args: list[str]) -> None:
-        idx = self._format_cb.current()
-        fmt_str = (
-            self._format_options[idx][1]
-            if 0 <= idx < len(self._format_options)
-            else "bestvideo+bestaudio/best"
-        )
+        fmt_str = self._chosen_format()
         container = self._container_var.get()
 
         cmd = yto.download_argv(ytdlp, url, fmt_str, container, playlist=self._playlist_var.get())
@@ -2491,7 +2507,7 @@ class YouTubeDownloaderTab(BaseTab):
 
             try:
                 cmd = yto.download_argv(
-                    ytdlp, url, yto.BEST, self._container_var.get(), playlist=True
+                    ytdlp, url, yto.SHARE, self._container_var.get(), playlist=True
                 )
             except OSError as exc:
                 from core import network as _net

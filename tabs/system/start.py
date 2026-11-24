@@ -6,7 +6,8 @@ The page the app opens on (configurable).  Three ways in:
 * goals - everyday tasks ("Make a file smaller", "Fix the sound"...), each
   showing the few tools that do it, in plain words;
 * search - type anything ("vertical", "too big", "hiss") and matching tools
-  appear;
+  appear; paste a video link (YouTube and other sites) and the Video
+  Downloader opens and starts downloading it;
 * a file - drop one in (or choose it) and get suggestions for that file:
   "It's 1.3 GB - shrink it", "It contains a GPS location - remove it"...
   Opening a suggestion opens the tool with the file already loaded.
@@ -24,17 +25,18 @@ from typing import TYPE_CHECKING
 
 from core import catalog, tools
 from core import settings as _settings
+from core.ops import youtube as yto
 from core.scaling import px
 from core.tools import ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab
-from tabs.kit.contracts import AcceptsFiles
+from tabs.kit.contracts import AcceptsFiles, TakesLink
 from tabs.widgets import scroll_body
 
 if TYPE_CHECKING:
     from core import ffmpeg as ff
 
 MAX_WIDTH = 1080
-PLACEHOLDER = "Search - e.g. too big, vertical, subtitles, background noise, slow motion"
+PLACEHOLDER = "Search, or paste a video link - e.g. too big, vertical, subtitles, slow motion"
 
 
 def _mix(a: str, b: str, amount: float) -> str:
@@ -144,6 +146,8 @@ class StartTab(BaseTab):
         self._search.bind("<FocusOut>", self._search_blur)
         self._search.bind("<KeyRelease>", self._search_typed)
         self._search.bind("<Return>", self._search_enter)
+        self._search.bind("<<Paste>>", lambda _e: self.after_idle(self.take_link_if_any))
+        self._search.bind("<<PasteSelection>>", lambda _e: self.after_idle(self.take_link_if_any))
         self._search.bind("<Escape>", lambda _e: self.clear_search())
         self._search.bind("<Down>", lambda _e: self._focus_first_result())
 
@@ -236,7 +240,21 @@ class StartTab(BaseTab):
             self.after_cancel(self._search_job)
         self._search_job = self.after(120, self._render_results)
 
+    def take_link_if_any(self) -> bool:
+        """A video link in the search box opens the Video Downloader with it
+        (which downloads it straight away when it is one video)."""
+        link = yto.site_link(self._query())
+        if link is None:
+            return False
+        self.clear_search()
+        page = self._go(ToolId.VIDEO_DOWNLOADER)
+        if isinstance(page, TakesLink):
+            page.take_link(link)
+        return True
+
     def _search_enter(self, _e: object = None) -> None:
+        if self.take_link_if_any():
+            return
         hits = catalog.search(self._query())
         if hits:
             self.open_tool(hits[0])
