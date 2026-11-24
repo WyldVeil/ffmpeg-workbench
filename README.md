@@ -50,7 +50,9 @@ between computers.
 
 Pick a goal, search in plain words ("too big", "vertical", "background noise"),
 or drop in a file. Here, a phone clip contains a GPS location, so the first
-suggestion is to remove it before sharing.
+suggestion is to remove it before sharing. Paste a YouTube, X/Twitter, TikTok,
+Vimeo or Twitch link into the same box and the Video Downloader opens and
+downloads it.
 
 ![Suggestions for a dropped file](screenshots/start-suggestions.png)
 
@@ -361,7 +363,10 @@ Any number of clips on one screen, laid out automatically.
 
 #### Video Downloader
 
-Download videos or music from YouTube and 1000+ sites.
+Download videos or music from YouTube and 1000+ sites. Videos are saved as
+H.264 with AAC sound by default, so they play anywhere and can be posted
+straight to X/Twitter and other sites; the highest-quality version (often AV1
+or VP9) is one choice away.
 
 ![Video Downloader](screenshots/35_video_downloader.png)
 
@@ -685,9 +690,11 @@ Network, proxy, skins, updates and system information.
 ## Private by design
 
 - Your files never leave your computer. Every tool works locally.
-- The network is used only for the Video Downloader, the optional online voices
-  in TTS Voice-Over, and checking for yt-dlp updates. All of that can be switched
-  off.
+- The network is used only when you ask for something that needs it: the Video
+  Downloader, the optional online voices in TTS Voice-Over, downloading a speech
+  model for Auto-Subtitles or Karaoke the first time you use one, installing the
+  MIDIfier's extras, and checking for FFmpeg and yt-dlp updates. All of it can be
+  switched off.
 - It works behind company proxies, VPNs and filtered networks. If you need to
   set those up, the network settings are under *Advanced Settings*.
 - Results never replace your files unless you say so, and a failed or cancelled
@@ -712,7 +719,8 @@ assistant to do something to your videos, point it at that file.
 ## 🌍 Multilingual
 
 The interface is available in 32 languages. You can switch at any time in
-*Advanced Settings*. The tools added in 1.2.0 are in English for now.
+*Advanced Settings*. Some parts added since 1.2.0, such as the Start page's
+goals and the downloader's notice, are still in English.
 
 | | | |
 |---|---|---|
