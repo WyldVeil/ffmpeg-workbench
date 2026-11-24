@@ -20,6 +20,13 @@
   <url type="bugtracker">@REPO_URL@/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.8" date="2026-11-24">
+      <description>
+        <p>Four new languages: Traditional Chinese, Czech, Greek and Hungarian. Downloads are now
+          H.264 + AAC by default, so they play and post everywhere (X/Twitter too), and a video link
+          pasted on the Start page opens the Video Downloader and downloads it.</p>
+      </description>
+    </release>
     <release version="1.2.7" date="2026-11-23">
       <description>
         <p>Fixes: on Windows, offline text-to-speech no longer gives up when the system voice takes more

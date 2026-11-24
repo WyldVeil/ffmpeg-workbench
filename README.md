@@ -23,8 +23,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.7_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.7-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.8_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.8-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -36,11 +36,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.7_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `ffmpeg-workbench_1.2.7_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.7_ubuntu_amd64.deb` |
-| **Debian** | `ffmpeg-workbench_1.2.7_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.7_debian_amd64.deb` |
-| **Fedora** | `ffmpeg-workbench-1.2.7-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `ffmpeg-workbench-1.2.7-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.8_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `ffmpeg-workbench_1.2.8_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.8_ubuntu_amd64.deb` |
+| **Debian** | `ffmpeg-workbench_1.2.8_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.8_debian_amd64.deb` |
+| **Fedora** | `ffmpeg-workbench-1.2.8-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `ffmpeg-workbench-1.2.8-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -711,21 +711,22 @@ assistant to do something to your videos, point it at that file.
 
 ## 🌍 Multilingual
 
-The interface is available in 28 languages. You can switch at any time in
+The interface is available in 32 languages. You can switch at any time in
 *Advanced Settings*. The tools added in 1.2.0 are in English for now.
 
 | | | |
 |---|---|---|
 | English (US) | English (GB) | العربية |
-| বাংলা | Deutsch | Español |
-| فارسی | Français | हिन्दी |
+| বাংলা | Čeština | Deutsch |
+| Ελληνικά | Español | فارسی |
+| Français | हिन्दी | Magyar |
 | Bahasa Indonesia | Italiano | 日本語 |
 | 한국어 | Bahasa Melayu | Nederlands |
 | Naijá Pidgin | Polski | Português (Brasil) |
 | Română | Русский | Kiswahili |
 | ภาษาไทย | Filipino | Türkçe |
 | Українська | اردو | Tiếng Việt |
-| 中文 | | |
+| 中文 (简体) | 中文 (繁體) | |
 
 ## Uninstall
 

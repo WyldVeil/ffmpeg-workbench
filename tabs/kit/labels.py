@@ -4,6 +4,7 @@ person's language (the English names in core/tools.py are the fallback)."""
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from core.i18n import t
 from core.tools import Category, ToolId, spec
@@ -18,10 +19,29 @@ _SECTION_KEYS: dict[Category, str] = {
 }
 
 
+def _section_text(category: Category) -> str:
+    key = _SECTION_KEYS.get(category)
+    return t(key) if key else category.value.strip()
+
+
+def capitals(text: str) -> str:
+    """*text* in capitals.  Greek capitals drop their accents (tonos), as Greek
+    is typeset; other letters keep theirs (Czech Č, Hungarian Á)."""
+    upper = unicodedata.normalize("NFD", text.upper())
+    return unicodedata.normalize("NFC", re.sub("(?<=[\u0370-\u03ff])\u0301", "", upper))
+
+
 def section(category: Category) -> str:
     """A sidebar heading, translated and in capitals."""
-    key = _SECTION_KEYS.get(category)
-    return (t(key) if key else category.value.strip()).upper()
+    return capitals(_section_text(category))
+
+
+def menu_section(category: Category) -> str:
+    """The same heading for the menu bar: as the translation writes it, or
+    title-cased when it is written in capitals (capitals lose Greek accents,
+    so title-casing them back can't restore them)."""
+    text = _section_text(category)
+    return text.title() if text.isupper() else text
 
 
 def tool(tid: ToolId) -> str:

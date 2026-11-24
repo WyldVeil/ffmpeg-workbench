@@ -56,6 +56,10 @@ SUPPORTED_LANGUAGES: list[str] = [
     "uk_UA",
     "ro_RO",
     "ms_MY",
+    "zh_TW",
+    "cs_CZ",
+    "el_GR",
+    "hu_HU",
 ]
 
 # Display names shown in the language selector
@@ -88,6 +92,10 @@ LANGUAGE_NAMES: dict[str, str] = {
     "uk_UA": "Українська",
     "ro_RO": "Română",
     "ms_MY": "Bahasa Melayu",
+    "zh_TW": "中文 (繁體)",
+    "cs_CZ": "Čeština",
+    "el_GR": "Ελληνικά",
+    "hu_HU": "Magyar",
 }
 
 # RTL languages
@@ -103,7 +111,9 @@ _OS_MAP: dict[str, str] = {
     "en_IE": "en_GB",
     "zh_CN": "zh_CN",
     "zh_SG": "zh_CN",
-    "zh_TW": "zh_CN",
+    "zh_TW": "zh_TW",
+    "zh_HK": "zh_TW",
+    "zh_MO": "zh_TW",
     "hi_IN": "hi_IN",
     "es_ES": "es_ES",
     "es_MX": "es_ES",
@@ -150,6 +160,10 @@ _OS_MAP: dict[str, str] = {
     "ro_RO": "ro_RO",
     "ms_MY": "ms_MY",
     "ms_SG": "ms_MY",
+    "cs_CZ": "cs_CZ",
+    "el_GR": "el_GR",
+    "hu_HU": "hu_HU",
+    "el_CY": "el_GR",
 }
 
 # ── Runtime state ─────────────────────────────────────────────────────────────

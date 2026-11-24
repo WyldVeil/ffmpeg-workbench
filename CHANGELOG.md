@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.8
+
+### New
+
+- **Four new languages:** Traditional Chinese (繁體中文), Czech (Čeština),
+  Greek (Ελληνικά) and Hungarian (Magyar), every string translated. A
+  computer set to Taiwanese, Hong Kong, Czech, Greek or Hungarian starts in
+  that language. Settings → Language switches at any time.
+- **Paste a video link on the Start page** (YouTube, X/Twitter, TikTok,
+  Vimeo, Twitch) and the Video Downloader opens and starts downloading it with
+  your current settings. A playlist or channel link opens there with its
+  details fetched, so you can choose what to download.
+
+### Changed
+
+- **Downloads are shareable by default.** The Video Downloader's first
+  Quality choice is now *Best for sharing*: H.264 video with AAC sound, which
+  every site, phone and editor accepts. YouTube's best is usually AV1 or VP9
+  with Opus, which X/Twitter (and many phones and TVs) refuse. *Highest
+  quality* is still the next choice down. The command line's `download` does
+  the same. A video-only format picked from the list gets AAC sound when it is
+  H.264.
+
+### Fixed
+
+- Video Downloader: with the Quality list filtered (say to 720p), the
+  download used the row at the same position in the whole list instead of the
+  one chosen.
+- Bengali: a label that showed the wrong text now shows the English until it
+  is translated.
+
 ## 1.2.7
 
 ### Fixed

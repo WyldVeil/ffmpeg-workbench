@@ -28,7 +28,7 @@ from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCALE_DIR = os.path.join(ROOT, "locale")
-CJK = {"zh_CN", "ja_JP", "ko_KR", "th_TH"}
+CJK = {"zh_CN", "zh_TW", "ja_JP", "ko_KR", "th_TH"}
 # Locales damaged by the old misaligned batch translator: also drop values
 # whose length matches a NEIGHBOURING key's English far better than their own.
 SHIFTED = {"bn_BD", "fa_IR", "ms_MY", "ro_RO", "sw_KE", "tl_PH", "ur_PK"}
@@ -45,7 +45,7 @@ def _end_class(s: str) -> str:
         return "ellipsis"
     if s.endswith((":", "：")):
         return "colon"
-    if s.endswith(("?", "？", "؟")):
+    if s.endswith(("?", "？", "؟", ";", "\u037e")):  # Greek asks with ";" (U+037E)
         return "question"
     return ""
 

@@ -65,3 +65,40 @@ def test_no_text_is_just_another_key():
                     if isinstance(v, str) and v in keys and v != k
                 ]
     assert not bad, bad[:10]
+
+
+def test_every_language_offered_has_its_file():
+    """The language list and the files agree: each language offered has a file
+    that says what it is, and the four added in 1.2.8 translate every string."""
+    from core.i18n import LANGUAGE_NAMES, SUPPORTED_LANGUAGES
+
+    folder = os.path.join(ROOT, "locale")
+    with open(os.path.join(folder, "en_US.json"), encoding="utf-8") as fh:
+        en = {k for k, v in json.load(fh).items() if isinstance(v, str)}
+    assert set(SUPPORTED_LANGUAGES) == set(LANGUAGE_NAMES)
+    for code in SUPPORTED_LANGUAGES:
+        with open(os.path.join(folder, f"{code}.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        assert data["_meta"]["code"] == code
+        if code in ("zh_TW", "cs_CZ", "el_GR", "hu_HU"):
+            assert en <= set(data), (code, sorted(en - set(data))[:5])
+
+
+def test_greek_capitals_drop_accents_and_the_menu_keeps_them():
+    """Greek is typeset without accents in capitals (the sidebar's headings),
+    but the menu bar shows the words as written - title-casing the capitals
+    back could not restore the accents.  Czech and Hungarian keep theirs."""
+    from core import i18n
+    from core.tools import Category
+    from tabs.kit.labels import capitals, menu_section, section
+
+    assert capitals("Ηχοληψία") == "ΗΧΟΛΗΨΙΑ"
+    assert capitals("Střihovna") == "STŘIHOVNA" and capitals("Vágószoba") == "VÁGÓSZOBA"
+    try:
+        i18n.load_language("el_GR")
+        assert section(Category.AUDIO) == "ΗΧΟΛΗΨΙΑ"
+        assert menu_section(Category.AUDIO) == "Ηχοληψία"
+        i18n.load_language("en_US")
+        assert menu_section(Category.AUDIO) == "Audio Engineering"  # capitals, title-cased
+    finally:
+        i18n.load_language("en_US")

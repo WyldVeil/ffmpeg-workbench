@@ -92,7 +92,7 @@ def _tool_menus(bar: tk.Menu, skin: dict[str, Any], actions: MenuActions) -> Non
         if category in (Category.PINNED, Category.HIDDEN):
             continue
         tools = _menu(bar, skin)
-        bar.add_cascade(label=labels.section(category).title(), menu=tools)
+        bar.add_cascade(label=labels.menu_section(category), menu=tools)
         for spec in sidebar(category):
             tools.add_command(label=labels.tool(spec.id), command=lambda t=spec.id: actions.show(t))
 
