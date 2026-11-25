@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ffmpeg-workbench"
-version = "1.2.9"
+version = "1.3.0"
 description = "FFmpeg Workbench: a video and audio toolkit powered by FFmpeg"
 requires-python = ">=3.11"
 dependencies = [
