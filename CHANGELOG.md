@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.9
+
+### Changed
+
+- The Video Downloader is described in general terms (on its page, on the
+  Start page, on the command line and in the README): it saves videos and audio
+  you have the right to download.
+
+### Updated
+
+- yt-dlp 2026.11.23 (site fixes), whisper.cpp b5907 (1.9.6) for speech to
+  text, FluidSynth 2.6.3 on Windows. FFmpeg stays at 9.0.2.
+
 ## 1.2.8
 
 ### New
@@ -8,18 +21,17 @@
   Greek (Ελληνικά) and Hungarian (Magyar), every string translated. A
   computer set to Taiwanese, Hong Kong, Czech, Greek or Hungarian starts in
   that language. Settings → Language switches at any time.
-- **Paste a video link on the Start page** (YouTube, X/Twitter, TikTok,
-  Vimeo, Twitch) and the Video Downloader opens and starts downloading it with
-  your current settings. A playlist or channel link opens there with its
+- **Paste a video link on the Start page** and the Video Downloader opens and
+  starts downloading it with your current settings. A playlist or channel link opens there with its
   details fetched, so you can choose what to download.
 
 ### Changed
 
 - **Downloads are shareable by default.** The Video Downloader's first
   Quality choice is now *Best for sharing*: H.264 video with AAC sound, which
-  every site, phone and editor accepts. YouTube's best is usually AV1 or VP9
-  with Opus, which X/Twitter (and many phones and TVs) refuse. *Highest
-  quality* is still the next choice down. The command line's `download` does
+  every site, phone and editor accepts. The best a site offers is often AV1 or
+  VP9 with Opus, which many sites, phones and TVs refuse. *Highest quality* is
+  still the next choice down. The command line's `download` does
   the same. A video-only format picked from the list gets AAC sound when it is
   H.264.
 

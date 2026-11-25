@@ -6,7 +6,7 @@ The page the app opens on (configurable).  Three ways in:
 * goals - everyday tasks ("Make a file smaller", "Fix the sound"...), each
   showing the few tools that do it, in plain words;
 * search - type anything ("vertical", "too big", "hiss") and matching tools
-  appear; paste a video link (YouTube and other sites) and the Video
+  appear; paste a video link and the Video
   Downloader opens and starts downloading it;
 * a file - drop one in (or choose it) and get suggestions for that file:
   "It's 1.3 GB - shrink it", "It contains a GPS location - remove it"...

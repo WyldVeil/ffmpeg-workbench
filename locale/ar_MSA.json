@@ -2050,7 +2050,7 @@
   "app.status.ytdlp_update_failed": "فشل التحديث",
   "karaoke.whisper_not_found": "لم يتم العثور على الهمس. انقر فوق تثبيت Whisper أو تشغيل: pip install openai-whisper",
   "auto_subs.whisper_not_found": "لم يتم العثور على Whisper. انقر فوق تثبيت Whisper أو تشغيل: pip install openai-whisper",
-  "youtube.tab_description": "جلب مقاطع الفيديو من المواقع المدعومة ومعاينتها وتنزيلها عبر yt-dlp. أسقط yt-dlp.exe في bin/ أو شغّل: pip install yt-dlp",
+  "youtube.tab_description": "اجلب مقاطع الفيديو والصوت التي يحق لك تنزيلها، واعرضها مسبقًا واحفظها.",
   "msg.ffmpeg_update_success_title": "نجاح",
   "msg.ffmpeg_update_failed_title": "خطأ",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

@@ -8,7 +8,7 @@ command builders).  ARCHITECTURE.md has the map.
 """
 
 # ── Application identity (single source of truth) ────────────────────────────
-APP_VERSION = "1.2.8"
+APP_VERSION = "1.2.9"
 APP_NAME = "FFmpeg Workbench"
 APP_ID = "io.github.ffmpeg_workbench.FFmpegWorkbench"  # Linux desktop/AppStream id
 APP_SLUG = "ffmpeg-workbench"  # Linux executable / folder names

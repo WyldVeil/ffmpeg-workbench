@@ -2058,7 +2058,7 @@
   "app.status.ytdlp_update_failed": "การอัปเดตล้มเหลว",
   "karaoke.whisper_not_found": "ไม่พบเสียงกระซิบ คลิกติดตั้ง Whisper หรือเรียกใช้: pip install openai-whisper",
   "auto_subs.whisper_not_found": "ไม่พบ Whisper คลิกติดตั้ง Whisper หรือเรียกใช้: pip install openai-whisper",
-  "youtube.tab_description": "ดึง ดูตัวอย่าง และดาวน์โหลดวิดีโอจากเว็บไซต์ที่รองรับผ่าน yt-dlp วาง yt-dlp.exe ใน bin/ หรือรัน: pip install yt-dlp",
+  "youtube.tab_description": "ดึงข้อมูล ดูตัวอย่าง และบันทึกวิดีโอและเสียงที่คุณมีสิทธิ์ดาวน์โหลด",
   "msg.ffmpeg_update_success_title": "สำเร็จ",
   "msg.ffmpeg_update_failed_title": "ข้อผิดพลาด",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

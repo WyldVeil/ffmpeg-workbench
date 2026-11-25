@@ -2068,7 +2068,7 @@
   "app.status.ytdlp_update_failed": "Update Failed",
   "karaoke.whisper_not_found": "Whisper not found. Click Install Whisper or run: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper not found. Click Install Whisper or run: pip install openai-whisper",
-  "youtube.tab_description": "Fetch, preview and download videos and audio from YouTube and 1000+ other sites.",
+  "youtube.tab_description": "Fetch, preview and save videos and audio you have the right to download.",
   "msg.ffmpeg_update_success_title": "Success",
   "msg.ffmpeg_update_failed_title": "Error",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

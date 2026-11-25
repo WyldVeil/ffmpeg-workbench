@@ -2060,7 +2060,7 @@
   "app.status.ytdlp_update_failed": "Aktualizacja nie powiodła się",
   "karaoke.whisper_not_found": "Nie znaleziono szeptu. Kliknij opcję Zainstaluj Whisper lub uruchom: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Nie znaleziono programu Whisper. Kliknij Zainstaluj Whisper lub uruchom: pip install openai-whisper",
-  "youtube.tab_description": "Pobieraj, podglądaj i pobieraj filmy z obsługiwanych witryn za pomocą yt-dlp. Umieść yt-dlp.exe w bin/ lub uruchom: pip install yt-dlp",
+  "youtube.tab_description": "Pobieraj informacje, oglądaj podgląd i zapisuj filmy oraz dźwięk, do których pobrania masz prawo.",
   "msg.ffmpeg_update_success_title": "Sukces",
   "msg.ffmpeg_update_failed_title": "Błąd",
   "msg.ytdlp_update_title2": "Aktualizator yt-dlp",

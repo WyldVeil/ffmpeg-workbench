@@ -2053,7 +2053,7 @@
   "app.status.ytdlp_update_failed": "Güncelleme Başarısız",
   "karaoke.whisper_not_found": "Fısıltı bulunamadı. Whisper'ı Kur'a tıklayın veya şunu çalıştırın: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper bulunamadı. Whisper'ı Kur'a tıklayın veya şunu çalıştırın: pip install openai-whisper",
-  "youtube.tab_description": "yt-dlp aracılığıyla desteklenen sitelerden videoları alın, önizleyin ve indirin. yt-dlp.exe dosyasını bin/ klasörüne bırakın veya çalıştırın: pip install yt-dlp",
+  "youtube.tab_description": "İndirme hakkınız olan videoları ve sesleri alın, önizleyin ve kaydedin.",
   "msg.ffmpeg_update_success_title": "Başarılı",
   "msg.ffmpeg_update_failed_title": "Hata",
   "msg.ytdlp_update_title2": "yt-dlp Güncelleyici",

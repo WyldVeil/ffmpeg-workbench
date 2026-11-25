@@ -2060,7 +2060,7 @@
   "app.status.ytdlp_update_failed": "Помилка оновлення",
   "karaoke.whisper_not_found": "Whisper не знайдено. Натисніть «Встановити Whisper» або запустіть: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper не знайдено. Клацніть «Встановити Whisper» або запустіть: pip install openai-whisper",
-  "youtube.tab_description": "Отримуйте, переглядайте та завантажуйте відео з підтримуваних сайтів через yt-dlp. Помістіть yt-dlp.exe у bin/ або запустіть: pip install yt-dlp",
+  "youtube.tab_description": "Отримуйте, переглядайте та зберігайте відео й аудіо, які ви маєте право завантажувати.",
   "msg.ffmpeg_update_success_title": "Успіх",
   "msg.ffmpeg_update_failed_title": "Помилка",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

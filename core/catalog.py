@@ -228,7 +228,7 @@ GOALS = (
         "get",
         "⬇",
         "Download & record",
-        "From YouTube and 1000+ sites, or your screen",
+        "Videos you have the right to save, or your screen",
         ("Video Downloader", "Screen Recorder", "Snapshot", "Frame Extractor"),
     ),
     Goal(

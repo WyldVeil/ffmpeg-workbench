@@ -1722,7 +1722,7 @@
   "app.status.ytdlp_update_failed": "Nabigo ang Pag-update",
   "karaoke.whisper_not_found": "Hindi nahanap ang bulong. I-click ang Install Whisper o tumakbo: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper not found. I-click ang I-install ang Whisper o tumakbo: pip install openai-whisper",
-  "youtube.tab_description": "Kunin, i-preview at i-download ang mga video mula sa mga suportadong site sa pamamagitan ng yt-dlp. Ilagay ang yt-dlp.exe sa bin/ o patakbuhin: pip install yt-dlp",
+  "youtube.tab_description": "Kunin, i-preview at i-save ang mga video at audio na may karapatan kang i-download.",
   "msg.ffmpeg_update_success_title": "Tagumpay",
   "msg.ffmpeg_update_failed_title": "Error",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

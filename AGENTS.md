@@ -100,7 +100,7 @@ On Windows the `ffw` part is the `ffw-cli.bat` in the install folder, and the
 | `deinterlace` | Remove comb lines from old or broadcast video | `--mode smart\|all\|double\|ivtc` | Deinterlace |
 | `lut` | Apply a colour look (.cube LUT) | `--lut FILE`, `--intensity 0-1` | LUT Applicator |
 | `metadata-clean` | Remove GPS location, device, dates, names and telemetry without re-encoding | `--deep`, `--keep-chapters`, `--keep-cover`, `--drop-languages` | Metadata Cleaner |
-| `download` | Download from YouTube and 1000+ other sites, as H.264 + AAC when the site has it (plays and posts everywhere) | `URL`, `--audio-only`, `--max-height 1080`, `--format mp4\|mkv\|webm`, `-o FOLDER` | Video Downloader |
+| `download` | Download a video the person has the right to save, as H.264 + AAC when the site has it (plays and posts everywhere) | `URL`, `--audio-only`, `--max-height 1080`, `--format mp4\|mkv\|webm`, `-o FOLDER` | Video Downloader |
 
 Every operation also takes `-o`, `--overwrite` and `--json`.
 

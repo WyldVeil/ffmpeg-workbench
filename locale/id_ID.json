@@ -2060,7 +2060,7 @@
   "app.status.ytdlp_update_failed": "Pembaruan Gagal",
   "karaoke.whisper_not_found": "Bisikan tidak ditemukan. Klik Instal Whisper atau jalankan: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper tidak ditemukan. Klik Instal Whisper atau jalankan: pip install openai-whisper",
-  "youtube.tab_description": "Ambil, pratinjau, dan unduh video dari situs yang didukung melalui yt-dlp. Letakkan yt-dlp.exe di bin/ atau jalankan: pip install yt-dlp",
+  "youtube.tab_description": "Ambil, pratinjau, dan simpan video serta audio yang berhak Anda unduh.",
   "msg.ffmpeg_update_success_title": "Sukses",
   "msg.ffmpeg_update_failed_title": "Kesalahan",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

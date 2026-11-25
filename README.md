@@ -21,8 +21,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.8_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.8-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.9_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.2.9-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +34,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.8_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `ffmpeg-workbench_1.2.8_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.8_ubuntu_amd64.deb` |
-| **Debian** | `ffmpeg-workbench_1.2.8_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.8_debian_amd64.deb` |
-| **Fedora** | `ffmpeg-workbench-1.2.8-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `ffmpeg-workbench-1.2.8-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.2.9_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `ffmpeg-workbench_1.2.9_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.9_ubuntu_amd64.deb` |
+| **Debian** | `ffmpeg-workbench_1.2.9_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.2.9_debian_amd64.deb` |
+| **Fedora** | `ffmpeg-workbench-1.2.9-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `ffmpeg-workbench-1.2.9-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -48,9 +48,7 @@ between computers.
 
 Pick a goal, search in plain words ("too big", "vertical", "background noise"),
 or drop in a file. Here, a phone clip contains a GPS location, so the first
-suggestion is to remove it before sharing. Paste a YouTube, X/Twitter, TikTok,
-Vimeo or Twitch link into the same box and the Video Downloader opens and
-downloads it.
+suggestion is to remove it before sharing.
 
 ![Suggestions for a dropped file](screenshots/start-suggestions.png)
 
@@ -361,10 +359,8 @@ Any number of clips on one screen, laid out automatically.
 
 #### Video Downloader
 
-Download videos or music from YouTube and 1000+ sites. Videos are saved as
-H.264 with AAC sound by default, so they play anywhere and can be posted
-straight to X/Twitter and other sites; the highest-quality version (often AV1
-or VP9) is one choice away.
+Save videos and audio you have the right to download. Videos are saved as
+H.264 with AAC sound by default, so they play anywhere.
 
 ![Video Downloader](screenshots/35_video_downloader.png)
 
@@ -755,10 +751,10 @@ copies of:
 |---|---|---|
 | [Python](https://www.python.org/) with Tk | 3.14.10 (Tk 9.0.4) | Runs the app; included, so it doesn't need to be installed |
 | [FFmpeg](https://ffmpeg.org/) | 9.0.2 | All video and audio processing, with libplacebo, libvmaf, rubberband and more |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 2026.10.26 | Video Downloader |
-| [Deno](https://deno.com/) | 2.9.8 | Lets yt-dlp handle YouTube's challenges |
-| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | b5454 | Offline speech-to-text (Auto-Subtitles, Karaoke) |
-| [FluidSynth](https://www.fluidsynth.org/) + GeneralUser GS SoundFont | 2.6.2 on Windows (Linux uses the system's copy) | MIDIfier playback |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 2026.11.23 | Video Downloader |
+| [Deno](https://deno.com/) | 2.9.8 | A JavaScript runtime yt-dlp uses for some sites |
+| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | b5907 | Offline speech-to-text (Auto-Subtitles, Karaoke) |
+| [FluidSynth](https://www.fluidsynth.org/) + GeneralUser GS SoundFont | 2.6.3 on Windows (Linux uses the system's copy) | MIDIfier playback |
 | FSR, NIS, ArtCNN, Anime4K shaders | | Upscaling in the Resolution Scaler |
 
 Every download is checked against a SHA-256 checksum

@@ -2068,7 +2068,7 @@
   "app.status.ytdlp_update_failed": "更新失敗",
   "karaoke.whisper_not_found": "找不到 Whisper。請按「安裝 Whisper」或執行：pip install openai-whisper",
   "auto_subs.whisper_not_found": "找不到 Whisper。請按「安裝 Whisper」或執行：pip install openai-whisper",
-  "youtube.tab_description": "從 YouTube 及 1000 多個網站取得、預覽並下載影片與音訊。",
+  "youtube.tab_description": "取得、預覽並儲存您有權下載的影片與音訊。",
   "msg.ffmpeg_update_success_title": "成功",
   "msg.ffmpeg_update_failed_title": "錯誤",
   "msg.ytdlp_update_title2": "yt-dlp 更新程式",

@@ -2068,7 +2068,7 @@
   "app.status.ytdlp_update_failed": "Aktualizace se nezdařila",
   "karaoke.whisper_not_found": "Whisper nebyl nalezen. Klepněte na Nainstalovat Whisper nebo spusťte: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper nebyl nalezen. Klepněte na Nainstalovat Whisper nebo spusťte: pip install openai-whisper",
-  "youtube.tab_description": "Načítejte, přehrávejte a stahujte videa a zvuk z YouTube a více než 1000 dalších webů.",
+  "youtube.tab_description": "Načtěte, přehrajte a uložte videa a zvuk, které máte právo stáhnout.",
   "msg.ffmpeg_update_success_title": "Hotovo",
   "msg.ffmpeg_update_failed_title": "Chyba",
   "msg.ytdlp_update_title2": "Aktualizace yt-dlp",

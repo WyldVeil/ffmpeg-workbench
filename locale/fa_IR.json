@@ -1752,7 +1752,7 @@
   "app.status.ytdlp_update_failed": "به روز رسانی انجام نشد",
   "karaoke.whisper_not_found": "Whisper یافت نشد. روی Install Whisper یا اجرا کلیک کنید: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper یافت نشد. روی Install Whisper یا اجرا کلیک کنید: pip install openai-whisper",
-  "youtube.tab_description": "ویدیوها را از سایت‌های پشتیبانی‌شده با yt-dlp واکشی، پیش‌نمایش و دانلود کنید. yt-dlp.exe را در bin/ قرار دهید یا اجرا کنید: pip install yt-dlp",
+  "youtube.tab_description": "ویدیوها و صداهایی را که حق دانلودشان را دارید دریافت کنید، پیش‌نمایش ببینید و ذخیره کنید.",
   "msg.ffmpeg_update_success_title": "Success",
   "msg.ffmpeg_update_failed_title": "خطا",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

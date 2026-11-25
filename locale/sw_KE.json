@@ -1687,7 +1687,7 @@
   "app.status.ytdlp_update_failed": "Usasishaji Umeshindwa",
   "karaoke.whisper_not_found": "Mnong'ono haujapatikana. Bofya Sakinisha Whisper au endesha: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Mnong'ono haupatikani. Bofya Sakinisha Whisper au endesha: pip install openai-whisper",
-  "youtube.tab_description": "Leta, hakiki na pakua video kutoka tovuti zinazotumika kupitia yt-dlp. Weka yt-dlp.exe kwenye bin/ au endesha: pip install yt-dlp",
+  "youtube.tab_description": "Pata, hakiki na uhifadhi video na sauti ulizo na haki ya kupakua.",
   "msg.ffmpeg_update_success_title": "Mafanikio",
   "msg.ffmpeg_update_failed_title": "Hitilafu",
   "msg.ytdlp_update_title2": "yt-dlp Kisasisho",

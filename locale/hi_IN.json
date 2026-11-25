@@ -2058,7 +2058,7 @@
   "app.status.ytdlp_update_failed": "अद्यतन विफल",
   "karaoke.whisper_not_found": "व्हिस्पर नहीं मिला। इंस्टॉल व्हिस्पर पर क्लिक करें या चलाएं: pip install openai-whisper",
   "auto_subs.whisper_not_found": "व्हिस्पर नहीं मिला। इंस्टॉल व्हिस्पर पर क्लिक करें या चलाएं: pip install openai-whisper",
-  "youtube.tab_description": "yt-dlp के माध्यम से समर्थित साइटों से वीडियो प्राप्त करें, पूर्वावलोकन करें और डाउनलोड करें। yt-dlp.exe को bin/ में रखें या चलाएँ: pip install yt-dlp",
+  "youtube.tab_description": "उन वीडियो और ऑडियो को खोजें, देखें और सहेजें जिन्हें डाउनलोड करने का आपको अधिकार है।",
   "msg.ffmpeg_update_success_title": "सफलता",
   "msg.ffmpeg_update_failed_title": "त्रुटि",
   "msg.ytdlp_update_title2": "yt-dlp अपडेटर",

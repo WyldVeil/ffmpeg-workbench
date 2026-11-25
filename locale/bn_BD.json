@@ -1725,7 +1725,7 @@
   "app.status.ytdlp_update_failed": "আপডেট ব্যর্থ হয়েছে",
   "karaoke.whisper_not_found": "হুইসপার পাওয়া যায়নি৷ Install Whisper ক্লিক করুন বা রান করুন: pip install openai-whisper",
   "auto_subs.whisper_not_found": "হুইস্পার পাওয়া যায়নি। ইন্সটল হুইস্পার ক্লিক করুন বা রান করুন: পিপ ইনস্টল openai-whisper",
-  "youtube.tab_description": "সমর্থিত সাইট থেকে ভিডিও আনুন, প্রিভিউ করুন এবং yt-dlp এর মাধ্যমে ডাউনলোড করুন। yt-dlp.exe বিনে রাখুন বা চালান: pip install yt-dlp",
+  "youtube.tab_description": "যেসব ভিডিও ও অডিও ডাউনলোড করার অধিকার আপনার আছে, সেগুলো খুঁজুন, প্রিভিউ করুন ও সংরক্ষণ করুন।",
   "msg.ffmpeg_update_success_title": "সাফল্য",
   "msg.ffmpeg_update_failed_title": "ত্রুটি",
   "msg.ytdlp_update_title2": "yt-dlp আপডেটার",

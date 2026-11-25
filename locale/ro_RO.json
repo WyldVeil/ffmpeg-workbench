@@ -1675,7 +1675,7 @@
   "app.status.ytdlp_update_failed": "Actualizare eșuată",
   "karaoke.whisper_not_found": "Whisper nu a fost găsit. Faceți clic pe Instalare Whisper sau rulați: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Whisper nu a fost găsit. Faceți clic pe Instalați Whisper sau rulați: pip install openai-whisper",
-  "youtube.tab_description": "Preluați, previzualizați și descărcați videoclipuri de pe site-urile acceptate prin yt-dlp. Puneți yt-dlp.exe în bin/ sau rulați: pip install yt-dlp",
+  "youtube.tab_description": "Preia, previzualizează și salvează videoclipuri și audio pe care ai dreptul să le descarci.",
   "msg.ffmpeg_update_success_title": "Succes",
   "msg.ffmpeg_update_failed_title": "Eroare",
   "msg.ytdlp_update_title2": "yt-dlp Updater",

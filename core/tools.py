@@ -415,7 +415,7 @@ SPECS: Final[tuple[ToolSpec, ...]] = (
         "Video Downloader",
         Category.SOCIAL,
         "⬇",
-        "Download videos or music from YouTube and 1000+ sites.",
+        "Save videos and audio you have the right to download.",
         "download youtube save url link online tiktok twitter music mp3",
     ),
     _t(

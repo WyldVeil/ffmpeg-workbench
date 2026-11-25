@@ -22,6 +22,7 @@ Usage::
     python scripts/fetch_binaries.py                      # both platforms from the lock
     python scripts/fetch_binaries.py --platform linux-x64 # one platform
     python scripts/fetch_binaries.py --refresh            # re-resolve latest versions into the lock
+    python scripts/fetch_binaries.py --refresh --keep ffmpeg   # ...all but FFmpeg, which stays pinned
     python scripts/fetch_binaries.py --sources dist/sources   # also fetch FFmpeg source (GPL)
 
 Network access uses GITHUB_TOKEN (or `gh auth token`) when available to avoid
@@ -45,6 +46,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
+from collections.abc import Sequence
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCK = os.path.join(ROOT, "scripts", "binaries.lock.json")
@@ -396,18 +398,25 @@ def resolve_shaders(cache: str) -> dict:
     }
 
 
-def refresh_lock(cache: str) -> dict:
+def refresh_lock(cache: str, keep: Sequence[str] = ()) -> dict:
+    """The latest version of every tool, except those in *keep*, which stay as
+    the lock file pins them."""
     print("Resolving latest versions …")
+    with open(LOCK, encoding="utf-8") as fh:
+        pinned = json.load(fh)["tools"]
+    resolvers = {
+        "ffmpeg": resolve_ffmpeg,
+        "yt-dlp": resolve_ytdlp,
+        "deno": resolve_deno,
+        "fluidsynth": lambda: resolve_fluidsynth(cache),
+        "whisper": resolve_whisper,
+        "soundfont": lambda: resolve_soundfont(cache),
+        "shaders": lambda: resolve_shaders(cache),
+    }
     lock = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "tools": {
-            "ffmpeg": resolve_ffmpeg(),
-            "yt-dlp": resolve_ytdlp(),
-            "deno": resolve_deno(),
-            "fluidsynth": resolve_fluidsynth(cache),
-            "whisper": resolve_whisper(),
-            "soundfont": resolve_soundfont(cache),
-            "shaders": resolve_shaders(cache),
+            name: pinned[name] if name in keep else resolve() for name, resolve in resolvers.items()
         },
     }
     with open(LOCK, "w", encoding="utf-8", newline="\n") as fh:
@@ -754,11 +763,18 @@ def main(argv=None) -> int:
     ap.add_argument("--cache", default=os.path.join(ROOT, ".cache", "downloads"))
     ap.add_argument("--sources", metavar="DIR", help="also download FFmpeg source to DIR")
     ap.add_argument("--lock-only", action="store_true", help="with --refresh: only update the lock")
+    ap.add_argument(
+        "--keep",
+        action="append",
+        default=[],
+        metavar="TOOL",
+        help="with --refresh: keep this tool's pinned version (repeatable), e.g. --keep ffmpeg",
+    )
     args = ap.parse_args(argv)
 
     os.makedirs(args.cache, exist_ok=True)
     if args.refresh:
-        lock = refresh_lock(args.cache)
+        lock = refresh_lock(args.cache, args.keep)
         if args.lock_only:
             return 0
     else:

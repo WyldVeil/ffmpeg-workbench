@@ -13,10 +13,10 @@ The exact versions and download checksums for each release are recorded in
 | Component | Version | Licence | Upstream |
 |-----------|---------|---------|----------|
 | FFmpeg (`ffmpeg`, `ffprobe`, `ffplay`), BtbN "gpl-shared" build | 9.0.2 (release/9.0 branch, `n9.0.2-39-g7adfbe40dc`) | GPL-3.0-or-later | https://ffmpeg.org · builds: https://github.com/FFmpeg-Builds/FFmpeg-Builds |
-| yt-dlp (stand-alone executable) | 2026.10.26 | Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work (see `THIRD_PARTY_LICENSES.txt`) | https://github.com/yt-dlp/yt-dlp |
+| yt-dlp (stand-alone executable) | 2026.11.23 | Unlicense; the stand-alone executable is a GPL-3.0-or-later combined work (see `THIRD_PARTY_LICENSES.txt`) | https://github.com/yt-dlp/yt-dlp |
 | Deno (JavaScript runtime that yt-dlp needs for YouTube) | 2.9.8 | MIT | https://deno.com |
-| FluidSynth (Windows build only; Linux uses the system package) | 2.6.2 | LGPL-2.1-or-later; bundled SDL3 (zlib) and libsndfile (LGPL-2.1-or-later) | https://www.fluidsynth.org |
-| whisper.cpp (`whisper-cli` and its ggml libraries, speech-to-text) | build b5454 (1.9.5) | MIT | https://github.com/ggml-org/whisper.cpp |
+| FluidSynth (Windows build only; Linux uses the system package) | 2.6.3 | LGPL-2.1-or-later; bundled SDL3 (zlib) and libsndfile (LGPL-2.1-or-later) | https://www.fluidsynth.org |
+| whisper.cpp (`whisper-cli` and its ggml libraries, speech-to-text) | build b5907 (1.9.6) | MIT | https://github.com/ggml-org/whisper.cpp |
 | GCC OpenMP runtime `libgomp.so.1` (Linux builds, used by whisper.cpp) | from the build system | GPL-3.0 with the GCC Runtime Library Exception | https://gcc.gnu.org |
 | GeneralUser GS SoundFont (`soundfonts/GeneralUser-GS.sf2`, instruments for the MIDIfier) | 2.0.3 | GeneralUser GS License v2.0 (free use in software projects; see `licenses/generaluser-gs`) | https://www.schristiancollins.com/generaluser.php |
 

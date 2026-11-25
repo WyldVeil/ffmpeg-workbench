@@ -67,7 +67,7 @@ def with_audio(format_id: str, vcodec: str) -> str:
 
 # ── Links ────────────────────────────────────────────────────────────────────
 
-#: the sites a pasted link is recognised from (yt-dlp reads 1000+; these are
+#: the sites a pasted link is recognised from (yt-dlp reads many more; these are
 #: the ones people paste most)
 VIDEO_SITES = (
     "youtube.com",

@@ -2059,7 +2059,7 @@
   "app.status.ytdlp_update_failed": "Cập nhật không thành công",
   "karaoke.whisper_not_found": "Không tìm thấy lời thì thầm. Nhấp vào Cài đặt Whisper hoặc chạy: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Không tìm thấy Whisper. Nhấp vào Cài đặt Whisper hoặc chạy: pip install openai-whisper",
-  "youtube.tab_description": "Tìm nạp, xem trước và tải xuống video từ các trang được hỗ trợ qua yt-dlp. Đặt yt-dlp.exe vào bin/ hoặc chạy: pip install yt-dlp",
+  "youtube.tab_description": "Lấy, xem trước và lưu video, âm thanh mà bạn có quyền tải xuống.",
   "msg.ffmpeg_update_success_title": "Thành công",
   "msg.ffmpeg_update_failed_title": "Lỗi",
   "msg.ytdlp_update_title2": "Trình cập nhật yt-dlp",

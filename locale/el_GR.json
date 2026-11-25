@@ -2068,7 +2068,7 @@
   "app.status.ytdlp_update_failed": "Η ενημέρωση απέτυχε",
   "karaoke.whisper_not_found": "Το Whisper δεν βρέθηκε. Πατήστε Εγκατάσταση Whisper ή εκτελέστε: pip install openai-whisper",
   "auto_subs.whisper_not_found": "Το Whisper δεν βρέθηκε. Πατήστε Εγκατάσταση Whisper ή εκτελέστε: pip install openai-whisper",
-  "youtube.tab_description": "Ανάκτηση, προεπισκόπηση και λήψη βίντεο και ήχου από το YouTube και πάνω από 1000 ακόμη ιστότοπους.",
+  "youtube.tab_description": "Ανάκτηση, προεπισκόπηση και αποθήκευση βίντεο και ήχου που έχετε δικαίωμα να κατεβάσετε.",
   "msg.ffmpeg_update_success_title": "Επιτυχία",
   "msg.ffmpeg_update_failed_title": "Σφάλμα",
   "msg.ytdlp_update_title2": "Ενημέρωση yt-dlp",

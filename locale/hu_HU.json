@@ -2068,7 +2068,7 @@
   "app.status.ytdlp_update_failed": "A frissítés nem sikerült",
   "karaoke.whisper_not_found": "A Whisper nem található. Kattintson a Whisper telepítése gombra, vagy futtassa: pip install openai-whisper",
   "auto_subs.whisper_not_found": "A Whisper nem található. Kattintson a Whisper telepítése gombra, vagy futtassa: pip install openai-whisper",
-  "youtube.tab_description": "Videók és hangok lekérése, előnézete és letöltése a YouTube-ról és több mint 1000 másik oldalról.",
+  "youtube.tab_description": "Olyan videók és hangok lekérése, előnézete és mentése, amelyek letöltésére jogosult.",
   "msg.ffmpeg_update_success_title": "Sikerült",
   "msg.ffmpeg_update_failed_title": "Hiba",
   "msg.ytdlp_update_title2": "yt-dlp-frissítő",

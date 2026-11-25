@@ -1998,7 +1998,7 @@ def _download_options(p: argparse.ArgumentParser) -> None:
 
 @operation(
     "download",
-    "Download a video (or --audio-only) from YouTube and 1000+ sites, following the app's "
+    "Download a video you have the right to save (or --audio-only), following the app's "
     "network settings",
     "Social",
     options=_download_options,
