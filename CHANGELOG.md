@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.1
+
+### Changed
+
+- **The whole app is translated.** Every label, button, message, log line and
+  page description added or opened up for translation in 1.3.0 is now
+  translated into all 31 other languages, as is the Video Downloader's notice.
+  The languages that were behind (Romanian, Swahili, Malay, Bengali, Urdu,
+  Persian, Filipino and Nigerian Pidgin) are now complete too. Commands, file
+  names, codec and program names stay exactly as they are.
+- **Older translations checked line by line.** Many earlier machine
+  translations were wrong: shown against the wrong label, using the wrong
+  sense of a word ("duck" as the bird, "crop" as a plant), cut short, or with a
+  command-line option or filter name translated. Romanian, Swahili, Malay,
+  Bengali, Urdu, Persian and Filipino were re-translated in full; the other
+  languages had their mistakes corrected. British English now matches the
+  current English everywhere.
+
 ## 1.3.0
 
 ### Fixed
