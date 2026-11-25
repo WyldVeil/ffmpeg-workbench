@@ -199,8 +199,7 @@ class WindowPicker(tk.Toplevel):
         else:
             messagebox.showwarning(
                 t("common.warning"),
-                "Couldn't read a title from that window. "
-                "Try clicking the title bar directly, or enter the name manually.",
+                t("screen_recorder.couldn_t_read_a_title_from_that"),
             )
 
 
@@ -424,7 +423,7 @@ class ScreenRecorderTab(BaseTab):
         self.lbl_region.pack(side="left", padx=px(8))
         tk.Button(
             self.region_row,
-            text="Reset",
+            text=t("snapshot.reset"),
             font=(UI_FONT, 8),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
@@ -710,7 +709,7 @@ class ScreenRecorderTab(BaseTab):
         ).pack(side="left", padx=px(4))
         tk.Label(
             r1,
-            text="tokens: {date}  {time}  {counter}",
+            text=t("screen_recorder.tokens_date_time_counter"),
             font=(UI_FONT, 8),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
@@ -732,7 +731,7 @@ class ScreenRecorderTab(BaseTab):
 
         tk.Checkbutton(
             timer_f,
-            text="Auto-stop recording after:",
+            text=t("screen_recorder.auto_stop_recording_after"),
             variable=self.autostop_var,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -830,8 +829,12 @@ class ScreenRecorderTab(BaseTab):
 
     def _set_region(self, x: int, y: int, w: int, h: int) -> None:
         self.selected_region = (x, y, w, h)
-        self.lbl_region.config(text=f"  {w}×{h} at ({x}, {y})", fg=CLR["green"])
-        self.log(self.console, f"Target region: {w}×{h} at offset ({x}, {y})")
+        self.lbl_region.config(
+            text=t("screen_recorder.w_h_at_x_y", w=w, h=h, x=x, y=y), fg=CLR["green"]
+        )
+        self.log(
+            self.console, t("screen_recorder.target_region_w_h_at_offset_x", w=w, h=h, x=x, y=y)
+        )
 
     def _reset_area(self) -> None:
         self.selected_region = None
@@ -850,7 +853,7 @@ class ScreenRecorderTab(BaseTab):
         self.window_title_var.set(title)
         self._window_rect = rect
         self.lbl_window.config(text=f"✔ {title[:40]}")
-        self.log(self.console, f'Window selected: "{title}"')
+        self.log(self.console, t("screen_recorder.window_selected_title", title=title))
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Output path helpers
@@ -913,14 +916,21 @@ class ScreenRecorderTab(BaseTab):
             self._hotkey_active = False
             messagebox.showerror(
                 t("common.error"),
-                f"Could not register {key_name}.\nAnother application may be using it.",
+                t(
+                    "screen_recorder.could_not_register_key_name_another_application",
+                    key_name=key_name,
+                ),
                 parent=self,
             )
             self.hotkey_enabled_var.set(False)
             return
         self._hotkey_tid = result["tid"]
-        self.lbl_hotkey_status.config(text=f"  ● {key_name} active", fg=CLR["green"])
-        self.log(self.console, f"Global hotkey {key_name} registered.")
+        self.lbl_hotkey_status.config(
+            text=t("screen_recorder.key_name_active", key_name=key_name), fg=CLR["green"]
+        )
+        self.log(
+            self.console, t("screen_recorder.global_hotkey_key_name_registered", key_name=key_name)
+        )
 
     def _stop_hotkey_listener(self) -> None:
         was_active = getattr(self, "_hotkey_active", False)
@@ -958,12 +968,8 @@ class ScreenRecorderTab(BaseTab):
         if tool:
             return tool
         if messagebox.askyesno(
-            "Wayland desktop",
-            "This desktop uses Wayland, which only lets screen recorders in through its own "
-            "screen-sharing system. Without gpu-screen-recorder or wf-recorder installed, only "
-            "windows of older X11 apps can be captured (others show black).\n\n"
-            "Install gpu-screen-recorder for full recording (e.g. from Flathub or your package "
-            "manager).\n\nRecord with X11 capture anyway?",
+            t("screen_recorder.wayland_desktop"),
+            t("screen_recorder.this_desktop_uses_wayland_which_only_lets"),
             parent=self,
         ):
             return ""
@@ -1009,8 +1015,10 @@ class ScreenRecorderTab(BaseTab):
             )
             self.log(
                 self.console,
-                f"Wayland: recording with {os.path.basename(tool)} - choose the screen or "
-                "window in the system dialog.",
+                t(
+                    "screen_recorder.wayland_recording_with_tool_choose_the_screen",
+                    tool=os.path.basename(tool),
+                ),
             )
         else:
             venc = venc or self._express_encode(out_ext)
@@ -1043,7 +1051,7 @@ class ScreenRecorderTab(BaseTab):
 
         if w < 16 or h < 16:
             messagebox.showwarning(
-                t("common.warning"), "Drag a larger area to record.", parent=self
+                t("common.warning"), t("screen_recorder.drag_a_larger_area_to_record"), parent=self
             )
             return
         self._start_capture(
@@ -1070,7 +1078,7 @@ class ScreenRecorderTab(BaseTab):
             video = recorder.screen_input("30", region=rect)
         else:
             video = recorder.screen_input("30", window_title=title)
-        self.log(self.console, f'Window: "{title}"')
+        self.log(self.console, t("screen_recorder.window_title", title=title))
         self._start_capture("Window", video)
 
     def _start_pro(self) -> None:
@@ -1089,7 +1097,9 @@ class ScreenRecorderTab(BaseTab):
                 ) or None
             except ValueError:
                 messagebox.showwarning(
-                    t("common.warning"), "The auto-stop time must be whole numbers.", parent=self
+                    t("common.warning"),
+                    t("screen_recorder.the_auto_stop_time_must_be_whole"),
+                    parent=self,
                 )
                 return
         _label, codec, hw = RECORD_CODECS[self.vcodec.value]
@@ -1124,7 +1134,9 @@ class ScreenRecorderTab(BaseTab):
                 region = self._window_rect
             elif not window:
                 messagebox.showerror(
-                    t("common.error"), "Pick a window or type its title first.", parent=self
+                    t("common.error"),
+                    t("screen_recorder.pick_a_window_or_type_its_title"),
+                    parent=self,
                 )
                 return
         elif self.selected_region:
@@ -1185,13 +1197,17 @@ class ScreenRecorderTab(BaseTab):
             )
         except OSError as exc:
             messagebox.showerror(
-                t("common.error"), f"The recorder could not start:\n{exc}", parent=self
+                t("common.error"),
+                t("screen_recorder.the_recorder_could_not_start_exc", exc=exc),
+                parent=self,
             )
             return
         self.record_proc = rec
         self._recording = True
         self._set_buttons(True)
-        self.log(self.console, f"[{mode_name}] Recording → {out}")
+        self.log(
+            self.console, t("screen_recorder.mode_name_recording_out", mode_name=mode_name, out=out)
+        )
         self._tick()
 
     def _tick(self) -> None:
@@ -1200,7 +1216,7 @@ class ScreenRecorderTab(BaseTab):
             return
         m, s_ = divmod(int(rec.elapsed), 60)
         try:
-            self.btn_stop.config(text=f"■  STOP   {m:02d}:{s_:02d}")
+            self.btn_stop.config(text=t("screen_recorder.stop_m_02d_s_02d", m=m, s_=s_))
         except tk.TclError:
             return
         self.after(500, self._tick)
@@ -1220,10 +1236,10 @@ class ScreenRecorderTab(BaseTab):
             )
         ok = os.path.isfile(rec.out) and os.path.getsize(rec.out) > 1024
         if ok and (rec.stopping or rc == 0 or rec.seconds):
-            self.log(self.console, f"Saved: {rec.out}")
+            self.log(self.console, t("screen_recorder.saved_out", out=rec.out))
             return
         detail = rec.error_text() or f"exit code {rc}"
-        self.log(self.console, f"Recording failed:\n{detail}")
+        self.log(self.console, t("screen_recorder.recording_failed_detail", detail=detail))
         messagebox.showerror(
             t("common.error"), "The recording stopped unexpectedly:\n\n" + detail, parent=self
         )

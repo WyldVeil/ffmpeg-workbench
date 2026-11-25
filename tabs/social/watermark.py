@@ -47,8 +47,7 @@ class TextBurnerTab(BaseTab):
         self.make_header(
             self,
             t("tab.watermarker"),
-            "Burn a text watermark - fixed, rotated, "
-            "bouncing or jumping, all the time or only at chosen moments.",
+            t("watermark.burn_a_text_watermark_fixed_rotated_bouncing"),
             icon="©",
         )
         body = scroll_body(self)
@@ -59,7 +58,7 @@ class TextBurnerTab(BaseTab):
         self.compare = CompareView(body, 400, 225, after_label="With watermark")
         self.compare.pack(pady=px(4))
 
-        ty = tk.LabelFrame(body, text="  Text  ", padx=px(12), pady=px(6))
+        ty = tk.LabelFrame(body, text=t("watermark.text"), padx=px(12), pady=px(6))
         ty.pack(fill="x", padx=px(20), pady=px(4))
         self.text_var = tk.StringVar(value="© My Channel")
         tk.Entry(ty, textvariable=self.text_var, width=40).grid(
@@ -77,7 +76,7 @@ class TextBurnerTab(BaseTab):
             to=200,
             orient="horizontal",
             length=px(160),
-            label="Size",
+            label=t("watermark.size"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=1, sticky="w")
         self.opacity_var = tk.DoubleVar(value=0.8)
@@ -89,7 +88,7 @@ class TextBurnerTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(140),
-            label="Opacity",
+            label=t("pip.opacity_section"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=2, sticky="w")
         flags = tk.Frame(ty)
@@ -104,14 +103,14 @@ class TextBurnerTab(BaseTab):
         ):
             tk.Checkbutton(flags, text=text, variable=var, command=self._changed).pack(side="left")
         self.col_btn = ColourButton(
-            flags, "#FFFFFF", text="Colour…", on_change=lambda _c: self._changed()
+            flags, "#FFFFFF", text=t("shortifier.colour"), on_change=lambda _c: self._changed()
         )
         return body
 
     def _build_position_motion(self, body: tk.Frame) -> None:
         self.col_btn.pack(side="left", padx=px(8))
 
-        pos = tk.LabelFrame(body, text="  Position & motion  ", padx=px(12), pady=px(6))
+        pos = tk.LabelFrame(body, text=t("watermark.position_motion"), padx=px(12), pady=px(6))
         pos.pack(fill="x", padx=px(20), pady=px(4))
         self.place_var = tk.StringVar(value=PLACES["br"])
         pb = ttk.Combobox(
@@ -138,17 +137,25 @@ class TextBurnerTab(BaseTab):
             tk.Entry(row, textvariable=var, width=w).pack(side="left")
             on_write(var, lambda: self._changed())
         tk.Checkbutton(
-            row, text="random (1-2× that)", variable=self.rand_var, command=self._changed
+            row, text=t("watermark.random_1_2_that"), variable=self.rand_var, command=self._changed
         ).pack(side="left", padx=px(6))
 
-        tm = tk.LabelFrame(body, text="  When  ", padx=px(12), pady=px(6))
+        tm = tk.LabelFrame(body, text=t("watermark.when"), padx=px(12), pady=px(6))
         tm.pack(fill="x", padx=px(20), pady=px(4))
         self.always_var = tk.BooleanVar(value=True)
         tk.Radiobutton(
-            tm, text="The whole video", value=True, variable=self.always_var, command=self._changed
+            tm,
+            text=t("watermark.the_whole_video"),
+            value=True,
+            variable=self.always_var,
+            command=self._changed,
         ).grid(row=0, column=0, sticky="w")
         tk.Radiobutton(
-            tm, text="Only at:", value=False, variable=self.always_var, command=self._changed
+            tm,
+            text=t("watermark.only_at"),
+            value=False,
+            variable=self.always_var,
+            command=self._changed,
         ).grid(row=1, column=0, sticky="w")
         self.ranges_var = tk.StringVar(value="0-5, 20-25")
         tk.Entry(tm, textvariable=self.ranges_var, width=30).grid(row=1, column=1, sticky="w")
@@ -157,7 +164,7 @@ class TextBurnerTab(BaseTab):
         )
         self.fade_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            tm, text="Fade in and out", variable=self.fade_var, command=self._changed
+            tm, text=t("watermark.fade_in_and_out"), variable=self.fade_var, command=self._changed
         ).grid(row=2, column=0, sticky="w")
         for var in (self.text_var, self.font_var, self.ranges_var):
             on_write(var, lambda: self._changed())
@@ -170,13 +177,15 @@ class TextBurnerTab(BaseTab):
         )
 
     def _build_render(self, body: tk.Frame) -> None:
-        self.btn_render = self.make_render_btn(body, "©  BURN WATERMARK", self._render, width=24)
+        self.btn_render = self.make_render_btn(
+            body, t("watermark.burn_watermark"), self._render, width=24
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
     def script(self, w: int, h: int, duration: float) -> ass.Script:
         place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
-        every = common.number(self.every_var.get() or "3", "Jump every", 0.2, 3600)
+        every = common.number(self.every_var.get() or "3", t("watermark.jump_every_2"), 0.2, 3600)
         mark = TextMark(
             text=self.text_var.get(),
             place=place,
@@ -188,7 +197,7 @@ class TextBurnerTab(BaseTab):
             italic=self.italic_var.get(),
             shadow=self.shadow_var.get(),
             outline=self.outline_var.get(),
-            angle=common.number(self.angle_var.get() or "0", "Angle", -360, 360),
+            angle=common.number(self.angle_var.get() or "0", t("watermark.angle"), -360, 360),
             custom=(
                 common.number(self.cx_var.get() or "50", "X %", 0, 100),
                 common.number(self.cy_var.get() or "50", "Y %", 0, 100),
@@ -236,7 +245,9 @@ class TextBurnerTab(BaseTab):
         if info is None:
             return
         if not self.text_var.get().strip():
-            messagebox.showwarning(t("common.warning"), "Type the watermark text.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("watermark.type_the_watermark_text"), parent=self
+            )
             return
         w, h = common.even_size(info)
         try:

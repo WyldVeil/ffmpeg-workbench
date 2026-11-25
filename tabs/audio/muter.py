@@ -41,7 +41,7 @@ class MuterTab(BaseTab):
 
     def _build_ui(self) -> None:
         self.make_header(
-            self, t("tab.the_muter"), "Silence or bleep moments, or remove the sound.", icon="🔇"
+            self, t("tab.the_muter"), t("muter.silence_or_bleep_moments_or_remove_the"), icon="🔇"
         )
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -76,30 +76,30 @@ class MuterTab(BaseTab):
         framestep.slider(self.slider, self.preview)  # , and . step a frame
         mark = tk.Frame(pv)
         mark.pack(fill="x")
-        tk.Label(mark, text="From").pack(side="left")
+        tk.Label(mark, text=t("muter.from")).pack(side="left")
         self.span = RangePicker(mark, start="", here=lambda: float(self.pos_var.get()))
         self.span.pack(side="left", padx=px(2))
-        tk.Button(mark, text="➕ Add", relief="flat", command=self._add).pack(
+        tk.Button(mark, text=t("muter.add"), relief="flat", command=self._add).pack(
             side="left", padx=px(4)
         )
         right = tk.Frame(top)
         right.pack(side="left", fill="both", expand=True, padx=px(10, 0))
         self.listbox = tk.Listbox(right, height=10)
         self.listbox.pack(fill="both", expand=True)
-        tk.Button(right, text="🗑 Remove selected", relief="flat", command=self._remove).pack(
+        tk.Button(right, text=t("muter.remove_selected"), relief="flat", command=self._remove).pack(
             anchor="w"
         )
 
     def _build_mode(self, body: tk.Frame) -> None:
         """What to do with the moments."""
-        opt = tk.LabelFrame(body, text="  What to do  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("muter.what_to_do"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="silence")
         for key, label in MODES.items():
             tk.Radiobutton(opt, text=label, value=key, variable=self.mode_var).pack(anchor="w")
         fr = tk.Frame(opt)
         fr.pack(anchor="w", pady=px(4, 0))
-        tk.Label(fr, text="Fade (s):").pack(side="left")
+        tk.Label(fr, text=t("muter.fade_s")).pack(side="left")
         self.fade_var = tk.StringVar(value="0.05")
         tk.Entry(fr, textvariable=self.fade_var, width=6).pack(side="left", padx=px(4))
 
@@ -111,7 +111,7 @@ class MuterTab(BaseTab):
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "muted"),
         )
-        self.btn_render = self.make_render_btn(body, "🔇  APPLY", self._render, width=20)
+        self.btn_render = self.make_render_btn(body, t("muter.apply"), self._render, width=20)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -164,11 +164,11 @@ class MuterTab(BaseTab):
         mode = self.mode_var.get()
         if mode in ("silence", "bleep") and not self.ranges:
             messagebox.showwarning(
-                t("common.warning"), "Add at least one moment to mute.", parent=self
+                t("common.warning"), t("muter.add_at_least_one_moment_to_mute"), parent=self
             )
             return
         try:
-            fade = common.number(self.fade_var.get() or "0", "Fade", 0, 5)
+            fade = common.number(self.fade_var.get() or "0", t("muter.fade"), 0, 5)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

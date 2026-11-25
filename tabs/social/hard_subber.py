@@ -72,9 +72,9 @@ class HardSubberTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         srow = tk.Frame(body)
         srow.pack(fill="x", padx=px(20), pady=px(2))
-        tk.Label(srow, text="Subtitles:", width=16, anchor="w", font=(UI_FONT, 10, "bold")).pack(
-            side="left"
-        )
+        tk.Label(
+            srow, text=t("hard_subber.subtitles"), width=16, anchor="w", font=(UI_FONT, 10, "bold")
+        ).pack(side="left")
         self.track_var = tk.StringVar(value=_EXTERNAL)
         self.track_box = ttk.Combobox(
             srow, textvariable=self.track_var, values=[_EXTERNAL], state="readonly", width=40
@@ -82,7 +82,10 @@ class HardSubberTab(BaseTab):
         self.track_box.pack(side="left", padx=px(6))
         self.track_box.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
         self.sub_row = FileRow(
-            body, "Subtitle file:", kind="subtitle", on_change=lambda _p: self._subs_changed()
+            body,
+            t("hard_subber.subtitle_file"),
+            kind="subtitle",
+            on_change=lambda _p: self._subs_changed(),
         )
         self.sub_row.pack(fill="x", padx=px(20), pady=px(2))
 
@@ -103,17 +106,17 @@ class HardSubberTab(BaseTab):
         framestep.slider(self.slider, self.preview)  # , and . step a frame
 
         st = tk.LabelFrame(
-            body, text="  Style (SRT / VTT, or override ASS)  ", padx=px(10), pady=px(6)
+            body, text=t("hard_subber.style_srt_vtt_or_override_ass"), padx=px(10), pady=px(6)
         )
         st.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(st)
         r0.pack(fill="x", pady=px(2))
-        tk.Label(r0, text="Font:").pack(side="left")
+        tk.Label(r0, text=t("hard_subber.font_label")).pack(side="left")
         self.font_var = tk.StringVar(value="Open Sans")
         ttk.Combobox(
             r0, textvariable=self.font_var, values=ass.families(["Arial", "DejaVu Sans"]), width=16
         ).pack(side="left", padx=px(6))
-        tk.Label(r0, text="Size:").pack(side="left", padx=px(8, 0))
+        tk.Label(r0, text=t("hard_subber.size_label")).pack(side="left", padx=px(8, 0))
         self.size_var = tk.IntVar(value=22)
         tk.Scale(
             r0,
@@ -128,16 +131,24 @@ class HardSubberTab(BaseTab):
 
     def _build_output(self, body: tk.Frame, r0: tk.Frame, st: tk.LabelFrame) -> None:
         self.col_btn = ColourButton(
-            r0, "#FFFFFF", text="Text", width=8, on_change=lambda _c: self._schedule()
+            r0,
+            "#FFFFFF",
+            text=t("hard_subber.text"),
+            width=8,
+            on_change=lambda _c: self._schedule(),
         )
         self.col_btn.pack(side="left", padx=px(4))
         self.out_btn = ColourButton(
-            r0, "#000000", text="Outline / box", width=12, on_change=lambda _c: self._schedule()
+            r0,
+            "#000000",
+            text=t("hard_subber.outline_box"),
+            width=12,
+            on_change=lambda _c: self._schedule(),
         )
         self.out_btn.pack(side="left", padx=px(4))
         r1 = tk.Frame(st)
         r1.pack(fill="x", pady=px(2))
-        tk.Label(r1, text="Outline:").pack(side="left")
+        tk.Label(r1, text=t("hard_subber.outline_label")).pack(side="left")
         self.outline_var = tk.DoubleVar(value=2.0)
         tk.Scale(
             r1,
@@ -151,9 +162,9 @@ class HardSubberTab(BaseTab):
         ).pack(side="left", padx=px(4))
         self.box_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            r1, text="Background box", variable=self.box_var, command=self._schedule
+            r1, text=t("hard_subber.background_box"), variable=self.box_var, command=self._schedule
         ).pack(side="left", padx=px(8))
-        tk.Label(r1, text="Position:").pack(side="left")
+        tk.Label(r1, text=t("hard_subber.position_label")).pack(side="left")
         self.position_var = tk.StringVar(value=POSITIONS["bottom"][0])
         pb = ttk.Combobox(
             r1,
@@ -164,7 +175,7 @@ class HardSubberTab(BaseTab):
         )
         pb.pack(side="left", padx=px(4))
         pb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
-        tk.Label(r1, text="Margin:").pack(side="left", padx=px(8, 0))
+        tk.Label(r1, text=t("hard_subber.margin")).pack(side="left", padx=px(8, 0))
         self.margin_var = tk.IntVar(value=20)
         tk.Scale(
             r1,
@@ -178,7 +189,7 @@ class HardSubberTab(BaseTab):
         self.override_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             st,
-            text="Apply this style to .ass subtitles too (replaces their styling)",
+            text=t("hard_subber.apply_this_style_to_ass_subtitles_too"),
             variable=self.override_var,
             command=self._schedule,
         ).pack(anchor="w")
@@ -192,7 +203,9 @@ class HardSubberTab(BaseTab):
             ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "subbed"),
         )
-        self.btn_render = self.make_render_btn(body, "🔥  BURN SUBTITLES", self._render, width=24)
+        self.btn_render = self.make_render_btn(
+            body, t("hard_subber.burn_subtitles"), self._render, width=24
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 

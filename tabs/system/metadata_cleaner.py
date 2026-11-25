@@ -18,6 +18,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import metaclean as mc
+from core.i18n import t
 from core.queue_manager import TaskContext
 from core.scaling import px
 from tabs import common
@@ -60,7 +61,13 @@ def _clean_one(
         kept = {k: opts[k] for k in ("keep_chapters", "keep_cover", "keep_subtitles")}
         for f in mc.leftovers(after, **kept):
             ctx.log("  still there: " + f.line())
-        ctx.log(f"  ✓ {os.path.basename(out)} - {removed} item(s) removed")
+        ctx.log(
+            t(
+                "metadata_cleaner.out_removed_item_s_removed",
+                out=os.path.basename(out),
+                removed=removed,
+            )
+        )
         return None
     except ff.CancelledError:
         if os.path.exists(part):
@@ -85,8 +92,8 @@ class MetadataCleanerTab(BaseTab):
     def _build_ui(self) -> None:
         self.make_header(
             self,
-            "Metadata Cleaner",
-            "Remove location, device, dates and names from files - without re-encoding.",
+            t("metadata_cleaner.metadata_cleaner"),
+            t("metadata_cleaner.remove_location_device_dates_and_names_from"),
             icon="🧹",
         )
         top = tk.Frame(self)
@@ -99,20 +106,22 @@ class MetadataCleanerTab(BaseTab):
             tk.Button(top, text=label, command=cmd, relief="flat", cursor="hand2").pack(
                 side="left", padx=px(0, 6)
             )
-        tk.Label(top, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=px(6))
+        tk.Label(top, text=t("converter.or_drop_files_here"), fg=CLR["fgdim"]).pack(
+            side="left", padx=px(6)
+        )
 
         mid = tk.Frame(self)
         mid.pack(fill="both", expand=True, padx=px(20), pady=px(4))
         self.tree = ttk.Treeview(mid, columns=("what",), show="tree headings", height=12)
-        self.tree.heading("#0", text="File / what it contains")
-        self.tree.heading("what", text="Value")
+        self.tree.heading("#0", text=t("metadata_cleaner.file_what_it_contains"))
+        self.tree.heading("what", text=t("metadata_cleaner.value"))
         self.tree.column("#0", width=px(420))
         self.tree.column("what", width=px(420))
         sb = linked_scrollbar(mid, self.tree)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        opt = tk.LabelFrame(self, text="  Keep  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(self, text=t("metadata_cleaner.keep"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.keep_lang = tk.BooleanVar(value=True)
         self.keep_subs = tk.BooleanVar(value=True)
@@ -128,8 +137,7 @@ class MetadataCleanerTab(BaseTab):
             tk.Checkbutton(opt, text=text, variable=var).pack(side="left", padx=px(0, 12))
         tk.Checkbutton(
             self,
-            text="Deep clean: also remove encoder notes inside the video stream (not for HDR "
-            "video, which needs them)",
+            text=t("metadata_cleaner.deep_clean_also_remove_encoder_notes_inside"),
             variable=self.deep,
         ).pack(anchor="w", padx=px(20))
         out = tk.Frame(self)
@@ -137,16 +145,18 @@ class MetadataCleanerTab(BaseTab):
         self.where_var = tk.StringVar(value="next")
         tk.Radiobutton(
             out,
-            text="Save next to each original as “name (clean)”",
+            text=t("metadata_cleaner.save_next_to_each_original_as_name"),
             variable=self.where_var,
             value="next",
         ).pack(side="left")
-        tk.Radiobutton(out, text="Into folder:", variable=self.where_var, value="folder").pack(
-            side="left", padx=px(12, 0)
-        )
+        tk.Radiobutton(
+            out, text=t("metadata_cleaner.into_folder"), variable=self.where_var, value="folder"
+        ).pack(side="left", padx=px(12, 0))
         self.folder_var = tk.StringVar()
         FolderRow(out, "", self.folder_var, width=34, label_width=0).pack(side="left")
-        self.btn = self.make_render_btn(self, "🧹  CLEAN FILES", self._clean, width=24)
+        self.btn = self.make_render_btn(
+            self, t("metadata_cleaner.clean_files"), self._clean, width=24
+        )
         self.btn.pack(pady=px(8))
         self.console = self.make_console_block(self, height=5, expand=False)
 
@@ -156,7 +166,10 @@ class MetadataCleanerTab(BaseTab):
             return True
         info = ff.try_probe(path)
         if info is None:
-            self.log(self.console, f"Can't read {os.path.basename(path)} - skipped.")
+            self.log(
+                self.console,
+                t("metadata_cleaner.can_t_read_path_skipped", path=os.path.basename(path)),
+            )
             return True
         self.files.append(path)
         found = mc.inspect(info) + mc.stream_notes(path)
@@ -179,7 +192,9 @@ class MetadataCleanerTab(BaseTab):
         return True
 
     def _add(self) -> None:
-        for p in dialogs.ask_open_many("media", title="Files to clean", parent=self):
+        for p in dialogs.ask_open_many(
+            "media", title=t("metadata_cleaner.files_to_clean"), parent=self
+        ):
             self.load_file(p)
 
     def _remove(self) -> None:
@@ -198,14 +213,20 @@ class MetadataCleanerTab(BaseTab):
     # ── Clean ─────────────────────────────────────────────────────────
     def _clean(self) -> None:
         if not self.files:
-            messagebox.showwarning("Nothing to clean", "Add some files first.", parent=self)
+            messagebox.showwarning(
+                t("metadata_cleaner.nothing_to_clean"),
+                t("metadata_cleaner.add_some_files_first"),
+                parent=self,
+            )
             return
         folder = None
         if self.where_var.get() == "folder":
             folder = self.folder_var.get().strip()
             if not folder:
                 messagebox.showwarning(
-                    "Folder", "Choose the folder for the cleaned files.", parent=self
+                    t("metadata_cleaner.folder"),
+                    t("metadata_cleaner.choose_the_folder_for_the_cleaned_files"),
+                    parent=self,
                 )
                 return
             os.makedirs(folder, exist_ok=True)

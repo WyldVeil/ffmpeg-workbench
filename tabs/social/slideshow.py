@@ -152,7 +152,7 @@ class SlideshowMakerTab(BaseTab):
         self.make_header(
             self,
             t("tab.slideshow_maker"),
-            "Photos, GIFs, video clips and title cards into one video - transitions, captions and music.",
+            t("slideshow.photos_gifs_video_clips_and_title_cards"),
             icon="🖼",
         )
         body = scroll_body(self)
@@ -197,25 +197,27 @@ class SlideshowMakerTab(BaseTab):
             tk.Button(
                 btns, text=text, relief="flat", anchor="w", width=20, cursor="hand2", command=cmd
             ).pack(fill="x", pady=px(1))
-        self.count_lbl = tk.Label(btns, text="0 slides", fg=CLR["fgdim"])
+        self.count_lbl = tk.Label(btns, text=t("slideshow.0_slides"), fg=CLR["fgdim"])
         self.count_lbl.pack(pady=px(6, 0))
 
     def _build_editor(self, body: tk.Frame) -> None:
-        self.editor = tk.LabelFrame(body, text="  Selected slide  ", padx=px(10), pady=px(6))
+        self.editor = tk.LabelFrame(
+            body, text=t("slideshow.selected_slide"), padx=px(10), pady=px(6)
+        )
         self.editor.pack(fill="x", padx=px(20), pady=px(4))
         row = tk.Frame(self.editor)
         row.pack(fill="x")
-        tk.Label(row, text="Caption:", width=12, anchor="w").pack(side="left")
+        tk.Label(row, text=t("slideshow.caption"), width=12, anchor="w").pack(side="left")
         self.cap_var = self._traced(tk.StringVar())
         tk.Entry(row, textvariable=self.cap_var, width=40).pack(side="left", fill="x", expand=True)
         row = tk.Frame(self.editor)
         row.pack(fill="x", pady=px(3, 0))
-        tk.Label(row, text="Time (s):", width=12, anchor="w").pack(side="left")
+        tk.Label(row, text=t("slideshow.time_s"), width=12, anchor="w").pack(side="left")
         self.slide_secs_var = self._traced(tk.StringVar())
         secs = tk.Entry(row, textvariable=self.slide_secs_var, width=6)
         secs.pack(side="left")
-        add_tooltip(secs, "Empty: as the slideshow (videos: the length of their part)")
-        tk.Label(row, text="Transition after:").pack(side="left", padx=px(12, 4))
+        add_tooltip(secs, t("slideshow.empty_as_the_slideshow_videos_the_length"))
+        tk.Label(row, text=t("slideshow.transition_after")).pack(side="left", padx=px(12, 4))
         self.slide_trans_var = self._traced(tk.StringVar(value=SAME))
         ttk.Combobox(
             row,
@@ -224,15 +226,17 @@ class SlideshowMakerTab(BaseTab):
             state="readonly",
             width=34,
         ).pack(side="left")
-        tk.Button(row, text="▶ Preview", relief="flat", command=self._preview_transition).pack(
-            side="left", padx=px(6, 0)
-        )
+        tk.Button(
+            row, text=t("youtube.preview"), relief="flat", command=self._preview_transition
+        ).pack(side="left", padx=px(6, 0))
         self._build_kind_rows()
 
     def _build_kind_rows(self) -> None:
         """The rows that only some kinds of slide have (shown for those)."""
         self.motion_row = tk.Frame(self.editor)
-        tk.Label(self.motion_row, text="Motion:", width=12, anchor="w").pack(side="left")
+        tk.Label(self.motion_row, text=t("slideshow.motion"), width=12, anchor="w").pack(
+            side="left"
+        )
         self.slide_motion_var = self._traced(tk.StringVar(value=SAME))
         ttk.Combobox(
             self.motion_row,
@@ -242,26 +246,28 @@ class SlideshowMakerTab(BaseTab):
             width=26,
         ).pack(side="left")
         self.video_row = tk.Frame(self.editor)
-        tk.Label(self.video_row, text="Part:", width=12, anchor="w").pack(side="left")
+        tk.Label(self.video_row, text=t("slideshow.part"), width=12, anchor="w").pack(side="left")
         self.part = RangePicker(
             self.video_row, start="0", end_hint="(empty = to the end)", on_change=self._edited
         )
         self.part.pack(side="left")
         self.sound_var = self._traced(tk.BooleanVar(value=True))
-        tk.Checkbutton(self.video_row, text="Keep its sound", variable=self.sound_var).pack(
-            side="left", padx=px(12, 0)
-        )
+        tk.Checkbutton(
+            self.video_row, text=t("slideshow.keep_its_sound"), variable=self.sound_var
+        ).pack(side="left", padx=px(12, 0))
         self.card_row = tk.Frame(self.editor)
-        tk.Label(self.card_row, text="Title:", width=12, anchor="w").pack(side="left")
+        tk.Label(self.card_row, text=t("chapter_markers.title"), width=12, anchor="w").pack(
+            side="left"
+        )
         self.card_title_var = self._traced(tk.StringVar())
         tk.Entry(self.card_row, textvariable=self.card_title_var, width=26).pack(side="left")
-        tk.Label(self.card_row, text="Subtitle:").pack(side="left", padx=px(10, 4))
+        tk.Label(self.card_row, text=t("slideshow.subtitle_2")).pack(side="left", padx=px(10, 4))
         self.card_sub_var = self._traced(tk.StringVar())
         tk.Entry(self.card_row, textvariable=self.card_sub_var, width=26).pack(side="left")
         self.card_bg_btn = ColourButton(
             self.card_row,
             "#101010",
-            text="Background",
+            text=t("intro_maker.background_section"),
             width=10,
             on_change=lambda _c: self._edited(),
         )
@@ -275,15 +281,15 @@ class SlideshowMakerTab(BaseTab):
         )
 
     def _build_settings(self, body: tk.Frame) -> None:
-        opt = tk.LabelFrame(body, text="  Slideshow  ", padx=px(10), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("slideshow.slideshow"), padx=px(10), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         self.dur_var, self.trans_dur_var = tk.StringVar(value="4"), tk.StringVar(value="1.0")
         self.form_row(
             opt,
             0,
-            "Seconds per slide:",
+            t("slideshow.seconds_per_slide"),
             tk.Entry(opt, textvariable=self.dur_var, width=6),
-            tk.Label(opt, text="Transition (s):"),
+            tk.Label(opt, text=t("slideshow.transition_s")),
             tk.Entry(opt, textvariable=self.trans_dur_var, width=6),
             label_width=16,
             pady=2,
@@ -293,9 +299,9 @@ class SlideshowMakerTab(BaseTab):
         self.form_row(
             opt,
             1,
-            "Transition:",
+            t("slideshow.transition"),
             self._combo(opt, self.trans_var, TRANSITIONS, 34),
-            tk.Label(opt, text="Motion:"),
+            tk.Label(opt, text=t("slideshow.motion")),
             self._combo(opt, self.motion_var, MOTIONS.values(), 24),
             label_width=16,
             pady=2,
@@ -313,14 +319,14 @@ class SlideshowMakerTab(BaseTab):
         self.form_row(
             opt,
             2,
-            "Framing:",
+            t("slideshow.framing"),
             self._combo(opt, self.fit_var, FITS.values(), 28),
-            tk.Label(opt, text="Motion amount:"),
+            tk.Label(opt, text=t("slideshow.motion_amount")),
             zoom,
             label_width=16,
             pady=2,
         )
-        self.bars_btn = ColourButton(opt, "#000000", text="Bars colour", width=10)
+        self.bars_btn = ColourButton(opt, "#000000", text=t("slideshow.bars_colour"), width=10)
         self.bars_btn.grid(row=2, column=5, sticky="w")
         self.res_var, self.fps_var = (
             tk.StringVar(value=next(iter(RESOLUTIONS))),
@@ -329,7 +335,7 @@ class SlideshowMakerTab(BaseTab):
         self.form_row(
             opt,
             3,
-            "Size:",
+            t("hard_subber.size_label"),
             self._combo(opt, self.res_var, RESOLUTIONS, 30),
             tk.Label(opt, text="FPS:"),
             self._combo(opt, self.fps_var, ("24", "25", "30", "50", "60"), 5),
@@ -341,8 +347,8 @@ class SlideshowMakerTab(BaseTab):
         self.form_row(
             opt,
             4,
-            "Captions:",
-            tk.Checkbutton(opt, text="Show", variable=self.cap_on),
+            t("slideshow.captions"),
+            tk.Checkbutton(opt, text=t("slideshow.show"), variable=self.cap_on),
             self._combo(opt, self.cap_font, ass.families(), 14),
             self._combo(opt, self.cap_pos, CAPTION_POS.values(), 16),
             label_width=16,
@@ -350,7 +356,7 @@ class SlideshowMakerTab(BaseTab):
         )
 
     def _build_music(self, body: tk.Frame) -> None:
-        box = tk.LabelFrame(body, text="  Music (optional)  ", padx=px(10), pady=px(6))
+        box = tk.LabelFrame(body, text=t("slideshow.music_optional"), padx=px(10), pady=px(6))
         box.pack(fill="x", padx=px(20), pady=px(4))
         top = tk.Frame(box)
         top.pack(fill="x")
@@ -367,11 +373,11 @@ class SlideshowMakerTab(BaseTab):
             tk.Button(btns, text=text, relief="flat", command=cmd).pack(side="left", padx=px(1))
         row = tk.Frame(box)
         row.pack(fill="x", pady=px(4, 0))
-        tk.Label(row, text="Start the first track at:").pack(side="left")
+        tk.Label(row, text=t("slideshow.start_the_first_track_at")).pack(side="left")
         self.music_start = MomentPicker(row, value="0", width=8)
         self.music_start.pack(side="left", padx=px(4, 12))
         self.music_vol = tk.DoubleVar(value=0.9)
-        tk.Label(row, text="Volume:").pack(side="left")
+        tk.Label(row, text=t("slideshow.volume_label")).pack(side="left")
         tk.Scale(
             row,
             variable=self.music_vol,
@@ -420,7 +426,9 @@ class SlideshowMakerTab(BaseTab):
         self.encoder, self.out_row = output_section(
             body, t("common.output_file"), ("h264", "hevc", "av1", "vp9"), suggest=self._suggest
         )
-        self.btn_render = self.make_render_btn(body, "🎞  CREATE SLIDESHOW", self._render, width=24)
+        self.btn_render = self.make_render_btn(
+            body, t("slideshow.create_slideshow"), self._render, width=24
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -447,7 +455,7 @@ class SlideshowMakerTab(BaseTab):
             self.tree.selection_set(str(select))
             self.tree.see(str(select))
         n = len(self.slides)
-        self.count_lbl.config(text=f"{n} slide{'s' if n != 1 else ''}")
+        self.count_lbl.config(text=t("slideshow.n_slide_value", n=n, value="s" if n != 1 else ""))
 
     def _index(self) -> int | None:
         sel = self.tree.selection()
@@ -489,7 +497,7 @@ class SlideshowMakerTab(BaseTab):
             if not self.add_paths(files):
                 messagebox.showinfo(
                     t("common.warning"),
-                    "No photos, GIFs or videos found in that folder.",
+                    t("slideshow.no_photos_gifs_or_videos_found_in"),
                     parent=self,
                 )
 
@@ -677,7 +685,7 @@ class SlideshowMakerTab(BaseTab):
 
     def _joins(self, rng: random.Random) -> list[ss.Join]:
         default = TRANSITIONS.get(self.trans_var.get(), "fade")
-        secs = common.number(self.trans_dur_var.get(), "Transition", 0.1, 10)
+        secs = common.number(self.trans_dur_var.get(), t("slideshow.transition_section"), 0.1, 10)
         joins: list[ss.Join] = []
         for s in self.slides[:-1]:
             name = s.transition or default
@@ -691,16 +699,16 @@ class SlideshowMakerTab(BaseTab):
         return ss.Music(
             tracks=tuple(p for p, _l in self.tracks),
             lengths=tuple(length for _p, length in self.tracks),
-            offset=self.music_start.seconds(0.0, "Music start") or 0.0,
+            offset=self.music_start.seconds(0.0, t("slideshow.music_start")) or 0.0,
             volume=float(self.music_vol.get()),
-            fade_in=common.number(self.fade_in_var.get() or "0", "Fade in", 0, 30),
-            fade_out=common.number(self.fade_out_var.get() or "0", "Fade out", 0, 60),
+            fade_in=common.number(self.fade_in_var.get() or "0", t("pip.fade_in"), 0, 30),
+            fade_out=common.number(self.fade_out_var.get() or "0", t("exporter.fade_out_2"), 0, 60),
             duck=self.duck_var.get(),
         )
 
     def _plan(self) -> tuple[list[ss.Slide], list[ss.Join], ss.Music | None]:
         """The slideshow as set on the page (ValueError: a sentence saying what's wrong)."""
-        default = common.number(self.dur_var.get(), "Seconds per slide", 0.5, 600)
+        default = common.number(self.dur_var.get(), t("slideshow.seconds_per_slide_2"), 0.5, 600)
         rng = random.Random(len(self.slides))
         joins = self._joins(rng)
         lengths, music = self._lengths(), self._music()
@@ -738,14 +746,20 @@ class SlideshowMakerTab(BaseTab):
     def _render(self) -> None:
         if not self.slides:
             messagebox.showwarning(
-                t("common.warning"), "Add some photos, GIFs or videos first.", parent=self
+                t("common.warning"),
+                t("slideshow.add_some_photos_gifs_or_videos_first"),
+                parent=self,
             )
             return
         missing = [
             s.path for s in self.slides if s.kind is not ss.Kind.CARD and not os.path.isfile(s.path)
         ]
         if missing:
-            messagebox.showwarning(t("common.warning"), f"Missing file:\n{missing[0]}", parent=self)
+            messagebox.showwarning(
+                t("common.warning"),
+                t("slideshow.missing_file_missing", missing=missing[0]),
+                parent=self,
+            )
             return
         try:
             slides, joins, music = self._plan()
@@ -783,7 +797,14 @@ class SlideshowMakerTab(BaseTab):
         look = job.look
         self.log(
             self.console,
-            f"{len(slides)} slides · {ff.format_time(total)} · {look.width}×{look.height} @ {look.fps} fps",
+            t(
+                "slideshow.slides_slides_total_width_height_fps_fps",
+                slides=len(slides),
+                total=ff.format_time(total),
+                width=look.width,
+                height=look.height,
+                fps=look.fps,
+            ),
         )
         common.queue_job(
             self,
@@ -796,7 +817,9 @@ class SlideshowMakerTab(BaseTab):
         """Play the selected slide into the next with its transition (small and quick)."""
         i = self._index()
         if i is None or i + 1 >= len(self.slides):
-            messagebox.showinfo("Preview", "Select a slide that has another after it.", parent=self)
+            messagebox.showinfo(
+                t("btn.preview"), t("slideshow.select_a_slide_that_has_another_after"), parent=self
+            )
             return
         try:
             slides, joins, _music = self._plan()
@@ -816,7 +839,7 @@ class SlideshowMakerTab(BaseTab):
             self._look().zoom,
             self.bars_btn.colour,
         )
-        self.log(self.console, f"Preview: {tr.LABELS.get(join.name, 'a cut')} …")
+        self.log(self.console, t("slideshow.preview_name", name=tr.LABELS.get(join.name, "a cut")))
         tasks.submit(
             partial(_make_preview, pair, join, look),
             on_done=launch_preview,
@@ -825,7 +848,7 @@ class SlideshowMakerTab(BaseTab):
         )
 
     def _preview_failed(self, exc: BaseException) -> None:
-        self.log(self.console, f"Preview failed: {exc}")
+        self.log(self.console, t("slideshow.preview_failed_exc", exc=exc))
 
 
 def _name_key(s: Slide) -> list[int | str]:
@@ -890,9 +913,9 @@ class _SlideshowJob:
     def _beat_slides(self, ctx: TaskContext) -> list[ss.Slide]:
         if not (self.on_beat and self.music):
             return self.slides
-        ctx.log("Finding the beats in the music…")
+        ctx.log(t("slideshow.finding_the_beats_in_the_music"))
         found, bpm = beats_core.find_beats(self.music.tracks[0])
-        ctx.log(f"{bpm:.0f} BPM")
+        ctx.log(t("slideshow.bpm_0f_bpm", bpm=bpm))
         offset = self.music.offset
         times = [b - offset for b in found if b >= offset]
         seconds = ss.on_beats([s.seconds for s in self.slides], self.joins, times)
@@ -904,7 +927,14 @@ class _SlideshowJob:
         n = len(slides)
         clips: list[str] = []
         for i, slide in enumerate(slides):
-            ctx.log(f"Slide {i + 1}/{n}: {os.path.basename(slide.path) or 'card'}")
+            ctx.log(
+                t(
+                    "slideshow.slide_i_n_value",
+                    i=i + 1,
+                    n=n,
+                    value=os.path.basename(slide.path) or "card",
+                )
+            )
             clip = ss.clip_name(tmp, i, slide)
             card = (
                 ss.card_script(slide.card, self.look).write(os.path.join(tmp, f"c{i}.ass"))

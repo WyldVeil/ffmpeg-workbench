@@ -77,26 +77,31 @@ class RotateFlipTab(BaseTab):
         self.hflip_var = tk.BooleanVar(value=False)
         self.vflip_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            r1, text="Mirror left ↔ right", variable=self.hflip_var, command=self._changed
+            r1,
+            text=t("rotate_flip.mirror_left_right"),
+            variable=self.hflip_var,
+            command=self._changed,
         ).pack(side="left", padx=px(4))
         tk.Checkbutton(
-            r1, text="Flip upside down ↕", variable=self.vflip_var, command=self._changed
+            r1,
+            text=t("rotate_flip.flip_upside_down"),
+            variable=self.vflip_var,
+            command=self._changed,
         ).pack(side="left", padx=px(12))
 
-        meth = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
+        meth = tk.LabelFrame(body, text=t("voice_isolation.method"), padx=px(12), pady=px(8))
         meth.pack(fill="x", padx=px(20), pady=px(4))
         self.lossless_var = tk.BooleanVar(value=True)
         tk.Radiobutton(
             meth,
-            text="Lossless - change the orientation flag only (instant, keeps "
-            "quality and all tracks)",
+            text=t("rotate_flip.lossless_change_the_orientation_flag_only_instan"),
             value=True,
             variable=self.lossless_var,
             command=self._method_changed,
         ).pack(anchor="w")
         tk.Radiobutton(
             meth,
-            text="Re-encode - rotate the pixels (for software that ignores orientation)",
+            text=t("rotate_flip.re_encode_rotate_the_pixels_for_software"),
             value=False,
             variable=self.lossless_var,
             command=self._method_changed,
@@ -106,7 +111,7 @@ class RotateFlipTab(BaseTab):
         self.out_row = save_section(
             body, t("common.output_file"), suggest=lambda: self._suggest(self.src_row.path)
         )
-        self.btn_render = self.make_render_btn(body, "🔄  APPLY", self._render, width=22)
+        self.btn_render = self.make_render_btn(body, t("rotate_flip.apply"), self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -119,7 +124,7 @@ class RotateFlipTab(BaseTab):
             v = self._info.require_video()
             w, h = v.display_size
             flag = f", orientation flag: {v.rotation}° clockwise" if v.rotation else ""
-            self.info_lbl.config(text=f"{w}×{h} as displayed{flag}")
+            self.info_lbl.config(text=t("rotate_flip.w_h_as_displayed_flag", w=w, h=h, flag=flag))
         self.compare.load(path)
         self._changed()
         if not self.out_row.path:
@@ -149,7 +154,7 @@ class RotateFlipTab(BaseTab):
             if common.container_of(out) not in LOSSLESS_CONTAINERS:
                 self.log_tagged(
                     self.console,
-                    "Lossless rotation needs an MP4, MOV or MKV output - re-encoding instead.",
+                    t("rotate_flip.lossless_rotation_needs_an_mp4_mov_or"),
                     "warn",
                 )
             else:

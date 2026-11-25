@@ -37,21 +37,24 @@ class AudioReplacerTab(BaseTab):
 
     def _build_ui(self) -> None:
         self.make_header(
-            self, t("tab.audio_replacer"), "Replace or mix a video's soundtrack.", icon="🎼"
+            self,
+            t("tab.audio_replacer"),
+            t("replacer.replace_or_mix_a_video_s_soundtrack"),
+            icon="🎼",
         )
         body = scroll_body(self)
         self.src_row = FileRow(
             body,
-            "Video:",
+            t("replacer.video"),
             self.src_var,
             on_change=lambda p: (
                 self.out_row.path or self.out_row.set(self.suggest_output(p, "new_audio"))
             ),
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
-        self.audio_row = FileRow(body, "New audio:", kind="media")
+        self.audio_row = FileRow(body, t("replacer.new_audio"), kind="media")
         self.audio_row.pack(fill="x", padx=px(20), pady=px(2))
-        opt = tk.LabelFrame(body, text="  Options  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("replacer.options"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value=MODES["replace"])
         ttk.Combobox(
@@ -66,7 +69,7 @@ class AudioReplacerTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(180),
-            label="New audio volume",
+            label=t("replacer.new_audio_volume"),
         ).grid(row=1, column=0, sticky="w")
         tk.Scale(
             opt,
@@ -76,18 +79,18 @@ class AudioReplacerTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(180),
-            label="Original volume (mix)",
+            label=t("replacer.original_volume_mix"),
         ).grid(row=1, column=1, sticky="w")
         r = tk.Frame(opt)
         r.grid(row=2, column=0, columnspan=2, sticky="w", pady=px(4))
-        tk.Label(r, text="Start the new audio at (s, negative skips its start):").pack(side="left")
+        tk.Label(r, text=t("replacer.start_the_new_audio_at_s_negative")).pack(side="left")
         self.offset_var = tk.StringVar(value="0")
         tk.Entry(r, textvariable=self.offset_var, width=8).pack(side="left", padx=px(4))
         self.loop_var, self.fade_var = tk.BooleanVar(value=False), tk.BooleanVar(value=True)
         tk.Checkbutton(
-            opt, text="Loop the new audio if it's shorter than the video", variable=self.loop_var
+            opt, text=t("replacer.loop_the_new_audio_if_it_s"), variable=self.loop_var
         ).grid(row=3, column=0, columnspan=2, sticky="w")
-        tk.Checkbutton(opt, text="Fade in and out (1 s)", variable=self.fade_var).grid(
+        tk.Checkbutton(opt, text=t("replacer.fade_in_and_out_1_s"), variable=self.fade_var).grid(
             row=4, column=0, sticky="w"
         )
         self.out_row = save_section(
@@ -95,7 +98,7 @@ class AudioReplacerTab(BaseTab):
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.src_row.path, "new_audio"),
         )
-        self.btn_render = self.make_render_btn(body, "🎼  APPLY", self._render, width=20)
+        self.btn_render = self.make_render_btn(body, t("replacer.apply"), self._render, width=20)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 

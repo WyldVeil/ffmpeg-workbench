@@ -130,8 +130,8 @@ class WebMTab(BaseTab):
         self.notebook.pack(fill="x", padx=px(18), pady=px(4))
         simple = tk.Frame(self.notebook)
         advanced = tk.Frame(self.notebook)
-        self.notebook.add(simple, text="Simple")
-        self.notebook.add(advanced, text="Advanced")
+        self.notebook.add(simple, text=t("webm_maker.simple"))
+        self.notebook.add(advanced, text=t("webm_maker.advanced"))
         self._build_simple_tab(simple)
         self._build_advanced_tab(advanced)
         self.notebook.bind("<<NotebookTabChanged>>", lambda _e: self._tab_changed())
@@ -146,7 +146,7 @@ class WebMTab(BaseTab):
         render_row = tk.Frame(outer)
         render_row.pack(pady=px(8))
         self.btn_render = self.make_render_btn(
-            render_row, "▶ ENCODE (Simple)", self._start_render, width=26
+            render_row, t("webm_maker.encode_simple"), self._start_render, width=26
         )
         self.btn_render.pack(side="left", padx=px(8))
         self.btn_cancel = tk.Button(
@@ -173,7 +173,7 @@ class WebMTab(BaseTab):
 
     def _build_simple_tab(self, parent: tk.Misc) -> None:
         prof = tk.LabelFrame(
-            parent, text="  Profile (size · audio · max duration)  ", padx=px(14), pady=px(8)
+            parent, text=t("webm_maker.profile_size_audio_max_duration"), padx=px(14), pady=px(8)
         )
         prof.pack(fill="x", padx=px(8), pady=px(8, 4))
         self.simple_profile_var = tk.StringVar(value="6mb_audio")
@@ -188,21 +188,21 @@ class WebMTab(BaseTab):
         self.simple_music_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             parent,
-            text="Prioritize audio quality (music mode)",
+            text=t("webm_maker.prioritize_audio_quality_music_mode"),
             variable=self.simple_music_var,
             command=self._update_simple_estimate,
         ).pack(anchor="w", padx=px(14))
         tk.Label(
             parent,
-            text="     Boosts audio bitrate; video quality drops.",
+            text=t("webm_maker.boosts_audio_bitrate_video_quality_drops"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(anchor="w", padx=px(14))
-        trim = tk.LabelFrame(parent, text="  Trim (optional)  ", padx=px(14), pady=px(6))
+        trim = tk.LabelFrame(parent, text=t("webm_maker.trim_optional"), padx=px(14), pady=px(6))
         trim.pack(fill="x", padx=px(8), pady=px(4))
         row = tk.Frame(trim)
         row.pack(fill="x")
-        tk.Label(row, text="From").pack(side="left")
+        tk.Label(row, text=t("muter.from")).pack(side="left")
         self.simple_trim = RangePicker(
             row,
             end_hint="(empty = to the end)",
@@ -277,7 +277,7 @@ class WebMTab(BaseTab):
         for mb in [4, 8, 10, 25, 50, 100, 200]:
             tk.Button(
                 quick,
-                text=f"{mb} MB",
+                text=t("webm_maker.mb_mb", mb=mb),
                 width=6,
                 bg="#333",
                 fg=CLR["fg"],
@@ -529,7 +529,7 @@ class WebMTab(BaseTab):
 
         trim_row = tk.Frame(trim_lf)
         trim_row.pack(fill="x")
-        tk.Label(trim_row, text="From").pack(side="left")
+        tk.Label(trim_row, text=t("muter.from")).pack(side="left")
         self.trim = RangePicker(
             trim_row, end_hint="(empty = to the end)", source=lambda: self.src_row.path
         )
@@ -595,7 +595,7 @@ class WebMTab(BaseTab):
         self.add_tooltip(tile_lbl, t("webm_maker.tile_columns_tooltip"))
         self.add_tooltip(tile_cb, t("webm_maker.tile_columns_tooltip"))
 
-        rowmt_lbl = tk.Label(ex3, text="  Row-MT", fg=CLR["fgdim"])
+        rowmt_lbl = tk.Label(ex3, text=t("webm_maker.row_mt"), fg=CLR["fgdim"])
         rowmt_lbl.pack(side="left", padx=px(10, 0))
         self.rowmt_var = tk.BooleanVar(value=True)
         rowmt_cb = tk.Checkbutton(ex3, variable=self.rowmt_var)
@@ -629,7 +629,7 @@ class WebMTab(BaseTab):
             return
         if info is None or not info.has_video:
             self._src_path, self._src_dur = "", 0.0
-            self.src_info_lbl.config(text="Not a readable video.", fg=CLR["red"])
+            self.src_info_lbl.config(text=t("webm_maker.not_a_readable_video"), fg=CLR["red"])
             self._update_simple_estimate()
             return
         v = info.require_video()
@@ -644,7 +644,15 @@ class WebMTab(BaseTab):
         mins, secs = divmod(int(info.duration), 60)
         size_mb = os.path.getsize(path) / 1024 / 1024 if os.path.isfile(path) else 0
         self.src_info_lbl.config(
-            text=f"{w}×{h}  |  {self._src_fps:g} fps  |  {mins}m {secs}s  |  {size_mb:.1f} MB",
+            text=t(
+                "webm_maker.w_h_src_fps_g_fps_mins",
+                w=w,
+                h=h,
+                src_fps=self._src_fps,
+                mins=mins,
+                secs=secs,
+                size_mb=size_mb,
+            ),
             fg=CLR["accent"],
         )
         self._seed_resolution(w, h)
@@ -655,7 +663,7 @@ class WebMTab(BaseTab):
             self.out_row.set(self._suggest_out())
 
     def _tab_changed(self) -> None:
-        self.btn_render.config(text=f"▶ ENCODE ({self._mode().title()})")
+        self.btn_render.config(text=t("webm_maker.encode_mode", mode=self._mode().title()))
 
     def _mode(self) -> str:
         try:
@@ -676,12 +684,12 @@ class WebMTab(BaseTab):
         if not hasattr(self, "simple_est_lbl"):
             return
         if not self._src_dur:
-            self.simple_est_lbl.config(text="Estimated:  load a source file")
+            self.simple_est_lbl.config(text=t("webm_maker.estimated_load_a_source_file"))
             return
         try:
             _s, _e, eff = self._simple_trim()
         except ValueError:
-            self.simple_est_lbl.config(text="Estimated:  (check the trim times)")
+            self.simple_est_lbl.config(text=t("webm_maker.estimated_check_the_trim_times"))
             return
         st = webm.simple_settings(
             self.simple_profile_var.get(),
@@ -699,8 +707,13 @@ class WebMTab(BaseTab):
             res = f"~{int(st.target_max_dim * self._src_h / self._src_w) // 2 * 2}p"
         audio = f" · {st.audio_bitrate_kbps} kbps audio" if st.audio_bitrate_kbps else ""
         self.simple_est_lbl.config(
-            text=f"Estimated:  ~{st.video_bitrate_kbps} kbps video{audio} · "
-            f"{res} · {st.fps_cap:g} fps"
+            text=t(
+                "webm_maker.estimated_video_bitrate_kbps_kbps_video_audio",
+                video_bitrate_kbps=st.video_bitrate_kbps,
+                audio=audio,
+                res=res,
+                fps_cap=st.fps_cap,
+            )
         )
 
     def _seed_resolution(self, w: int, h: int) -> None:
@@ -864,7 +877,12 @@ class WebMTab(BaseTab):
                 video_kbps = video_bits / dur / 1000
                 self.budget_lbl.config(
                     text=(
-                        f"≈ {video_kbps:.0f} kbps video bitrate  ({size_mb:.0f} MB ÷ {dur:.1f}s)"
+                        t(
+                            "webm_maker.video_kbps_0f_kbps_video_bitrate_size",
+                            video_kbps=video_kbps,
+                            size_mb=size_mb,
+                            dur=dur,
+                        )
                     ),
                     fg=CLR["accent"] if video_kbps > 100 else CLR["red"],
                 )
@@ -948,10 +966,14 @@ class WebMTab(BaseTab):
     def _start_render(self) -> None:
         src = self.src_row.path
         if not src or not os.path.exists(src):
-            messagebox.showwarning(t("common.warning"), "Load a source file first.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("webm_maker.load_a_source_file_first"), parent=self
+            )
             return
         if not self._ensure_probe(src):
-            messagebox.showwarning(t("common.warning"), "Load a source file first.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("webm_maker.load_a_source_file_first"), parent=self
+            )
             return
         try:
             job = self._simple_job(src) if self._mode() == "simple" else self._advanced_job(src)

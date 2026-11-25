@@ -52,7 +52,7 @@ class SequencerTab(BaseTab):
         self.make_header(
             self,
             t("tab.multi_clip_sequencer"),
-            "Trim and join clips in order - any mix of sizes and formats.",
+            t("toolinfo.sequencer"),
             icon="🎞",
         )
         body = scroll_body(self)
@@ -120,17 +120,17 @@ class SequencerTab(BaseTab):
             trim, start="", joiner="Out", here=lambda: float(self.pos_var.get())
         )
         self.trim.pack(side="left", padx=px(2))
-        tk.Button(trim, text="Apply", relief="flat", command=self._apply_trim).pack(
+        tk.Button(trim, text=t("btn.apply"), relief="flat", command=self._apply_trim).pack(
             side="left", padx=px(6)
         )
 
     def _build_join(self, body: tk.Frame) -> None:
         """How to join, where the result goes, the button and the log."""
-        opt = tk.LabelFrame(body, text="  Join  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("sequencer.join"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         r = tk.Frame(opt)
         r.pack(fill="x")
-        tk.Label(r, text="Size:").pack(side="left")
+        tk.Label(r, text=t("hard_subber.size_label")).pack(side="left")
         self.size_var = tk.StringVar(value=SIZES["first"])
         ttk.Combobox(
             r, textvariable=self.size_var, values=list(SIZES.values()), state="readonly", width=24
@@ -138,14 +138,14 @@ class SequencerTab(BaseTab):
         self.lossless_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             r,
-            text="Lossless (identical clips only - trims move to keyframes)",
+            text=t("sequencer.lossless_identical_clips_only_trims_move_to"),
             variable=self.lossless_var,
         ).pack(side="left", padx=px(10))
         self.encoder = EncoderPanel(opt, codecs=("h264", "hevc", "av1", "vp9"))
         self.encoder.pack(anchor="w", pady=px(4))
         self.out_row = SaveRow(opt, t("common.output_file"), suggest=self._suggest)
         self.out_row.pack(fill="x")
-        self.btn_render = self.make_render_btn(body, "🎞  JOIN", self._render, width=22)
+        self.btn_render = self.make_render_btn(body, t("sequencer.join_2"), self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -185,7 +185,11 @@ class SequencerTab(BaseTab):
         if select is not None and 0 <= select < len(self.clips):
             self.tree.selection_set(str(select))
         total = sum(c.end - c.start for c in self.clips)
-        self.total_lbl.config(text=f"{len(self.clips)} clips · {ff.format_time(total)}")
+        self.total_lbl.config(
+            text=t(
+                "sequencer.clips_clips_total", clips=len(self.clips), total=ff.format_time(total)
+            )
+        )
 
     def _index(self) -> int | None:
         sel = self.tree.selection()
@@ -237,7 +241,7 @@ class SequencerTab(BaseTab):
         b = min(b, c.duration)
         if not 0 <= a < b:
             messagebox.showwarning(
-                t("common.warning"), "'In' must be before 'Out', inside the clip.", parent=self
+                t("common.warning"), t("sequencer.in_must_be_before_out_inside_the"), parent=self
             )
             return
         c.start, c.end = a, b
@@ -251,12 +255,7 @@ class SequencerTab(BaseTab):
     # ── render ───────────────────────────────────────────────────────────────
 
     def _render(self) -> None:
-        if len(self.clips) < 1:
-            messagebox.showwarning(t("common.warning"), "Add at least one clip.", parent=self)
-            return
-        missing = [c.path for c in self.clips if not os.path.isfile(c.path)]
-        if missing:
-            messagebox.showwarning(t("common.warning"), f"Missing clip:\n{missing[0]}", parent=self)
+        if not self._clips_ready():
             return
         out = self.confirm_output(
             self.out_row.path or self._suggest(), [c.path for c in self.clips]
@@ -267,47 +266,11 @@ class SequencerTab(BaseTab):
         pieces = [concat.Piece.of(c.path, c.start, c.end) for c in self.clips]
         total = sum(p.length for p in pieces)
         if self.lossless_var.get():
-            problems = concat.copy_compatibility([p.info for p in pieces])
-            if problems:
-                messagebox.showwarning(
-                    t("common.warning"),
-                    "These clips can't be joined losslessly:\n\n"
-                    + "\n".join(problems[:5])
-                    + "\n\nUntick 'Lossless' to join them "
-                    "with re-encoding.",
-                    parent=self,
-                )
+            cmd = self._lossless_command(out, pieces)
+            if cmd is None:
                 return
-            from core.paths import temp_dir
-
-            lst = os.path.join(temp_dir("sequence_"), "list.txt")
-            cmd = concat.copy_join_command(
-                [c.path for c in self.clips],
-                out,
-                lst,
-                inpoints=[c.start or None for c in self.clips],
-                outpoints=[c.end if c.end < c.duration - 0.01 else None for c in self.clips],
-            )
-            self.log(self.console, "Joining losslessly (trims snap to keyframes)…")
         else:
-            key = next((k for k, v in SIZES.items() if v == self.size_var.get()), "first")
-            if "x" in key:
-                w, h = (int(v) for v in key.split("x"))
-                fps = concat.target_geometry(pieces, "first")[2]
-            else:
-                w, h, fps = concat.target_geometry(pieces, key)
-            venc = self.encoder.video_encode(common.container_of(out))
-            from core import encoders as enc
-
-            cmd, total = concat.filter_join_command(
-                pieces,
-                out,
-                size=(w, h),
-                fps=fps,
-                venc=venc,
-                audio_codec=enc.default_audio_for(common.container_of(out)),
-            )
-            self.log(self.console, f"Joining {len(pieces)} clips at {w}×{h} @ {fps}…")
+            cmd, total = self._encoded_command(out, pieces)
         self.run_ffmpeg(
             cmd,
             self.console,
@@ -318,3 +281,68 @@ class SequencerTab(BaseTab):
             inputs=[c.path for c in self.clips],
             name="Sequencer",
         )
+
+    def _clips_ready(self) -> bool:
+        """At least one clip, and every clip's file still there (else say so)."""
+        if len(self.clips) < 1:
+            messagebox.showwarning(
+                t("common.warning"), t("sequencer.add_at_least_one_clip"), parent=self
+            )
+            return False
+        missing = [c.path for c in self.clips if not os.path.isfile(c.path)]
+        if missing:
+            messagebox.showwarning(
+                t("common.warning"),
+                t("sequencer.missing_clip_missing", missing=missing[0]),
+                parent=self,
+            )
+            return False
+        return True
+
+    def _lossless_command(self, out: str, pieces: list[concat.Piece]) -> list[str] | None:
+        """Joining without re-encoding (None, after saying why, when the clips differ)."""
+        problems = concat.copy_compatibility([p.info for p in pieces])
+        if problems:
+            messagebox.showwarning(
+                t("common.warning"),
+                t("sequencer.cant_join_losslessly", problems="\n".join(problems[:5])),
+                parent=self,
+            )
+            return None
+        from core.paths import temp_dir
+
+        lst = os.path.join(temp_dir("sequence_"), "list.txt")
+        cmd = concat.copy_join_command(
+            [c.path for c in self.clips],
+            out,
+            lst,
+            inpoints=[c.start or None for c in self.clips],
+            outpoints=[c.end if c.end < c.duration - 0.01 else None for c in self.clips],
+        )
+        self.log(self.console, t("sequencer.joining_losslessly_trims_snap_to_keyframes"))
+        return cmd
+
+    def _encoded_command(self, out: str, pieces: list[concat.Piece]) -> tuple[list[str], float]:
+        """Joining with re-encoding to one size and frame rate; (command, length)."""
+        key = next((k for k, v in SIZES.items() if v == self.size_var.get()), "first")
+        if "x" in key:
+            w, h = (int(v) for v in key.split("x"))
+            fps = concat.target_geometry(pieces, "first")[2]
+        else:
+            w, h, fps = concat.target_geometry(pieces, key)
+        venc = self.encoder.video_encode(common.container_of(out))
+        from core import encoders as enc
+
+        cmd, total = concat.filter_join_command(
+            pieces,
+            out,
+            size=(w, h),
+            fps=fps,
+            venc=venc,
+            audio_codec=enc.default_audio_for(common.container_of(out)),
+        )
+        self.log(
+            self.console,
+            t("sequencer.joining_pieces_clips_at_w_h_fps", pieces=len(pieces), w=w, h=h, fps=fps),
+        )
+        return cmd, total

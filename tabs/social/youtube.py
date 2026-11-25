@@ -204,8 +204,7 @@ class YouTubeDownloaderTab(BaseTab):
         # Tails: a clear warning while downloads bypass Tor (Settings → Network)
         self._route_banner = tk.Label(
             self,
-            text="⚠  DIRECT CONNECTION - NOT ANONYMOUS: downloads are bypassing "
-            "Tor for this session (Settings → Network to turn off)",
+            text=t("youtube.direct_connection_not_anonymous_downloads_are_by"),
             bg="#B71C1C",
             fg="white",
             font=(UI_FONT, 10, "bold"),
@@ -265,9 +264,9 @@ class YouTubeDownloaderTab(BaseTab):
         the third-party yt-dlp tool and the platforms it interacts with,
         and shifts compliance/copyright responsibility onto the user.
 
-        Kept in English by design: legal language can shift meaning when
-        translated, and this notice exists to document the user's accepted
-        terms in a single canonical form.
+        Translated like the rest of the app, but each translation ends by
+        saying the English text is the authoritative one: legal language can
+        shift meaning when translated.
         """
         outer = tk.Frame(
             root,
@@ -282,48 +281,14 @@ class YouTubeDownloaderTab(BaseTab):
 
         tk.Label(
             inner,
-            text="⚠  Important Notice: Third-Party Tool & User Responsibility",
+            text=t("youtube.important_notice_third_party_tool_user_responsib"),
             font=(UI_FONT, 10, "bold"),
             bg=CLR["bg"],
             fg=CLR["orange"],
             anchor="w",
         ).pack(fill="x")
 
-        body = (
-            "This feature is a user-interface front-end for "
-            "yt-dlp, an independent open-source command-line program "
-            "developed and maintained by third parties. FFmpeg "
-            "Workbench is NOT affiliated with, endorsed by, or responsible "
-            "for yt-dlp, any website or platform yt-dlp may interact "
-            "with, or any content downloaded through it. yt-dlp is "
-            "executed as a separate process; FFmpeg Workbench neither hosts nor "
-            "modifies it.\n\n"
-            "By using this feature you acknowledge and agree that:\n"
-            "  •  You are solely responsible for complying with the "
-            "Terms of Service, robots.txt, and acceptable-use policies "
-            "of any website or platform you access.\n"
-            "  •  You will only download content that you own, that is "
-            "in the public domain, or for which you have explicit "
-            "permission from the rightsholder (including, where "
-            "applicable, fair use / fair dealing in your jurisdiction).\n"
-            "  •  You are solely responsible for complying with all "
-            "applicable copyright, intellectual-property, privacy, "
-            "broadcasting, and computer-misuse laws in your "
-            "jurisdiction and the jurisdiction of the content's origin.\n"
-            "  •  You will not use this software to circumvent technical "
-            "protection measures, paywalls, geographic restrictions, or "
-            "DRM where doing so is unlawful.\n"
-            '  •  This software is provided "AS IS", WITHOUT WARRANTY '
-            "OF ANY KIND, express or implied. To the maximum extent "
-            "permitted by law, the authors of FFmpeg Workbench disclaim "
-            "all liability for any direct, indirect, incidental, "
-            "special, consequential, or punitive damages arising out "
-            "of or relating to your use of this feature, including "
-            "without limitation any claim by a rightsholder, platform "
-            "operator, regulator, or other third party.\n\n"
-            "If you do not agree to these terms, do not use this "
-            "feature."
-        )
+        body = t("youtube.disclaimer_body")
         tk.Label(
             inner,
             text=body,
@@ -366,7 +331,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._playlist_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             url_f,
-            text="Playlist",
+            text=t("youtube.playlist"),
             variable=self._playlist_var,
             font=(UI_FONT, 9),
             bg=CLR["bg"],
@@ -394,9 +359,9 @@ class YouTubeDownloaderTab(BaseTab):
             b.pack(side="left", padx=px(0, 5))
             return b
 
-        self._btn_fetch = _btn("🔍 Fetch Info", self._on_fetch)
-        self._btn_preview = _btn("▶ Preview", self._preview, bg=CLR["accent"])
-        _btn("🌐 Browser", self._open_browser)
+        self._btn_fetch = _btn(t("youtube.fetch_info"), self._on_fetch)
+        self._btn_preview = _btn(t("youtube.preview"), self._preview, bg=CLR["accent"])
+        _btn(t("youtube.browser"), self._open_browser)
         self._btn_record = tk.Button(
             url_f,
             text=t("youtube.record"),
@@ -527,12 +492,12 @@ class YouTubeDownloaderTab(BaseTab):
 
         # Tab 1: Quality
         self._tab_quality = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
-        self._settings_nb.add(self._tab_quality, text="Quality")
+        self._settings_nb.add(self._tab_quality, text=t("youtube.quality"))
         self._build_quality_tab(self._tab_quality)
 
         # Tab 2: Encode
         self._tab_encode = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
-        self._settings_nb.add(self._tab_encode, text="Encode")
+        self._settings_nb.add(self._tab_encode, text=t("youtube.encode"))
         self._build_encode_tab(self._tab_encode)
 
         # Tab 3: Audio Only
@@ -547,7 +512,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         # Tab 5: SponsorBlock
         self._tab_sponsor = tk.Frame(self._settings_nb, bg=CLR["bg"], padx=px(10), pady=px(8))
-        self._settings_nb.add(self._tab_sponsor, text="SponsorBlock")
+        self._settings_nb.add(self._tab_sponsor, text=t("youtube.sponsorblock"))
         self._build_sponsorblock_tab(self._tab_sponsor)
 
         # Tab 6: Auth / Network (Upgraded)
@@ -693,7 +658,7 @@ class YouTubeDownloaderTab(BaseTab):
             insertbackground=CLR["accent"],
         )
         self._custom_res_label = self.form_row(
-            col, 5, "Custom size:", self._custom_res_entry, label_width=18
+            col, 5, t("youtube.custom_size"), self._custom_res_entry, label_width=18
         )
         self._show_custom_res()
 
@@ -742,14 +707,14 @@ class YouTubeDownloaderTab(BaseTab):
         self.form_row(
             col,
             1,
-            "Audio bitrate:",
+            t("batch_joiner.lbl_audio"),
             self._encode_choice(col, self._abitrate_var, rates, 10),
             label_width=16,
         )
         self.form_row(
             col,
             2,
-            "Sample rate:",
+            t("youtube.sample_rate"),
             self._encode_choice(col, self._asamplerate_var, ["48000", "44100", "22050"], 10),
             label_width=16,
         )
@@ -1030,9 +995,9 @@ class YouTubeDownloaderTab(BaseTab):
             command=self._browse_cookies,
         ).pack(side="left")
 
-        _labeled_entry(parent, "Username:", self._username_var)
-        _labeled_entry(parent, "Password:", self._password_var, show="*")
-        _labeled_entry(parent, "Rate limit:", self._ratelimit_var, width=14)
+        _labeled_entry(parent, t("youtube.username"), self._username_var)
+        _labeled_entry(parent, t("youtube.password"), self._password_var, show="*")
+        _labeled_entry(parent, t("youtube.rate_limit"), self._ratelimit_var, width=14)
         tk.Label(
             parent,
             text=t("youtube.e_g_1m_500k_leave_blank_for_unlimited"),
@@ -1040,7 +1005,7 @@ class YouTubeDownloaderTab(BaseTab):
             bg=CLR["bg"],
             fg=CLR["fgdim"],
         ).pack(anchor="w", padx=px(20))
-        _labeled_entry(parent, "Proxy:", self._proxy_var, width=28)
+        _labeled_entry(parent, t("youtube.proxy"), self._proxy_var, width=28)
         tk.Label(
             parent,
             text=t("youtube.e_g_socks5_127_0_0_1_1080"),
@@ -1066,7 +1031,7 @@ class YouTubeDownloaderTab(BaseTab):
             selectcolor=CLR["panel"],
         ).pack(side="left", padx=px(4))
 
-        _labeled_entry(parent, "Custom yt-dlp args:", self._custom_args_var, width=40)
+        _labeled_entry(parent, t("youtube.custom_yt_dlp_args"), self._custom_args_var, width=40)
         tk.Label(
             parent,
             text=t("youtube.e_g_write_comments_dateafter_now_7days"),
@@ -1299,7 +1264,7 @@ class YouTubeDownloaderTab(BaseTab):
         ).pack(side="left", padx=px(0, 6))
         tk.Button(
             batch_ctrl_f,
-            text="Clear",
+            text=t("btn.clear"),
             relief="flat",
             font=(UI_FONT, 9),
             cursor="hand2",
@@ -1417,16 +1382,15 @@ class YouTubeDownloaderTab(BaseTab):
             tasks.submit(
                 partial(ytdlp_core.version, p),
                 on_done=partial(self._ytdlp_found, p),
-                on_error=lambda _e: self.log_tagged(self.console, "✔ yt-dlp found.", "success"),
+                on_error=lambda _e: self.log_tagged(
+                    self.console, t("youtube.yt_dlp_found"), "success"
+                ),
                 name="yt-dlp version",
             )
         else:
             self.log_tagged(
                 self.console,
-                "⚠  yt-dlp not found.  Options:\n"
-                "   • pip install yt-dlp\n"
-                "   • Download yt-dlp.exe → place in bin/ next to ffmpeg.exe\n"
-                "   • https://github.com/yt-dlp/yt-dlp/releases\n",
+                t("youtube.yt_dlp_not_found_options_pip_install"),
                 "warn",
             )
 
@@ -1435,7 +1399,9 @@ class YouTubeDownloaderTab(BaseTab):
         _proc.kill_tree(self._record_proc)
 
     def _ytdlp_found(self, path: str, version: str) -> None:
-        self.log_tagged(self.console, f"✔ yt-dlp found (v{version}).", "success")
+        self.log_tagged(
+            self.console, t("youtube.yt_dlp_found_v_version", version=version), "success"
+        )
         setter = getattr(
             self.winfo_toplevel(), "set_ytdlp_status", None
         )  # the main window's status bar
@@ -1489,14 +1455,14 @@ class YouTubeDownloaderTab(BaseTab):
             self._batch_tree.insert("", tk.END, values=("-", url, "Queued"))
             self.log_tagged(
                 self.console,
-                f"A download is running, so {url} was added to the Batch queue.",
+                t("youtube.a_download_is_running_so_url_was", url=url),
                 "warn",
             )
             return
         self._url_var.set(url)
         self._start_after_fetch = yto.is_one_video(url)
         if not self._start_after_fetch:
-            self.log(self.console, "This link has several videos: choose, then press Download.")
+            self.log(self.console, t("youtube.this_link_has_several_videos_choose_then"))
         self._on_fetch()
 
     def _chosen_format(self) -> str:
@@ -1538,7 +1504,7 @@ class YouTubeDownloaderTab(BaseTab):
 
     def _save_thumbnail(self) -> None:
         if self._thumb_photo is None:
-            messagebox.showwarning(t("common.warning"), "Fetch video info first.")
+            messagebox.showwarning(t("common.warning"), t("youtube.fetch_video_info_first"))
             return
         p = dialogs.asksaveasfilename(
             defaultextension=".png", filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")]
@@ -1547,7 +1513,9 @@ class YouTubeDownloaderTab(BaseTab):
             return
         data = getattr(self, "_thumb_bytes", None)
         if not data:
-            messagebox.showwarning(t("common.warning"), "Fetch video info first.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("youtube.fetch_video_info_first"), parent=self
+            )
             return
 
         res = _proc.run(
@@ -1557,7 +1525,7 @@ class YouTubeDownloaderTab(BaseTab):
             input=data,
         )
         if res.returncode == 0 and os.path.isfile(p):
-            self.log_tagged(self.console, f"✔ Thumbnail saved: {p}", "success")
+            self.log_tagged(self.console, t("youtube.thumbnail_saved_p", p=p), "success")
         else:
             messagebox.showerror(
                 t("common.error"),
@@ -1596,19 +1564,17 @@ class YouTubeDownloaderTab(BaseTab):
     def _on_fetch(self) -> None:
         url = self._url_var.get().strip()
         if not url:
-            messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
+            messagebox.showwarning(t("common.warning"), t("youtube.paste_a_video_url_first"))
             return
         ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
             messagebox.showerror(
                 t("common.error"),
-                "yt-dlp is required.\n\n"
-                "Install:  pip install yt-dlp\n"
-                "or place yt-dlp.exe in bin/ next to ffmpeg.exe",
+                t("youtube.yt_dlp_is_required_install_pip_install"),
             )
             return
         self._btn_fetch.config(state="disabled", text=t("youtube.fetching"))
-        self.log(self.console, f"↳ Fetching info: {url}")
+        self.log(self.console, t("youtube.fetching_info_url", url=url))
         tasks.submit(
             partial(ytdlp_core.fetch_info, ytdlp, url, playlist=bool(self._playlist_var.get())),
             on_done=self._fetched,
@@ -1652,7 +1618,7 @@ class YouTubeDownloaderTab(BaseTab):
             self._live_var.set("  ⏺ LIVE  ")
             self._live_badge.pack(side="left", padx=px(4))
             self._btn_record.config(state="normal")
-            self.log_tagged(self.console, "⏺ Live stream detected.", "warn")
+            self.log_tagged(self.console, t("youtube.live_stream_detected"), "warn")
         else:
             self._live_var.set("")
             self._live_badge.pack_forget()
@@ -1814,7 +1780,7 @@ class YouTubeDownloaderTab(BaseTab):
     def _preview(self) -> None:
         url = self._url_var.get().strip()
         if not url:
-            messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
+            messagebox.showwarning(t("common.warning"), t("youtube.paste_a_video_url_first"))
             return
         ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
@@ -1846,19 +1812,17 @@ class YouTubeDownloaderTab(BaseTab):
                 )
                 lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
                 if not lines:
-                    self.after(
-                        0,
-                        lambda: self.log_tagged(
-                            self.console, "⚠ Could not resolve stream URL for preview.", "error"
-                        ),
-                    )
+                    message = t("youtube.could_not_resolve_stream_url_for_preview")
+                    self.after(0, partial(self.log_tagged, self.console, message, "error"))
                     return
                 stream_url = lines[0]
                 self.preview_proc = _proc.spawn(
                     yto.stream_preview_cmd(stream_url),
                     env=_net.subprocess_env(),
                 )
-                self.after(0, lambda: self.log_tagged(self.console, "▶ Playing in ffplay.", "info"))
+                self.after(
+                    0, lambda: self.log_tagged(self.console, t("youtube.playing_in_ffplay"), "info")
+                )
             except Exception as exc:
                 logger.debug("_worker: best-effort step failed", exc_info=True)
                 self.after(
@@ -1878,11 +1842,11 @@ class YouTubeDownloaderTab(BaseTab):
     def _start_record(self) -> None:
         url = self._url_var.get().strip()
         if not url:
-            messagebox.showwarning(t("common.warning"), "Paste a live stream URL first.")
+            messagebox.showwarning(t("common.warning"), t("youtube.paste_a_live_stream_url_first"))
             return
         ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
-            messagebox.showerror(t("common.error"), "Install yt-dlp first.")
+            messagebox.showerror(t("common.error"), t("youtube.install_yt_dlp_first"))
             return
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -1896,7 +1860,10 @@ class YouTubeDownloaderTab(BaseTab):
             messagebox.showwarning(t("common.warning"), _net.explain_error(exc), parent=self)
             return
 
-        self.log(self.console, f"⏺ Starting live recording → {out_template}")
+        self.log(
+            self.console,
+            t("youtube.starting_live_recording_out_template", out_template=out_template),
+        )
         self._btn_record.config(state="disabled", text=t("youtube.recording"))
         self._record_start = time.time()
 
@@ -2095,9 +2062,9 @@ class YouTubeDownloaderTab(BaseTab):
                 self._kill_process_tree(proc)
             except Exception as exc:
                 logger.debug("_cancel_download: best-effort step failed", exc_info=True)
-                self.log_tagged(self.console, f"⚠ Cancel error: {exc}", "warn")
+                self.log_tagged(self.console, t("youtube.cancel_error_exc", exc=exc), "warn")
         self._batch_running = False
-        self.log_tagged(self.console, "⏹ Download cancelled.", "warn")
+        self.log_tagged(self.console, t("youtube.download_cancelled"), "warn")
         self._reset_download_ui()
 
     def _kill_process_tree(self, proc: _proc.Popen[str]) -> None:
@@ -2145,7 +2112,7 @@ class YouTubeDownloaderTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc))
             return None
         if s1 is None:
-            messagebox.showwarning(t("common.warning"), "Say where the section ends.")
+            messagebox.showwarning(t("common.warning"), t("youtube.say_where_the_section_ends"))
             return None
         return yto.section_args(s0, s1)
 
@@ -2174,7 +2141,7 @@ class YouTubeDownloaderTab(BaseTab):
     def _download(self) -> None:
         url = self._url_var.get().strip()
         if not url:
-            messagebox.showwarning(t("common.warning"), "Paste a video URL first.")
+            messagebox.showwarning(t("common.warning"), t("youtube.paste_a_video_url_first"))
             return
         out = self._out_var.get().strip()
         if not out:
@@ -2194,7 +2161,7 @@ class YouTubeDownloaderTab(BaseTab):
         if not ytdlp:
             messagebox.showerror(
                 t("common.error"),
-                "Install:  pip install yt-dlp\nor place yt-dlp.exe in bin/ next to ffmpeg.exe",
+                t("youtube.install_pip_install_yt_dlp_or_place"),
             )
             return
 
@@ -2304,7 +2271,7 @@ class YouTubeDownloaderTab(BaseTab):
 
         def _dl_done(rc: int) -> None:
             if rc != 0:
-                self.log_tagged(self.console, f"⚠ Download failed (code {rc})", "error")
+                self.log_tagged(self.console, t("youtube.download_failed_code_rc", rc=rc), "error")
                 self._reset_download_ui()
                 return
             self.log(self.console, t("log.youtube.re_encoding_with_ffmpeg"))
@@ -2421,7 +2388,7 @@ class YouTubeDownloaderTab(BaseTab):
         if rc == 0:
             self._progress["value"] = 100
             self._prog_status_var.set("✔ Complete!")
-            self.log_tagged(self.console, f"✔ Saved: {out_path}", "success")
+            self.log_tagged(self.console, t("youtube.saved_out_path", out_path=out_path), "success")
             title = self._title_var.get()
             duration = self._dur_var.get()
             url = self._url_var.get().strip()
@@ -2429,7 +2396,7 @@ class YouTubeDownloaderTab(BaseTab):
             self.show_result(0, out_path)
         else:
             self._prog_status_var.set(f"✘ Error (code {rc})")
-            self.log_tagged(self.console, f"⚠ Failed (code {rc})", "error")
+            self.log_tagged(self.console, t("youtube.failed_code_rc", rc=rc), "error")
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Batch queue
@@ -2449,11 +2416,11 @@ class YouTubeDownloaderTab(BaseTab):
     def _batch_download_all(self) -> None:
         items = self._batch_tree.get_children()
         if not items:
-            messagebox.showwarning(t("common.warning"), "Add URLs to the queue first.")
+            messagebox.showwarning(t("common.warning"), t("youtube.add_urls_to_the_queue_first"))
             return
         ytdlp = ytdlp_core.ytdlp_path()
         if not ytdlp:
-            messagebox.showerror(t("common.error"), "Install yt-dlp first.")
+            messagebox.showerror(t("common.error"), t("youtube.install_yt_dlp_first"))
             return
         self._batch_running = True
         self._cancel_requested = False
@@ -2542,7 +2509,7 @@ class YouTubeDownloaderTab(BaseTab):
                 self._kill_process_tree(proc)
             except Exception:
                 logger.debug("_batch_stop: best-effort step failed", exc_info=True)
-        self.log_tagged(self.console, "⏹ Batch stopped.", "warn")
+        self.log_tagged(self.console, t("youtube.batch_stopped"), "warn")
 
     def _batch_finished(self) -> None:
         self._batch_running = False
@@ -2550,7 +2517,7 @@ class YouTubeDownloaderTab(BaseTab):
         self._btn_stop_batch.config(state="disabled")
         self._progress["value"] = 0
         self._prog_status_var.set("Batch complete.")
-        self.log_tagged(self.console, "✔ Batch download finished.", "success")
+        self.log_tagged(self.console, t("youtube.batch_download_finished"), "success")
 
     # ─────────────────────────────────────────────────────────────────────────
     #  History

@@ -102,7 +102,7 @@ class FrameExtractorTab(BaseTab):
             b.pack(side="left")
             add_tooltip(b, tip)
 
-        opts = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
+        opts = tk.LabelFrame(body, text=t("extractor.extract"), padx=px(12), pady=px(8))
         opts.pack(fill="x", padx=px(20), pady=px(6))
         self.mode_var = tk.StringVar(value="single")
         mrow = tk.Frame(opts)
@@ -114,26 +114,29 @@ class FrameExtractorTab(BaseTab):
 
         self.panels: dict[str, tk.Frame] = {}
         p = self.panels["single"] = tk.Frame(opts)
-        tk.Label(p, text="Time:").pack(side="left")
+        tk.Label(p, text=t("frame_extractor.time")).pack(side="left")
         self.moment = MomentPicker(p, value="0", width=14, on_change=self._time_typed)
         return body, opts, p
 
     def _build_every(self, opts: tk.LabelFrame, p: tk.Frame) -> None:
         self.moment.pack(side="left", padx=px(6))
         tk.Label(
-            p, text="(follows the slider; type m:ss.ms to jump)", fg=CLR["fgdim"], font=(UI_FONT, 8)
+            p,
+            text=t("frame_extractor.follows_the_slider_type_m_ss_ms"),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
         ).pack(side="left")
 
         p = self.panels["interval"] = tk.Frame(opts)
         self.every_var = tk.StringVar(value="1")
-        tk.Label(p, text="Every (s):").pack(side="left", padx=px(8, 2))
+        tk.Label(p, text=t("frame_extractor.every_s")).pack(side="left", padx=px(8, 2))
         tk.Entry(p, textvariable=self.every_var, width=6).pack(side="left")
-        tk.Label(p, text="From:").pack(side="left", padx=px(8, 2))
+        tk.Label(p, text=t("frame_extractor.from")).pack(side="left", padx=px(8, 2))
         self.part = RangePicker(p, end_hint="(empty = end)", here=lambda: float(self.pos_var.get()))
         self.part.pack(side="left")
 
         p = self.panels["scenes"] = tk.Frame(opts)
-        tk.Label(p, text="Sensitivity:").pack(side="left")
+        tk.Label(p, text=t("scene_detect.sensitivity_label")).pack(side="left")
         self.scene_var = tk.DoubleVar(value=0.3)
         tk.Scale(
             p,
@@ -144,7 +147,7 @@ class FrameExtractorTab(BaseTab):
             orient="horizontal",
             length=px(180),
         ).pack(side="left", padx=px(6))
-        tk.Label(p, text="(lower = more scenes)   Min. scene (s):").pack(side="left")
+        tk.Label(p, text=t("frame_extractor.lower_more_scenes_min_scene_s")).pack(side="left")
         self.min_scene_var = tk.StringVar(value="2")
         tk.Entry(p, textvariable=self.min_scene_var, width=5).pack(side="left", padx=px(4))
 
@@ -162,11 +165,13 @@ class FrameExtractorTab(BaseTab):
             tk.Label(p, text=label).pack(side="left", padx=px(8, 2))
             tk.Entry(p, textvariable=var, width=5).pack(side="left")
         self.stamp_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(p, text="Timestamps", variable=self.stamp_var).pack(side="left", padx=px(8))
+        tk.Checkbutton(p, text=t("frame_extractor.timestamps"), variable=self.stamp_var).pack(
+            side="left", padx=px(8)
+        )
 
         frow = tk.Frame(opts)
         frow.pack(fill="x", pady=px(8, 0))
-        tk.Label(frow, text="Format:").pack(side="left")
+        tk.Label(frow, text=t("common.format")).pack(side="left")
         self.fmt_var = tk.StringVar(value=FORMATS["png"])
         ttk.Combobox(
             frow,
@@ -175,7 +180,7 @@ class FrameExtractorTab(BaseTab):
             state="readonly",
             width=16,
         ).pack(side="left", padx=px(6))
-        tk.Label(frow, text="Quality (1-100):").pack(side="left", padx=px(10, 2))
+        tk.Label(frow, text=t("frame_extractor.quality_1_100")).pack(side="left", padx=px(10, 2))
         self.quality_var = tk.IntVar(value=92)
         tk.Scale(
             frow, variable=self.quality_var, from_=1, to=100, orient="horizontal", length=px(160)
@@ -183,9 +188,9 @@ class FrameExtractorTab(BaseTab):
 
     def _build_dir(self, body: tk.Frame, opts: tk.LabelFrame) -> None:
         self.dir_var = tk.StringVar()
-        FolderRow(opts, "Save to folder:", self.dir_var, width=50, label_width=14).pack(
-            fill="x", pady=px(6, 0)
-        )
+        FolderRow(
+            opts, t("frame_extractor.save_to_folder"), self.dir_var, width=50, label_width=14
+        ).pack(fill="x", pady=px(6, 0))
 
         self.btn_render = self.make_render_btn(
             body, t("frame_extractor.extract_button"), self._render, width=24
@@ -249,7 +254,11 @@ class FrameExtractorTab(BaseTab):
         try:
             os.makedirs(folder, exist_ok=True)
         except OSError as exc:
-            messagebox.showerror(t("common.error"), f"Cannot use {folder}:\n{exc}", parent=self)
+            messagebox.showerror(
+                t("common.error"),
+                t("frame_extractor.cannot_use_folder_exc", folder=folder, exc=exc),
+                parent=self,
+            )
             return
         base = os.path.splitext(os.path.basename(src))[0]
         mode = self.mode_var.get()
@@ -268,7 +277,7 @@ class FrameExtractorTab(BaseTab):
     def _single(
         self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, q: list[str]
     ) -> None:
-        at = self.moment.seconds(0.0, "Time") or 0.0
+        at = self.moment.seconds(0.0, t("frame_extractor.time_2")) or 0.0
         at = max(0.0, min(at, max(0.0, info.duration - 1.0 / self._fps())))
         stamp = ff.format_time(at).replace(":", "-")
         from core.outputs import unique_path
@@ -289,14 +298,17 @@ class FrameExtractorTab(BaseTab):
     def _interval(
         self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, q: list[str]
     ) -> None:
-        every = common.number(self.every_var.get(), "Every", 0.01, 3600)
+        every = common.number(self.every_var.get(), t("frame_extractor.every"), 0.01, 3600)
         start, until = self.part.span(info.duration)
         end = info.duration if until is None else until
         out_dir = fresh_folder(folder, f"{base} frames")
         # image2 patterns treat every '%' as a format code - escape real ones
         pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%05d.{ext}"
         cmd = fe.interval_cmd(src, (start, end), every, self._fps(), pattern, q)
-        self.log(self.console, f"One frame every {every:g}s → {out_dir}")
+        self.log(
+            self.console,
+            t("frame_extractor.one_frame_every_every_g_s_out", every=every, out_dir=out_dir),
+        )
         self.run_ffmpeg(
             cmd,
             self.console,
@@ -312,7 +324,9 @@ class FrameExtractorTab(BaseTab):
         self, src: str, info: ff.MediaInfo, folder: str, base: str, ext: str, q: list[str]
     ) -> None:
         threshold = float(self.scene_var.get())
-        min_len = common.number(self.min_scene_var.get() or "0", "Min. scene", 0, 3600)
+        min_len = common.number(
+            self.min_scene_var.get() or "0", t("frame_extractor.min_scene"), 0, 3600
+        )
         out_dir = fresh_folder(folder, f"{base} scenes")
         dur = info.duration
         job = fe.SceneFrames(
@@ -324,7 +338,14 @@ class FrameExtractorTab(BaseTab):
             pattern=os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%04d.{ext}",
             quality=tuple(q),
         )
-        self.log(self.console, f"Finding scenes (sensitivity {threshold:.2f}) → {out_dir}")
+        self.log(
+            self.console,
+            t(
+                "frame_extractor.finding_scenes_sensitivity_threshold_2f_out_dir",
+                threshold=threshold,
+                out_dir=out_dir,
+            ),
+        )
         common.queue_job(
             self,
             common.Job(
@@ -341,9 +362,11 @@ class FrameExtractorTab(BaseTab):
         from core.outputs import unique_path
 
         layout = cs.Layout(
-            cols=int(common.number(self.cols_var.get(), "Columns", 1, 12)),
-            rows=int(common.number(self.rows_var.get(), "Rows", 1, 20)),
-            tile_width=int(common.number(self.tile_w_var.get(), "Thumb width", 64, 1920)),
+            cols=int(common.number(self.cols_var.get(), t("frame_extractor.columns"), 1, 12)),
+            rows=int(common.number(self.rows_var.get(), t("frame_extractor.rows"), 1, 20)),
+            tile_width=int(
+                common.number(self.tile_w_var.get(), t("frame_extractor.thumb_width"), 64, 1920)
+            ),
         )
         corner = cs.Corner.BOTTOM_RIGHT if self.stamp_var.get() else cs.Corner.OFF
         out = unique_path(os.path.join(folder, f"{base}_contact_sheet.{ext}"))
@@ -356,7 +379,15 @@ class FrameExtractorTab(BaseTab):
             cuts=None,
             quality=int(self.quality_var.get()),
         )
-        self.log(self.console, f"Contact sheet {layout.cols}×{layout.rows} → {out}")
+        self.log(
+            self.console,
+            t(
+                "frame_extractor.contact_sheet_cols_rows_out",
+                cols=layout.cols,
+                rows=layout.rows,
+                out=out,
+            ),
+        )
         common.queue_job(
             self,
             common.Job(name="Contact sheet", out=out, work=job.run, inputs=[src]),

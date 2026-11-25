@@ -10,13 +10,12 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 from core import APP_VERSION
 from core.i18n import t
 from core.paths import resource_path
 from core.scaling import px
-from core.skins import UI_FONT
+from core.skins import UI_FONT, Skin
 from core.tools import Category, ToolId, sidebar
 from shell.wheel import yview
 from tabs.kit import labels
@@ -38,7 +37,7 @@ class Sidebar(tk.Frame):
     def __init__(
         self,
         master: tk.Misc,
-        skin: dict[str, Any],
+        skin: Skin,
         *,
         on_select: Callable[[ToolId], object],
         debug_mode: tk.BooleanVar,
@@ -87,10 +86,12 @@ class Sidebar(tk.Frame):
         names = tk.Frame(logo, bg=bg)
         names.pack(side="left", anchor="w")
         # the app's name is a name: the same in every language
-        tk.Label(names, text="FFmpeg", font=(UI_FONT, 11, "bold"), bg=bg, fg="#CCCCCC").pack(
+        tk.Label(
+            names, text=t("adv.tab.ffmpeg"), font=(UI_FONT, 11, "bold"), bg=bg, fg="#CCCCCC"
+        ).pack(anchor="w")
+        tk.Label(names, text=t("sidebar.workbench"), font=(UI_FONT, 8), bg=bg, fg="#5A5A5A").pack(
             anchor="w"
         )
-        tk.Label(names, text="Workbench", font=(UI_FONT, 8), bg=bg, fg="#5A5A5A").pack(anchor="w")
         tk.Frame(top, bg=border, height=px(1)).pack(fill="x", padx=px(14), pady=px(16, 0))
 
     def _build_pinned(self, top: tk.Frame) -> None:
@@ -386,7 +387,7 @@ class Sidebar(tk.Frame):
         self._update_scrollregion()
 
     # ── Theme ─────────────────────────────────────────────────────────────────
-    def recolour(self, skin: dict[str, Any]) -> None:
+    def recolour(self, skin: Skin) -> None:
         self.skin = skin
         for tool, btn in self.buttons.items():
             btn.config(

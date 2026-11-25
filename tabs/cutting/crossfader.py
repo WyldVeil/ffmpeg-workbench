@@ -586,8 +586,13 @@ class CrossfaderTab(BaseTab):
         cmd, seconds = built
         self.log(
             self.console,
-            f"Rendering {len(clips)} clips → {os.path.basename(out)} "
-            f"({ff.format_time(seconds, ms=False)}, {self.encoder.video_encode().label})",
+            t(
+                "crossfader.rendering_clips_clips_out_seconds_label",
+                clips=len(clips),
+                out=os.path.basename(out),
+                seconds=ff.format_time(seconds, ms=False),
+                label=self.encoder.video_encode().label,
+            ),
         )
         self.run_ffmpeg(
             cmd,

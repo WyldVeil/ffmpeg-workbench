@@ -249,12 +249,15 @@ class AudioMixerTab(BaseTab):
     # ─────────────────────────────────────────────────────────────────────
     def _add_track(self) -> None:
         if len(self.tracks) >= MAX_TRACKS:
-            messagebox.showinfo("Max tracks", f"Maximum {MAX_TRACKS} tracks supported.")
+            messagebox.showinfo(
+                t("mixer.max_tracks"),
+                t("mixer.maximum_max_tracks_tracks_supported", max_tracks=MAX_TRACKS),
+            )
             return
         trk = Track(len(self.tracks))
         self.tracks.append(trk)
         self._draw_track_row(trk)
-        self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
+        self.track_count_lbl.config(text=t("mixer.tracks_tracks", tracks=len(self.tracks)))
 
     def _draw_track_row(self, trk: Track) -> None:
         row = tk.Frame(self.track_frame, relief="groove", bd=px(1))
@@ -355,7 +358,7 @@ class AudioMixerTab(BaseTab):
             trk = self.tracks.pop()
             if trk.row is not None:
                 trk.row.destroy()
-            self.track_count_lbl.config(text=f"{len(self.tracks)} tracks")
+            self.track_count_lbl.config(text=t("mixer.tracks_tracks", tracks=len(self.tracks)))
 
     def _browse_video(self) -> None:
         p = dialogs.askopenfilename(
@@ -386,7 +389,7 @@ class AudioMixerTab(BaseTab):
             if tinfo is None or not tinfo.has_audio:
                 messagebox.showwarning(
                     t("common.warning"),
-                    f"Track {trk.idx + 1} has no readable audio:\n{path}",
+                    t("mixer.track_idx_has_no_readable_audio_path", idx=trk.idx + 1, path=path),
                     parent=self,
                 )
                 return None
@@ -399,7 +402,7 @@ class AudioMixerTab(BaseTab):
             except ValueError:
                 messagebox.showwarning(
                     t("common.warning"),
-                    f"Track {trk.idx + 1}: start and fades must be numbers of seconds.",
+                    t("mixer.track_idx_start_and_fades_must_be", idx=trk.idx + 1),
                     parent=self,
                 )
                 return None
@@ -460,7 +463,10 @@ class AudioMixerTab(BaseTab):
         self.out_var.set(out)
         bitrate = "320k" if fmt is MixOutput.AAC_320 else "256k"
         cmd = mx.mix_cmd(video, tracks, master, dur, out, audio_only=audio_only, bitrate=bitrate)
-        self.log(self.console, f"Mixing {sources} source(s) → {os.path.basename(out)}")
+        self.log(
+            self.console,
+            t("mixer.mixing_sources_source_s_out", sources=sources, out=os.path.basename(out)),
+        )
         self.run_ffmpeg(
             cmd,
             self.console,

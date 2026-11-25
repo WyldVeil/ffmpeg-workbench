@@ -45,7 +45,7 @@ class ReverserTab(BaseTab):
         self.make_header(
             self,
             t("tab.video_reverser"),
-            "Backwards playback, boomerangs and ping-pong loops - for clips of any length.",
+            t("reverser.backwards_playback_boomerangs_and_ping_pong_loop"),
             icon="⏪",
         )
         body = scroll_body(self)
@@ -56,7 +56,7 @@ class ReverserTab(BaseTab):
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"])
         self.info_lbl.pack(anchor="w", padx=px(24))
 
-        mode_lf = tk.LabelFrame(body, text="  Effect  ", padx=px(12), pady=px(6))
+        mode_lf = tk.LabelFrame(body, text=t("voice_changer.effect"), padx=px(12), pady=px(6))
         mode_lf.pack(fill="x", padx=px(20), pady=px(6))
         self.mode_var = tk.StringVar(value="full")
         for key, label, desc in MODES:
@@ -73,18 +73,18 @@ class ReverserTab(BaseTab):
             ).pack(side="left")
             tk.Label(row, text=desc, fg=CLR["fgdim"], font=(UI_FONT, 9)).pack(side="left")
         self.range_f = tk.Frame(mode_lf)
-        tk.Label(self.range_f, text="Section from").pack(side="left")
+        tk.Label(self.range_f, text=t("reverser.section_from")).pack(side="left")
         self.section = RangePicker(
             self.range_f, end_hint="(empty = end)", source=lambda: self.src_row.path
         )
         self.section.pack(side="left", padx=px(4))
-        tk.Label(self.range_f, text="   Repeats:").pack(side="left")
+        tk.Label(self.range_f, text=t("reverser.repeats")).pack(side="left")
         self.repeat_var = tk.StringVar(value="3")
         tk.Entry(self.range_f, textvariable=self.repeat_var, width=4).pack(side="left", padx=px(4))
         self.audio_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             mode_lf,
-            text="Reverse the sound too (otherwise the output is silent)",
+            text=t("reverser.reverse_the_sound_too_otherwise_the_output"),
             variable=self.audio_var,
         ).pack(anchor="w", pady=px(4, 0))
 
@@ -94,7 +94,7 @@ class ReverserTab(BaseTab):
             ("h264", "hevc", "av1"),
             suggest=lambda: self.suggest_output(self.src_row.path, "reversed"),
         )
-        self.btn_render = self.make_render_btn(body, "⏪  CREATE", self._render, width=22)
+        self.btn_render = self.make_render_btn(body, t("reverser.create"), self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
         self._mode_changed()
@@ -119,7 +119,9 @@ class ReverserTab(BaseTab):
         try:
             start, end_or_none = self.section.span() if mode != "full" else (0.0, None)
             end = dur if end_or_none is None else end_or_none
-            repeats = int(common.number(self.repeat_var.get() or "1", "Repeats", 1, 50))
+            repeats = int(
+                common.number(self.repeat_var.get() or "1", t("reverser.repeats_2"), 1, 50)
+            )
             if not 0 <= start < end <= dur + 0.05:
                 raise ValueError("The section must lie inside the clip, with 'from' before 'to'.")
         except ValueError as exc:
@@ -158,8 +160,13 @@ class ReverserTab(BaseTab):
         n_chunks = sum(len(rv.reverse_chunks(a, b, chunk)) for k, a, b in pieces if k == "rev")
         self.log(
             self.console,
-            f"{dict((k, lbl) for k, lbl, _d in MODES)[mode]} · "
-            f"{ff.format_time(total)} · reversed in {n_chunks} chunk(s) of up to {chunk:.0f}s",
+            t(
+                "reverser.value_total_reversed_in_n_chunks_chunk",
+                value=dict((k, lbl) for k, lbl, _d in MODES)[mode],
+                total=ff.format_time(total),
+                n_chunks=n_chunks,
+                chunk=chunk,
+            ),
         )
         common.queue_job(
             self,

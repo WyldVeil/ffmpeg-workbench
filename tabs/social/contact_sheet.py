@@ -108,7 +108,7 @@ class ContactSheetTab(BaseTab):
         self.make_header(
             self,
             t("tab.contact_sheet"),
-            "A grid of frames from a video, with its details - choose the grid, step through other frames.",
+            t("contact_sheet.a_grid_of_frames_from_a_video"),
             icon="🎞",
         )
         body = scroll_body(self)
@@ -128,24 +128,31 @@ class ContactSheetTab(BaseTab):
         nav = tk.Frame(body)
         nav.pack(pady=px(4, 0))
         self.btn_prev = tk.Button(
-            nav, text="◀  Previous set", relief="flat", command=partial(self._step, -1)
+            nav,
+            text=t("contact_sheet.previous_set"),
+            relief="flat",
+            command=partial(self._step, -1),
         )
         self.btn_prev.pack(side="left")
-        add_tooltip(self.btn_prev, "Back to the set before")
+        add_tooltip(self.btn_prev, t("contact_sheet.back_to_the_set_before"))
         self.set_lbl = tk.Label(
-            nav, text="Set 1", width=8, font=(UI_FONT, 10, "bold"), fg=CLR["accent"]
+            nav,
+            text=t("contact_sheet.set_1"),
+            width=8,
+            font=(UI_FONT, 10, "bold"),
+            fg=CLR["accent"],
         )
         self.set_lbl.pack(side="left", padx=px(8))
         self.btn_next = tk.Button(
-            nav, text="Next set  ▶", relief="flat", command=partial(self._step, 1)
+            nav, text=t("contact_sheet.next_set"), relief="flat", command=partial(self._step, 1)
         )
         self.btn_next.pack(side="left")
-        add_tooltip(self.btn_next, "Other moments from the video (the sets never repeat)")
-        tk.Button(nav, text="⟲ First set", relief="flat", command=self._first_set).pack(
-            side="left", padx=px(12, 0)
-        )
+        add_tooltip(self.btn_next, t("contact_sheet.other_moments_from_the_video_the_sets"))
+        tk.Button(
+            nav, text=t("contact_sheet.first_set"), relief="flat", command=self._first_set
+        ).pack(side="left", padx=px(12, 0))
         self.status_lbl = tk.Label(
-            body, text="Open a video to see its contact sheet.", fg=CLR["fgdim"]
+            body, text=t("contact_sheet.open_a_video_to_see_its_contact"), fg=CLR["fgdim"]
         )
         self.status_lbl.pack(pady=px(2, 0))
 
@@ -171,7 +178,7 @@ class ContactSheetTab(BaseTab):
         return var
 
     def _build_grid(self, cols: tk.Frame) -> None:
-        f = tk.LabelFrame(cols, text="  Grid  ", padx=px(10), pady=px(6))
+        f = tk.LabelFrame(cols, text=t("contact_sheet.grid"), padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True, padx=px(0, 6))
         presets = tk.Frame(f)
         presets.grid(row=0, column=0, columnspan=3, sticky="w", pady=px(0, 4))
@@ -180,43 +187,51 @@ class ContactSheetTab(BaseTab):
                 presets, text=f"{c}×{r}", relief="flat", width=4, command=partial(self._grid, c, r)
             )
             b.pack(side="left", padx=px(0, 2))
-        self.cols_var = self._spin(f, 1, "Columns:", 4, 1, 12)
-        self.rows_var = self._spin(f, 2, "Rows:", 5, 1, 20)
-        self.tile_var = self._spin(f, 3, "Tile width:", 384, 120, 1280, step=16, unit="px")
-        self.gap_var = self._spin(f, 4, "Gap:", 8, 0, 60, unit="px")
-        self.margin_var = self._spin(f, 5, "Margin:", 20, 0, 160, unit="px")
-        self.border_var = self._spin(f, 6, "Border:", 0, 0, 16, unit="px")
+        self.cols_var = self._spin(f, 1, t("frame_extractor.columns_label"), 4, 1, 12)
+        self.rows_var = self._spin(f, 2, t("frame_extractor.rows_label"), 5, 1, 20)
+        self.tile_var = self._spin(
+            f, 3, t("contact_sheet.tile_width"), 384, 120, 1280, step=16, unit="px"
+        )
+        self.gap_var = self._spin(f, 4, t("contact_sheet.gap"), 8, 0, 60, unit="px")
+        self.margin_var = self._spin(f, 5, t("hard_subber.margin"), 20, 0, 160, unit="px")
+        self.border_var = self._spin(f, 6, t("contact_sheet.border_2"), 0, 0, 16, unit="px")
         swatches = tk.Frame(f)
         swatches.grid(row=7, column=0, columnspan=3, sticky="w", pady=px(4, 0))
         self.bg_btn = ColourButton(
-            swatches, "#141414", text="Background", width=12, on_change=self._recolour
+            swatches,
+            "#141414",
+            text=t("intro_maker.background_section"),
+            width=12,
+            on_change=self._recolour,
         )
         self.bg_btn.pack(side="left", padx=px(0, 4))
         self.border_btn = ColourButton(
-            swatches, "#FFFFFF", text="Border", width=12, on_change=self._recolour
+            swatches, "#FFFFFF", text=t("contact_sheet.border"), width=12, on_change=self._recolour
         )
         self.border_btn.pack(side="left")
 
     def _build_frames(self, cols: tk.Frame) -> None:
-        f = tk.LabelFrame(cols, text="  Frames  ", padx=px(10), pady=px(6))
+        f = tk.LabelFrame(cols, text=t("contact_sheet.frames"), padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True, padx=px(0, 6))
-        tk.Label(f, text="Take frames:", anchor="w").grid(row=0, column=0, columnspan=3, sticky="w")
+        tk.Label(f, text=t("contact_sheet.take_frames"), anchor="w").grid(
+            row=0, column=0, columnspan=3, sticky="w"
+        )
         self.sampling = ChoiceBox(
             f, SAMPLING, cs.Sampling.EVEN, width=22, on_change=self._sampling_changed
         )
         self.sampling.grid(row=1, column=0, columnspan=3, sticky="w", pady=px(0, 4))
-        tk.Label(f, text="Shot changes:", anchor="w").grid(
+        tk.Label(f, text=t("contact_sheet.shot_changes"), anchor="w").grid(
             row=2, column=0, columnspan=3, sticky="w"
         )
         self.sensitivity = ChoiceBox(
             f, SENSITIVITY, Sensitivity.NORMAL, width=16, on_change=self._changed
         )
         self.sensitivity.grid(row=3, column=0, columnspan=3, sticky="w", pady=px(0, 4))
-        self.skip_start_var = self._spin(f, 4, "Skip start:", 0, 0, 45, unit="%")
-        self.skip_end_var = self._spin(f, 5, "Skip end:", 0, 0, 45, unit="%")
+        self.skip_start_var = self._spin(f, 4, t("contact_sheet.skip_start"), 0, 0, 45, unit="%")
+        self.skip_end_var = self._spin(f, 5, t("contact_sheet.skip_end"), 0, 0, 45, unit="%")
         tk.Label(
             f,
-            text="Skipping leaves out opening titles and end credits.",
+            text=t("contact_sheet.skipping_leaves_out_opening_titles_and_end"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
             wraplength=px(200),
@@ -225,7 +240,7 @@ class ContactSheetTab(BaseTab):
         self._sampling_changed()
 
     def _build_text(self, cols: tk.Frame) -> None:
-        f = tk.LabelFrame(cols, text="  Text  ", padx=px(10), pady=px(6))
+        f = tk.LabelFrame(cols, text=t("watermark.text"), padx=px(10), pady=px(6))
         f.pack(side="left", fill="both", expand=True)
         ticks = tk.Frame(f)
         ticks.grid(row=0, column=0, columnspan=4, sticky="w")
@@ -240,8 +255,8 @@ class ContactSheetTab(BaseTab):
         self.title_var = tk.StringVar()
         self.title_var.trace_add("write", self._changed)
         title = tk.Entry(f, textvariable=self.title_var, width=24)
-        self.form_row(f, 1, "Title:", title, pady=(4, 0))
-        add_tooltip(title, "Shown in place of the file name (leave empty for the name)")
+        self.form_row(f, 1, t("chapter_markers.title"), title, pady=(4, 0))
+        add_tooltip(title, t("contact_sheet.shown_in_place_of_the_file_name"))
         self.corner = ChoiceBox(
             f, CORNERS, cs.Corner.BOTTOM_RIGHT, width=12, on_change=self._changed
         )
@@ -250,9 +265,9 @@ class ContactSheetTab(BaseTab):
         self.form_row(
             f,
             2,
-            "Times:",
+            t("contact_sheet.times"),
             self.corner,
-            tk.Checkbutton(f, text="Tile numbers", variable=self.numbers_var),
+            tk.Checkbutton(f, text=t("contact_sheet.tile_numbers"), variable=self.numbers_var),
             pady=2,
         )
         self._build_font(f)
@@ -261,13 +276,15 @@ class ContactSheetTab(BaseTab):
         self.font_var = tk.StringVar(value="Montserrat")
         fonts = tk.OptionMenu(f, self.font_var, *ass.families())
         fonts.configure(relief="flat", width=14)
-        self.form_row(f, 3, "Font:", fonts, pady=2)
+        self.form_row(f, 3, t("hard_subber.font_label"), fonts, pady=2)
         self.font_var.trace_add("write", self._changed)
         size = tk.Frame(f)
         size.grid(row=4, column=0, columnspan=4, sticky="w")
-        self.text_size_var = self._spin(size, 0, "Text size:", 0, 0, 60, unit="(0 = automatic)")
+        self.text_size_var = self._spin(
+            size, 0, t("titles.text_size"), 0, 0, 60, unit="(0 = automatic)"
+        )
         self.text_btn = ColourButton(
-            f, "#FFFFFF", text="Text colour", width=12, on_change=self._recolour
+            f, "#FFFFFF", text=t("intro_maker.text_colour"), width=12, on_change=self._recolour
         )
         self.text_btn.grid(row=5, column=0, columnspan=2, sticky="w", pady=px(4, 0))
 
@@ -279,16 +296,16 @@ class ContactSheetTab(BaseTab):
         self.out_row.pack(fill="x")
         row = tk.Frame(out_lf)
         row.pack(fill="x", pady=px(4, 0))
-        tk.Label(row, text="Picture:").pack(side="left")
+        tk.Label(row, text=t("contact_sheet.picture")).pack(side="left")
         self.picture = ChoiceBox(
             row, PICTURES, Picture.PNG, width=18, on_change=self._picture_changed
         )
         self.picture.pack(side="left", padx=px(6))
         self.quality_var = tk.StringVar(value="92")
-        tk.Label(row, text="Quality:").pack(side="left", padx=px(12, 4))
+        tk.Label(row, text=t("common.quality")).pack(side="left", padx=px(12, 4))
         tk.Spinbox(row, from_=40, to=100, textvariable=self.quality_var, width=5).pack(side="left")
         self.btn_render = self.make_render_btn(
-            body, "💾  Save contact sheet", self._render, width=24
+            body, t("contact_sheet.save_contact_sheet"), self._render, width=24
         )
         self.btn_render.pack(pady=px(6))
         self.console = self.make_console_block(body, height=4)
@@ -315,12 +332,14 @@ class ContactSheetTab(BaseTab):
     def _settings(self) -> tuple[cs.Layout, cs.Labels, cs.Picking]:
         """The sheet as set on the page.  ValueError (a sentence) when a box is wrong."""
         layout = cs.Layout(
-            cols=int(common.number(self.cols_var.get(), "Columns", 1, 12)),
-            rows=int(common.number(self.rows_var.get(), "Rows", 1, 20)),
-            tile_width=int(common.number(self.tile_var.get(), "Tile width", 64, 1920)),
+            cols=int(common.number(self.cols_var.get(), t("frame_extractor.columns"), 1, 12)),
+            rows=int(common.number(self.rows_var.get(), t("frame_extractor.rows"), 1, 20)),
+            tile_width=int(
+                common.number(self.tile_var.get(), t("contact_sheet.tile_width_2"), 64, 1920)
+            ),
             gap=int(common.number(self.gap_var.get(), "Gap", 0, 200)),
-            margin=int(common.number(self.margin_var.get(), "Margin", 0, 400)),
-            border=int(common.number(self.border_var.get(), "Border", 0, 40)),
+            margin=int(common.number(self.margin_var.get(), t("contact_sheet.margin"), 0, 400)),
+            border=int(common.number(self.border_var.get(), t("contact_sheet.border"), 0, 40)),
             background=self.bg_btn.colour,
             border_colour=self.border_btn.colour,
         )
@@ -330,13 +349,19 @@ class ContactSheetTab(BaseTab):
             timestamps=self.corner.value,
             numbers=self.numbers_var.get(),
             font=self.font_var.get(),
-            text_size=int(common.number(self.text_size_var.get() or "0", "Text size", 0, 120)),
+            text_size=int(
+                common.number(self.text_size_var.get() or "0", t("contact_sheet.text_size"), 0, 120)
+            ),
             text_colour=self.text_btn.colour,
         )
         picking = cs.Picking(
             sampling=self.sampling.value,
-            skip_start=common.number(self.skip_start_var.get() or "0", "Skip start", 0, 45),
-            skip_end=common.number(self.skip_end_var.get() or "0", "Skip end", 0, 45),
+            skip_start=common.number(
+                self.skip_start_var.get() or "0", t("contact_sheet.skip_start_2"), 0, 45
+            ),
+            skip_end=common.number(
+                self.skip_end_var.get() or "0", t("contact_sheet.skip_end_2"), 0, 45
+            ),
             variant=self._variant,
         )
         return layout, labels, picking
@@ -348,7 +373,9 @@ class ContactSheetTab(BaseTab):
         self._variant = 0
         if self._info is not None and not self._info.has_video:
             self._info = None
-            self.status_lbl.config(text="That file has no picture - choose a video.", fg=CLR["red"])
+            self.status_lbl.config(
+                text=t("contact_sheet.that_file_has_no_picture_choose_a"), fg=CLR["red"]
+            )
         self._changed()
 
     def _step(self, by: int) -> None:
@@ -361,7 +388,7 @@ class ContactSheetTab(BaseTab):
 
     def _changed(self, *_: str) -> None:
         """Any setting changed: make a new preview once the typing stops."""
-        self.set_lbl.config(text=f"Set {self._variant + 1}")
+        self.set_lbl.config(text=t("contact_sheet.set_variant", variant=self._variant + 1))
         self.btn_prev.config(state="normal" if self._variant > 0 else "disabled")
         if self._after is not None:
             self.after_cancel(self._after)
@@ -393,7 +420,7 @@ class ContactSheetTab(BaseTab):
             stale=self._stale,
         )
         full = cs.plan(info, layout, self._settings()[1], picking).geo
-        self.status_lbl.config(text="Making the preview…", fg=CLR["fgdim"])
+        self.status_lbl.config(text=t("contact_sheet.making_the_preview"), fg=CLR["fgdim"])
         tasks.submit(
             job.make,
             on_done=partial(self._preview_ready, job.gen, layout.count, full),
@@ -415,13 +442,19 @@ class ContactSheetTab(BaseTab):
             return
         self.preview.load(path, duration=0.0)
         self.status_lbl.config(
-            text=f"{frames} frames  ·  saved at {full.width} × {full.height} px", fg=CLR["fgdim"]
+            text=t(
+                "contact_sheet.frames_frames_saved_at_width_height_px",
+                frames=frames,
+                width=full.width,
+                height=full.height,
+            ),
+            fg=CLR["fgdim"],
         )
 
     def _preview_failed(self, gen: int, exc: BaseException) -> None:
         if gen != self._gen or isinstance(exc, Cancelled):
             return
-        self.status_lbl.config(text=f"No preview: {exc}", fg=CLR["red"])
+        self.status_lbl.config(text=t("contact_sheet.no_preview_exc", exc=exc), fg=CLR["red"])
 
     # ── Saving ────────────────────────────────────────────────────────────
 
@@ -448,7 +481,9 @@ class ContactSheetTab(BaseTab):
             return
         try:
             layout, labels, picking = self._settings()
-            quality = int(common.number(self.quality_var.get() or "92", "Quality", 1, 100))
+            quality = int(
+                common.number(self.quality_var.get() or "92", t("youtube.quality"), 1, 100)
+            )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -465,7 +500,15 @@ class ContactSheetTab(BaseTab):
             cuts=self._cuts.get((src, threshold)) if threshold is not None else None,
             quality=quality,
         )
-        self.log(self.console, f"Contact sheet {layout.cols}×{layout.rows} → {out}")
+        self.log(
+            self.console,
+            t(
+                "frame_extractor.contact_sheet_cols_rows_out",
+                cols=layout.cols,
+                rows=layout.rows,
+                out=out,
+            ),
+        )
         common.queue_job(
             self,
             common.Job(name="Contact Sheet", out=out, work=job.run, duration=None, inputs=[src]),

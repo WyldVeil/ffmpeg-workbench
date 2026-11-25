@@ -106,7 +106,7 @@ class AudioExporterTab(BaseTab):
         sec = self.make_section(self._inner, title=t("exporter.section.source_info"))
         self._info_lbl = tk.Label(
             sec,
-            text="  No file loaded - browse to open a file",
+            text=t("exporter.no_file_loaded_browse_to_open_a"),
             font=(MONO_FONT, 9),
             anchor="w",
             justify="left",
@@ -231,7 +231,7 @@ class AudioExporterTab(BaseTab):
         self._vbr_scale.pack(side="left", padx=px(8))
         self._vbr_hint = tk.Label(
             self._vbr_row,
-            text="0 = best, 9 = smallest",
+            text=t("exporter.0_best_9_smallest"),
             font=(UI_FONT, 8),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
@@ -684,7 +684,7 @@ class AudioExporterTab(BaseTab):
 
     def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
-            title="Open audio / video file",
+            title=t("exporter.open_audio_video_file"),
             filetypes=[
                 (
                     "Audio files",
@@ -704,7 +704,7 @@ class AudioExporterTab(BaseTab):
         fmt_def = ae.FORMAT_DEFS[self.fmt_box.value]
         ext = fmt_def.ext
         p = dialogs.asksaveasfilename(
-            title="Save audio as",
+            title=t("exporter.save_audio_as"),
             defaultextension=ext,
             filetypes=[(ae.FORMATS[self.fmt_box.value], f"*{ext}"), ("All files", "*.*")],
         )
@@ -719,14 +719,16 @@ class AudioExporterTab(BaseTab):
             if info is None:
                 self.after(
                     0,
-                    lambda: self._info_lbl.config(text="  Could not read file info", fg=CLR["red"]),
+                    lambda: self._info_lbl.config(
+                        text=t("exporter.could_not_read_file_info"), fg=CLR["red"]
+                    ),
                 )
                 return
             if not info.audio_streams:
                 self.after(
                     0,
                     lambda: self._info_lbl.config(
-                        text="  No audio stream found in file", fg=CLR["red"]
+                        text=t("exporter.no_audio_stream_found_in_file"), fg=CLR["red"]
                     ),
                 )
                 return
@@ -748,7 +750,9 @@ class AudioExporterTab(BaseTab):
             self.after(0, lambda: self._info_lbl.config(text=text, fg=CLR["accent"]))
             self.after(
                 0,
-                lambda: self.log_tagged(self.console, f"Loaded: {os.path.basename(path)}", "info"),
+                lambda: self.log_tagged(
+                    self.console, t("exporter.loaded_path", path=os.path.basename(path)), "info"
+                ),
             )
 
         tasks.submit(_do)
@@ -859,7 +863,7 @@ class AudioExporterTab(BaseTab):
         if fd.lossy:
             if self.limit_enabled.get():
                 unit = 1024 * 1024 if self.size_unit.value is SizeUnit.MB else 1024
-                size_bytes = num(self.max_size_var, "Maximum size", 0.001, 1e6) * unit
+                size_bytes = num(self.max_size_var, t("exporter.maximum_size"), 0.001, 1e6) * unit
             elif self.br_mode_var.get() == "VBR" and fd.vbr_flag:
                 vbr = str(self.vbr_var.get())
             else:
@@ -869,17 +873,17 @@ class AudioExporterTab(BaseTab):
             fmt=fmt,
             start=start,
             end=end,
-            volume=num(self.volume_var, "Volume", -60, 40),
-            fade_in=num(self.fade_in, "Fade in", 0, 600),
-            fade_out=num(self.fade_out, "Fade out", 0, 600),
+            volume=num(self.volume_var, t("exporter.volume"), -60, 40),
+            fade_in=num(self.fade_in, t("pip.fade_in"), 0, 600),
+            fade_out=num(self.fade_out, t("exporter.fade_out_2"), 0, 600),
             norm=norm,
-            lufs=num(self.lufs_var, "Target loudness", -70, -5)
+            lufs=num(self.lufs_var, t("exporter.target_loudness"), -70, -5)
             if norm is ae.Normalise.LOUDNESS
             else -16.0,
             tp=(
-                num(self.tp_var, "True peak", -9, 0)
+                num(self.tp_var, t("exporter.true_peak_2"), -9, 0)
                 if norm is ae.Normalise.LOUDNESS
-                else num(self.tp_var, "Peak level", -20, 0)
+                else num(self.tp_var, t("exporter.peak_level"), -20, 0)
                 if norm is ae.Normalise.PEAK
                 else -1.0
             ),
@@ -944,7 +948,11 @@ class AudioExporterTab(BaseTab):
             if rc == 0 and self.open_folder_var.get():
                 self.open_path(os.path.dirname(out))
 
-        self.log_tagged(self.console, f"Exporting: {os.path.basename(src)} -> {cfg.fmt}", "info")
+        self.log_tagged(
+            self.console,
+            t("exporter.exporting_src_fmt", src=os.path.basename(src), fmt=cfg.fmt),
+            "info",
+        )
         common.queue_job(
             self,
             common.Job(

@@ -14,12 +14,12 @@ import logging
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Literal
+from typing import Literal
 
 from core.i18n import t
 from core.queue_manager import RenderQueueManager, TaskStatus
 from core.scaling import px
-from core.skins import MONO_FONT, UI_FONT
+from core.skins import MONO_FONT, UI_FONT, Skin
 
 logger = logging.getLogger("crossfader.shell")
 
@@ -30,7 +30,7 @@ class StatusBar(tk.Frame):
     def __init__(
         self,
         master: tk.Misc,
-        skin: dict[str, Any],
+        skin: Skin,
         *,
         on_queue_click: Callable[[], object],
         on_ffmpeg_click: Callable[[], object],
@@ -121,7 +121,7 @@ class StatusBar(tk.Frame):
         else:
             self.ytdlp.pack_forget()
 
-    def recolour(self, skin: dict[str, Any]) -> None:
+    def recolour(self, skin: Skin) -> None:
         self.skin = skin
         bg = skin["sb_bg"]
         for frame in (self, *self.winfo_children()):

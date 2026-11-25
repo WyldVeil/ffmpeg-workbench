@@ -236,7 +236,9 @@ class SpecialEffectsTab(BaseTab):
             return None
         info = ff.try_probe(src)
         if info is None or not info.has_video:
-            messagebox.showerror(t("common.error"), f"Not a readable video:\n{src}", parent=self)
+            messagebox.showerror(
+                t("common.error"), t("effects.not_a_readable_video_src", src=src), parent=self
+            )
             return None
         out = out_var.get().strip() or self.suggest_output(src, suffix, ".mp4")
         out = self.confirm_output(out, [src])
@@ -296,23 +298,20 @@ class SpecialEffectsTab(BaseTab):
     def _build_intro_fadein(self, nb: ttk.Notebook) -> None:
         inner, self._fi_src, self._fi_out = self._effect_page(
             nb,
-            "  Fade-In  ",
+            t("effects.fade_in"),
             t("effects.fade_in_from_static_frame"),
-            "A still frame from the start of your video fades out over the live "
-            "footage, so you see the image dissolve into the actual video. "
-            "No frames are lost. The tool automatically finds the first "
-            "non-black frame for you.",
+            t("effects.a_still_frame_from_the_start_of"),
             "_fadein",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._fi_dur = tk.StringVar(value="2.5")
         self._fi_start = tk.StringVar(value="auto")
         self._fi_crf = tk.StringVar(value="18")
 
-        r = _spin(opts, "Fade duration (s):", self._fi_dur, 0.5, 10, 0.5)
+        r = _spin(opts, t("muter.fade_label"), self._fi_dur, 0.5, 10, 0.5)
         r.pack(anchor="w", pady=px(3))
 
         r2 = tk.Frame(opts, bg=CLR["bg"])
@@ -341,11 +340,11 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(4))
 
-        r3 = _spin(opts, "CRF (quality):", self._fi_crf, 12, 30, 1)
+        r3 = _spin(opts, t("effects.crf_quality"), self._fi_crf, 12, 30, 1)
         r3.pack(anchor="w", pady=px(3))
 
         self._fi_btn = self.make_render_btn(
-            inner, "✨  APPLY FADE-IN", self._render_fadein, width=30
+            inner, t("effects.apply_fade_in"), self._render_fadein, width=30
         )
         self._fi_btn.pack(pady=px(10))
         self._fi_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -356,11 +355,11 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            fade = self._fx_num(self._fi_dur, "Fade duration", 0.1, 60)
+            fade = self._fx_num(self._fi_dur, t("effects.fade_duration"), 0.1, 60)
             custom = (
                 None
                 if self._fi_start.get() == "auto"
-                else self._fx_num(self._fi_custom_t, "Timestamp", 0)
+                else self._fx_num(self._fi_custom_t, t("chapter_markers.timestamp_col"), 0)
             )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
@@ -368,7 +367,7 @@ class SpecialEffectsTab(BaseTab):
         _w, _h, _fps, dur = fx.geometry(info)
         still_at = custom if custom is not None else first_visible_time(src)
         still_at = max(0.0, min(still_at, max(0.0, dur - 0.1)))
-        self.log(self._fi_console, f"  Still frame at {still_at:.2f}s")
+        self.log(self._fi_console, t("effects.still_frame_at_still_at_2f_s", still_at=still_at))
         graph = fx.fadein_graph(fade, still_at)
         self._fx_run(
             RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
@@ -384,27 +383,27 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.zoom_burst"),
             t("effects.zoom_burst_in"),
-            "The video starts massively zoomed-in and rapidly pulls back to "
-            "full frame, like a camera snap-zoom. Great for high-energy openers. "
-            "Uses zoompan filter; original video is untouched after the burst ends.",
+            t("effects.the_video_starts_massively_zoomed_in_and"),
             "_zoomburst",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._zb_dur = tk.StringVar(value="1.5")
         self._zb_zoom = tk.StringVar(value="3.0")
         self._zb_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Burst duration (s):", self._zb_dur, 0.3, 5, 0.1).pack(anchor="w", pady=px(3))
-        _spin(opts, "Starting zoom factor (×):", self._zb_zoom, 1.5, 8, 0.5).pack(
+        _spin(opts, t("effects.burst_duration_s"), self._zb_dur, 0.3, 5, 0.1).pack(
             anchor="w", pady=px(3)
         )
-        _spin(opts, "CRF (quality):", self._zb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.starting_zoom_factor"), self._zb_zoom, 1.5, 8, 0.5).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("effects.crf_quality"), self._zb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._zb_btn = self.make_render_btn(
-            inner, "🔍  APPLY ZOOM BURST", self._render_zoomburst, width=30
+            inner, t("effects.apply_zoom_burst"), self._render_zoomburst, width=30
         )
         self._zb_btn.pack(pady=px(10))
         self._zb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -415,8 +414,8 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            d = self._fx_num(self._zb_dur, "Duration", 0.1, 30)
-            z = self._fx_num(self._zb_zoom, "Zoom", 1.0, 10)
+            d = self._fx_num(self._zb_dur, t("splicer.column_duration"), 0.1, 30)
+            z = self._fx_num(self._zb_zoom, t("effects.zoom"), 1.0, 10)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -437,12 +436,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.slide_in"),
             t("effects.slide_in_2"),
-            "The video frame slides onto a black background from any edge. "
-            "After the animation the video plays normally at full size.",
+            t("effects.the_video_frame_slides_onto_a_black"),
             "_slidein",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._sl_dir = tk.StringVar(value="Left")
@@ -450,13 +448,19 @@ class SpecialEffectsTab(BaseTab):
         self._sl_crf = tk.StringVar(value="18")
 
         _combo(
-            opts, "Slide from:", self._sl_dir, ["Left", "Right", "Top", "Bottom"], width=12
+            opts,
+            t("effects.slide_from"),
+            self._sl_dir,
+            ["Left", "Right", "Top", "Bottom"],
+            width=12,
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Slide duration (s):", self._sl_dur, 0.2, 5, 0.1).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.slide_duration_s"), self._sl_dur, 0.2, 5, 0.1).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._sl_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._sl_btn = self.make_render_btn(
-            inner, "↔  APPLY SLIDE-IN", self._render_slidein, width=30
+            inner, t("effects.apply_slide_in"), self._render_slidein, width=30
         )
         self._sl_btn.pack(pady=px(10))
         self._sl_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -467,7 +471,7 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            d = self._fx_num(self._sl_dur, "Duration", 0.1, 30)
+            d = self._fx_num(self._sl_dur, t("splicer.column_duration"), 0.1, 30)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -497,25 +501,27 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.spin_in"),
             t("effects.spin_in_2"),
-            "The video rotates in from a small, spinning state and expands "
-            "to fill the frame. A popular dramatic opener. "
-            "Achieved via rotate + scale expressions on the first N frames.",
+            t("effects.the_video_rotates_in_from_a_small"),
             "_spinin",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._sp_dur = tk.StringVar(value="1.5")
         self._sp_turns = tk.StringVar(value="1")
         self._sp_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Spin duration (s):", self._sp_dur, 0.3, 5, 0.1).pack(anchor="w", pady=px(3))
-        _spin(opts, "Number of rotations:", self._sp_turns, 1, 5, 1).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.spin_duration_s"), self._sp_dur, 0.3, 5, 0.1).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("effects.number_of_rotations"), self._sp_turns, 1, 5, 1).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._sp_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._sp_btn = self.make_render_btn(
-            inner, "🌀  APPLY SPIN-IN", self._render_spinin, width=30
+            inner, t("effects.apply_spin_in"), self._render_spinin, width=30
         )
         self._sp_btn.pack(pady=px(10))
         self._sp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -526,8 +532,8 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            d = self._fx_num(self._sp_dur, "Duration", 0.1, 30)
-            turns = self._fx_num(self._sp_turns, "Turns", 0, 20)
+            d = self._fx_num(self._sp_dur, t("splicer.column_duration"), 0.1, 30)
+            turns = self._fx_num(self._sp_turns, t("effects.turns"), 0, 20)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -547,23 +553,23 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.split_open"),
             t("effects.split_open_2"),
-            "The screen is split horizontally. Top half slides up and bottom half "
-            "slides down, revealing the video. The cinematic curtain reveal. "
-            "Achieved with two crop+overlay layers animating in opposite directions.",
+            t("effects.the_screen_is_split_horizontally_top_half"),
             "_splitopen",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._spo_dur = tk.StringVar(value="1.0")
         self._spo_dir = tk.StringVar(value="Vertical (curtain)")
         self._spo_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Open duration (s):", self._spo_dur, 0.2, 4, 0.1).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.open_duration_s"), self._spo_dur, 0.2, 4, 0.1).pack(
+            anchor="w", pady=px(3)
+        )
         _combo(
             opts,
-            "Split axis:",
+            t("effects.split_axis"),
             self._spo_dir,
             ["Vertical (curtain)", "Horizontal (book)"],
             width=22,
@@ -571,7 +577,7 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "CRF:", self._spo_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._spo_btn = self.make_render_btn(
-            inner, "↕  APPLY SPLIT-OPEN", self._render_splitopen, width=30
+            inner, t("effects.apply_split_open"), self._render_splitopen, width=30
         )
         self._spo_btn.pack(pady=px(10))
         self._spo_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -582,7 +588,7 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            d = self._fx_num(self._spo_dur, "Duration", 0.1, 30)
+            d = self._fx_num(self._spo_dur, t("splicer.column_duration"), 0.1, 30)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -610,20 +616,19 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.fade_out"),
             t("effects.fade_to_black"),
-            "The last N seconds of your video fade smoothly to black. "
-            "Audio fades out in parallel. Clean and professional.",
+            t("effects.the_last_n_seconds_of_your_video"),
             "_fadeout",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._fo_dur = tk.StringVar(value="2.0")
         self._fo_crf = tk.StringVar(value="18")
-        _spin(opts, "Fade duration (s):", self._fo_dur, 0.3, 10, 0.5).pack(anchor="w", pady=px(3))
+        _spin(opts, t("muter.fade_label"), self._fo_dur, 0.3, 10, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._fo_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._fo_btn = self.make_render_btn(
-            inner, "⬛  APPLY FADE-OUT", self._render_fadeout, width=30
+            inner, t("effects.apply_fade_out"), self._render_fadeout, width=30
         )
         self._fo_btn.pack(pady=px(10))
         self._fo_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -635,7 +640,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         dur = float(self._fo_dur.get())
@@ -656,22 +661,23 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.freeze_zoom_out"),
             t("effects.freeze_frame_zoom_out"),
-            "The last frame of the video is frozen, then slowly zooms out and "
-            "fades to black. A classic cinematic ending.",
+            t("effects.the_last_frame_of_the_video_is"),
             "_freezezoom",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._fz_hold = tk.StringVar(value="2.5")
         self._fz_fade = tk.StringVar(value="1.0")
         self._fz_crf = tk.StringVar(value="18")
-        _spin(opts, "Hold duration (s):", self._fz_hold, 0.5, 10, 0.5).pack(anchor="w", pady=px(3))
-        _spin(opts, "Fade duration (s):", self._fz_fade, 0.3, 5, 0.5).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.hold_duration_s"), self._fz_hold, 0.5, 10, 0.5).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("muter.fade_label"), self._fz_fade, 0.3, 5, 0.5).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._fz_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._fz_btn = self.make_render_btn(
-            inner, "🎞  APPLY FREEZE & ZOOM OUT", self._render_freezezoom, width=30
+            inner, t("effects.apply_freeze_zoom_out"), self._render_freezezoom, width=30
         )
         self._fz_btn.pack(pady=px(10))
         self._fz_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -682,8 +688,8 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            hold = self._fx_num(self._fz_hold, "Hold", 0.1, 60)
-            fade = self._fx_num(self._fz_fade, "Fade", 0, 30)
+            hold = self._fx_num(self._fz_hold, t("effects.hold"), 0.1, 60)
+            fade = self._fx_num(self._fz_fade, t("muter.fade"), 0, 30)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -710,20 +716,21 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.iris_close"),
             t("effects.iris_vignette_close"),
-            "A black oval vignette closes in from the edges to the centre "
-            "like a classic iris wipe, beloved in cinema and vintage content.",
+            t("effects.a_black_oval_vignette_closes_in_from"),
             "_irisclose",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._ir_dur = tk.StringVar(value="1.5")
         self._ir_crf = tk.StringVar(value="18")
-        _spin(opts, "Iris duration (s):", self._ir_dur, 0.3, 6, 0.5).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.iris_duration_s"), self._ir_dur, 0.3, 6, 0.5).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._ir_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._ir_btn = self.make_render_btn(
-            inner, "⭕  APPLY IRIS CLOSE", self._render_irisclose, width=30
+            inner, t("effects.apply_iris_close"), self._render_irisclose, width=30
         )
         self._ir_btn.pack(pady=px(10))
         self._ir_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -734,7 +741,7 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            d = self._fx_num(self._ir_dur, "Duration", 0.1, 30)
+            d = self._fx_num(self._ir_dur, t("splicer.column_duration"), 0.1, 30)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -767,13 +774,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.emoji_burst"),
             t("effects.emoji_text_burst"),
-            "Slam a large emoji or short text onto the video at a specific "
-            "timestamp with a pop-in scale animation. "
-            "Set the position (% of frame), appear time, and hold duration.",
+            t("effects.slam_a_large_emoji_or_short_text"),
             "_emoji",
         )
 
-        opts = _lf(inner, "Emoji / Text Options")
+        opts = _lf(inner, t("effects.emoji_text_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._em_text = tk.StringVar(value="😂")
@@ -808,7 +813,9 @@ class SpecialEffectsTab(BaseTab):
             font=(UI_FONT, 8),
         ).pack(side="left")
 
-        _spin(opts, "Font size (px):", self._em_size, 24, 256, 8).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.font_size_px"), self._em_size, 24, 256, 8).pack(
+            anchor="w", pady=px(3)
+        )
 
         r1 = tk.Frame(opts, bg=CLR["bg"])
         r1.pack(anchor="w", pady=px(3))
@@ -843,18 +850,20 @@ class SpecialEffectsTab(BaseTab):
         """When it appears, how long it stays, quality, and the button."""
         _spin(
             opts,
-            "Appear at (s):",
+            t("effects.appear_at_s"),
             self._em_start,
             0,
             3600,
             0.5,
             source=lambda: self._em_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Hold for (s):", self._em_hold, 0.2, 30, 0.5).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.hold_for_s"), self._em_hold, 0.2, 30, 0.5).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._em_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._em_btn = self.make_render_btn(
-            inner, "😂  BURN EMOJI ONTO VIDEO", self._render_emoji, width=30
+            inner, t("effects.burn_emoji_onto_video"), self._render_emoji, width=30
         )
         self._em_btn.pack(pady=px(10))
         self._em_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -866,7 +875,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         # read the settings here, on the UI thread; only the probe runs in the background
@@ -900,13 +909,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.lower_third"),
             t("effects.lower_third_banner"),
-            "A professional name/title bar that slides up from the bottom. "
-            "Used for speaker IDs, location captions, product names, "
-            "and news-style graphics.",
+            t("effects.a_professional_name_title_bar_that_slides"),
             "_lt",
         )
 
-        opts = _lf(inner, "Banner Options")
+        opts = _lf(inner, t("effects.banner_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._lt_title = tk.StringVar(value="John Smith")
@@ -937,18 +944,20 @@ class SpecialEffectsTab(BaseTab):
 
         _spin(
             opts,
-            "Appear at (s):",
+            t("effects.appear_at_s"),
             self._lt_start,
             0,
             3600,
             0.5,
             source=lambda: self._lt_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Hold for (s):", self._lt_hold, 0.5, 60, 0.5).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.hold_for_s"), self._lt_hold, 0.5, 60, 0.5).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._lt_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._lt_btn = self.make_render_btn(
-            inner, "📛  BURN LOWER THIRD", self._render_lowerthird, width=30
+            inner, t("effects.burn_lower_third"), self._render_lowerthird, width=30
         )
         self._lt_btn.pack(pady=px(10))
         self._lt_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -959,8 +968,8 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            start = self._fx_num(self._lt_start, "Start", 0)
-            hold = self._fx_num(self._lt_hold, "Hold", 0.1)
+            start = self._fx_num(self._lt_start, t("btn.start"), 0)
+            hold = self._fx_num(self._lt_hold, t("effects.hold"), 0.1)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -1004,13 +1013,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.subscribe_bump"),
             t("effects.subscribe_like_reminder"),
-            "Burns a customisable call-to-action reminder onto your video. "
-            '"Like & Subscribe!", "Follow for more", etc. '
-            "Animates in with a bounce and fades out cleanly.",
+            t("effects.burns_a_customisable_call_to_action_reminder"),
             "_subscribe",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._sub_text = tk.StringVar(value="👍 Like & Subscribe! 🔔")
@@ -1033,28 +1040,32 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(6))
 
-        _spin(opts, "Font size:", self._sub_size, 24, 120, 4).pack(anchor="w", pady=px(3))
+        _spin(opts, t("intro_maker.font_size_label"), self._sub_size, 24, 120, 4).pack(
+            anchor="w", pady=px(3)
+        )
         _combo(
             opts,
-            "Position:",
+            t("side_by_side.label_position_label"),
             self._sub_pos,
             list(fx.BANNER_PLACES),
             width=16,
         ).pack(anchor="w", pady=px(3))
         _spin(
             opts,
-            "Appear at (s):",
+            t("effects.appear_at_s"),
             self._sub_start,
             0,
             3600,
             0.5,
             source=lambda: self._sub_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Hold for (s):", self._sub_hold, 0.5, 60, 0.5).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.hold_for_s"), self._sub_hold, 0.5, 60, 0.5).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._sub_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._sub_btn = self.make_render_btn(
-            inner, "🔔  BURN SUBSCRIBE REMINDER", self._render_subscribe, width=30
+            inner, t("effects.burn_subscribe_reminder"), self._render_subscribe, width=30
         )
         self._sub_btn.pack(pady=px(10))
         self._sub_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1066,7 +1077,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         # read the settings here, on the UI thread; only the probe runs in the background
@@ -1098,15 +1109,13 @@ class SpecialEffectsTab(BaseTab):
     def _build_ov_countdown(self, nb: ttk.Notebook) -> None:
         inner, self._cd_src, self._cd_out = self._effect_page(
             nb,
-            "  Countdown  ",
+            t("effects.countdown"),
             t("effects.countdown_timer_overlay"),
-            "Burns a live countdown clock onto the video starting at "
-            "your chosen value. Great for reaction videos, cooking timers, "
-            "challenges, and live event coverage.",
+            t("effects.burns_a_live_countdown_clock_onto_the"),
             "_countdown",
         )
 
-        opts = _lf(inner, "Countdown Options")
+        opts = _lf(inner, t("effects.countdown_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._cd_from = tk.StringVar(value="10")
@@ -1114,21 +1123,25 @@ class SpecialEffectsTab(BaseTab):
         self._cd_size = tk.StringVar(value="80")
         self._cd_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Count from (s):", self._cd_from, 3, 3600, 1).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.count_from_s"), self._cd_from, 3, 3600, 1).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(
             opts,
-            "Start at (s):",
+            t("effects.start_at_s"),
             self._cd_start,
             0,
             3600,
             0.5,
             source=lambda: self._cd_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Font size:", self._cd_size, 24, 200, 8).pack(anchor="w", pady=px(3))
+        _spin(opts, t("intro_maker.font_size_label"), self._cd_size, 24, 200, 8).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._cd_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._cd_btn = self.make_render_btn(
-            inner, "⏱  BURN COUNTDOWN", self._render_countdown, width=30
+            inner, t("effects.burn_countdown"), self._render_countdown, width=30
         )
         self._cd_btn.pack(pady=px(10))
         self._cd_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1140,7 +1153,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         try:
@@ -1167,13 +1180,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.progress_bar"),
             t("effects.video_progress_bar"),
-            "Adds a YouTube-style thin progress bar at the top or bottom that "
-            "fills from left to right as the video plays. "
-            "Viewers love knowing how far through the video they are.",
+            t("effects.adds_a_youtube_style_thin_progress_bar"),
             "_progress",
         )
 
-        opts = _lf(inner, "Bar Options")
+        opts = _lf(inner, t("effects.bar_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._pb_color = tk.StringVar(value="FF0000")
@@ -1195,14 +1206,16 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(6))
 
-        _spin(opts, "Bar height (px):", self._pb_height, 2, 40, 2).pack(anchor="w", pady=px(3))
-        _combo(opts, "Position:", self._pb_pos, ["Bottom", "Top"], width=10).pack(
+        _spin(opts, t("effects.bar_height_px"), self._pb_height, 2, 40, 2).pack(
             anchor="w", pady=px(3)
         )
+        _combo(
+            opts, t("side_by_side.label_position_label"), self._pb_pos, ["Bottom", "Top"], width=10
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._pb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._pb_btn = self.make_render_btn(
-            inner, "▶  BURN PROGRESS BAR", self._render_progressbar, width=30
+            inner, t("effects.burn_progress_bar"), self._render_progressbar, width=30
         )
         self._pb_btn.pack(pady=px(10))
         self._pb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1213,7 +1226,7 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            bar_h = int(self._fx_num(self._pb_height, "Height", 1, 200))
+            bar_h = int(self._fx_num(self._pb_height, t("region_blur.height_col"), 1, 200))
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -1242,16 +1255,13 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_rgb(self, nb: ttk.Notebook) -> None:
         inner, self._rgb_src, self._rgb_out = self._effect_page(
             nb,
-            "  RGB Glitch  ",
+            t("effects.rgb_glitch"),
             t("effects.rgb_chromatic_aberration_glitch"),
-            "Splits the Red, Green, and Blue channels and offsets them "
-            "horizontally to create the classic chromatic aberration / "
-            "cyberpunk glitch look seen everywhere on YouTube. "
-            "Apply to a section or the entire video.",
+            t("effects.splits_the_red_green_and_blue_channels"),
             "_rgb",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._rgb_offset = tk.StringVar(value="6")
@@ -1259,7 +1269,9 @@ class SpecialEffectsTab(BaseTab):
         self._rgb_dur = tk.StringVar(value="whole video")
         self._rgb_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Channel offset (px):", self._rgb_offset, 1, 40, 1).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.channel_offset_px"), self._rgb_offset, 1, 40, 1).pack(
+            anchor="w", pady=px(3)
+        )
 
         r = tk.Frame(opts, bg=CLR["bg"])
         r.pack(anchor="w", pady=px(3))
@@ -1275,7 +1287,7 @@ class SpecialEffectsTab(BaseTab):
         frame_button(r, self._rgb_start, lambda: self._rgb_src.get().strip(), seconds_text).pack(
             side="left"
         )
-        tk.Label(r, text="  Duration (s, or 'whole video'):", bg=CLR["bg"], fg=CLR["fg"]).pack(
+        tk.Label(r, text=t("effects.duration_s_or_whole_video"), bg=CLR["bg"], fg=CLR["fg"]).pack(
             side="left"
         )
         tk.Entry(
@@ -1289,7 +1301,7 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "CRF:", self._rgb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._rgb_btn = self.make_render_btn(
-            inner, "🌈  APPLY RGB GLITCH", self._render_rgb, width=30
+            inner, t("effects.apply_rgb_glitch"), self._render_rgb, width=30
         )
         self._rgb_btn.pack(pady=px(10))
         self._rgb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1301,7 +1313,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         try:
@@ -1333,24 +1345,26 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.vhs_retro"),
             t("effects.vhs_retro_effect"),
-            "Simulates a degraded VHS tape: colour bleed, noise, "
-            "scanlines, and edge distortion. Popular for nostalgia, "
-            "horror, lo-fi, and vaporwave aesthetics.",
+            t("effects.simulates_a_degraded_vhs_tape_colour_bleed"),
             "_vhs",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._vhs_strength = tk.StringVar(value="Medium")
         self._vhs_crf = tk.StringVar(value="18")
 
         _combo(
-            opts, "Intensity:", self._vhs_strength, ["Subtle", "Medium", "Heavy"], width=10
+            opts,
+            t("lut.intensity_label"),
+            self._vhs_strength,
+            ["Subtle", "Medium", "Heavy"],
+            width=10,
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._vhs_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._vhs_btn = self.make_render_btn(
-            inner, "📼  APPLY VHS EFFECT", self._render_vhs, width=30
+            inner, t("effects.apply_vhs_effect"), self._render_vhs, width=30
         )
         self._vhs_btn.pack(pady=px(10))
         self._vhs_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1362,7 +1376,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         crf = self._vhs_crf.get()
@@ -1390,23 +1404,21 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.film_grain"),
             t("effects.film_grain_cinematic_noise"),
-            "Adds organic, temporal film grain. Used by cinematographers to "
-            "add texture, hide compression artefacts, and give footage a "
-            "cinematic / analogue feel.",
+            t("effects.adds_organic_temporal_film_grain_used_by"),
             "_grain",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._gr_amount = tk.StringVar(value="20")
         self._gr_crf = tk.StringVar(value="18")
-        _spin(opts, "Grain amount (0-100):", self._gr_amount, 1, 100, 5).pack(
+        _spin(opts, t("effects.grain_amount_0_100"), self._gr_amount, 1, 100, 5).pack(
             anchor="w", pady=px(3)
         )
         _spin(opts, "CRF:", self._gr_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._gr_btn = self.make_render_btn(
-            inner, "🎞  APPLY FILM GRAIN", self._render_grain, width=30
+            inner, t("effects.apply_film_grain"), self._render_grain, width=30
         )
         self._gr_btn.pack(pady=px(10))
         self._gr_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1418,7 +1430,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         try:
@@ -1438,24 +1450,23 @@ class SpecialEffectsTab(BaseTab):
     def _build_gl_vignette(self, nb: ttk.Notebook) -> None:
         inner, self._vi_src, self._vi_out = self._effect_page(
             nb,
-            "  Vignette  ",
+            t("effects.vignette"),
             t("effects.cinematic_vignette"),
-            "Darkens the edges of the frame, drawing the eye to the centre. "
-            "One of the most universally used effects in cinema and YouTube.",
+            t("effects.darkens_the_edges_of_the_frame_drawing"),
             "_vignette",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._vi_angle = tk.StringVar(value="0.628")
         self._vi_crf = tk.StringVar(value="18")
-        _spin(opts, "Strength (angle 0.1–1.5):", self._vi_angle, 0.1, 1.5, 0.05, width=6).pack(
-            anchor="w", pady=px(3)
-        )
+        _spin(
+            opts, t("effects.strength_angle_0_1_1_5"), self._vi_angle, 0.1, 1.5, 0.05, width=6
+        ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._vi_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._vi_btn = self.make_render_btn(
-            inner, "🔲  APPLY VIGNETTE", self._render_vignette, width=30
+            inner, t("effects.apply_vignette"), self._render_vignette, width=30
         )
         self._vi_btn.pack(pady=px(10))
         self._vi_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1467,7 +1478,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         angle = self._vi_angle.get()
@@ -1485,13 +1496,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.light_leak"),
             t("effects.light_leak_lens_flare"),
-            "Simulates a burst of warm light sweeping across the frame, "
-            "as if a lens flare or light leak was caught on a film camera. "
-            "Great for transitions and dream-like sequences.",
+            t("effects.simulates_a_burst_of_warm_light_sweeping"),
             "_lightleak",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._ll_start = tk.StringVar(value="2.0")
         self._ll_dur = tk.StringVar(value="1.0")
@@ -1500,17 +1509,19 @@ class SpecialEffectsTab(BaseTab):
 
         _spin(
             opts,
-            "Appear at (s):",
+            t("effects.appear_at_s"),
             self._ll_start,
             0,
             3600,
             0.5,
             source=lambda: self._ll_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Duration (s):", self._ll_dur, 0.2, 5, 0.2).pack(anchor="w", pady=px(3))
+        _spin(opts, t("gif_maker.duration_label"), self._ll_dur, 0.2, 5, 0.2).pack(
+            anchor="w", pady=px(3)
+        )
         _combo(
             opts,
-            "Light colour:",
+            t("effects.light_colour"),
             self._ll_color,
             ["Warm Orange", "Cool White", "Golden Yellow", "Soft Pink", "Electric Blue"],
             width=16,
@@ -1518,7 +1529,7 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "CRF:", self._ll_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._ll_btn = self.make_render_btn(
-            inner, "✨  APPLY LIGHT LEAK", self._render_lightleak, width=30
+            inner, t("effects.apply_light_leak"), self._render_lightleak, width=30
         )
         self._ll_btn.pack(pady=px(10))
         self._ll_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1529,8 +1540,8 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            start = self._fx_num(self._ll_start, "Start", 0)
-            d = self._fx_num(self._ll_dur, "Duration", 0.1, 30)
+            start = self._fx_num(self._ll_start, t("btn.start"), 0)
+            d = self._fx_num(self._ll_dur, t("splicer.column_duration"), 0.1, 30)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -1566,13 +1577,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.camera_shake"),
             t("effects.camera_shake_2"),
-            "Simulates an unstabilised handheld camera. Apply to impact moments, "
-            "action sequences, or jump scares. Amplitude controls jitter size. "
-            "Frame edges are cropped slightly to hide the shake border.",
+            t("effects.simulates_an_unstabilised_handheld_camera_apply"),
             "_shake",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._sh_amp = tk.StringVar(value="10")
         self._sh_speed = tk.StringVar(value="Normal")
@@ -1580,9 +1589,13 @@ class SpecialEffectsTab(BaseTab):
         self._sh_dur = tk.StringVar(value="whole video")
         self._sh_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Amplitude (px):", self._sh_amp, 2, 60, 2).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.amplitude_px"), self._sh_amp, 2, 60, 2).pack(anchor="w", pady=px(3))
         _combo(
-            opts, "Shake speed:", self._sh_speed, ["Slow", "Normal", "Fast", "Violent"], width=10
+            opts,
+            t("effects.shake_speed"),
+            self._sh_speed,
+            ["Slow", "Normal", "Fast", "Violent"],
+            width=10,
         ).pack(anchor="w", pady=px(3))
         r = tk.Frame(opts, bg=CLR["bg"])
         r.pack(anchor="w", pady=px(3))
@@ -1598,7 +1611,7 @@ class SpecialEffectsTab(BaseTab):
         frame_button(r, self._sh_start, lambda: self._sh_src.get().strip(), seconds_text).pack(
             side="left"
         )
-        tk.Label(r, text="  Duration (s / 'whole video'):", bg=CLR["bg"], fg=CLR["fg"]).pack(
+        tk.Label(r, text=t("effects.duration_s_whole_video"), bg=CLR["bg"], fg=CLR["fg"]).pack(
             side="left"
         )
         tk.Entry(
@@ -1612,7 +1625,7 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "CRF:", self._sh_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._sh_btn = self.make_render_btn(
-            inner, "📳  APPLY CAMERA SHAKE", self._render_shake, width=30
+            inner, t("effects.apply_camera_shake"), self._render_shake, width=30
         )
         self._sh_btn.pack(pady=px(10))
         self._sh_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1624,7 +1637,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         # read the settings here, on the UI thread; only the probe runs in the background
@@ -1643,7 +1656,8 @@ class SpecialEffectsTab(BaseTab):
             span = None if dur_str.lower() == "whole video" else float(dur_str)
         except ValueError:
             messagebox.showwarning(
-                t("common.warning"), f"Duration must be seconds or 'Whole video': {dur_str!r}"
+                t("common.warning"),
+                t("effects.duration_must_be_seconds_or_whole_video", dur_str=dur_str),
             )
             return
 
@@ -1666,13 +1680,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.zoom_punch"),
             t("effects.zoom_punch_impact_zoom"),
-            "A sudden very fast zoom-in at a specific timestamp, synced to an "
-            "impact, beat drop, or punchline. A favourite for meme edits, "
-            "gaming highlights, and react content.",
+            t("effects.a_sudden_very_fast_zoom_in_at"),
             "_zoompunch",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._zp_at = tk.StringVar(value="5.0")
         self._zp_zoom = tk.StringVar(value="1.4")
@@ -1683,23 +1695,29 @@ class SpecialEffectsTab(BaseTab):
 
         _spin(
             opts,
-            "Punch at (s):",
+            t("effects.punch_at_s"),
             self._zp_at,
             0,
             3600,
             0.5,
             source=lambda: self._zp_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Zoom factor (×):", self._zp_zoom, 1.1, 4, 0.05).pack(anchor="w", pady=px(3))
-        _spin(opts, "Attack (s):", self._zp_attack, 0.03, 0.5, 0.02).pack(anchor="w", pady=px(3))
-        _spin(opts, "Hold at peak (s):", self._zp_hold, 0.05, 2, 0.05).pack(anchor="w", pady=px(3))
-        _spin(opts, "Release / ease (s):", self._zp_release, 0.1, 3, 0.1).pack(
+        _spin(opts, t("effects.zoom_factor"), self._zp_zoom, 1.1, 4, 0.05).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("effects.attack_s"), self._zp_attack, 0.03, 0.5, 0.02).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("effects.hold_at_peak_s"), self._zp_hold, 0.05, 2, 0.05).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("effects.release_ease_s"), self._zp_release, 0.1, 3, 0.1).pack(
             anchor="w", pady=px(3)
         )
         _spin(opts, "CRF:", self._zp_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._zp_btn = self.make_render_btn(
-            inner, "👊  APPLY ZOOM PUNCH", self._render_zoompunch, width=30
+            inner, t("effects.apply_zoom_punch"), self._render_zoompunch, width=30
         )
         self._zp_btn.pack(pady=px(10))
         self._zp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1711,10 +1729,10 @@ class SpecialEffectsTab(BaseTab):
         src, out, info = begun
         try:
             at = self._fx_num(self._zp_at, "At", 0)
-            z = self._fx_num(self._zp_zoom, "Zoom", 1.0, 5)
-            a = self._fx_num(self._zp_attack, "Attack", 0.01, 10)
-            hold = self._fx_num(self._zp_hold, "Hold", 0, 10)
-            rel = self._fx_num(self._zp_release, "Release", 0.01, 10)
+            z = self._fx_num(self._zp_zoom, t("effects.zoom"), 1.0, 5)
+            a = self._fx_num(self._zp_attack, t("effects.attack"), 0.01, 10)
+            hold = self._fx_num(self._zp_hold, t("effects.hold"), 0, 10)
+            rel = self._fx_num(self._zp_release, t("effects.release"), 0.01, 10)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -1735,28 +1753,28 @@ class SpecialEffectsTab(BaseTab):
     def _build_mo_kenburns(self, nb: ttk.Notebook) -> None:
         inner, self._kb_src, self._kb_out = self._effect_page(
             nb,
-            "  Ken Burns  ",
+            t("effects.ken_burns"),
             t("effects.ken_burns_pan_zoom"),
-            "A slow, cinematic pan and zoom across the entire video. "
-            "Named after the documentary filmmaker. Ideal for drone footage, "
-            "landscape shots, interview B-roll, and still photo slideshows.",
+            t("effects.a_slow_cinematic_pan_and_zoom_across"),
             "_kenburns",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._kb_zoom_start = tk.StringVar(value="1.0")
         self._kb_zoom_end = tk.StringVar(value="1.15")
         self._kb_dir = tk.StringVar(value=next(iter(_KB_PANS)))
         self._kb_crf = tk.StringVar(value="18")
 
-        _spin(opts, "Zoom start (×):", self._kb_zoom_start, 1.0, 2.0, 0.05).pack(
+        _spin(opts, t("effects.zoom_start"), self._kb_zoom_start, 1.0, 2.0, 0.05).pack(
             anchor="w", pady=px(3)
         )
-        _spin(opts, "Zoom end (×):", self._kb_zoom_end, 1.0, 2.0, 0.05).pack(anchor="w", pady=px(3))
+        _spin(opts, t("effects.zoom_end"), self._kb_zoom_end, 1.0, 2.0, 0.05).pack(
+            anchor="w", pady=px(3)
+        )
         _combo(
             opts,
-            "Pan direction:",
+            t("effects.pan_direction"),
             self._kb_dir,
             list(_KB_PANS),
             width=18,
@@ -1764,7 +1782,7 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "CRF:", self._kb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._kb_btn = self.make_render_btn(
-            inner, "🎥  APPLY KEN BURNS", self._render_kenburns, width=30
+            inner, t("effects.apply_ken_burns"), self._render_kenburns, width=30
         )
         self._kb_btn.pack(pady=px(10))
         self._kb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1775,8 +1793,8 @@ class SpecialEffectsTab(BaseTab):
             return
         src, out, info = begun
         try:
-            z0 = self._fx_num(self._kb_zoom_start, "Start zoom", 1.0, 5)
-            z1 = self._fx_num(self._kb_zoom_end, "End zoom", 1.0, 5)
+            z0 = self._fx_num(self._kb_zoom_start, t("effects.start_zoom"), 1.0, 5)
+            z1 = self._fx_num(self._kb_zoom_end, t("effects.end_zoom"), 1.0, 5)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -1805,14 +1823,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.whip_pan_blur"),
             t("effects.whip_pan_motion_blur"),
-            "Adds an extreme horizontal or vertical motion blur over a short "
-            "window, simulating a fast camera whip pan. "
-            "Perfect for transitions between scenes, used on YouTube by "
-            "MrBeast, MKBHD, Linus Tech Tips, and almost every vlogger.",
+            t("effects.adds_an_extreme_horizontal_or_vertical_motion"),
             "_whippan",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._wp_at = tk.StringVar(value="5.0")
         self._wp_dur = tk.StringVar(value="0.3")
@@ -1822,22 +1837,26 @@ class SpecialEffectsTab(BaseTab):
 
         _spin(
             opts,
-            "Apply at (s):",
+            t("effects.apply_at_s"),
             self._wp_at,
             0,
             3600,
             0.5,
             source=lambda: self._wp_src.get().strip(),
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Duration (s):", self._wp_dur, 0.1, 2, 0.05).pack(anchor="w", pady=px(3))
-        _combo(opts, "Direction:", self._wp_dir, ["Horizontal", "Vertical"], width=12).pack(
+        _spin(opts, t("gif_maker.duration_label"), self._wp_dur, 0.1, 2, 0.05).pack(
             anchor="w", pady=px(3)
         )
-        _spin(opts, "Blur strength:", self._wp_str, 5, 120, 5).pack(anchor="w", pady=px(3))
+        _combo(opts, t("zoom.direction"), self._wp_dir, ["Horizontal", "Vertical"], width=12).pack(
+            anchor="w", pady=px(3)
+        )
+        _spin(opts, t("effects.blur_strength"), self._wp_str, 5, 120, 5).pack(
+            anchor="w", pady=px(3)
+        )
         _spin(opts, "CRF:", self._wp_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._wp_btn = self.make_render_btn(
-            inner, "💨  APPLY WHIP PAN BLUR", self._render_whippan, width=30
+            inner, t("effects.apply_whip_pan_blur"), self._render_whippan, width=30
         )
         self._wp_btn.pack(pady=px(10))
         self._wp_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1849,8 +1868,8 @@ class SpecialEffectsTab(BaseTab):
         src, out, info = begun
         try:
             at = self._fx_num(self._wp_at, "At", 0)
-            d = self._fx_num(self._wp_dur, "Duration", 0.01, 10)
-            strength = int(self._fx_num(self._wp_str, "Strength", 1, 500))
+            d = self._fx_num(self._wp_dur, t("splicer.column_duration"), 0.01, 10)
+            strength = int(self._fx_num(self._wp_str, t("region_blur.strength_col"), 1, 500))
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -1880,13 +1899,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.meme_caption"),
             t("effects.impact_meme_caption"),
-            "Burns large white Impact-style text with black outline onto the "
-            "video: top caption, bottom caption, or both. The classic meme "
-            "format used on every reaction and highlight channel.",
+            t("effects.burns_large_white_impact_style_text_with"),
             "_meme",
         )
 
-        opts = _lf(inner, "Caption Options")
+        opts = _lf(inner, t("effects.caption_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._mc_top = tk.StringVar(value="WHEN YOU REALISE")
@@ -1912,7 +1929,9 @@ class SpecialEffectsTab(BaseTab):
                 font=(UI_FONT, 11),
             ).pack(side="left", padx=px(6))
 
-        _spin(opts, "Font size:", self._mc_size, 24, 180, 4).pack(anchor="w", pady=px(3))
+        _spin(opts, t("intro_maker.font_size_label"), self._mc_size, 24, 180, 4).pack(
+            anchor="w", pady=px(3)
+        )
         r2 = tk.Frame(opts, bg=CLR["bg"])
         r2.pack(anchor="w", pady=px(3))
         tk.Label(r2, text=t("pip.show_from_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(side="left")
@@ -1927,7 +1946,7 @@ class SpecialEffectsTab(BaseTab):
         frame_button(r2, self._mc_start, lambda: self._mc_src.get().strip(), seconds_text).pack(
             side="left"
         )
-        tk.Label(r2, text="  Duration (s / 'whole video'):", bg=CLR["bg"], fg=CLR["fg"]).pack(
+        tk.Label(r2, text=t("effects.duration_s_whole_video"), bg=CLR["bg"], fg=CLR["fg"]).pack(
             side="left"
         )
         tk.Entry(
@@ -1941,7 +1960,7 @@ class SpecialEffectsTab(BaseTab):
         _spin(opts, "CRF:", self._mc_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._mc_btn = self.make_render_btn(
-            inner, "🗯  BURN MEME CAPTIONS", self._render_meme, width=30
+            inner, t("effects.burn_meme_captions"), self._render_meme, width=30
         )
         self._mc_btn.pack(pady=px(10))
         self._mc_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -1953,7 +1972,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         try:
@@ -1989,7 +2008,7 @@ class SpecialEffectsTab(BaseTab):
                 )
 
         if not filters:
-            messagebox.showwarning(t("common.warning"), "Enter at least one caption.")
+            messagebox.showwarning(t("common.warning"), t("effects.enter_at_least_one_caption"))
             return
 
         cmd = fx.meme_cmd(crf, filters, out, src)
@@ -2005,13 +2024,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.cinematic_bars"),
             t("effects.cinematic_black_bars"),
-            "Adds letterbox bars to simulate a 2.39:1 or 2.35:1 anamorphic "
-            "widescreen cinema aspect ratio. Optionally animate them sliding "
-            "in from the edges for a dramatic reveal.",
+            t("effects.adds_letterbox_bars_to_simulate_a_2"),
             "_cinebars",
         )
 
-        opts = _lf(inner, "Options")
+        opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
         self._cb_ratio = tk.StringVar(value="2.39:1")
         self._cb_anim = tk.BooleanVar(value=True)
@@ -2020,7 +2037,7 @@ class SpecialEffectsTab(BaseTab):
 
         _combo(
             opts,
-            "Aspect ratio:",
+            t("effects.aspect_ratio"),
             self._cb_ratio,
             ["2.39:1 (Scope)", "2.35:1 (Scope)", "2.20:1", "1.85:1 (Flat)"],
             width=18,
@@ -2036,13 +2053,13 @@ class SpecialEffectsTab(BaseTab):
             selectcolor=CLR["panel"],
             activebackground=CLR["bg"],
         ).pack(side="left")
-        _spin(opts, "Animation duration (s):", self._cb_adur, 0.2, 3, 0.2).pack(
+        _spin(opts, t("pip.animation_duration_label"), self._cb_adur, 0.2, 3, 0.2).pack(
             anchor="w", pady=px(3)
         )
         _spin(opts, "CRF:", self._cb_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._cb_btn = self.make_render_btn(
-            inner, "🎬  APPLY CINEMATIC BARS", self._render_cinebars, width=30
+            inner, t("effects.apply_cinematic_bars"), self._render_cinebars, width=30
         )
         self._cb_btn.pack(pady=px(10))
         self._cb_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -2055,7 +2072,7 @@ class SpecialEffectsTab(BaseTab):
         w, h, fps, _dur = fx.geometry(info)
         try:
             ratio = float(self._cb_ratio.get().split(":")[0])
-            ad = self._fx_num(self._cb_adur, "Animation", 0.05, 30)
+            ad = self._fx_num(self._cb_adur, t("titles.animation"), 0.05, 30)
         except (ValueError, IndexError) as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -2063,7 +2080,7 @@ class SpecialEffectsTab(BaseTab):
         if bar < 2:
             messagebox.showinfo(
                 t("common.warning"),
-                "This video is already as wide as the chosen ratio - no bars needed.",
+                t("effects.this_video_is_already_as_wide_as"),
                 parent=self,
             )
             return
@@ -2085,13 +2102,11 @@ class SpecialEffectsTab(BaseTab):
             nb,
             t("effects.social_watermark"),
             t("effects.social_media_watermark"),
-            "Burns a persistent channel handle / watermark onto the entire "
-            "video. Supports @ prefixes, emojis, and custom positioning. "
-            "Essential for short-form content repurposed across platforms.",
+            t("effects.burns_a_persistent_channel_handle_watermark_onto"),
             "_watermark",
         )
 
-        opts = _lf(inner, "Watermark Options")
+        opts = _lf(inner, t("effects.watermark_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._wm_text = tk.StringVar(value="@YourChannel")
@@ -2113,21 +2128,23 @@ class SpecialEffectsTab(BaseTab):
             insertbackground=CLR["fg"],
         ).pack(side="left", padx=px(6))
 
-        _spin(opts, "Font size:", self._wm_size, 12, 100, 2).pack(anchor="w", pady=px(3))
+        _spin(opts, t("intro_maker.font_size_label"), self._wm_size, 12, 100, 2).pack(
+            anchor="w", pady=px(3)
+        )
         _combo(
             opts,
-            "Position:",
+            t("side_by_side.label_position_label"),
             self._wm_pos,
             ["Bottom Right", "Bottom Left", "Top Right", "Top Left", "Centre"],
             width=14,
         ).pack(anchor="w", pady=px(3))
-        _spin(opts, "Opacity (0.1–1.0):", self._wm_alpha, 0.1, 1.0, 0.05, width=6).pack(
+        _spin(opts, t("effects.opacity_0_1_1_0"), self._wm_alpha, 0.1, 1.0, 0.05, width=6).pack(
             anchor="w", pady=px(3)
         )
         _spin(opts, "CRF:", self._wm_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
 
         self._wm_btn = self.make_render_btn(
-            inner, "©  BURN WATERMARK", self._render_watermark, width=30
+            inner, t("watermark.burn_watermark"), self._render_watermark, width=30
         )
         self._wm_btn.pack(pady=px(10))
         self._wm_console = self.make_console_block(inner, height=7, bg=CLR["bg"])
@@ -2139,7 +2156,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Please set an output path.")
+            messagebox.showwarning(t("common.warning"), t("effects.please_set_an_output_path"))
             return
 
         try:

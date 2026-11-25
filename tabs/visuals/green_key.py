@@ -71,9 +71,9 @@ class GreenKeyerTab(BaseTab):
         self.src_row.pack(fill="x", pady=px(2))
         brow = tk.Frame(pick)
         brow.pack(fill="x", pady=px(2))
-        tk.Label(brow, text="Background:", width=16, anchor="w", font=(UI_FONT, 10, "bold")).pack(
-            side="left"
-        )
+        tk.Label(
+            brow, text=t("green_key.background"), width=16, anchor="w", font=(UI_FONT, 10, "bold")
+        ).pack(side="left")
         self.bg_mode = tk.StringVar(value=BACKGROUNDS["file"])
         bm = ttk.Combobox(
             brow,
@@ -85,7 +85,11 @@ class GreenKeyerTab(BaseTab):
         bm.pack(side="left", padx=px(6))
         bm.bind("<<ComboboxSelected>>", lambda _e: self._bg_mode_changed())
         self.bg_swatch = ColourButton(
-            brow, "#202020", text="  Colour…  ", width=10, on_change=lambda _c: self._schedule()
+            brow,
+            "#202020",
+            text=t("green_key.colour"),
+            width=10,
+            on_change=lambda _c: self._schedule(),
         )
         self.bg_row = FileRow(
             pick,
@@ -120,7 +124,7 @@ class GreenKeyerTab(BaseTab):
     def _build_output(self, body: tk.Frame, opts: tk.LabelFrame) -> None:
         r0 = tk.Frame(opts)
         r0.pack(fill="x", pady=px(2))
-        tk.Label(r0, text="Method:", font=(UI_FONT, 10, "bold")).pack(side="left")
+        tk.Label(r0, text=t("sync.method_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
         self.method_var = tk.StringVar(value=METHODS["chroma"])
         mb = ttk.Combobox(
             r0,
@@ -141,7 +145,7 @@ class GreenKeyerTab(BaseTab):
         self.swatch.pack(side="left")
         tk.Button(
             r0,
-            text="Auto-detect",
+            text=t("green_key.auto_detect"),
             relief="flat",
             cursor="hand2",
             command=lambda: self._auto_sample(force=True),
@@ -170,7 +174,7 @@ class GreenKeyerTab(BaseTab):
         self.despill_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             opts,
-            text="Remove colour spill from the subject (green/blue screens)",
+            text=t("green_key.remove_colour_spill_from_the_subject_green"),
             variable=self.despill_var,
             command=self._schedule,
         ).pack(anchor="w")
@@ -184,7 +188,7 @@ class GreenKeyerTab(BaseTab):
         )
         self.alpha_note = tk.Label(  # shown under the save row for transparent output
             self.out_row.master,
-            text="Transparent output: save as .mov (ProRes 4444) or .webm (VP9 with alpha).",
+            text=t("green_key.transparent_output_save_as_mov_prores_4444"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         )
@@ -246,12 +250,14 @@ class GreenKeyerTab(BaseTab):
         def done(colour: str | None) -> None:
             if colour and (force or gk.spill_type(colour)):
                 self._set_key(colour)
-                self.log(self.console, f"Key colour sampled from the frame edges: #{colour}")
+                self.log(
+                    self.console,
+                    t("green_key.key_colour_sampled_from_the_frame_edges", colour=colour),
+                )
             elif force:
                 self.log(
                     self.console,
-                    "Could not detect a backdrop colour - pick one with "
-                    "the eyedropper (click the Before image).",
+                    t("green_key.could_not_detect_a_backdrop_colour_pick"),
                 )
             self._schedule()
 
@@ -348,11 +354,11 @@ class GreenKeyerTab(BaseTab):
             if container not in ("mov", "webm", "mkv"):
                 messagebox.showwarning(
                     t("common.warning"),
-                    "Transparent video needs a .mov (ProRes 4444) or .webm (VP9) output file.",
+                    t("green_key.transparent_video_needs_a_mov_prores_4444"),
                     parent=self,
                 )
                 return
-            self.log(self.console, "Keying to a transparent video…")
+            self.log(self.console, t("green_key.keying_to_a_transparent_video"))
             self.run_ffmpeg(
                 gk.transparent_cmd(src, out, keyer, info),
                 self.console,
@@ -376,7 +382,14 @@ class GreenKeyerTab(BaseTab):
         graph, extra_inputs = gk.composite_graph(
             backdrop, keyer, common.even_size(info), frame_rate(info)
         )
-        self.log(self.console, f"Keying #{self.key_colour} ({self.method_var.get()})")
+        self.log(
+            self.console,
+            t(
+                "green_key.keying_key_colour_method_var",
+                key_colour=self.key_colour,
+                method_var=self.method_var.get(),
+            ),
+        )
         common.render(
             self,
             RenderJob(

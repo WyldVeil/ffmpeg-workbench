@@ -269,7 +269,7 @@ class AudioDuckerTab(BaseTab):
 
     def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
-            title="Select source video (with voice/speech)",
+            title=t("ducker.select_source_video_with_voice_speech"),
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
         )
         if p:
@@ -279,7 +279,7 @@ class AudioDuckerTab(BaseTab):
 
     def _browse_music(self) -> None:
         p = dialogs.askopenfilename(
-            title="Select background music",
+            title=t("ducker.select_background_music"),
             filetypes=[
                 ("Audio", "*.mp3 *.wav *.aac *.flac *.ogg *.m4a"),
                 (t("ducker.video_audio"), "*.mp4 *.mov *.mkv"),
@@ -306,7 +306,7 @@ class AudioDuckerTab(BaseTab):
         info = _ff.try_probe(src)
         if info is None or not info.has_audio:
             messagebox.showwarning(
-                t("common.warning"), "The video needs a voice/speech audio track.", parent=self
+                t("common.warning"), t("ducker.the_video_needs_a_voice_speech_audio"), parent=self
             )
             return
         out = self.confirm_output(out or self.suggest_output(src, "ducked"), [src, music])
@@ -336,11 +336,17 @@ class AudioDuckerTab(BaseTab):
         dur = info.duration
         cmd = dk.duck_cmd(src, music, out, dur, duck)
 
-        self.log(self.console, f"▶ Ducking music into: {os.path.basename(src)}")
+        self.log(self.console, t("ducker.ducking_music_into_src", src=os.path.basename(src)))
         self.log(
             self.console,
-            f"  Threshold={duck.threshold}  Ratio={int(duck.ratio)}:1  "
-            f"Attack={int(duck.attack)}ms  Release={int(duck.release)}ms  Music vol={music_vol:.0%}",
+            t(
+                "ducker.threshold_threshold_ratio_ratio_1_attack_attack",
+                threshold=duck.threshold,
+                ratio=int(duck.ratio),
+                attack=int(duck.attack),
+                release=int(duck.release),
+                music_vol=music_vol,
+            ),
         )
 
         self.run_ffmpeg(

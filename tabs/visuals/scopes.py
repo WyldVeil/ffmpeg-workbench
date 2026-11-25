@@ -56,9 +56,9 @@ class VideoScopesTab(BaseTab):
         """Which scope, and what it shows."""
         pick = tk.Frame(body, bg=CLR["bg"])
         pick.pack(fill="x", padx=px(20), pady=px(4))
-        tk.Label(pick, text="Scope:", bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10, "bold")).pack(
-            side="left"
-        )
+        tk.Label(
+            pick, text=t("scopes.scope"), bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10, "bold")
+        ).pack(side="left")
         self.scope_var = tk.StringVar(value="waveform")
         for key, (label, *_rest) in sc.SCOPES.items():
             tk.Radiobutton(
@@ -102,7 +102,11 @@ class VideoScopesTab(BaseTab):
         self.time_lbl = tk.Label(bar, text="", width=12, bg=CLR["bg"], fg=CLR["fgdim"])
         self.time_lbl.pack(side="left", padx=px(6))
         tk.Button(
-            bar, text="Save snapshot…", relief="flat", cursor="hand2", command=self._snapshot
+            bar,
+            text=t("scopes.save_snapshot"),
+            relief="flat",
+            cursor="hand2",
+            command=self._snapshot,
         ).pack(side="left")
 
     def _build_scope_video(self, body: tk.Frame) -> None:
@@ -191,7 +195,7 @@ class VideoScopesTab(BaseTab):
 
         def done(res: ProcResult[str]) -> None:
             if res.returncode == 0 and os.path.isfile(out):
-                self.log_tagged(self.console, f"Snapshot saved: {out}", "success")
+                self.log_tagged(self.console, t("scopes.snapshot_saved_out", out=out), "success")
             else:
                 self.log_tagged(
                     self.console,

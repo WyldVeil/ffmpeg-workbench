@@ -506,12 +506,12 @@ class ThumbnailMakerTab(BaseTab):
             except ValueError:
                 messagebox.showwarning(
                     t("common.warning"),
-                    "The interval must be a number of seconds shorter than the video.",
+                    t("thumbnail.the_interval_must_be_a_number_of"),
                     parent=self,
                 )
                 return
             out_root = dialogs.ask_directory(
-                title="Choose a folder for the thumbnails", parent=self
+                title=t("thumbnail.choose_a_folder_for_the_thumbnails"), parent=self
             )
             if not out_root:
                 return
@@ -521,7 +521,14 @@ class ThumbnailMakerTab(BaseTab):
             out_dir = fresh_folder(out_root, f"{base} thumbnails")
             pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_%04d{ext}"
             cmd = th.batch_cmd(src, interval, vf_parts, self._get_format_args(), pattern)
-            self.log(self.console, f"Batch export: every {interval:g}s → {out_dir}")
+            self.log(
+                self.console,
+                t(
+                    "thumbnail.batch_export_every_interval_g_s_out",
+                    interval=interval,
+                    out_dir=out_dir,
+                ),
+            )
             self.run_ffmpeg(
                 cmd,
                 self.console,
@@ -543,7 +550,7 @@ class ThumbnailMakerTab(BaseTab):
         if pos >= self.duration - 0.5:
             pos = self.duration
         cmd = th.frame_cmd(src, pos, self.duration, vf_parts, self._get_format_args(), out)
-        self.log(self.console, f"Extracting frame at {_fmt(pos)}")
+        self.log(self.console, t("thumbnail.extracting_frame_at_pos", pos=_fmt(pos)))
         self.run_ffmpeg(
             cmd,
             self.console,

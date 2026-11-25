@@ -89,7 +89,7 @@ class ProxyGenTab(BaseTab):
         ).pack(side="left", padx=px(8))
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(3))
-        tk.Label(r1, text="Size:").pack(side="left")
+        tk.Label(r1, text=t("hard_subber.size_label")).pack(side="left")
         self.size_var = tk.StringVar(value=px_ops.SIZES["half"][0])
         ttk.Combobox(
             r1,
@@ -99,7 +99,7 @@ class ProxyGenTab(BaseTab):
             width=12,
         ).pack(side="left", padx=px(8))
         self.audio_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Include every audio track", variable=self.audio_var).pack(
+        tk.Checkbutton(r1, text=t("proxy.include_every_audio_track"), variable=self.audio_var).pack(
             side="left", padx=px(12)
         )
         r2 = tk.Frame(opt)
@@ -107,7 +107,7 @@ class ProxyGenTab(BaseTab):
         self.place_var = tk.StringVar(value="folder")
         tk.Radiobutton(
             r2,
-            text="Same name in a “Proxy” folder next to each file (easy relinking)",
+            text=t("proxy.same_name_in_a_proxy_folder_next"),
             variable=self.place_var,
             value="folder",
         ).pack(anchor="w")
@@ -115,7 +115,7 @@ class ProxyGenTab(BaseTab):
         r3.pack(anchor="w")
         tk.Radiobutton(
             r3,
-            text="Next to the originals, with the suffix",
+            text=t("proxy.next_to_the_originals_with_the_suffix"),
             variable=self.place_var,
             value="suffix",
         ).pack(side="left")
@@ -123,9 +123,9 @@ class ProxyGenTab(BaseTab):
         tk.Entry(r3, textvariable=self.suffix_var, width=12).pack(side="left", padx=px(4))
         r4 = tk.Frame(r2)
         r4.pack(anchor="w")
-        tk.Radiobutton(r4, text="In this folder:", variable=self.place_var, value="dir").pack(
-            side="left"
-        )
+        tk.Radiobutton(
+            r4, text=t("proxy.in_this_folder"), variable=self.place_var, value="dir"
+        ).pack(side="left")
         self.out_dir_var = tk.StringVar()
         FolderRow(r4, "", self.out_dir_var, width=44, label_width=0).pack(side="left")
         self.btn_render = self.make_render_btn(
@@ -141,7 +141,7 @@ class ProxyGenTab(BaseTab):
         return True
 
     def _add(self) -> None:
-        for p in dialogs.ask_open_many("video", title="Add camera files", parent=self):
+        for p in dialogs.ask_open_many("video", title=t("proxy.add_camera_files"), parent=self):
             self.load_file(p)
 
     def _add_folder(self) -> None:

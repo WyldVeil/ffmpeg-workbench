@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from core import proc as _proc
 from core import settings, tasks
+from core.i18n import t
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -651,9 +652,11 @@ def ask_overwrite(existing: str, alternative: str, *, parent: Any = None) -> boo
     from tkinter import messagebox
 
     return messagebox.askyesnocancel(
-        "File already exists",
-        f"{os.path.basename(existing)} already exists.\n\n"
-        f"Yes — overwrite it\nNo — save as {os.path.basename(alternative)}\n"
-        "Cancel — don't render",
+        t("dialogs.file_already_exists"),
+        t(
+            "dialogs.existing_already_exists_yes_overwrite_it_no",
+            existing=os.path.basename(existing),
+            alternative=os.path.basename(alternative),
+        ),
         parent=parent,
     )

@@ -44,13 +44,17 @@ def check_source(
         return None
     if not os.path.isfile(path):
         messagebox.showwarning(
-            t("common.warning"), f"{label}\n\nFile not found:\n{path}", parent=tab
+            t("common.warning"),
+            t("common.label_file_not_found_path", label=label, path=path),
+            parent=tab,
         )
         return None
     info = ff.try_probe(path)
     if info is None or (need_video and not info.has_video):
         messagebox.showerror(
-            t("common.error"), f"{label}\n\nThis file has no readable video:\n{path}", parent=tab
+            t("common.error"),
+            t("common.label_this_file_has_no_readable_video", label=label, path=path),
+            parent=tab,
         )
         return None
     return info
@@ -86,7 +90,10 @@ def render(
     result is shown."""
     container = container_of(job.out)
     venc = encoder.video_encode(container) if hasattr(encoder, "video_encode") else encoder
-    tab.log(console, f"Rendering {os.path.basename(job.out)} with {venc.label}…")
+    tab.log(
+        console,
+        t("common.rendering_out_with_label", out=os.path.basename(job.out), label=venc.label),
+    )
 
     def _done(rc: int) -> None:
         if on_done is not None:
@@ -166,7 +173,7 @@ def queue_job(
         inputs=job.inputs,
         hooks=Hooks(on_start=on_start, on_progress=on_progress, on_complete=on_complete),
     )
-    tab.log(console, f"Queued: {os.path.basename(job.out)}")
+    tab.log(console, t("common.queued_out", out=os.path.basename(job.out)))
     return task["id"]
 
 
@@ -197,7 +204,9 @@ def preview_audio(
             return
         if launch_preview(wav) is None:
             messagebox.showinfo(
-                t("common.warning"), f"No player available - the preview is at\n{wav}", parent=tab
+                t("common.warning"),
+                t("common.no_player_available_the_preview_is_at", wav=wav),
+                parent=tab,
             )
 
     tasks.submit(partial(ff.capture, cmd, timeout=120), on_done=done, name="AudioPreview")

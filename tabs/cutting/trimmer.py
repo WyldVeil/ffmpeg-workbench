@@ -256,12 +256,12 @@ class TrimmerTab(BaseTab):
 
     def _build_render(self, bf: tk.Frame, prev_btn: tk.Button) -> None:
         prev_btn.pack(side="left", padx=px(8))
-        add_tooltip(prev_btn, "Preview the selected region in ffplay (Space)")
+        add_tooltip(prev_btn, t("trimmer.preview_the_selected_region_in_ffplay_space"))
         self.btn_render = self.make_render_btn(
             bf, t("trimmer.export_button"), self._run_trim, width=28
         )
         self.btn_render.pack(side="left", padx=px(8))
-        add_tooltip(self.btn_render, "Export the trimmed clip (Ctrl+S)")
+        add_tooltip(self.btn_render, t("trimmer.export_the_trimmed_clip_ctrl_s"))
 
         # Console
         self.console = self.make_console_block(self, height=5, padx=px(20), pady=px(4))
@@ -432,7 +432,7 @@ class TrimmerTab(BaseTab):
         c.create_text(
             xs,
             cy - px(20),
-            text=f"START {fmt_time(s_sec)}",
+            text=t("trimmer.start_s_sec", s_sec=fmt_time(s_sec)),
             fill="#4CAF50",
             font=(MONO_FONT, 8, "bold"),
         )
@@ -442,14 +442,14 @@ class TrimmerTab(BaseTab):
         c.create_text(
             xe,
             cy + px(36),
-            text=f"END {fmt_time(e_sec)}",
+            text=t("trimmer.end_e_sec", e_sec=fmt_time(e_sec)),
             fill="#F44336",
             font=(MONO_FONT, 8, "bold"),
         )
         c.create_text(
             (xs + xe) // 2,
             px(14),
-            text=f"Clip Length: {fmt_time(max(0.0, e_sec - s_sec))}",
+            text=t("trimmer.clip_length_value", value=fmt_time(max(0.0, e_sec - s_sec))),
             fill="white",
             font=(UI_FONT, 9, "bold"),
         )
@@ -513,7 +513,7 @@ class TrimmerTab(BaseTab):
             s_sec = self._tv(self._start_var, 0.0)
             e_sec = self._tv(self._end_var, self.duration)
             sel = max(0.0, e_sec - s_sec)
-            self._dur_lbl.config(text=f"Clip Length: {fmt_time(sel)}")
+            self._dur_lbl.config(text=t("trimmer.clip_length_sel", sel=fmt_time(sel)))
         except Exception:
             logger.debug("_update_dur: best-effort step failed", exc_info=True)
 
@@ -588,7 +588,12 @@ class TrimmerTab(BaseTab):
             )
         self.log(
             self.console,
-            f"Lossless trim: {fmt_time(k)} \u2013 {fmt_time(end)}  ({fmt_time(end - k)})",
+            t(
+                "trimmer.lossless_trim_k_end_end2",
+                k=fmt_time(k),
+                end=fmt_time(end),
+                end2=fmt_time(end - k),
+            ),
         )
         return trim.copy_cmd(self.file_path, k, end, out, container), end - k
 
@@ -602,7 +607,13 @@ class TrimmerTab(BaseTab):
             self.file_path, ss, end, out, container, crf, has_audio=bool(info and info.has_audio)
         )
         self.log(
-            self.console, f"Frame-accurate trim: {fmt_time(ss)} \u2013 {fmt_time(end)}  CRF={crf}"
+            self.console,
+            t(
+                "trimmer.frame_accurate_trim_ss_end_crf_crf",
+                ss=fmt_time(ss),
+                end=fmt_time(end),
+                crf=crf,
+            ),
         )
         return cmd, end - ss
 

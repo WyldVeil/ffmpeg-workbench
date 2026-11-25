@@ -57,7 +57,9 @@ class FormatConverterTab(BaseTab):
             tk.Button(btn_f, text=label, command=cmd, cursor="hand2", relief="flat").pack(
                 side="left", padx=px(4)
             )
-        tk.Label(btn_f, text="(or drop files here)", fg=CLR["fgdim"]).pack(side="left", padx=px(6))
+        tk.Label(btn_f, text=t("converter.or_drop_files_here"), fg=CLR["fgdim"]).pack(
+            side="left", padx=px(6)
+        )
 
         opts = tk.LabelFrame(
             self, text=t("converter.sect_conversion_options"), padx=px(15), pady=px(8)
@@ -79,8 +81,7 @@ class FormatConverterTab(BaseTab):
         self.copy_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             opts,
-            text="Smart: keep streams the new format can hold as they are (fast, no quality "
-            "loss) and convert only the rest",
+            text=t("converter.smart_keep_streams_the_new_format_can"),
             variable=self.copy_var,
         ).pack(anchor="w")
         self.out_dir_var = tk.StringVar()
@@ -102,7 +103,7 @@ class FormatConverterTab(BaseTab):
         return True
 
     def _add(self) -> None:
-        for p in dialogs.ask_open_many("media", title="Add files", parent=self):
+        for p in dialogs.ask_open_many("media", title=t("converter.add_files"), parent=self):
             self.load_file(p)
 
     def _remove(self) -> None:
@@ -128,7 +129,9 @@ class FormatConverterTab(BaseTab):
                 os.makedirs(out_dir, exist_ok=True)
             except OSError as exc:
                 messagebox.showwarning(
-                    t("common.warning"), f"Can't use that folder:\n{exc}", parent=self
+                    t("common.warning"),
+                    t("converter.can_t_use_that_folder_exc", exc=exc),
+                    parent=self,
                 )
                 return
         smart = self.copy_var.get()

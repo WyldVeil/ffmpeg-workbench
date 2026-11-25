@@ -246,11 +246,11 @@ class AudioDynamicsTab(BaseTab):
         on_write(var, partial(_show_value, lbl, var, "{:.2f}" + unit))
 
     def _build_gate(self, parent: tk.Misc) -> None:
-        lf = self._stage_frame(parent, "🚪  1. Noise Gate", "gate_on")
-        self._slider_row(lf, "Threshold (dB):", "gate_thresh", -80, 0, -40, 0.5, " dB")
-        self._slider_row(lf, "Ratio:", "gate_ratio", 1, 10, 4, 0.5, ":1")
-        self._slider_row(lf, "Attack (ms):", "gate_attack", 1, 200, 5, 1, " ms")
-        self._slider_row(lf, "Release (ms):", "gate_release", 10, 2000, 80, 10, " ms")
+        lf = self._stage_frame(parent, t("dynamics.1_noise_gate"), "gate_on")
+        self._slider_row(lf, t("dynamics.threshold_db"), "gate_thresh", -80, 0, -40, 0.5, " dB")
+        self._slider_row(lf, t("dynamics.ratio"), "gate_ratio", 1, 10, 4, 0.5, ":1")
+        self._slider_row(lf, t("ducker.lbl_attack_ms"), "gate_attack", 1, 200, 5, 1, " ms")
+        self._slider_row(lf, t("ducker.lbl_release_ms"), "gate_release", 10, 2000, 80, 10, " ms")
         tk.Label(
             lf,
             text=t("dynamics.cuts_everything_below_the_threshold_silences_roo"),
@@ -259,12 +259,14 @@ class AudioDynamicsTab(BaseTab):
         ).pack(anchor="w")
 
     def _build_eq(self, parent: tk.Misc) -> None:
-        lf = self._stage_frame(parent, "🎚  2. Parametric EQ  (5 bands)", "eq_on")
+        lf = self._stage_frame(parent, t("dynamics.2_parametric_eq_5_bands"), "eq_on")
         self._eq_vars: dict[int, tuple[tk.DoubleVar, str, int]] = {}
         for i, (name, ftype, freq, tip) in enumerate(EQ_BANDS):
             row = tk.Frame(lf)
             row.pack(fill="x", pady=px(2))
-            tk.Label(row, text=f"{name} ({freq} Hz):", width=22, anchor="e").pack(side="left")
+            tk.Label(
+                row, text=t("dynamics.name_freq_hz", name=name, freq=freq), width=22, anchor="e"
+            ).pack(side="left")
             var = tk.DoubleVar(value=0.0)
             self._eq_vars[i] = (var, ftype, freq)
             sl = tk.Scale(
@@ -286,12 +288,12 @@ class AudioDynamicsTab(BaseTab):
             )
 
     def _build_compressor(self, parent: tk.Misc) -> None:
-        lf = self._stage_frame(parent, "🗜  3. Compressor", "comp_on")
-        self._slider_row(lf, "Threshold (dB):", "comp_thresh", -60, 0, -18, 0.5, " dB")
-        self._slider_row(lf, "Ratio:", "comp_ratio", 1, 20, 3, 0.5, ":1")
-        self._slider_row(lf, "Attack (ms):", "comp_attack", 0.1, 200, 5, 0.1, " ms")
-        self._slider_row(lf, "Release (ms):", "comp_release", 10, 2000, 80, 10, " ms")
-        self._slider_row(lf, "Makeup gain (dB):", "comp_makeup", 0, 24, 0, 0.5, " dB")
+        lf = self._stage_frame(parent, t("dynamics.3_compressor"), "comp_on")
+        self._slider_row(lf, t("dynamics.threshold_db"), "comp_thresh", -60, 0, -18, 0.5, " dB")
+        self._slider_row(lf, t("dynamics.ratio"), "comp_ratio", 1, 20, 3, 0.5, ":1")
+        self._slider_row(lf, t("ducker.lbl_attack_ms"), "comp_attack", 0.1, 200, 5, 0.1, " ms")
+        self._slider_row(lf, t("ducker.lbl_release_ms"), "comp_release", 10, 2000, 80, 10, " ms")
+        self._slider_row(lf, t("dynamics.makeup_gain_db"), "comp_makeup", 0, 24, 0, 0.5, " dB")
         tk.Label(
             lf,
             text=t("dynamics.raises_quiet_parts_and_lowers_loud_peaks_makes_s"),
@@ -300,9 +302,11 @@ class AudioDynamicsTab(BaseTab):
         ).pack(anchor="w")
 
     def _build_deesser(self, parent: tk.Misc) -> None:
-        lf = self._stage_frame(parent, "🐍  4. De-esser", "deess_on")
-        self._slider_row(lf, "Frequency (Hz):", "deess_freq", 2000, 16000, 6000, 100, " Hz")
-        self._slider_row(lf, "Threshold:", "deess_thresh", 0, 1, 0.1, 0.01, "")
+        lf = self._stage_frame(parent, t("dynamics.4_de_esser"), "deess_on")
+        self._slider_row(
+            lf, t("dynamics.frequency_hz"), "deess_freq", 2000, 16000, 6000, 100, " Hz"
+        )
+        self._slider_row(lf, t("dynamics.threshold"), "deess_thresh", 0, 1, 0.1, 0.01, "")
         tk.Label(
             lf,
             text=t("dynamics.targets_harsh_s_sh_sibilance_at_the_chosen_frequ"),
@@ -311,8 +315,8 @@ class AudioDynamicsTab(BaseTab):
         ).pack(anchor="w")
 
     def _build_limiter(self, parent: tk.Misc) -> None:
-        lf = self._stage_frame(parent, "🔔  5. Limiter", "limit_on")
-        self._slider_row(lf, "Ceiling (dBFS):", "limit_thresh", -12, 0, -1, 0.1, " dBFS")
+        lf = self._stage_frame(parent, t("dynamics.5_limiter"), "limit_on")
+        self._slider_row(lf, t("dynamics.ceiling_dbfs"), "limit_thresh", -12, 0, -1, 0.1, " dBFS")
         tk.Label(
             lf,
             text=t("dynamics.hard_ceiling_prevents_any_peak_from_exceeding_th"),
@@ -374,7 +378,7 @@ class AudioDynamicsTab(BaseTab):
     def _update_filter_preview(self) -> None:
         filt = self._build_filter()
         short = filt[:180] + "…" if len(filt) > 180 else filt
-        self.filter_preview.config(text=f"Filter chain:  {short}")
+        self.filter_preview.config(text=t("dynamics.filter_chain_short", short=short))
 
     # ─────────────────────────────────────────────────────────────────────
     def _browse(self) -> None:

@@ -50,9 +50,7 @@ class VoiceIsolationTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self.make_header(
-            self, t("tab.voice_isolation"), "Remove background noise from speech.", icon="🎤"
-        )
+        self.make_header(self, t("tab.voice_isolation"), t("toolinfo.voice_isolation"), icon="🎤")
         body = scroll_body(self)
         self.src_row = FileRow(
             body,
@@ -70,7 +68,7 @@ class VoiceIsolationTab(BaseTab):
 
     def _build_methods(self, body: tk.Frame) -> tk.LabelFrame:
         """Which method cleans the voice."""
-        opt = tk.LabelFrame(body, text="  Method  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("voice_isolation.method"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value="neural")
         methods = [
@@ -98,7 +96,7 @@ class VoiceIsolationTab(BaseTab):
         """The chosen method's settings and a preview."""
         mr = tk.Frame(opt)
         mr.pack(fill="x", pady=px(4))
-        tk.Label(mr, text="Model:").pack(side="left")
+        tk.Label(mr, text=t("common.model")).pack(side="left")
         self.model_var = tk.StringVar(value=MODELS["sh.rnnn"])
         mb = ttk.Combobox(
             mr,
@@ -109,7 +107,9 @@ class VoiceIsolationTab(BaseTab):
         )
         mb.pack(side="left", padx=px(6))
         mb.bind("<<ComboboxSelected>>", lambda _e: self._model_changed())
-        self.custom_row = FileRow(opt, "Custom model:", kind="any", label_width=14)
+        self.custom_row = FileRow(
+            opt, t("voice_isolation.custom_model"), kind="any", label_width=14
+        )
         self.blend_var = tk.DoubleVar(value=0.0)
         tk.Scale(
             opt,
@@ -119,22 +119,24 @@ class VoiceIsolationTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(220),
-            label="Keep some original sound (more natural)",
+            label=t("voice_isolation.keep_some_original_sound_more_natural"),
         ).pack(anchor="w")
         fr = tk.Frame(opt)
         fr.pack(anchor="w", pady=px(2))
         self.floor_var, self.red_var = tk.StringVar(value="-30"), tk.StringVar(value="12")
-        tk.Label(fr, text="FFT: noise floor (dB)").pack(side="left")
+        tk.Label(fr, text=t("voice_isolation.fft_noise_floor_db")).pack(side="left")
         tk.Entry(fr, textvariable=self.floor_var, width=5).pack(side="left", padx=px(4))
-        tk.Label(fr, text="reduction (dB)").pack(side="left")
+        tk.Label(fr, text=t("voice_isolation.reduction_db")).pack(side="left")
         tk.Entry(fr, textvariable=self.red_var, width=5).pack(side="left", padx=px(4))
         self.rumble_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            opt, text="Remove low rumble (80 Hz high-pass)", variable=self.rumble_var
+            opt,
+            text=t("voice_isolation.remove_low_rumble_80_hz_high_pass"),
+            variable=self.rumble_var,
         ).pack(anchor="w")
-        tk.Button(opt, text="▶ Preview 12 s", relief="flat", command=self._preview).pack(
-            anchor="w", pady=px(4)
-        )
+        tk.Button(
+            opt, text=t("voice_changer.preview_12_s"), relief="flat", command=self._preview
+        ).pack(anchor="w", pady=px(4))
 
     def _build_output(self, body: tk.Frame) -> None:
         """Where the result goes, the button and the log."""
@@ -144,7 +146,9 @@ class VoiceIsolationTab(BaseTab):
             kind="media",
             suggest=lambda: self.suggest_output(self.src_row.path, "clean"),
         )
-        self.btn_render = self.make_render_btn(body, "🎤  CLEAN UP", self._render, width=20)
+        self.btn_render = self.make_render_btn(
+            body, t("voice_isolation.clean_up"), self._render, width=20
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -171,8 +175,12 @@ class VoiceIsolationTab(BaseTab):
             method,
             model=model,
             blend=float(self.blend_var.get()),
-            floor_db=common.number(self.floor_var.get(), "Noise floor", -80, -20),
-            reduction_db=common.number(self.red_var.get(), "Reduction", 0.01, 97),
+            floor_db=common.number(
+                self.floor_var.get(), t("voice_isolation.noise_floor"), -80, -20
+            ),
+            reduction_db=common.number(
+                self.red_var.get(), t("voice_isolation.reduction"), 0.01, 97
+            ),
             rumble=self.rumble_var.get(),
         )
 
@@ -190,7 +198,9 @@ class VoiceIsolationTab(BaseTab):
         if info is None:
             return
         if not info.has_audio:
-            messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("voice_changer.this_file_has_no_audio"), parent=self
+            )
             return
         try:
             af = self._filter()

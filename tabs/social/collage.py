@@ -107,7 +107,7 @@ class VideoCollageTab(BaseTab):
         self.make_header(
             self,
             t("tab.video_collage"),
-            "Any number of clips on one screen, playing together.",
+            t("collage.any_number_of_clips_on_one_screen"),
             icon="🎞",
         )
         layout_lf = tk.LabelFrame(
@@ -133,14 +133,14 @@ class VideoCollageTab(BaseTab):
         self._mode_var = tk.StringVar(value="fit")
         tk.Radiobutton(
             left,
-            text="Show whole clips (bars where shapes differ)",
+            text=t("collage.show_whole_clips_bars_where_shapes_differ"),
             variable=self._mode_var,
             value="fit",
             command=self._changed,
         ).pack(anchor="w", pady=px(6, 0))
         tk.Radiobutton(
             left,
-            text="Fill each space (crop the edges)",
+            text=t("collage.fill_each_space_crop_the_edges"),
             variable=self._mode_var,
             value="fill",
             command=self._changed,
@@ -238,7 +238,7 @@ class VideoCollageTab(BaseTab):
         self._pad_var = tk.StringVar(value="4")
         tk.Entry(or2, textvariable=self._pad_var, width=4).pack(side="left", padx=px(4))
         on_write(self._pad_var, lambda: self._changed())
-        tk.Label(or2, text="px   Background:").pack(side="left")
+        tk.Label(or2, text=t("collage.px_background")).pack(side="left")
         self._bg_color = tk.StringVar(value="Black")
         ttk.Combobox(
             or2, textvariable=self._bg_color, width=9, values=list(BACKGROUNDS), state="readonly"
@@ -246,7 +246,7 @@ class VideoCollageTab(BaseTab):
         return or2, out_lf
 
     def _build_audio_mode(self, or2: tk.Frame, out_lf: tk.LabelFrame) -> None:
-        tk.Label(or2, text="  Sound:").pack(side="left")
+        tk.Label(or2, text=t("collage.sound")).pack(side="left")
         self._audio_mode = tk.StringVar(value=AUDIO_MODES["first"])
         ttk.Combobox(
             or2,
@@ -257,7 +257,7 @@ class VideoCollageTab(BaseTab):
         ).pack(side="left", padx=px(4))
         or3 = tk.Frame(out_lf)
         or3.pack(fill="x", pady=px(2))
-        tk.Label(or3, text="Length:").pack(side="left")
+        tk.Label(or3, text=t("collage.length")).pack(side="left")
         self._length_var = tk.StringVar(value=LENGTHS["longest"])
         lc = ttk.Combobox(
             or3,
@@ -274,9 +274,12 @@ class VideoCollageTab(BaseTab):
         or4.pack(fill="x", pady=px(2))
         self._loop_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            or4, text="Loop shorter clips", variable=self._loop_var, command=self._changed
+            or4,
+            text=t("collage.loop_shorter_clips"),
+            variable=self._loop_var,
+            command=self._changed,
         ).pack(side="left")
-        tk.Label(or4, text="   otherwise, when a clip ends:").pack(side="left")
+        tk.Label(or4, text=t("collage.otherwise_when_a_clip_ends")).pack(side="left")
         self._end_var = tk.StringVar(value=ENDS["hold"])
         self._end_cb = ttk.Combobox(
             or4, textvariable=self._end_var, values=list(ENDS.values()), state="readonly", width=24
@@ -353,7 +356,7 @@ class VideoCollageTab(BaseTab):
         ox, oy = (cw - W * scale) / 2, (ch - H * scale) / 2
         c.create_rectangle(ox, oy, ox + W * scale, oy + H * scale, outline="#444444", width=px(1))
         if spec.pip:
-            self._layout_lbl.config(text="Main video full screen, the others in the corners.")
+            self._layout_lbl.config(text=t("collage.main_video_full_screen_the_others_in"))
             return
         clips = self._clips_for_layout()
         aspects = [s.aspect for s in clips] or [16 / 9] * (4 if spec.auto else spec.slots)
@@ -401,11 +404,11 @@ class VideoCollageTab(BaseTab):
     # ── Clips ─────────────────────────────────────────────────────────
     def load_file(self, path: str) -> bool:
         if len(self._slots) >= MAX_CLIPS:
-            self.log(self.console, f"At most {MAX_CLIPS} clips.")
+            self.log(self.console, t("collage.at_most_max_clips_clips", max_clips=MAX_CLIPS))
             return True
         info = ff.try_probe(path)
         if info is None or not info.has_video:
-            self.log(self.console, f"{os.path.basename(path)}: no video - skipped.")
+            self.log(self.console, t("collage.path_no_video_skipped", path=os.path.basename(path)))
             return True
         w, h = info.require_video().display_size
         sar = info.require_video().sar or "1:1"
@@ -424,7 +427,7 @@ class VideoCollageTab(BaseTab):
         return True
 
     def _add_videos(self) -> None:
-        for p in dialogs.ask_open_many("video", title="Add clips", parent=self):
+        for p in dialogs.ask_open_many("video", title=t("collage.add_clips"), parent=self):
             self.load_file(p)
 
     def _remove_selected(self) -> None:
@@ -457,7 +460,7 @@ class VideoCollageTab(BaseTab):
         self._slot_list.delete(0, "end")
         for i, s in enumerate(self._slots):
             self._slot_list.insert("end", f"  #{i + 1}   {s.name:<40s}  {_fmt(s.duration)}")
-        self._slot_count_lbl.config(text=f"{len(self._slots)} clip(s)")
+        self._slot_count_lbl.config(text=t("collage.slots_clip_s", slots=len(self._slots)))
         self._changed()
 
     # ── Render ────────────────────────────────────────────────────────
@@ -469,7 +472,7 @@ class VideoCollageTab(BaseTab):
         if length_key == "shortest":
             return min(durs)
         try:
-            return common.number(self._custom_len.get(), "Length", 0.5, 24 * 3600)
+            return common.number(self._custom_len.get(), t("intro_maker.length"), 0.5, 24 * 3600)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return None
@@ -515,7 +518,11 @@ class VideoCollageTab(BaseTab):
         if len(clips) < need:
             messagebox.showwarning(
                 t("collage.not_enough_title"),
-                f"This layout needs {need} clips - {len(self._slots)} added.",
+                t(
+                    "collage.this_layout_needs_need_clips_slots_added",
+                    need=need,
+                    slots=len(self._slots),
+                ),
                 parent=self,
             )
             return
@@ -539,7 +546,17 @@ class VideoCollageTab(BaseTab):
         looped = loop and not spec.pip
         cmd = grid.collage_cmd(paths, graph, venc, container, total, out, audio=has_a, loop=looped)
         what = spec.label if not spec.auto else self._layout([c.aspect for c in clips]).describe()
-        self.log(self.console, f"{len(clips)} clips · {what} · {W}×{H} · {_fmt(total)}")
+        self.log(
+            self.console,
+            t(
+                "collage.clips_clips_what_w_h_total",
+                clips=len(clips),
+                what=what,
+                w=W,
+                h=H,
+                total=_fmt(total),
+            ),
+        )
         self.run_ffmpeg(
             cmd,
             self.console,

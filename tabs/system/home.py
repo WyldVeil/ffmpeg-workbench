@@ -25,6 +25,7 @@ from collections.abc import Callable, Sequence
 
 from core import settings as _settings
 from core import tools
+from core.i18n import t
 from core.scaling import px
 from core.tools import Category, ToolId
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
@@ -88,13 +89,13 @@ class HomeTab(BaseTab):
         # Header
         column = make_header(
             self,
-            "Home",
-            "Pick a tool to get started. Star the ones you use most to pin them to your Favourites.",
+            t("home.home"),
+            t("home.pick_a_tool_to_get_started_star"),
             icon="🏠",
         )
         back = tk.Label(
             column,
-            text="🧭  Not sure which tool? Start: What do you want to do?  ›",
+            text=t("home.not_sure_which_tool_start_what_do"),
             font=(UI_FONT, 10, "bold"),
             bg=CLR["panel"],
             fg=CLR["accent"],

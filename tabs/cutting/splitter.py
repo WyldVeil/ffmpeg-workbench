@@ -108,13 +108,16 @@ class MultiSplitterTab(BaseTab):
         )
         self._timeline.pack(fill="x", padx=px(4), pady=px(4))
         self._tl_info = tk.Label(
-            tl_frame, text="No file loaded", bg=CLR["bg"], fg=CLR["fgdim"], font=(MONO_FONT, 9)
+            tl_frame,
+            text=t("splitter.no_file_loaded"),
+            bg=CLR["bg"],
+            fg=CLR["fgdim"],
+            font=(MONO_FONT, 9),
         )
         self._tl_info.pack(anchor="w", padx=px(4))
         tk.Label(
             tl_frame,
-            text="Drag the green / red handles to a clip's start and end - or click a handle "
-            "and press , or . to move it one frame - then Add Split Range.",
+            text=t("splitter.drag_the_green_red_handles_to_a"),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
@@ -181,7 +184,9 @@ class MultiSplitterTab(BaseTab):
         self.duration = get_video_duration(p)
         self._timeline.set_duration(self.duration, framestep.fps_of(p))
         self._timeline.set_range(0, self.duration)
-        self._tl_info.config(text=f"{os.path.basename(p)}  ·  {_fmt(self.duration)} total")
+        self._tl_info.config(
+            text=t("splitter.p_duration_total", p=os.path.basename(p), duration=_fmt(self.duration))
+        )
         # A row nobody has edited yet covers the whole new video
         for r in self.split_rows:
             if (r.start.get(), r.end.get()) == ("00:00:00", "00:00:10"):
@@ -190,7 +195,12 @@ class MultiSplitterTab(BaseTab):
 
     def _on_timeline_change(self, start: float, end: float, playhead: float) -> None:
         self._tl_info.config(
-            text=f"Start {_fmt(start)}  ·  End {_fmt(end)}  ·  Playhead {_fmt(playhead)}"
+            text=t(
+                "splitter.start_start_end_end_playhead_playhead",
+                start=_fmt(start),
+                end=_fmt(end),
+                playhead=_fmt(playhead),
+            )
         )
 
     def _add_row(self) -> None:
@@ -205,7 +215,9 @@ class MultiSplitterTab(BaseTab):
         row = tk.Frame(self.rows_frame, bg=CLR["bg"])
         row.pack(fill="x", pady=px(4))
 
-        num = tk.Label(row, text=f"Clip {idx}:", bg=CLR["bg"], fg=CLR["accent"], width=6)
+        num = tk.Label(
+            row, text=t("splitter.clip_idx", idx=idx), bg=CLR["bg"], fg=CLR["accent"], width=6
+        )
         num.pack(side="left")
 
         tk.Label(row, text=t("splitter.start_label"), bg=CLR["bg"], fg=CLR["fg"]).pack(
@@ -234,14 +246,14 @@ class MultiSplitterTab(BaseTab):
 
         use = tk.Button(
             row,
-            text="⤓ From timeline",
+            text=t("splitter.from_timeline"),
             bg=CLR["panel"],
             fg=CLR["fg"],
             relief="flat",
             command=lambda a=start_var, b=end_var: self._from_timeline(a, b),
         )
         use.pack(side="left", padx=px(8, 0))
-        add_tooltip(use, "Set this clip to the range selected on the timeline")
+        add_tooltip(use, t("splitter.set_this_clip_to_the_range_selected"))
 
         btn_rm = tk.Button(
             row, text="❌", bg=CLR["bg"], fg=CLR["red"], command=lambda r=row: self._remove_row(r)
@@ -262,7 +274,7 @@ class MultiSplitterTab(BaseTab):
         self.split_rows = [r for r in self.split_rows if r.frame != row_frame]
         # Number the clips 1, 2, 3... again (and their suffixes, unless edited)
         for i, r in enumerate(self.split_rows, 1):
-            r.label.config(text=f"Clip {i}:")
+            r.label.config(text=t("splitter.clip_i", i=i))
             if re.fullmatch(r"_clip\d+", r.suffix.get()):
                 r.suffix.set(f"_clip{i}")
 
@@ -281,20 +293,20 @@ class MultiSplitterTab(BaseTab):
             except ValueError:
                 self._warn(
                     "splitter.bad_time",
-                    "Clip {n}: times must look like 12.5, 01:23.4 or 1:02:03.",
+                    t("splitter.clip_n_times_must_look_like_12"),
                     n=i,
                 )
                 return None
             ee = min(ee, total) if total else ee
             if ee <= ss:
-                self._warn("splitter.empty_range", "Clip {n} ends before it starts.", n=i)
+                self._warn("splitter.empty_range", t("splitter.clip_n_ends_before_it_starts"), n=i)
                 return None
             out = f"{base}{data.suffix.get().strip() or f'_clip{i}'}{ext}"
             key = os.path.normcase(os.path.abspath(out))
             if key in seen:
                 self._warn(
                     "splitter.duplicate_name",
-                    "Two clips would both be saved as\n{p}\nGive them different suffixes.",
+                    t("splitter.two_clips_would_both_be_saved_as"),
                     p=out,
                 )
                 return None

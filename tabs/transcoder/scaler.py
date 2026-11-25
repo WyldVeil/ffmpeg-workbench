@@ -101,7 +101,7 @@ class ResolutionScalerTab(BaseTab):
         self.form_row(
             opt,
             0,
-            "Size:",
+            t("hard_subber.size_label"),
             sb,
             tk.Entry(opt, textvariable=self.w_var, width=6),
             tk.Label(opt, text="×"),
@@ -112,7 +112,7 @@ class ResolutionScalerTab(BaseTab):
         self.form_row(
             opt,
             1,
-            "Shape:",
+            t("smart_reframe.shape"),
             ttk.Combobox(
                 opt,
                 textvariable=self.shape_var,
@@ -132,7 +132,7 @@ class ResolutionScalerTab(BaseTab):
         self.form_row(
             opt,
             2,
-            "Method:",
+            t("sync.method_label"),
             ttk.Combobox(
                 opt, textvariable=self.method_var, values=methods, state="readonly", width=40
             ),
@@ -142,7 +142,7 @@ class ResolutionScalerTab(BaseTab):
         self.form_row(
             opt,
             3,
-            "Sharpen:",
+            t("scaler.sharpen"),
             tk.Scale(
                 opt,
                 variable=self.sharpen_var,
@@ -152,7 +152,9 @@ class ResolutionScalerTab(BaseTab):
                 orient="horizontal",
                 length=px(200),
             ),
-            tk.Label(opt, text="(when upscaling with Lanczos, Bicubic or GPU)", fg=CLR["fgdim"]),
+            tk.Label(
+                opt, text=t("scaler.when_upscaling_with_lanczos_bicubic_or_gpu"), fg=CLR["fgdim"]
+            ),
             label_width=10,
         )
         self.result_lbl = tk.Label(opt, text="", fg=CLR["accent"])
@@ -169,7 +171,9 @@ class ResolutionScalerTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, self._suffix()),
         )
         self.out_var = self.out_row.var
-        self.btn_render = self.make_render_btn(body, "📐  SCALE VIDEO", self._render, width=26)
+        self.btn_render = self.make_render_btn(
+            body, t("scaler.scale_video"), self._render, width=26
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
 
@@ -179,8 +183,8 @@ class ResolutionScalerTab(BaseTab):
         sw, sh = common.even_size(info)
         if a == 0:
             return (
-                int(common.number(self.w_var.get(), "Width", 16, 16384)),
-                int(common.number(self.h_var.get(), "Height", 16, 16384)),
+                int(common.number(self.w_var.get(), t("region_blur.width_col"), 16, 16384)),
+                int(common.number(self.h_var.get(), t("region_blur.height_col"), 16, 16384)),
             )
         if b == 0:
             f = 0.5 if a < 0 else a
@@ -208,7 +212,13 @@ class ResolutionScalerTab(BaseTab):
         if info is not None and info.has_video:
             w, h = common.even_size(info)
             self.info_lbl.config(
-                text=f"Now {w}×{h} · {info.require_video().fps:.3g} fps · {ff.format_time(info.duration)}"
+                text=t(
+                    "scaler.now_w_h_fps_3g_fps_duration",
+                    w=w,
+                    h=h,
+                    fps=info.require_video().fps,
+                    duration=ff.format_time(info.duration),
+                )
             )
         self.out_row.set(self.suggest_output(path, self._suffix()))
         self._update()
@@ -255,7 +265,7 @@ class ResolutionScalerTab(BaseTab):
             return
         if "libplacebo" in chain and not gpu:
             messagebox.showwarning(
-                t("common.warning"), "GPU scaling isn't available on this computer.", parent=self
+                t("common.warning"), t("scaler.gpu_scaling_isn_t_available_on_this"), parent=self
             )
             return
         out = common.output_for(self, self.out_row, src, self._suffix())
@@ -299,7 +309,7 @@ class FPSInterpolatorTab(BaseTab):
         self.make_header(
             self,
             t("tab.framerate_interpolator"),
-            "Change the frame rate smoothly, or make true slow motion.",
+            t("toolinfo.fps_interpolator"),
             icon="🎞",
         )
         body = scroll_body(self)
@@ -313,11 +323,11 @@ class FPSInterpolatorTab(BaseTab):
 
     def _build_rate_options(self, body: tk.Frame) -> None:
         """The new rate, how frames are made, and slow motion."""
-        opt = tk.LabelFrame(body, text="  Frame rate  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("scaler.frame_rate"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         r0 = tk.Frame(opt)
         r0.pack(anchor="w", pady=px(2))
-        tk.Label(r0, text="New frame rate:").pack(side="left")
+        tk.Label(r0, text=t("scaler.new_frame_rate")).pack(side="left")
         self.fps_var = tk.StringVar(value="60")
         ttk.Combobox(r0, textvariable=self.fps_var, values=RATES, width=8).pack(
             side="left", padx=px(6)
@@ -334,27 +344,32 @@ class FPSInterpolatorTab(BaseTab):
         r1 = tk.Frame(opt)
         r1.pack(anchor="w", pady=px(2))
         self.slowmo_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r1, text="Slow motion: play", variable=self.slowmo_var).pack(side="left")
+        tk.Checkbutton(r1, text=t("scaler.slow_motion_play"), variable=self.slowmo_var).pack(
+            side="left"
+        )
         self.factor_var = tk.StringVar(value="2")
         ttk.Combobox(
             r1, textvariable=self.factor_var, values=["1.5", "2", "3", "4", "8"], width=4
         ).pack(side="left")
-        tk.Label(r1, text="× slower (new frames are made in between)").pack(side="left", padx=px(4))
+        tk.Label(r1, text=t("scaler.slower_new_frames_are_made_in_between")).pack(
+            side="left", padx=px(4)
+        )
         r2 = tk.Frame(opt)
         r2.pack(anchor="w", pady=px(2))
         self.audio_var = tk.StringVar(value="slow")
-        tk.Label(r2, text="Slow-motion audio:").pack(side="left")
+        tk.Label(r2, text=t("scaler.slow_motion_audio")).pack(side="left")
         tk.Radiobutton(
-            r2, text="slow it down too (same pitch)", variable=self.audio_var, value="slow"
+            r2, text=t("scaler.slow_it_down_too_same_pitch"), variable=self.audio_var, value="slow"
         ).pack(side="left")
-        tk.Radiobutton(r2, text="remove it", variable=self.audio_var, value="none").pack(
+        tk.Radiobutton(r2, text=t("scaler.remove_it"), variable=self.audio_var, value="none").pack(
             side="left"
         )
         self.parallel_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             opt,
-            text=f"Use all processor cores for motion interpolation ({os.cpu_count() or 1} "
-            "available)",
+            text=t(
+                "scaler.use_all_processor_cores_for_motion_interpolation", value=os.cpu_count() or 1
+            ),
             variable=self.parallel_var,
         ).pack(anchor="w")
 
@@ -367,7 +382,9 @@ class FPSInterpolatorTab(BaseTab):
             suggest=lambda: self.suggest_output(self.src_row.path, "interp"),
         )
         self.out_var = self.out_row.var
-        self.btn_render = self.make_render_btn(body, "🎞  CHANGE FRAME RATE", self._render, width=26)
+        self.btn_render = self.make_render_btn(
+            body, t("scaler.change_frame_rate"), self._render, width=26
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
 
@@ -375,7 +392,11 @@ class FPSInterpolatorTab(BaseTab):
         self._info = info = ff.try_probe(path)
         if info is not None and info.has_video:
             self.info_lbl.config(
-                text=f"Now {info.require_video().fps:.3f} fps · {ff.format_time(info.duration)}"
+                text=t(
+                    "scaler.now_fps_3f_fps_duration",
+                    fps=info.require_video().fps,
+                    duration=ff.format_time(info.duration),
+                )
             )
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "interp"))

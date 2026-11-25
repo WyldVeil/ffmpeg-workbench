@@ -289,7 +289,12 @@ class BatchJoinerTab(BaseTab):
         list_path = os.path.join(temp_dir("join_"), "list.txt")
         cmd = concat.copy_join_command(self.file_paths, out, list_path)
         self.log(
-            self.console, f"Lossless join of {len(pieces)} files \u2192 {os.path.basename(out)}"
+            self.console,
+            t(
+                "batch_joiner.lossless_join_of_pieces_files_out",
+                pieces=len(pieces),
+                out=os.path.basename(out),
+            ),
         )
         self.run_ffmpeg(
             cmd,
@@ -330,7 +335,15 @@ class BatchJoinerTab(BaseTab):
             audio_bitrate=self.audio_var.get() or "192k",
         )
         self.log(
-            self.console, f"Re-encoding {len(pieces)} files to {W}x{H} @ {fps} fps ({venc.label})"
+            self.console,
+            t(
+                "batch_joiner.re_encoding_pieces_files_to_w_x",
+                pieces=len(pieces),
+                w=W,
+                h=H,
+                fps=fps,
+                label=venc.label,
+            ),
         )
         self.run_ffmpeg(
             cmd,

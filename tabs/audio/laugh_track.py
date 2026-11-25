@@ -625,7 +625,7 @@ class LaughTrackRemoverTab(BaseTab):
             return
 
         cmd = lt.render_cmd(self.file_path, af, out, video=self._export_mode.get() == "video")
-        self.log(self.console, f"Running FFmpeg engine with filters: {af}")
+        self.log(self.console, t("laugh_track.running_ffmpeg_engine_with_filters_af", af=af))
         self.run_ffmpeg(
             cmd,
             self.console,

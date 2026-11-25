@@ -53,7 +53,10 @@ class DeinterlaceTab(BaseTab):
 
     def _build_ui(self) -> None:
         self.make_header(
-            self, t("tab.deinterlace"), "Remove the comb lines from interlaced video.", icon="〰"
+            self,
+            t("tab.deinterlace"),
+            t("deinterlace.remove_the_comb_lines_from_interlaced_video"),
+            icon="〰",
         )
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -64,7 +67,7 @@ class DeinterlaceTab(BaseTab):
         self.info_lbl.pack(fill="x", padx=px(20))
         self.compare = CompareView(body, 400, 225, after_label="Deinterlaced")
         self.compare.pack(pady=px(4))
-        opt = tk.LabelFrame(body, text="  Deinterlace  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("deinterlace.deinterlace"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def choice(var: tk.StringVar, values: list[str], width: int) -> ttk.Combobox:
@@ -74,17 +77,25 @@ class DeinterlaceTab(BaseTab):
 
         self.mode_var = tk.StringVar(value=MODES["smart"])
         self.form_row(
-            opt, 0, "Mode:", choice(self.mode_var, list(MODES.values()), 46), label_width=12
+            opt,
+            0,
+            t("beat_sync.lbl_mode"),
+            choice(self.mode_var, list(MODES.values()), 46),
+            label_width=12,
         )
         self.engine_var = tk.StringVar(value=ENGINES["bwdif"])
         self.form_row(
-            opt, 1, "Method:", choice(self.engine_var, list(ENGINES.values()), 24), label_width=12
+            opt,
+            1,
+            t("sync.method_label"),
+            choice(self.engine_var, list(ENGINES.values()), 24),
+            label_width=12,
         )
         self.order_var = tk.StringVar(value=ORDERS["auto"])
         self.form_row(
             opt,
             2,
-            "Field order:",
+            t("deinterlace.field_order"),
             choice(self.order_var, list(ORDERS.values()), 24),
             label_width=12,
         )
@@ -94,7 +105,9 @@ class DeinterlaceTab(BaseTab):
             ("h264", "hevc", "av1", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "progressive"),
         )
-        self.btn_render = self.make_render_btn(body, "〰  DEINTERLACE", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("deinterlace.deinterlace_2"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -119,8 +132,13 @@ class DeinterlaceTab(BaseTab):
                 "bt": "interlaced (bottom coded first)",
             }.get(fo, fo)
             self.info_lbl.config(
-                text=f"{info.require_video().width}×{info.require_video().height} · {info.require_video().fps:.3f} fps · "
-                f"the file says: {label}"
+                text=t(
+                    "deinterlace.width_height_fps_3f_fps_the_file",
+                    width=info.require_video().width,
+                    height=info.require_video().height,
+                    fps=info.require_video().fps,
+                    label=label,
+                )
             )
         self.compare.load(path)
         self._changed()

@@ -94,8 +94,12 @@ class GIFMakerTab(BaseTab):
         )
         self.slider.pack(side="left", fill="x", expand=True)
         framestep.slider(self.slider, self.preview)  # , and . step a frame
-        tk.Button(bar, text="Start here", relief="flat", command=self.mark_in).pack(side="left")
-        tk.Button(bar, text="End here", relief="flat", command=self.mark_out).pack(side="left")
+        tk.Button(bar, text=t("gif_maker.start_here"), relief="flat", command=self.mark_in).pack(
+            side="left"
+        )
+        tk.Button(bar, text=t("gif_maker.end_here"), relief="flat", command=self.mark_out).pack(
+            side="left"
+        )
 
         opt = tk.LabelFrame(body, text="  GIF  ", padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
@@ -105,9 +109,9 @@ class GIFMakerTab(BaseTab):
         self.form_row(
             opt,
             0,
-            "Start:",
+            t("splitter.start_label"),
             self.start,
-            tk.Label(opt, text="Length (s):"),
+            tk.Label(opt, text=t("gif_maker.length_s")),
             tk.Entry(opt, textvariable=self.dur_var, width=6),
             label_width=12,
             pady=2,
@@ -116,14 +120,14 @@ class GIFMakerTab(BaseTab):
         self.form_row(
             opt,
             1,
-            "Frame rate:",
+            t("gif_maker.frame_rate"),
             ttk.Combobox(
                 opt,
                 textvariable=self.fps_var,
                 values=["8", "10", "12", "15", "20", "24", "30"],
                 width=5,
             ),
-            tk.Label(opt, text="Width (px):"),
+            tk.Label(opt, text=t("common.width")),
             ttk.Combobox(
                 opt,
                 textvariable=self.width_var,
@@ -141,7 +145,7 @@ class GIFMakerTab(BaseTab):
         self.form_row(
             opt,
             2,
-            "Colours:",
+            t("intro_maker.colours"),
             ttk.Combobox(
                 opt,
                 textvariable=self.colours_var,
@@ -149,7 +153,7 @@ class GIFMakerTab(BaseTab):
                 state="readonly",
                 width=5,
             ),
-            tk.Label(opt, text="Dither:"),
+            tk.Label(opt, text=t("gif_maker.dither_label")),
             ttk.Combobox(
                 opt,
                 textvariable=self.dither_var,
@@ -165,7 +169,7 @@ class GIFMakerTab(BaseTab):
         self.form_row(
             opt,
             3,
-            "Loop:",
+            t("gif_maker.loop"),
             ttk.Combobox(
                 opt,
                 textvariable=self.loop_var,
@@ -173,13 +177,13 @@ class GIFMakerTab(BaseTab):
                 state="readonly",
                 width=8,
             ),
-            tk.Label(opt, text="Max size (MB, optional):"),
+            tk.Label(opt, text=t("gif_maker.max_size_mb_optional")),
             tk.Entry(opt, textvariable=self.limit_var, width=6),
             label_width=12,
             pady=2,
         )
         self.format = ChoiceBox(opt, ANIM_FORMATS, AnimFormat.GIF, width=16)
-        self.form_row(opt, 4, "Format:", self.format, label_width=12, pady=2)
+        self.form_row(opt, 4, t("common.format"), self.format, label_width=12, pady=2)
 
         self.out_row = save_section(
             body, t("common.output_file"), kind="image", ext=".gif", suggest=self._suggest
@@ -214,12 +218,16 @@ class GIFMakerTab(BaseTab):
         if info is None:
             return
         try:
-            start = self.start.seconds(0.0, "Start") or 0.0
-            dur = common.number(self.dur_var.get(), "Length", 0.1, 600)
-            fps = common.number(self.fps_var.get(), "Frame rate", 1, 60)
-            width = int(common.number(self.width_var.get(), "Width", 16, 4096)) // 2 * 2
+            start = self.start.seconds(0.0, t("btn.start")) or 0.0
+            dur = common.number(self.dur_var.get(), t("intro_maker.length"), 0.1, 600)
+            fps = common.number(self.fps_var.get(), t("gif_maker.frame_rate_2"), 1, 60)
+            width = (
+                int(common.number(self.width_var.get(), t("region_blur.width_col"), 16, 4096))
+                // 2
+                * 2
+            )
             limit = (
-                common.number(self.limit_var.get(), "Max size", 0.05, 500)
+                common.number(self.limit_var.get(), t("gif_maker.max_size"), 0.05, 500)
                 if self.limit_var.get().strip()
                 else 0
             )

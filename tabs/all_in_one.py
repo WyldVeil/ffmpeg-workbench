@@ -394,12 +394,12 @@ class AllInOneTab(BaseTab):
     # ── ✂ Trim ────────────────────────────────────────────────────────────
 
     def _build_trim(self, parent: tk.Misc) -> None:
-        self._sec_trim = _Section(parent, "✂  Trim", self._rebuild_cmd)
+        self._sec_trim = _Section(parent, t("all_in_one.trim"), self._rebuild_cmd)
         self._sec_trim.pack(fill="x", pady=px(1))
         b = self._sec_trim.body
 
         r = _line(b)
-        _lbl(r, "From:").pack(side="left")
+        _lbl(r, t("frame_extractor.from")).pack(side="left")
         trim = RangePicker(
             r,
             start="0.0",
@@ -413,7 +413,7 @@ class AllInOneTab(BaseTab):
     # ── 📐 Scale ──────────────────────────────────────────────────────────
 
     def _build_scale(self, parent: tk.Misc) -> None:
-        self._sec_scale = _Section(parent, "📐  Scale / Resolution", self._rebuild_cmd)
+        self._sec_scale = _Section(parent, t("all_in_one.scale_resolution"), self._rebuild_cmd)
         self._sec_scale.pack(fill="x", pady=px(1))
         b = self._sec_scale.body
 
@@ -428,7 +428,7 @@ class AllInOneTab(BaseTab):
         on_write(self._scale_pad, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
-        _lbl(r1, "Preset:").pack(side="left")
+        _lbl(r1, t("common.preset")).pack(side="left")
         cb = _combo(r1, self._scale_preset, list(_RES_PRESETS), width=24)
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", self._on_res_preset)
@@ -438,16 +438,16 @@ class AllInOneTab(BaseTab):
         _lbl(r1, "H:").pack(side="left")
         self._scale_h_entry = _entry(r1, self._scale_h, 6)
         self._scale_h_entry.pack(side="left", padx=px(3))
-        _lbl(r1, "(-1 = auto-aspect)", dim=True).pack(side="left", padx=px(6))
+        _lbl(r1, t("all_in_one.1_auto_aspect"), dim=True).pack(side="left", padx=px(6))
 
         r2 = _line(b)
-        _lbl(r2, "Algorithm:").pack(side="left")
+        _lbl(r2, t("loudness.algorithm_label")).pack(side="left")
         _combo(r2, self._scale_algo, list(_SCALE_ALGO.keys()), width=26).pack(
             side="left", padx=px(6)
         )
         tk.Checkbutton(
             r2,
-            text="Pad to exact size (adds black bars)",
+            text=t("all_in_one.pad_to_exact_size_adds_black_bars"),
             variable=self._scale_pad,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -466,7 +466,7 @@ class AllInOneTab(BaseTab):
     # ── 🎬 Frame Rate ─────────────────────────────────────────────────────
 
     def _build_fps(self, parent: tk.Misc) -> None:
-        self._sec_fps = _Section(parent, "🎬  Frame Rate", self._rebuild_cmd)
+        self._sec_fps = _Section(parent, t("all_in_one.frame_rate"), self._rebuild_cmd)
         self._sec_fps.pack(fill="x", pady=px(1))
         b = self._sec_fps.body
 
@@ -474,15 +474,15 @@ class AllInOneTab(BaseTab):
         on_write(self._fps_val, lambda: self._rebuild_cmd())
 
         r = _line(b)
-        _lbl(r, "Target FPS:").pack(side="left")
+        _lbl(r, t("fps.target_fps_label")).pack(side="left")
         cb = _combo(r, self._fps_val, _FPS_VALS, width=8, state="normal")
         cb.pack(side="left", padx=px(6))
-        _lbl(r, "(or type any value)", dim=True).pack(side="left", padx=px(4))
+        _lbl(r, t("all_in_one.or_type_any_value"), dim=True).pack(side="left", padx=px(4))
 
     # ── 🔄 Rotate & Flip ─────────────────────────────────────────────────
 
     def _build_rotate(self, parent: tk.Misc) -> None:
-        self._sec_rotate = _Section(parent, "🔄  Rotate & Flip", self._rebuild_cmd)
+        self._sec_rotate = _Section(parent, t("all_in_one.rotate_flip"), self._rebuild_cmd)
         self._sec_rotate.pack(fill="x", pady=px(1))
         b = self._sec_rotate.body
 
@@ -494,7 +494,7 @@ class AllInOneTab(BaseTab):
             on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
-        _lbl(r, "Rotation:").pack(side="left")
+        _lbl(r, t("all_in_one.rotation")).pack(side="left")
         for val, label in [("0", "None"), ("90", "90° CW"), ("180", "180°"), ("270", "90° CCW")]:
             tk.Radiobutton(
                 r,
@@ -511,7 +511,7 @@ class AllInOneTab(BaseTab):
         r2 = _line(b)
         tk.Checkbutton(
             r2,
-            text="Flip Horizontal (Mirror)",
+            text=t("all_in_one.flip_horizontal_mirror"),
             variable=self._flip_h,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -521,7 +521,7 @@ class AllInOneTab(BaseTab):
         ).pack(side="left", padx=px(4))
         tk.Checkbutton(
             r2,
-            text="Flip Vertical",
+            text=t("all_in_one.flip_vertical"),
             variable=self._flip_v,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -533,7 +533,7 @@ class AllInOneTab(BaseTab):
     # ── ⚡ Speed ──────────────────────────────────────────────────────────
 
     def _build_speed(self, parent: tk.Misc) -> None:
-        self._sec_speed = _Section(parent, "⚡  Speed", self._rebuild_cmd)
+        self._sec_speed = _Section(parent, t("all_in_one.speed"), self._rebuild_cmd)
         self._sec_speed.pack(fill="x", pady=px(1))
         b = self._sec_speed.body
 
@@ -543,14 +543,14 @@ class AllInOneTab(BaseTab):
             on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
-        _lbl(r, "Speed multiplier:").pack(side="left")
+        _lbl(r, t("speed_ramp.speed_multiplier_label")).pack(side="left")
         _spin(r, self._speed_val, 0.05, 16, 0.25, width=6).pack(side="left", padx=px(6))
-        _lbl(r, "(0.5 = half speed · 2.0 = double)", dim=True).pack(side="left", padx=px(6))
+        _lbl(r, t("all_in_one.0_5_half_speed_2_0_double"), dim=True).pack(side="left", padx=px(6))
 
         r2 = _line(b)
         tk.Checkbutton(
             r2,
-            text="Preserve audio pitch (atempo)",
+            text=t("all_in_one.preserve_audio_pitch_atempo"),
             variable=self._speed_pitch,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -558,7 +558,7 @@ class AllInOneTab(BaseTab):
             activebackground=CLR["bg"],
             command=self._rebuild_cmd,
         ).pack(side="left", padx=px(4))
-        _lbl(r2, "(when off, audio speeds up / slows down raw)", dim=True).pack(
+        _lbl(r2, t("all_in_one.when_off_audio_speeds_up_slows_down"), dim=True).pack(
             side="left", padx=px(6)
         )
 
@@ -569,7 +569,7 @@ class AllInOneTab(BaseTab):
         self._rebuild_cmd()
 
     def _build_color(self, parent: tk.Misc) -> None:
-        self._sec_color = _Section(parent, "🎨  Color & Image", self._rebuild_cmd)
+        self._sec_color = _Section(parent, t("all_in_one.color_image"), self._rebuild_cmd)
         self._sec_color.pack(fill="x", pady=px(1))
         b = self._sec_color.body
 
@@ -613,7 +613,7 @@ class AllInOneTab(BaseTab):
         r5 = _line(b, pady=2)
         tk.Button(
             r5,
-            text="Reset all to defaults",
+            text=t("all_in_one.reset_all_to_defaults"),
             bg=CLR["panel"],
             fg=CLR["fg"],
             command=self._reset_color,
@@ -630,7 +630,7 @@ class AllInOneTab(BaseTab):
     # ── 🌫 Denoise ────────────────────────────────────────────────────────
 
     def _build_denoise(self, parent: tk.Misc) -> None:
-        self._sec_denoise = _Section(parent, "🌫  Denoise", self._rebuild_cmd)
+        self._sec_denoise = _Section(parent, t("all_in_one.denoise"), self._rebuild_cmd)
         self._sec_denoise.pack(fill="x", pady=px(1))
         b = self._sec_denoise.body
 
@@ -640,7 +640,7 @@ class AllInOneTab(BaseTab):
             on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
-        _lbl(r, "Algorithm:").pack(side="left")
+        _lbl(r, t("loudness.algorithm_label")).pack(side="left")
         for val, lbl in [("hqdn3d", "HQDN3D (fast)"), ("nlmeans", "NLMeans (quality)")]:
             tk.Radiobutton(
                 r,
@@ -655,7 +655,7 @@ class AllInOneTab(BaseTab):
             ).pack(side="left", padx=px(10))
 
         r2 = _line(b)
-        _lbl(r2, "Strength:").pack(side="left")
+        _lbl(r2, t("sharpen.strength_label")).pack(side="left")
         _combo(r2, self._denoise_str, ["Light", "Medium", "Strong", "Aggressive"], width=12).pack(
             side="left", padx=px(6)
         )
@@ -663,7 +663,7 @@ class AllInOneTab(BaseTab):
     # ── 🔪 Sharpen ────────────────────────────────────────────────────────
 
     def _build_sharpen(self, parent: tk.Misc) -> None:
-        self._sec_sharpen = _Section(parent, "🔪  Sharpen", self._rebuild_cmd)
+        self._sec_sharpen = _Section(parent, t("all_in_one.sharpen"), self._rebuild_cmd)
         self._sec_sharpen.pack(fill="x", pady=px(1))
         b = self._sec_sharpen.body
 
@@ -673,18 +673,16 @@ class AllInOneTab(BaseTab):
             on_write(v, lambda: self._rebuild_cmd())
 
         r = _line(b)
-        _lbl(r, "Kernel size (odd):").pack(side="left")
+        _lbl(r, t("all_in_one.kernel_size_odd")).pack(side="left")
         _combo(r, self._sharp_lx, ["3", "5", "7"], width=4).pack(side="left", padx=px(6))
-        _lbl(r, "  Amount (luma):").pack(side="left")
+        _lbl(r, t("all_in_one.amount_luma")).pack(side="left")
         _spin(r, self._sharp_la, 0.1, 5.0, 0.1, width=5).pack(side="left", padx=px(6))
-        _lbl(r, "(0.5 subtle · 1.0 standard · 2.5 aggressive)", dim=True).pack(
-            side="left", padx=px(6)
-        )
+        _lbl(r, t("all_in_one.0_5_subtle_1_0_standard_2"), dim=True).pack(side="left", padx=px(6))
 
     # ── 🔊 Audio ──────────────────────────────────────────────────────────
 
     def _build_audio(self, parent: tk.Misc) -> None:
-        self._sec_audio = _Section(parent, "🔊  Audio Processing", self._rebuild_cmd)
+        self._sec_audio = _Section(parent, t("all_in_one.audio_processing"), self._rebuild_cmd)
         self._sec_audio.pack(fill="x", pady=px(1))
         b = self._sec_audio.body
 
@@ -699,7 +697,7 @@ class AllInOneTab(BaseTab):
         r1 = _line(b)
         tk.Checkbutton(
             r1,
-            text="Adjust volume ×",
+            text=t("all_in_one.adjust_volume"),
             variable=self._vol_en,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -708,12 +706,12 @@ class AllInOneTab(BaseTab):
             command=self._rebuild_cmd,
         ).pack(side="left")
         _spin(r1, self._vol_val, 0.05, 10, 0.05, width=5).pack(side="left", padx=px(6))
-        _lbl(r1, "(1.0 = no change · 2.0 = double)", dim=True).pack(side="left", padx=px(4))
+        _lbl(r1, t("all_in_one.1_0_no_change_2_0_double"), dim=True).pack(side="left", padx=px(4))
 
         r2 = _line(b)
         tk.Checkbutton(
             r2,
-            text="Loudness normalise to",
+            text=t("all_in_one.loudness_normalise_to"),
             variable=self._norm_en,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -724,12 +722,14 @@ class AllInOneTab(BaseTab):
         _combo(
             r2, self._norm_lufs, ["-14", "-16", "-18", "-23", "-24"], width=5, state="normal"
         ).pack(side="left", padx=px(4))
-        _lbl(r2, "LUFS  (YouTube = -14 · broadcast = -23)", dim=True).pack(side="left", padx=px(4))
+        _lbl(r2, t("all_in_one.lufs_youtube_14_broadcast_23"), dim=True).pack(
+            side="left", padx=px(4)
+        )
 
     # ── 💬 Text Overlay ───────────────────────────────────────────────────
 
     def _build_text(self, parent: tk.Misc) -> None:
-        self._sec_text = _Section(parent, "💬  Text / Watermark Overlay", self._rebuild_cmd)
+        self._sec_text = _Section(parent, t("all_in_one.text_watermark_overlay"), self._rebuild_cmd)
         self._sec_text.pack(fill="x", pady=px(1))
         b = self._sec_text.body
 
@@ -741,21 +741,21 @@ class AllInOneTab(BaseTab):
             on_write(v, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
-        _lbl(r1, "Text:").pack(side="left")
+        _lbl(r1, t("intro_maker.text_label")).pack(side="left")
         _entry(r1, self._text_val, 34).pack(side="left", padx=px(6))
-        _lbl(r1, "  Size:").pack(side="left")
+        _lbl(r1, t("slideshow.size")).pack(side="left")
         _spin(r1, self._text_size, 8, 200, 2, width=5).pack(side="left", padx=px(4))
-        _lbl(r1, "  Colour:").pack(side="left")
+        _lbl(r1, t("all_in_one.colour")).pack(side="left")
         _combo(
             r1, self._text_color, ["white", "yellow", "red", "cyan", "black", "orange"], width=8
         ).pack(side="left", padx=px(4))
 
         r2 = _line(b)
-        _lbl(r2, "Position:").pack(side="left")
+        _lbl(r2, t("side_by_side.label_position_label")).pack(side="left")
         _combo(r2, self._text_pos, list(_TEXT_POSITIONS.keys()), width=14).pack(
             side="left", padx=px(6)
         )
-        _lbl(r2, "  Show from:").pack(side="left")
+        _lbl(r2, t("all_in_one.show_from")).pack(side="left")
         shown = RangePicker(
             r2, end_hint="(blank = to the end)", source=self._source, on_change=self._rebuild_cmd
         )
@@ -765,7 +765,7 @@ class AllInOneTab(BaseTab):
     # ── 🌅 Fade In / Out ─────────────────────────────────────────────────
 
     def _build_fade(self, parent: tk.Misc) -> None:
-        self._sec_fade = _Section(parent, "🌅  Fade In / Fade Out", self._rebuild_cmd)
+        self._sec_fade = _Section(parent, t("all_in_one.fade_in_fade_out"), self._rebuild_cmd)
         self._sec_fade.pack(fill="x", pady=px(1))
         b = self._sec_fade.body
 
@@ -781,7 +781,7 @@ class AllInOneTab(BaseTab):
         r1 = _line(b)
         tk.Checkbutton(
             r1,
-            text="Fade IN duration (s):",
+            text=t("all_in_one.fade_in_duration_s"),
             variable=self._fi_en,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -794,7 +794,7 @@ class AllInOneTab(BaseTab):
         r2 = _line(b)
         tk.Checkbutton(
             r2,
-            text="Fade OUT duration (s):",
+            text=t("all_in_one.fade_out_duration_s"),
             variable=self._fo_en,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -803,12 +803,14 @@ class AllInOneTab(BaseTab):
             command=self._rebuild_cmd,
         ).pack(side="left")
         _spin(r2, self._fo_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
-        _lbl(r2, "(requires source duration to be loaded)", dim=True).pack(side="left", padx=px(6))
+        _lbl(r2, t("all_in_one.requires_source_duration_to_be_loaded"), dim=True).pack(
+            side="left", padx=px(6)
+        )
 
         r3 = _line(b)
         tk.Checkbutton(
             r3,
-            text="Also fade audio in/out",
+            text=t("all_in_one.also_fade_audio_in_out"),
             variable=self._fade_audio,
             bg=CLR["bg"],
             fg=CLR["fg"],
@@ -820,7 +822,7 @@ class AllInOneTab(BaseTab):
     # ── ⚙ Encode Settings ─────────────────────────────────────────────────
 
     def _build_encode(self, parent: tk.Misc) -> None:
-        self._sec_encode = _Section(parent, "⚙  Encode Settings", self._rebuild_cmd)
+        self._sec_encode = _Section(parent, t("all_in_one.encode_settings"), self._rebuild_cmd)
         self._sec_encode.pack(fill="x", pady=px(1))
         # Default ON - you almost always want to set these
         self._sec_encode.set_enabled(True)
@@ -836,21 +838,23 @@ class AllInOneTab(BaseTab):
             on_write(v, lambda: self._rebuild_cmd())
 
         r1 = _line(b)
-        _lbl(r1, "Video codec:").pack(side="left")
+        _lbl(r1, t("encode_queue.video_codec")).pack(side="left")
         _combo(r1, self._vcodec, list(_VCODECS.keys()), width=24).pack(side="left", padx=px(6))
-        _lbl(r1, "  Quality (CRF/CQ):").pack(side="left")
+        _lbl(r1, t("all_in_one.quality_crf_cq")).pack(side="left")
         _combo(r1, self._crf, [str(x) for x in range(12, 32)], width=4).pack(
             side="left", padx=px(4)
         )
-        _lbl(r1, "  Preset:").pack(side="left")
+        _lbl(r1, t("rotate_flip.preset")).pack(side="left")
         _combo(r1, self._preset, _PRESETS, width=10).pack(side="left", padx=px(4))
 
         r2 = _line(b)
-        _lbl(r2, "Audio codec:").pack(side="left")
+        _lbl(r2, t("all_in_one.audio_codec")).pack(side="left")
         _combo(r2, self._acodec, _ACODECS, width=12).pack(side="left", padx=px(6))
-        _lbl(r2, "  Bitrate:").pack(side="left")
+        _lbl(r2, t("webm_maker.bitrate")).pack(side="left")
         _combo(r2, self._abitrate, _ABITRATES, width=7).pack(side="left", padx=px(4))
-        _lbl(r2, "(ignored when codec = copy / none)", dim=True).pack(side="left", padx=px(6))
+        _lbl(r2, t("all_in_one.ignored_when_codec_copy_none"), dim=True).pack(
+            side="left", padx=px(6)
+        )
 
     # ─────────────────────────────────────────────────────────────────────
     #  Fixed bottom bar: command display + render
@@ -870,16 +874,24 @@ class AllInOneTab(BaseTab):
         cmd_hdr.pack(fill="x", padx=px(12), pady=px(8, 2))
         tk.Label(
             cmd_hdr,
-            text="📋  Generated FFmpeg Command  (editable; your changes are preserved on render)",
+            text=t("all_in_one.generated_ffmpeg_command_editable_your_changes_a"),
             font=(UI_FONT, 9, "bold"),
             bg=CLR["panel"],
             fg=CLR["accent"],
         ).pack(side="left")
         tk.Button(
-            cmd_hdr, text="Copy to clipboard", bg=CLR["panel"], fg=CLR["fg"], command=self._copy_cmd
+            cmd_hdr,
+            text=t("all_in_one.copy_to_clipboard"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            command=self._copy_cmd,
         ).pack(side="right", padx=px(4))
         tk.Button(
-            cmd_hdr, text="Reset command", bg=CLR["panel"], fg=CLR["fg"], command=self._reset_cmd
+            cmd_hdr,
+            text=t("all_in_one.reset_command"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            command=self._reset_cmd,
         ).pack(side="right", padx=px(4))
         self._edit_lbl = tk.Label(
             cmd_hdr, text="", bg=CLR["panel"], fg=CLR["orange"], font=(UI_FONT, 8)
@@ -913,12 +925,14 @@ class AllInOneTab(BaseTab):
         btn_row = tk.Frame(bottom, bg=CLR["panel"])
         btn_row.pack(fill="x", padx=px(12), pady=px(4, 10))
 
-        self.btn_render = self.make_render_btn(btn_row, "▶  RENDER", self._render, width=20)
+        self.btn_render = self.make_render_btn(
+            btn_row, t("all_in_one.render"), self._render, width=20
+        )
         self.btn_render.pack(side="left", padx=px(8))
 
         self._btn_stop = tk.Button(
             btn_row,
-            text="⏹  STOP",
+            text=t("downsizer.stop_button"),
             font=(UI_FONT, 12, "bold"),
             bg="#D32F2F",
             fg="white",
@@ -932,7 +946,7 @@ class AllInOneTab(BaseTab):
 
         tk.Button(
             btn_row,
-            text="💾  Save Command as .bat",
+            text=t("all_in_one.save_command_as_bat"),
             bg=CLR["panel"],
             fg=CLR["fg"],
             height=2,
@@ -941,7 +955,7 @@ class AllInOneTab(BaseTab):
 
         tk.Button(
             btn_row,
-            text="💾  Save Command as .sh",
+            text=t("all_in_one.save_command_as_sh"),
             bg=CLR["panel"],
             fg=CLR["fg"],
             height=2,
@@ -965,7 +979,7 @@ class AllInOneTab(BaseTab):
         if not hasattr(self, "_cmd_text"):
             return
         if getattr(self, "_cmd_dirty", False):
-            self._edit_lbl.config(text="✎ Edited by hand - press 'Reset command' to regenerate")
+            self._edit_lbl.config(text=t("all_in_one.edited_by_hand_press_reset_command_to"))
             return
         src = self._src_var.get().strip()
         out = self._out_var.get().strip()
@@ -1131,9 +1145,7 @@ class AllInOneTab(BaseTab):
     def _on_cmd_modified(self, _event: tk.Event[tk.Misc] | None = None) -> None:
         if self._cmd_text.edit_modified() and not getattr(self, "_setting_text", False):
             self._cmd_dirty = True
-            self._edit_lbl.config(
-                text="✎ Edited by hand - your edits are used; 'Reset command' regenerates it"
-            )
+            self._edit_lbl.config(text=t("all_in_one.edited_by_hand_your_edits_are_used"))
         self._cmd_text.edit_modified(False)
 
     def _reset_cmd(self) -> None:
@@ -1171,10 +1183,10 @@ class AllInOneTab(BaseTab):
         src = self._src_var.get().strip()
         out = self._out_var.get().strip()
         if not src or not os.path.exists(src):
-            messagebox.showwarning(t("common.warning"), "Source file not found.")
+            messagebox.showwarning(t("common.warning"), t("all_in_one.source_file_not_found"))
             return
         if not out:
-            messagebox.showwarning(t("common.warning"), "Set an output file path.")
+            messagebox.showwarning(t("common.warning"), t("all_in_one.set_an_output_file_path"))
             return
 
         self.log(self.console, t("log.all_in_one.running_pipeline"))
@@ -1213,7 +1225,7 @@ class AllInOneTab(BaseTab):
 
         self.log(self.console, t("log.all_in_one.render_forcibly_stopped_by_user"))
         self._btn_stop.config(state="disabled")
-        self.btn_render.config(state="normal", text="▶  RENDER")
+        self.btn_render.config(state="normal", text=t("all_in_one.render"))
 
     def _copy_cmd(self) -> None:
         raw = self._cmd_text.get("1.0", "end").strip()
@@ -1235,7 +1247,7 @@ class AllInOneTab(BaseTab):
                 f.write("@echo off\nchcp 65001 >nul\n")
                 f.write(_proc.list2cmdline(argv).replace("%", "%%") + "\n")
                 f.write("pause\n")
-            self.log(self.console, f"✅  Saved: {p}")
+            self.log(self.console, t("all_in_one.saved_p", p=p))
         except OSError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)
 
@@ -1251,6 +1263,6 @@ class AllInOneTab(BaseTab):
                 f.write("#!/usr/bin/env bash\nset -euo pipefail\n")
                 f.write(shlex.join(argv) + "\n")
             os.chmod(p, 0o755)
-            self.log(self.console, f"✅  Saved: {p}")
+            self.log(self.console, t("all_in_one.saved_p", p=p))
         except OSError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)

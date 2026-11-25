@@ -298,8 +298,14 @@ class EncodeQueueTab(BaseTab):
         active, pending, done, failed = self._qmgr.get_stats()
         total = len(tasks)
         self._stats_lbl.config(
-            text=f"{total} tasks  ·  {active} active  ·  {pending} pending  "
-            f"·  {done} done  ·  {failed} failed"
+            text=t(
+                "encode_queue.total_tasks_active_active_pending_pending_done",
+                total=total,
+                active=active,
+                pending=pending,
+                done=done,
+                failed=failed,
+            )
         )
 
     def _on_tree_select(self, _event: object = None) -> None:
@@ -406,11 +412,13 @@ class EncodeQueueTab(BaseTab):
                 break
         if count:
             messagebox.showinfo(
-                "Queued", f"{count} file(s) added to the render queue.", parent=self
+                t("encode_queue.queued"),
+                t("encode_queue.count_file_s_added_to_the_render", count=count),
+                parent=self,
             )
         else:
             messagebox.showwarning(
-                t("common.warning"), "No video files to add were found.", parent=self
+                t("common.warning"), t("encode_queue.no_video_files_to_add_were_found"), parent=self
             )
 
     def _read_editor(self) -> eq.EncodeJob:
@@ -437,7 +445,10 @@ class EncodeQueueTab(BaseTab):
     def _on_task_complete(self, task_id: str, returncode: int, out_path: str) -> None:
         if returncode != 0:
             messagebox.showerror(
-                "Encode Failed",
-                f"Task finished with error code {returncode}.\n"
-                f"Check the queue log for details.\nOutput: {out_path}",
+                t("encode_queue.encode_failed"),
+                t(
+                    "encode_queue.task_finished_with_error_code_returncode_check",
+                    returncode=returncode,
+                    out_path=out_path,
+                ),
             )

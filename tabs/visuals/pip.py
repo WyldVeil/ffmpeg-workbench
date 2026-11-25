@@ -73,19 +73,25 @@ class PIPTab(BaseTab):
         self,
     ) -> tuple[tk.Frame, Callable[..., None], tk.LabelFrame, ttk.Combobox, tk.Frame]:
         self.make_header(
-            self, t("tab.picture_in_picture"), "Put one video inside another.", icon="🖼"
+            self, t("tab.picture_in_picture"), t("pip.put_one_video_inside_another"), icon="🖼"
         )
         body = scroll_body(self)
         self.bg_row = FileRow(
-            body, "Background video:", self.src_var, on_change=self._bg_changed, label_width=18
+            body,
+            t("pip.background_video"),
+            self.src_var,
+            on_change=self._bg_changed,
+            label_width=18,
         )
         self.bg_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_row = self.bg_row
-        self.fg_row = FileRow(body, "Inset video:", on_change=self._fg_changed, label_width=18)
+        self.fg_row = FileRow(
+            body, t("pip.inset_video"), on_change=self._fg_changed, label_width=18
+        )
         self.fg_row.pack(fill="x", padx=px(20), pady=px(2))
         self.compare = CompareView(body, 400, 225, after_label="Result")
         self.compare.pack(pady=px(4))
-        opt = tk.LabelFrame(body, text="  Inset  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("pip.inset"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
         def ch(*_a: object) -> None:
@@ -99,7 +105,7 @@ class PIPTab(BaseTab):
             to=90,
             orient="horizontal",
             length=px(180),
-            label="Width (% of background)",
+            label=t("pip.width_of_background"),
             command=ch,
         ).grid(row=0, column=0, sticky="w")
         self.margin_var = tk.DoubleVar(value=3)
@@ -111,7 +117,7 @@ class PIPTab(BaseTab):
             resolution=0.5,
             orient="horizontal",
             length=px(140),
-            label="Margin (%)",
+            label=t("image_watermark.margin"),
             command=ch,
         ).grid(row=0, column=1, sticky="w")
         self.opacity_var = tk.DoubleVar(value=1.0)
@@ -123,12 +129,12 @@ class PIPTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(140),
-            label="Opacity",
+            label=t("pip.opacity_section"),
             command=ch,
         ).grid(row=0, column=2, sticky="w")
         pr = tk.Frame(opt)
         pr.grid(row=1, column=0, columnspan=3, sticky="w", pady=px(3))
-        tk.Label(pr, text="Position:").pack(side="left")
+        tk.Label(pr, text=t("side_by_side.label_position_label")).pack(side="left")
         self.place_var = tk.StringVar(value=POSITIONS["br"])
         pb = ttk.Combobox(
             pr,
@@ -156,21 +162,21 @@ class PIPTab(BaseTab):
             var.trace_add("write", ch)
         br = tk.Frame(opt)
         br.grid(row=2, column=0, columnspan=3, sticky="w", pady=px(3))
-        tk.Label(br, text="Border (px):").pack(side="left")
+        tk.Label(br, text=t("pip.border_px")).pack(side="left")
         self.border_var = tk.StringVar(value="0")
         tk.Entry(br, textvariable=self.border_var, width=4).pack(side="left", padx=px(4))
         self.colour_btn = ColourButton(
-            br, "#FFFFFF", text="Colour…", on_change=lambda _c: self._changed()
+            br, "#FFFFFF", text=t("shortifier.colour"), on_change=lambda _c: self._changed()
         )
         self.colour_btn.pack(side="left")
-        tk.Label(br, text="  Rounded corners (px):").pack(side="left")
+        tk.Label(br, text=t("pip.rounded_corners_px")).pack(side="left")
         self.radius_var = tk.StringVar(value="0")
         tk.Entry(br, textvariable=self.radius_var, width=4).pack(side="left", padx=px(4))
         for v in (self.border_var, self.radius_var):
             v.trace_add("write", ch)
         tr = tk.Frame(opt)
         tr.grid(row=3, column=0, columnspan=3, sticky="w", pady=px(3))
-        tk.Label(tr, text="Show from").pack(side="left")
+        tk.Label(tr, text=t("pip.show_from")).pack(side="left")
         self.window = RangePicker(
             tr,
             joiner="until",
@@ -188,7 +194,7 @@ class PIPTab(BaseTab):
         tk.Label(ar, text="over").pack(side="left", padx=px(4))
         self.anim_dur_var = tk.StringVar(value="0.5")
         tk.Entry(ar, textvariable=self.anim_dur_var, width=5).pack(side="left")
-        tk.Label(ar, text="s    Sound:").pack(side="left")
+        tk.Label(ar, text=t("pip.s_sound")).pack(side="left")
         self.audio_var = tk.StringVar(value=AUDIO["bg"])
         ttk.Combobox(
             ar, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly", width=20
@@ -201,7 +207,7 @@ class PIPTab(BaseTab):
             suggest=lambda: self.suggest_output(self.bg_row.path, "pip"),
         )
         self.btn_render = self.make_render_btn(
-            body, "🖼  MAKE PICTURE-IN-PICTURE", self._render, width=28
+            body, t("pip.make_picture_in_picture"), self._render, width=28
         )
 
     def _build_console(self, body: tk.Frame) -> None:
@@ -235,14 +241,18 @@ class PIPTab(BaseTab):
                 common.number(self.cy_var.get() or "50", "Y %", 0, 100),
             ),
             margin_pct=float(self.margin_var.get()),
-            border=int(common.number(self.border_var.get() or "0", "Border", 0, 100)),
+            border=int(
+                common.number(self.border_var.get() or "0", t("contact_sheet.border"), 0, 100)
+            ),
             border_colour=self.colour_btn.rgb,
-            radius=int(common.number(self.radius_var.get() or "0", "Corners", 0, 500)),
+            radius=int(common.number(self.radius_var.get() or "0", t("pip.corners"), 0, 500)),
             opacity=float(self.opacity_var.get()),
             start=start,
             end=end,
             anim=next((k for k, v in ANIMS.items() if v == self.anim_var.get()), "none"),
-            anim_dur=common.number(self.anim_dur_var.get() or "0.5", "Animation length", 0.05, 10),
+            anim_dur=common.number(
+                self.anim_dur_var.get() or "0.5", t("pip.animation_length"), 0.05, 10
+            ),
         )
 
     def _changed(self, *_a: object) -> None:

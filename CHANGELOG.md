@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Mystical's falling stars on Linux.** They were drawn behind the window's
+  panels, so they never showed. They now fall over the whole window (an
+  overlay cut to the stars themselves, so every click still reaches the app).
+- **Switching theme without restarting** left some colours from the old theme
+  behind: buttons, text boxes, menus and drop-downs. Every colour now follows
+  the theme.
+
+### Changed
+
+- **Much more of the app can be translated.** About 1,100 labels, titles,
+  messages and log lines (and the Start page's goals and suggestions) were fixed
+  in English; they now come from the language files, ready for translating. About
+  1,200 old entries nothing used are gone from every language file. The Video
+  Downloader's notice is translated too (Chinese (Traditional), Czech, Greek and
+  Hungarian so far), with each translation saying the English text is the one
+  that counts.
+
 ## 1.2.9
 
 ### Changed

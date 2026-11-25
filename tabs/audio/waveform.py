@@ -101,8 +101,7 @@ class WaveformEditorTab(BaseTab):
             )
         tk.Label(
             wf_lf,
-            text="Drag to select · click = In · Shift+click = Out · wheel = zoom · "
-            "Shift+wheel = scroll",
+            text=t("waveform.drag_to_select_click_in_shift_click"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(anchor="w")
@@ -128,13 +127,15 @@ class WaveformEditorTab(BaseTab):
         tk.Label(mk, text=t("waveform.selection_label"), font=(UI_FONT, 10)).pack(side="left")
         self._sel_lbl = tk.Label(mk, text="0.00s", font=(MONO_FONT, 10), fg=CLR["accent"], width=10)
         self._sel_lbl.pack(side="left")
-        tk.Button(mk, text="Zoom to selection", relief="flat", command=self._zoom_sel).pack(
-            side="left", padx=px(4)
-        )
+        tk.Button(
+            mk, text=t("waveform.zoom_to_selection"), relief="flat", command=self._zoom_sel
+        ).pack(side="left", padx=px(4))
         return mk
 
     def _build_region_actions(self, mk: tk.Frame) -> None:
-        tk.Button(mk, text="Show all", relief="flat", command=self._zoom_all).pack(side="left")
+        tk.Button(mk, text=t("waveform.show_all"), relief="flat", command=self._zoom_all).pack(
+            side="left"
+        )
 
         act = tk.LabelFrame(
             self,
@@ -246,7 +247,7 @@ class WaveformEditorTab(BaseTab):
         self._region_list.delete(0, "end")
         self._mark_in = self._mark_out = 0.0
         self._view = (0.0, 0.0)
-        self._info_lbl.config(text="Reading the file…")
+        self._info_lbl.config(text=t("waveform.reading_the_file"))
         self._draw()
         tasks.submit(
             partial(self._analyse, path),
@@ -287,13 +288,25 @@ class WaveformEditorTab(BaseTab):
         self._view = (0.0, self.duration)
         a = info.require_audio()
         self._info_lbl.config(
-            text=f"{_fmt(self.duration)}   {a.codec}  {a.sample_rate} Hz  "
-            f"{a.channel_layout or str(a.channels) + ' ch'}"
+            text=t(
+                "waveform.duration_codec_sample_rate_hz_value",
+                duration=_fmt(self.duration),
+                codec=a.codec,
+                sample_rate=a.sample_rate,
+                value=a.channel_layout or str(a.channels) + " ch",
+            )
         )
         self._sync_marks()
         if not self.out_row.path:
             self.out_row.set(self._suggest())
-        self.log(self.console, f"Waveform ready: {len(peaks)} slices of {slice_s * 1000:.0f} ms")
+        self.log(
+            self.console,
+            t(
+                "waveform.waveform_ready_peaks_slices_of_slice_s",
+                peaks=len(peaks),
+                slice_s=slice_s * 1000,
+            ),
+        )
 
     def _failed(self, my_id: int, exc: BaseException) -> None:
         if my_id != self._load_id:
@@ -463,14 +476,16 @@ class WaveformEditorTab(BaseTab):
                 db = -1
             if not 0 < db <= 30:
                 messagebox.showwarning(
-                    t("common.warning"), "The amount must be between 0.1 and 30 dB.", parent=self
+                    t("common.warning"), t("waveform.the_amount_must_be_between_0_1"), parent=self
                 )
                 return
         self._regions.append((s, e, action, db))
         label = {"mute": "MUTE", "boost": f"BOOST +{db:g} dB", "duck": f"DUCK -{db:g} dB"}[action]
         self._region_list.insert("end", f"  {_fmt(s)} → {_fmt(e)}  [{label}]")
         self._draw()
-        self.log(self.console, f"Region added: {label} at {_fmt(s)} → {_fmt(e)}")
+        self.log(
+            self.console, t("waveform.region_added_label_at_s_e", label=label, s=_fmt(s), e=_fmt(e))
+        )
 
     def _remove_region(self) -> None:
         sel = selected_rows(self._region_list)
@@ -504,7 +519,7 @@ class WaveformEditorTab(BaseTab):
             return
         self.out_row.set(out)
         cmd = wf.apply_cmd(src, out, self._regions, audio_only=audio_only)
-        self.log(self.console, f"Applying {len(self._regions)} region(s)…")
+        self.log(self.console, t("waveform.applying_regions_region_s", regions=len(self._regions)))
         self.run_ffmpeg(
             cmd,
             self.console,

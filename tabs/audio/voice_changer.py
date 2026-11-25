@@ -34,13 +34,13 @@ class VoiceChangerTab(BaseTab):
         body = scroll_body(self)
         self.src_row = FileRow(
             body,
-            "Input:",
+            t("webm_maker.input"),
             self.src_var,
             kind="media",
             on_change=lambda p: setattr(self, "_info", ff.try_probe(p)),
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
-        opt = tk.LabelFrame(body, text="  Effect  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("voice_changer.effect"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.preset_var = tk.StringVar(value=vc.PRESETS["chipmunk"][0])
         ttk.Combobox(
@@ -59,16 +59,20 @@ class VoiceChangerTab(BaseTab):
             resolution=0.5,
             orient="horizontal",
             length=px(220),
-            label="Custom pitch (semitones)",
+            label=t("voice_changer.custom_pitch_semitones"),
         ).grid(row=1, column=0, sticky="w", pady=px(4))
         self.formant_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opt,
-            text="Keep the voice's character (formants) - sounds more natural",
+            text=t("voice_changer.keep_the_voice_s_character_formants_sounds"),
             variable=self.formant_var,
         ).grid(row=2, column=0, sticky="w")
         tk.Button(
-            opt, text="▶ Preview 12 s", relief="flat", cursor="hand2", command=self._preview
+            opt,
+            text=t("voice_changer.preview_12_s"),
+            relief="flat",
+            cursor="hand2",
+            command=self._preview,
         ).grid(row=0, column=1, padx=px(12))
         self.out_row = save_section(
             body,
@@ -79,8 +83,7 @@ class VoiceChangerTab(BaseTab):
         out_lf = self.out_row.master
         tk.Label(
             out_lf,
-            text="  ℹ  Save as .mp3/.wav/.flac/.m4a for audio only, or a video type to keep "
-            "the picture.",
+            text=t("voice_changer.save_as_mp3_wav_flac_m4a_for"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(anchor="w")
@@ -112,14 +115,18 @@ class VoiceChangerTab(BaseTab):
         if not info.has_audio:
             from tkinter import messagebox
 
-            messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("voice_changer.this_file_has_no_audio"), parent=self
+            )
             return
         out = common.output_for(self, self.out_row, src, "voice")
         if not out:
             return
         af = self.chain(info)
         cmd = audio_filter_cmd(src, af, out, info)
-        self.log(self.console, f"Effect: {self.preset_var.get()}")
+        self.log(
+            self.console, t("voice_changer.effect_preset_var", preset_var=self.preset_var.get())
+        )
         self.run_ffmpeg(
             cmd,
             self.console,

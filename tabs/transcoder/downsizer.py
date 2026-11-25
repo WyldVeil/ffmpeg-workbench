@@ -75,7 +75,7 @@ class UniversalDownsizerTab(BaseTab):
         self.make_header(
             self,
             t("tab.universal_downsizer"),
-            "Shrink a video to fit a size limit, at the best quality that fits.",
+            t("downsizer.shrink_a_video_to_fit_a_size"),
             icon="🗜",
         )
         body = scroll_body(self)
@@ -85,7 +85,7 @@ class UniversalDownsizerTab(BaseTab):
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"], anchor="w")
         self.info_lbl.pack(fill="x", padx=px(20))
 
-        opt = tk.LabelFrame(body, text="  Target  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("downsizer.target"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
 
         self.target_var = tk.StringVar(value=TARGETS[1][0])
@@ -99,7 +99,13 @@ class UniversalDownsizerTab(BaseTab):
         self._target_mb = tk.StringVar(value="10")
         self.custom_entry = tk.Entry(opt, textvariable=self._target_mb, width=7)
         self.form_row(
-            opt, 0, "Size limit:", tb, self.custom_entry, tk.Label(opt, text="MB"), label_width=14
+            opt,
+            0,
+            t("downsizer.size_limit"),
+            tb,
+            self.custom_entry,
+            tk.Label(opt, text="MB"),
+            label_width=14,
         )
         self.codec_var = tk.StringVar(value=CODECS["h264"])
         cb = ttk.Combobox(
@@ -109,24 +115,24 @@ class UniversalDownsizerTab(BaseTab):
             state="readonly",
             width=40,
         )
-        self.form_row(opt, 1, "Codec:", cb, label_width=14)
+        self.form_row(opt, 1, t("common.codec"), cb, label_width=14)
         self.speed_var = tk.StringVar(value="quality")
         sp = tk.Frame(opt)
         tk.Radiobutton(
             sp,
-            text="Best quality (two-pass, CPU)",
+            text=t("downsizer.best_quality_two_pass_cpu"),
             variable=self.speed_var,
             value="quality",
             command=self._changed,
         ).pack(side="left")
         tk.Radiobutton(
             sp,
-            text="Fast (GPU when available)",
+            text=t("downsizer.fast_gpu_when_available"),
             variable=self.speed_var,
             value="fast",
             command=self._changed,
         ).pack(side="left", padx=px(10))
-        self.form_row(opt, 2, "Encoding:", sp, label_width=14)
+        self.form_row(opt, 2, t("downsizer.encoding"), sp, label_width=14)
         self.audio_var = tk.StringVar(value=AUDIO_MODES["auto"])
         return body, cb, opt, tb
 
@@ -140,27 +146,30 @@ class UniversalDownsizerTab(BaseTab):
             state="readonly",
             width=28,
         )
-        self.form_row(opt, 3, "Audio:", ab, label_width=14)
+        self.form_row(opt, 3, t("crossfader.audio"), ab, label_width=14)
         self._allow_res = tk.BooleanVar(value=True)
         self._allow_fps = tk.BooleanVar(value=True)
         perm = tk.Frame(opt)
         tk.Checkbutton(
-            perm, text="May lower the resolution", variable=self._allow_res, command=self._changed
+            perm,
+            text=t("downsizer.may_lower_the_resolution"),
+            variable=self._allow_res,
+            command=self._changed,
         ).pack(side="left")
         tk.Checkbutton(
             perm,
-            text="May lower the frame rate (above 30 fps only)",
+            text=t("downsizer.may_lower_the_frame_rate_above_30"),
             variable=self._allow_fps,
             command=self._changed,
         ).pack(side="left", padx=px(10))
-        self.form_row(opt, 4, "Allowed:", perm, label_width=14)
+        self.form_row(opt, 4, t("downsizer.allowed"), perm, label_width=14)
         self.trim = RangePicker(
             opt,
             start="",
             end_hint="(optional - leave empty for the whole video)",
             source=lambda: self.src_row.path,
         )
-        self.form_row(opt, 5, "Trim:", self.trim, label_width=14)
+        self.form_row(opt, 5, t("downsizer.trim"), self.trim, label_width=14)
         for w in (tb, cb, ab):
             w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         for v in (self._target_mb, self.trim.start.var, self.trim.end.var):
@@ -190,7 +199,7 @@ class UniversalDownsizerTab(BaseTab):
     def _target_bytes(self) -> int:
         mb = dict(TARGETS).get(self.target_var.get(), 0)
         if not mb:
-            mb = common.number(self._target_mb.get(), "Size limit", 0.1, 100000)
+            mb = common.number(self._target_mb.get(), t("downsizer.size_limit_2"), 0.1, 100000)
         return int(mb * 1_000_000)  # decimal MB: also fits limits counted in MiB
 
     def _trim(self, info: ff.MediaInfo) -> tuple[float, float]:
@@ -210,8 +219,16 @@ class UniversalDownsizerTab(BaseTab):
             size_mb = os.path.getsize(path) / 1e6 if os.path.isfile(path) else 0
             hdr = "  HDR" if v.is_hdr else ""
             self.info_lbl.config(
-                text=f"{ff.format_time(info.duration)}  ·  {v.width}×{v.height}  ·  "
-                f"{v.fps:.3g} fps  ·  {v.codec}{hdr}  ·  {size_mb:.1f} MB now"
+                text=t(
+                    "downsizer.duration_width_height_fps_3g_fps_codec",
+                    duration=ff.format_time(info.duration),
+                    width=v.width,
+                    height=v.height,
+                    fps=v.fps,
+                    codec=v.codec,
+                    hdr=hdr,
+                    size_mb=size_mb,
+                )
             )
         if not self.out_row.path:
             self.out_row.set(self.suggest_output(path, "small", ".mp4"))
@@ -296,8 +313,15 @@ class UniversalDownsizerTab(BaseTab):
         fast = self.speed_var.get() == "fast"
         self.log(
             self.console,
-            f"Target {target / 1e6:g} MB · {p.width}×{p.height} @ {p.fps:.3g} fps · "
-            f"video {p.video_kbps} kb/s · audio {p.audio_kbps} kb/s",
+            t(
+                "downsizer.target_target_g_mb_width_height_fps",
+                target=target / 1e6,
+                width=p.width,
+                height=p.height,
+                fps=p.fps,
+                video_kbps=p.video_kbps,
+                audio_kbps=p.audio_kbps,
+            ),
         )
         for note in p.notes:
             self.log(self.console, "  " + note)

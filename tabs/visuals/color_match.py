@@ -51,13 +51,15 @@ class ColorMatchTab(BaseTab):
         """The clip to fix and the reference to match, and the before/after view."""
         inp = tk.LabelFrame(body, text=f"  {t('section.input_clips')}  ", padx=px(12), pady=px(8))
         inp.pack(fill="x", padx=px(20), pady=px(10, 4))
-        self.src_row = FileRow(inp, "Clip to fix:", self.src_var, on_change=self._inputs_changed)
+        self.src_row = FileRow(
+            inp, t("color_match.clip_to_fix"), self.src_var, on_change=self._inputs_changed
+        )
         self.src_row.pack(fill="x", pady=px(2))
         tk.Label(
             inp, text=f"  ℹ  {t('color_match.source_hint')}", fg=CLR["fgdim"], font=(UI_FONT, 8)
         ).pack(anchor="w")
         self.ref_row = FileRow(
-            inp, "Reference look:", kind="visual", on_change=self._inputs_changed
+            inp, t("color_match.reference_look"), kind="visual", on_change=self._inputs_changed
         )
         self.ref_row.pack(fill="x", pady=px(2))
         tk.Label(
@@ -103,7 +105,10 @@ class ColorMatchTab(BaseTab):
             ).pack(side="left", padx=px(6))
         self.contrast_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            r1, text="Match contrast too", variable=self.contrast_var, command=self._update_filter
+            r1,
+            text=t("color_match.match_contrast_too"),
+            variable=self.contrast_var,
+            command=self._update_filter,
         ).pack(side="left", padx=px(16, 0))
 
     def _build_stats(self, body: tk.Frame) -> None:
@@ -202,8 +207,14 @@ class ColorMatchTab(BaseTab):
             self._analysing = False
             self.btn_analyse.config(state="normal", text=t("color_match.analyse_button"))
             if error is not None or result is None:
-                self.log_tagged(self.console, f"Analysis failed: {error}", "error")
-                messagebox.showerror(t("common.error"), f"Analysis failed:\n{error}", parent=self)
+                self.log_tagged(
+                    self.console, t("color_match.analysis_failed_error", error=error), "error"
+                )
+                messagebox.showerror(
+                    t("common.error"),
+                    t("color_match.analysis_failed_error_2", error=error),
+                    parent=self,
+                )
                 return
             s, r = result
             self._stats = (src, ref, s, r)

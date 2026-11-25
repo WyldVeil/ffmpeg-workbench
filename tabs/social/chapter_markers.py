@@ -306,7 +306,8 @@ class ChapterMarkersTab(BaseTab):
         # Prevent duplicate timestamps
         if any(abs(c.time - ts) < 0.5 for c in self.chapters):
             messagebox.showwarning(
-                t("common.warning"), f"A chapter already exists near {fmt_yt(ts)}."
+                t("common.warning"),
+                t("chapter_markers.a_chapter_already_exists_near_ts", ts=fmt_yt(ts)),
             )
             return
         c = Chapter(ts, title, auto)
@@ -323,7 +324,9 @@ class ChapterMarkersTab(BaseTab):
         for i, c in enumerate(self.chapters):
             self.tree.insert("", tk.END, iid=str(i), values=(fmt_yt(c.time), c.title))
         n = len(self.chapters)
-        self.count_lbl.config(text=f"{n} chapter{'s' if n != 1 else ''}")
+        self.count_lbl.config(
+            text=t("chapter_markers.n_chapter_value", n=n, value="s" if n != 1 else "")
+        )
         self._validate()
         self._update_preview()
 
@@ -371,11 +374,13 @@ class ChapterMarkersTab(BaseTab):
                 self._refresh_tree()
                 dlg.destroy()
             except ValueError:
-                messagebox.showerror(t("common.error"), "Enter a valid number for timestamp.")
+                messagebox.showerror(
+                    t("common.error"), t("chapter_markers.enter_a_valid_number_for_timestamp")
+                )
 
         tk.Button(
             dlg,
-            text="Save",
+            text=t("btn.save"),
             command=_save,
             bg=CLR["green"],
             fg="white",
@@ -425,7 +430,9 @@ class ChapterMarkersTab(BaseTab):
         found = parse_chapter_text(content)
         if not found:
             messagebox.showwarning(
-                t("common.warning"), "No chapter times found in that file.", parent=self
+                t("common.warning"),
+                t("chapter_markers.no_chapter_times_found_in_that_file"),
+                parent=self,
             )
             return
         for secs, title in found:
@@ -446,7 +453,9 @@ class ChapterMarkersTab(BaseTab):
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
         if not self.chapters:
-            messagebox.showwarning(t("common.warning"), "Add some chapters first.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("chapter_markers.add_some_chapters_first"), parent=self
+            )
             return
         ext = os.path.splitext(src)[1].lower()
         if ext not in (".mp4", ".m4v", ".mov", ".mkv"):
@@ -486,7 +495,9 @@ class ChapterMarkersTab(BaseTab):
         if p:
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(self._yt_text() + "\n")
-            messagebox.showinfo("Saved", f"Saved to {os.path.basename(p)}")
+            messagebox.showinfo(
+                t("presets.saved"), t("chapter_markers.saved_to_p", p=os.path.basename(p))
+            )
 
     def _save_srt(self) -> None:
         p = dialogs.asksaveasfilename(defaultextension=".srt", filetypes=[("SRT", "*.srt")])
@@ -505,7 +516,11 @@ class ChapterMarkersTab(BaseTab):
             lines.append("")
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
-        messagebox.showinfo("Saved", f"SRT saved to {os.path.basename(p)}", parent=self)
+        messagebox.showinfo(
+            t("presets.saved"),
+            t("chapter_markers.srt_saved_to_p", p=os.path.basename(p)),
+            parent=self,
+        )
 
     def _save_vtt(self) -> None:
         p = dialogs.asksaveasfilename(defaultextension=".vtt", filetypes=[("WebVTT", "*.vtt")])
@@ -531,7 +546,11 @@ class ChapterMarkersTab(BaseTab):
             lines.append("")
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
-        messagebox.showinfo("Saved", f"VTT saved to {os.path.basename(p)}", parent=self)
+        messagebox.showinfo(
+            t("presets.saved"),
+            t("chapter_markers.vtt_saved_to_p", p=os.path.basename(p)),
+            parent=self,
+        )
 
     def _save_json(self) -> None:
         p = dialogs.asksaveasfilename(
@@ -544,4 +563,6 @@ class ChapterMarkersTab(BaseTab):
         ]
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        messagebox.showinfo("Saved", f"JSON saved to {os.path.basename(p)}")
+        messagebox.showinfo(
+            t("presets.saved"), t("chapter_markers.json_saved_to_p", p=os.path.basename(p))
+        )

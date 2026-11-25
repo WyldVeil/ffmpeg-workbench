@@ -35,9 +35,7 @@ class AutoCropperTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self.make_header(
-            self, t("tab.auto_cropper"), "Find and remove black bars automatically.", icon="✂"
-        )
+        self.make_header(self, t("tab.auto_cropper"), t("toolinfo.auto_cropper"), icon="✂")
         body = scroll_body(self)
         self.src_row = FileRow(
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
@@ -54,7 +52,7 @@ class AutoCropperTab(BaseTab):
         self.compare.view_after.after_draw = self._outline_result
         self.compare.view_after.canvas.configure(bg=CLR["bg"])
         self.btn_detect = tk.Button(
-            body, text="🔍 Detect again", relief="flat", command=self._detect
+            body, text=t("auto_cropper.detect_again"), relief="flat", command=self._detect
         )
         self.btn_detect.pack()
 
@@ -64,7 +62,9 @@ class AutoCropperTab(BaseTab):
             ("h264", "hevc", "av1", "vp9", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "nobars"),
         )
-        self.btn_render = self.make_render_btn(body, "✂  REMOVE BARS", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("auto_cropper.remove_bars"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -80,7 +80,7 @@ class AutoCropperTab(BaseTab):
         path, info = self.src_row.path, self._info
         if not path or info is None or not info.has_video:
             return
-        self.result_lbl.config(text="Looking for black bars…")
+        self.result_lbl.config(text=t("auto_cropper.looking_for_black_bars"))
         self.btn_detect.config(state="disabled")
 
         def done(box: tuple[int, int, int, int] | None) -> None:
@@ -88,13 +88,15 @@ class AutoCropperTab(BaseTab):
             w, h = info.require_video().display_size
             if not box or (box[2] >= w - 2 and box[3] >= h - 2):
                 self.box = None
-                self.result_lbl.config(text="No black bars found - nothing to crop.")
+                self.result_lbl.config(text=t("auto_cropper.no_black_bars_found_nothing_to_crop"))
                 self.compare.set_filter("")
                 self._draw_bars()
                 return
             self.box = box
             x, y, bw, bh = box
-            self.result_lbl.config(text=f"Picture is {bw}×{bh} at ({x}, {y}) inside {w}×{h}.")
+            self.result_lbl.config(
+                text=t("auto_cropper.picture_is_bw_bh_at_x_y", bw=bw, bh=bh, x=x, y=y, w=w, h=h)
+            )
             self.compare.set_filter(crop_chain(x, y, bw, bh))
             self._draw_bars()
 
@@ -155,7 +157,7 @@ class AutoCropperTab(BaseTab):
             return
         if not self.box:
             messagebox.showinfo(
-                t("common.warning"), "No black bars were found in this video.", parent=self
+                t("common.warning"), t("auto_cropper.no_black_bars_were_found_in_this"), parent=self
             )
             return
         out = common.output_for(self, self.out_row, src, "nobars")

@@ -63,16 +63,15 @@ class TracksRemuxTab(BaseTab):
     def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
         self.make_header(
             self,
-            "Tracks & Remux",
-            "Keep, drop, reorder and label tracks, add audio or subtitles, "
-            "change the container - without re-encoding.",
+            t("tracks.tracks_remux"),
+            t("tracks.keep_drop_reorder_and_label_tracks_add"),
             icon="🗂",
         )
         body = scroll_body(self)
         self.src_row = FileRow(body, t("common.source_file"), on_change=self._source_changed)
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        lf = tk.LabelFrame(body, text="  Tracks (in output order)  ", padx=px(10), pady=px(8))
+        lf = tk.LabelFrame(body, text=t("tracks.tracks_in_output_order"), padx=px(10), pady=px(8))
         lf.pack(fill="x", padx=px(20), pady=px(4))
         cols = ("keep", "kind", "what", "lang", "title", "flags", "from")
         self.tree = ttk.Treeview(lf, columns=cols, show="headings", height=9, selectmode="browse")
@@ -109,14 +108,14 @@ class TracksRemuxTab(BaseTab):
     ) -> tuple[ttk.Combobox, tk.LabelFrame, tk.Frame]:
         ed = tk.Frame(lf)
         ed.pack(fill="x", pady=px(8, 0))
-        tk.Label(ed, text="Language:").pack(side="left")
+        tk.Label(ed, text=t("common.language")).pack(side="left")
         self.lang_var = tk.StringVar()
         lc = ttk.Combobox(ed, textvariable=self.lang_var, values=LANG_CHOICES, width=20)
         lc.pack(side="left", padx=px(4, 12))
         lc.bind("<<ComboboxSelected>>", lambda _e: self._apply_edit())
         lc.bind("<FocusOut>", lambda _e: self._apply_edit())
         lc.bind("<Return>", lambda _e: self._apply_edit())
-        tk.Label(ed, text="Title:").pack(side="left")
+        tk.Label(ed, text=t("chapter_markers.title")).pack(side="left")
         self.title_var = tk.StringVar()
         te = tk.Entry(ed, textvariable=self.title_var, width=26)
         te.pack(side="left", padx=px(4, 12))
@@ -125,16 +124,16 @@ class TracksRemuxTab(BaseTab):
         self.default_var = tk.BooleanVar()
         self.forced_var = tk.BooleanVar()
         tk.Checkbutton(
-            ed, text="Default", variable=self.default_var, command=self._apply_edit
+            ed, text=t("adv.star_default"), variable=self.default_var, command=self._apply_edit
         ).pack(side="left")
-        tk.Checkbutton(ed, text="Forced", variable=self.forced_var, command=self._apply_edit).pack(
-            side="left"
-        )
+        tk.Checkbutton(
+            ed, text=t("tracks.forced"), variable=self.forced_var, command=self._apply_edit
+        ).pack(side="left")
 
         opt = output_box(body)
         r1 = tk.Frame(opt)
         r1.pack(fill="x")
-        tk.Label(r1, text="Container:").pack(side="left")
+        tk.Label(r1, text=t("screen_recorder.container")).pack(side="left")
         self.container_var = tk.StringVar(value=CONTAINERS["mkv"])
         cb = ttk.Combobox(
             r1,
@@ -151,10 +150,10 @@ class TracksRemuxTab(BaseTab):
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._container_changed())
         self.chapters_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(r1, text="Keep chapters", variable=self.chapters_var).pack(
+        tk.Checkbutton(r1, text=t("tracks.keep_chapters"), variable=self.chapters_var).pack(
             side="left", padx=px(12)
         )
-        tk.Label(r1, text="File title:").pack(side="left")
+        tk.Label(r1, text=t("tracks.file_title")).pack(side="left")
         self.file_title = tk.StringVar()
         tk.Entry(r1, textvariable=self.file_title, width=24).pack(side="left", padx=px(4))
         self.notes = tk.Label(
@@ -165,7 +164,9 @@ class TracksRemuxTab(BaseTab):
             opt, t("common.output_file"), ext=".mkv", suggest=lambda: self._suggest()
         )
         self.out_row.pack(fill="x", pady=px(6, 0))
-        self.btn = self.make_render_btn(body, "🗂  REMUX  (no re-encoding)", self._render, width=28)
+        self.btn = self.make_render_btn(
+            body, t("tracks.remux_no_re_encoding"), self._render, width=28
+        )
         self.btn.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -186,7 +187,9 @@ class TracksRemuxTab(BaseTab):
         try:
             self.plan.load(path)
         except ff.ProbeError as exc:
-            self.log(self.console, f"Can't read {os.path.basename(path)}: {exc}")
+            self.log(
+                self.console, t("tracks.can_t_read_path_exc", path=os.path.basename(path), exc=exc)
+            )
             return
         ext = os.path.splitext(path)[1].lower().lstrip(".")
         self.container_var.set(CONTAINERS.get("mp4" if ext == "m4v" else ext, CONTAINERS["mkv"]))
@@ -300,9 +303,13 @@ class TracksRemuxTab(BaseTab):
 
     def _add_file(self) -> None:
         if not self.plan.inputs:
-            messagebox.showwarning("Tracks", "Choose the main file first.", parent=self)
+            messagebox.showwarning(
+                t("tracks.tracks"), t("tracks.choose_the_main_file_first"), parent=self
+            )
             return
-        path = dialogs.ask_open("media", title="Audio or subtitle file to add", parent=self)
+        path = dialogs.ask_open(
+            "media", title=t("tracks.audio_or_subtitle_file_to_add"), parent=self
+        )
         if path:
             self.add_file(path)
 
@@ -311,15 +318,24 @@ class TracksRemuxTab(BaseTab):
         try:
             added = self.plan.add_file(path, delay=delay, language=language)
         except (ValueError, ff.ProbeError) as exc:
-            messagebox.showwarning("Tracks", str(exc), parent=self)
+            messagebox.showwarning(t("tracks.tracks"), str(exc), parent=self)
             return
-        self.log(self.console, f"Added {len(added)} track(s) from {os.path.basename(path)}")
+        self.log(
+            self.console,
+            t(
+                "tracks.added_added_track_s_from_path",
+                added=len(added),
+                path=os.path.basename(path),
+            ),
+        )
         self._refresh(select=len(self.plan.tracks) - 1)
 
     def _extract(self) -> None:
         i = self._index()
         if i is None:
-            messagebox.showwarning("Tracks", "Select a track first.", parent=self)
+            messagebox.showwarning(
+                t("tracks.tracks"), t("tracks.select_a_track_first"), parent=self
+            )
             return
         tr = self.plan.tracks[i]
         src = self.plan.inputs[tr.source]
@@ -342,7 +358,14 @@ class TracksRemuxTab(BaseTab):
         if not final:
             return
         cmd = remux.extract_command(self.plan.inputs[tr.source], tr, final)
-        self.log(self.console, f"Saving {tr.describe()} → {os.path.basename(final)}")
+        self.log(
+            self.console,
+            t(
+                "tracks.saving_describe_final",
+                describe=tr.describe(),
+                final=os.path.basename(final),
+            ),
+        )
         self.run_ffmpeg(
             cmd,
             self.console,

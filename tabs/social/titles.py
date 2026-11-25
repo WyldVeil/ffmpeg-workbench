@@ -117,21 +117,21 @@ class TitlesGeneratorTab(BaseTab):
         """Font, text size and animation length for every card."""
         look = tk.Frame(body)
         look.pack(fill="x", padx=px(20), pady=px(4))
-        tk.Label(look, text="Font:").pack(side="left")
+        tk.Label(look, text=t("hard_subber.font_label")).pack(side="left")
         self.font_var = tk.StringVar(value="Montserrat")
         fb = ttk.Combobox(
             look, textvariable=self.font_var, values=ass.families(), width=18, state="readonly"
         )
         fb.pack(side="left", padx=px(6))
         fb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
-        tk.Label(look, text="Text size:").pack(side="left", padx=px(12, 0))
+        tk.Label(look, text=t("titles.text_size")).pack(side="left", padx=px(12, 0))
         self.size_var = tk.StringVar(value="Medium")
         sb = ttk.Combobox(
             look, textvariable=self.size_var, values=list(SIZES), width=8, state="readonly"
         )
         sb.pack(side="left", padx=px(6))
         sb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
-        tk.Label(look, text="Animation (s):").pack(side="left", padx=px(12, 0))
+        tk.Label(look, text=t("titles.animation_s")).pack(side="left", padx=px(12, 0))
         self.anim_var = tk.StringVar(value="0.35")
         tk.Entry(look, textvariable=self.anim_var, width=5).pack(side="left", padx=px(6))
         on_write(self.anim_var, lambda: self._schedule())
@@ -171,7 +171,10 @@ class TitlesGeneratorTab(BaseTab):
     def add_card(self, card: Card | None = None) -> _CardRow:
         card = card or Card(start=self._next_start())
         frame = tk.LabelFrame(
-            self.cards_frame, text=f"  Card {len(self.rows) + 1}  ", padx=px(8), pady=px(4)
+            self.cards_frame,
+            text=t("titles.card_rows", rows=len(self.rows) + 1),
+            padx=px(8),
+            pady=px(4),
         )
         frame.pack(fill="x", pady=px(3))
         row = _CardRow(frame, card)
@@ -226,7 +229,7 @@ class TitlesGeneratorTab(BaseTab):
             command=lambda r=row: self._end_here(r),
         )
         end_btn.pack(side="left")
-        add_tooltip(end_btn, "End at the frame shown (o) - sets the duration")
+        add_tooltip(end_btn, t("titles.end_at_the_frame_shown_o_sets"))
         swatch = ColourButton(r1, card.accent, width=3, on_change=lambda _c: self._schedule())
         swatch.pack(side="left", padx=px(10))
         row.swatch = swatch
@@ -280,7 +283,7 @@ class TitlesGeneratorTab(BaseTab):
             self.rows.remove(row)
             row.frame.destroy()
             for i, r in enumerate(self.rows, 1):
-                r.frame.config(text=f"  Card {i}  ")
+                r.frame.config(text=t("titles.card_i", i=i))
             self._schedule()
 
     def _show_card(self, row: _CardRow) -> None:
@@ -304,14 +307,14 @@ class TitlesGeneratorTab(BaseTab):
                 start = ff.parse_time(v.start.get())
             except ValueError:
                 raise ValueError(f"Card {i}: start time '{v.start.get()}' is not a time.") from None
-            dur = common.number(v.duration.get(), f"Card {i} duration", 0.2, 3600)
+            dur = common.number(v.duration.get(), t("titles.card_i_duration", i=i), 0.2, 3600)
             style = next((k for k, lbl in STYLES.items() if lbl == v.style.get()), "lower_third")
             out.append(Card(style, v.line1.get(), v.line2.get(), start, dur, r.swatch.colour))
         return out
 
     def script(self, width: int, height: int) -> ass.Script:
         try:
-            anim = common.number(self.anim_var.get() or "0.35", "Animation", 0.05, 3)
+            anim = common.number(self.anim_var.get() or "0.35", t("titles.animation"), 0.05, 3)
         except ValueError:
             anim = 0.35
         return build_script(
@@ -378,13 +381,19 @@ class TitlesGeneratorTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         if not cards:
-            messagebox.showwarning(t("common.warning"), "Add at least one title card.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("titles.add_at_least_one_title_card"), parent=self
+            )
             return
         late = [i for i, c in enumerate(cards, 1) if c.start >= info.duration > 0]
         if late:
             messagebox.showwarning(
                 t("common.warning"),
-                f"Card {late[0]} starts after the video ends ({ff.format_time(info.duration)}).",
+                t(
+                    "titles.card_late_starts_after_the_video_ends",
+                    late=late[0],
+                    duration=ff.format_time(info.duration),
+                ),
                 parent=self,
             )
             return

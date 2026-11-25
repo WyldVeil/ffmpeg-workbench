@@ -61,31 +61,37 @@ class BeatSyncCutterTab(BaseTab):
         self._build_output(body, cl)
 
     def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
-        self.make_header(
-            self, t("tab.beat_sync_cutter"), "Music montages that cut on the beat.", icon="🥁"
-        )
+        self.make_header(self, t("tab.beat_sync_cutter"), t("toolinfo.beat_sync"), icon="🥁")
         body = scroll_body(self)
         self.music_row = FileRow(
-            body, "Music:", self.src_var, kind="media", on_change=lambda _p: self._analyse()
+            body,
+            t("beat_sync.music"),
+            self.src_var,
+            kind="media",
+            on_change=lambda _p: self._analyse(),
         )
         self.music_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        bl = tk.LabelFrame(body, text="  Beats  ", padx=px(12), pady=px(6))
+        bl = tk.LabelFrame(body, text=t("beat_sync.beats"), padx=px(12), pady=px(6))
         bl.pack(fill="x", padx=px(20), pady=px(4))
         r0 = tk.Frame(bl)
         r0.pack(fill="x")
         self.mode_var = tk.StringVar(value="grid")
         tk.Radiobutton(
             r0,
-            text="Beat grid (steady tempo)",
+            text=t("beat_sync.beat_grid_steady_tempo"),
             value="grid",
             variable=self.mode_var,
             command=self._analyse,
         ).pack(side="left")
         tk.Radiobutton(
-            r0, text="Every hit", value="hits", variable=self.mode_var, command=self._analyse
+            r0,
+            text=t("beat_sync.every_hit"),
+            value="hits",
+            variable=self.mode_var,
+            command=self._analyse,
         ).pack(side="left", padx=px(10))
-        tk.Label(r0, text="Sensitivity:").pack(side="left", padx=px(10, 2))
+        tk.Label(r0, text=t("beat_sync.lbl_sensitivity")).pack(side="left", padx=px(10, 2))
         self.sens_var = tk.DoubleVar(value=0.5)
         tk.Scale(
             r0,
@@ -98,7 +104,7 @@ class BeatSyncCutterTab(BaseTab):
             command=lambda _v: self._schedule(),
         ).pack(side="left")
         self.bpm_lbl = tk.Label(
-            bl, text="Choose a music file.", fg=CLR["accent"], font=(MONO_FONT, 10)
+            bl, text=t("beat_sync.choose_a_music_file"), fg=CLR["accent"], font=(MONO_FONT, 10)
         )
         self.bpm_lbl.pack(anchor="w", pady=px(4, 0))
         self.canvas = tk.Canvas(bl, height=px(60), bg=CLR["console_bg"], highlightthickness=0)
@@ -106,7 +112,7 @@ class BeatSyncCutterTab(BaseTab):
         self.canvas.bind("<Configure>", lambda _e: self._draw())
         r1 = tk.Frame(bl)
         r1.pack(fill="x")
-        tk.Label(r1, text="Cut every").pack(side="left")
+        tk.Label(r1, text=t("beat_sync.cut_every")).pack(side="left")
         self.every_var = tk.StringVar(value="2")
         ttk.Combobox(
             r1,
@@ -116,11 +122,11 @@ class BeatSyncCutterTab(BaseTab):
             width=4,
         ).pack(side="left", padx=px(4))
         tk.Label(r1, text="beats").pack(side="left")
-        tk.Button(r1, text="Save beat times…", relief="flat", command=self._save_beats).pack(
-            side="right"
-        )
+        tk.Button(
+            r1, text=t("beat_sync.save_beat_times"), relief="flat", command=self._save_beats
+        ).pack(side="right")
 
-        cl = tk.LabelFrame(body, text="  Clips  ", padx=px(12), pady=px(6))
+        cl = tk.LabelFrame(body, text=t("beat_sync.clips"), padx=px(12), pady=px(6))
         cl.pack(fill="x", padx=px(20), pady=px(4))
         return body, cl
 
@@ -141,7 +147,7 @@ class BeatSyncCutterTab(BaseTab):
             )
         r2 = tk.Frame(cl)
         r2.pack(fill="x", pady=px(4, 0))
-        tk.Label(r2, text="Order:").pack(side="left")
+        tk.Label(r2, text=t("beat_sync.order")).pack(side="left")
         self.order_var = tk.StringVar(value=ORDERS["sequential"])
         ttk.Combobox(
             r2,
@@ -150,7 +156,7 @@ class BeatSyncCutterTab(BaseTab):
             state="readonly",
             width=36,
         ).pack(side="left", padx=px(4))
-        tk.Label(r2, text="Size:").pack(side="left", padx=px(10, 2))
+        tk.Label(r2, text=t("hard_subber.size_label")).pack(side="left", padx=px(10, 2))
         self.size_var = tk.StringVar(value=next(iter(SIZES)))
         ttk.Combobox(
             r2, textvariable=self.size_var, values=list(SIZES), state="readonly", width=22
@@ -162,7 +168,9 @@ class BeatSyncCutterTab(BaseTab):
             ("h264", "hevc", "av1"),
             suggest=lambda: self.suggest_output(self.music_row.path, "montage", ".mp4"),
         )
-        self.btn_render = self.make_render_btn(body, "🥁  BUILD MONTAGE", self._render, width=24)
+        self.btn_render = self.make_render_btn(
+            body, t("beat_sync.build_montage"), self._render, width=24
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
         self._onset: list[float] | None = None
@@ -214,10 +222,10 @@ class BeatSyncCutterTab(BaseTab):
         path = self.music_row.path
         info = ff.try_probe(path) if path else None
         if info is None or not info.has_audio:
-            self.bpm_lbl.config(text="The music file needs an audio track.")
+            self.bpm_lbl.config(text=t("beat_sync.the_music_file_needs_an_audio_track"))
             return
         self._music_dur = info.duration
-        self.bpm_lbl.config(text="Listening for the beat…")
+        self.bpm_lbl.config(text=t("beat_sync.listening_for_the_beat"))
 
         def work() -> tuple[list[float], float]:
             on = onset_strength(envelope(path))
@@ -228,7 +236,7 @@ class BeatSyncCutterTab(BaseTab):
             self._pick_beats()
 
         def failed(exc: BaseException) -> None:
-            self.bpm_lbl.config(text=f"Beat detection failed: {exc}")
+            self.bpm_lbl.config(text=t("beat_sync.beat_detection_failed_exc", exc=exc))
 
         tasks.submit(work, on_done=done, on_error=failed, name="BeatDetect")
 
@@ -239,10 +247,12 @@ class BeatSyncCutterTab(BaseTab):
         if self.mode_var.get() == "grid":
             self.beats = beat_grid(self._onset, self._period)
             bpm = 60 * ENV_RATE / self._period
-            self.bpm_lbl.config(text=f"{bpm:.1f} BPM · {len(self.beats)} beats")
+            self.bpm_lbl.config(
+                text=t("beat_sync.bpm_1f_bpm_beats_beats", bpm=bpm, beats=len(self.beats))
+            )
         else:
             self.beats = onset_peaks(self._onset, float(self.sens_var.get()))
-            self.bpm_lbl.config(text=f"{len(self.beats)} hits")
+            self.bpm_lbl.config(text=t("beat_sync.beats_hits", beats=len(self.beats)))
         self._draw()
 
     def _draw(self) -> None:
@@ -273,7 +283,11 @@ class BeatSyncCutterTab(BaseTab):
         if out:
             with open(out, "w", encoding="utf-8") as fh:
                 fh.write("\n".join(f"{b:.3f}" for b in self.beats) + "\n")
-            self.log_tagged(self.console, f"Saved {len(self.beats)} beat times to {out}", "success")
+            self.log_tagged(
+                self.console,
+                t("beat_sync.saved_beats_beat_times_to_out", beats=len(self.beats), out=out),
+                "success",
+            )
 
     # ── render ───────────────────────────────────────────────────────────────
 
@@ -284,11 +298,13 @@ class BeatSyncCutterTab(BaseTab):
             return
         if not self.beats:
             messagebox.showwarning(
-                t("common.warning"), "No beats yet - wait for the analysis to finish.", parent=self
+                t("common.warning"), t("beat_sync.no_beats_yet_wait_for_the_analysis"), parent=self
             )
             return
         if not self.clips:
-            messagebox.showwarning(t("common.warning"), "Add some video clips.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("beat_sync.add_some_video_clips"), parent=self
+            )
             return
         first = ff.probe(self.clips[0][0])
         size = SIZES.get(self.size_var.get())
@@ -321,7 +337,17 @@ class BeatSyncCutterTab(BaseTab):
             container=container,
         )
 
-        self.log(self.console, f"{len(plan)} cuts · {w}×{h} @ {fps_str} · {ff.format_time(total)}")
+        self.log(
+            self.console,
+            t(
+                "beat_sync.plan_cuts_w_h_fps_str_total",
+                plan=len(plan),
+                w=w,
+                h=h,
+                fps_str=fps_str,
+                total=ff.format_time(total),
+            ),
+        )
         common.queue_job(
             self,
             common.Job(

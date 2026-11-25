@@ -32,6 +32,7 @@ from core.settings import load_settings, update
 from core.skins import (
     CUSTOM_DEFAULTS,
     SKINS,
+    ColourKey,
     Skin,
     get_skin,
     load_skin_name,
@@ -48,7 +49,7 @@ from tabs.widgets import FolderRow, scroll_body
 logger = logging.getLogger("crossfader.system.advanced_settings")
 
 
-def _custom_sections() -> list[tuple[str, list[tuple[str, str]]]]:
+def _custom_sections() -> list[tuple[str, list[tuple[str, ColourKey]]]]:
     """The custom skin's colours by section: (title, [(label, colour key), ...])."""
     return [
         (
@@ -177,7 +178,7 @@ class AdvancedSettingsTab(BaseTab):
     # ─── FFmpeg Management ────────────────────────────────────────────────────
     def _build_ffmpeg_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
-        nb.add(f, text="  FFmpeg  ")
+        nb.add(f, text=t("advanced_settings.ffmpeg"))
 
         tk.Label(f, text=t("adv.ffmpeg_management"), font=(UI_FONT, 12, "bold")).pack(
             pady=px(20, 10)
@@ -199,9 +200,7 @@ class AdvancedSettingsTab(BaseTab):
 
         tk.Label(
             ver_f,
-            text="The app ships the FFmpeg build every tool is tested with; it is updated "
-            "together with the app (there is no separate FFmpeg updater, so an FFmpeg "
-            "change can never break a tool).",
+            text=t("advanced_settings.the_app_ships_the_ffmpeg_build_every"),
             fg=CLR["fgdim"],
             wraplength=px(640),
             justify="left",
@@ -245,13 +244,18 @@ class AdvancedSettingsTab(BaseTab):
         local = get_local_version()
         path = find_binary("ffmpeg") or ""
         where = "bundled with the app" if updater.is_app_managed(path) else f"your own copy: {path}"
-        self.after(0, lambda: self.local_ver_lbl.config(text=f"FFmpeg {local}"))
+        self.after(
+            0,
+            lambda: self.local_ver_lbl.config(
+                text=t("advanced_settings.ffmpeg_local", local=local)
+            ),
+        )
         self.after(0, lambda: self.online_ver_lbl.config(text=where))
 
     def _open_bin(self) -> None:
         bin_dir = binaries_dir()
         if not open_in_explorer(bin_dir):
-            messagebox.showinfo("Bin folder", bin_dir)
+            messagebox.showinfo(t("advanced_settings.bin_folder"), bin_dir)
 
     def _browse_binary(self, key: str, var: tk.StringVar) -> None:
         p = dialogs.askopenfilename(
@@ -265,7 +269,7 @@ class AdvancedSettingsTab(BaseTab):
     # ─── Defaults ─────────────────────────────────────────────────────────────
     def _build_defaults_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
-        nb.add(f, text="  Defaults  ")
+        nb.add(f, text=t("advanced_settings.defaults"))
         tk.Label(f, text=t("adv.encoding_defaults"), font=(UI_FONT, 12, "bold")).pack(
             pady=px(20, 10)
         )
@@ -315,13 +319,13 @@ class AdvancedSettingsTab(BaseTab):
 
         self.out_folder_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
         FolderRow(
-            opts, "Default Output Folder:", self.out_folder_var, width=40, label_width=24
+            opts, t("adv.default_out_folder"), self.out_folder_var, width=40, label_width=24
         ).grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(6))
 
         self.auto_open_var = tk.BooleanVar(value=self.settings.get("auto_open_output", False))
-        tk.Checkbutton(
-            opts, text="Auto-open output folder after render", variable=self.auto_open_var
-        ).grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4))
+        tk.Checkbutton(opts, text=t("adv.auto_open_output"), variable=self.auto_open_var).grid(
+            row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4)
+        )
 
         self.make_render_btn(f, t("advanced_settings.save_settings"), self._save_settings).pack(
             pady=px(15)
@@ -336,7 +340,10 @@ class AdvancedSettingsTab(BaseTab):
         changes["ffmpeg_path_override"] = self.ffmpeg_path_var.get()
         override = changes["ffmpeg_path_override"].strip()
         if override and not os.path.isfile(override):
-            self.save_lbl.config(text=f"FFmpeg not found at: {override}", fg=CLR["red"])
+            self.save_lbl.config(
+                text=t("advanced_settings.ffmpeg_not_found_at_override", override=override),
+                fg=CLR["red"],
+            )
             return
         self.settings.update(changes)
         if update(changes):
@@ -349,7 +356,7 @@ class AdvancedSettingsTab(BaseTab):
         from core import network as _net
 
         f = ttk.Frame(nb)
-        nb.add(f, text="  Network  ")
+        nb.add(f, text=t("advanced_settings.network"))
         body = scroll_body(f)
         self._net_vars: dict[str, FormVar] = {}
         form = _NetForm(body, _net.get(), self._net_vars)
@@ -370,10 +377,10 @@ class AdvancedSettingsTab(BaseTab):
         body = form.body
 
         # ── What happens now ─────────────────────────────────────────────────
-        now = section("Right now")
+        now = section(t("advanced_settings.right_now"))
         self._net_now_lbl = tk.Label(
             now,
-            text="Checking…",
+            text=t("advanced_settings.checking"),
             anchor="w",
             justify="left",
             wraplength=px(760),
@@ -386,13 +393,18 @@ class AdvancedSettingsTab(BaseTab):
         self._net_sys_lbl.pack(anchor="w", fill="x")
         row = tk.Frame(now)
         row.pack(anchor="w", pady=px(6, 0))
-        tk.Button(row, text="Test the connection", command=self._net_test).pack(side="left")
-        tk.Button(row, text="Save", bg=CLR["green"], fg="white", command=self._net_save).pack(
-            side="left", padx=px(6)
-        )
-        tk.Button(row, text="Reset everything", fg=CLR["red"], command=self._net_reset_all).pack(
-            side="left"
-        )
+        tk.Button(
+            row, text=t("advanced_settings.test_the_connection"), command=self._net_test
+        ).pack(side="left")
+        tk.Button(
+            row, text=t("btn.save"), bg=CLR["green"], fg="white", command=self._net_save
+        ).pack(side="left", padx=px(6))
+        tk.Button(
+            row,
+            text=t("advanced_settings.reset_everything"),
+            fg=CLR["red"],
+            command=self._net_reset_all,
+        ).pack(side="left")
         self._net_status_lbl = tk.Label(
             now, text="", anchor="w", justify="left", wraplength=px(760)
         )
@@ -413,7 +425,7 @@ class AdvancedSettingsTab(BaseTab):
         cfg = form.cfg
 
         # ── Situations ───────────────────────────────────────────────────────
-        sit = section("How should the app connect?")
+        sit = section(t("advanced_settings.how_should_the_app_connect"))
         apps = [
             x
             for x in _net.SITUATIONS
@@ -436,7 +448,9 @@ class AdvancedSettingsTab(BaseTab):
             self._net_app_var = self._net_pick_list(
                 parent, "app", self._net_app_labels, current, 44
             )
-            tk.Button(parent, text="Find…", command=self._net_find_local).pack(side="left")
+            tk.Button(parent, text=t("advanced_settings.find"), command=self._net_find_local).pack(
+                side="left"
+            )
 
         def tor_box(parent: tk.Misc) -> None:
             self._net_tor_var = self._net_pick_list(
@@ -445,24 +459,24 @@ class AdvancedSettingsTab(BaseTab):
 
         desc = {sid: d for sid, _t, d, _v in _net.SITUATIONS}
         radio = partial(self._net_radio, sit)
-        radio("auto", "Automatic - follow this computer's settings", desc["auto"])
-        radio("direct", "No proxy - connect directly", desc["direct"])
+        radio(
+            "auto", t("advanced_settings.automatic_follow_this_computer_s_settings"), desc["auto"]
+        )
+        radio("direct", t("advanced_settings.no_proxy_connect_directly"), desc["direct"])
         radio(
             "app",
-            "A proxy app on this computer:",
-            "Clash, v2rayN, Shadowsocks, NekoRay, Hiddify, Privoxy... "
-            "'Find…' looks for one that is running.",
+            t("advanced_settings.a_proxy_app_on_this_computer"),
+            t("advanced_settings.clash_v2rayn_shadowsocks_nekoray_hiddify_privoxy"),
             app_box,
         )
         radio(
             "tor",
-            "Tor:",
-            "Everything goes through Tor and nothing goes out without it. Some sites block Tor; "
-            "downloads then retry through fresh Tor circuits.",
+            t("advanced_settings.tor"),
+            t("advanced_settings.everything_goes_through_tor_and_nothing_goes"),
             tor_box,
         )
-        radio("custom", "My own proxy (details below)")
-        radio("offline", "Offline - never use the network", desc["offline"])
+        radio("custom", t("advanced_settings.my_own_proxy_details_below"))
+        radio("offline", t("advanced_settings.offline_never_use_the_network"), desc["offline"])
         self._net_found_lbl = tk.Label(sit, text="", fg=CLR["fgdim"])
         self._net_found_lbl.pack(anchor="w", padx=px(24, 0))
         self._net_found_frame = tk.Frame(sit)
@@ -515,14 +529,14 @@ class AdvancedSettingsTab(BaseTab):
         var = form.var
 
         # ── Own proxy ────────────────────────────────────────────────────────
-        own = section("Your own proxy")
+        own = section(t("advanced_settings.your_own_proxy"))
         var("network.mode")
         g = tk.Frame(own)
         g.pack(anchor="w")
         self.form_row(
             g,
             0,
-            "Type",
+            t("mixer.track_type_col"),
             ttk.Combobox(
                 g,
                 textvariable=var("network.proxy_scheme"),
@@ -530,39 +544,37 @@ class AdvancedSettingsTab(BaseTab):
                 width=9,
                 values=["http", "https", "socks5h", "socks5", "socks4a", "socks4"],
             ),
-            tk.Label(g, text="Address"),
+            tk.Label(g, text=t("advanced_settings.address")),
             tk.Entry(g, textvariable=var("network.proxy_host"), width=26),
-            tk.Label(g, text="Port"),
+            tk.Label(g, text=t("advanced_settings.port")),
             tk.Entry(g, textvariable=var("network.proxy_port"), width=7),
         )
         self.form_row(
             g,
             1,
-            "Username",
+            t("advanced_settings.username"),
             tk.Entry(g, textvariable=var("network.proxy_user"), width=18),
-            tk.Label(g, text="Password"),
+            tk.Label(g, text=t("advanced_settings.password")),
             tk.Entry(g, textvariable=var("network.proxy_pass"), width=18, show="•"),
             pady=4,
         )
         tk.Checkbutton(
             own,
-            text="Strict: never connect without this proxy (for Tor and privacy proxies)",
+            text=t("advanced_settings.strict_never_connect_without_this_proxy_for"),
             variable=var("network.strict"),
         ).pack(anchor="w")
         r = tk.Frame(own)
         r.pack(anchor="w", pady=px(2))
-        tk.Label(r, text="When a site blocks Tor, retry through a fresh Tor circuit up to").pack(
+        tk.Label(r, text=t("advanced_settings.when_a_site_blocks_tor_retry_through")).pack(
             side="left"
         )
         tk.Spinbox(r, from_=0, to=50, width=4, textvariable=var("network.tor_retries")).pack(
             side="left", padx=px(4)
         )
-        tk.Label(r, text="times (0 = off)").pack(side="left")
+        tk.Label(r, text=t("advanced_settings.times_0_off")).pack(side="left")
         hint(
             own,
-            "Proxies that sign you in automatically with your Windows account (NTLM/Kerberos) need a local "
-            "helper such as Px or CNTLM; then use its local address here. The password is never put on a "
-            "command line.",
+            t("advanced_settings.proxies_that_sign_you_in_automatically_with"),
         )
         for key in ("network.proxy_scheme", "network.proxy_host", "network.proxy_port"):
             on_write(self._net_vars[key], lambda: self._net_situation_var.set("custom"))
@@ -580,31 +592,30 @@ class AdvancedSettingsTab(BaseTab):
         text_var = form.text_var
 
         # ── Certificates ─────────────────────────────────────────────────────
-        cert = section("Security certificates")
+        cert = section(t("advanced_settings.security_certificates"))
         tk.Checkbutton(
             cert,
-            text="Trust this computer's certificates (needed on many company and school networks)",
+            text=t("advanced_settings.trust_this_computer_s_certificates_needed_on"),
             variable=var("network.system_certs"),
         ).pack(anchor="w")
         r = tk.Frame(cert)
         r.pack(anchor="w", fill="x", pady=px(2))
-        tk.Label(r, text="Extra certificate file (PEM):").pack(side="left")
+        tk.Label(r, text=t("advanced_settings.extra_certificate_file_pem")).pack(side="left")
         ca = text_var("network.extra_ca")
         tk.Entry(r, textvariable=ca, width=44).pack(side="left", padx=px(4))
         tk.Button(
             r,
-            text="Choose…",
+            text=t("scene_detect.choose"),
             command=partial(self._choose_certificate, ca),
         ).pack(side="left")
         tk.Checkbutton(
             cert,
-            text="Check certificates at all (turning this off is unsafe)",
+            text=t("advanced_settings.check_certificates_at_all_turning_this_off"),
             variable=var("network.verify_ssl"),
         ).pack(anchor="w")
         hint(
             cert,
-            "Security products such as Zscaler, Netskope or a school firewall re-sign websites with their own "
-            "certificate. It is usually installed on the computer already; if not, ask IT for the file.",
+            t("advanced_settings.security_products_such_as_zscaler_netskope_or"),
         )
 
     def _net_mirrors(self, form: _NetForm) -> None:
@@ -613,13 +624,13 @@ class AdvancedSettingsTab(BaseTab):
         var = form.var
 
         # ── Mirrors ──────────────────────────────────────────────────────────
-        mir = section("Mirrors (when download sites are blocked)")
+        mir = section(t("advanced_settings.mirrors_when_download_sites_are_blocked"))
         g = tk.Frame(mir)
         g.pack(anchor="w")
         self.form_row(
             g,
             0,
-            "Speech models (Hugging Face) mirror:",
+            t("advanced_settings.speech_models_hugging_face_mirror"),
             ttk.Combobox(
                 g,
                 textvariable=var("network.hf_mirror"),
@@ -630,7 +641,7 @@ class AdvancedSettingsTab(BaseTab):
         self.form_row(
             g,
             1,
-            "GitHub download prefix:",
+            t("advanced_settings.github_download_prefix"),
             ttk.Combobox(
                 g,
                 textvariable=var("network.github_mirror"),
@@ -640,7 +651,7 @@ class AdvancedSettingsTab(BaseTab):
         )
         hint(
             mir,
-            "Downloads are checked against fixed SHA-256 sums, so a mirror can't swap the files.",
+            t("advanced_settings.downloads_are_checked_against_fixed_sha_256"),
         )
 
     def _net_details(self, form: _NetForm) -> None:
@@ -651,7 +662,7 @@ class AdvancedSettingsTab(BaseTab):
         var = form.var
 
         # ── Connection details ───────────────────────────────────────────────
-        con = section("Connection details")
+        con = section(t("advanced_settings.connection_details"))
         g = tk.Frame(con)
         g.pack(anchor="w")
         rows = [
@@ -682,7 +693,7 @@ class AdvancedSettingsTab(BaseTab):
             self.form_row(g, i, label, box, pady=2)
         r = tk.Frame(con)
         r.pack(anchor="w", pady=px(2))
-        tk.Label(r, text="Internet protocol:").pack(side="left")
+        tk.Label(r, text=t("advanced_settings.internet_protocol")).pack(side="left")
         ttk.Combobox(
             r,
             textvariable=var("network.ip_version"),
@@ -691,13 +702,13 @@ class AdvancedSettingsTab(BaseTab):
             width=6,
         ).pack(side="left", padx=px(4))
         tk.Checkbutton(
-            r, text="Allow plain (unencrypted) HTTP", variable=var("network.allow_http")
+            r,
+            text=t("advanced_settings.allow_plain_unencrypted_http"),
+            variable=var("network.allow_http"),
         ).pack(side="left", padx=px(10))
         hint(
             con,
-            "The local address only helps where the network allows it (several connections, or a VPN with "
-            "split tunnelling). Where an organisation's VPN sends all traffic through itself, the app "
-            "doesn't try to get around that.",
+            t("advanced_settings.the_local_address_only_helps_where_the"),
         )
         for key in _net.DEFAULTS:
             if key not in self._net_vars:
@@ -752,19 +763,26 @@ class AdvancedSettingsTab(BaseTab):
     def _net_find_local(self) -> None:
         from core import network as _net
 
-        self._net_found_lbl.config(text="Looking…")
+        self._net_found_lbl.config(text=t("advanced_settings.looking"))
         for w in self._net_found_frame.winfo_children():
             w.destroy()
 
         def done(found: list[tuple[int, str, str]]) -> None:
             if not found:
-                self._net_found_lbl.config(text="No proxy apps found on the usual ports.")
+                self._net_found_lbl.config(
+                    text=t("advanced_settings.no_proxy_apps_found_on_the_usual")
+                )
                 return
-            self._net_found_lbl.config(text=f"Found {len(found)}:")
+            self._net_found_lbl.config(text=t("advanced_settings.found_found", found=len(found)))
             for port, scheme, label in found:
                 tk.Button(
                     self._net_found_frame,
-                    text=f"Use {label} - {scheme} 127.0.0.1:{port}",
+                    text=t(
+                        "advanced_settings.use_label_scheme_127_0_0_1",
+                        label=label,
+                        scheme=scheme,
+                        port=port,
+                    ),
                     relief="flat",
                     command=partial(self._net_use_local, scheme, port),
                 ).pack(anchor="w")
@@ -783,7 +801,9 @@ class AdvancedSettingsTab(BaseTab):
         _set_form(self._net_vars["network.proxy_host"], "127.0.0.1")
         _set_form(self._net_vars["network.proxy_port"], str(port))
         self._net_situation_var.set("custom")
-        self._net_status_lbl.config(text="Filled in - click Test, then Save.", fg=CLR["fgdim"])
+        self._net_status_lbl.config(
+            text=t("advanced_settings.filled_in_click_test_then_save"), fg=CLR["fgdim"]
+        )
 
     def _build_tor_system_section(self, body: tk.Frame, special: str) -> None:
         lf = tk.LabelFrame(
@@ -796,16 +816,14 @@ class AdvancedSettingsTab(BaseTab):
         if special == "whonix":
             tk.Label(
                 lf,
-                text="Whonix's gateway already sends all traffic through Tor - no proxy is needed here.",
+                text=t("advanced_settings.whonix_s_gateway_already_sends_all_traffic"),
                 wraplength=px(760),
                 justify="left",
             ).pack(anchor="w")
             return
         tk.Label(
             lf,
-            text="Tails sends everything through Tor, and some sites (YouTube often) block Tor. Downloads "
-            "retry through fresh Tor circuits automatically. If that isn't enough, Tails' own "
-            "mechanism for its Unsafe Browser can be used for downloads only, for this session.",
+            text=t("advanced_settings.tails_sends_everything_through_tor_and_some"),
             wraplength=px(760),
             justify="left",
         ).pack(anchor="w")
@@ -815,12 +833,14 @@ class AdvancedSettingsTab(BaseTab):
         r.pack(anchor="w")
         self._tails_on_btn = tk.Button(
             r,
-            text="Allow direct downloads (not anonymous)…",
+            text=t("advanced_settings.allow_direct_downloads_not_anonymous"),
             fg=CLR["red"],
             command=self._tails_enable,
         )
         self._tails_on_btn.pack(side="left")
-        tk.Button(r, text="Turn off", command=self._tails_disable).pack(side="left", padx=px(6))
+        tk.Button(r, text=t("advanced_settings.turn_off"), command=self._tails_disable).pack(
+            side="left", padx=px(6)
+        )
         self._tails_refresh()
 
     def _tails_refresh(self) -> None:
@@ -843,13 +863,11 @@ class AdvancedSettingsTab(BaseTab):
 
         issues = tails.problems()
         if issues:
-            messagebox.showinfo("Tails", "\n\n".join(issues), parent=self)
+            messagebox.showinfo(t("advanced_settings.tails"), "\n\n".join(issues), parent=self)
             return
         if not messagebox.askyesno(
-            "Not anonymous",
-            "Downloads will connect directly, NOT through Tor.\n\nThe websites you download from, and anyone "
-            "watching this network, will see your real internet address. Everything else in Tails stays on "
-            "Tor.\n\nThis lasts until you close the app or click Turn off.\n\nContinue?",
+            t("advanced_settings.not_anonymous"),
+            t("advanced_settings.downloads_will_connect_directly_not_through_tor"),
             icon="warning",
             default="no",
             parent=self,
@@ -858,15 +876,15 @@ class AdvancedSettingsTab(BaseTab):
         dlg = tk.Toplevel(self)
         dlg.title("Administration password")
         dlg.transient(self.winfo_toplevel())
-        tk.Label(dlg, text="Tails' administration password (set at the Welcome Screen):").pack(
-            padx=px(14), pady=px(12, 4)
-        )
+        tk.Label(
+            dlg, text=t("advanced_settings.tails_administration_password_set_at_the_welcome")
+        ).pack(padx=px(14), pady=px(12, 4))
         pw = tk.StringVar()
         entry = tk.Entry(dlg, textvariable=pw, show="•", width=30)
         entry.pack(padx=px(14))
         remember = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            dlg, text="Remember it until I close the app (kept in memory only)", variable=remember
+            dlg, text=t("advanced_settings.remember_it_until_i_close_the_app"), variable=remember
         ).pack(padx=px(14), pady=px(4))
         msg = tk.Label(dlg, text="", fg=CLR["red"])
         msg.pack()
@@ -877,19 +895,19 @@ class AdvancedSettingsTab(BaseTab):
             if done:
                 dlg.destroy()
                 self._tails_refresh()
-                messagebox.showinfo("Tails", text, parent=self)
+                messagebox.showinfo(t("advanced_settings.tails"), text, parent=self)
             else:
                 msg.config(text=text)
 
         bf = tk.Frame(dlg)
         bf.pack(pady=px(10))
-        tk.Button(bf, text="Turn on", command=ok).pack(side="left", padx=px(4))
+        tk.Button(bf, text=t("advanced_settings.turn_on"), command=ok).pack(side="left", padx=px(4))
 
         def cancel() -> None:
             pw.set("")
             dlg.destroy()
 
-        tk.Button(bf, text="Cancel", command=cancel).pack(side="left", padx=px(4))
+        tk.Button(bf, text=t("btn.cancel"), command=cancel).pack(side="left", padx=px(4))
         entry.bind("<Return>", ok)
         entry.focus_set()
         dlg.grab_set()
@@ -934,7 +952,7 @@ class AdvancedSettingsTab(BaseTab):
         # can validate before clicking Save.
         cfg = dict(_net.DEFAULTS)
         cfg.update(self._net_collect())
-        self._net_status_lbl.config(text="Testing…", fg=CLR["fgdim"])
+        self._net_status_lbl.config(text=t("advanced_settings.testing"), fg=CLR["fgdim"])
         self.update_idletasks()
 
         def _work() -> None:
@@ -955,16 +973,16 @@ class AdvancedSettingsTab(BaseTab):
         if var is None:
             return
         _set_form(var, default)
-        self._net_status_lbl.config(text=f"{key} reset (not saved yet).", fg=CLR["fgdim"])
+        self._net_status_lbl.config(
+            text=t("advanced_settings.key2_reset_not_saved_yet", key2=key), fg=CLR["fgdim"]
+        )
 
     def _net_reset_all(self) -> None:
         from core import network as _net
 
         if not messagebox.askyesno(
-            "Reset networking",
-            "Reset every networking setting to its default?\n\n"
-            "This clears any proxy, bandwidth cap, custom User-Agent, "
-            "and other overrides you have made.",
+            t("advanced_settings.reset_networking"),
+            t("advanced_settings.reset_every_networking_setting_to_its_default"),
         ):
             return
         _net.reset_all()
@@ -975,7 +993,8 @@ class AdvancedSettingsTab(BaseTab):
                 continue
             _set_form(var, default)
         self._net_status_lbl.config(
-            text="All networking settings reset to defaults and saved.", fg=CLR["green"]
+            text=t("advanced_settings.all_networking_settings_reset_to_defaults_and"),
+            fg=CLR["green"],
         )
 
     def _net_apply_preset(self, preset_id: str) -> None:
@@ -995,7 +1014,9 @@ class AdvancedSettingsTab(BaseTab):
             if var is None:
                 continue
             _set_form(var, value)
-        self._net_status_lbl.config(text="Chosen - click Save (or Test first).", fg=CLR["fgdim"])
+        self._net_status_lbl.config(
+            text=t("advanced_settings.chosen_click_save_or_test_first"), fg=CLR["fgdim"]
+        )
 
     # ─── Skins ────────────────────────────────────────────────────────────────
     def _build_skins_tab(self, nb: ttk.Notebook) -> None:
@@ -1018,7 +1039,7 @@ class AdvancedSettingsTab(BaseTab):
 
     def _build_skin_cards(self, inner_nb: ttk.Notebook) -> tuple[str, ttk.Frame]:
         f = ttk.Frame(inner_nb)
-        inner_nb.add(f, text="  Themes  ")
+        inner_nb.add(f, text=t("advanced_settings.themes"))
 
         tk.Label(f, text=t("adv.skins_title"), font=(UI_FONT, 12, "bold")).pack(pady=px(16, 4))
         tk.Label(f, text=t("adv.skins_subtitle"), fg=CLR["fgdim"]).pack()
@@ -1086,7 +1107,7 @@ class AdvancedSettingsTab(BaseTab):
         rb.pack(pady=px(0, 8))
 
     @staticmethod
-    def _skin_preview(card: tk.Frame, name: str, skin: dict[str, str]) -> tk.Canvas:
+    def _skin_preview(card: tk.Frame, name: str, skin: Skin) -> tk.Canvas:
         """A miniature of the window in this skin: sidebar, buttons, title bar (and stars)."""
         c = tk.Canvas(card, width=px(180), height=px(80), bg=skin["sb_bg"], highlightthickness=0)
         c.pack(pady=px(8, 4))
@@ -1126,10 +1147,7 @@ class AdvancedSettingsTab(BaseTab):
 
         tk.Label(
             f,
-            text=(
-                "✨  Mystical includes animated falling star particles across the app window.\n"
-                "All skins apply instantly. No restart required."
-            ),
+            text=(t("advanced_settings.mystical_includes_animated_falling_star_particle")),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(pady=px(2, 6))
@@ -1142,7 +1160,9 @@ class AdvancedSettingsTab(BaseTab):
 
         speed_row = tk.Frame(self._star_speed_frame)
         speed_row.pack(fill="x")
-        tk.Label(speed_row, text="Slow", font=(UI_FONT, 8), fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(speed_row, text=t("adv.star_slow"), font=(UI_FONT, 8), fg=CLR["fgdim"]).pack(
+            side="left"
+        )
 
         saved_speed = settings.STAR_SPEED.get()
         self._star_speed_var = tk.DoubleVar(value=saved_speed)
@@ -1166,7 +1186,9 @@ class AdvancedSettingsTab(BaseTab):
             bd=px(2),
         )
         speed_slider.pack(side="left", padx=px(8), fill="x", expand=True)
-        tk.Label(speed_row, text="Fast", font=(UI_FONT, 8), fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(speed_row, text=t("adv.star_fast"), font=(UI_FONT, 8), fg=CLR["fgdim"]).pack(
+            side="left"
+        )
 
         self._star_speed_lbl = tk.Label(
             self._star_speed_frame,
@@ -1206,10 +1228,15 @@ class AdvancedSettingsTab(BaseTab):
             bd=px(2),
         )
         density_slider.pack(side="left", padx=px(8), fill="x", expand=True)
-        tk.Label(density_row, text="Many", font=(UI_FONT, 8), fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(density_row, text=t("adv.star_many"), font=(UI_FONT, 8), fg=CLR["fgdim"]).pack(
+            side="left"
+        )
 
         self._star_count_lbl = tk.Label(
-            self._star_speed_frame, text=f"{saved_count} stars", font=(UI_FONT, 8), fg=CLR["fgdim"]
+            self._star_speed_frame,
+            text=t("advanced_settings.saved_count_stars", saved_count=saved_count),
+            font=(UI_FONT, 8),
+            fg=CLR["fgdim"],
         )
         self._star_count_lbl.pack()
 
@@ -1224,9 +1251,9 @@ class AdvancedSettingsTab(BaseTab):
 
     def _build_custom_header(
         self, inner_nb: ttk.Notebook
-    ) -> tuple[Skin, tk.Frame, list[tuple[str, list[tuple[str, str]]]]]:
+    ) -> tuple[Skin, tk.Frame, list[tuple[str, list[tuple[str, ColourKey]]]]]:
         f = ttk.Frame(inner_nb)
-        inner_nb.add(f, text="  Custom  ")
+        inner_nb.add(f, text=t("advanced_settings.custom"))
 
         # Header
         hdr = tk.Frame(f)
@@ -1263,9 +1290,9 @@ class AdvancedSettingsTab(BaseTab):
 
     def _build_custom_colour_rows(
         self,
-        current_custom: dict[str, str],
+        current_custom: Skin,
         inner: tk.Frame,
-        sections: list[tuple[str, list[tuple[str, str]]]],
+        sections: list[tuple[str, list[tuple[str, ColourKey]]]],
     ) -> None:
         for section_title, props in sections:
             sec_frame = tk.LabelFrame(inner, text=f"  {section_title}  ", padx=px(12), pady=px(10))
@@ -1354,7 +1381,9 @@ class AdvancedSettingsTab(BaseTab):
         shell = self.shell()
         if shell is not None:
             shell.apply_theme(name)
-            self._skin_status.config(text=f"✅  '{name}' applied live!", fg=CLR["accent"])
+            self._skin_status.config(
+                text=t("advanced_settings.name_applied_live", name=name), fg=CLR["accent"]
+            )
         else:
             self._skin_status.config(
                 text=t("advanced_settings.saved_reopen_to_see_full_effect"), fg=CLR["green"]
@@ -1399,7 +1428,7 @@ class AdvancedSettingsTab(BaseTab):
         count = int(float(value))
         set_star_count(count)
         with contextlib.suppress(tk.TclError):
-            self._star_count_lbl.config(text=f"{count} stars")
+            self._star_count_lbl.config(text=t("advanced_settings.count_stars", count=count))
         settings.STAR_COUNT.set(count)
         # restart the stars so the new density shows at once
         shell = self.shell()
@@ -1535,7 +1564,7 @@ class AdvancedSettingsTab(BaseTab):
     # ─── Developer ────────────────────────────────────────────────────────────
     def _build_dev_tab(self, nb: ttk.Notebook) -> None:
         f = ttk.Frame(nb)
-        nb.add(f, text="  Developer  ")
+        nb.add(f, text=t("advanced_settings.developer"))
 
         tk.Label(
             f, text=t("advanced_settings.ffmpeg_command_runner"), font=(UI_FONT, 12, "bold")

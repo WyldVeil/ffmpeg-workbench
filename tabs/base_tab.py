@@ -562,7 +562,7 @@ class VideoTimeline(tk.Frame):
             c.create_text(
                 w // 2,
                 h // 2,
-                text="Load a file to see the timeline",
+                text=t("base_tab.load_a_file_to_see_the_timeline"),
                 fill=CLR["fgdim"],
                 font=(UI_FONT, 10),
             )
@@ -621,7 +621,7 @@ class VideoTimeline(tk.Frame):
         c.create_text(
             xs,
             cy - px(20),
-            text=f"IN {_fmt_tl(self._start)}",
+            text=t("base_tab.in_start", start=_fmt_tl(self._start)),
             fill="#4CAF50",
             font=(MONO_FONT, 8, "bold"),
         )
@@ -631,7 +631,7 @@ class VideoTimeline(tk.Frame):
         c.create_text(
             xe,
             cy + px(34),
-            text=f"OUT {_fmt_tl(self._end)}",
+            text=t("base_tab.out_end", end=_fmt_tl(self._end)),
             fill="#F44336",
             font=(MONO_FONT, 8, "bold"),
         )
@@ -639,7 +639,7 @@ class VideoTimeline(tk.Frame):
         c.create_text(
             (xs + xe) // 2,
             px(12),
-            text=f"Selection: {_fmt_tl(sel)}",
+            text=t("base_tab.selection_sel", sel=_fmt_tl(sel)),
             fill="white",
             font=(UI_FONT, 9, "bold"),
         )

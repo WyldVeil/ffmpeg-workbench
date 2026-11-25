@@ -35,7 +35,7 @@ from tkinter import ttk
 
 from core import encoders, tasks
 from core import ffmpeg as ff
-from core.i18n import t_or
+from core.i18n import t, t_or
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from tabs import framestep
@@ -713,10 +713,10 @@ class FramePicker(tk.Toplevel):
             bar, text="", bg=clr["bg"], fg=clr["accent"], font=(MONO_FONT, 10, "bold")
         )
         self.time_lbl.pack(side="left", padx=px(10))
-        tk.Button(bar, text="Cancel", relief="flat", command=self.destroy).pack(side="right")
+        tk.Button(bar, text=t("btn.cancel"), relief="flat", command=self.destroy).pack(side="right")
         tk.Button(
             bar,
-            text="✓  Use this frame",
+            text=t("preview.use_this_frame"),
             bg=clr["green"],
             fg="white",
             relief="flat",
@@ -724,7 +724,7 @@ class FramePicker(tk.Toplevel):
         ).pack(side="right", padx=px(6))
         tk.Label(
             self,
-            text="Keys:  ,  and  .  one frame   ·   with Shift, one second   ·   Enter to use it",
+            text=t("preview.keys_and_one_frame_with_shift_one"),
             bg=clr["bg"],
             fg=clr["fgdim"],
             font=(UI_FONT, 8),
@@ -741,7 +741,9 @@ class FramePicker(tk.Toplevel):
 
     def _moved(self) -> None:
         at = framestep.snap(float(self.pos.get()), self._fps)
-        self.time_lbl.config(text=f"{ff.format_time(at)}   ·   frame {round(at * self._fps) + 1:,}")
+        self.time_lbl.config(
+            text=t("preview.at_frame_at2", at=ff.format_time(at), at2=round(at * self._fps) + 1)
+        )
         self.preview.show(at)
 
     def _use(self) -> None:

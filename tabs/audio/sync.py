@@ -32,23 +32,25 @@ class AudioSyncTab(BaseTab):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self.make_header(self, t("tab.audio_sync_shifter"), "Fix out-of-sync sound.", icon="⏱")
+        self.make_header(
+            self, t("tab.audio_sync_shifter"), t("sync.fix_out_of_sync_sound"), icon="⏱"
+        )
         body = scroll_body(self)
         self.src_row = FileRow(
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
-        opt = tk.LabelFrame(body, text="  Shift  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("sync.shift"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.offset_var = tk.StringVar(value="0.000")
         self.form_row(
             opt,
             0,
-            "Move the sound by (seconds):",
+            t("sync.move_the_sound_by_seconds"),
             tk.Entry(opt, textvariable=self.offset_var, width=10),
             tk.Label(
                 opt,
-                text="positive = later (sound was early), negative = earlier",
+                text=t("sync.positive_later_sound_was_early_negative_earlier"),
                 fg=CLR["fgdim"],
                 font=(UI_FONT, 8),
             ),
@@ -61,11 +63,11 @@ class AudioSyncTab(BaseTab):
             ).pack(side="left", padx=px(1))
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=36)
-        self.form_row(opt, 2, "Audio track:", self.track_box)
+        self.form_row(opt, 2, t("loudness.audio_track"), self.track_box)
         self.lossless_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             opt,
-            text="Lossless (instant; re-times the track without re-encoding)",
+            text=t("sync.lossless_instant_re_times_the_track_without"),
             variable=self.lossless_var,
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=px(4))
         self.out_row = save_section(
@@ -73,7 +75,7 @@ class AudioSyncTab(BaseTab):
             t("common.output_file"),
             suggest=lambda: self.suggest_output(self.src_row.path, "synced"),
         )
-        self.btn_render = self.make_render_btn(body, "⏱  APPLY", self._render, width=20)
+        self.btn_render = self.make_render_btn(body, t("sync.apply"), self._render, width=20)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -105,13 +107,15 @@ class AudioSyncTab(BaseTab):
         if info is None:
             return
         if not info.has_audio:
-            messagebox.showwarning(t("common.warning"), "This video has no audio.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("sync.this_video_has_no_audio"), parent=self
+            )
             return
         try:
             offset = float(self.offset_var.get().replace(",", "."))
         except ValueError:
             messagebox.showwarning(
-                t("common.warning"), "The shift must be a number of seconds.", parent=self
+                t("common.warning"), t("sync.the_shift_must_be_a_number_of"), parent=self
             )
             return
         out = common.output_for(self, self.out_row, src, "synced")
@@ -123,7 +127,7 @@ class AudioSyncTab(BaseTab):
             cmd = sy.lossless_cmd(src, out, offset, track, len(info.audio_streams))
         else:
             cmd = sy.reencode_cmd(src, out, offset, track, info.duration)
-        self.log(self.console, f"Shifting audio by {offset:+.3f}s")
+        self.log(self.console, t("sync.shifting_audio_by_offset_3f_s", offset=offset))
         self.run_ffmpeg(
             cmd,
             self.console,

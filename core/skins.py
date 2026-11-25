@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import sys
-from typing import Any
+from typing import Literal, TypedDict, get_args
 
 logger = logging.getLogger("crossfader.skins")
 SKIN_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skin.json")
@@ -39,8 +39,56 @@ UI_FONT = _detect_ui_font()
 MONO_FONT = _detect_mono_font()
 
 # ── Default colors for the Custom skin (based on Classic) ────────────────────
-#: A colour scheme: colour names -> "#RRGGBB", plus "stars" (bool) and "desc" (text)
-Skin = dict[str, Any]
+#: the colours a theme names (each "#RRGGBB")
+ColourKey = Literal[
+    "sb_bg",
+    "sb_cat",
+    "sb_btn",
+    "sb_hover",
+    "sb_active",
+    "accent",
+    "content",
+    "panel",
+    "fg",
+    "fgdim",
+    "green",
+    "red",
+    "orange",
+    "pink",
+    "console_bg",
+    "console_fg",
+    "border",
+    "input_bg",
+    "input_fg",
+]
+COLOUR_KEYS: tuple[ColourKey, ...] = get_args(ColourKey)
+
+
+class Skin(TypedDict):
+    """A colour theme: its colours, whether stars fall, and a description."""
+
+    sb_bg: str
+    sb_cat: str
+    sb_btn: str
+    sb_hover: str
+    sb_active: str
+    accent: str
+    content: str
+    panel: str
+    fg: str
+    fgdim: str
+    green: str
+    red: str
+    orange: str
+    pink: str
+    console_bg: str
+    console_fg: str
+    border: str
+    input_bg: str
+    input_fg: str
+    stars: bool
+    desc: str
+
 
 CUSTOM_DEFAULTS: Skin = {
     "sb_bg": "#111111",
@@ -66,7 +114,7 @@ CUSTOM_DEFAULTS: Skin = {
     "desc": "Your personal color scheme.",
 }
 
-SKINS: dict[str, dict[str, Any]] = {
+SKINS: dict[str, Skin] = {
     "Classic": {
         # Professional dark - all surfaces dark, blue-cyan accent
         "sb_bg": "#111111",
@@ -243,13 +291,14 @@ def get_skin(name: str) -> Skin:
     For "Custom", overlay saved user colours from settings.json on top of defaults.
     """
     if name == "Custom":
-        skin = dict(CUSTOM_DEFAULTS)
+        skin = CUSTOM_DEFAULTS.copy()
         from core import settings
 
-        prefix = "custom_color_"
-        for key, val in settings.load_settings().items():
-            if key.startswith(prefix) and key[len(prefix) :] in skin and isinstance(val, str):
-                skin[key[len(prefix) :]] = val
+        saved = settings.load_settings()
+        for key in COLOUR_KEYS:
+            value = saved.get(f"custom_color_{key}")
+            if isinstance(value, str):
+                skin[key] = value
         return skin
     return SKINS.get(name, SKINS["Classic"])
 

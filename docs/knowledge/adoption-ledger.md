@@ -25,7 +25,7 @@ side of this page.
 | R9 | Immutable, typed probe results | Adopted | frozen `MediaInfo`, `Stream` |
 | R10 | One tool registry | Adopted | `core/tools.py` + `tabs/registry.py`; `tests/test_tools.py` |
 | R11 | BaseTab: documented contract, composition | Partly | contracts + defaults on `BaseTab`; it still carries UI helpers |
-| R12 | Typed theme tokens and layout constants | Deferred | theme application moved out of core; palettes are still dicts |
+| R12 | Typed theme tokens and layout constants | Adopted | `Skin` is a TypedDict and `ColourKey` names every colour, so pyright checks each one; a live theme switch maps every widget's colour from the old palette to the new (`tabs/kit/theme.recolour`), guarded by `test_switching_theme_leaves_no_old_colour` (2026-11-25) |
 | R13 | Context managers for processes and busy state | Partly | `proc.run` (always cleans up), `ui.hosted_by`; no `busy()` helper yet |
 | R14 | Render job with invariants and an Enum status | Partly | `TaskStatus` StrEnum; the job is still a mutable class |
 | R15 | An error-handling policy | Adopted | `core/errors.py`; CONVENTIONS.md; ruff BLE001/S110 on |
@@ -33,7 +33,7 @@ side of this page.
 | R17 | Typed thread hand-off | Adopted | `tasks.submit(fn, on_done=, on_error=) -> Future[T]` |
 | R18 | Tests through public contracts | Partly | the harness opens pages through `show_page`; many tests still read page internals |
 | R19 | Property-based and stateful tests | Adopted | `tests/test_properties.py` (the stateful test found a real bug: a broken settings file could overwrite the good backup) |
-| R20 | Selective mutation testing | Deferred | worthwhile on `core/ops`; too slow on the GUI suite |
+| R20 | Selective mutation testing | Partly | `devtools/mutate.py` (one small change at a time: comparisons, and/or, `not`, numbers, booleans); `core/ops/youtube.py` went from 24 to 56 of 64 changes caught, the other 8 change nothing observable (2026-11-25); more `core/ops` modules as they are touched |
 | R21 | Delete compatibility shims | Adopted | 75 `tabs/tab_*.py` shims and the base_tab re-exports removed |
 | R22 | Visible module ownership | Adopted | module docstrings; ARCHITECTURE.md |
 | R23 | Typed observers for app events | Declined | the only observable store (`core/state.py`) had no readers; deleted |
@@ -59,7 +59,7 @@ side of this page.
 | R14 | Dependency seams for tests | Adopted | `ui.hosted_by`, injectable settings file, capability cache folder |
 | R15 | One logging stream | Adopted | module `logger`s under `crossfader.*` |
 | R16 | Break up the App god class | Adopted | `shell/` |
-| R17 | Output promotion as a context manager | Deferred | `.part` promotion works and is tested; a refactor without a bug to fix |
+| R17 | Output promotion as a context manager | Declined | `.part` promotion works and is tested; a refactor with no bug behind it (reviewed 2026-11-25) |
 | R18 | Test conventions | Adopted | CONVENTIONS.md |
 | R19 | Measure start-up and hot paths | Adopted | `devtools/perf.py`, `tests/test_perf.py` |
 | R20 | Document thread ownership of shared state | Partly | "threads:" comments on the shared structures of the new modules; ARCHITECTURE.md |
@@ -95,8 +95,8 @@ side of this page.
 | R3 | No program ever starts on the UI thread | Adopted | `tests/test_perf.py`, empty allow-list |
 | R4 | Import edge-tts lazily | Adopted | `core/tts.edge_available()` uses `find_spec` |
 | R5 | 8-bit preview frames | Adopted | `grab_frame_png` adds `format=rgb24` |
-| R6 | Build notebook sub-pages on first view | Deferred | 40-60 ms per page open; behind the remaining items |
+| R6 | Build notebook sub-pages on first view | Declined | 40-60 ms per page open is below what anyone notices (reviewed 2026-11-25) |
 | R7 | Debounce the recent-tools settings write | Adopted | `shell/app.py` |
 | R8 | Adaptive UI-queue polling | Adopted | `core/ui.py` backs off to 100 ms when idle |
-| R9 | Faster scrubbing (a long-lived decoder) | Deferred | only if people ask: high effort |
+| R9 | Faster scrubbing (a long-lived decoder) | Deferred | only if people ask: high effort (reviewed 2026-11-25) |
 | §4 | Permanent performance checks | Adopted | `tests/test_perf.py`; `devtools/perf.py` (stall watchdog, sampler, `timed`) |

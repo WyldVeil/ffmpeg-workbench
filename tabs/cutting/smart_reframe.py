@@ -54,7 +54,7 @@ class SmartReframeTab(BaseTab):
         self.make_header(
             self,
             t("tab.smart_reframe"),
-            "Landscape to vertical or square, with the crop following the action.",
+            t("toolinfo.smart_reframe"),
             icon="🎯",
         )
         body = scroll_body(self)
@@ -65,13 +65,13 @@ class SmartReframeTab(BaseTab):
         self.info_lbl = tk.Label(body, text="", fg=CLR["fgdim"])
         self.info_lbl.pack(anchor="w", padx=px(24))
 
-        opt = tk.LabelFrame(body, text="  Reframe  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("smart_reframe.reframe"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         self.ratio_var = tk.StringVar(value=RATIOS["9:16"][0])
         self.mode_var = tk.StringVar(value=MODES["follow"])
         r0 = tk.Frame(opt)
         r0.pack(fill="x", pady=px(2))
-        tk.Label(r0, text="Shape:", width=12, anchor="w").pack(side="left")
+        tk.Label(r0, text=t("smart_reframe.shape"), width=12, anchor="w").pack(side="left")
         rb = ttk.Combobox(
             r0,
             textvariable=self.ratio_var,
@@ -81,21 +81,20 @@ class SmartReframeTab(BaseTab):
         )
         rb.pack(side="left")
         rb.bind("<<ComboboxSelected>>", lambda _e: self._ratio_changed())
-        tk.Label(r0, text="Output size:").pack(side="left", padx=px(12, 2))
+        tk.Label(r0, text=t("smart_reframe.output_size")).pack(side="left", padx=px(12, 2))
         self.ow_var, self.oh_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
         tk.Entry(r0, textvariable=self.ow_var, width=6).pack(side="left")
         tk.Label(r0, text="×").pack(side="left")
         tk.Entry(r0, textvariable=self.oh_var, width=6).pack(side="left")
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(2))
-        tk.Label(r1, text="Camera:", width=12, anchor="w").pack(side="left")
+        tk.Label(r1, text=t("smart_reframe.camera"), width=12, anchor="w").pack(side="left")
         ttk.Combobox(
             r1, textvariable=self.mode_var, values=list(MODES.values()), state="readonly", width=40
         ).pack(side="left")
         tk.Label(
             opt,
-            text="  ℹ  Tracking analyses the whole clip first (about 10-20× faster than "
-            "real time), then renders.",
+            text=t("smart_reframe.tracking_analyses_the_whole_clip_first_about"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(anchor="w")
@@ -106,7 +105,9 @@ class SmartReframeTab(BaseTab):
             ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "reframed"),
         )
-        self.btn_render = self.make_render_btn(body, "🎯  REFRAME", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("smart_reframe.reframe_2"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=6)
 
@@ -132,8 +133,14 @@ class SmartReframeTab(BaseTab):
         if info is None:
             return
         try:
-            ow = int(common.number(self.ow_var.get(), "Width", 16, 8192)) // 2 * 2
-            oh = int(common.number(self.oh_var.get(), "Height", 16, 8192)) // 2 * 2
+            ow = (
+                int(common.number(self.ow_var.get(), t("region_blur.width_col"), 16, 8192)) // 2 * 2
+            )
+            oh = (
+                int(common.number(self.oh_var.get(), t("region_blur.height_col"), 16, 8192))
+                // 2
+                * 2
+            )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -171,7 +178,10 @@ class SmartReframeTab(BaseTab):
             audio=keep_audio_args(info, container),
         )
 
-        self.log(self.console, f"Reframing {w}×{h} → {cw}×{ch} window → {ow}×{oh}")
+        self.log(
+            self.console,
+            t("smart_reframe.reframing_w_h_cw_ch_window_ow", w=w, h=h, cw=cw, ch=ch, ow=ow, oh=oh),
+        )
         common.queue_job(
             self,
             common.Job(name="Smart Reframe", out=out, work=job.run, duration=dur, inputs=[src]),

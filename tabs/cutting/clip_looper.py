@@ -51,7 +51,7 @@ class ClipLooperTab(BaseTab):
         self._build_console(body)
 
     def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
-        self.make_header(self, t("tab.clip_looper"), "Repeat, stutter or echo a moment.", icon="🔁")
+        self.make_header(self, t("tab.clip_looper"), t("toolinfo.clip_looper"), icon="🔁")
         body = scroll_body(self)
         self.src_row = FileRow(
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
@@ -74,10 +74,14 @@ class ClipLooperTab(BaseTab):
         )
         self.slider.pack(side="left", fill="x", expand=True)
         framestep.slider(self.slider, self.preview)  # , and . step a frame
-        tk.Button(bar, text="Set start", relief="flat", command=self.mark_in).pack(side="left")
-        tk.Button(bar, text="Set end", relief="flat", command=self.mark_out).pack(side="left")
+        tk.Button(bar, text=t("clip_looper.set_start"), relief="flat", command=self.mark_in).pack(
+            side="left"
+        )
+        tk.Button(bar, text=t("clip_looper.set_end"), relief="flat", command=self.mark_out).pack(
+            side="left"
+        )
 
-        opt = tk.LabelFrame(body, text="  Loop  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("clip_looper.loop"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="simple")
         for key, label, desc in MODES:
@@ -98,24 +102,24 @@ class ClipLooperTab(BaseTab):
     def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(6, 2))
-        tk.Label(r, text="Section from").pack(side="left")
+        tk.Label(r, text=t("reverser.section_from")).pack(side="left")
         self.section = RangePicker(r, end="2", here=lambda: float(self.pos_var.get()))
         self.section.pack(side="left", padx=px(4))
-        tk.Label(r, text="Repeats:").pack(side="left", padx=px(10, 2))
+        tk.Label(r, text=t("clip_looper.repeats")).pack(side="left", padx=px(10, 2))
         self.count_var = tk.StringVar(value="4")
         tk.Entry(r, textvariable=self.count_var, width=4).pack(side="left")
         r2 = tk.Frame(opt)
         r2.pack(fill="x", pady=px(2))
-        tk.Label(r2, text="Stutter slice (s):").pack(side="left")
+        tk.Label(r2, text=t("clip_looper.stutter_slice_s")).pack(side="left")
         self.slice_var = tk.StringVar(value="0.15")
         tk.Entry(r2, textvariable=self.slice_var, width=6).pack(side="left", padx=px(4))
-        tk.Label(r2, text="Speed-up per repeat:").pack(side="left", padx=px(10, 2))
+        tk.Label(r2, text=t("clip_looper.speed_up_per_repeat")).pack(side="left", padx=px(10, 2))
         self.factor_var = tk.StringVar(value="1.3")
         tk.Entry(r2, textvariable=self.factor_var, width=6).pack(side="left")
         self.context_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
             opt,
-            text="Keep the rest of the clip before and after the loop",
+            text=t("clip_looper.keep_the_rest_of_the_clip_before"),
             variable=self.context_var,
         ).pack(anchor="w")
 
@@ -125,7 +129,9 @@ class ClipLooperTab(BaseTab):
             ("h264", "hevc", "av1"),
             suggest=lambda: self.suggest_output(self.src_row.path, "looped"),
         )
-        self.btn_render = self.make_render_btn(body, "🔁  CREATE", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("clip_looper.create"), self._render, width=22
+        )
 
     def _build_console(self, body: tk.Frame) -> None:
         self.btn_render.pack(pady=px(8))
@@ -150,15 +156,19 @@ class ClipLooperTab(BaseTab):
         mode = self.mode_var.get()
         fps = info.require_video().fps or 30.0
         try:
-            start = self.section.start.seconds(0.0, "From") or 0.0
+            start = self.section.start.seconds(0.0, t("muter.from")) or 0.0
             if mode == "stutter":
-                end = start + common.number(self.slice_var.get(), "Stutter slice", 1.0 / fps, 5)
+                end = start + common.number(
+                    self.slice_var.get(), t("clip_looper.stutter_slice"), 1.0 / fps, 5
+                )
             else:
                 end = self.section.end.seconds(None, "To")
                 if end is None:
                     raise ValueError("Say where the section ends.")
-            count = int(common.number(self.count_var.get(), "Repeats", 2, 200))
-            factor = common.number(self.factor_var.get() or "1.3", "Speed-up", 1.01, 4)
+            count = int(common.number(self.count_var.get(), t("reverser.repeats_2"), 2, 200))
+            factor = common.number(
+                self.factor_var.get() or "1.3", t("clip_looper.speed_up"), 1.01, 4
+            )
             if not 0 <= start < end <= info.duration + 0.05:
                 raise ValueError("The section must lie inside the clip, with 'from' before 'to'.")
             if end - start < 1.0 / fps:
@@ -197,8 +207,12 @@ class ClipLooperTab(BaseTab):
         )
         self.log(
             self.console,
-            f"{len(units)} repeats of {ff.format_time(end - start)} → "
-            f"{ff.format_time(total)} total",
+            t(
+                "clip_looper.units_repeats_of_end_total_total",
+                units=len(units),
+                end=ff.format_time(end - start),
+                total=ff.format_time(total),
+            ),
         )
         common.queue_job(
             self,

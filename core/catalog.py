@@ -9,7 +9,7 @@ Used by the Start page ("What do you want to do?"):
 * ``GOALS``   - everyday goals, each leading to the tools that do it.
 * ``search(text)``  - tools ranked for whatever the person typed.
 * ``suggest(info)`` - tools worth trying on a particular file, each with the
-  reason ("It's 1.3 GB", "It contains a GPS location"...).
+  reason (t("catalog.it_s_1_3_gb"), t("catalog.it_contains_a_gps_location")...).
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
+from core.i18n import t, t_or
 from core.tools import SPECS, Category, ToolId, ToolSpec, spec
 
 if TYPE_CHECKING:
@@ -419,11 +420,11 @@ def describe(info: MediaInfo) -> str:
     parts: list[str] = []
     v = info.video if info.video is not None and not info.video.attached_pic else None
     if v is not None and info.duration <= 0.05:
-        parts.append("Image")
+        parts.append(t("catalog.kind_image"))
     elif v is not None:
-        parts.append("Video")
+        parts.append(t("catalog.kind_video"))
     elif info.has_audio:
-        parts.append("Audio")
+        parts.append(t("catalog.kind_audio"))
     if v is not None:
         w, h = v.display_size
         parts.append(f"{w}×{h}" + (" HDR" if v.is_hdr else ""))
@@ -446,9 +447,9 @@ def _privacy(info: MediaInfo) -> list[Suggestion]:
 
     cats = {f.category for f in mc.inspect(info)}
     if "location" in cats:
-        return [("Metadata Cleaner", "It contains a GPS location - remove it before sharing")]
+        return [("Metadata Cleaner", t("catalog.it_contains_a_gps_location_remove_it"))]
     if cats & {"device", "telemetry"}:
-        why = "It names the camera or phone it was made with - remove that before sharing"
+        why = t("catalog.it_names_the_camera_or_phone_it")
         return [("Metadata Cleaner", why)]
     return []
 
@@ -458,8 +459,10 @@ def _tracks(info: MediaInfo) -> str:
     n_audio = sum(1 for s in info.streams if s.type == "audio")
     n_subs = sum(1 for s in info.streams if s.type == "subtitle")
     parts = (
-        f"{n_audio} audio tracks" if n_audio > 1 else "",
-        f"{n_subs} subtitle track{'s' if n_subs > 1 else ''}" if n_subs else "",
+        t("catalog.n_audio_tracks", n=n_audio) if n_audio > 1 else "",
+        t("catalog.n_subtitle_tracks" if n_subs > 1 else "catalog.one_subtitle_track", n=n_subs)
+        if n_subs
+        else "",
     )
     return ", ".join(x for x in parts if x)
 
@@ -472,45 +475,49 @@ def _for_video(info: MediaInfo, v: Stream) -> list[Suggestion]:
         (
             v.is_hdr,
             "HDR to SDR",
-            "It's HDR - convert it so it doesn't look washed out on normal screens",
+            t("catalog.it_s_hdr_convert_it_so_it"),
         ),
         (
             info.size > 25_000_000,
             "Universal Downsizer",
-            f"It's {_size(info.size)} - shrink it to fit Discord, email or WhatsApp",
+            t("catalog.it_s_size_shrink_it", size=_size(info.size)),
         ),
         (
             bool(tracks),
             "Tracks & Remux",
-            f"It has {tracks} - choose which to keep, label them, or add more",
+            t("catalog.it_has_tracks_choose", tracks=tracks),
         ),
         (
             (v.field_order or "") in ("tt", "bb", "tb", "bt"),
             "Deinterlace",
-            "It's interlaced - remove the comb lines",
+            t("catalog.it_s_interlaced_remove_the_comb_lines"),
         ),
-        (w > h, "The Shortifier", "Make a vertical version for Shorts, TikTok or Reels"),
-        (max(w, h) < 1280, "Resolution Scaler", f"It's small ({w}×{h}) - upscale it to HD"),
-        (talk and info.duration > 20, "Auto-Subtitles", "Turn what's said into subtitles"),
-        (info.duration > 30, "Quick Trimmer", "Cut the start or end off"),
-        (talk and info.duration > 60, "Silence Remover", "Cut out the pauses"),
-        (talk, "Loudness Normalizer", "Make the volume even and right for YouTube"),
-        (info.duration <= 30, "Pro GIF Maker", "Make it an animated GIF"),
-        (True, "Snapshot", "Save a frame as a full-quality picture"),
-        (True, "Format Converter", "Convert it to another format"),
+        (w > h, "The Shortifier", t("catalog.make_a_vertical_version_for_shorts_tiktok")),
+        (max(w, h) < 1280, "Resolution Scaler", t("catalog.it_s_small_upscale", w=w, h=h)),
+        (
+            talk and info.duration > 20,
+            "Auto-Subtitles",
+            t("catalog.turn_what_s_said_into_subtitles"),
+        ),
+        (info.duration > 30, "Quick Trimmer", t("catalog.cut_the_start_or_end_off")),
+        (talk and info.duration > 60, "Silence Remover", t("catalog.cut_out_the_pauses")),
+        (talk, "Loudness Normalizer", t("catalog.make_the_volume_even_and_right_for")),
+        (info.duration <= 30, "Pro GIF Maker", t("catalog.make_it_an_animated_gif")),
+        (True, "Snapshot", t("catalog.save_a_frame_as_a_full_quality")),
+        (True, "Format Converter", t("catalog.convert_it_to_another_format")),
     ]
     return [(name, why) for wanted, name, why in rules if wanted]
 
 
 def _for_audio(info: MediaInfo) -> list[Suggestion]:
     rules: list[tuple[bool, str, str]] = [
-        (info.duration > 20, "Auto-Subtitles", "Turn the speech into text or subtitles"),
-        (True, "Loudness Normalizer", "Make the volume even"),
-        (True, "Voice Isolation", "Remove background noise from a voice"),
-        (info.duration > 60, "Silence Remover", "Cut out the pauses"),
-        (True, "Audio Converter", "Convert it to MP3, FLAC, WAV..."),
-        (True, "Waveform Editor", "See the sound and edit parts of it"),
-        (True, "MIDIfier", "Turn the music into MIDI notes"),
+        (info.duration > 20, "Auto-Subtitles", t("catalog.turn_the_speech_into_text_or_subtitles")),
+        (True, "Loudness Normalizer", t("catalog.make_the_volume_even")),
+        (True, "Voice Isolation", t("catalog.remove_background_noise_from_a_voice")),
+        (info.duration > 60, "Silence Remover", t("catalog.cut_out_the_pauses")),
+        (True, "Audio Converter", t("catalog.convert_it_to_mp3_flac_wav")),
+        (True, "Waveform Editor", t("catalog.see_the_sound_and_edit_parts_of")),
+        (True, "MIDIfier", t("catalog.turn_the_music_into_midi_notes")),
     ]
     return [(name, why) for wanted, name, why in rules if wanted]
 
@@ -521,8 +528,8 @@ def suggest(info: MediaInfo, limit: int = 8) -> list[Suggestion]:
     picks = _privacy(info)
     if v is not None and info.duration <= 0.05:  # a still picture
         picks += [
-            ("Slideshow Maker", "Turn photos into a video with music"),
-            ("Image Watermark", "Use it as a logo on a video"),
+            ("Slideshow Maker", t("catalog.turn_photos_into_a_video_with_music")),
+            ("Image Watermark", t("catalog.use_it_as_a_logo_on_a")),
         ]
     elif v is not None:
         picks += _for_video(info, v)
@@ -533,6 +540,20 @@ def suggest(info: MediaInfo, limit: int = 8) -> list[Suggestion]:
         if name in TOOLS and all(n != name for n, _r in out):
             out.append((name, why))
     return out[:limit]
+
+
+def goal_title(g: Goal) -> str:
+    return t_or(f"goal.{g.key}.title", g.title)
+
+
+def goal_blurb(g: Goal) -> str:
+    return t_or(f"goal.{g.key}.blurb", g.blurb)
+
+
+def tool_blurb(name: str) -> str:
+    """What tool *name* is for, in the person's language."""
+    info = TOOLS.get(name)
+    return t_or(f"toolinfo.{info.id.value}", info.blurb) if info is not None else ""
 
 
 def goal(key: str) -> Goal | None:

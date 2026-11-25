@@ -293,15 +293,18 @@ class KaraokeTab(BaseTab):
         key = MODELS.get(self._model_var.get(), "base")
         if not whisper.cli_path():
             self._whisper_lbl.config(
-                text="⚠  The speech engine (whisper-cli) is missing from this build.", fg=CLR["red"]
+                text=t("karaoke.the_speech_engine_whisper_cli_is_missing"), fg=CLR["red"]
             )
         elif whisper.is_installed(key):
             self._whisper_lbl.config(
-                text="✅  Speech recognition ready (runs offline).", fg=CLR["green"]
+                text=t("karaoke.speech_recognition_ready_runs_offline"), fg=CLR["green"]
             )
         else:
             self._whisper_lbl.config(
-                text=f"ℹ  The {whisper.MODELS[key].label} model downloads once on first use.",
+                text=t(
+                    "karaoke.the_label_model_downloads_once_on_first",
+                    label=whisper.MODELS[key].label,
+                ),
                 fg=CLR["fgdim"],
             )
 
@@ -323,7 +326,7 @@ class KaraokeTab(BaseTab):
 
     def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
-            title="Select music video",
+            title=t("karaoke.select_music_video"),
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
         )
         if p:

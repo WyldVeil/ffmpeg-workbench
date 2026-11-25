@@ -35,7 +35,10 @@ class ImageWatermarkTab(BaseTab):
 
     def _build_ui(self) -> None:
         self.make_header(
-            self, t("tab.image_watermark"), "Add a logo or badge on top of a video.", icon="🖼"
+            self,
+            t("tab.image_watermark"),
+            t("image_watermark.add_a_logo_or_badge_on_top"),
+            icon="🖼",
         )
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -43,7 +46,10 @@ class ImageWatermarkTab(BaseTab):
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.logo_row = FileRow(
-            body, "Logo image:", kind="image", on_change=lambda _p: self._changed()
+            body,
+            t("image_watermark.logo_image"),
+            kind="image",
+            on_change=lambda _p: self._changed(),
         )
         self.logo_row.pack(fill="x", padx=px(20), pady=px(2))
         self.compare = CompareView(body, 400, 225, after_label="With logo")
@@ -53,7 +59,7 @@ class ImageWatermarkTab(BaseTab):
 
     def _build_placement(self, body: tk.Frame) -> None:
         """Where the logo goes, its size, opacity and margin, and when it shows."""
-        opt = tk.LabelFrame(body, text="  Placement  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("image_watermark.placement"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.place_var = tk.StringVar(value=POSITIONS["br"][0])
         pb = ttk.Combobox(
@@ -80,7 +86,7 @@ class ImageWatermarkTab(BaseTab):
             to=80,
             orient="horizontal",
             length=px(180),
-            label="Width (% of video)",
+            label=t("image_watermark.width_of_video"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=0, sticky="w")
         self.opacity_var = tk.DoubleVar(value=0.85)
@@ -92,7 +98,7 @@ class ImageWatermarkTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(160),
-            label="Opacity",
+            label=t("pip.opacity_section"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=1, sticky="w")
         self.margin_var = tk.DoubleVar(value=3)
@@ -104,20 +110,20 @@ class ImageWatermarkTab(BaseTab):
             resolution=0.5,
             orient="horizontal",
             length=px(140),
-            label="Margin (%)",
+            label=t("image_watermark.margin"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=2, sticky="w")
         tr = tk.Frame(opt)
         tr.grid(row=2, column=0, columnspan=3, sticky="w", pady=px(4))
         self.window_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(tr, text="Only from", variable=self.window_var, command=self._changed).pack(
-            side="left"
-        )
+        tk.Checkbutton(
+            tr, text=t("image_watermark.only_from"), variable=self.window_var, command=self._changed
+        ).pack(side="left")
         self.window = RangePicker(
             tr, start="0", end="10", here=lambda: self.compare.position, on_change=self._window_on
         )
         self.window.pack(side="left")
-        tk.Label(tr, text="  Fade (s):").pack(side="left")
+        tk.Label(tr, text=t("image_watermark.fade_s")).pack(side="left")
         self.fade_var = tk.StringVar(value="0.5")
         tk.Entry(tr, textvariable=self.fade_var, width=5).pack(side="left")
 
@@ -129,7 +135,9 @@ class ImageWatermarkTab(BaseTab):
             ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "logo"),
         )
-        self.btn_render = self.make_render_btn(body, "🖼  ADD LOGO", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("image_watermark.add_logo"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -150,7 +158,7 @@ class ImageWatermarkTab(BaseTab):
                 common.number(self.cy_var.get() or "50", "Y %", 0, 100),
             ),
             window=window,
-            fade=common.number(self.fade_var.get() or "0", "Fade", 0, 10),
+            fade=common.number(self.fade_var.get() or "0", t("muter.fade"), 0, 10),
         )
         return logo_graph(w, h, spec, logo_input)
 

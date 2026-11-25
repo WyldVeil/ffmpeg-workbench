@@ -61,7 +61,10 @@ class RegionBlurTab(BaseTab):
 
     def _build_header(self) -> tuple[tk.Frame, tk.Frame, tk.Frame]:
         self.make_header(
-            self, t("tab.privacy_blur"), "Hide faces, plates, names or screens.", icon="🕶"
+            self,
+            t("tab.privacy_blur"),
+            t("region_blur.hide_faces_plates_names_or_screens"),
+            icon="🕶",
         )
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -94,7 +97,7 @@ class RegionBlurTab(BaseTab):
         self.result_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             left,
-            text="Show the result in the preview",
+            text=t("region_blur.show_the_result_in_the_preview"),
             variable=self.result_var,
             command=self._refresh_preview,
         ).pack(anchor="w")
@@ -102,12 +105,15 @@ class RegionBlurTab(BaseTab):
 
     def _build_selected_region(self, left: tk.Frame, top: tk.Frame) -> tk.LabelFrame:
         tk.Label(
-            left, text="Drag on the picture to add a region.", fg=CLR["fgdim"], font=(UI_FONT, 8)
+            left,
+            text=t("region_blur.drag_on_the_picture_to_add_a"),
+            fg=CLR["fgdim"],
+            font=(UI_FONT, 8),
         ).pack(anchor="w")
 
         right = tk.Frame(top)
         right.pack(side="left", fill="both", expand=True, padx=px(12, 0))
-        tk.Label(right, text="Regions", font=(UI_FONT, 10, "bold")).pack(anchor="w")
+        tk.Label(right, text=t("region_blur.regions"), font=(UI_FONT, 10, "bold")).pack(anchor="w")
         self.listbox = tk.Listbox(right, height=7, font=(MONO_FONT, 9), exportselection=False)
         self.listbox.pack(fill="both", expand=True)
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._select())
@@ -119,10 +125,10 @@ class RegionBlurTab(BaseTab):
         )
         pb.pack(side="left")
         pb.bind("<<ComboboxSelected>>", lambda _e: self._add_preset())
-        tk.Button(pr, text="Remove", relief="flat", command=self._remove).pack(
+        tk.Button(pr, text=t("btn.remove"), relief="flat", command=self._remove).pack(
             side="left", padx=px(4)
         )
-        ed = tk.LabelFrame(right, text="  Selected region  ", padx=px(8), pady=px(4))
+        ed = tk.LabelFrame(right, text=t("region_blur.selected_region"), padx=px(8), pady=px(4))
         ed.pack(fill="x", pady=px(4))
         self.kind_var = tk.StringVar(value=KINDS["blur"])
         ttk.Combobox(
@@ -137,25 +143,27 @@ class RegionBlurTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(140),
-            label="Strength",
+            label=t("region_blur.strength_col"),
         ).grid(row=0, column=1, sticky="w", padx=px(6))
         return ed
 
     def _build_output(self, body: tk.Frame, ed: tk.LabelFrame) -> None:
         tf = tk.Frame(ed)
         tf.grid(row=1, column=0, columnspan=2, sticky="w")
-        tk.Label(tf, text="From").pack(side="left")
+        tk.Label(tf, text=t("muter.from")).pack(side="left")
         self.window = RangePicker(
             tf, end_hint="(empty = to the end)", here=lambda: float(self.pos_var.get())
         )
         self.window.pack(side="left")
-        tk.Button(ed, text="Apply to region", relief="flat", command=self._apply_edit).grid(
-            row=2, column=0, sticky="w", pady=px(2)
-        )
+        tk.Button(
+            ed, text=t("region_blur.apply_to_region"), relief="flat", command=self._apply_edit
+        ).grid(row=2, column=0, sticky="w", pady=px(2))
         here = tk.Frame(ed)
         here.grid(row=2, column=1, sticky="w")
-        tk.Button(here, text="From here", relief="flat", command=self.mark_in).pack(side="left")
-        tk.Button(here, text="To here", relief="flat", command=self.mark_out).pack(
+        tk.Button(here, text=t("region_blur.from_here"), relief="flat", command=self.mark_in).pack(
+            side="left"
+        )
+        tk.Button(here, text=t("region_blur.to_here"), relief="flat", command=self.mark_out).pack(
             side="left", padx=px(4, 0)
         )
 
@@ -165,7 +173,9 @@ class RegionBlurTab(BaseTab):
             ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "blurred"),
         )
-        self.btn_render = self.make_render_btn(body, "🕶  APPLY BLUR", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("region_blur.apply_blur"), self._render, width=22
+        )
 
     def _build_console(self, body: tk.Frame) -> None:
         self.btn_render.pack(pady=px(8))
@@ -329,7 +339,7 @@ class RegionBlurTab(BaseTab):
             return
         if not self.regions:
             messagebox.showwarning(
-                t("common.warning"), "Add at least one region (drag on the picture).", parent=self
+                t("common.warning"), t("region_blur.add_at_least_one_region_drag_on"), parent=self
             )
             return
         out = common.output_for(self, self.out_row, src, "blurred")

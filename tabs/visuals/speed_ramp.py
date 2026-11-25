@@ -108,7 +108,7 @@ class SpeedRamperTab(BaseTab):
         ).pack(side="left", padx=px(12))
         tk.Radiobutton(
             mode_lf,
-            text="Speed ramp (smooth curve)",
+            text=t("speed_ramp.speed_ramp_smooth_curve"),
             value="ramp",
             variable=self.mode_var,
             command=self._on_mode,
@@ -157,7 +157,7 @@ class SpeedRamperTab(BaseTab):
         )
         top = tk.Frame(self.ramp_f)
         top.pack(fill="x")
-        tk.Label(top, text="Preset:").pack(side="left")
+        tk.Label(top, text=t("common.preset")).pack(side="left")
         self.preset_var = tk.StringVar(value="")
         pb = ttk.Combobox(
             top, textvariable=self.preset_var, values=list(PRESETS), state="readonly", width=32
@@ -184,12 +184,14 @@ class SpeedRamperTab(BaseTab):
         self.rows_f = tk.Frame(self.ramp_f)
         self.rows_f.pack(fill="x")
 
-        opt = tk.LabelFrame(body, text="  Frames & sound  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("speed_ramp.frames_sound"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.opt_frame = opt
         r0 = tk.Frame(opt)
         r0.pack(fill="x", pady=px(2))
-        tk.Label(r0, text="Slow-motion frames:", width=18, anchor="w").pack(side="left")
+        tk.Label(r0, text=t("speed_ramp.slow_motion_frames"), width=18, anchor="w").pack(
+            side="left"
+        )
         self.slowmo_var = tk.StringVar(value=SLOWMO["dup"])
         ttk.Combobox(
             r0,
@@ -200,7 +202,7 @@ class SpeedRamperTab(BaseTab):
         ).pack(side="left", padx=px(6))
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(2))
-        tk.Label(r1, text="Audio:", width=18, anchor="w").pack(side="left")
+        tk.Label(r1, text=t("crossfader.audio"), width=18, anchor="w").pack(side="left")
         self.audio_var = tk.StringVar(value=AUDIO["tempo"])
         self.audio_box = ttk.Combobox(
             r1, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly", width=36
@@ -284,7 +286,9 @@ class SpeedRamperTab(BaseTab):
                 tm = ff.parse_time(p.time.get())
             except ValueError:
                 raise ValueError(f"Point {i}: '{p.time.get()}' is not a time.") from None
-            sp = common.number(p.speed.get(), f"Point {i} speed", MIN_SPEED, MAX_SPEED)
+            sp = common.number(
+                p.speed.get(), t("speed_ramp.point_i_speed", i=i), MIN_SPEED, MAX_SPEED
+            )
             pts.append((tm, sp))
         if not pts:
             raise ValueError("Add at least one point.")
@@ -336,7 +340,9 @@ class SpeedRamperTab(BaseTab):
             self.result_lbl.config(text=f"⚠ {exc}")
             return
         self.result_lbl.config(
-            text=f"Result: {ff.format_time(new)}   (source {ff.format_time(dur)})"
+            text=t(
+                "speed_ramp.result_new_source_dur", new=ff.format_time(new), dur=ff.format_time(dur)
+            )
         )
 
     def _draw(self) -> None:
@@ -420,10 +426,18 @@ class SpeedRamperTab(BaseTab):
             sample_rate=sr,
         )
         if points is None:
-            self.log(self.console, f"Speed {speed:g}× → {ff.format_time(new_dur)}")
+            self.log(
+                self.console,
+                t("speed_ramp.speed_speed_g_new_dur", speed=speed, new_dur=ff.format_time(new_dur)),
+            )
         else:
             self.log(
-                self.console, f"Speed ramp through {len(points)} points → {ff.format_time(new_dur)}"
+                self.console,
+                t(
+                    "speed_ramp.speed_ramp_through_points_points_new_dur",
+                    points=len(points),
+                    new_dur=ff.format_time(new_dur),
+                ),
             )
         job = sr_ops.SpeedJob(
             src=src,

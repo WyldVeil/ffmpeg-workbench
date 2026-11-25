@@ -45,7 +45,7 @@ class SceneDetectTab(BaseTab):
         self.make_header(
             self,
             t("tab.scene_detector"),
-            "Find every cut, then split, list or chapter the video.",
+            t("scene_detect.find_every_cut_then_split_list_or"),
             icon="🎬",
         )
         body = scroll_body(self)
@@ -61,7 +61,7 @@ class SceneDetectTab(BaseTab):
         """Sensitivity, shortest scene and the Find button."""
         det = tk.Frame(body)
         det.pack(fill="x", padx=px(20), pady=px(4))
-        tk.Label(det, text="Sensitivity:").pack(side="left")
+        tk.Label(det, text=t("scene_detect.sensitivity_label")).pack(side="left")
         self.sens_var = tk.DoubleVar(value=0.3)
         tk.Scale(
             det,
@@ -72,11 +72,17 @@ class SceneDetectTab(BaseTab):
             orient="horizontal",
             length=px(160),
         ).pack(side="left", padx=px(4))
-        tk.Label(det, text="(lower finds more cuts)   Shortest scene (s):").pack(side="left")
+        tk.Label(det, text=t("scene_detect.lower_finds_more_cuts_shortest_scene_s")).pack(
+            side="left"
+        )
         self.min_var = tk.StringVar(value="1.0")
         tk.Entry(det, textvariable=self.min_var, width=5).pack(side="left", padx=px(4))
         self.btn_detect = tk.Button(
-            det, text="🔍 Find scenes", relief="flat", cursor="hand2", command=self._detect
+            det,
+            text=t("scene_detect.find_scenes"),
+            relief="flat",
+            cursor="hand2",
+            command=self._detect,
         )
         self.btn_detect.pack(side="left", padx=px(10))
 
@@ -102,31 +108,35 @@ class SceneDetectTab(BaseTab):
 
     def _build_actions(self, body: tk.Frame) -> None:
         """Split into files, add chapters, or save the list."""
-        act = tk.LabelFrame(body, text="  Use the scenes  ", padx=px(12), pady=px(8))
+        act = tk.LabelFrame(body, text=t("scene_detect.use_the_scenes"), padx=px(12), pady=px(8))
         act.pack(fill="x", padx=px(20), pady=px(6))
         r = tk.Frame(act)
         r.pack(fill="x")
         self.lossless_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             r,
-            text="Lossless split (fast, but each cut moves to the next keyframe)",
+            text=t("scene_detect.lossless_split_fast_but_each_cut_moves"),
             variable=self.lossless_var,
         ).pack(side="left")
         self.encoder = EncoderPanel(act, codecs=("h264", "hevc", "av1"))
         self.encoder.pack(anchor="w", pady=px(4))
         self.dir_var = tk.StringVar()
-        FolderRow(act, "Save files to:", self.dir_var, width=50, label_width=14).pack(fill="x")
+        FolderRow(
+            act, t("scene_detect.save_files_to"), self.dir_var, width=50, label_width=14
+        ).pack(fill="x")
         btns = tk.Frame(act)
         btns.pack(pady=px(8, 0))
-        self.btn_split = self.make_render_btn(btns, "✂  SPLIT INTO SCENES", self._split)
+        self.btn_split = self.make_render_btn(
+            btns, t("scene_detect.split_into_scenes"), self._split
+        )
         self.btn_split.pack(side="left", padx=px(4))
         self.btn_chapters = tk.Button(
-            btns, text="📑 Add as chapters…", relief="flat", command=self._chapters
+            btns, text=t("scene_detect.add_as_chapters"), relief="flat", command=self._chapters
         )
         self.btn_chapters.pack(side="left", padx=px(4))
-        tk.Button(btns, text="💾 Save list (CSV)…", relief="flat", command=self._save_csv).pack(
-            side="left", padx=px(4)
-        )
+        tk.Button(
+            btns, text=t("scene_detect.save_list_csv"), relief="flat", command=self._save_csv
+        ).pack(side="left", padx=px(4))
 
         self.console = self.make_console_block(body, height=5)
 
@@ -149,7 +159,9 @@ class SceneDetectTab(BaseTab):
         if info is None:
             return
         try:
-            min_len = common.number(self.min_var.get() or "0", "Shortest scene", 0, 3600)
+            min_len = common.number(
+                self.min_var.get() or "0", t("scene_detect.shortest_scene"), 0, 3600
+            )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
@@ -163,11 +175,15 @@ class SceneDetectTab(BaseTab):
         orig = self.btn_detect.cget("command")
 
         def on_complete(tid: str, rc: int) -> None:
-            self.btn_detect.config(text="🔍 Find scenes", command=orig)
+            self.btn_detect.config(text=t("scene_detect.find_scenes"), command=orig)
             if rc == 0:
                 self.scenes = scenes.scene_ranges(result.get("starts", [0.0]), info.duration)
                 self._fill()
-                self.log_tagged(self.console, f"{len(self.scenes)} scenes found.", "success")
+                self.log_tagged(
+                    self.console,
+                    t("scene_detect.scenes_scenes_found", scenes=len(self.scenes)),
+                    "success",
+                )
             elif rc != -1:
                 self.last_task = self.task(tid)
                 self.show_result(rc)
@@ -180,7 +196,7 @@ class SceneDetectTab(BaseTab):
             inputs=[src],
             hooks=Hooks(on_complete=on_complete, on_progress=lambda _t, line: None),
         )
-        self.btn_detect.config(text="✖ Stop", command=lambda: self.cancel_render(tid))
+        self.btn_detect.config(text=t("scene_detect.stop"), command=lambda: self.cancel_render(tid))
 
     def _fill(self) -> None:
         self.tree.delete(*self.tree.get_children())
@@ -202,7 +218,9 @@ class SceneDetectTab(BaseTab):
 
     def _need_scenes(self) -> bool:
         if not self.scenes:
-            messagebox.showwarning(t("common.warning"), "Find the scenes first.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("scene_detect.find_the_scenes_first"), parent=self
+            )
             return False
         return True
 
@@ -217,7 +235,14 @@ class SceneDetectTab(BaseTab):
 
         out_dir = fresh_folder(folder, f"{base} scenes")
         ext = os.path.splitext(src)[1].lower() if self.lossless_var.get() else ".mp4"
-        self.log(self.console, f"Splitting into {len(self.scenes)} files → {out_dir}")
+        self.log(
+            self.console,
+            t(
+                "scene_detect.splitting_into_scenes_files_out_dir",
+                scenes=len(self.scenes),
+                out_dir=out_dir,
+            ),
+        )
         if self.lossless_var.get():
             pattern = os.path.join(out_dir, base).replace("%", "%%") + f"_scene_%03d{ext}"
             self.run_ffmpeg(
@@ -299,4 +324,4 @@ class SceneDetectTab(BaseTab):
                         f"{b - a:.3f}",
                     ]
                 )
-        self.log_tagged(self.console, f"Saved {out}", "success")
+        self.log_tagged(self.console, t("scene_detect.saved_out", out=out), "success")

@@ -33,6 +33,7 @@ from core import (
 from core import scaling as _scaling
 from core.ffmpeg import version_of
 from core.hardware import open_in_explorer
+from core.i18n import t
 from core.paths import log_dir, resource_path
 from core.queue_manager import RenderQueueManager
 from core.scaling import px
@@ -320,12 +321,14 @@ class App(tk.Tk):
                     break
         folder = folder or settings.DEFAULT_OUTPUT_FOLDER.get()
         if not folder or not os.path.exists(folder):
-            folder = filedialog.askdirectory(title="Choose folder to open", parent=self)
+            folder = filedialog.askdirectory(
+                title=t("shell_app.choose_folder_to_open"), parent=self
+            )
         if folder and os.path.exists(folder):
             open_in_explorer(folder)
 
     def _show_shortcuts(self) -> None:
-        messagebox.showinfo("Keyboard Shortcuts", SHORTCUTS_HELP, parent=self)
+        messagebox.showinfo(t("shell_app.keyboard_shortcuts"), SHORTCUTS_HELP, parent=self)
 
     def _show_system_info(self) -> None:
         page = self.show_page(ToolId.ADVANCED_SETTINGS)
@@ -336,12 +339,17 @@ class App(tk.Tk):
     def _show_about(self) -> None:
         count = sum(1 for s in tools.SPECS if s.category is not Category.HIDDEN)
         messagebox.showinfo(
-            f"About {APP_NAME}",
-            f"{APP_NAME}  ·  version {APP_VERSION}\n\n"
-            "A free, self-contained video and audio toolkit powered by FFmpeg.\n\n"
-            f"{count} tools  ·  FFmpeg {version_of()}  ·  {platform.system()} {platform.machine()}\n\n"
-            f"{APP_URL}\n"
-            "Third-party licences: see THIRD_PARTY_NOTICES.md",
+            t("shell_app.about_app_name", app_name=APP_NAME),
+            t(
+                "shell_app.app_name_version_app_version_a_free",
+                app_name=APP_NAME,
+                app_version=APP_VERSION,
+                count=count,
+                version_of=version_of(),
+                system=platform.system(),
+                machine=platform.machine(),
+                app_url=APP_URL,
+            ),
             parent=self,
         )
 
@@ -352,9 +360,8 @@ class App(tk.Tk):
         busy = queue.active_tasks()
         if busy:
             if not messagebox.askyesno(
-                "Jobs still running",
-                f"{len(busy)} render job(s) are still running or waiting.\n\n"
-                "Stop them and quit? Unfinished files will be removed.",
+                t("shell_app.jobs_still_running"),
+                t("shell_app.busy_render_job_s_are_still_running", busy=len(busy)),
                 parent=self,
             ):
                 return

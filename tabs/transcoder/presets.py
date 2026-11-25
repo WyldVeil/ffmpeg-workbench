@@ -90,7 +90,7 @@ class PresetManagerTab(BaseTab):
             parent, columns=cols, show="headings", selectmode="browse", height=20
         )
         self.tree.heading("name", text=t("presets.preset_name_col"))
-        self.tree.heading("category", text="Category")
+        self.tree.heading("category", text=t("presets.category_col"))
         self.tree.column("name", width=px(270), stretch=True)
         self.tree.column("category", width=px(90))
         self.tree.tag_configure("builtin", foreground="#888888")
@@ -167,7 +167,7 @@ class PresetManagerTab(BaseTab):
         )
         tk.Label(
             cmd_lbl,
-            text="  Use {INPUT} and {OUTPUT} as placeholders",
+            text=t("presets.use_input_and_output_as_placeholders"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(side="left")
@@ -314,11 +314,11 @@ class PresetManagerTab(BaseTab):
         name = self.editor["ed_name_var"].get().strip()
         cmd = self.ed_cmd_text.get("1.0", tk.END).strip()
         if not name:
-            messagebox.showwarning(t("common.warning"), "Enter a preset name.")
+            messagebox.showwarning(t("common.warning"), t("presets.no_name_message"))
             return
         if not cmd:
             messagebox.showwarning(
-                t("common.warning"), "Enter an FFmpeg command template.", parent=self
+                t("common.warning"), t("presets.no_command_message"), parent=self
             )
             return
         try:
@@ -338,8 +338,7 @@ class PresetManagerTab(BaseTab):
         if name in bi_names:
             messagebox.showwarning(
                 t("common.warning"),
-                "Built-in presets cannot be overwritten.\n"
-                "Change the name to save as a new custom preset.",
+                t("presets.read_only_message"),
             )
             return
 
@@ -354,10 +353,14 @@ class PresetManagerTab(BaseTab):
         self._refresh_list()
         if err:
             messagebox.showerror(
-                t("common.error"), f"The preset could not be saved:\n{err}", parent=self
+                t("common.error"),
+                t("presets.the_preset_could_not_be_saved_err", err=err),
+                parent=self,
             )
         else:
-            messagebox.showinfo("Saved", f'Preset "{name}" saved.', parent=self)
+            messagebox.showinfo(
+                t("presets.saved"), t("presets.preset_name_saved", name=name), parent=self
+            )
 
     def _delete_selected(self) -> None:
         if self._selected_idx is None:
@@ -365,16 +368,18 @@ class PresetManagerTab(BaseTab):
         p = self.presets[self._selected_idx]
         bi_names = {p2["name"] for p2 in pr.BUILT_IN}
         if p["name"] in bi_names:
-            messagebox.showwarning(t("common.warning"), "Built-in presets cannot be deleted.")
+            messagebox.showwarning(t("common.warning"), t("presets.cannot_delete_builtin"))
             return
-        if messagebox.askyesno("Delete", f'Delete preset "{p["name"]}"?'):
+        if messagebox.askyesno(t("presets.delete"), t("presets.delete_preset_p", p=p["name"])):
             del self.presets[self._selected_idx]
             self._selected_idx = None
             err = pr.save_user_presets(self.presets)
             self._refresh_list()
             if err:
                 messagebox.showerror(
-                    t("common.error"), f"Could not save the change:\n{err}", parent=self
+                    t("common.error"),
+                    t("presets.could_not_save_the_change_err", err=err),
+                    parent=self,
                 )
 
     def _duplicate(self) -> None:
@@ -392,7 +397,7 @@ class PresetManagerTab(BaseTab):
         self._refresh_list()
         if err:
             messagebox.showerror(
-                t("common.error"), f"Could not save the change:\n{err}", parent=self
+                t("common.error"), t("presets.could_not_save_the_change_err", err=err), parent=self
             )
 
     def _export_presets(self) -> None:
@@ -408,7 +413,13 @@ class PresetManagerTab(BaseTab):
             messagebox.showerror(t("common.error"), str(exc), parent=self)
             return
         messagebox.showinfo(
-            "Exported", f"{len(mine)} preset(s) exported to {os.path.basename(path)}", parent=self
+            t("presets.exported"),
+            t(
+                "presets.mine_preset_s_exported_to_path",
+                mine=len(mine),
+                path=os.path.basename(path),
+            ),
+            parent=self,
         )
 
     def _import_presets(self) -> None:
@@ -419,7 +430,9 @@ class PresetManagerTab(BaseTab):
             with open(path, encoding="utf-8") as f:
                 new, skipped = pr.read_import(json.load(f), {p["name"] for p in self.presets})
         except (OSError, ValueError) as exc:
-            messagebox.showerror(t("common.error"), f"Could not read the file:\n{exc}", parent=self)
+            messagebox.showerror(
+                t("common.error"), t("presets.could_not_read_the_file_exc", exc=exc), parent=self
+            )
             return
         self.presets.extend(new)
         added = len(new)
@@ -433,7 +446,7 @@ class PresetManagerTab(BaseTab):
             )
         if err:
             msg += f"\n\nBut they could not be saved:\n{err}"
-        messagebox.showinfo("Imported", msg, parent=self)
+        messagebox.showinfo(t("presets.imported"), msg, parent=self)
 
     # ── Quick run ─────────────────────────────────────────────────────────
     def _browse_run_src(self) -> None:
@@ -458,7 +471,9 @@ class PresetManagerTab(BaseTab):
         if not src:
             return
         if not os.path.isfile(src):
-            messagebox.showwarning(t("common.warning"), f"File not found:\n{src}", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("presets.file_not_found_src", src=src), parent=self
+            )
             return
         ext = p.get("ext") or ".mp4"
         out = self.run_out_var.get().strip() or self.suggest_output(src, "preset", ext)

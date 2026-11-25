@@ -14,6 +14,7 @@ from tkinter import messagebox
 from typing import Any
 
 from core import settings
+from core.i18n import t
 from core.tools import ToolId
 from tabs.kit import dialogs
 from tabs.kit.contracts import AcceptsFiles
@@ -84,7 +85,9 @@ class FileOpener:
 
     def ask(self) -> None:
         """File › Open."""
-        paths = dialogs.ask_open_many("media", title="Open media files", parent=self._window)
+        paths = dialogs.ask_open_many(
+            "media", title=t("files.open_media_files"), parent=self._window
+        )
         if paths:
             self.open(list(paths))
 
@@ -94,19 +97,21 @@ class FileOpener:
         menu.delete(0, tk.END)
         recent = settings.RECENT_FILES.get()
         if not recent:
-            menu.add_command(label="(no recent files)", state="disabled")
+            menu.add_command(label=t("files.no_recent_files"), state="disabled")
             return
         for path in recent:
             menu.add_command(
                 label=os.path.basename(path), command=lambda p=path: self._open_recent(p)
             )
         menu.add_separator()
-        menu.add_command(label="Clear Recent Files", command=self.clear_recent)
+        menu.add_command(label=t("files.clear_recent_files"), command=self.clear_recent)
 
     def _open_recent(self, path: str) -> None:
         if not os.path.isfile(path):
             messagebox.showwarning(
-                "File Not Found", f"File no longer exists:\n{path}", parent=self._window
+                t("files.file_not_found"),
+                t("files.file_no_longer_exists_path", path=path),
+                parent=self._window,
             )
             return
         self.open([path])

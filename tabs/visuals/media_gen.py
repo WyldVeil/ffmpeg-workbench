@@ -77,7 +77,7 @@ class MediaGeneratorTab(BaseTab):
         self.make_header(
             self,
             t("mgen.title"),
-            "Colour bars, test patterns, countdown leaders, line-up tones and more.",
+            t("mgen.colour_bars_test_patterns_countdown_leaders_line"),
             icon="🎨",
         )
         body = scroll_body(self)
@@ -88,7 +88,7 @@ class MediaGeneratorTab(BaseTab):
 
     def _build_generate_options(self, body: tk.Frame) -> None:
         """Pattern, size, rate, length and sound."""
-        f = tk.LabelFrame(body, text="  What to generate  ", padx=px(12), pady=px(8))
+        f = tk.LabelFrame(body, text=t("mgen.what_to_generate"), padx=px(12), pady=px(8))
         f.pack(fill="x", padx=px(20), pady=px(10, 4))
 
         self.pattern_var = tk.StringVar(value=PATTERNS["smpte_hd"])
@@ -101,13 +101,13 @@ class MediaGeneratorTab(BaseTab):
         )
         pb.bind("<<ComboboxSelected>>", lambda _e: self._pattern_changed())
         self.form_row(f, 0, t("mgen.visual_pattern"), pb, label_width=16)
-        self.colour_btn = ColourButton(f, "#202020", text="  Colour…  ", width=10)
+        self.colour_btn = ColourButton(f, "#202020", text=t("green_key.colour"), width=10)
         self.colour_btn.grid(row=0, column=2, sticky="w", padx=px(8))
         self.size_var = tk.StringVar(value="1920×1080 (Full HD)")
         self.form_row(
             f,
             1,
-            "Resolution:",
+            t("common.resolution"),
             ttk.Combobox(
                 f, textvariable=self.size_var, values=list(SIZES), state="readonly", width=34
             ),
@@ -117,7 +117,7 @@ class MediaGeneratorTab(BaseTab):
         self.form_row(
             f,
             2,
-            "Frame rate:",
+            t("gif_maker.frame_rate"),
             ttk.Combobox(
                 f, textvariable=self.rate_var, values=list(RATES), state="readonly", width=10
             ),
@@ -136,7 +136,7 @@ class MediaGeneratorTab(BaseTab):
             f, textvariable=self.audio_var, values=list(AUDIO.values()), state="readonly", width=34
         )
         ab.bind("<<ComboboxSelected>>", lambda _e: self._audio_changed())
-        self.form_row(f, 4, "Audio:", ab, label_width=16)
+        self.form_row(f, 4, t("crossfader.audio"), ab, label_width=16)
         self.freq_var = tk.StringVar(value="440")
         self.freq_row = tk.Frame(f)
         tk.Label(self.freq_row, text="Hz").pack(side="right")
@@ -153,8 +153,7 @@ class MediaGeneratorTab(BaseTab):
         out_lf = self.out_row.master
         tk.Label(
             out_lf,
-            text="  ℹ  .mp4/.mkv = H.264, .mov = ProRes, .webm = VP9; "
-            ".wav/.flac/.mp3 = audio only.",
+            text=t("mgen.mp4_mkv_h_264_mov_prores_webm"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(anchor="w")
@@ -185,15 +184,9 @@ class MediaGeneratorTab(BaseTab):
             self.colour_btn.grid_remove()
         if p == "countdown":
             self.audio_var.set(AUDIO["pop"])
-            self.hint.config(
-                text="Counts down from the duration (at least 3 s) to 2, with one "
-                "frame of '2' and a 1 kHz pop, then black - the classic "
-                "sync leader."
-            )
+            self.hint.config(text=t("mgen.counts_down_from_the_duration_at_least"))
         elif p == "none":
-            self.hint.config(
-                text="Only the audio is written - choose a .wav, .flac or .mp3 output file."
-            )
+            self.hint.config(text=t("mgen.only_the_audio_is_written_choose_a"))
         else:
             self.hint.config(text="")
         self._audio_changed()
@@ -209,9 +202,9 @@ class MediaGeneratorTab(BaseTab):
     def _render(self) -> None:
         pattern, audio = self.pattern(), self.audio()
         try:
-            dur = common.number(self.dur_var.get(), "Duration", 0.1, 3600)
+            dur = common.number(self.dur_var.get(), t("splicer.column_duration"), 0.1, 3600)
             freq = (
-                common.number(self.freq_var.get(), "Frequency", 10, 22000)
+                common.number(self.freq_var.get(), t("mgen.frequency"), 10, 22000)
                 if audio == "tone"
                 else 1000
             )
@@ -220,7 +213,7 @@ class MediaGeneratorTab(BaseTab):
             return
         if pattern == "none" and audio == "none":
             messagebox.showwarning(
-                t("common.warning"), "Choose a pattern or an audio signal.", parent=self
+                t("common.warning"), t("mgen.choose_a_pattern_or_an_audio_signal"), parent=self
             )
             return
         out = self.out_row.path or self._suggest_name()
@@ -244,7 +237,14 @@ class MediaGeneratorTab(BaseTab):
         cmd, dur, textfile = generate_cmd(spec, out)
         self.log(
             self.console,
-            f"Generating {self.pattern_var.get()} · {w}×{h} @ {self.rate_var.get()} fps · {dur:g}s",
+            t(
+                "mgen.generating_pattern_var_w_h_rate_var",
+                pattern_var=self.pattern_var.get(),
+                w=w,
+                h=h,
+                rate_var=self.rate_var.get(),
+                dur=dur,
+            ),
         )
 
         def done(rc: int) -> None:

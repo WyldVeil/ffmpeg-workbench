@@ -77,7 +77,7 @@ class DeshakerTab(BaseTab):
             self.smooth_var,
             1,
             60,
-            "Frames averaged each way: higher = steadier, floatier camera.",
+            t("deshaker.frames_averaged_each_way_higher_steadier_floatie"),
         )
         self.shake_var = tk.IntVar(value=5)
         scale(
@@ -86,7 +86,7 @@ class DeshakerTab(BaseTab):
             self.shake_var,
             1,
             10,
-            "How shaky the footage is (1 = a little, 10 = very).",
+            t("deshaker.how_shaky_the_footage_is_1_a"),
         )
         self.accuracy_var = tk.IntVar(value=15)
         scale(
@@ -95,14 +95,14 @@ class DeshakerTab(BaseTab):
             self.accuracy_var,
             1,
             15,
-            "Detection accuracy (15 = best, slower analysis).",
+            t("deshaker.detection_accuracy_15_best_slower_analysis"),
         )
 
         self.zoom_mode = tk.StringVar(value=next(iter(ZOOM_MODES)))
         self.form_row(
             opts,
             3,
-            "Zoom:",
+            t("zoom.zoom"),
             ttk.Combobox(
                 opts,
                 textvariable=self.zoom_mode,
@@ -120,7 +120,7 @@ class DeshakerTab(BaseTab):
         self.form_row(
             opts,
             4,
-            "Extra zoom (%):",
+            t("deshaker.extra_zoom"),
             tk.Entry(opts, textvariable=self.zoom_var, width=6),
             label_width=26,
         )
@@ -128,7 +128,7 @@ class DeshakerTab(BaseTab):
         self.form_row(
             opts,
             5,
-            "Edges:",
+            t("deshaker.edges"),
             ttk.Combobox(
                 opts,
                 textvariable=self.edge_var,
@@ -143,17 +143,19 @@ class DeshakerTab(BaseTab):
         self.tripod_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opts,
-            text="Tripod mode (lock the frame completely - for shots meant to be static)",
+            text=t("deshaker.tripod_mode_lock_the_frame_completely_for"),
             variable=self.tripod_var,
         ).grid(row=6, column=0, columnspan=3, sticky="w")
         self.sharpen_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            opts, text="Light sharpening after stabilising (recommended)", variable=self.sharpen_var
+            opts,
+            text=t("deshaker.light_sharpening_after_stabilising_recommended"),
+            variable=self.sharpen_var,
         ).grid(row=7, column=0, columnspan=3, sticky="w")
         self.compare_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opts,
-            text="Comparison video: original | stabilised side by side",
+            text=t("deshaker.comparison_video_original_stabilised_side_by_sid"),
             variable=self.compare_var,
         ).grid(row=8, column=0, columnspan=3, sticky="w")
 
@@ -182,7 +184,7 @@ class DeshakerTab(BaseTab):
         if info is None:
             return
         try:
-            zoom = common.number(self.zoom_var.get() or "0", "Extra zoom", -50, 100)
+            zoom = common.number(self.zoom_var.get() or "0", t("deshaker.extra_zoom_2"), -50, 100)
         except ValueError as exc:
             from tkinter import messagebox
 
@@ -206,8 +208,7 @@ class DeshakerTab(BaseTab):
         if not two_pass:
             self.log_tagged(
                 self.console,
-                "This FFmpeg build has no vid.stab - using the "
-                "single-pass 'deshake' filter instead.",
+                t("deshaker.this_ffmpeg_build_has_no_vid_stab"),
                 "warn",
             )
         container = common.container_of(out)

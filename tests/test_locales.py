@@ -69,7 +69,7 @@ def test_no_text_is_just_another_key():
 
 def test_every_language_offered_has_its_file():
     """The language list and the files agree: each language offered has a file
-    that says what it is, and the four added in 1.2.8 translate every string."""
+    that says what it is, with no entry the English catalogue doesn't have."""
     from core.i18n import LANGUAGE_NAMES, SUPPORTED_LANGUAGES
 
     folder = os.path.join(ROOT, "locale")
@@ -80,8 +80,7 @@ def test_every_language_offered_has_its_file():
         with open(os.path.join(folder, f"{code}.json"), encoding="utf-8") as fh:
             data = json.load(fh)
         assert data["_meta"]["code"] == code
-        if code in ("zh_TW", "cs_CZ", "el_GR", "hu_HU"):
-            assert en <= set(data), (code, sorted(en - set(data))[:5])
+        assert set(data) - {"_meta"} <= en, (code, sorted(set(data) - en - {"_meta"})[:5])
 
 
 def test_greek_capitals_drop_accents_and_the_menu_keeps_them():
@@ -102,3 +101,77 @@ def test_greek_capitals_drop_accents_and_the_menu_keeps_them():
         assert menu_section(Category.AUDIO) == "Audio Engineering"  # capitals, title-cased
     finally:
         i18n.load_language("en_US")
+
+
+_TEXT_KW = {"text", "title", "label", "message", "header", "subtitle"}
+_DIALOGS = {
+    "showinfo",
+    "showwarning",
+    "showerror",
+    "askyesno",
+    "askokcancel",
+    "askyesnocancel",
+    "askretrycancel",
+    "askquestion",
+}
+#: the app's helpers whose string arguments are on-screen labels
+_LABEL_FNS = {
+    "_spin", "form_row", "make_render_btn", "make_header", "_lbl", "number", "_effect_page",
+    "FileRow", "add_tooltip", "_Section", "_slider_row", "_combo", "labelled", "radio", "num",
+    "_lf", "section", "_stage_frame", "_labeled_entry", "hint", "FolderRow", "_btn", "_fx_num",
+    "scale", "seconds",
+}  # fmt: skip
+
+
+def _words(s: str) -> bool:
+    """Text a person reads: words, not a codec name, file pattern or colour."""
+    v = s.strip()
+    if not re.search(r"[A-Za-z]{2,}", v):
+        return False
+    if " " in v:
+        return True
+    return not (
+        re.fullmatch(r"[*.#\-+/\\:%\w]*", v)
+        and (not v[:1].isupper() or v.isupper() or any(c in v for c in "*.#_/\\%") or len(v) <= 3)
+    )
+
+
+def _shown_text(node):
+    """The string arguments of call *node* that end up on screen."""
+    import ast
+
+    fn = node.func
+    called = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+    values = [kw.value for kw in node.keywords if kw.arg in _TEXT_KW]
+    if called in _DIALOGS:
+        values += node.args[:2]
+    if called in _LABEL_FNS:
+        values += node.args
+    if called in ("log", "log_tagged") and node.args:
+        values.append(node.args[1] if len(node.args) > 1 else node.args[0])
+    for v in values:
+        if isinstance(v, ast.Constant) and isinstance(v.value, str):
+            yield v.lineno, v.value
+        elif isinstance(v, ast.JoinedStr):
+            yield v.lineno, "".join(str(p.value) for p in v.values if isinstance(p, ast.Constant))
+
+
+def test_on_screen_text_goes_through_the_catalogue():
+    """Labels, titles, dialog messages and log lines come from locale/ (t()),
+    so every language can show them; English typed straight into a page
+    stays English for everyone."""
+    import ast
+
+    found = []
+    for folder in ("tabs", "shell"):
+        for dirpath, _dirs, files in os.walk(os.path.join(ROOT, folder)):
+            for name in (f for f in files if f.endswith(".py")):
+                path = os.path.join(dirpath, name)
+                with open(path, encoding="utf-8") as fh:
+                    tree = ast.parse(fh.read())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Call):
+                        for line, text in _shown_text(node):
+                            if _words(text):
+                                found.append(f"{os.path.relpath(path, ROOT)}:{line} {text[:40]!r}")
+    assert not found, f"{len(found)} on-screen strings not in the catalogue: {found[:10]}"

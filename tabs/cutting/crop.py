@@ -123,9 +123,11 @@ class ManualCropTab(BaseTab):
             e.bind("<FocusOut>", lambda _e: self._clamp_and_draw())
         bt = tk.Frame(num)
         bt.pack(fill="x", pady=px(4))
-        tk.Button(bt, text="Reset", relief="flat", command=self._reset).pack(side="left")
+        tk.Button(bt, text=t("snapshot.reset"), relief="flat", command=self._reset).pack(
+            side="left"
+        )
         self.detect_btn = tk.Button(
-            bt, text="Detect black bars", relief="flat", command=self._detect_bars
+            bt, text=t("crop.detect_black_bars"), relief="flat", command=self._detect_bars
         )
         self.detect_btn.pack(side="left", padx=px(6))
         sc = tk.LabelFrame(
@@ -134,14 +136,14 @@ class ManualCropTab(BaseTab):
         sc.pack(fill="x")
         self.scale_var = tk.StringVar(value="keep")
         tk.Radiobutton(
-            sc, text="Keep the cropped size", value="keep", variable=self.scale_var
+            sc, text=t("crop.keep_the_cropped_size"), value="keep", variable=self.scale_var
         ).pack(anchor="w")
         return sc
 
     def _build_output(self, body: tk.Frame, sc: tk.LabelFrame) -> None:
         sr = tk.Frame(sc)
         sr.pack(fill="x")
-        tk.Radiobutton(sr, text="Scale to", value="scale", variable=self.scale_var).pack(
+        tk.Radiobutton(sr, text=t("crop.scale_to"), value="scale", variable=self.scale_var).pack(
             side="left"
         )
         self.sw_var, self.sh_var = tk.StringVar(value="1080"), tk.StringVar(value="1920")
@@ -231,7 +233,7 @@ class ManualCropTab(BaseTab):
             c.create_text(
                 c.winfo_width() // 2,
                 c.winfo_height() // 2,
-                text="Choose a video",
+                text=t("crop.choose_a_video"),
                 fill="#777777",
                 font=(UI_FONT, 11),
             )
@@ -336,7 +338,7 @@ class ManualCropTab(BaseTab):
         info = ff.try_probe(path)
         if info is None or not info.has_video:
             self.vid_w = self.vid_h = 0
-            self.info_lbl.config(text="Not a readable video.")
+            self.info_lbl.config(text=t("webm_maker.not_a_readable_video"))
             self._draw()
             return
         self.vid_w, self.vid_h = info.require_video().display_size
@@ -371,22 +373,27 @@ class ManualCropTab(BaseTab):
         path = self.src_row.path
         if not path or not self.vid_w:
             return
-        self.detect_btn.config(state="disabled", text="Detecting…")
+        self.detect_btn.config(state="disabled", text=t("crop.detecting"))
 
         def work() -> tuple[int, int, int, int] | None:
             return detect_bars(path, self.duration)
 
         def done(found: tuple[int, int, int, int] | None) -> None:
-            self.detect_btn.config(state="normal", text="Detect black bars")
+            self.detect_btn.config(state="normal", text=t("crop.detect_black_bars"))
             if not found:
-                messagebox.showinfo(t("common.warning"), "No black bars found.", parent=self)
+                messagebox.showinfo(t("common.warning"), t("crop.no_black_bars_found"), parent=self)
                 return
             self.aspect_var.set("free")
             self.set_rect(*found)
             self.log(
                 self.console,
-                f"Black bars detected: picture is {found[2]}×{found[3]} at "
-                f"({found[0]},{found[1]}).",
+                t(
+                    "crop.black_bars_detected_picture_is_found_found2",
+                    found=found[2],
+                    found2=found[3],
+                    found3=found[0],
+                    found4=found[1],
+                ),
             )
 
         tasks.submit(work, on_done=done, on_error=lambda _e: done(None), name="CropDetect")
@@ -401,8 +408,16 @@ class ManualCropTab(BaseTab):
         scale_to = None
         if self.scale_var.get() == "scale":
             try:
-                sw = int(common.number(self.sw_var.get(), "Width", 16, 8192)) // 2 * 2
-                sh = int(common.number(self.sh_var.get(), "Height", 16, 8192)) // 2 * 2
+                sw = (
+                    int(common.number(self.sw_var.get(), t("region_blur.width_col"), 16, 8192))
+                    // 2
+                    * 2
+                )
+                sh = (
+                    int(common.number(self.sh_var.get(), t("region_blur.height_col"), 16, 8192))
+                    // 2
+                    * 2
+                )
             except ValueError as exc:
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
                 return
@@ -411,7 +426,7 @@ class ManualCropTab(BaseTab):
         out = common.output_for(self, self.out_row, src, "cropped")
         if not out:
             return
-        self.log(self.console, f"Cropping to {w}×{h} at ({x},{y})")
+        self.log(self.console, t("crop.cropping_to_w_h_at_x_y", w=w, h=h, x=x, y=y))
         common.render(
             self,
             RenderJob(src=src, info=info, out=out, chain=chain, name="Manual Crop"),

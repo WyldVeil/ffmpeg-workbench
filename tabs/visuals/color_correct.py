@@ -42,7 +42,7 @@ class ColorCorrectorTab(BaseTab):
         self.make_header(
             self,
             t("tab.basic_color_corrector"),
-            "Exposure, tone, white balance and colour with a live before/after preview.",
+            t("color_correct.exposure_tone_white_balance_and_colour_with"),
             icon="🌈",
         )
         body = scroll_body(self)
@@ -58,7 +58,11 @@ class ColorCorrectorTab(BaseTab):
         looks = tk.Frame(body, bg=CLR["bg"])
         looks.pack(fill="x", padx=px(20), pady=px(2, 4))
         tk.Label(
-            looks, text="Quick look:", bg=CLR["bg"], fg=CLR["fg"], font=(UI_FONT, 10, "bold")
+            looks,
+            text=t("color_correct.quick_look"),
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            font=(UI_FONT, 10, "bold"),
         ).pack(side="left")
         self.look_var = tk.StringVar(value="Neutral (reset)")
         box = ttk.Combobox(
@@ -171,7 +175,7 @@ class ColorCorrectorTab(BaseTab):
             return
         chain = cc.build_chain(self.values())
         if not chain:
-            self.log(self.console, "No adjustments set - the video will just be re-encoded.")
+            self.log(self.console, t("color_correct.no_adjustments_set_the_video_will_just"))
         out = common.output_for(self, self.out_row, src, "graded")
         if not out:
             return

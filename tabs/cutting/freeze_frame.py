@@ -52,7 +52,7 @@ class FreezeFrameTab(BaseTab):
         self.make_header(
             self,
             t("tab.freeze_frame"),
-            "Pause the picture on a moment - with an optional flash and caption.",
+            t("freeze_frame.pause_the_picture_on_a_moment_with"),
             icon="⏸",
         )
         body = scroll_body(self)
@@ -76,7 +76,7 @@ class FreezeFrameTab(BaseTab):
         self.slider.pack(fill="x")
         framestep.slider(self.slider, self.preview)  # , and . step a frame
 
-        opt = tk.LabelFrame(body, text="  Freeze  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("freeze_frame.freeze"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value="insert")
         for key, label, desc in MODES:
@@ -94,7 +94,7 @@ class FreezeFrameTab(BaseTab):
         tk.Label(r, text="At:").pack(side="left")
         self.at = MomentPicker(r, value="0", width=12)
         self.at.pack(side="left", padx=px(4))
-        tk.Label(r, text="(follows the slider)   Hold for (s):").pack(side="left")
+        tk.Label(r, text=t("freeze_frame.follows_the_slider_hold_for_s")).pack(side="left")
         self.hold_var = tk.StringVar(value="2")
         tk.Entry(r, textvariable=self.hold_var, width=6).pack(side="left", padx=px(4))
         r2 = tk.Frame(opt)
@@ -105,15 +105,15 @@ class FreezeFrameTab(BaseTab):
         ).pack(side="left")
         self.flash_var = tk.BooleanVar(value=False)
         self.mono_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(r2, text="White flash", variable=self.flash_var).pack(
+        tk.Checkbutton(r2, text=t("freeze_frame.white_flash"), variable=self.flash_var).pack(
             side="left", padx=px(8)
         )
-        tk.Checkbutton(r2, text="Black & white while frozen", variable=self.mono_var).pack(
-            side="left"
-        )
+        tk.Checkbutton(
+            r2, text=t("freeze_frame.black_white_while_frozen"), variable=self.mono_var
+        ).pack(side="left")
         r3 = tk.Frame(opt)
         r3.pack(fill="x", pady=px(2))
-        tk.Label(r3, text="Caption while frozen:").pack(side="left")
+        tk.Label(r3, text=t("freeze_frame.caption_while_frozen")).pack(side="left")
         self.caption_var = tk.StringVar()
         tk.Entry(r3, textvariable=self.caption_var, width=40).pack(side="left", padx=px(4))
 
@@ -125,7 +125,9 @@ class FreezeFrameTab(BaseTab):
         )
 
     def _build_render(self, body: tk.Frame) -> None:
-        self.btn_render = self.make_render_btn(body, "⏸  CREATE", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("freeze_frame.create"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -152,7 +154,7 @@ class FreezeFrameTab(BaseTab):
         dur = info.duration
         try:
             at = self.at.seconds(0.0, "At") or 0.0
-            hold = common.number(self.hold_var.get(), "Hold for", 0.04, 600)
+            hold = common.number(self.hold_var.get(), t("freeze_frame.hold_for"), 0.04, 600)
             if not 0 <= at < dur:
                 raise ValueError(
                     f"The freeze time must be inside the clip (0 - {ff.format_time(dur)})."

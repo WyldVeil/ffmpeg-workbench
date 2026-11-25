@@ -48,9 +48,7 @@ class DenoiseTab(BaseTab):
         self._changed()
 
     def _build_ui(self) -> None:
-        self.make_header(
-            self, t("tab.denoise"), "Clean up noisy, grainy or blocky video.", icon="✨"
-        )
+        self.make_header(self, t("tab.denoise"), t("toolinfo.denoise"), icon="✨")
         body = scroll_body(self)
         self.src_row = FileRow(
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
@@ -58,7 +56,7 @@ class DenoiseTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="Denoised")
         self.compare.pack(pady=px(4))
-        opt = tk.LabelFrame(body, text="  Denoise  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("denoise.denoise"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value=METHODS["fast"])
         mb = ttk.Combobox(
@@ -81,7 +79,7 @@ class DenoiseTab(BaseTab):
             resolution=0.5,
             orient="horizontal",
             length=px(260),
-            label="Strength",
+            label=t("region_blur.strength_col"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=0, sticky="w", pady=px(4))
         pf = tk.Frame(opt)
@@ -99,7 +97,7 @@ class DenoiseTab(BaseTab):
             ("h264", "hevc", "av1", "vp9", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "denoised"),
         )
-        self.btn_render = self.make_render_btn(body, "✨  DENOISE", self._render, width=22)
+        self.btn_render = self.make_render_btn(body, t("denoise.denoise_2"), self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
         self._changed()

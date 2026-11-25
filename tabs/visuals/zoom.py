@@ -79,9 +79,7 @@ class AnimatedZoomTab(BaseTab):
         self._build_output(body, opt)
 
     def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame]:
-        self.make_header(
-            self, t("tab.animated_zoom"), "Punch-ins, Ken Burns moves and smooth pans.", icon="🔍"
-        )
+        self.make_header(self, t("tab.animated_zoom"), t("toolinfo.zoom"), icon="🔍")
         body = scroll_body(self)
         self.src_row = FileRow(
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
@@ -104,12 +102,12 @@ class AnimatedZoomTab(BaseTab):
         framestep.slider(self.slider, self.preview)  # , and . step a frame
         tk.Label(
             pv,
-            text="Move the slider to see the zoom at any moment.",
+            text=t("zoom.move_the_slider_to_see_the_zoom"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack()
 
-        opt = tk.LabelFrame(body, text="  Move  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("zoom.move"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.mode_var = tk.StringVar(value=MODES["punch"])
         mb = ttk.Combobox(
@@ -155,16 +153,16 @@ class AnimatedZoomTab(BaseTab):
         f = self.frames["punch"] = tk.Frame(opt)
         labelled(
             f,
-            "From",
+            t("muter.from"),
             lambda r: time_entry(r, "p_start", "1"),
             "to",
             lambda r: time_entry(r, "p_end", "3"),
-            "  zoom ×",
+            t("zoom.zoom_2"),
             lambda r: entry(r, "p_zoom", "1.5", 5),
         )
         labelled(
             f,
-            "Keep in view - X %",
+            t("zoom.keep_in_view_x"),
             lambda r: entry(r, "p_x", "50", 5),
             "Y %",
             lambda r: entry(r, "p_y", "40", 5),
@@ -175,30 +173,30 @@ class AnimatedZoomTab(BaseTab):
             f, textvariable=self.kb_var, values=list(KB.values()), state="readonly", width=20
         )
         kb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        labelled(f, lambda r: kb, "  zoom ×", lambda r: entry(r, "kb_zoom", "1.3", 5))
+        labelled(f, lambda r: kb, t("zoom.zoom_2"), lambda r: entry(r, "kb_zoom", "1.3", 5))
         f = self.frames["keyframes"] = tk.Frame(opt)
         labelled(
             f,
-            "Start: X %",
+            t("zoom.start_x"),
             lambda r: entry(r, "k_x0", "50", 5),
             "Y %",
             lambda r: entry(r, "k_y0", "50", 5),
-            "zoom ×",
+            t("zoom.zoom_3"),
             lambda r: entry(r, "k_z0", "1.0", 5),
             "  at",
             lambda r: time_entry(r, "k_t0", "0"),
         )
         labelled(
             f,
-            "End:   X %",
+            t("zoom.end_x_2"),
             lambda r: entry(r, "k_x1", "70", 5),
             "Y %",
             lambda r: entry(r, "k_y1", "35", 5),
-            "zoom ×",
+            t("zoom.zoom_3"),
             lambda r: entry(r, "k_z1", "1.6", 5),
             "  at",
             lambda r: time_entry(r, "k_t1", ""),
-            "(empty = the end)",
+            t("zoom.empty_the_end"),
         )
         f = self.frames["pulse"] = tk.Frame(opt)
         labelled(
@@ -207,12 +205,12 @@ class AnimatedZoomTab(BaseTab):
             lambda r: time_entry(r, "u_time", "1"),
             "lasting",
             lambda r: entry(r, "u_dur", "0.4", 5),
-            "s   zoom ×",
+            t("zoom.s_zoom"),
             lambda r: entry(r, "u_zoom", "1.3", 5),
         )
         labelled(
             f,
-            "Keep in view - X %",
+            t("zoom.keep_in_view_x"),
             lambda r: entry(r, "u_x", "50", 5),
             "Y %",
             lambda r: entry(r, "u_y", "50", 5),
@@ -221,7 +219,7 @@ class AnimatedZoomTab(BaseTab):
     def _build_output(self, body: tk.Frame, opt: tk.LabelFrame) -> None:
         er = self._ease_row = tk.Frame(opt)
         er.pack(anchor="w", pady=px(4))
-        tk.Label(er, text="Motion:").pack(side="left")
+        tk.Label(er, text=t("slideshow.motion")).pack(side="left")
         self.ease_var = tk.StringVar(value=EASES["smooth"])
         eb = ttk.Combobox(
             er, textvariable=self.ease_var, values=list(EASES.values()), state="readonly", width=10
@@ -238,7 +236,7 @@ class AnimatedZoomTab(BaseTab):
             ("h264", "hevc", "av1", "vp9"),
             suggest=lambda: self.suggest_output(self.src_row.path, "zoom"),
         )
-        self.btn_render = self.make_render_btn(body, "🔍  RENDER ZOOM", self._render, width=22)
+        self.btn_render = self.make_render_btn(body, t("zoom.render_zoom"), self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
         self._mode_changed()
@@ -264,7 +262,7 @@ class AnimatedZoomTab(BaseTab):
             p = {
                 "start": ff.parse_time(v["p_start"] or "0"),
                 "end": ff.parse_time(v["p_end"] or "0"),
-                "zoom": num(v["p_zoom"], "Zoom", 1.01, 10),
+                "zoom": num(v["p_zoom"], t("effects.zoom"), 1.01, 10),
                 "x": num(v["p_x"], "X %", 0, 100),
                 "y": num(v["p_y"], "Y %", 0, 100),
             }
@@ -273,15 +271,15 @@ class AnimatedZoomTab(BaseTab):
         elif mode == "pulse":
             p = {
                 "time": ff.parse_time(v["u_time"] or "0"),
-                "dur": num(v["u_dur"], "Length", 0.05, 10),
-                "zoom": num(v["u_zoom"], "Zoom", 1.01, 10),
+                "dur": num(v["u_dur"], t("intro_maker.length"), 0.05, 10),
+                "zoom": num(v["u_zoom"], t("effects.zoom"), 1.01, 10),
                 "x": num(v["u_x"], "X %", 0, 100),
                 "y": num(v["u_y"], "Y %", 0, 100),
             }
         elif mode == "kenburns":
             p = {
                 "dir": next((k for k, x in KB.items() if x == self.kb_var.get()), "in"),
-                "zoom": num(v["kb_zoom"], "Zoom", 1.01, 10),
+                "zoom": num(v["kb_zoom"], t("effects.zoom"), 1.01, 10),
             }
         else:
             t1 = ff.parse_time(v["k_t1"]) if v["k_t1"] else duration
@@ -289,12 +287,12 @@ class AnimatedZoomTab(BaseTab):
                 "from": (
                     num(v["k_x0"], "X %", 0, 100),
                     num(v["k_y0"], "Y %", 0, 100),
-                    num(v["k_z0"], "Zoom", 1, 10),
+                    num(v["k_z0"], t("effects.zoom"), 1, 10),
                 ),
                 "to": (
                     num(v["k_x1"], "X %", 0, 100),
                     num(v["k_y1"], "Y %", 0, 100),
-                    num(v["k_z1"], "Zoom", 1, 10),
+                    num(v["k_z1"], t("effects.zoom"), 1, 10),
                 ),
                 "t0": ff.parse_time(v["k_t0"] or "0"),
                 "t1": t1,

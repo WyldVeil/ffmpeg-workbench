@@ -42,7 +42,7 @@ class SilenceTab(BaseTab):
         self.make_header(
             self,
             t("tab.silence_remover"),
-            "Cut out the pauses - jump cuts for talks and podcasts.",
+            t("toolinfo.silence"),
             icon="✂",
         )
         body = scroll_body(self)
@@ -54,7 +54,7 @@ class SilenceTab(BaseTab):
             on_change=self._source_changed,
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
-        opt = tk.LabelFrame(body, text="  Detection  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("silence.detection"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.thr_var, self.min_var, self.pad_var = (
             tk.StringVar(value="-35"),
@@ -85,10 +85,16 @@ class SilenceTab(BaseTab):
         row = tk.Frame(body)
         row.pack(pady=px(8))
         self.btn_analyse = tk.Button(
-            row, text="🔍  ANALYSE", font=(UI_FONT, 11, "bold"), width=14, command=self._analyse
+            row,
+            text=t("silence.analyse"),
+            font=(UI_FONT, 11, "bold"),
+            width=14,
+            command=self._analyse,
         )
         self.btn_analyse.pack(side="left", padx=px(6))
-        self.btn_render = self.make_render_btn(row, "✂  REMOVE SILENCES", self._render, width=20)
+        self.btn_render = self.make_render_btn(
+            row, t("silence.remove_silences"), self._render, width=20
+        )
         self.btn_render.pack(side="left", padx=px(6))
         self.console = self.make_console_block(body, height=6)
 
@@ -101,9 +107,9 @@ class SilenceTab(BaseTab):
 
     def _params(self) -> tuple[float, float, float]:
         return (
-            common.number(self.thr_var.get(), "Silence threshold", -90, -5),
-            common.number(self.min_var.get(), "Shortest pause", 0.05, 60),
-            common.number(self.pad_var.get(), "Keep around speech", 0, 5),
+            common.number(self.thr_var.get(), t("silence.silence_threshold"), -90, -5),
+            common.number(self.min_var.get(), t("silence.shortest_pause"), 0.05, 60),
+            common.number(self.pad_var.get(), t("silence.keep_around_speech"), 0, 5),
         )
 
     def _detect(
@@ -118,7 +124,7 @@ class SilenceTab(BaseTab):
         return sil.find_zones(src, info, thr, min_s, pad, runner)
 
     def _analyse_failed(self, exc: BaseException) -> None:
-        self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
+        self.btn_analyse.config(state="normal", text=t("silence.analyse"))
         messagebox.showerror(t("common.error"), str(exc), parent=self)
 
     def _analyse(self) -> None:
@@ -131,18 +137,23 @@ class SilenceTab(BaseTab):
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
-        self.btn_analyse.config(state="disabled", text="Listening…")
+        self.btn_analyse.config(state="disabled", text=t("silence.listening"))
 
         def work() -> list[sil.Span]:
             return self._detect(src, info, thr, min_s, pad, lambda c: ff.run(c, tail=100000))
 
         def done(zones: list[sil.Span]) -> None:
-            self.btn_analyse.config(state="normal", text="🔍  ANALYSE")
+            self.btn_analyse.config(state="normal", text=t("silence.analyse"))
             self._zones = (src, (thr, min_s, pad), zones)
             kept = sum(b - a for a, b in zones)
             self.report.config(
-                text=f"{len(zones)} parts kept · {ff.format_time(kept)} of "
-                f"{ff.format_time(info.duration)} · removes {ff.format_time(info.duration - kept)}"
+                text=t(
+                    "silence.zones_parts_kept_kept_of_duration_removes",
+                    zones=len(zones),
+                    kept=ff.format_time(kept),
+                    duration=ff.format_time(info.duration),
+                    duration2=ff.format_time(info.duration - kept),
+                )
             )
 
         tasks.submit(
@@ -159,7 +170,7 @@ class SilenceTab(BaseTab):
             return
         if not info.has_audio:
             messagebox.showwarning(
-                t("common.warning"), "This file has no audio to analyse.", parent=self
+                t("common.warning"), t("silence.this_file_has_no_audio_to_analyse"), parent=self
             )
             return
         try:
@@ -190,7 +201,12 @@ class SilenceTab(BaseTab):
                 )
             kept = sum(b - a for a, b in zones)
             ctx.log(
-                f"Keeping {len(zones)} parts ({ff.format_time(kept)} of {ff.format_time(info.duration)})"
+                t(
+                    "silence.keeping_zones_parts_kept_of_duration",
+                    zones=len(zones),
+                    kept=ff.format_time(kept),
+                    duration=ff.format_time(info.duration),
+                )
             )
             with open(os.path.join(tmp, "cuts.txt"), "w", encoding="utf-8") as fh:
                 fh.write(sil.cut_graph(zones, not audio_only, True))

@@ -18,6 +18,7 @@ import tkinter as tk
 from collections.abc import Callable
 
 from core import ffmpeg as ff
+from core.i18n import t
 
 Source = Callable[[], "str | None"]  # the video the times are in
 Here = Callable[[], float]  # the time the page's preview shows
@@ -41,12 +42,14 @@ def frame_button(
         if not path or not os.path.isfile(path):
             from tkinter import messagebox
 
-            messagebox.showinfo("Pick a frame", "Choose a video first.", parent=parent)
+            messagebox.showinfo(
+                t("time_fields.pick_a_frame"), t("time_fields.choose_a_video_first"), parent=parent
+            )
             return
         FramePicker(parent, path, var, fmt)
 
     btn = tk.Button(parent, text="🎞", relief="flat", width=2, cursor="hand2", command=pick)
-    add_tooltip(btn, "Find the moment by looking at the frames (, and . step one frame)")
+    add_tooltip(btn, t("time_fields.find_the_moment_by_looking_at_the"))
     return btn
 
 
@@ -157,7 +160,7 @@ class RangePicker(tk.Frame):
         """(start, end) in seconds - end None when empty (the end of the video),
         and never past *duration* when that's known.  ValueError when the
         times can't be used."""
-        a = self.start.seconds(0.0, "From") or 0.0
+        a = self.start.seconds(0.0, t("muter.from")) or 0.0
         b = self.end.seconds(None, "To")
         if duration and b is not None:
             b = min(b, duration)

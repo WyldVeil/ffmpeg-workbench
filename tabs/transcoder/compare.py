@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
+from core import i18n
 from core import quality as q
 from core.i18n import t
 from core.scaling import px
@@ -110,19 +111,22 @@ class CompareQualityTab(BaseTab):
     def _build_header(self) -> tuple[tk.Frame, tk.LabelFrame, tk.Frame]:
         self.make_header(
             self,
-            "Compare & Quality",
-            "How much quality did an encode lose? VMAF, SSIM and PSNR, "
-            "the worst moments, and both videos side by side.",
+            t("compare.compare_quality"),
+            t("compare.how_much_quality_did_an_encode_lose"),
             icon="📊",
         )
         body = scroll_body(self)
-        self.ref_row = FileRow(body, "Original:", on_change=lambda _p: self._files_changed())
+        self.ref_row = FileRow(
+            body, t("compare.original"), on_change=lambda _p: self._files_changed()
+        )
         self.ref_row.pack(fill="x", padx=px(20), pady=px(10, 2))
-        self.dist_row = FileRow(body, "Encoded copy:", on_change=lambda _p: self._files_changed())
+        self.dist_row = FileRow(
+            body, t("compare.encoded_copy"), on_change=lambda _p: self._files_changed()
+        )
         self.dist_row.pack(fill="x", padx=px(20), pady=px(2))
         self.info_lbl = tk.Label(
             body,
-            text="Choose the original and the encoded (or edited) copy to compare.",
+            text=t("compare.choose_the_original_and_the_encoded_or"),
             fg=CLR["fgdim"],
             anchor="w",
             justify="left",
@@ -131,7 +135,7 @@ class CompareQualityTab(BaseTab):
         self.ab = ABView(body)
         self.ab.pack(pady=px(4))
 
-        opt = tk.LabelFrame(body, text="  Measure  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("compare.measure"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         r1 = tk.Frame(opt)
         r1.pack(fill="x")
@@ -146,7 +150,7 @@ class CompareQualityTab(BaseTab):
             )
         r2 = tk.Frame(opt)
         r2.pack(fill="x", pady=px(6, 0))
-        tk.Label(r2, text="Viewing:").pack(side="left")
+        tk.Label(r2, text=t("compare.viewing")).pack(side="left")
         self.model_var = tk.StringVar(value=q.MODELS["hd"][0])
         ttk.Combobox(
             r2,
@@ -155,7 +159,7 @@ class CompareQualityTab(BaseTab):
             state="readonly",
             width=32,
         ).pack(side="left", padx=px(4, 16))
-        tk.Label(r2, text="Speed:").pack(side="left")
+        tk.Label(r2, text=t("common.speed")).pack(side="left")
         self.speed_var = tk.StringVar(value=SPEEDS[1])
         ttk.Combobox(
             r2,
@@ -166,33 +170,35 @@ class CompareQualityTab(BaseTab):
         ).pack(side="left", padx=px(4))
         r3 = tk.Frame(opt)
         r3.pack(fill="x", pady=px(6, 0))
-        tk.Label(r3, text="Skip at the start - original:").pack(side="left")
+        tk.Label(r3, text=t("compare.skip_at_the_start_original")).pack(side="left")
         self.skip_ref_var = tk.StringVar(value="0")
         tk.Entry(r3, textvariable=self.skip_ref_var, width=6).pack(side="left", padx=px(4))
         return body, opt, r3
 
     def _build_results(self, body: tk.Frame, opt: tk.LabelFrame, r3: tk.Frame) -> None:
-        tk.Label(r3, text="s   encoded:").pack(side="left")
+        tk.Label(r3, text=t("compare.s_encoded")).pack(side="left")
         self.skip_dist_var = tk.StringVar(value="0")
         tk.Entry(r3, textvariable=self.skip_dist_var, width=6).pack(side="left", padx=px(4))
-        tk.Label(r3, text="s   (if one was trimmed)").pack(side="left")
+        tk.Label(r3, text=t("compare.s_if_one_was_trimmed")).pack(side="left")
         for v in (self.skip_ref_var, self.skip_dist_var):
             on_write(v, lambda: self._skips_changed())
         r4 = tk.Frame(opt)
         r4.pack(fill="x", pady=px(6, 0))
         self.limit_on = tk.BooleanVar(value=False)
-        tk.Checkbutton(r4, text="Only the first", variable=self.limit_on).pack(side="left")
+        tk.Checkbutton(r4, text=t("compare.only_the_first"), variable=self.limit_on).pack(
+            side="left"
+        )
         self.limit_var = tk.StringVar(value="30")
         tk.Entry(r4, textvariable=self.limit_var, width=6).pack(side="left", padx=px(4))
         tk.Label(r4, text="seconds").pack(side="left")
 
-        self.btn = self.make_render_btn(body, "📊  MEASURE QUALITY", self._run, width=24)
+        self.btn = self.make_render_btn(body, t("compare.measure_quality"), self._run, width=24)
         self.btn.pack(pady=px(8))
         self._build_scores(body)
 
     def _build_scores(self, body: tk.Frame) -> None:
         """The scores, the verdict, the graph over time and the worst moments."""
-        self.res = tk.LabelFrame(body, text="  Results  ", padx=px(12), pady=px(8))
+        self.res = tk.LabelFrame(body, text=t("compare.results"), padx=px(12), pady=px(8))
         self.res.pack(fill="x", padx=px(20), pady=px(4))
         scores = tk.Frame(self.res)
         scores.pack(fill="x")
@@ -223,7 +229,10 @@ class CompareQualityTab(BaseTab):
         self.worst_frame = tk.Frame(self.res)
         self.worst_frame.pack(fill="x", pady=px(2, 4))
         tk.Button(
-            self.res, text="💾  Save the scores (CSV + JSON)…", relief="flat", command=self._export
+            self.res,
+            text=t("compare.save_the_scores_csv_json"),
+            relief="flat",
+            command=self._export,
         ).pack(anchor="w")
         self.console = self.make_console_block(body, height=4, pady=px(4, 10))
 
@@ -286,13 +295,15 @@ class CompareQualityTab(BaseTab):
             return
         try:
             skip_ref = common.number(
-                self.skip_ref_var.get() or "0", "Skip (original)", 0, ri.duration
+                self.skip_ref_var.get() or "0", t("compare.skip_original"), 0, ri.duration
             )
             skip_dist = common.number(
-                self.skip_dist_var.get() or "0", "Skip (encoded)", 0, di.duration
+                self.skip_dist_var.get() or "0", t("compare.skip_encoded"), 0, di.duration
             )
             seconds = (
-                common.number(self.limit_var.get(), "Seconds", 0.5) if self.limit_on.get() else None
+                common.number(self.limit_var.get(), t("compare.seconds"), 0.5)
+                if self.limit_on.get()
+                else None
             )
             argv, files = q.build(
                 ref,
@@ -317,12 +328,12 @@ class CompareQualityTab(BaseTab):
         if ri.require_video().is_hdr or di.require_video().is_hdr:
             self.log(
                 self.console,
-                "Note: VMAF is made for normal (SDR) video - scores for HDR are only a rough guide.",
+                t("compare.note_vmaf_is_made_for_normal_sdr"),
             )
 
         def work(_p: object, _c: object, ctx: TaskContext) -> int:
             tmp = ctx.tempdir()
-            ctx.log(f"Measuring {_fmt(span)} ({', '.join(files)})…")
+            ctx.log(t("compare.measuring_span_files", span=_fmt(span), files=", ".join(files)))
             ctx.run(argv, duration=span, cwd=tmp)
             res = q.read(tmp, files, fps, skip_ref)
             self.call_ui(self._show, res)
@@ -349,30 +360,36 @@ class CompareQualityTab(BaseTab):
             s = summary.get(m)
             if not s:
                 big.config(text="–")
-                small.config(text="not measured")
+                small.config(text=t("compare.not_measured"))
                 continue
             mean = s["mean"]
             if m == "ssim" and isinstance(mean, float):
                 big.config(text=f"{mean:.4f}")
-                small.config(text=f"{q.ssim_db(mean):.1f} dB · 1% low {s['low_1pct']:.4f}")
+                small.config(
+                    text=t("compare.mean_1f_db_1_low_s_4f", mean=q.ssim_db(mean), s=s["low_1pct"])
+                )
             elif mean == "inf":
                 big.config(text="∞")
-                small.config(text="identical pixels")
+                small.config(text=t("compare.identical_pixels"))
             elif isinstance(mean, float):
                 unit = " dB" if m == "psnr" else ""
                 big.config(text=f"{mean:.1f}{unit}")
-                small.config(text=f"1% low {s['low_1pct']:.1f}{unit} · lowest {s['min']:.1f}{unit}")
+                small.config(
+                    text=t(
+                        "compare.1_low_s_1f_unit_lowest_s2", s=s["low_1pct"], unit=unit, s2=s["min"]
+                    )
+                )
         if "vmaf" in summary and isinstance(summary["vmaf"]["mean"], float):
             v = summary["vmaf"]["mean"]
             colour = CLR["green"] if v >= 90 else CLR["orange"] if v >= 70 else CLR["red"]
-            self.verdict_lbl.config(text=f"{q.verdict(v)}  (VMAF {v:.1f})", fg=colour)
+            self.verdict_lbl.config(text=t("compare.v_vmaf_v2_1f", v=q.verdict(v), v2=v), fg=colour)
         else:
             self.verdict_lbl.config(text="", fg=CLR["fg"])
         for w in self.worst_frame.winfo_children():
             w.destroy()
         worst = res.worst(6, gap=max(1.0, (res.vmaf.times[-1] if res.vmaf.times else 10) / 30))
         if worst:
-            tk.Label(self.worst_frame, text="Worst moments:").pack(side="left")
+            tk.Label(self.worst_frame, text=t("compare.worst_moments")).pack(side="left")
             for at, value in worst:
                 tk.Button(
                     self.worst_frame,
@@ -397,7 +414,7 @@ class CompareQualityTab(BaseTab):
             c.create_text(
                 w / 2,
                 h / 2,
-                text="The score over time appears here",
+                text=i18n.t("compare.the_score_over_time_appears_here"),
                 fill="#777777",
                 font=(UI_FONT, 10),
             )
@@ -460,7 +477,9 @@ class CompareQualityTab(BaseTab):
 
     def _export(self) -> None:
         if not self.result:
-            messagebox.showinfo("Compare & Quality", "Measure first.", parent=self)
+            messagebox.showinfo(
+                t("compare.compare_quality"), t("compare.measure_first"), parent=self
+            )
             return
         base = os.path.splitext(self.dist_row.path or "quality")[0] + " (quality)"
         path = dialogs.ask_save(base + ".csv", kind="any", defaultextension=".csv", parent=self)
@@ -478,4 +497,6 @@ class CompareQualityTab(BaseTab):
                 fh,
                 indent=2,
             )
-        self.log(self.console, f"Saved {os.path.basename(path)} and the .json summary")
+        self.log(
+            self.console, t("compare.saved_path_and_the_json_summary", path=os.path.basename(path))
+        )

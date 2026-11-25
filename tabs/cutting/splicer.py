@@ -174,7 +174,7 @@ class SplicerTab(BaseTab):
     # ─── Segment management ───────────────────────────────────────────────────
     def _add_segment(self) -> None:
         path = dialogs.askopenfilename(
-            title="Select source clip",
+            title=t("splicer.select_source_clip"),
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
         )
         if not path:
@@ -359,8 +359,12 @@ class SplicerTab(BaseTab):
             if p.start - k > 0.01:
                 self.log(
                     self.console,
-                    f"\u2139 {os.path.basename(p.path)}: lossless cut starts at keyframe "
-                    f"{ff.format_time(k)} instead of {ff.format_time(p.start)}",
+                    t(
+                        "splicer.path_lossless_cut_starts_at_keyframe_k",
+                        path=os.path.basename(p.path),
+                        k=ff.format_time(k),
+                        start=ff.format_time(p.start),
+                    ),
                 )
             ins.append(k)
             outs.append(p.start + p.length)
@@ -392,7 +396,12 @@ class SplicerTab(BaseTab):
         )
         self.log(
             self.console,
-            f"Splicing {len(pieces)} segments ({ff.format_time(total, ms=False)}, {venc.label})",
+            t(
+                "splicer.splicing_pieces_segments_total_label",
+                pieces=len(pieces),
+                total=ff.format_time(total, ms=False),
+                label=venc.label,
+            ),
         )
         self.run_ffmpeg(
             cmd,

@@ -205,7 +205,7 @@ class BatchTab(BaseTab):
 
     # ─── File management ──────────────────────────────────────────────────
     def _add_files(self) -> None:
-        for p in dialogs.ask_open_many("media", title="Add files", parent=self):
+        for p in dialogs.ask_open_many("media", title=t("converter.add_files"), parent=self):
             if p not in self.input_files:
                 self.input_files.append(p)
                 self.listbox.insert(tk.END, f"  {os.path.basename(p)}")
@@ -236,7 +236,9 @@ class BatchTab(BaseTab):
 
     def _update_count(self) -> None:
         n = len(self.input_files)
-        self._count_lbl.config(text=f"{n} file{'s' if n != 1 else ''} queued")
+        self._count_lbl.config(
+            text=t("batch.n_file_value_queued", n=n, value="s" if n != 1 else "")
+        )
 
     def load_file(self, path: str) -> bool:
         if os.path.isfile(path) and path not in self.input_files:
@@ -249,7 +251,7 @@ class BatchTab(BaseTab):
         tid = getattr(self, "_batch_tid", None)
         if tid:
             self.cancel_render(tid)  # stops the running file at once
-            self.log(self.console, "Cancelling…")
+            self.log(self.console, t("batch.cancelling"))
 
     # ─── Operation UI ─────────────────────────────────────────────────────
     def _op(self) -> str:
@@ -275,16 +277,18 @@ class BatchTab(BaseTab):
 
         if not self.input_files:
             messagebox.showwarning(
-                t("common.warning"), "Add at least one file to process.", parent=self
+                t("common.warning"), t("batch.add_at_least_one_file_to_process"), parent=self
             )
             return
-        out_dir = self._out_var.get().strip() or dialogs.askdirectory(title="Select output folder")
+        out_dir = self._out_var.get().strip() or dialogs.askdirectory(
+            title=t("batch.select_output_folder")
+        )
         if not out_dir:
             return
         self._out_var.set(out_dir)
         try:
             os.makedirs(out_dir, exist_ok=True)
-            crf = int(common.number(self._crf_var.get(), "Quality (CRF)", 0, 51))
+            crf = int(common.number(self._crf_var.get(), t("webm_maker.crf_section"), 0, 51))
         except (OSError, ValueError) as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

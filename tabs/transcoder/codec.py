@@ -45,7 +45,7 @@ class CodecCruncherTab(BaseTab):
         self.copy_video = tk.BooleanVar(value=False)
         tk.Checkbutton(
             vc,
-            text="Copy the video as it is (only change audio / container)",
+            text=t("codec.copy_the_video_as_it_is_only"),
             variable=self.copy_video,
             command=self._update_ext,
         ).pack(anchor="w")
@@ -57,14 +57,16 @@ class CodecCruncherTab(BaseTab):
         self.encoder.pack(anchor="w", pady=px(4, 0))
         r = tk.Frame(vc)
         r.pack(anchor="w", pady=px(6, 0))
-        tk.Label(r, text="Container:").pack(side="left")
+        tk.Label(r, text=t("screen_recorder.container")).pack(side="left")
         self.container_var = tk.StringVar(value="auto")
         cb = ttk.Combobox(
             r, textvariable=self.container_var, values=list(CONTAINERS), state="readonly", width=8
         )
         cb.pack(side="left", padx=px(6))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._update_ext())
-        tk.Label(r, text="(auto = the usual one for the codec)", fg=CLR["fgdim"]).pack(side="left")
+        tk.Label(r, text=t("codec.auto_the_usual_one_for_the_codec"), fg=CLR["fgdim"]).pack(
+            side="left"
+        )
 
         ac = tk.LabelFrame(body, text=t("section.audio_codec"), padx=px(12), pady=px(8))
         ac.pack(fill="x", padx=px(20), pady=px(5))
@@ -78,7 +80,7 @@ class CodecCruncherTab(BaseTab):
         ).pack(side="left")
         self.keep_all = tk.BooleanVar(value=True)
         tk.Checkbutton(
-            ac, text="Keep every audio track and the subtitles", variable=self.keep_all
+            ac, text=t("codec.keep_every_audio_track_and_the_subtitles"), variable=self.keep_all
         ).pack(side="left", padx=px(12))
 
         self.out_row = save_section(
@@ -118,9 +120,17 @@ class CodecCruncherTab(BaseTab):
         if info is not None and info.has_video:
             v = info.require_video()
             self.info_lbl.config(
-                text=f"{ff.format_time(info.duration)}  ·  {v.codec} {v.width}×{v.height}  ·  "
-                f"{v.fps:.3g} fps  ·  {v.pix_fmt}{'  ·  HDR' if v.is_hdr else ''}  ·  "
-                f"{len([s for s in info.streams if s.type == 'audio'])} audio track(s)"
+                text=t(
+                    "codec.duration_codec_width_height_fps_3g_fps",
+                    duration=ff.format_time(info.duration),
+                    codec=v.codec,
+                    width=v.width,
+                    height=v.height,
+                    fps=v.fps,
+                    pix_fmt=v.pix_fmt,
+                    value="  ·  HDR" if v.is_hdr else "",
+                    value2=len([s for s in info.streams if s.type == "audio"]),
+                )
             )
         else:
             self.info_lbl.config(text="")
@@ -151,7 +161,10 @@ class CodecCruncherTab(BaseTab):
         label = "copy" if venc is None else venc.label
         for note in notes:
             self.log(self.console, "  " + note)
-        self.log(self.console, f"Encoding with {label} → {container.upper()}…")
+        self.log(
+            self.console,
+            t("codec.encoding_with_label_container", label=label, container=container.upper()),
+        )
         self.run_ffmpeg(
             cmd,
             self.console,

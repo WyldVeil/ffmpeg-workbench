@@ -70,7 +70,7 @@ class SnapshotTab(BaseTab):
         self.make_header(
             self,
             t("tab.snapshot"),
-            "Save any frame as a full-size, high-quality picture.",
+            t("toolinfo.snapshot"),
             icon="📷",
         )
         body = scroll_body(self)
@@ -126,7 +126,7 @@ class SnapshotTab(BaseTab):
             add_tooltip(b, tip)
         self.pos_lbl = tk.Label(row, text="", fg=CLR["accent"], font=(MONO_FONT, 10, "bold"))
         self.pos_lbl.pack(side="left", padx=px(12, 0))
-        tk.Label(row, text="Go to:").pack(side="left", padx=px(16, 4))
+        tk.Label(row, text=t("snapshot.go_to")).pack(side="left", padx=px(16, 4))
         self.goto_var = tk.StringVar()
         return body, row
 
@@ -134,15 +134,15 @@ class SnapshotTab(BaseTab):
         goto = tk.Entry(row, textvariable=self.goto_var, width=13, relief="flat")
         goto.pack(side="left")
         goto.bind("<Return>", lambda _e: self._goto())
-        add_tooltip(goto, "A time (1:02.5) or a frame number (#1500), then Enter")
+        add_tooltip(goto, t("snapshot.a_time_1_02_5_or_a"))
         tk.Label(
             row,
-            text="Keys:  ,  and  .  one frame   ·   with Shift, one second",
+            text=t("snapshot.keys_and_one_frame_with_shift_one"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(side="right")
 
-        pic = tk.LabelFrame(body, text="  Picture  ", padx=px(12), pady=px(8))
+        pic = tk.LabelFrame(body, text=t("snapshot.picture"), padx=px(12), pady=px(8))
         pic.pack(fill="x", padx=px(20), pady=px(8, 4))
         self.accurate_var = tk.BooleanVar(value=True)
         self.square_var = tk.BooleanVar(value=True)
@@ -228,19 +228,22 @@ class SnapshotTab(BaseTab):
                 length=px(130),
                 command=lambda _v: self._options_changed(),
             ).pack(side="left", padx=px(4, 14))
-        tk.Button(sliders, text="Reset", relief="flat", command=self._reset_look).pack(side="left")
+        tk.Button(sliders, text=t("snapshot.reset"), relief="flat", command=self._reset_look).pack(
+            side="left"
+        )
 
         out = tk.Frame(body)
         out.pack(fill="x", padx=px(20), pady=px(8, 4))
-        self.btn_render = self.make_render_btn(out, "📷  SAVE SCREENSHOT…", self._save_as)
+        self.btn_render = self.make_render_btn(out, t("snapshot.save_screenshot_2"), self._save_as)
         self.btn_render.pack(side="left")
-        add_tooltip(self.btn_render, "Save this frame as a PNG (Ctrl+S)")
-        self.btn_quick = tk.Button(out, text="Quick save", relief="flat", command=self._quick_save)
+        add_tooltip(self.btn_render, t("snapshot.save_this_frame_as_a_png_ctrl"))
+        self.btn_quick = tk.Button(
+            out, text=t("snapshot.quick_save"), relief="flat", command=self._quick_save
+        )
         self.btn_quick.pack(side="left", padx=px(10))
         add_tooltip(
             self.btn_quick,
-            "Save straight into the last folder you used (or next to the video), "
-            "named after the video and the frame's time",
+            t("snapshot.save_straight_into_the_last_folder_you"),
         )
         self.size_lbl = tk.Label(out, text="", fg=CLR["fgdim"])
         self.size_lbl.pack(side="left", padx=px(10))
@@ -257,7 +260,7 @@ class SnapshotTab(BaseTab):
         info = ff.try_probe(path) if path else None
         if info is None or not info.has_video or info.is_image:
             if path:
-                self.info_lbl.config(text="Can't read this file as video.", fg=CLR["red"])
+                self.info_lbl.config(text=t("hdr.can_t_read_this_file_as_video"), fg=CLR["red"])
             return False
         if self.src_row.path != path:
             self.src_row.set(path)
@@ -267,7 +270,10 @@ class SnapshotTab(BaseTab):
         self._bars = None
         v = info.require_video()  # has_video was checked above
         frames = max(1, round(info.duration * self._fps))
-        self.info_lbl.config(text=f"{info.summary()}  ·  {frames:,} frames", fg=CLR["fgdim"])
+        self.info_lbl.config(
+            text=t("snapshot.summary_frames_frames", summary=info.summary(), frames=frames),
+            fg=CLR["fgdim"],
+        )
         self._checks["HDR to normal colours"].config(state="normal" if info.is_hdr else "disabled")
         interlaced = v.field_order not in ("", "progressive", "unknown")
         self._checks["Remove interlacing combs"].config(
@@ -315,7 +321,7 @@ class SnapshotTab(BaseTab):
             return
         n = self._frame()
         at = n / self._fps
-        self.pos_lbl.config(text=f"{ff.format_time(at)}   ·   frame {n + 1:,}")
+        self.pos_lbl.config(text=t("snapshot.at_frame_n", at=ff.format_time(at), n=n + 1))
         for view in self.views:
             view.show(self._seek(at))
 
@@ -392,7 +398,7 @@ class SnapshotTab(BaseTab):
             self._bars if self.crop_var.get() and self._bars else None,
         )
         bits = "16-bit" if self.deep_var.get() else "8-bit"
-        self.size_lbl.config(text=f"{w}×{h} PNG, {bits}")
+        self.size_lbl.config(text=t("snapshot.w_h_png_bits", w=w, h=h, bits=bits))
 
     def _detect_bars(self) -> None:
         from core.ops.auto_cropper import detect_bars
@@ -408,7 +414,7 @@ class SnapshotTab(BaseTab):
             self._bars = box if box and (box[2], box[3]) != (v.width, v.height) else ()
             self._options_changed()
 
-        self.size_lbl.config(text="Looking for black bars…")
+        self.size_lbl.config(text=t("auto_cropper.looking_for_black_bars"))
         tasks.submit(
             partial(detect_bars, path, info.duration),
             on_done=done,
@@ -419,7 +425,7 @@ class SnapshotTab(BaseTab):
     # ── Saving ────────────────────────────────────────────────────────
     def _save_as(self) -> None:
         if self._info is None:
-            self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
+            self.result_lbl.config(text=t("time_fields.choose_a_video_first"), fg=CLR["orange"])
             return
         from tabs.kit import dialogs
 
@@ -429,7 +435,7 @@ class SnapshotTab(BaseTab):
             os.path.join(start, frame_name(self.file_path, at)),
             kind="image",
             defaultextension=".png",
-            title="Save screenshot",
+            title=t("snapshot.save_screenshot"),
             parent=self,
         )
         if out:
@@ -437,7 +443,7 @@ class SnapshotTab(BaseTab):
 
     def _quick_save(self) -> None:
         if self._info is None:
-            self.result_lbl.config(text="Choose a video first.", fg=CLR["orange"])
+            self.result_lbl.config(text=t("time_fields.choose_a_video_first"), fg=CLR["orange"])
             return
         folder = (
             self._last_dir if os.path.isdir(self._last_dir) else os.path.dirname(self.file_path)
@@ -454,7 +460,7 @@ class SnapshotTab(BaseTab):
             out += ".png"
         at = self._frame() / self._fps
         cmd = save_command(self.file_path, self._seek(at), self.chain(), out)
-        self.result_lbl.config(text="Saving…", fg=CLR["fgdim"])
+        self.result_lbl.config(text=t("snapshot.saving"), fg=CLR["fgdim"])
         self.btn_render.config(state="disabled")
 
         def work() -> str:
@@ -469,13 +475,13 @@ class SnapshotTab(BaseTab):
             self._saved = path
             mb = os.path.getsize(path) / 1e6
             self.result_lbl.config(
-                text=f"✓  Saved {os.path.basename(path)}  ({mb:.1f} MB)  -  click to show it",
+                text=t("snapshot.saved_path_mb_1f_mb_click_to", path=os.path.basename(path), mb=mb),
                 fg=CLR["green"],
             )
 
         def failed(exc: BaseException) -> None:
             self.btn_render.config(state="normal")
-            self.result_lbl.config(text=f"Couldn't save: {exc}", fg=CLR["red"])
+            self.result_lbl.config(text=t("snapshot.couldn_t_save_exc", exc=exc), fg=CLR["red"])
 
         tasks.submit(work, on_done=done, on_error=failed, name="Snapshot")
 

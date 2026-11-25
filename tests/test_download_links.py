@@ -3,6 +3,8 @@ links pasted on the Start page (they open the downloader and download)."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from core.ops import youtube as yto
@@ -187,3 +189,106 @@ def test_the_link_starts_the_download_with_the_shareable_format(
     tab._run_direct_copy("https://youtu.be/aqz-KE-bpKQ", str(tmp_path / "x.mp4"), "/opt/yt-dlp", [])
     cmd = cmds[-1]
     assert cmd[cmd.index("-f") + 1] == yto.SHARE
+
+
+# ── re-encoding after a download (found untested by a mutation pass) ───────
+
+
+def test_hevc_is_tagged_hvc1_only_inside_mp4_and_mov():
+    assert "hvc1" in yto.video_codec_args("libx265", 23, "fast", "MP4")
+    assert "hvc1" not in yto.video_codec_args("libx265", 23, "fast", "mkv")
+    assert "hvc1" not in yto.video_codec_args("libx264", 23, "fast", "mp4")
+    assert "yuv420p" in yto.video_codec_args("libx264", 23, "fast", "mp4")
+    assert "yuv420p" not in yto.video_codec_args("prores_ks", 23, "fast", "mov")
+
+
+def test_the_size_choices_become_scale_filters():
+    r = yto.Resolution
+    assert yto.scale_filter(r.ORIGINAL, "") is None
+    assert yto.scale_filter(r.CUSTOM, " 1280 × 720 ") == "scale=1280:720"
+    assert yto.scale_filter(r.CUSTOM, "1280") is None
+    assert yto.scale_filter(r.CUSTOM, "1x2x3") is None
+    fitted = yto.scale_filter(r.R720, "")
+    assert fitted is not None and fitted.startswith("scale=1280:720:")
+
+
+def test_subtitles_are_burned_only_from_a_file_that_exists(tmp_path):
+    srt = tmp_path / "a.srt"
+    assert yto.subtitle_filter("") is None
+    assert yto.subtitle_filter(str(srt)) is None
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n", encoding="utf-8")
+    assert yto.subtitle_filter(str(srt))
+
+
+def test_audio_settings_follow_the_codec():
+    assert yto.audio_args("copy", "192k", "48000") == ["-c:a", "copy"]
+    assert yto.audio_args("aac", "192k", "48000") == ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
+    assert yto.audio_args("pcm_s16le", "192k", "44100") == ["-c:a", "pcm_s16le", "-ar", "44100"]
+    assert yto.audio_args("flac", "192k", "48000") == ["-c:a", "flac"]
+
+
+def test_the_re_encode_command(tmp_path):
+    e = yto.Encode(
+        vcodec="libx264",
+        crf=20,
+        preset="fast",
+        container="mp4",
+        resolution=yto.Resolution.R720,
+        custom_size="",
+        acodec="aac",
+        abitrate="160k",
+        sample_rate="48000",
+    )
+    cmd = yto.encode_cmd("in.mkv", "out.mp4", e)
+    assert cmd[-2:] == ["out.mp4", "-y"] and "+faststart" in cmd and "-vf" in cmd
+    mkv = yto.encode_cmd("in.mkv", "out.mkv", replace(e, container="mkv"))
+    assert "+faststart" not in mkv
+    plain = replace(e, resolution=yto.Resolution.ORIGINAL)
+    assert "-vf" not in yto.encode_cmd("in.mkv", "out.mp4", plain)
+
+
+def test_a_retry_through_another_proxy_changes_only_the_last_one():
+    cmd = ["yt-dlp", "--proxy", "http://a:1", "-f", "b", "--proxy", "http://b:2", "URL"]
+    assert yto.with_proxy(cmd, "socks5://c:3") == [
+        "yt-dlp", "--proxy", "http://a:1", "-f", "b", "--proxy", "socks5://c:3", "URL",
+    ]  # fmt: skip
+
+
+def test_an_unknown_site_is_not_taken_for_one_video():
+    assert yto.is_one_video("https://example.com/watch?v=abc") is False
+
+
+def test_extras_are_off_unless_asked(monkeypatch):
+    monkeypatch.setattr(yto, "base_argv", lambda *a, **k: ["yt-dlp"])
+    plain = yto.audio_argv("yt-dlp", "U", "mp3", "0", playlist=False)
+    assert "--embed-thumbnail" not in plain and "--add-metadata" not in plain
+    both = yto.audio_argv("yt-dlp", "U", "mp3", "0", playlist=False, thumbnail=True, metadata=True)
+    assert "--embed-thumbnail" in both and "--add-metadata" in both
+    subs = yto.subtitles_only_argv("yt-dlp", "U", "en", "srt", "out", playlist=False)
+    assert "--write-auto-sub" not in subs
+    assert "--write-auto-sub" in yto.subtitles_only_argv(
+        "yt-dlp", "U", "en", "srt", "out", playlist=False, auto=True
+    )
+
+
+def test_the_tabs_own_options(tmp_path):
+    assert yto.common_args(yto.Options()) == []
+    assert yto.common_args(yto.Options(cookies=str(tmp_path / "missing.txt"))) == []
+    jar = tmp_path / "cookies.txt"
+    jar.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    assert yto.common_args(yto.Options(cookies=str(jar))) == ["--cookies", str(jar)]
+    marked = yto.common_args(yto.Options(sponsorblock=("sponsor", "intro")))
+    assert marked == ["--sponsorblock-mark", "sponsor,intro"]
+    cut = yto.common_args(yto.Options(sponsorblock=("sponsor",), sponsorblock_mark=False))
+    assert cut == ["--sponsorblock-remove", "sponsor"]
+    assert "aria2c" in yto.common_args(yto.Options(aria2c=True))
+    assert yto.common_args(yto.Options(chapters=True, metadata=True)) == [
+        "--embed-chapters",
+        "--embed-metadata",
+    ]
+
+
+def test_the_proxy_swap_works_when_the_proxy_comes_last():
+    assert yto.with_proxy(["yt-dlp", "--proxy", "a", "--proxy", "b"], "c") == [
+        "yt-dlp", "--proxy", "a", "--proxy", "c",
+    ]  # fmt: skip

@@ -15,15 +15,18 @@ from tabs.kit import theme
 _OPTIONS = ("background", "foreground", "activebackground", "highlightbackground", "selectcolor")
 
 
-def _colours(widget: tk.Misc) -> set[str]:
-    found: set[str] = set()
+def _painted(widget: tk.Misc, colours: set[str]) -> list[str]:
+    """Widgets (path: option=colour) still painted in one of *colours*."""
+    found: list[str] = []
     for option in _OPTIONS:
         try:
-            found.add(str(widget.cget(option)).lower())
+            value = str(widget.cget(option)).lower()
         except (tk.TclError, ValueError):
-            pass
+            continue
+        if value in colours:
+            found.append(f"{widget} ({widget.winfo_class()}): {option}={value}")
     for child in widget.winfo_children():
-        found |= _colours(child)
+        found += _painted(child, colours)
     return found
 
 
@@ -45,7 +48,8 @@ def test_a_colour_follows_its_palette_entry():
 @pytest.mark.gui
 def test_switching_theme_leaves_no_old_colour(ui):
     app = ui.app
-    for name in ("Start", "Video Downloader", "Quick Trimmer", "Audio Mixer", "Settings"):
+    pages = ("Start", "Video Downloader", "Encode Queue", "Preset Manager", "Advanced Settings")
+    for name in pages:
         ui.open(name)  # build some pages in the current theme first
     try:
         for old, new in (("Classic", "Low Blue"), ("Low Blue", "Mystical")):
@@ -53,8 +57,8 @@ def test_switching_theme_leaves_no_old_colour(ui):
             ui.pump(0.3)
             app.apply_theme(new)
             ui.pump(0.3)
-            left = _colours(app) & _only_in(old, new)
-            assert not left, f"{old} -> {new}: still painted {sorted(left)}"
+            left = _painted(app, _only_in(old, new))
+            assert not left, f"{old} -> {new}: still painted {left[:8]}"
     finally:
         app.apply_theme("Classic")
         ui.pump(0.3)

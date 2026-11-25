@@ -167,15 +167,14 @@ class TTSVoiceOverTab(BaseTab):
         if not ok:
             tk.Label(
                 banner,
-                text="⚠  No voice engine available - the online voices are missing from this "
-                "copy and the system has no offline voice (on Linux: install espeak-ng).",
+                text=t("tts.no_voice_engine_available_the_online_voices"),
                 bg=banner["bg"],
                 fg="#EF9A9A",
                 font=(UI_FONT, 9),
             ).pack(side="left", padx=px(16))
             return
         tk.Label(
-            banner, text="Voice engine:", bg=banner["bg"], fg=CLR["fgdim"], font=(UI_FONT, 9)
+            banner, text=t("tts.voice_engine"), bg=banner["bg"], fg=CLR["fgdim"], font=(UI_FONT, 9)
         ).pack(side="left", padx=px(16, 4))
         cb = ttk.Combobox(
             banner, textvariable=self._engine_var, values=engines, state="readonly", width=40
@@ -195,11 +194,9 @@ class TTSVoiceOverTab(BaseTab):
         if not hasattr(self, "_engine_note"):
             return
         if self._engine() == "edge":
-            self._engine_note.config(text="Needs internet. Uses the proxy from Settings → Network.")
+            self._engine_note.config(text=t("tts.needs_internet_uses_the_proxy_from_settings"))
         else:
-            self._engine_note.config(
-                text="Works offline. The voice list and pitch apply to the online voices only."
-            )
+            self._engine_note.config(text=t("tts.works_offline_the_voice_list_and_pitch"))
 
     # ── Text section ──────────────────────────────────────────────────────
     def _build_text_section(self, parent: tk.Misc) -> None:
@@ -664,7 +661,9 @@ class TTSVoiceOverTab(BaseTab):
         secs = (words / wpm) * 60 if words else 0
         m, s = divmod(int(secs), 60)
         dur_str = f"{m}m {s:02d}s" if m else f"{s}s"
-        self._stats_lbl.config(text=f"{chars:,} chars  │  {words:,} words  │  ~{dur_str}")
+        self._stats_lbl.config(
+            text=t("tts.chars_chars_words_words_dur_str", chars=chars, words=words, dur_str=dur_str)
+        )
 
     def _get_text(self) -> str:
         t = self.text_box.get("1.0", "end-1c").strip()
@@ -764,13 +763,16 @@ class TTSVoiceOverTab(BaseTab):
         self._tts_audio_path = audio_path
         self._pending_srt = srt_text
         self._gen_status.config(text=t("tts.tts_generated"), fg="#66BB6A")
-        self.log(self.console, f"TTS audio ready: {os.path.basename(audio_path)}")
+        self.log(
+            self.console,
+            t("tts.tts_audio_ready_audio_path", audio_path=os.path.basename(audio_path)),
+        )
         if srt_text:
             self.log(self.console, t("log.tts.srt_subtitle_data_captured"))
 
     def _on_tts_error(self, msg: str) -> None:
         self._gen_status.config(text=f"❌  {msg}", fg="#EF9A9A")
-        self.log(self.console, f"[TTS ERROR] {msg}")
+        self.log(self.console, t("tts.tts_error_msg", msg=msg))
         self.btn_render.config(state="normal", text=t("tts.generate_export"))
 
     # ─────────────────────────────────────────────────────────────────────
@@ -795,7 +797,7 @@ class TTSVoiceOverTab(BaseTab):
         try:
             self._player_proc = _proc.spawn(cmd)
         except _proc.ProcessError as e:
-            self.log(self.console, f"[WARN] ffplay failed: {e}")
+            self.log(self.console, t("tts.warn_ffplay_failed_e", e=e))
             return
         self._player_start_time = time.monotonic()
         self._btn_play.config(state="disabled")
@@ -853,7 +855,7 @@ class TTSVoiceOverTab(BaseTab):
         """Speak the whole script into the in-tab player (nothing is exported)."""
         text = self._get_text()
         if not text:
-            messagebox.showwarning(t("common.warning"), "Enter some text first.", parent=self)
+            messagebox.showwarning(t("common.warning"), t("tts.enter_some_text_first"), parent=self)
             return
         self._gen_status.config(text=t("tts.generating"), fg=CLR["accent"])
         self.log(self.console, t("log.tts.generating_tts_preview"))
@@ -890,11 +892,11 @@ class TTSVoiceOverTab(BaseTab):
                 max(0.0, float(self.pad_before_var.get() or 0)),
                 max(0.0, float(self.pad_after_var.get() or 0)),
             )
-            offset = (self.timestamp.seconds(0.0, "Insert at") or 0.0) if video else 0.0
+            offset = (self.timestamp.seconds(0.0, t("tts.insert_at")) or 0.0) if video else 0.0
         except ValueError:
             messagebox.showwarning(
                 t("common.warning"),
-                "Padding and start time must be numbers of seconds.",
+                t("tts.padding_and_start_time_must_be_numbers"),
                 parent=self,
             )
             return None
@@ -916,12 +918,12 @@ class TTSVoiceOverTab(BaseTab):
         text = self._get_text()
         if not text:
             messagebox.showwarning(
-                t("common.warning"), "Enter some text in the script box.", parent=self
+                t("common.warning"), t("tts.enter_some_text_in_the_script_box"), parent=self
             )
             return
         if not self._engine_var.get():
             messagebox.showwarning(
-                t("common.warning"), "No voice engine is available.", parent=self
+                t("common.warning"), t("tts.no_voice_engine_is_available"), parent=self
             )
             return
         source = self._voiceover_source()

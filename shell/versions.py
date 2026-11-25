@@ -72,7 +72,10 @@ class ToolVersions:
             )
         else:
             where = "bundled" if found.bundled else "your own copy"
-            self._bar.ffmpeg.config(text=f"FFmpeg {found.version} ({where})", fg=skin["fgdim"])
+            self._bar.ffmpeg.config(
+                text=t("versions.ffmpeg_version_where", version=found.version, where=where),
+                fg=skin["fgdim"],
+            )
 
     def explain_ffmpeg(self) -> None:
         found = self._ffmpeg
@@ -89,7 +92,7 @@ class ToolVersions:
                 "Tools are tested with the bundled FFmpeg; choose 'Bundled' under Advanced Settings › FFmpeg "
                 "if something doesn't work."
             )
-        messagebox.showinfo("FFmpeg", msg, parent=self._window)
+        messagebox.showinfo(t("adv.tab.ffmpeg"), msg, parent=self._window)
 
     # ── yt-dlp ────────────────────────────────────────────────────────────────
     def set_ytdlp(self, version: str, path: str, force: bool = False) -> None:
@@ -97,7 +100,9 @@ class ToolVersions:
         for a newer one even when automatic checks are off)."""
         self._ytdlp_path, self._ytdlp_local = path, version
         self._bar.ytdlp.config(
-            text=f"yt-dlp {version} (checking…)", fg=self._bar.skin["fgdim"], cursor="watch"
+            text=t("versions.yt_dlp_version_checking", version=version),
+            fg=self._bar.skin["fgdim"],
+            cursor="watch",
         )
         tasks.submit(
             partial(updater.latest_ytdlp_release, force=force),
@@ -110,16 +115,20 @@ class ToolVersions:
         skin = self._bar.skin
         have, newest = version_tuple(local), version_tuple(latest)
         if have is None or newest is None:
-            self._bar.ytdlp.config(text=f"yt-dlp {local}", fg=skin["fgdim"], cursor="hand2")
+            self._bar.ytdlp.config(
+                text=t("versions.yt_dlp_local", local=local), fg=skin["fgdim"], cursor="hand2"
+            )
         elif newest > have:
             self._bar.ytdlp.config(
-                text=f"yt-dlp {local} → {latest} (click to update)",
+                text=t("versions.yt_dlp_local_latest_click_to_update", local=local, latest=latest),
                 fg=skin["orange"],
                 cursor="hand2",
             )
         else:
             self._bar.ytdlp.config(
-                text=f"yt-dlp {local} (up to date)", fg=skin["green"], cursor="arrow"
+                text=t("versions.yt_dlp_local_up_to_date", local=local),
+                fg=skin["green"],
+                cursor="arrow",
             )
 
     def _ytdlp_found(self, path: str, version: str) -> None:
@@ -142,15 +151,14 @@ class ToolVersions:
         if have and newest and newest <= have:
             messagebox.showinfo(
                 t("msg.ytdlp_update_title"),
-                f"yt-dlp {self._ytdlp_local} is already up to date.",
+                t("versions.yt_dlp_ytdlp_local_is_already_up", ytdlp_local=self._ytdlp_local),
                 parent=self._window,
             )
             return
         if self._ytdlp_path and not updater.is_app_managed(self._ytdlp_path):
             if not messagebox.askyesno(
                 t("msg.ytdlp_update_title"),
-                f"This yt-dlp ({self._ytdlp_path}) was installed by your system.\n\nDownload the latest "
-                "official yt-dlp for this app instead? (Your system copy is left untouched.)",
+                t("versions.this_yt_dlp_ytdlp_path_was_installed", ytdlp_path=self._ytdlp_path),
                 parent=self._window,
             ):
                 return

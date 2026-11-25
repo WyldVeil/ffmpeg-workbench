@@ -40,7 +40,12 @@ class SettingsTab(BaseTab):
             self, text=f"  {t('settings.encoding_defaults_section')}  ", padx=px(20), pady=px(14)
         )
         lf.pack(fill="x", padx=px(24), pady=px(14))
+        count = self._build_encoding_rows(lf)
+        self._build_more_rows(lf, count)
+        self._build_save_row()
 
+    def _build_encoding_rows(self, lf: tk.LabelFrame) -> int:
+        """CRF, preset and audio bitrate; returns how many rows that is."""
         rows = [
             (t("settings.default_crf_label"), "default_crf", "18", None),
             (
@@ -76,12 +81,15 @@ class SettingsTab(BaseTab):
             else:
                 box = tk.Entry(lf, textvariable=var, width=8, relief="flat")
             self.form_row(lf, i, label, box, label_width=24, pady=8)
+        return len(rows)
 
+    def _build_more_rows(self, lf: tk.LabelFrame, first: int) -> None:
+        """The output folder, opening it after a render, and the start page."""
         # Output folder
         self._out_var = tk.StringVar(value=self.settings.get("default_output_folder", ""))
         FolderRow(
             lf, t("settings.output_folder_label"), self._out_var, width=44, label_width=24
-        ).grid(row=len(rows), column=0, columnspan=3, sticky="w", pady=px(8))
+        ).grid(row=first, column=0, columnspan=3, sticky="w", pady=px(8))
 
         # Auto-open
         self._auto_open = tk.BooleanVar(value=self.settings.get("auto_open_output", False))
@@ -89,14 +97,20 @@ class SettingsTab(BaseTab):
             lf,
             text=t("settings.auto_open_checkbox"),
             variable=self._auto_open,
-        ).grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=px(4))
+        ).grid(row=first + 1, column=0, columnspan=3, sticky="w", pady=px(4))
 
         # Startup page
         self.start_box = ChoiceBox(lf, START_CHOICES, settings.START_PAGE.get())
         self.form_row(
-            lf, len(rows) + 2, "Start the app on:", self.start_box, label_width=24, pady=8
+            lf,
+            first + 2,
+            t("settings.start_the_app_on"),
+            self.start_box,
+            label_width=24,
+            pady=8,
         )
 
+    def _build_save_row(self) -> None:
         # Save button
         btn_f = tk.Frame(self)
         btn_f.pack(pady=px(16))

@@ -99,13 +99,13 @@ class TransitionStudioTab(BaseTab):
         self.make_header(
             self,
             t("tab.transition_studio"),
-            "One polished transition between two clips.",
+            t("toolinfo.transitions"),
             icon="🎬",
         )
         body = scroll_body(self)
         self.a_row = FileRow(
             body,
-            "First clip (A):",
+            t("transitions.first_clip_a"),
             self.src_var,
             label_width=16,
             on_change=lambda p: (
@@ -114,7 +114,7 @@ class TransitionStudioTab(BaseTab):
         )
         self.a_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.src_row = self.a_row
-        self.b_row = FileRow(body, "Second clip (B):", label_width=16)
+        self.b_row = FileRow(body, t("transitions.second_clip_b"), label_width=16)
         self.b_row.pack(fill="x", padx=px(20), pady=px(2))
         self._build_transition_options(body)
         self._build_output(body)
@@ -122,7 +122,7 @@ class TransitionStudioTab(BaseTab):
 
     def _build_transition_options(self, body: tk.Frame) -> None:
         """Which transition, its length, the sound under it, and a preview."""
-        opt = tk.LabelFrame(body, text="  Transition  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("transitions.transition"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
         top = tk.Frame(opt)
         top.pack(fill="x")
@@ -136,7 +136,7 @@ class TransitionStudioTab(BaseTab):
         self.trans_list.pack(fill="x", pady=px(4))
         r = tk.Frame(opt)
         r.pack(fill="x", pady=px(2))
-        tk.Label(r, text="Length (s):").pack(side="left")
+        tk.Label(r, text=t("gif_maker.length_s")).pack(side="left")
         self.dur_var = tk.StringVar(value="1.0")
         ttk.Combobox(
             r,
@@ -147,12 +147,12 @@ class TransitionStudioTab(BaseTab):
         self.freeze_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             r,
-            text="Hold the end of A / start of B (don't overlap the footage)",
+            text=t("transitions.hold_the_end_of_a_start_of"),
             variable=self.freeze_var,
         ).pack(side="left", padx=px(10))
         r2 = tk.Frame(opt)
         r2.pack(fill="x", pady=px(2))
-        tk.Label(r2, text="Sound:").pack(side="left")
+        tk.Label(r2, text=t("transitions.sound")).pack(side="left")
         self.audio_var = tk.StringVar(value="normal")
         for key, label in (("normal", "crossfade"), ("none", "no sound")):
             tk.Radiobutton(r2, text=label, variable=self.audio_var, value=key).pack(side="left")
@@ -166,7 +166,7 @@ class TransitionStudioTab(BaseTab):
             width=22,
         ).pack(side="left", padx=px(4))
         self.btn_preview = tk.Button(
-            opt, text="▶  Preview the cut", relief="flat", command=self._preview
+            opt, text=t("transitions.preview_the_cut"), relief="flat", command=self._preview
         )
         self.btn_preview.pack(anchor="w", pady=px(4))
 
@@ -179,7 +179,7 @@ class TransitionStudioTab(BaseTab):
             suggest=lambda: self.suggest_output(self.a_row.path, "transition"),
         )
         self.btn_render = self.make_render_btn(
-            body, "🎬  RENDER TRANSITION", self._render, width=24
+            body, t("transitions.render_transition"), self._render, width=24
         )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
@@ -200,7 +200,7 @@ class TransitionStudioTab(BaseTab):
         for path, what in ((a, "First clip"), (b, "Second clip")):
             if not path or not os.path.isfile(path):
                 raise ValueError(f"{what}: choose a video file.")
-        T = common.number(self.dur_var.get(), "Length", 0.04, 30)
+        T = common.number(self.dur_var.get(), t("intro_maker.length"), 0.04, 30)
         clips = [xf.Clip.from_info(ff.probe(a)), xf.Clip.from_info(ff.probe(b))]
         problem = xf.validate(clips, T, self.freeze_var.get())
         if problem:
@@ -219,20 +219,22 @@ class TransitionStudioTab(BaseTab):
             shutil.rmtree(self._preview_dir, ignore_errors=True)
         self._preview_dir = tmp = tempfile.mkdtemp(prefix="wme_transition_")
         trans, freeze, audio = self._transition(), self.freeze_var.get(), self.audio_var.get()
-        self.btn_preview.config(state="disabled", text="Making the preview…")
+        self.btn_preview.config(state="disabled", text=t("contact_sheet.making_the_preview"))
 
         def make() -> str:
             fade = xf.Crossfade(T, [trans], freeze, audio, curve)
             return xf.preview_cut(clips, fade, tmp)
 
         def done(path: str) -> None:
-            self.btn_preview.config(state="normal", text="▶  Preview the cut")
+            self.btn_preview.config(state="normal", text=t("transitions.preview_the_cut"))
             launch_preview(path)
 
         def failed(exc: BaseException) -> None:
-            self.btn_preview.config(state="normal", text="▶  Preview the cut")
+            self.btn_preview.config(state="normal", text=t("transitions.preview_the_cut"))
             messagebox.showerror(
-                t("common.error"), f"The preview could not be made:\n{exc}", parent=self
+                t("common.error"),
+                t("transitions.the_preview_could_not_be_made_exc", exc=exc),
+                parent=self,
             )
 
         tasks.submit(make, on_done=done, on_error=failed, name="TransitionPreview")
@@ -259,7 +261,15 @@ class TransitionStudioTab(BaseTab):
             T, [self._transition()], self.freeze_var.get(), self.audio_var.get(), curve
         )
         argv, secs = xf.build_command(clips, out, fade, venc=venc)
-        self.log(self.console, f"{self._transition()} · {T:g} s · {ff.format_time(secs)} total")
+        self.log(
+            self.console,
+            t(
+                "transitions.transition_t_g_s_secs_total",
+                transition=self._transition(),
+                t=T,
+                secs=ff.format_time(secs),
+            ),
+        )
         self.run_ffmpeg(
             argv,
             self.console,

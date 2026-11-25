@@ -13,6 +13,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 
+from core.i18n import t
 from core.logs import log_file
 from core.scaling import px
 
@@ -54,6 +55,8 @@ def show_crash(title: str, summary: str, details: str) -> None:
 
         open_in_explorer(os.path.dirname(log_file()))
 
-    ttk.Button(row, text="Copy details", command=copy).pack(side="left")
-    ttk.Button(row, text="Open log folder", command=open_folder).pack(side="left", padx=px(6))
-    ttk.Button(row, text="Close", command=win.destroy).pack(side="right")
+    ttk.Button(row, text=t("crash.copy_details"), command=copy).pack(side="left")
+    ttk.Button(row, text=t("crash.open_log_folder"), command=open_folder).pack(
+        side="left", padx=px(6)
+    )
+    ttk.Button(row, text=t("btn.close"), command=win.destroy).pack(side="right")

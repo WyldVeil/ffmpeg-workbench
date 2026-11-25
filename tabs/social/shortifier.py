@@ -53,7 +53,7 @@ class ShortifierTab(BaseTab):
         self.make_header(
             self,
             t("tab.the_shortifier"),
-            "Reformat any video for Shorts, TikTok, Reels, square posts and more.",
+            t("shortifier.reformat_any_video_for_shorts_tiktok_reels"),
             icon="📱",
         )
         body = scroll_body(self)
@@ -68,7 +68,7 @@ class ShortifierTab(BaseTab):
 
     def _build_format(self, body: tk.Frame) -> None:
         """Platform, layout, framing and length."""
-        opt = tk.LabelFrame(body, text="  Format  ", padx=px(12), pady=px(6))
+        opt = tk.LabelFrame(body, text=t("shortifier.format"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
 
         self.platform_var = tk.StringVar(value=platform_label("shorts"))
@@ -84,9 +84,9 @@ class ShortifierTab(BaseTab):
         self.form_row(
             opt,
             0,
-            "Platform:",
+            t("shortifier.platform"),
             pb,
-            tk.Label(opt, text="Custom:"),
+            tk.Label(opt, text=t("shortifier.custom")),
             tk.Entry(opt, textvariable=self.cw_var, width=6),
             tk.Entry(opt, textvariable=self.ch_var, width=6),
             label_width=12,
@@ -102,9 +102,11 @@ class ShortifierTab(BaseTab):
         )
         bb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.colour_btn = ColourButton(
-            opt, "#1E1E1E", text="Colour…", on_change=self._colour_chosen
+            opt, "#1E1E1E", text=t("shortifier.colour"), on_change=self._colour_chosen
         )
-        self.form_row(opt, 1, "Layout:", bb, self.colour_btn, label_width=12, pady=2)
+        self.form_row(
+            opt, 1, t("side_by_side.layout_label"), bb, self.colour_btn, label_width=12, pady=2
+        )
         self.anchor_var = tk.StringVar(value="Centre")
         ab = ttk.Combobox(
             opt,
@@ -117,10 +119,13 @@ class ShortifierTab(BaseTab):
         self.form_row(
             opt,
             2,
-            "Keep:",
+            t("shortifier.keep"),
             ab,
             tk.Label(
-                opt, text="(which part to keep when cropping)", fg=CLR["fgdim"], font=(UI_FONT, 8)
+                opt,
+                text=t("shortifier.which_part_to_keep_when_cropping"),
+                fg=CLR["fgdim"],
+                font=(UI_FONT, 8),
             ),
             label_width=12,
             pady=2,
@@ -129,9 +134,11 @@ class ShortifierTab(BaseTab):
         self.form_row(
             opt,
             3,
-            "Length:",
+            t("collage.length"),
             tk.Checkbutton(
-                opt, text="Trim to the platform's maximum length", variable=self.trim_var
+                opt,
+                text=t("shortifier.trim_to_the_platform_s_maximum_length"),
+                variable=self.trim_var,
             ),
             label_width=12,
             pady=2,
@@ -148,7 +155,9 @@ class ShortifierTab(BaseTab):
             show_ten_bit=False,
             suggest=lambda: self.suggest_output(self.src_row.path, self._key()),
         )
-        self.btn_render = self.make_render_btn(body, "📱  SHORTIFY", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("shortifier.shortify"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -160,8 +169,8 @@ class ShortifierTab(BaseTab):
     def size(self) -> tuple[int, int]:
         key = self._key()
         if key == "custom":
-            w = int(common.number(self.cw_var.get(), "Width", 16, 8192))
-            h = int(common.number(self.ch_var.get(), "Height", 16, 8192))
+            w = int(common.number(self.cw_var.get(), t("region_blur.width_col"), 16, 8192))
+            h = int(common.number(self.ch_var.get(), t("region_blur.height_col"), 16, 8192))
             return w // 2 * 2, h // 2 * 2
         return PLATFORMS[key][1], PLATFORMS[key][2]
 
@@ -214,7 +223,7 @@ class ShortifierTab(BaseTab):
         cut_at, dur = None, info.duration
         if self.trim_var.get() and limit and info.duration > limit:
             cut_at, dur = float(limit), float(limit)
-            self.log(self.console, f"Trimming to the {limit}s limit.")
+            self.log(self.console, t("shortifier.trimming_to_the_limit_s_limit", limit=limit))
         tw, th = self.size()
         self.log(self.console, f"{PLATFORMS[self._key()][0]} · {tw}×{th}")
         common.render(

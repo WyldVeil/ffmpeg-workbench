@@ -51,9 +51,9 @@ class LUTApplicatorTab(BaseTab):
         self.src_row.pack(fill="x", pady=px(2))
         look_row = tk.Frame(pick)
         look_row.pack(fill="x", pady=px(2))
-        tk.Label(look_row, text="Look:", width=16, anchor="w", font=(UI_FONT, 10, "bold")).pack(
-            side="left"
-        )
+        tk.Label(
+            look_row, text=t("lut.look"), width=16, anchor="w", font=(UI_FONT, 10, "bold")
+        ).pack(side="left")
         self.look_var = tk.StringVar(value=_CUSTOM)
         box = ttk.Combobox(
             look_row,
@@ -70,8 +70,7 @@ class LUTApplicatorTab(BaseTab):
         self.lut_row.pack(fill="x", pady=px(2))
         tk.Label(
             pick,
-            text="  ℹ  3D/1D .cube, .3dl, .dat, .m3d, .csp and Hald CLUT images "
-            "(.png/.tif) are supported.",
+            text=t("lut.3d_1d_cube_3dl_dat_m3d_csp"),
             fg=CLR["fgdim"],
             font=(UI_FONT, 8),
         ).pack(anchor="w")
@@ -173,8 +172,11 @@ class LUTApplicatorTab(BaseTab):
             return
         self.log(
             self.console,
-            f"Applying {os.path.basename(lut)} at "
-            f"{int(self.intensity_var.get() * 100)}% intensity…",
+            t(
+                "lut.applying_lut_at_intensity_var_intensity",
+                lut=os.path.basename(lut),
+                intensity_var=int(self.intensity_var.get() * 100),
+            ),
         )
         common.render(
             self,

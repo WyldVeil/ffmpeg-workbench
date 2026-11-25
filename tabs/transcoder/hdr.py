@@ -66,8 +66,8 @@ class HdrToSdrTab(BaseTab):
     def _build_header(self) -> tuple[tk.Frame, bool, tk.LabelFrame]:
         self.make_header(
             self,
-            "HDR to SDR",
-            "Make HDR video from phones, cameras and streaming look right on normal screens.",
+            t("hdr.hdr_to_sdr"),
+            t("hdr.make_hdr_video_from_phones_cameras_and"),
             icon="🌗",
         )
         body = scroll_body(self)
@@ -75,7 +75,7 @@ class HdrToSdrTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 2))
         self.kind_lbl = tk.Label(
             body,
-            text="Choose an HDR video - from a phone, camera, game or download.",
+            text=t("hdr.choose_an_hdr_video_from_a_phone"),
             fg=CLR["fgdim"],
             anchor="w",
             justify="left",
@@ -87,14 +87,14 @@ class HdrToSdrTab(BaseTab):
         )
         self.compare.pack(pady=px(4))
 
-        opt = tk.LabelFrame(body, text="  Conversion  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("hdr.conversion"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         known = capabilities.peek("vulkan")  # None: still being checked (never block the window)
         self.gpu_ok = bool(known)
         self.engine_var = tk.StringVar(value="gpu" if self.gpu_ok else "cpu")
         self.gpu_radio = tk.Radiobutton(
             opt,
-            text="GPU - best quality, understands Dolby Vision",
+            text=t("hdr.gpu_best_quality_understands_dolby_vision"),
             variable=self.engine_var,
             value="gpu",
             command=self._changed,
@@ -106,7 +106,7 @@ class HdrToSdrTab(BaseTab):
         self.gpu_radio.grid(row=0, column=0, columnspan=2, sticky="w")
         tk.Radiobutton(
             opt,
-            text="CPU - works on any computer",
+            text=t("hdr.cpu_works_on_any_computer"),
             variable=self.engine_var,
             value="cpu",
             command=self._changed,
@@ -114,7 +114,7 @@ class HdrToSdrTab(BaseTab):
         self.gpu_note = tk.Label(opt, text="", fg=CLR["fgdim"])
         self.gpu_note.grid(row=0, column=2, sticky="w")
         if known is None:
-            self.gpu_note.config(text="(checking the graphics driver...)")
+            self.gpu_note.config(text=t("hdr.checking_the_graphics_driver"))
             capabilities.on_ready("vulkan", self._gpu_known)
         elif not known:
             self.gpu_note.config(text=_NO_GPU)
@@ -126,12 +126,12 @@ class HdrToSdrTab(BaseTab):
             state="readonly",
             width=38,
         )
-        self.form_row(opt, 2, "Tone curve:", cb, pady=(8, 0))
+        self.form_row(opt, 2, t("hdr.tone_curve"), cb, pady=(8, 0))
         cb.bind("<<ComboboxSelected>>", lambda _e: self._changed())
         self.adaptive_var = tk.BooleanVar(value=True)
         self.adaptive_cb = tk.Checkbutton(
             opt,
-            text="Adapt to each scene's brightness (GPU)",
+            text=t("hdr.adapt_to_each_scene_s_brightness_gpu"),
             variable=self.adaptive_var,
             command=self._changed,
         )
@@ -146,7 +146,7 @@ class HdrToSdrTab(BaseTab):
             state="readonly",
             width=38,
         )
-        self.form_row(opt, 4, "Input:", ab, pady=(6, 0))
+        self.form_row(opt, 4, t("webm_maker.input"), ab, pady=(6, 0))
         ab.bind("<<ComboboxSelected>>", lambda _e: self._changed())
 
         self.encoder, self.out_row = output_section(
@@ -157,10 +157,12 @@ class HdrToSdrTab(BaseTab):
         )
         tk.Label(
             self.out_row.master,
-            text="Tip: HEVC or AV1 with 10-bit gives the smoothest skies and shadows.",
+            text=t("hdr.tip_hevc_or_av1_with_10_bit"),
             fg=CLR["fgdim"],
         ).pack(anchor="w", pady=px(2, 0), before=self.out_row)
-        self.btn_render = self.make_render_btn(body, "🌗  CONVERT TO SDR", self._render, width=24)
+        self.btn_render = self.make_render_btn(
+            body, t("hdr.convert_to_sdr"), self._render, width=24
+        )
         self.btn_render.pack(pady=px(8))
 
     def _build_console(self, body: tk.Frame) -> None:
@@ -205,7 +207,7 @@ class HdrToSdrTab(BaseTab):
             hdr.HdrInfo(),
             path,
         )  # nothing stale meanwhile
-        self.kind_lbl.config(text="Reading the file...", fg=CLR["fgdim"])
+        self.kind_lbl.config(text=t("hdr.reading_the_file"), fg=CLR["fgdim"])
         tasks.submit(
             partial(_inspect, path),
             on_done=lambda res: self._inspected(path, *res),
@@ -217,7 +219,7 @@ class HdrToSdrTab(BaseTab):
             return
         self._info, self._hdr, self._inspecting = info, found, None
         if self._info is None or not self._info.has_video:
-            self.kind_lbl.config(text="Can't read this file as video.", fg=CLR["red"])
+            self.kind_lbl.config(text=t("hdr.can_t_read_this_file_as_video"), fg=CLR["red"])
         elif self._hdr.is_hdr:
             note = ""
             if self._hdr.needs_gpu:
@@ -232,8 +234,7 @@ class HdrToSdrTab(BaseTab):
             )
         else:
             self.kind_lbl.config(
-                text="This video isn't tagged as HDR - it should already look right. If it "
-                "looks grey and flat, its HDR tags were lost: set Input below.",
+                text=t("hdr.this_video_isn_t_tagged_as_hdr_2"),
                 fg=CLR["fgdim"],
             )
         self.compare.load(path)
@@ -259,7 +260,7 @@ class HdrToSdrTab(BaseTab):
         src = self.src_row.path
         if self._inspecting:
             messagebox.showinfo(
-                "HDR to SDR", "Still reading the file - try again in a moment.", parent=self
+                t("hdr.hdr_to_sdr"), t("hdr.still_reading_the_file_try_again_in"), parent=self
             )
             return
         info = common.check_source(self, src)
@@ -267,19 +268,15 @@ class HdrToSdrTab(BaseTab):
             return
         if not (self._hdr.is_hdr or self._assume()):
             messagebox.showwarning(
-                "Not HDR",
-                "This video isn't tagged as HDR, so there's nothing to convert.\n\n"
-                "If it looks grey and flat, its HDR tags were lost - choose "
-                '"Treat as HDR10" (or HLG) under Input.',
+                t("hdr.not_hdr"),
+                t("hdr.this_video_isn_t_tagged_as_hdr"),
                 parent=self,
             )
             return
         if self._hdr.needs_gpu and not self._gpu():
             if not messagebox.askyesno(
-                "Dolby Vision",
-                "This Dolby Vision video has no HDR10 layer, so the CPU "
-                "conversion will have wrong colours (purple/green).\n\n"
-                "Convert anyway?",
+                t("hdr.dolby_vision"),
+                t("hdr.this_dolby_vision_video_has_no_hdr10"),
                 parent=self,
             ):
                 return
@@ -291,8 +288,12 @@ class HdrToSdrTab(BaseTab):
         chain = self.chain("yuv420p10le" if ten else "yuv420p")
         self.log(
             self.console,
-            f"{self._hdr.label() if self._hdr.is_hdr else 'Assumed HDR'} → SDR "
-            f"({'GPU' if self._gpu() else 'CPU'}, {hdr.CURVES[self._curve()][0]})",
+            t(
+                "hdr.value_sdr_value2_curves",
+                value=self._hdr.label() if self._hdr.is_hdr else "Assumed HDR",
+                value2="GPU" if self._gpu() else "CPU",
+                curves=hdr.CURVES[self._curve()][0],
+            ),
         )
         common.render(
             self,

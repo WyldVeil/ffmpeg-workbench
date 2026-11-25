@@ -46,7 +46,7 @@ class LoudnessNormTab(BaseTab):
             on_change=self._source_changed,
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
-        opt = tk.LabelFrame(body, text="  Target  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("downsizer.target"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.preset_var = tk.StringVar(value=ln.TARGETS["youtube"][0])
         pb = ttk.Combobox(
@@ -76,7 +76,7 @@ class LoudnessNormTab(BaseTab):
             )
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
-        self.form_row(opt, 2, "Audio track:", self.track_box)
+        self.form_row(opt, 2, t("loudness.audio_track"), self.track_box)
         self.report = tk.Label(
             body, text="", fg=CLR["accent"], font=(MONO_FONT, 10), justify="left"
         )
@@ -90,10 +90,14 @@ class LoudnessNormTab(BaseTab):
         row = tk.Frame(body)
         row.pack(pady=px(8))
         self.btn_analyse = tk.Button(
-            row, text="📏  ANALYSE", font=(UI_FONT, 11, "bold"), width=14, command=self._analyse
+            row,
+            text=t("loudness.analyse"),
+            font=(UI_FONT, 11, "bold"),
+            width=14,
+            command=self._analyse,
         )
         self.btn_analyse.pack(side="left", padx=px(6))
-        self.btn_render = self.make_render_btn(row, "📢  NORMALISE", self._render, width=18)
+        self.btn_render = self.make_render_btn(row, t("loudness.normalise"), self._render, width=18)
         self.btn_render.pack(side="left", padx=px(6))
         self.console = self.make_console_block(body, height=6)
 
@@ -122,9 +126,9 @@ class LoudnessNormTab(BaseTab):
 
     def _targets(self) -> tuple[float, float, float]:
         return (
-            common.number(self.i_var.get(), "Loudness", -70, -5),
-            common.number(self.tp_var.get(), "True peak", -9, 0),
-            common.number(self.lra_var.get(), "Range", 1, 50),
+            common.number(self.i_var.get(), t("loudness.loudness"), -70, -5),
+            common.number(self.tp_var.get(), t("exporter.true_peak_2"), -9, 0),
+            common.number(self.lra_var.get(), t("loudness.range"), 1, 50),
         )
 
     def _stream(self) -> int:
@@ -137,18 +141,24 @@ class LoudnessNormTab(BaseTab):
         if info is None:
             return
         stream = self._stream()
-        self.btn_analyse.config(state="disabled", text="Measuring…")
+        self.btn_analyse.config(state="disabled", text=t("loudness.measuring"))
 
         def done(m: ln.Measurement) -> None:
-            self.btn_analyse.config(state="normal", text="📏  ANALYSE")
+            self.btn_analyse.config(state="normal", text=t("loudness.analyse"))
             self.report.config(
-                text=f"Integrated {m.input_i:.1f} LUFS   ·   true peak {m.input_tp:.1f} dBTP   ·   "
-                f"range {m.input_lra:.1f} LU"
+                text=t(
+                    "loudness.integrated_input_i_1f_lufs_true_peak",
+                    input_i=m.input_i,
+                    input_tp=m.input_tp,
+                    input_lra=m.input_lra,
+                )
             )
 
         def failed(exc: BaseException) -> None:
-            self.btn_analyse.config(state="normal", text="📏  ANALYSE")
-            messagebox.showerror(t("common.error"), f"Measurement failed:\n{exc}", parent=self)
+            self.btn_analyse.config(state="normal", text=t("loudness.analyse"))
+            messagebox.showerror(
+                t("common.error"), t("loudness.measurement_failed_exc", exc=exc), parent=self
+            )
 
         tasks.submit(
             partial(ln.measure, src, -16, -1.5, 11, stream=stream),
@@ -163,7 +173,9 @@ class LoudnessNormTab(BaseTab):
         if info is None:
             return
         if not info.has_audio:
-            messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("voice_changer.this_file_has_no_audio"), parent=self
+            )
             return
         try:
             i, tp, lra = self._targets()
@@ -179,11 +191,17 @@ class LoudnessNormTab(BaseTab):
         result = {}
 
         def work(_p: object, _c: object, ctx: TaskContext) -> int:
-            ctx.log("Pass 1 of 2: measuring…")
+            ctx.log(t("loudness.pass_1_of_2_measuring"))
             m = ln.measure(src, i, tp, lra, stream=stream, ctx=ctx.span(0.0, 0.45))
             result["before"] = m
-            ctx.log(f"Measured {m.input_i:.1f} LUFS, peak {m.input_tp:.1f} dBTP")
-            ctx.log("Pass 2 of 2: normalising…")
+            ctx.log(
+                t(
+                    "loudness.measured_input_i_1f_lufs_peak_input",
+                    input_i=m.input_i,
+                    input_tp=m.input_tp,
+                )
+            )
+            ctx.log(t("loudness.pass_2_of_2_normalising"))
             af = ln.normalise_filter(i, tp, lra, m, sr)
             cmd = audio_filter_cmd(src, af, ctx.output(), info, stream=stream)
             ctx.span(0.45, 1.0).run(cmd, duration=dur)

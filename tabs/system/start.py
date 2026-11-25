@@ -23,8 +23,9 @@ import tkinter as tk
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
-from core import catalog, tools
+from core import catalog, i18n, tools
 from core import settings as _settings
+from core.i18n import t
 from core.ops import youtube as yto
 from core.scaling import px
 from core.tools import ToolId
@@ -99,15 +100,14 @@ class StartTab(BaseTab):
         ).pack(anchor="w")
         tk.Label(
             self._col,
-            text="What do you want to do?",
+            text=t("start.what_do_you_want_to_do"),
             font=(UI_FONT, 24, "bold"),
             bg=CLR["bg"],
             fg=CLR["fg"],
         ).pack(anchor="w", pady=px(2, 2))
         tk.Label(
             self._col,
-            text="Choose a goal, search, or drop in a file to see what you can do with it. "
-            "Everything happens on this computer.",
+            text=t("start.choose_a_goal_search_or_drop_in"),
             font=(UI_FONT, 11),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
@@ -178,7 +178,7 @@ class StartTab(BaseTab):
         total = len(catalog.TOOLS)
         home = tk.Label(
             foot,
-            text=f"🏠  Browse all {total} tools on Home  ›",
+            text=t("start.browse_all_total_tools_on_home", total=total),
             font=(UI_FONT, 10, "bold"),
             bg=CLR["bg"],
             fg=CLR["accent"],
@@ -188,7 +188,7 @@ class StartTab(BaseTab):
         home.bind("<Button-1>", lambda _e: self._go(ToolId.HOME))
         tk.Label(
             foot,
-            text="Tip: drop files anywhere in the app. Ctrl+F searches the sidebar.",
+            text=t("start.tip_drop_files_anywhere_in_the_app"),
             font=(UI_FONT, 9),
             bg=CLR["bg"],
             fg=CLR["fgdim"],
@@ -280,7 +280,7 @@ class StartTab(BaseTab):
     def _choose_file(self) -> None:
         from tabs.kit import dialogs
 
-        path = dialogs.ask_open("media", title="Choose a file", parent=self)
+        path = dialogs.ask_open("media", title=t("start.choose_a_file"), parent=self)
         if path:
             self.load_file(path)
 
@@ -344,7 +344,7 @@ class StartTab(BaseTab):
             c.create_text(
                 px(82),
                 h / 2 + px(32),
-                text="Click to choose another file",
+                text=t("start.click_to_choose_another_file"),
                 font=(UI_FONT, 9),
                 fill=CLR["fgdim"],
                 anchor="w",
@@ -367,7 +367,7 @@ class StartTab(BaseTab):
         c.create_text(
             w / 2,
             h / 2 - px(14),
-            text="⬇  Drop a video, audio file or photo here",
+            text=t("start.drop_a_video_audio_file_or_photo"),
             font=(UI_FONT, 12, "bold"),
             fill=CLR["fg"],
         )
@@ -412,7 +412,7 @@ class StartTab(BaseTab):
         if not recent and not files:
             tk.Label(
                 self._recent,
-                text="New here?",
+                text=i18n.t("start.new_here"),
                 font=(UI_FONT, 10, "bold"),
                 bg=CLR["bg"],
                 fg=CLR["fg"],
@@ -429,7 +429,7 @@ class StartTab(BaseTab):
         if recent:
             tk.Label(
                 self._recent,
-                text="Recently used",
+                text=i18n.t("start.recently_used"),
                 font=(UI_FONT, 10, "bold"),
                 bg=CLR["bg"],
                 fg=CLR["fg"],
@@ -449,7 +449,7 @@ class StartTab(BaseTab):
         if files:
             tk.Label(
                 self._recent,
-                text="Recent files",
+                text=i18n.t("start.recent_files"),
                 font=(UI_FONT, 10, "bold"),
                 bg=CLR["bg"],
                 fg=CLR["fg"],
@@ -483,7 +483,7 @@ class StartTab(BaseTab):
             if not hits:
                 tk.Label(
                     self._results,
-                    text="Try other words - or pick a goal below, or browse every tool on Home.",
+                    text=t("start.try_other_words_or_pick_a_goal"),
                     font=(UI_FONT, 10),
                     bg=CLR["bg"],
                     fg=CLR["fgdim"],
@@ -496,7 +496,7 @@ class StartTab(BaseTab):
         if g is not None:
             back = tk.Label(
                 self._results,
-                text="‹  All goals",
+                text=t("start.all_goals"),
                 font=(UI_FONT, 10, "bold"),
                 bg=CLR["bg"],
                 fg=CLR["accent"],
@@ -504,7 +504,9 @@ class StartTab(BaseTab):
             )
             back.pack(anchor="w")
             back.bind("<Button-1>", lambda _e: self.show_goal(None))
-            self._section(self._results, f"{g.icon}  {g.title}", sub=g.blurb)
+            self._section(
+                self._results, f"{g.icon}  {catalog.goal_title(g)}", sub=catalog.goal_blurb(g)
+            )
             self._tool_list(g.tools)
             return
         self._section(self._results, "Goals")
@@ -588,7 +590,7 @@ class StartTab(BaseTab):
         text.pack(side="left", fill="both", expand=True, pady=px(10), padx=px(0, 10))
         title = tk.Label(
             text,
-            text=g.title,
+            text=catalog.goal_title(g),
             font=(UI_FONT, 11, "bold"),
             bg=CLR["panel"],
             fg=CLR["fg"],
@@ -599,7 +601,7 @@ class StartTab(BaseTab):
         title.pack(anchor="w", fill="x")
         blurb = tk.Label(
             text,
-            text=g.blurb,
+            text=catalog.goal_blurb(g),
             font=(UI_FONT, 9),
             bg=CLR["panel"],
             fg=CLR["fgdim"],
@@ -613,14 +615,14 @@ class StartTab(BaseTab):
 
     def _tool_row(self, parent: tk.Misc, name: str, reason: str = "") -> Card:
         info = catalog.TOOLS.get(name)
-        icon, about = (info.icon, info.blurb) if info is not None else ("•", "")
+        icon, about = (info.icon, catalog.tool_blurb(name)) if info is not None else ("•", "")
         card = self._card(parent)
         card.tool = name
         tk.Label(card, text=icon, font=(UI_FONT, 17), bg=CLR["panel"], fg=CLR["fg"], width=2).pack(
             side="left", padx=px(12, 6), pady=px(8)
         )
         tk.Label(
-            card, text="Open ›", font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"]
+            card, text=t("start.open"), font=(UI_FONT, 9, "bold"), bg=CLR["panel"], fg=CLR["accent"]
         ).pack(side="right", padx=px(12))
         text = tk.Frame(card, bg=CLR["panel"])
         text.pack(side="left", fill="both", expand=True, pady=px(8))

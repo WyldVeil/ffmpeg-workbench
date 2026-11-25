@@ -43,9 +43,7 @@ class SharpenTab(BaseTab):
         self._changed()
 
     def _build_ui(self) -> None:
-        self.make_header(
-            self, t("tab.sharpen"), "Bring back detail in soft or upscaled video.", icon="🔪"
-        )
+        self.make_header(self, t("tab.sharpen"), t("toolinfo.sharpen"), icon="🔪")
         body = scroll_body(self)
         self.src_row = FileRow(
             body, t("common.source_video"), self.src_var, on_change=self._source_changed
@@ -53,7 +51,7 @@ class SharpenTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.compare = CompareView(body, 400, 225, after_label="Sharpened")
         self.compare.pack(pady=px(4))
-        opt = tk.LabelFrame(body, text="  Sharpen  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("sharpen.sharpen"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.method_var = tk.StringVar(value=METHODS["cas"])
         mb = ttk.Combobox(
@@ -74,7 +72,7 @@ class SharpenTab(BaseTab):
             resolution=0.05,
             orient="horizontal",
             length=px(240),
-            label="Amount",
+            label=t("sharpen.amount"),
             command=lambda _v: self._changed(),
         ).grid(row=1, column=0, sticky="w")
         self.radius_var = tk.IntVar(value=5)
@@ -86,7 +84,7 @@ class SharpenTab(BaseTab):
             resolution=2,
             orient="horizontal",
             length=px(160),
-            label="Radius (unsharp)",
+            label=t("sharpen.radius_unsharp"),
             command=lambda _v: self._changed(),
         )
         self.radius_scale.grid(row=1, column=1, sticky="w", padx=px(10))
@@ -105,7 +103,7 @@ class SharpenTab(BaseTab):
             ("h264", "hevc", "av1", "vp9", "prores"),
             suggest=lambda: self.suggest_output(self.src_row.path, "sharp"),
         )
-        self.btn_render = self.make_render_btn(body, "🔪  SHARPEN", self._render, width=22)
+        self.btn_render = self.make_render_btn(body, t("sharpen.sharpen_2"), self._render, width=22)
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
         self._changed()

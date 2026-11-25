@@ -31,7 +31,10 @@ class AudioExtractorTab(BaseTab):
 
     def _build_ui(self) -> None:
         self.make_header(
-            self, t("tab.audio_extractor"), "Save a video's soundtrack as its own file.", icon="🎵"
+            self,
+            t("tab.audio_extractor"),
+            t("extractor.save_a_video_s_soundtrack_as_its"),
+            icon="🎵",
         )
         body = scroll_body(self)
         self.src_row = FileRow(
@@ -42,7 +45,7 @@ class AudioExtractorTab(BaseTab):
             on_change=self._source_changed,
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
-        opt = tk.LabelFrame(body, text="  Extract  ", padx=px(12), pady=px(8))
+        opt = tk.LabelFrame(body, text=t("extractor.extract"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
         self.fmt_var = tk.StringVar(value=xo.FORMATS["copy"][0])
         fb = ttk.Combobox(
@@ -53,20 +56,22 @@ class AudioExtractorTab(BaseTab):
             width=34,
         )
         fb.bind("<<ComboboxSelected>>", lambda _e: self._suggest_name(force=True))
-        self.form_row(opt, 0, "Format:", fb)
+        self.form_row(opt, 0, t("common.format"), fb)
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(opt, textvariable=self.track_var, state="readonly", width=40)
-        self.form_row(opt, 1, "Track:", self.track_box)
+        self.form_row(opt, 1, t("extractor.track"), self.track_box)
         self.part = RangePicker(opt, start="", source=lambda: self.src_row.path)
-        self.form_row(opt, 2, "From / to (optional):", self.part)
+        self.form_row(opt, 2, t("extractor.from_to_optional"), self.part)
         self.norm_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             opt,
-            text="Normalise loudness to -16 LUFS (two-pass, re-encodes)",
+            text=t("extractor.normalise_loudness_to_16_lufs_two_pass"),
             variable=self.norm_var,
         ).grid(row=3, column=1, sticky="w")
         self.out_row = save_section(body, t("common.output_file"), kind="audio", ext=".m4a")
-        self.btn_render = self.make_render_btn(body, "🎵  EXTRACT", self._render, width=20)
+        self.btn_render = self.make_render_btn(
+            body, t("extractor.extract_2"), self._render, width=20
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -112,7 +117,7 @@ class AudioExtractorTab(BaseTab):
             return
         if not info.has_audio:
             messagebox.showwarning(
-                t("common.warning"), "This file has no audio track.", parent=self
+                t("common.warning"), t("extractor.this_file_has_no_audio_track"), parent=self
             )
             return
         self._info = info

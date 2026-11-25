@@ -66,7 +66,12 @@ class _Transcription:
 
     def run(self, _p: object, cancelled: Callable[[], bool], ctx: TaskContext) -> int:
         if not whisper.is_installed(self.model):
-            ctx.log(f"Downloading the {whisper.MODELS[self.model].label} model (one time)…")
+            ctx.log(
+                t(
+                    "auto_subs.downloading_the_label_model_one_time",
+                    label=whisper.MODELS[self.model].label,
+                )
+            )
             whisper.download_model(self.model, lambda f: ctx.progress(0.25 * f), cancelled)
         tmp = ctx.tempdir()
         wav = os.path.join(tmp, "audio.wav")
@@ -128,7 +133,7 @@ class AutoSubsTab(BaseTab):
         self.make_header(
             self,
             t("tab.auto_subtitles"),
-            "Turn speech into subtitles with Whisper - runs entirely on this computer.",
+            t("auto_subs.turn_speech_into_subtitles_with_whisper_runs"),
             icon="🗣",
         )
         body = scroll_body(self)
@@ -141,23 +146,23 @@ class AutoSubsTab(BaseTab):
         )
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
 
-        eng = tk.LabelFrame(body, text="  Speech recognition  ", padx=px(12), pady=px(8))
+        eng = tk.LabelFrame(body, text=t("auto_subs.speech_recognition"), padx=px(12), pady=px(8))
         eng.pack(fill="x", padx=px(20), pady=px(6))
 
         self.model_var = tk.StringVar()
         self.model_box = ttk.Combobox(eng, textvariable=self.model_var, state="readonly", width=40)
         self.model_box.bind("<<ComboboxSelected>>", lambda _e: self._model_status())
         self.dl_btn = tk.Button(
-            eng, text="Download", relief="flat", cursor="hand2", command=self._download
+            eng, text=t("btn.download"), relief="flat", cursor="hand2", command=self._download
         )
-        self.form_row(eng, 0, "Model:", self.model_box, self.dl_btn, label_width=18)
+        self.form_row(eng, 0, t("common.model"), self.model_box, self.dl_btn, label_width=18)
         self.model_lbl = tk.Label(eng, text="", fg=CLR["fgdim"], font=(UI_FONT, 8))
         self.model_lbl.grid(row=1, column=1, columnspan=3, sticky="w")
         self.lang_var = tk.StringVar(value=whisper.LANGUAGES[0][1])
         self.form_row(
             eng,
             2,
-            "Spoken language:",
+            t("auto_subs.spoken_language"),
             ttk.Combobox(
                 eng,
                 textvariable=self.lang_var,
@@ -173,7 +178,9 @@ class AutoSubsTab(BaseTab):
             3,
             "",
             tk.Checkbutton(
-                eng, text="Translate the subtitles into English", variable=self.translate_var
+                eng,
+                text=t("auto_subs.translate_the_subtitles_into_english"),
+                variable=self.translate_var,
             ),
             label_width=18,
         )
@@ -181,13 +188,13 @@ class AutoSubsTab(BaseTab):
         self.form_row(
             eng,
             4,
-            "Max. characters/line:",
+            t("auto_subs.max_characters_line"),
             tk.Scale(
                 eng, variable=self.maxlen_var, from_=0, to=80, orient="horizontal", length=px(200)
             ),
             tk.Label(
                 eng,
-                text="(0 = whole sentences; 32-42 suits most screens)",
+                text=t("auto_subs.0_whole_sentences_32_42_suits_most"),
                 fg=CLR["fgdim"],
                 font=(UI_FONT, 8),
             ),
@@ -200,33 +207,37 @@ class AutoSubsTab(BaseTab):
         self.form_row(
             eng,
             5,
-            "Names / terms:",
+            t("auto_subs.names_terms"),
             tk.Entry(eng, textvariable=self.prompt_var, width=44),
-            tk.Label(eng, text="(optional - helps spelling)", fg=CLR["fgdim"], font=(UI_FONT, 8)),
+            tk.Label(
+                eng, text=t("auto_subs.optional_helps_spelling"), fg=CLR["fgdim"], font=(UI_FONT, 8)
+            ),
             label_width=18,
         )
         self.track_var = tk.StringVar()
         self.track_box = ttk.Combobox(eng, textvariable=self.track_var, state="readonly", width=40)
-        self.form_row(eng, 6, "Audio track:", self.track_box, label_width=18)
+        self.form_row(eng, 6, t("loudness.audio_track"), self.track_box, label_width=18)
 
         out = output_box(body)
         self.fmt_var = tk.StringVar(value=FORMATS["srt"])
         fr = tk.Frame(out)
         fr.pack(fill="x")
-        tk.Label(fr, text="Format:", width=10, anchor="w").pack(side="left")
+        tk.Label(fr, text=t("common.format"), width=10, anchor="w").pack(side="left")
         ttk.Combobox(
             fr, textvariable=self.fmt_var, values=list(FORMATS.values()), state="readonly", width=34
         ).pack(side="left")
         self.out_row = SaveRow(out, "Save as:", kind="subtitle", ext=".srt", suggest=self._suggest)
         self.out_row.pack(fill="x", pady=px(6, 0))
 
-        self.btn_render = self.make_render_btn(body, "🗣  GENERATE SUBTITLES", self._run, width=26)
+        self.btn_render = self.make_render_btn(
+            body, t("auto_subs.generate_subtitles_2"), self._run, width=26
+        )
         self.btn_render.pack(pady=px(8))
         after = tk.Frame(body)
         after.pack(pady=px(0, 6))
         self.burn_btn = tk.Button(
             after,
-            text="🔥 Burn into the video…",
+            text=t("auto_subs.burn_into_the_video"),
             relief="flat",
             state="disabled",
             command=self._burn,
@@ -234,7 +245,7 @@ class AutoSubsTab(BaseTab):
         self.burn_btn.pack(side="left", padx=px(6))
         self.mux_btn = tk.Button(
             after,
-            text="📎 Add as a subtitle track…",
+            text=t("auto_subs.add_as_a_subtitle_track"),
             relief="flat",
             state="disabled",
             command=self._mux,
@@ -246,8 +257,7 @@ class AutoSubsTab(BaseTab):
         if not whisper.cli_path():
             self.log_tagged(
                 self.console,
-                "The whisper-cli engine is missing from this build - run "
-                "scripts/fetch_binaries.py.",
+                t("auto_subs.the_whisper_cli_engine_is_missing_from"),
                 "error",
             )
 
@@ -269,13 +279,12 @@ class AutoSubsTab(BaseTab):
     def _model_status(self) -> None:
         key = self.model_key() or whisper.DEFAULT_MODEL
         if whisper.is_installed(key):
-            self.model_lbl.config(text="Downloaded - ready to use offline.")
+            self.model_lbl.config(text=t("auto_subs.downloaded_ready_to_use_offline"))
             self.dl_btn.config(state="disabled")
         else:
             m = whisper.MODELS[key]
             self.model_lbl.config(
-                text=f"Not downloaded yet ({m.size_mb} MB, once). It will be "
-                f"fetched automatically when you generate."
+                text=t("auto_subs.not_downloaded_yet_size_mb_mb_once", size_mb=m.size_mb)
             )
             self.dl_btn.config(state="normal" if not self._downloading else "disabled")
 
@@ -284,24 +293,32 @@ class AutoSubsTab(BaseTab):
         if self._downloading:
             return
         self._downloading = True
-        self.dl_btn.config(state="disabled", text="Downloading… 0%")
+        self.dl_btn.config(state="disabled", text=t("auto_subs.downloading_0"))
 
         def progress(f: float) -> None:
-            self.call_ui(lambda: self.dl_btn.config(text=f"Downloading… {f * 100:.0f}%"))
+            self.call_ui(
+                lambda: self.dl_btn.config(text=t("auto_subs.downloading_f_0f", f=f * 100))
+            )
 
         def done(_path: str) -> None:
             self._downloading = False
-            self.dl_btn.config(text="Download")
+            self.dl_btn.config(text=t("btn.download"))
             self._fill_models(key)
-            self.log_tagged(self.console, f"Model ready: {whisper.MODELS[key].label}", "success")
+            self.log_tagged(
+                self.console,
+                t("auto_subs.model_ready_label", label=whisper.MODELS[key].label),
+                "success",
+            )
             if then is not None:
                 then()
 
         def failed(exc: BaseException) -> None:
             self._downloading = False
-            self.dl_btn.config(text="Download", state="normal")
+            self.dl_btn.config(text=t("btn.download"), state="normal")
             messagebox.showerror(
-                t("common.error"), f"Could not download the model:\n{exc}", parent=self
+                t("common.error"),
+                t("auto_subs.could_not_download_the_model_exc", exc=exc),
+                parent=self,
             )
 
         tasks.submit(
@@ -350,13 +367,13 @@ class AutoSubsTab(BaseTab):
             return None
         if not info.has_audio:
             messagebox.showwarning(
-                t("common.warning"), "This file has no audio track to transcribe.", parent=self
+                t("common.warning"), t("auto_subs.this_file_has_no_audio_track_to"), parent=self
             )
             return None
         if not whisper.cli_path():
             messagebox.showerror(
                 t("common.error"),
-                "The speech-to-text engine (whisper-cli) is missing from this build.",
+                t("auto_subs.the_speech_to_text_engine_whisper_cli"),
                 parent=self,
             )
             return None
@@ -395,8 +412,11 @@ class AutoSubsTab(BaseTab):
         self.btn_render.config(text=f"✖ {t('btn.cancel')}", command=lambda: self.cancel_render(tid))
         self.log(
             self.console,
-            f"Transcribing with {whisper.MODELS[key].label} "
-            f"({'auto language' if lang == 'auto' else lang})…",
+            t(
+                "auto_subs.transcribing_with_label_value",
+                label=whisper.MODELS[key].label,
+                value="auto language" if lang == "auto" else lang,
+            ),
         )
 
     def _outputs(self, src: str, fmt: str) -> list[str] | None:
@@ -413,7 +433,9 @@ class AutoSubsTab(BaseTab):
 
     def _transcribed(self, job: _Transcription, key: str, tid: str, rc: int) -> None:
         """Back to ready; on success, the follow-up buttons light up."""
-        self.btn_render.config(text="🗣  GENERATE SUBTITLES", command=self._run, state="normal")
+        self.btn_render.config(
+            text=t("auto_subs.generate_subtitles_2"), command=self._run, state="normal"
+        )
         self._fill_models(key)
         self.last_task = self.task(tid)
         outputs = job.outputs

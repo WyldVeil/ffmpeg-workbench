@@ -298,6 +298,8 @@ def t(key: str, **kwargs: object) -> str:
     Supports Python str.format() substitution via keyword arguments:
         t("misc.queue_busy", n=3)  ->  "Queue: 3 jobs"
     """
+    if not _fallback:  # nothing loaded yet (the command line, a test): English
+        load_language(_current)
     text: str = _strings.get(key) or _fallback.get(key) or key
     if kwargs:
         try:

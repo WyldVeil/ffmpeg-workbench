@@ -278,7 +278,7 @@ def _remap_widget(widget: tk.Misc, mapping: dict[str, str]) -> None:
             with contextlib.suppress(tk.TclError):
                 _configure(widget, **{option: now})
     if isinstance(widget, tk.Canvas):
-        path = str(widget)
+        path = _path(widget)
         for item in widget.find_all():
             for option in ("-fill", "-outline"):
                 with contextlib.suppress(tk.TclError):
@@ -336,7 +336,7 @@ def apply_skin(app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame) -> Skin:
         content.config(bg=skin["content"])
     else:
         recolour(app, _applied, skin, sidebar=sidebar)
-    _applied = dict(skin)
+    _applied = skin.copy()
     apply_ttk_styles(skin)
     if skin.get("stars"):
         start_stars(app, skin)
@@ -479,9 +479,17 @@ def _style_lists(style: ttk.Style, k: _Colours) -> None:
     style.map("TRadiobutton", background=[("active", k.c)], foreground=[("active", k.acc)])
 
 
+def _path(widget: tk.Misc) -> str:
+    """The widget's own Tk path.  Not ``str(widget)``: ScrolledText answers
+    that with its outer frame's path, so its text box was never repainted."""
+    return str(getattr(widget, "_w", widget))
+
+
 def _configure(widget: tk.Misc, **options: str) -> None:
     """``widget.configure(**options)`` for any Tk widget class (Misc doesn't declare the options)."""
-    widget.tk.call(str(widget), "configure", *[x for k, v in options.items() for x in (f"-{k}", v)])
+    widget.tk.call(
+        _path(widget), "configure", *[x for k, v in options.items() for x in (f"-{k}", v)]
+    )
 
 
 def _recolour_frame(widget: tk.Misc, bg_col: str) -> None:

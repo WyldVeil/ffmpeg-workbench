@@ -65,11 +65,11 @@ class SideBySideTab(BaseTab):
         self.make_header(
             self,
             t("tab.side_by_side"),
-            "Comparison, reaction and before/after layouts from two to four clips.",
+            t("side_by_side.comparison_reaction_and_before_after_layouts_fro"),
             icon="◫",
         )
         body = scroll_body(self)
-        clips = tk.LabelFrame(body, text="  Clips  ", padx=px(12), pady=px(6))
+        clips = tk.LabelFrame(body, text=t("beat_sync.clips"), padx=px(12), pady=px(6))
         clips.pack(fill="x", padx=px(20), pady=px(10, 4))
         self.rows: list[FileRow] = []
         self.label_vars: list[tk.StringVar] = []
@@ -79,17 +79,17 @@ class SideBySideTab(BaseTab):
             line.pack(fill="x", pady=px(2))
             fr = FileRow(
                 line,
-                f"Clip {i + 1}{'' if i < 2 else ' (grid)'}:",
+                t("side_by_side.clip_i_value", i=i + 1, value="" if i < 2 else " (grid)"),
                 self.src_var if i == 0 else None,
                 label_width=12,
                 width=40,
             )
             fr.pack(side="left", fill="x", expand=True)
             lv = tk.StringVar(value=("Before", "After", "", "")[i])
-            tk.Label(line, text="Label:").pack(side="left", padx=px(6, 2))
+            tk.Label(line, text=t("side_by_side.label")).pack(side="left", padx=px(6, 2))
             tk.Entry(line, textvariable=lv, width=12).pack(side="left")
             sv = tk.StringVar(value="1.0")
-            tk.Label(line, text="Speed:").pack(side="left", padx=px(6, 2))
+            tk.Label(line, text=t("common.speed")).pack(side="left", padx=px(6, 2))
             ttk.Combobox(
                 line,
                 textvariable=sv,
@@ -100,7 +100,7 @@ class SideBySideTab(BaseTab):
             self.label_vars.append(lv)
             self.speed_vars.append(sv)
 
-        lay = tk.LabelFrame(body, text="  Layout  ", padx=px(12), pady=px(6))
+        lay = tk.LabelFrame(body, text=t("side_by_side.layout"), padx=px(12), pady=px(6))
         lay.pack(fill="x", padx=px(20), pady=px(4))
 
         self.layout_var = tk.StringVar(value=LAYOUTS["side"])
@@ -108,7 +108,7 @@ class SideBySideTab(BaseTab):
         self.form_row(
             lay,
             0,
-            "Layout:",
+            t("side_by_side.layout_label"),
             ttk.Combobox(
                 lay,
                 textvariable=self.layout_var,
@@ -131,12 +131,14 @@ class SideBySideTab(BaseTab):
         self.form_row(
             lay,
             1,
-            "Framing:",
+            t("slideshow.framing"),
             tk.Checkbutton(
-                lay, text="Fill cells (crop instead of black bars)", variable=self.fill_var
+                lay,
+                text=t("side_by_side.fill_cells_crop_instead_of_black_bars"),
+                variable=self.fill_var,
             ),
-            tk.Checkbutton(lay, text="Divider line", variable=self.divider_var),
-            tk.Checkbutton(lay, text="Labels", variable=self.labels_on),
+            tk.Checkbutton(lay, text=t("side_by_side.divider_line"), variable=self.divider_var),
+            tk.Checkbutton(lay, text=t("side_by_side.labels"), variable=self.labels_on),
             label_width=14,
             pady=2,
         )
@@ -145,7 +147,7 @@ class SideBySideTab(BaseTab):
         self.form_row(
             lay,
             2,
-            "Wipe:",
+            t("side_by_side.wipe"),
             tk.Scale(
                 lay,
                 variable=self.wipe_pos,
@@ -155,7 +157,7 @@ class SideBySideTab(BaseTab):
                 orient="horizontal",
                 length=px(160),
             ),
-            tk.Label(lay, text="Sweep every (s, 0 = fixed):"),
+            tk.Label(lay, text=t("side_by_side.sweep_every_s_0_fixed")),
             tk.Entry(lay, textvariable=self.wipe_period, width=5),
             label_width=14,
             pady=2,
@@ -165,7 +167,7 @@ class SideBySideTab(BaseTab):
         self.form_row(
             lay,
             3,
-            "Audio:",
+            t("crossfader.audio"),
             ttk.Combobox(
                 lay,
                 textvariable=self.audio_var,
@@ -179,7 +181,7 @@ class SideBySideTab(BaseTab):
         self.form_row(
             lay,
             4,
-            "Length:",
+            t("collage.length"),
             ttk.Combobox(
                 lay,
                 textvariable=self.length_var,
@@ -199,7 +201,9 @@ class SideBySideTab(BaseTab):
         )
 
     def _build_render(self, body: tk.Frame) -> None:
-        self.btn_render = self.make_render_btn(body, "◫  CREATE", self._render, width=22)
+        self.btn_render = self.make_render_btn(
+            body, t("side_by_side.create"), self._render, width=22
+        )
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
@@ -217,7 +221,9 @@ class SideBySideTab(BaseTab):
             if info is None:
                 return None
             try:
-                speed = common.number(self.speed_vars[i].get(), f"Clip {i + 1} speed", 0.1, 4)
+                speed = common.number(
+                    self.speed_vars[i].get(), t("side_by_side.clip_i_speed", i=i + 1), 0.1, 4
+                )
             except ValueError as exc:
                 messagebox.showwarning(t("common.warning"), str(exc), parent=self)
                 return None
@@ -231,7 +237,7 @@ class SideBySideTab(BaseTab):
             return
         labels = [c.label for c in clips]
         try:
-            period = common.number(self.wipe_period.get() or "0", "Sweep", 0, 600)
+            period = common.number(self.wipe_period.get() or "0", t("side_by_side.sweep"), 0, 600)
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return

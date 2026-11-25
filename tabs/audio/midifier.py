@@ -72,7 +72,7 @@ class MIDIfierTab(BaseTab):
         self._dep_lbl.pack(fill="x", padx=px(4), pady=px(2))
         self._dep_btn = tk.Button(
             dep_sec,
-            text="Choose SoundFont…",
+            text=t("midifier.choose_soundfont"),
             font=(UI_FONT, 9, "bold"),
             bg=CLR["accent"],
             fg="white",
@@ -80,7 +80,7 @@ class MIDIfierTab(BaseTab):
             cursor="hand2",
             command=self._choose_soundfont,
         )
-        add_tooltip(self._dep_btn, "Use any General MIDI SoundFont (.sf2 / .sf3) you have.")
+        add_tooltip(self._dep_btn, t("midifier.use_any_general_midi_soundfont_sf2_sf3"))
 
     def _build_source(self) -> None:
         """Source."""
@@ -283,7 +283,7 @@ class MIDIfierTab(BaseTab):
 
     def _browse_src(self) -> None:
         p = dialogs.askopenfilename(
-            title="Open audio file",
+            title=t("midifier.open_audio_file"),
             filetypes=[
                 (
                     "Audio, video or MIDI",
@@ -302,7 +302,7 @@ class MIDIfierTab(BaseTab):
 
     def _browse_out(self) -> None:
         p = dialogs.asksaveasfilename(
-            title="Save MP3 as",
+            title=t("midifier.save_mp3_as"),
             defaultextension=".mp3",
             filetypes=[("MP3", "*.mp3"), ("All files", "*.*")],
         )
@@ -338,7 +338,7 @@ class MIDIfierTab(BaseTab):
 
     def _choose_soundfont(self) -> None:
         p = dialogs.askopenfilename(
-            title="Choose a SoundFont",
+            title=t("midifier.choose_a_soundfont"),
             filetypes=[("SoundFont", "*.sf2 *.sf3"), ("All files", "*.*")],
         )
         if p:
@@ -353,7 +353,9 @@ class MIDIfierTab(BaseTab):
 
         info = common.check_source(self, src, need_video=False)
         if info is not None and not info.has_audio:
-            messagebox.showwarning(t("common.warning"), "This file has no audio.", parent=self)
+            messagebox.showwarning(
+                t("common.warning"), t("voice_changer.this_file_has_no_audio"), parent=self
+            )
             return None
         return info
 
@@ -390,13 +392,17 @@ class MIDIfierTab(BaseTab):
             return
         try:
             threshold = common.number(
-                self.note_thresh_var.get() or "0.5", "Note threshold", 0.05, 0.99
+                self.note_thresh_var.get() or "0.5", t("midifier.note_threshold"), 0.05, 0.99
             )
             min_dur = common.number(
-                self.min_note_var.get() or "0.05", "Minimum note length", 0.01, 5
+                self.min_note_var.get() or "0.05", t("midifier.minimum_note_length"), 0.01, 5
             )
-            gain = common.number(self.gain_var.get() or "0.6", "Gain", 0.05, 5)
-            rate = int(common.number(self.sr_var.get() or "44100", "Sample rate", 8000, 192000))
+            gain = common.number(self.gain_var.get() or "0.6", t("midifier.gain"), 0.05, 5)
+            rate = int(
+                common.number(
+                    self.sr_var.get() or "44100", t("midifier.sample_rate_2"), 8000, 192000
+                )
+            )
         except ValueError as exc:
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
