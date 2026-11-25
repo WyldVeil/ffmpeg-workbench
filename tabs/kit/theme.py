@@ -205,6 +205,106 @@ def _blend(a: str, b: str, amount: float) -> str:
     return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(ca, cb, strict=False))
 
 
+_applied: Skin | None = None  # the palette the window is painted in now
+
+#: which palette entry a colour stands for when two share it: the content's
+#: first, except in the sidebar
+_CONTENT_FIRST = (
+    "content",
+    "panel",
+    "fg",
+    "fgdim",
+    "accent",
+    "border",
+    "input_bg",
+    "input_fg",
+    "console_bg",
+    "console_fg",
+    "green",
+    "red",
+    "orange",
+    "pink",
+    "sb_bg",
+    "sb_btn",
+    "sb_hover",
+    "sb_active",
+    "sb_cat",
+)
+_SIDEBAR_FIRST = (
+    "sb_bg",
+    "sb_btn",
+    "sb_hover",
+    "sb_active",
+    "sb_cat",
+    *(k for k in _CONTENT_FIRST if not k.startswith("sb_")),
+)
+_COLOUR_OPTIONS = (
+    "background",
+    "foreground",
+    "activebackground",
+    "activeforeground",
+    "highlightbackground",
+    "highlightcolor",
+    "insertbackground",
+    "selectbackground",
+    "selectforeground",
+    "selectcolor",
+    "troughcolor",
+    "disabledforeground",
+    "readonlybackground",
+    "disabledbackground",
+)
+
+
+def colour_map(old: Skin, new: Skin, order: tuple[str, ...]) -> dict[str, str]:
+    """Each colour of *old* (lower case) -> the same palette entry in *new*;
+    when entries share a colour, the first in *order* decides."""
+    out: dict[str, str] = {}
+    for key in order:
+        was, now = old.get(key), new.get(key)
+        if isinstance(was, str) and isinstance(now, str) and was.startswith("#"):
+            out.setdefault(was.lower(), now)
+    return out
+
+
+def _remap_widget(widget: tk.Misc, mapping: dict[str, str]) -> None:
+    for option in _COLOUR_OPTIONS:
+        try:
+            value = str(widget.cget(option)).lower()
+        except (tk.TclError, ValueError):
+            continue  # this kind of widget has no such option (ttk widgets have none)
+        now = mapping.get(value)
+        if now is not None and now.lower() != value:
+            with contextlib.suppress(tk.TclError):
+                _configure(widget, **{option: now})
+    if isinstance(widget, tk.Canvas):
+        path = str(widget)
+        for item in widget.find_all():
+            for option in ("-fill", "-outline"):
+                with contextlib.suppress(tk.TclError):
+                    now = mapping.get(str(widget.tk.call(path, "itemcget", item, option)).lower())
+                    if now is not None:
+                        widget.tk.call(path, "itemconfigure", item, option, now)
+
+
+def recolour(app: tk.Misc, old: Skin, new: Skin, *, sidebar: tk.Misc | None = None) -> int:
+    """Repaint every widget of *app* from palette *old* to *new*: a colour that
+    is one of *old*'s entries becomes the same entry of *new* (a button in the
+    panel colour stays in the panel colour).  Returns how many widgets were looked at."""
+    content_map = colour_map(old, new, _CONTENT_FIRST)
+    sidebar_map = colour_map(old, new, _SIDEBAR_FIRST)
+    seen = 0
+    stack: list[tuple[tk.Misc, bool]] = [(app, False)]
+    while stack:
+        widget, in_sidebar = stack.pop()
+        in_sidebar = in_sidebar or widget is sidebar
+        _remap_widget(widget, sidebar_map if in_sidebar else content_map)
+        seen += 1
+        with contextlib.suppress(tk.TclError):
+            stack.extend((child, in_sidebar) for child in widget.winfo_children())
+    return seen
+
+
 def apply_skin(app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame) -> Skin:
     """Apply the saved theme to the window (safe to repeat: live switching).
     Returns the palette; the shell's own widgets recolour themselves from it."""
@@ -230,9 +330,13 @@ def apply_skin(app: tk.Tk, *, sidebar: tk.Frame, content: tk.Frame) -> Skin:
             "input_fg": skin.get("input_fg", "#E2E2E2"),
         }
     )
-    _recolour_frame(sidebar, skin["sb_bg"])
-    content.config(bg=skin["content"])
-    _recolour_widget_tree(content, skin)
+    global _applied
+    if _applied is None:  # first time: widgets are built in these colours already
+        _recolour_frame(sidebar, skin["sb_bg"])
+        content.config(bg=skin["content"])
+    else:
+        recolour(app, _applied, skin, sidebar=sidebar)
+    _applied = dict(skin)
     apply_ttk_styles(skin)
     if skin.get("stars"):
         start_stars(app, skin)
@@ -393,29 +497,3 @@ def _recolour_frame(widget: tk.Misc, bg_col: str) -> None:
             _recolour_frame(child, bg_col)
     except Exception:
         logger.debug("_recolour_frame: best-effort step failed", exc_info=True)
-
-
-def _recolour_widget_tree(widget: tk.Misc, skin: Skin) -> None:
-    """
-    Recursively update background colors in the content area for live skin switch.
-    Only updates widgets that don't have explicit color overrides (checks for
-    common surface color patterns to avoid incorrectly recoloring accent buttons).
-    """
-    try:
-        cls = widget.winfo_class()
-        c = skin["content"]
-
-        if cls == "Frame":
-            with contextlib.suppress(tk.TclError):
-                _configure(widget, bg=c)
-        elif cls == "Label":
-            with contextlib.suppress(tk.TclError):
-                _configure(widget, bg=c, fg=skin["fg"])
-        elif cls == "LabelFrame":
-            with contextlib.suppress(tk.TclError):
-                _configure(widget, bg=c, fg=skin["fgdim"])
-
-        for child in widget.winfo_children():
-            _recolour_widget_tree(child, skin)
-    except Exception:
-        logger.debug("_recolour_widget_tree: best-effort step failed", exc_info=True)

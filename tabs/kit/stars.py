@@ -1,9 +1,16 @@
 """
 tabs/kit/stars.py - the Mystical skin's falling stars over the window.
 
-On Windows they are drawn on a borderless click-through window kept over the
-app (its background colour is keyed out, so only the stars show and every
-click reaches the app below); elsewhere on a canvas behind the content.
+They are drawn on a borderless click-through window kept over the app, so
+only the stars show and every click reaches the app below:
+
+* Windows: the window's background colour is keyed out (-transparentcolor).
+* Linux (X11 and XWayland): the window is cut to the stars themselves with
+  the X SHAPE extension (tabs/kit/x11shape.py); each star is a sparkle made
+  of a few rectangles, so the cut is exact.  It hides while another program
+  has the focus, since such a window would otherwise float over it.
+* Elsewhere, or if that fails: a canvas behind the content (seen only where
+  nothing covers it).
 """
 
 from __future__ import annotations
@@ -18,12 +25,30 @@ from dataclasses import dataclass
 from core import settings
 from core.scaling import px
 from core.skins import UI_FONT, Skin
+from tabs.kit.x11shape import Rect, Shaper
 
 logger = logging.getLogger("crossfader.stars")
 
 _CHARS = ("✦", "✧", "⋆", "·", "˚", "∘", "*")
 _COLOURS = ("#E1BEE7", "#CE93D8", "#BA68C8", "#AB47BC", "#F3E5F5", "#D1C4E9", "#B39DDB", "#EDE7F6")
 _CHROMA = "#010203"  # the keyed-out background: never used in any real skin
+_DOTS = ("·", "˚", "∘")  # drawn as a dot; the others as a four-pointed sparkle
+
+
+def sparkle(x: float, y: float, char: str, size: int) -> list[Rect]:
+    """The rectangles of one star drawn at (*x*, *y*): a dot, or a cross of two
+    thin bars with a brighter centre (the shape the overlay is cut to)."""
+    cx, cy, s = int(x), int(y), px(size)
+    if char in _DOTS:
+        d = max(2, s // 5)
+        return [(cx - d // 2, cy - d // 2, d, d)]
+    arm, bar = max(2, s // 2), max(1, px(1))
+    core = bar + 2
+    return [
+        (cx - bar // 2, cy - arm, bar, 2 * arm),
+        (cx - arm, cy - bar // 2, 2 * arm, bar),
+        (cx - core // 2, cy - core // 2, core, core),
+    ]
 
 
 @dataclass(slots=True)
@@ -66,10 +91,36 @@ class StarField:
         self.stars: list[_Star] = []
         self._after: str | None = None
         self._overlay: tk.Toplevel | None = None
-        self.canvas = (
-            self._windows_overlay() if sys.platform == "win32" else self._behind(background)
-        )
+        self._shaper: Shaper | None = None
+        if sys.platform == "win32":
+            self.canvas = self._windows_overlay()
+        else:
+            self.canvas = self._x11_overlay() or self._behind(background)
         self._after = self.canvas.after(50, self._tick)
+
+    def _x11_overlay(self) -> tk.Canvas | None:
+        """A window over the app cut to the stars (None where X SHAPE isn't available)."""
+        if not sys.platform.startswith(("linux", "freebsd", "openbsd", "netbsd")):
+            return None
+        top = tk.Toplevel(self.app)
+        try:
+            top.overrideredirect(True)
+            canvas = tk.Canvas(top, bg=_COLOURS[0], highlightthickness=0, bd=0)
+            canvas.pack(fill="both", expand=True)
+            top.update_idletasks()
+            self._shaper = Shaper(int(top.wm_frame(), 16))
+            self._shaper.show_only(())
+            self._shaper.click_through()
+        except (OSError, ValueError, tk.TclError):
+            logger.info("falling stars: no X SHAPE here, drawing them behind the window")
+            top.destroy()
+            self._shaper = None
+            return None
+        self._overlay = top
+        self._cover_window()
+        self.app.bind("<Configure>", lambda _e: self._cover_window(), add=True)
+        self.app.after(50, self._follow_window)
+        return canvas
 
     def _behind(self, background: str) -> tk.Canvas:
         canvas = tk.Canvas(self.app, bg=background, highlightthickness=0, bd=0)
@@ -127,17 +178,29 @@ class StarField:
         except Exception:
             logger.debug("_cover_window: best-effort step failed", exc_info=True)
 
+    def _app_hidden(self) -> bool:
+        """Minimised - or, on X11, another program has the focus (the overlay
+        would float over that program's window otherwise)."""
+        if self.app.state() == "iconic":
+            return True
+        if self._shaper is None:
+            return False
+        try:
+            return self.app.focus_displayof() is None
+        except (KeyError, tk.TclError):  # focus in a widget Tkinter doesn't know (a popdown)
+            return False
+
     def _follow_window(self) -> None:
-        """Every half second: hide with the app when minimised, else sit over it."""
+        """Every half second: hide with the app, else sit over it."""
         top = self._overlay
-        if sys.platform != "win32" or top is None or not top.winfo_exists():
+        if top is None or not top.winfo_exists():
             return
         try:
-            if self.app.state() == "iconic":
+            if self._app_hidden():
                 top.withdraw()
             else:
                 top.deiconify()
-                top.lift(self.app)
+                top.lift(self.app)  # pyright: ignore[reportUnknownMemberType] - lift's stub is untyped
                 self._cover_window()
         except Exception:
             logger.debug("_follow_window: best-effort step failed", exc_info=True)
@@ -161,6 +224,13 @@ class StarField:
                     slot * i + random.uniform(0, slot), random.uniform(-px(120), height + px(200))
                 )
                 self.stars.append(star)
+        if self._shaper is not None:
+            self._draw_sparkles(canvas, width, height)
+        else:
+            self._draw_glyphs(canvas, width, height)
+        self._after = canvas.after(50, self._tick)
+
+    def _draw_glyphs(self, canvas: tk.Canvas, width: int, height: int) -> None:
         for star in self.stars:
             if star.item is not None:
                 with contextlib.suppress(tk.TclError):
@@ -173,7 +243,23 @@ class StarField:
                 fill=star.colour,
                 font=(UI_FONT, star.size),
             )
-        self._after = canvas.after(50, self._tick)
+
+    def _draw_sparkles(self, canvas: tk.Canvas, width: int, height: int) -> None:
+        """Each star as rectangles, and the overlay cut to exactly those."""
+        canvas.delete("star")
+        shape: list[Rect] = []
+        for star in self.stars:
+            star.fall(self.speed, width, height)
+            for x, y, w, h in sparkle(star.x, star.y, star.char, star.size):
+                canvas.create_rectangle(
+                    x, y, x + w, y + h, fill=star.colour, width=0, tags=("star",)
+                )
+                shape.append((x, y, w, h))
+        if self._shaper is not None:
+            try:
+                self._shaper.show_only(shape)
+            except OSError:
+                logger.debug("_draw_sparkles: reshaping failed", exc_info=True)
 
     def stop(self) -> None:
         with contextlib.suppress(tk.TclError):
@@ -185,6 +271,9 @@ class StarField:
             if widget.winfo_exists():
                 widget.destroy()
         self._overlay = None
+        if self._shaper is not None:
+            self._shaper.close()
+            self._shaper = None
         self.stars.clear()
 
 
