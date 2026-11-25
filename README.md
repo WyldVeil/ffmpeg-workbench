@@ -2,11 +2,9 @@
 
 [![Found it useful? Buy me a coffee](https://img.shields.io/badge/Found_it_useful%3F-Buy_me_a_coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/wyldveil)
 
-*Called WyldVeil's Media Editor until version 1.2.5 - same app, new name.*
-
 **83 video and audio tools in one free app.** Cut, join, convert, compress,
 subtitle, upscale, fix the sound, clean up old footage and get videos ready for
-social media. Everything runs on your own computer.
+social media.
 
 ![The Start page: what do you want to do?](screenshots/start.png)
 
@@ -16,7 +14,7 @@ suggests what you can do with it.
 
 ## Download
 
-Get the file for your system from the **[Releases page](https://github.com/WyldVeil/ffmpeg-workbench/releases/latest)**.
+Get the file for your system from the **[Releases page](../../releases/latest)**.
 
 **Portable: nothing to install.** Unpack it anywhere (your Documents, a USB
 stick...) and run it. No administrator password needed.
@@ -303,7 +301,7 @@ Burn subtitles from a file into the picture.
 
 #### Auto-Subtitles
 
-Turn speech into subtitles - runs entirely on this computer.
+Turn speech into subtitles.
 
 ![Auto-Subtitles](screenshots/26_auto_subtitles.png)
 
