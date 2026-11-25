@@ -52,7 +52,9 @@ def test_mystical_star_canvas_stays_behind_the_ui():
     from tests.gui_harness import Harness
 
     app = Harness.instance().app
-    stars.start_stars(app, {"sb_bg": "#101018"})
+    from core.skins import get_skin
+
+    stars.start_stars(app, get_skin("Mystical"))
     try:
         field = stars.running()
         canvas = field.canvas if field is not None else None

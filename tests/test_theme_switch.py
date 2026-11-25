@@ -38,11 +38,12 @@ def _only_in(old: str, new: str) -> set[str]:
 
 
 def test_a_colour_follows_its_palette_entry():
-    old = {"content": "#111111", "panel": "#222222", "sb_bg": "#111111"}
-    new = {"content": "#AAAAAA", "panel": "#BBBBBB", "sb_bg": "#CCCCCC"}
-    assert theme.colour_map(old, new, theme._CONTENT_FIRST)["#111111"] == "#AAAAAA"
-    assert theme.colour_map(old, new, theme._SIDEBAR_FIRST)["#111111"] == "#CCCCCC"
-    assert theme.colour_map(old, new, theme._CONTENT_FIRST)["#222222"] == "#BBBBBB"
+    old, new = get_skin("Classic").copy(), get_skin("Classic").copy()
+    old["content"], old["sb_bg"], old["panel"] = "#010101", "#010101", "#020202"
+    new["content"], new["sb_bg"], new["panel"] = "#0A0A0A", "#0C0C0C", "#0B0B0B"
+    assert theme.colour_map(old, new, theme._CONTENT_FIRST)["#010101"] == "#0A0A0A"
+    assert theme.colour_map(old, new, theme._SIDEBAR_FIRST)["#010101"] == "#0C0C0C"
+    assert theme.colour_map(old, new, theme._CONTENT_FIRST)["#020202"] == "#0B0B0B"
 
 
 @pytest.mark.gui
@@ -74,9 +75,11 @@ def test_mystical_stars_float_over_the_window_and_let_clicks_through(ui):
         ui.pump(0.5)
         field = stars.running()
         assert field is not None and field.canvas.winfo_toplevel() is not ui.app
-        if field._shaper is None:
+        shaper = field._shaper
+        if shaper is None:
             pytest.skip("no X SHAPE extension on this display")
-        assert field._shaper.input_rectangles() == 0  # the mouse goes through
+            return
+        assert shaper.input_rectangles() == 0  # the mouse goes through
         assert field.canvas.find_withtag("star")  # sparkles are drawn
     finally:
         ui.app.apply_theme("Classic")
