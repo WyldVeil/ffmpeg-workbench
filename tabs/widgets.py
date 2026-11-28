@@ -648,6 +648,11 @@ class EncoderPanel(tk.Frame):
         )
 
     def _changed(self, notify: bool = True) -> None:
+        if self.hw == "auto" and not encoders.hw_known():
+            # the GPU test runs in the background (_hw_detected calls back): don't run it here
+            if notify and self._on_change:
+                self._on_change()
+            return
         try:
             ve = self.video_encode()
             self._status.config(text=t_or("encoder.using", "Will encode with") + f": {ve.label}")

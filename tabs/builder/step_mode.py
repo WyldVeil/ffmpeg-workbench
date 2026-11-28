@@ -198,7 +198,12 @@ class StepHost:
         for widget in _walk(self.tab):  # a file row waits for typing to pause: not now
             if isinstance(widget, FileRow):
                 widget.flush()
-        self._settle(lambda: (self._adapt(), done()))
+
+        def settled() -> None:
+            self._adapt()
+            done()
+
+        self._settle(settled)
 
     def _settle(self, then: Callable[[], object], waited: float = 0.0, quiet: int = 0) -> None:
         """Wait until the tool's background work (probing, thumbnails) is done."""
@@ -425,14 +430,20 @@ class _Capture:
 
     def _finish(self, found: Captured | None) -> None:
         if found is not None and self.mark is not None and self.console is not None:
-            with contextlib.suppress(tk.TclError):  # "Rendering..." - it wasn't
-                self.console.delete(self.mark, "end-1c")
+            # "Rendering..." - it wasn't; the tool's log lines arrive a moment later
+            console, mark = self.console, self.mark
+            self.host.win.after(300, lambda: _forget_since(console, mark))
         if self.before is not None and self.btn is not None:
             with contextlib.suppress(tk.TclError):
                 text, command, state = self.before
                 self.btn.config(text=text, command=command)
                 self.btn["state"] = state
         self.done(found, "\n".join(s for s in self.said if s))
+
+
+def _forget_since(console: tk.Text, mark: str) -> None:
+    with contextlib.suppress(tk.TclError):
+        console.delete(mark, "end-1c")
 
 
 def _raw(tab: tk.Misc, var: tk.Variable) -> Any:

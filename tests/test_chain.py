@@ -250,3 +250,18 @@ def test_dry_run_checks_a_command(media, outdir):
     )
     _run(chain.dry_run_cmd(passes[0].cmds[0]))
     assert not os.path.exists(outdir / "x.mp4")
+
+
+@pytest.mark.ffmpeg
+def test_steps_join_on_a_video_without_sound(media, outdir):
+    """A trim keeps "sound if there is any": on a silent video it trims the picture only."""
+    out = str(outdir / "silent.mp4")
+    steps = [chain.Step("trim", [TRIM]), chain.Step("crop", [CROP]), chain.Step("trim2", [TRIM])]
+    passes = chain.plan(
+        steps, media["vertical_noaudio"], out, final=chain.Encode(tuple(H264)), has_audio=False,
+        workdir=str(outdir),
+    )  # fmt: skip
+    assert len(passes) == 1
+    _run(passes[0].cmds[0])
+    info = ff.probe(out, use_cache=False)
+    assert not info.has_audio and info.duration == pytest.approx(2, abs=0.25)

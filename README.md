@@ -21,8 +21,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.2_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.3.2-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.3_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.3.3-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +34,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.2_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `ffmpeg-workbench_1.3.2_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.2_ubuntu_amd64.deb` |
-| **Debian** | `ffmpeg-workbench_1.3.2_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.2_debian_amd64.deb` |
-| **Fedora** | `ffmpeg-workbench-1.3.2-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `ffmpeg-workbench-1.3.2-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.3_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `ffmpeg-workbench_1.3.3_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.3_ubuntu_amd64.deb` |
+| **Debian** | `ffmpeg-workbench_1.3.3_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.3_debian_amd64.deb` |
+| **Fedora** | `ffmpeg-workbench-1.3.3-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `ffmpeg-workbench-1.3.3-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -125,10 +125,19 @@ without touching the picture or sound.
 
 ### All-in-One Builder
 
-Combine trimming, scaling, frame rate, rotation, speed and colour in one pass,
-with the FFmpeg command shown (and editable) underneath.
+Line up any tools, in any order, as often as you like: blur the text, put your
+own logo over it, crop, resize, speed it up, make it a GIF. "Add a step" opens
+the tool itself, with everything it normally has, in a window over the builder;
+set it up and "Save and return". Each step after the first works on - and
+shows - the video as the steps before it leave it.
+
+Rendering joins the steps into as few FFmpeg runs as it can (usually one) and
+says how many; anything passed between runs is lossless, so however the steps
+are mixed, the video is only compressed once. A step list can be saved as a
+recipe and used again on other videos.
 
 ![All-in-One Builder](screenshots/03_all_in_one_builder.png)
+![A step set up in its own window](screenshots/03b_builder_step.png)
 
 Also: `,` and `.` step one frame back and forward in every tool that picks a moment
 (with Shift, a second), sharp and properly sized on HiDPI screens at any scaling,
@@ -635,7 +644,8 @@ Blur or pixelate faces, number plates, names or screens.
 
 Finds the text laid over a video - names, handles, captions, phone numbers,
 logos - and blurs the ones you click. Each find is outlined while it's on
-screen; the preview shows the result straight away.
+screen; the preview shows the result straight away. If you like, your own logo
+or text can go on top of what was hidden.
 
 ![Text Blurrer](screenshots/77b_text_blurrer.png)
 

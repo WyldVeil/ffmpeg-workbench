@@ -173,7 +173,13 @@ class AllInOneTab(BaseTab):
         return self.src_row.path
 
     def _source_changed(self, path: str) -> None:
-        self._info = ff.try_probe(path) if path else None
+        self._info = None
+        if path:
+            tasks.submit(
+                partial(ff.try_probe, path),
+                on_done=partial(self._probed, path),
+                name="builder probe",
+            )
         if self.steps:
             for s in self.steps:
                 s.stale = True
@@ -182,6 +188,11 @@ class AllInOneTab(BaseTab):
             self.log(self.console, t("builder.new_video"))
         self.out_row.set(self._suggest())
         self._refresh()
+
+    def _probed(self, path: str, info: ff.MediaInfo | None) -> None:
+        if path == self.src:
+            self._info = info
+            self._refresh()
 
     def _suggest(self) -> str:
         return self.suggest_output(self.src, "edited", self._out_ext()) if self.src else ""
@@ -347,9 +358,12 @@ class AllInOneTab(BaseTab):
             link(have)
             return
         out = os.path.join(self.workdir, f"preview-{sig}{ext}")
-        self._make_preview(
-            before, out, index, lambda: (self._previews.__setitem__(sig, out), link(out)), failed
-        )
+
+        def made() -> None:
+            self._previews[sig] = out
+            link(out)
+
+        self._make_preview(before, out, index, made, failed)
 
     def _make_preview(
         self,
@@ -603,8 +617,10 @@ class AllInOneTab(BaseTab):
         ):
             return None
         has_audio = bool(self._info and self._info.has_audio)
+        # the encoder is only asked once the GPU test is done (it never runs here)
+        encode = self._final_encode(out) if encoders.hw_known() else chain.LOSSLESS_ENCODE
         try:
-            return self._plan(self.steps, self.src, out, self._final_encode(out), has_audio, set())
+            return self._plan(self.steps, self.src, out, encode, has_audio, set())
         except Exception:
             logger.exception("planning failed")
             return None
@@ -824,11 +840,10 @@ def steps_from_recipe(data: dict[str, Any], src: str) -> list[Step]:
 
 
 def _video_id(path: str) -> str:
-    """The same video, wherever it is: its name, size and length."""
+    """The same video, wherever it is: its name and size."""
     if not path or not os.path.isfile(path):
         return ""
-    info = ff.try_probe(path)
-    return f"{os.path.basename(path)}|{os.path.getsize(path)}|{info.duration if info else 0:.2f}"
+    return f"{os.path.basename(path)}|{os.path.getsize(path)}"
 
 
 class _Progress:

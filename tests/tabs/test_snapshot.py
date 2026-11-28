@@ -283,7 +283,6 @@ def test_gif_maker_frame_steps_then_i_and_o(ui, media):
         ("Special Effects", 10),
         ("Universal Downsizer", 2),
         ("WebM Maker", 4),  # both trims (simple and advanced)
-        ("All-in-One Builder", 4),
     ],
 )
 def test_frame_pickers_next_to_time_fields(ui, tool, expected):

@@ -173,6 +173,20 @@ Outputs are written to `name.part.ext` and renamed only on success, so a
 failed or cancelled job never leaves a broken file. Inputs are never
 overwritten.
 
+### Tools as steps (the All-in-One Builder)
+
+Because every render goes through `enqueue_render`, any page can be a step
+without knowing it. `tabs/builder/step_mode.py` builds the page in its own
+window, gives it the video, and on "Save and return" presses its Render with
+`enqueue_render` replaced: what the page *would* have queued - its commands,
+or its Python job - is captured, with its input and output paths turned into
+tokens. `core/ops/chain.py` reads captured commands into filtergraph fragments
+and joins neighbours into one command (a step it can't read, or one with
+several commands, runs alone, fed lossless); `core/ops/chain_run.py` runs the
+plan, re-planning steps one at a time if a joined command fails a short dry
+run. The page's settings are read and restored generically (every Tk variable
+on it, plus `step_state()`/`set_step_state()` where a page keeps more).
+
 ## 6. Quality gates
 
 | Gate | Where | Rule |

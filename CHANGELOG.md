@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.3.3
+
+### New
+
+- **The All-in-One Builder is rebuilt around the tools themselves.** Add any of
+  about fifty tools as steps, in any order and as many times as you like - blur
+  text, put a logo over it, crop, resize, crop again, make a GIF. Each step
+  opens that tool, whole, in a window over the builder (its preview, its
+  options, its buttons); "Save and return" keeps its settings, and ⚙ opens it
+  again. A step after the first works on, and shows, the video as the earlier
+  steps leave it. Steps can be moved, copied and removed; a step that depends
+  on positions or times is flagged when an earlier step changes.
+- **One encode, however the steps are mixed.** Rendering joins the steps into
+  as few FFmpeg runs as it can - usually one - and says so above the Render
+  button. Where a step has to run on its own (it does several passes, or works
+  in Python), the video is handed to it lossless, so the picture is still only
+  compressed once. If a joined command ever fails its quick check, those steps
+  simply run one at a time.
+- **Recipes.** Save a step list and open it again, on the same video or another
+  (steps are set up for the new video when you render).
+- **Text Blurrer: your own logo or text on top** of what it hides - optional,
+  under "How to hide them", with size and opacity, shown in the preview.
+
+### Changed
+
+- The old builder's sections (trim, size, speed, colour, sound, caption,
+  fades) are now one step, "Quick adjustments".
+
 ## 1.3.2
 
 ### New

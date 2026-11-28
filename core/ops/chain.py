@@ -324,15 +324,19 @@ _known: dict[str, frozenset[str]] = {}
 
 
 def audio_filters() -> frozenset[str]:
-    """Names of the filters that make sound (learned from FFmpeg once)."""
-    if "audio" not in _known:
-        try:
-            from core import capabilities
+    """Names of the filters that make sound, as FFmpeg says (learned in the
+    background at start-up; until then, guessed from names)."""
+    if "audio" in _known:
+        return _known["audio"]
+    from core import capabilities, ui
 
-            _known["audio"] = frozenset(capabilities.get("audio_filters"))
-        except (OSError, RuntimeError, ValueError):  # no FFmpeg to ask: guess from names
-            _known["audio"] = frozenset()
-    return _known["audio"]
+    names = capabilities.peek("audio_filters")
+    if not names and not (ui.installed() and ui.on_main_thread()):
+        names = capabilities.get("audio_filters")  # a worker may wait for it
+    if names:
+        _known["audio"] = frozenset(names)
+        return _known["audio"]
+    return frozenset()
 
 
 def _is_audio(f: Filter) -> bool:
@@ -684,8 +688,10 @@ def _source(maps: list[str], kind: str, extras: int, made: dict[str, str]) -> st
     return found[0] if found else None
 
 
-def fragment(cmd: Sequence[str]) -> Fragment:
-    """*cmd* (a template) as a :class:`Fragment`, or :class:`Unjoinable`."""
+def fragment(cmd: Sequence[str], *, has_audio: bool = True) -> Fragment:
+    """*cmd* (a template) as a :class:`Fragment`, or :class:`Unjoinable`.
+    Without *has_audio* (the video has no sound by then), what the step does
+    to its input's sound is left out, as FFmpeg would."""
     cmd = [str(a) for a in cmd]
     if not cmd or not os.path.basename(cmd[0]).lower().startswith("ffmpeg"):
         raise Unjoinable("not an FFmpeg command")
@@ -704,6 +710,8 @@ def fragment(cmd: Sequence[str]) -> Fragment:
     else:
         v_src = None if o.no_v else made.get("v", _V)
         a_src = None if o.no_a else made.get("a", _A)
+    if not has_audio and a_src == _A:
+        a_src, o.af, o.post_a = None, None, []
     try:
         graph += _post(o, v_src, a_src)
     except GraphError as exc:
@@ -990,18 +998,21 @@ class Pass:
     made: str = ""  # where a Python step's job writes, when it ignores the plan's path
 
 
-def fragments(steps: Sequence[Step]) -> list[Fragment | None]:
-    """Each step's fragment, or None when it must run on its own."""
-    out: list[Fragment | None] = []
-    for s in steps:
-        if s.alone or s.cmds is None or len(s.cmds) != 1:
-            out.append(None)
-            continue
-        try:
-            out.append(fragment(s.cmds[0]))
-        except Unjoinable:
-            out.append(None)
-    return out
+def fragments(steps: Sequence[Step], has_audio: bool = True) -> list[Fragment | None]:
+    """Each step's fragment, or None when it must run on its own (for a video
+    with sound throughout, unless *has_audio* is False)."""
+    return [fragment_of(s, has_audio) for s in steps]
+
+
+def fragment_of(step: Step, has_audio: bool) -> Fragment | None:
+    """*step*'s fragment for a video with (or without) sound, or None."""
+    if step.alone or step.cmds is None or len(step.cmds) != 1:
+        return None
+    try:
+        fr = fragment(step.cmds[0], has_audio=has_audio)
+    except Unjoinable:
+        return None
+    return None if fr.uses_audio and not has_audio else fr
 
 
 def why_alone(step: Step) -> str:
@@ -1048,52 +1059,47 @@ class _Planner:
     ffmpeg: str
 
     def passes(self, has_audio: bool) -> list[Pass]:
-        frags = fragments(self.steps)
         lossless = Encode(tuple(LOSSLESS_ALPHA if self.alpha else LOSSLESS))
         out: list[Pass] = []
         reads, audio, i, n = self.src, has_audio, 0, len(self.steps)
         while i < n:
             step = self.steps[i]
-            if frags[i] is None:
+            first = fragment_of(step, audio)
+            if first is None:
                 last = i == n - 1
-                writes = self.out if last else _middle(self.workdir, i, step, self.steps, frags)
+                writes = self.out if last else _middle(self.workdir, i, step, self.steps)
                 out.append(_alone(step, i, reads, writes, last, self.final, lossless))
                 audio = _keeps_audio(step, audio)
             else:
-                group, audio_in, audio = self._group(i, frags, audio)
-                out.append(self._joined(group, frags, reads, audio_in, lossless))
+                group, parts, audio_in, audio = self._group(i, first, audio)
+                out.append(self._joined(group, parts, reads, audio_in, lossless))
                 i = group[-1]
             reads = out[-1].writes
             i += 1
         return out
 
     def _group(
-        self, i: int, frags: list[Fragment | None], audio: bool
-    ) -> tuple[list[int], bool, bool]:
+        self, i: int, first: Fragment, audio: bool
+    ) -> tuple[list[int], list[Fragment], bool, bool]:
         """Steps from *i* that join: up to one that can't, or one deciding the format."""
-        group, audio_in = [i], audio
-        audio = _after(frags[i], audio)
+        group, parts, audio_in = [i], [first], audio
+        audio = _after(first, audio)
         while i + 1 < len(self.steps) and not self.steps[i].decides_format:
-            nxt = frags[i + 1]
-            if nxt is None or (nxt.uses_audio and not audio):
+            nxt = fragment_of(self.steps[i + 1], audio)
+            if nxt is None:
                 break
             i += 1
             group.append(i)
+            parts.append(nxt)
             audio = _after(nxt, audio)
-        return group, audio_in, audio
+        return group, parts, audio_in, audio
 
     def _joined(
-        self,
-        group: list[int],
-        frags: list[Fragment | None],
-        reads: str,
-        audio_in: bool,
-        lossless: Encode,
+        self, group: list[int], parts: list[Fragment], reads: str, audio_in: bool, lossless: Encode
     ) -> Pass:
         last = group[-1] == len(self.steps) - 1
         end = self.steps[group[-1]]
-        writes = self.out if last else _middle(self.workdir, group[-1], end, self.steps, frags)
-        parts = [f for f in (frags[k] for k in group) if f is not None]
+        writes = self.out if last else _middle(self.workdir, group[-1], end, self.steps)
         if end.decides_format:
             enc = Encode(tuple(parts[-1].codec))
         else:
@@ -1124,7 +1130,9 @@ def filter_names(cmds: Sequence[Sequence[str]]) -> list[str]:
                     graph = parse_graph(cmd[k + 1])
                 except GraphError:
                     continue
-                names += [f.name for c in graph for f in c if f.name not in names]
+                for f in (f for c in graph for f in c):
+                    if f.name not in names:
+                        names.append(f.name)
     return names
 
 
@@ -1140,9 +1148,7 @@ def _keeps_audio(step: Step, audio: bool) -> bool:
     return audio
 
 
-def _middle(
-    workdir: str, i: int, step: Step, steps: Sequence[Step], frags: Sequence[Fragment | None]
-) -> str:
+def _middle(workdir: str, i: int, step: Step, steps: Sequence[Step]) -> str:
     """Where pass output *i* is kept for the next pass: the next Python step's
     own input path when it reads one, else a lossless file (or the step's own
     format, when it decides one)."""
@@ -1150,7 +1156,7 @@ def _middle(
     inside = nxt is not None and os.path.abspath(nxt.in_path).startswith(
         os.path.abspath(workdir) + os.sep
     )
-    if nxt is not None and frags[i + 1] is None and nxt.cmds is None and inside:
+    if nxt is not None and nxt.cmds is None and inside:
         return nxt.in_path  # a Python step reads the file it was set up with
     ext = step.out_ext if step.decides_format else ".mkv"
     return os.path.join(workdir, f"step{i + 1}{ext}")

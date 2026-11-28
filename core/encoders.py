@@ -312,6 +312,16 @@ def hw_available(refresh: bool = False, ffmpeg: str | None = None) -> dict[str, 
     return dict(result)
 
 
+def hw_known(ffmpeg: str | None = None) -> bool:
+    """True when :func:`hw_available` can answer without testing (no program runs)."""
+    ff = ffmpeg or _ffmpeg()
+    with _lock:
+        if ff in _HW_OK:
+            return True
+    disk = _load_disk_cache(ff)
+    return bool(disk and isinstance(disk.get("hw"), dict))
+
+
 def working_hw_kinds() -> list[str]:
     return [k for k, ok in hw_available().items() if ok]
 
