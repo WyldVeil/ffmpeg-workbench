@@ -172,8 +172,15 @@ class SplicerTab(BaseTab):
         self.console = self.make_console_block(self, height=7, padx=px(20), pady=px(5))
 
     # ─── Segment management ───────────────────────────────────────────────────
-    def _add_segment(self) -> None:
-        path = dialogs.askopenfilename(
+    def load_file(self, path: str) -> bool:
+        """A dropped video is added as a segment."""
+        if dialogs.kind_of(path) != "video":
+            return False
+        self._add_segment(path)
+        return True
+
+    def _add_segment(self, path: str = "") -> None:
+        path = path or dialogs.askopenfilename(
             title=t("splicer.select_source_clip"),
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))],
         )

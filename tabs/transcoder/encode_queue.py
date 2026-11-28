@@ -367,6 +367,13 @@ class EncodeQueueTab(BaseTab):
     def _default_ext(self) -> str:
         return eq.DEFAULT_EXT.get(self.editor["ed_vcodec_var"].get(), ".mp4")
 
+    def load_file(self, path: str) -> bool:
+        """A dropped video becomes the source of the job being set up."""
+        if dialogs.kind_of(path) != "video":
+            return False
+        self.ed_src_var.set(path)
+        return True
+
     def _add_to_queue(self) -> None:
         src = self.ed_src_var.get().strip()
         if not src or not os.path.isfile(src):

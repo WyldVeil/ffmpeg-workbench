@@ -38,6 +38,7 @@ from core.paths import temp_dir
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
+from tabs.kit import dialogs
 from tabs.kit.widgets import ChoiceBox, ColourButton
 from tabs.widgets import FileRow, FramePreview, SaveRow, output_box, scroll_body
 
@@ -367,6 +368,13 @@ class ContactSheetTab(BaseTab):
         return layout, labels, picking
 
     # ── The preview ───────────────────────────────────────────────────────
+
+    def load_file(self, path: str) -> bool:
+        """A dropped video becomes the source."""
+        if dialogs.kind_of(path) != "video":
+            return False
+        self.src_row.var.set(path)
+        return True
 
     def _load(self, path: str) -> None:
         self._info = ff.try_probe(path) if path else None

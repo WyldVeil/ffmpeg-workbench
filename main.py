@@ -54,6 +54,9 @@ def main(argv: list[str] | None = None) -> int:
         os.environ.setdefault("CROSSFADER_NO_NETWORK", "1")
 
     _windows_dpi_awareness()
+    from core.deps import ensure_libs_on_path
+
+    ensure_libs_on_path()  # the bundled add-ons (drag and drop...) before the window needs them
     from core.i18n import init as init_i18n
 
     init_i18n()  # before any widget exists

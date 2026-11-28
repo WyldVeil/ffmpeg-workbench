@@ -632,10 +632,27 @@ class TTSVoiceOverTab(BaseTab):
         except Exception:
             logger.debug("_paste_text: best-effort step failed", exc_info=True)
 
+    def load_file(self, path: str) -> bool:
+        """A dropped file: a text or subtitle file becomes the script, a video
+        the one to put the voice-over on."""
+        if dialogs.kind_of(path) in ("text", "subtitle"):
+            self._read_text_file(path)
+            return True
+        if dialogs.kind_of(path) != "video":
+            return False
+        self.mode_var.set("video")
+        self._on_mode_change()
+        self._set_video(path)
+        return True
+
     def _load_text_file(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[(t("tts.text_files"), "*.txt *.srt *.md"), ("All", t("ducker.item_2"))]
         )
+        if p:
+            self._read_text_file(p)
+
+    def _read_text_file(self, p: str) -> None:
         if p:
             with open(p, encoding="utf-8", errors="replace") as f:
                 self.text_box.delete("1.0", "end")
@@ -704,6 +721,9 @@ class TTSVoiceOverTab(BaseTab):
         p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))]
         )
+        self._set_video(p)
+
+    def _set_video(self, p: str) -> None:
         if p:
             self._vid_path = p
             self.vid_var.set(p)

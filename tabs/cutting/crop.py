@@ -22,6 +22,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import boxedit
 from tabs.kit.tktyped import draw_image
 from tabs.widgets import FileRow, output_section, scroll_body
 
@@ -43,7 +44,7 @@ class ManualCropTab(BaseTab):
         self.vid_w, self.vid_h = 0, 0
         self.duration = 0.0
         self._cx, self._cy, self._cw, self._ch = (tk.IntVar(value=0) for _ in range(4))
-        self._drag = None
+        self._drag: tuple[str, int, int, boxedit.Rect] | None = None  # what, where it started
         self._photo: tk.PhotoImage | None = None
         self._frame_job: str | None = None
         self._frame_gen = 0
@@ -83,6 +84,7 @@ class ManualCropTab(BaseTab):
         self.canvas.bind("<ButtonPress-1>", self._press)
         self.canvas.bind("<B1-Motion>", self._move)
         self.canvas.bind("<ButtonRelease-1>", lambda _e: setattr(self, "_drag", None))
+        self.canvas.bind("<Motion>", self._hover)
         self.pos_var = tk.DoubleVar(value=0)
         self.slider = ttk.Scale(
             left, from_=0, to=1, variable=self.pos_var, command=lambda _v: self._schedule_frame()
@@ -177,10 +179,11 @@ class ManualCropTab(BaseTab):
         return self._cx.get(), self._cy.get(), self._cw.get(), self._ch.get()
 
     def set_rect(self, x: float, y: float, w: float, h: float) -> None:
-        wi = max(16, min(int(w), self.vid_w))
-        hi = max(16, min(int(h), self.vid_h))
-        xi = max(0, min(int(x), self.vid_w - wi))
-        yi = max(0, min(int(y), self.vid_h - hi))
+        # Round the edges, not the size, so dragging one edge never nudges the other
+        wi = max(16, min(round(x + w) - round(x), self.vid_w))
+        hi = max(16, min(round(y + h) - round(y), self.vid_h))
+        xi = max(0, min(round(x), self.vid_w - wi))
+        yi = max(0, min(round(y), self.vid_h - hi))
         for var, val in zip(
             (self._cx, self._cy, self._cw, self._ch), (xi, yi, wi, hi), strict=False
         ):
@@ -268,16 +271,7 @@ class ManualCropTab(BaseTab):
                 dash=px(2, 4),
                 width=px(1),
             )
-        for hx, hy in ((x1, y1), (x2, y1), (x1, y2), (x2, y2)):
-            c.create_rectangle(
-                hx - px(6),
-                hy - px(6),
-                hx + px(6),
-                hy + px(6),
-                fill=CLR["accent"],
-                outline="white",
-                width=px(1),
-            )
+        boxedit.draw(c, x1, y1, x2, y2, CLR["accent"], px(6))
         c.create_text(
             (x1 + x2) / 2,
             max(y1 - px(10), px(8)),
@@ -288,49 +282,32 @@ class ManualCropTab(BaseTab):
 
     # ── mouse ────────────────────────────────────────────────────────────────
 
+    def _box_on_canvas(self) -> boxedit.Rect:
+        s, ox, oy = self._view()
+        x, y, w, h = self.rect()
+        return (ox + x * s, oy + y * s, w * s, h * s)
+
+    def _hover(self, ev: tk.Event[tk.Misc]) -> None:
+        if self._drag is None:
+            kind = boxedit.hit(self._box_on_canvas(), ev.x, ev.y, px(8)) if self.vid_w else None
+            boxedit.set_cursor(self.canvas, kind)
+
     def _press(self, ev: tk.Event[tk.Misc]) -> None:
         if not self.vid_w:
             return
-        s, ox, oy = self._view()
-        x, y, w, h = self.rect()
-        x1, y1, x2, y2 = ox + x * s, oy + y * s, ox + (x + w) * s, oy + (y + h) * s
-
-        def near(a: float, b: float) -> bool:
-            return abs(a - b) < px(10)
-
-        corners = {"tl": (x1, y1), "tr": (x2, y1), "bl": (x1, y2), "br": (x2, y2)}
-        kind = next(
-            (k for k, (cx, cy) in corners.items() if near(ev.x, cx) and near(ev.y, cy)), None
-        )
-        if kind is None and x1 < ev.x < x2 and y1 < ev.y < y2:
-            kind = "move"
-        self._drag = (kind, ev.x, ev.y, (x, y, w, h)) if kind else None
+        kind = boxedit.hit(self._box_on_canvas(), ev.x, ev.y, px(8))
+        self._drag = (kind, ev.x, ev.y, self.rect()) if kind else None
 
     def _move(self, ev: tk.Event[tk.Misc]) -> None:
         if not self._drag:
             return
-        kind, sx, sy, (x, y, w, h) = self._drag
+        kind, sx, sy, start = self._drag
         s, _ox, _oy = self._view()
-        dx, dy = (ev.x - sx) / s, (ev.y - sy) / s
         ratio = next((r for k, _l, r in ASPECTS if k == self.aspect_var.get()), None)
-        if kind == "move":
-            self.set_rect(x + dx, y + dy, w, h)
-            return
-        left, top, right, bottom = x, y, x + w, y + h
-        if "l" in kind:
-            left = min(max(0, left + dx), right - 16)
-        if "r" in kind:
-            right = max(min(self.vid_w, right + dx), left + 16)
-        if "t" in kind:
-            top = min(max(0, top + dy), bottom - 16)
-        if "b" in kind:
-            bottom = max(min(self.vid_h, bottom + dy), top + 16)
-        nw, nh = right - left, bottom - top
-        if ratio:
-            nh = nw * ratio[1] / ratio[0]
-            if "t" in kind:
-                top = bottom - nh
-        self.set_rect(left, top, nw, nh)
+        box = boxedit.drag(
+            kind, start, (ev.x - sx) / s, (ev.y - sy) / s, (self.vid_w, self.vid_h), ratio
+        )
+        self.set_rect(*box)
 
     # ── actions ──────────────────────────────────────────────────────────────
 

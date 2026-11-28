@@ -102,6 +102,22 @@ _KINDS = {
 }
 
 
+def kind_of(path: str) -> str:
+    """What a file is by its extension: "video", "audio", "image", "subtitle",
+    "text" or "other" (for sorting dropped files)."""
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    for kind, exts in (
+        ("video", VIDEO_EXTS),
+        ("audio", AUDIO_EXTS),
+        ("image", IMAGE_EXTS),
+        ("subtitle", SUB_EXTS),
+        ("text", ("txt", "md")),
+    ):
+        if ext in exts:
+            return kind
+    return "other"
+
+
 def _patterns(exts: Sequence[str]) -> str:
     if not exts:
         return "*"

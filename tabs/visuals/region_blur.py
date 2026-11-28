@@ -20,6 +20,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
+from tabs.kit import boxedit
 from tabs.kit.time_fields import RangePicker
 from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
@@ -37,10 +38,14 @@ PW, PH = 480, 270
 
 @dataclass
 class _Drag:
-    """A region being drawn on the preview: where the press was, the box so far."""
+    """A press on the preview: drawing a new region (the box so far), or moving /
+    resizing region *index* from *part* (boxedit.hit) of its box *before*."""
 
     start: tuple[int, int]
     rect: tuple[int, int, int, int] | None = None
+    index: int | None = None
+    part: str = ""
+    before: boxedit.Rect = (0.0, 0.0, 0.0, 0.0)
 
 
 class RegionBlurTab(BaseTab):
@@ -83,6 +88,7 @@ class RegionBlurTab(BaseTab):
         c.bind("<ButtonPress-1>", self._press)
         c.bind("<B1-Motion>", self._move)
         c.bind("<ButtonRelease-1>", self._release)
+        c.bind("<Motion>", self._hover)
         self.pos_var = tk.DoubleVar(value=0)
         self.slider = ttk.Scale(
             left,
@@ -231,6 +237,17 @@ class RegionBlurTab(BaseTab):
                 font=(UI_FONT, 9, "bold"),
                 tags="region",
             )
+            if i == sel:
+                boxedit.draw(
+                    c,
+                    x0 + r.x * bw,
+                    y0 + r.y * bh,
+                    x0 + (r.x + r.w) * bw,
+                    y0 + (r.y + r.h) * bh,
+                    colour,
+                    px(5),
+                    tag="region",
+                )
         if self._drag and self._drag.rect:
             a, b, cc, d = self._drag.rect
             c.create_rectangle(
@@ -244,18 +261,68 @@ class RegionBlurTab(BaseTab):
         x0, y0, bw, bh = box
         return min(1.0, max(0.0, (ex - x0) / bw)), min(1.0, max(0.0, (ey - y0) / bh))
 
+    def _on_canvas(self, r: Region) -> boxedit.Rect | None:
+        box = self.preview.image_box()
+        if box is None:
+            return None
+        x0, y0, bw, bh = box
+        return (x0 + r.x * bw, y0 + r.y * bh, r.w * bw, r.h * bh)
+
+    def _grabbed(self, ex: int, ey: int) -> tuple[int, str] | None:
+        """The region and part of it under the pointer: the selected region's
+        handles and edges first, then the inside of any region (topmost first)."""
+        sel = self._selected()
+        if sel is not None:
+            box = self._on_canvas(self.regions[sel])
+            part = boxedit.hit(box, ex, ey, px(7)) if box else None
+            if part:
+                return sel, part
+        for i in reversed(range(len(self.regions))):
+            box = self._on_canvas(self.regions[i])
+            if box and boxedit.hit(box, ex, ey, 0) == "move":
+                return i, "move"
+        return None
+
+    def _hover(self, ev: tk.Event[tk.Misc]) -> None:
+        if self._drag is None:
+            grabbed = self._grabbed(ev.x, ev.y)
+            boxedit.set_cursor(self.preview.canvas, grabbed[1] if grabbed else None)
+
     def _press(self, ev: tk.Event[tk.Misc]) -> None:
-        if self.preview.image_box() is not None:
-            self._drag = _Drag((ev.x, ev.y))
+        if self.preview.image_box() is None:
+            return
+        grabbed = self._grabbed(ev.x, ev.y)
+        if grabbed is None:
+            self._drag = _Drag((ev.x, ev.y))  # draw a new region
+            return
+        index, part = grabbed
+        if index != self._selected():
+            self.listbox.selection_clear(0, "end")
+            self.listbox.selection_set(index)
+            self._select()
+        r = self.regions[index]
+        self._drag = _Drag((ev.x, ev.y), index=index, part=part, before=(r.x, r.y, r.w, r.h))
 
     def _move(self, ev: tk.Event[tk.Misc]) -> None:
-        if self._drag:
-            sx, sy = self._drag.start
-            self._drag.rect = (min(sx, ev.x), min(sy, ev.y), max(sx, ev.x), max(sy, ev.y))
-            self._draw_regions()
+        drag, box = self._drag, self.preview.image_box()
+        if not drag or box is None:
+            return
+        sx, sy = drag.start
+        if drag.index is None:
+            drag.rect = (min(sx, ev.x), min(sy, ev.y), max(sx, ev.x), max(sy, ev.y))
+        else:
+            _x0, _y0, bw, bh = box
+            r = self.regions[drag.index]
+            r.x, r.y, r.w, r.h = boxedit.drag(
+                drag.part, drag.before, (ev.x - sx) / bw, (ev.y - sy) / bh, (1.0, 1.0), minimum=0.01
+            )
+        self._draw_regions()
 
     def _release(self, ev: tk.Event[tk.Misc]) -> None:
         drag, self._drag = self._drag, None
+        if drag and drag.index is not None:  # moved or resized: relabel and redraw the blur
+            self._relist(drag.index)
+            return
         if not drag or not drag.rect:
             return
         a = self._frac(drag.rect[0], drag.rect[1])

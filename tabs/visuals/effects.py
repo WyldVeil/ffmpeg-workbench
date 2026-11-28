@@ -40,6 +40,7 @@ from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
+from tabs.kit import dialogs
 from tabs.kit.time_fields import Source, frame_button, seconds_text
 from tabs.widgets import FileRow, SaveRow, scroll_body
 
@@ -172,6 +173,7 @@ class SpecialEffectsTab(BaseTab):
 
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
+        self._sources: list[tk.StringVar] = []  # every effect page's source video
         self._build_ui()
 
     # ── Shared plumbing for every effect ──────────────────────────────────
@@ -2203,6 +2205,14 @@ class SpecialEffectsTab(BaseTab):
     #  Shared helpers used by all render methods
     # ═════════════════════════════════════════════════════════════════════
 
+    def load_file(self, path: str) -> bool:
+        """A dropped video becomes the source on every effect's page."""
+        if dialogs.kind_of(path) != "video":
+            return False
+        for var in self._sources:
+            var.set(path)
+        return True
+
     def _effect_page(
         self, nb: ttk.Notebook, tab: str, title: str, hint: str, suffix: str
     ) -> tuple[tk.Frame, tk.StringVar, tk.StringVar]:
@@ -2217,6 +2227,7 @@ class SpecialEffectsTab(BaseTab):
         ).pack(anchor="w", padx=px(18), pady=px(14, 2))
         _hint(inner, hint)
         src, out = tk.StringVar(), tk.StringVar()
+        self._sources.append(src)
         FileRow(
             inner, t("common.source_video"), src, on_change=partial(self._suggest_out, out, suffix)
         ).pack(fill="x", padx=px(18), pady=px(12, 4))

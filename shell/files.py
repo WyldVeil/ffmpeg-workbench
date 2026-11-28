@@ -13,7 +13,7 @@ from collections.abc import Callable
 from tkinter import messagebox
 from typing import Any
 
-from core import settings
+from core import deps, settings
 from core.i18n import t
 from core.tools import ToolId
 from tabs.kit import dialogs
@@ -122,17 +122,36 @@ class FileOpener:
 
     # ── Drag-and-drop (Windows, Linux X11/XWayland, macOS) ───────────────────
     def accept_drops(self, *targets: tk.Misc) -> None:
+        """Files dropped anywhere on *targets* open (a drop on a child widget
+        reaches the nearest registered parent).  tkinterdnd2 adds its methods to
+        widgets, not to the main window itself, so a window passed here stands
+        for the parts it holds."""
         try:
+            deps.ensure_libs_on_path()  # tkinterdnd2 ships in libs/, which isn't on the path by itself
             dnd: Any = importlib.import_module("tkinterdnd2")  # optional, and untyped
 
             dnd.TkinterDnD._require(self._window)  # noqa: SLF001 - tkinterdnd2's documented set-up call
-            for widget in targets:
+        except Exception as exc:  # no tkdnd for this Tk: the app works without it
+            logger.info("Drag-and-drop unavailable: %s", exc, exc_info=True)
+            return
+        widgets: list[tk.Misc] = []
+        for widget in targets:
+            if isinstance(widget, tk.BaseWidget):
+                widgets.append(widget)
+            else:
+                widgets += [w for w in widget.winfo_children() if isinstance(w, tk.BaseWidget)]
+        registered = 0
+        for widget in dict.fromkeys(widgets):  # once each, in order
+            try:
                 target: Any = widget  # tkinterdnd2 adds these methods to every widget
                 target.drop_target_register(dnd.DND_FILES)
                 target.dnd_bind("<<Drop>>", self._dropped)
-            self.drag_and_drop = True
-        except Exception as exc:  # no tkdnd for this Tk: the app works without it
-            logger.info("Drag-and-drop unavailable: %s", exc, exc_info=True)
+                registered += 1
+            except Exception:  # one odd widget shouldn't cost the rest
+                logger.debug("drop target %s", widget, exc_info=True)
+        self.drag_and_drop = registered > 0
+        if not registered:
+            logger.info("Drag-and-drop unavailable: no widget took the drop target")
 
     def _dropped(self, event: tk.Event) -> str:
         data = str(getattr(event, "data", ""))

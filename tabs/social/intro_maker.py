@@ -31,6 +31,7 @@ from core.ops.shared import frame_rate
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
+from tabs.kit import dialogs
 from tabs.kit.tktyped import draw_image, on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import FileRow, output_section, scroll_body
@@ -351,6 +352,25 @@ class IntroMakerTab(BaseTab):
         self.c2_btn.config(state=state[2])
         self.bg_row.entry.config(state="normal" if kind == "file" else "disabled")
         self._schedule()
+
+    def load_file(self, path: str) -> bool:
+        """A dropped file: a video becomes the main video (as an intro, unless
+        attaching was already chosen), a picture the background, audio the music."""
+        kind = dialogs.kind_of(path)
+        if kind == "video":
+            self.main_row.var.set(path)
+            if self.attach_key() == "none":
+                self.attach_var.set(ATTACH["before"])
+        elif kind == "image":
+            self.bg_var.set(BACKGROUNDS["file"])
+            self._bg_changed()
+            self.bg_row.var.set(path)
+        elif kind == "audio":
+            self.music_row.var.set(path)
+        else:
+            return False
+        self._schedule()
+        return True
 
     def _suggest(self) -> str:
         main = self.main_row.path

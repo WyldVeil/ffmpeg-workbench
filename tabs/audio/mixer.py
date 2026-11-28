@@ -360,10 +360,27 @@ class AudioMixerTab(BaseTab):
                 trk.row.destroy()
             self.track_count_lbl.config(text=t("mixer.tracks_tracks", tracks=len(self.tracks)))
 
+    def load_file(self, path: str) -> bool:
+        """A dropped file: an audio file becomes a new track, anything else the video."""
+        if dialogs.kind_of(path) == "audio":
+            if len(self.tracks) >= MAX_TRACKS:
+                return False
+            self._add_track()
+            trk = self.tracks[-1]
+            trk.path = trk.full_path = path
+            trk.path_var.set(path)
+            return True
+        self._set_video(path)
+        return True
+
     def _browse_video(self) -> None:
         p = dialogs.askopenfilename(
             filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All", t("ducker.item_2"))]
         )
+        if p:
+            self._set_video(p)
+
+    def _set_video(self, p: str) -> None:
         if p:
             self.video_path = p
             self.vid_var.set(p)
