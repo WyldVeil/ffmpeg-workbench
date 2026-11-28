@@ -105,8 +105,13 @@ def _drain() -> None:
             did_work = True
             try:
                 fn(*args, **kwargs)
-            except Exception:  # never let one bad callback stop the pump
-                logger.exception("UI callback %r failed", getattr(fn, "__name__", fn))
+            except Exception as exc:  # never let one bad callback stop the pump
+                name = getattr(fn, "__name__", fn)
+                if isinstance(exc, tk_error()) and "invalid command name" in str(exc):
+                    # background work finishing after its page was closed: nothing to update
+                    logger.debug("UI callback %r: its widget is gone", name)
+                else:
+                    logger.exception("UI callback %r failed", name)
     finally:
         root = _root
         if root is not None:

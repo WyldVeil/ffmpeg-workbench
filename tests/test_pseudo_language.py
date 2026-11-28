@@ -114,7 +114,12 @@ def test_drop_downs_in_another_language(ui, pseudo):
         host.destroy()
         i18n._strings = english
         _reload_pages()
-    ui.pump(1.0)  # let background checks the pages started finish
+    # let the background checks the pages started finish (slower on Windows)
+    try:
+        ui.wait_idle(timeout=60)
+    except TimeoutError:
+        pass
+    ui.pump(2.0)
     # a page's background check landing after the page was thrown away (here,
     # pages are built and dropped in quick succession) isn't what this tests
     errors = [e for e in ui.callback_errors if "invalid command name" not in e]
