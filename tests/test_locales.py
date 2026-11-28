@@ -175,3 +175,21 @@ def test_on_screen_text_goes_through_the_catalogue():
                             if _words(text):
                                 found.append(f"{os.path.relpath(path, ROOT)}:{line} {text[:40]!r}")
     assert not found, f"{len(found)} on-screen strings not in the catalogue: {found[:10]}"
+
+
+def test_every_english_fallback_is_in_the_catalogue():
+    """Text written in the code as a fallback (t_or, Labels, Choices) is in
+    en_US.json too, so it reaches the translators - run
+    scripts/harvest_strings.py after adding some."""
+    import subprocess
+    import sys
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    res = subprocess.run(
+        [sys.executable, os.path.join(root, "scripts", "harvest_strings.py"), "--check"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ},
+    )
+    assert res.returncode == 0, res.stdout[-2000:]

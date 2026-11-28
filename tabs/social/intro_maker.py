@@ -18,13 +18,14 @@ from __future__ import annotations
 import base64
 import os
 import tkinter as tk
+from collections.abc import Mapping
 from tkinter import messagebox, ttk
 from typing import Literal
 
 from core import ass, tasks
 from core import encoders as enc
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops import intro_card as ic
 from core.ops.intro_card import Background, Card, card_script
 from core.ops.shared import frame_rate
@@ -36,40 +37,57 @@ from tabs.kit.tktyped import draw_image, on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import FileRow, output_section, scroll_body
 
-BACKGROUNDS = {
-    "solid": "Solid colour",
-    "gradient": "Gradient",
-    "black": "Black",
-    "file": "Image or video file",
-}
-GRADIENTS = {
-    "horizontal": "Left → right",
-    "vertical": "Top → bottom",
-    "diagonal": "Diagonal",
-    "radial": "Radial (from centre)",
-}
-ANIMATIONS = {
-    "fade": "Fade in / out",
-    "slide": "Slide up",
-    "zoom": "Zoom in",
-    "typewriter": "Typewriter",
-    "static": "No animation",
-}
-POSITIONS = {"centre": "Centre", "lower": "Lower third", "top": "Top"}
-SIZES = {"Medium": 1.0, "Large": 1.3, "Huge": 1.7, "Small": 0.75}
-RESOLUTIONS = {
-    "1920×1080 (Full HD)": (1920, 1080),
-    "3840×2160 (4K)": (3840, 2160),
-    "1280×720 (HD)": (1280, 720),
-    "1080×1920 (vertical 9:16)": (1080, 1920),
-    "1080×1080 (square)": (1080, 1080),
-}
-ATTACH = {
-    "none": "Just make the card",
-    "before": "Put it before the video (intro)",
-    "after": "Put it after the video (outro)",
-    "both": "Before and after",
-}
+BACKGROUNDS = Labels(
+    "intro_maker.backgrounds",
+    {
+        "solid": "Solid colour",
+        "gradient": "Gradient",
+        "black": "Black",
+        "file": "Image or video file",
+    },
+)
+GRADIENTS = Labels(
+    "intro_maker.gradients",
+    {
+        "horizontal": "Left → right",
+        "vertical": "Top → bottom",
+        "diagonal": "Diagonal",
+        "radial": "Radial (from centre)",
+    },
+)
+ANIMATIONS = Labels(
+    "intro_maker.animations",
+    {
+        "fade": "Fade in / out",
+        "slide": "Slide up",
+        "zoom": "Zoom in",
+        "typewriter": "Typewriter",
+        "static": "No animation",
+    },
+)
+POSITIONS = Labels(
+    "intro_maker.positions", {"centre": "Centre", "lower": "Lower third", "top": "Top"}
+)
+SIZES = Choices("intro_maker.sizes", {"Medium": 1.0, "Large": 1.3, "Huge": 1.7, "Small": 0.75})
+RESOLUTIONS = Choices(
+    "intro_maker.resolutions",
+    {
+        "1920×1080 (Full HD)": (1920, 1080),
+        "3840×2160 (4K)": (3840, 2160),
+        "1280×720 (HD)": (1280, 720),
+        "1080×1920 (vertical 9:16)": (1080, 1920),
+        "1080×1080 (square)": (1080, 1080),
+    },
+)
+ATTACH = Labels(
+    "intro_maker.attach",
+    {
+        "none": "Just make the card",
+        "before": "Put it before the video (intro)",
+        "after": "Put it after the video (outro)",
+        "both": "Before and after",
+    },
+)
 
 
 class IntroMakerTab(BaseTab):
@@ -116,8 +134,10 @@ class IntroMakerTab(BaseTab):
         design = tk.LabelFrame(left, text=t("intro_maker.card"), padx=px(10), pady=px(6))
         design.pack(fill="x")
 
-        self.title_var = tk.StringVar(value="My Channel")
-        self.sub_var = tk.StringVar(value="Subscribe for more")
+        self.title_var = tk.StringVar(value=t_or("intro_maker.sample.my_channel", "My Channel"))
+        self.sub_var = tk.StringVar(
+            value=t_or("intro_maker.sample.subscribe_for_more", "Subscribe for more")
+        )
         self.form_row(
             design,
             0,
@@ -135,7 +155,7 @@ class IntroMakerTab(BaseTab):
             pady=2,
         )
         self.font_var = tk.StringVar(value="Montserrat")
-        self.size_var = tk.StringVar(value="Medium")
+        self.size_var = tk.StringVar(value=SIZES.label("Medium"))
         self.form_row(
             design,
             2,
@@ -384,7 +404,7 @@ class IntroMakerTab(BaseTab):
 
     # ── settings ─────────────────────────────────────────────────────────────
 
-    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
+    def _key(self, table: Mapping[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
     def bg_kind(self) -> str:

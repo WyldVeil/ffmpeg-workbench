@@ -16,7 +16,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops import pip as pip_ops
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -26,27 +26,36 @@ from tabs.kit.time_fields import RangePicker
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-POSITIONS = {
-    "tl": "Top left",
-    "tc": "Top centre",
-    "tr": "Top right",
-    "ml": "Middle left",
-    "c": "Centre",
-    "mr": "Middle right",
-    "bl": "Bottom left",
-    "bc": "Bottom centre",
-    "br": "Bottom right",
-    "custom": "Custom (%)",
-}
-ANIMS = {
-    "none": "Just appear",
-    "fade": "Fade in and out",
-    "left": "Slide in from the left",
-    "right": "Slide in from the right",
-    "top": "Slide in from the top",
-    "bottom": "Slide in from the bottom",
-}
-AUDIO = {"bg": "Background's sound", "fg": "Inset's sound", "mix": "Both mixed", "none": "No sound"}
+POSITIONS = Labels(
+    "pip.positions",
+    {
+        "tl": "Top left",
+        "tc": "Top centre",
+        "tr": "Top right",
+        "ml": "Middle left",
+        "c": "Centre",
+        "mr": "Middle right",
+        "bl": "Bottom left",
+        "bc": "Bottom centre",
+        "br": "Bottom right",
+        "custom": "Custom (%)",
+    },
+)
+ANIMS = Labels(
+    "pip.anims",
+    {
+        "none": "Just appear",
+        "fade": "Fade in and out",
+        "left": "Slide in from the left",
+        "right": "Slide in from the right",
+        "top": "Slide in from the top",
+        "bottom": "Slide in from the bottom",
+    },
+)
+AUDIO = Labels(
+    "pip.audio",
+    {"bg": "Background's sound", "fg": "Inset's sound", "mix": "Both mixed", "none": "No sound"},
+)
 
 
 class PIPTab(BaseTab):
@@ -180,7 +189,7 @@ class PIPTab(BaseTab):
         self.window = RangePicker(
             tr,
             joiner="until",
-            end_hint="(empty = until the inset ends)",
+            end_hint=t_or("hint.empty_until_the_inset_ends", "(empty = until the inset ends)"),
             here=lambda: self.compare.position,
             on_change=self._changed,
         )

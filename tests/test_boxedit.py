@@ -47,6 +47,12 @@ def test_top_edge_drag_ignores_sideways_movement():
     assert (y, h) == (70, 80)
 
 
+def test_locked_ratio_side_edge_drag_keeps_shape_about_the_middle():
+    x, y, w, h = boxedit.drag("r", BOX, 100, 0, (640, 360), ratio=(2, 1))
+    assert (x, w, h) == (100, 300, 150)
+    assert y + h / 2 == 100  # same centre
+
+
 def test_side_edge_drag_ignores_vertical_movement():
     x, y, w, h = boxedit.drag("r", BOX, dx=40, dy=-25, bounds=(640, 360))
     assert (y, h) == (50, 100)
@@ -59,7 +65,7 @@ def test_corner_drag_moves_both_sides():
 
 def test_edges_stay_inside_and_keep_a_minimum_size():
     assert boxedit.drag("t", BOX, 0, -500, (640, 360))[1] == 0
-    x, y, w, h = boxedit.drag("l", BOX, 1000, 0, (640, 360), minimum=16)
+    x, _y, w, _h = boxedit.drag("l", BOX, 1000, 0, (640, 360), minimum=16)
     assert w == 16 and x == 284
 
 
@@ -68,7 +74,7 @@ def test_move_stays_inside():
 
 
 def test_locked_ratio_edge_drag_keeps_shape_about_the_middle():
-    x, y, w, h = boxedit.drag("b", BOX, 0, 50, (640, 360), ratio=(2, 1))
+    x, _y, w, h = boxedit.drag("b", BOX, 0, 50, (640, 360), ratio=(2, 1))
     assert h == 150 and w == 300
     assert x + w / 2 == 200  # same centre
     assert w / h == 2
@@ -76,7 +82,8 @@ def test_locked_ratio_edge_drag_keeps_shape_about_the_middle():
 
 def test_locked_ratio_corner_drag_keeps_shape():
     x, y, w, h = boxedit.drag("br", BOX, 40, 0, (640, 360), ratio=(2, 1))
-    assert (x, y) == (100, 50) and w / h == 2
+    assert (x, y) == (100, 50)
+    assert w / h == 2
 
 
 def _ev(x: float, y: float) -> SimpleNamespace:
@@ -106,6 +113,7 @@ def test_privacy_blur_region_can_be_resized_and_moved(ui, media):
     tab = ui.open("Privacy Blur")
     tab.load_file(media["h264"])
     ui.wait_for(lambda: tab.preview.image_box() is not None, timeout=20)
+    tab.regions.clear()  # (an earlier test may have left regions on the page)
     tab._add(Region(0.25, 0.25, 0.5, 0.5))
     ui.app.update()
     x, y, w, h = tab._on_canvas(tab.regions[0])

@@ -17,7 +17,7 @@ from tkinter import messagebox, ttk
 
 from core import ass
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops.shared import RenderJob
 from core.ops.text_watermark import PLACES, TextMark, build_script, parse_ranges
 from core.scaling import px
@@ -26,6 +26,9 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
+
+#: where the text can go, shown in the current language
+PLACE_LABELS = Labels("watermark.places", PLACES)
 
 
 class TextBurnerTab(BaseTab):
@@ -60,7 +63,7 @@ class TextBurnerTab(BaseTab):
 
         ty = tk.LabelFrame(body, text=t("watermark.text"), padx=px(12), pady=px(6))
         ty.pack(fill="x", padx=px(20), pady=px(4))
-        self.text_var = tk.StringVar(value="© My Channel")
+        self.text_var = tk.StringVar(value=t_or("watermark.sample.my_channel", "© My Channel"))
         tk.Entry(ty, textvariable=self.text_var, width=40).grid(
             row=0, column=0, columnspan=3, sticky="w"
         )
@@ -112,11 +115,11 @@ class TextBurnerTab(BaseTab):
 
         pos = tk.LabelFrame(body, text=t("watermark.position_motion"), padx=px(12), pady=px(6))
         pos.pack(fill="x", padx=px(20), pady=px(4))
-        self.place_var = tk.StringVar(value=PLACES["br"])
+        self.place_var = tk.StringVar(value=PLACE_LABELS["br"])
         pb = ttk.Combobox(
             pos,
             textvariable=self.place_var,
-            values=list(PLACES.values()),
+            values=list(PLACE_LABELS.values()),
             state="readonly",
             width=24,
         )
@@ -184,7 +187,7 @@ class TextBurnerTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
 
     def script(self, w: int, h: int, duration: float) -> ass.Script:
-        place = next((k for k, v in PLACES.items() if v == self.place_var.get()), "br")
+        place = PLACE_LABELS.code_of(self.place_var.get(), "br")
         every = common.number(self.every_var.get() or "3", t("watermark.jump_every_2"), 0.2, 3600)
         mark = TextMark(
             text=self.text_var.get(),

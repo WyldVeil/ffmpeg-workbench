@@ -23,7 +23,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core.i18n import t
+from core.i18n import t, t_or
 from core.ops.chapters import Chapter, fmt_srt_tc, fmt_yt, parse_chapter_text, youtube_issues
 from core.scaling import px
 from tabs import framestep
@@ -125,7 +125,7 @@ class ChapterMarkersTab(BaseTab):
         mark_row = tk.Frame(body)
         mark_row.pack(fill="x", padx=px(16), pady=px(4))
         tk.Label(mark_row, text=t("chapter_markers.chapter_title_label")).pack(side="left")
-        self.new_title_var = tk.StringVar(value="Chapter")
+        self.new_title_var = tk.StringVar(value=t_or("chapter_markers.sample.chapter", "Chapter"))
         title_entry = tk.Entry(mark_row, textvariable=self.new_title_var, width=30, relief="flat")
         title_entry.pack(side="left", padx=px(8))
 
@@ -154,7 +154,7 @@ class ChapterMarkersTab(BaseTab):
         tk.Checkbutton(
             auto_row, text=t("chapter_markers.auto_number_checkbox"), variable=self.autonumber_var
         ).pack(side="left")
-        self.prefix_var = tk.StringVar(value="Chapter")
+        self.prefix_var = tk.StringVar(value=t_or("chapter_markers.sample.chapter", "Chapter"))
         tk.Entry(auto_row, textvariable=self.prefix_var, width=12, relief="flat").pack(
             side="left", padx=px(6)
         )

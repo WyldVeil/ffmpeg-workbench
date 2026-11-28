@@ -22,7 +22,7 @@ from tkinter import messagebox, ttk
 
 from core import ass
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops.shared import RenderJob
 from core.ops.titles import Card, build_script
 from core.scaling import px
@@ -33,13 +33,16 @@ from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
-STYLES = {
-    "lower_third": "Lower third (sliding bar)",
-    "chapter": "Chapter title (dimmed frame)",
-    "name_tag": "Name tag (corner box)",
-    "kinetic": "Kinetic pop (word by word)",
-    "strip": "Subtitle strip (bottom banner)",
-}
+STYLES = Labels(
+    "titles.styles",
+    {
+        "lower_third": "Lower third (sliding bar)",
+        "chapter": "Chapter title (dimmed frame)",
+        "name_tag": "Name tag (corner box)",
+        "kinetic": "Kinetic pop (word by word)",
+        "strip": "Subtitle strip (bottom banner)",
+    },
+)
 ACCENTS = {
     "YouTube red": "#E53935",
     "Electric blue": "#1565C0",
@@ -48,7 +51,7 @@ ACCENTS = {
     "Purple": "#7B1FA2",
     "Charcoal": "#263238",
 }
-SIZES = {"Small": 0.8, "Medium": 1.0, "Large": 1.25}
+SIZES = Choices("titles.sizes", {"Small": 0.8, "Medium": 1.0, "Large": 1.25})
 
 
 def _walk(widget: tk.Misc) -> Iterator[tk.Misc]:
@@ -125,7 +128,7 @@ class TitlesGeneratorTab(BaseTab):
         fb.pack(side="left", padx=px(6))
         fb.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
         tk.Label(look, text=t("titles.text_size")).pack(side="left", padx=px(12, 0))
-        self.size_var = tk.StringVar(value="Medium")
+        self.size_var = tk.StringVar(value=SIZES.label("Medium"))
         sb = ttk.Combobox(
             look, textvariable=self.size_var, values=list(SIZES), width=8, state="readonly"
         )

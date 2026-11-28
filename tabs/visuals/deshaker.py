@@ -12,7 +12,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from core.i18n import t
+from core.i18n import Choices, t
 from core.ops import deshake as ds
 from core.ops.shared import keep_audio_args
 from core.queue_manager import Hooks
@@ -21,12 +21,17 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, output_section, scroll_body
 
-ZOOM_MODES = {
-    "Auto zoom to hide borders (recommended)": 1,
-    "Adaptive zoom (zooms only when needed)": 2,
-    "No automatic zoom": 0,
-}
-EDGE_MODES = {"Keep previous frame at edges": "keep", "Black edges": "black"}
+ZOOM_MODES = Choices(
+    "deshaker.zoom_modes",
+    {
+        "Auto zoom to hide borders (recommended)": 1,
+        "Adaptive zoom (zooms only when needed)": 2,
+        "No automatic zoom": 0,
+    },
+)
+EDGE_MODES = Choices(
+    "deshaker.edge_modes", {"Keep previous frame at edges": "keep", "Black edges": "black"}
+)
 
 
 class DeshakerTab(BaseTab):

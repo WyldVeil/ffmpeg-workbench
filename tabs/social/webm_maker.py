@@ -19,7 +19,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops import webm
 from core.queue_manager import Hooks
 from core.scaling import px
@@ -47,7 +47,7 @@ QUALITY_LABELS = [p[0] for p in QUALITY_PRESETS]
 # Audio codec options
 AUDIO_OPTIONS = {
     t("webm_maker.no_audio_option"): None,
-    "Opus  (recommended)": "libopus",
+    t_or("webm_maker.opus_recommended", "Opus  (recommended)"): "libopus",
     "Vorbis": "libvorbis",
 }
 
@@ -75,13 +75,16 @@ class PixFmt(StrEnum):
     GBRP = "gbrp"
 
 
-PIX_FORMATS = {
-    PixFmt.SOURCE: "Source (auto-detect)",
-    PixFmt.YUV420P: "yuv420p",
-    PixFmt.YUVA420P: "yuva420p (transparency)",
-    PixFmt.YUV444P: "yuv444p",
-    PixFmt.GBRP: "gbrp",
-}
+PIX_FORMATS = Labels(
+    "webm_maker.pix_formats",
+    {
+        PixFmt.SOURCE: "Source (auto-detect)",
+        PixFmt.YUV420P: "yuv420p",
+        PixFmt.YUVA420P: "yuva420p (transparency)",
+        PixFmt.YUV444P: "yuv444p",
+        PixFmt.GBRP: "gbrp",
+    },
+)
 
 
 class WebMTab(BaseTab):
@@ -205,7 +208,7 @@ class WebMTab(BaseTab):
         tk.Label(row, text=t("muter.from")).pack(side="left")
         self.simple_trim = RangePicker(
             row,
-            end_hint="(empty = to the end)",
+            end_hint=t_or("hint.empty_to_the_end", "(empty = to the end)"),
             source=lambda: self.src_row.path,
             on_change=self._update_simple_estimate,
         )
@@ -375,7 +378,9 @@ class WebMTab(BaseTab):
         )
         audio_lf.pack(fill="x", pady=px(0, 6))
 
-        self.audio_codec_var = tk.StringVar(value="Opus  (recommended)")
+        self.audio_codec_var = tk.StringVar(
+            value=t_or("webm_maker.opus_recommended", "Opus  (recommended)")
+        )
         audio_cb = ttk.Combobox(
             audio_lf,
             textvariable=self.audio_codec_var,
@@ -531,7 +536,9 @@ class WebMTab(BaseTab):
         trim_row.pack(fill="x")
         tk.Label(trim_row, text=t("muter.from")).pack(side="left")
         self.trim = RangePicker(
-            trim_row, end_hint="(empty = to the end)", source=lambda: self.src_row.path
+            trim_row,
+            end_hint=t_or("hint.empty_to_the_end", "(empty = to the end)"),
+            source=lambda: self.src_row.path,
         )
         self.trim.pack(side="left", padx=px(4))
 

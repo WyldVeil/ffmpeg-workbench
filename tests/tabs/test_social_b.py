@@ -194,7 +194,7 @@ def test_slideshow(ui, media, outdir, tmp_path, trans):
     tab.slides[0].caption = NASTY_TEXT
     tab.dur_var.set("2")
     tab.trans_dur_var.set("0.5")
-    tab.trans_var.set(slideshow.TRANSITION_NAMES[trans])
+    tab.trans_var.set(slideshow.TRANSITIONS[trans])
     tab.set_music([(media["mp3"], ff.duration_of(media["mp3"]))])
     out = str(outdir / f"slides_{trans}.mp4")
     tab.out_row.set(out)

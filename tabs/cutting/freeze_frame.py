@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.freeze_frame import Freeze, caption_script, freeze_graph
 from core.ops.shared import RenderJob, encoded_audio
 from core.scaling import px
@@ -29,11 +29,14 @@ MODES = [
     ("end", "Freeze the ending", "Hold the last frame at the end of the clip."),
     ("only", "Freeze only", "Export just the frozen moment as a still clip."),
 ]
-AUDIO = {
-    "pause": "Sound pauses during the freeze",
-    "continue": "Sound keeps playing",
-    "mute": "No sound",
-}
+AUDIO = Labels(
+    "freeze_frame.audio",
+    {
+        "pause": "Sound pauses during the freeze",
+        "continue": "Sound keeps playing",
+        "mute": "No sound",
+    },
+)
 
 
 class FreezeFrameTab(BaseTab):

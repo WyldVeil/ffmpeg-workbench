@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import grid
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops.shared import frame_rate
 from core.scaling import px
 from core.timecode import Timecode
@@ -75,19 +76,35 @@ LAYOUTS = {  # stable ids; labels are what the user sees
     "3x3": _Layout("3×3 (Nine grid)", 9, 3, 3),
     "pip": _Layout("Main video + 2 picture-in-picture", 3, 2, 2, pip=True),
 }
-BACKGROUNDS = {"Black": "black", "White": "white", "Grey": "gray", "Charcoal": "0x1E1E1E"}
-AUDIO_MODES = {"first": "Audio from clip 1", "mix": "Mix all clips", "none": "No audio"}
-LENGTHS = {
-    "longest": "As long as the longest clip",
-    "shortest": "As long as the shortest clip",
-    "custom": "Custom length (seconds):",
-}
-ENDS = {
-    "hold": "hold its last frame",
-    "background": "show the background",
-    "reflow": "re-arrange the others",
-}
+BACKGROUNDS = Choices(
+    "collage.backgrounds",
+    {"Black": "black", "White": "white", "Grey": "gray", "Charcoal": "0x1E1E1E"},
+)
+AUDIO_MODES = Labels(
+    "collage.audio_modes",
+    {"first": "Audio from clip 1", "mix": "Mix all clips", "none": "No audio"},
+)
+LENGTHS = Labels(
+    "collage.lengths",
+    {
+        "longest": "As long as the longest clip",
+        "shortest": "As long as the shortest clip",
+        "custom": "Custom length (seconds):",
+    },
+)
+ENDS = Labels(
+    "collage.ends",
+    {
+        "hold": "hold its last frame",
+        "background": "show the background",
+        "reflow": "re-arrange the others",
+    },
+)
 MAX_CLIPS = 25
+
+
+#: how the layouts are shown (in the current language)
+LAYOUT_LABELS = Labels("collage.layouts", {k: v.label for k, v in LAYOUTS.items()})
 
 
 class VideoCollageTab(BaseTab):
@@ -120,11 +137,11 @@ class VideoCollageTab(BaseTab):
         layout_lf.pack(fill="x", padx=px(20), pady=px(10, 6))
         left = tk.Frame(layout_lf)
         left.pack(side="left", fill="y")
-        self._layout_var = tk.StringVar(value=LAYOUTS["auto"].label)
+        self._layout_var = tk.StringVar(value=LAYOUT_LABELS["auto"])
         lb = ttk.Combobox(
             left,
             textvariable=self._layout_var,
-            values=[v.label for v in LAYOUTS.values()],
+            values=list(LAYOUT_LABELS.values()),
             state="readonly",
             width=40,
         )
@@ -239,7 +256,7 @@ class VideoCollageTab(BaseTab):
         tk.Entry(or2, textvariable=self._pad_var, width=4).pack(side="left", padx=px(4))
         on_write(self._pad_var, lambda: self._changed())
         tk.Label(or2, text=t("collage.px_background")).pack(side="left")
-        self._bg_color = tk.StringVar(value="Black")
+        self._bg_color = tk.StringVar(value=BACKGROUNDS.label("Black"))
         ttk.Combobox(
             or2, textvariable=self._bg_color, width=9, values=list(BACKGROUNDS), state="readonly"
         ).pack(side="left", padx=px(4))
@@ -301,9 +318,9 @@ class VideoCollageTab(BaseTab):
 
     # ── State helpers ─────────────────────────────────────────────────
     def _layout_key(self) -> str:
-        return next((k for k, v in LAYOUTS.items() if v.label == self._layout_var.get()), "auto")
+        return LAYOUT_LABELS.code_of(self._layout_var.get(), "auto")
 
-    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
+    def _key(self, table: Mapping[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
     def _canvas_size(self) -> tuple[int, int]:

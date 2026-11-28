@@ -20,7 +20,7 @@ from functools import partial
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops import speed_ramp as sr_ops
 from core.ops.shared import frame_rate
 from core.scaling import px
@@ -30,29 +30,38 @@ from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, output_section, scroll_body
 
 MIN_SPEED, MAX_SPEED = 0.1, 16.0
-SLOWMO = {
-    "dup": "Duplicate frames (fast)",
-    "blend": "Blend frames (smoother)",
-    "flow": "Optical flow (smoothest, very slow)",
-}
-AUDIO = {
-    "tempo": "Keep pitch",
-    "pitch": "Natural pitch (chipmunk / deep)",
-    "mute": "Mute",
-}
-PRESETS = {
-    "Speed up in the middle": [(0.0, 1.0), (0.35, 1.0), (0.45, 4.0), (0.55, 4.0), (0.65, 1.0)],
-    "Slow-mo in the middle": [(0.0, 1.0), (0.4, 1.0), (0.45, 0.3), (0.6, 0.3), (0.65, 1.0)],
-    "Ramp up (1× → 4×)": [(0.0, 1.0), (0.8, 4.0)],
-    "Ramp down (4× → 1×)": [(0.0, 4.0), (0.8, 1.0)],
-    "Hit the beat (fast, slow, fast)": [
-        (0.0, 3.0),
-        (0.3, 3.0),
-        (0.35, 0.4),
-        (0.55, 0.4),
-        (0.6, 3.0),
-    ],
-}
+SLOWMO = Labels(
+    "speed_ramp.slowmo",
+    {
+        "dup": "Duplicate frames (fast)",
+        "blend": "Blend frames (smoother)",
+        "flow": "Optical flow (smoothest, very slow)",
+    },
+)
+AUDIO = Labels(
+    "speed_ramp.audio",
+    {
+        "tempo": "Keep pitch",
+        "pitch": "Natural pitch (chipmunk / deep)",
+        "mute": "Mute",
+    },
+)
+PRESETS = Choices(
+    "speed_ramp.presets",
+    {
+        "Speed up in the middle": [(0.0, 1.0), (0.35, 1.0), (0.45, 4.0), (0.55, 4.0), (0.65, 1.0)],
+        "Slow-mo in the middle": [(0.0, 1.0), (0.4, 1.0), (0.45, 0.3), (0.6, 0.3), (0.65, 1.0)],
+        "Ramp up (1× → 4×)": [(0.0, 1.0), (0.8, 4.0)],
+        "Ramp down (4× → 1×)": [(0.0, 4.0), (0.8, 1.0)],
+        "Hit the beat (fast, slow, fast)": [
+            (0.0, 3.0),
+            (0.3, 3.0),
+            (0.35, 0.4),
+            (0.55, 0.4),
+            (0.6, 3.0),
+        ],
+    },
+)
 
 
 # ── Tab ──────────────────────────────────────────────────────────────────────

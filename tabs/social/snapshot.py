@@ -32,7 +32,7 @@ from core import filters as fl
 from core import proc as _proc
 from core import tasks
 from core.hardware import reveal_file
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.snapshot import Box, Picture, build_chain, frame_name, out_size, sar, save_command
 from core.procenv import child_env
 from core.scaling import px
@@ -43,7 +43,10 @@ from tabs.widgets import FileRow, FramePreview, scroll_body
 
 K = TypeVar("K")
 
-SIZES = {"own": "The video's own size", "half": "Half size", "double": "Double size (upscaled)"}
+SIZES = Labels(
+    "snapshot.sizes",
+    {"own": "The video's own size", "half": "Half size", "double": "Double size (upscaled)"},
+)
 SHARPEN = {0.0: "Off", 0.3: "Subtle", 0.6: "Medium", 0.9: "Strong"}
 DENOISE = {0: "Off", 2: "Light", 4: "Medium", 7: "Strong"}
 LOOK = {"sharpen": 0.0, "denoise": 0, "brightness": 0.0, "contrast": 1.0, "saturation": 1.0}

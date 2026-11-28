@@ -593,3 +593,34 @@ def test_subtitles_from_speech(capsys, outdir):
         str(outdir / "b.mp4"),
     )
     assert d["duration"] == pytest.approx(11.0, abs=0.2)
+
+
+@pytest.mark.ffmpeg
+def test_blur_text(capsys, outdir):
+    """blur-text lists what it finds (--find) and blurs the picked ones."""
+    import subprocess
+
+    from core import ffmpeg as ff
+
+    src = str(outdir / "words.mp4")
+    letters = ",".join(
+        f"drawbox=x={40 + i * 22}:y=300:w=12:h=34:color=white:t=fill" for i in range(12)
+    )
+    subprocess.run(
+        [
+            ff.ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+            "-i", "mandelbrot=s=640x360:r=25:start_scale=1.5:end_scale=0.05", "-t", "8",
+            "-vf", f"{letters},format=yuv420p", "-c:v", "libx264", "-preset", "ultrafast", src,
+        ],
+        check=True,
+    )  # fmt: skip
+    d = ok(capsys, "blur-text", src, "--find")
+    handle = [f for f in d["found"] if f["what"] == "text" and f["box_percent"][1] > 70]
+    assert len(handle) == 1 and handle[0]["start"] == 0 and handle[0]["end"] is None
+    d = ok(
+        capsys, "blur-text", src, "--pick", str(handle[0]["number"]), "-o", str(outdir / "t.mp4")
+    )
+    assert d["duration"] == pytest.approx(8.0, abs=0.15)
+    assert [b["number"] for b in d["blurred"]] == [handle[0]["number"]]
+    code, d = run(capsys, "blur-text", src, "--pick", "99")
+    assert code == 1 and "--find" in d["error"]

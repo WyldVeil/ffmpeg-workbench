@@ -24,7 +24,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import filters as fl
 from core import upscale
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops import scaler as scaler_ops
 from core.ops.scaler import GPU_METHODS, geometry, rate_fraction, scale_chain
 from core.ops.shared import RenderJob, frame_rate
@@ -34,35 +34,50 @@ from tabs.base_tab import CLR, BaseTab
 from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, output_section, scroll_body
 
-SIZES = [
-    ("8K (7680×4320)", 7680, 4320),
-    ("4K UHD (3840×2160)", 3840, 2160),
-    ("1440p (2560×1440)", 2560, 1440),
-    ("1080p (1920×1080)", 1920, 1080),
-    ("720p (1280×720)", 1280, 720),
-    ("480p (854×480)", 854, 480),
-    ("360p (640×360)", 640, 360),
-    ("Twice the size (×2)", 2, 0),
-    ("Three times (×3)", 3, 0),
-    ("Four times (×4)", 4, 0),
-    ("Half the size (½)", -2, 0),
-    ("Custom size", 0, 0),
-]
-SHAPES = {
-    "fit": "Keep the shape (fit inside the size)",
-    "pad": "Keep the shape, add bars to fill the size",
-    "crop": "Fill the size, crop the edges",
-    "stretch": "Stretch to the size exactly",
-}
-METHODS = {
-    "auto": "Automatic (best for the direction)",
-    "gpu": "GPU - libplacebo EWA Lanczos sharp",
-    "lanczos": "Lanczos (sharp)",
-    "bicubic": "Bicubic (soft)",
-    "area": "Area (smooth downscale)",
-    "neighbor": "Nearest (pixel art)",
-}
-METHODS.update({key: "Upscale: " + spec[0] for key, spec in upscale.SHADERS.items()})
+SIZES = Choices(
+    "scaler.sizes",
+    {
+        "8K (7680×4320)": (7680, 4320),
+        "4K UHD (3840×2160)": (3840, 2160),
+        "1440p (2560×1440)": (2560, 1440),
+        "1080p (1920×1080)": (1920, 1080),
+        "720p (1280×720)": (1280, 720),
+        "480p (854×480)": (854, 480),
+        "360p (640×360)": (640, 360),
+        "Twice the size (×2)": (2, 0),
+        "Three times (×3)": (3, 0),
+        "Four times (×4)": (4, 0),
+        "Half the size (½)": (-2, 0),
+        "Custom size": (0, 0),
+    },
+)
+SHAPES = Labels(
+    "scaler.shapes",
+    {
+        "fit": "Keep the shape (fit inside the size)",
+        "pad": "Keep the shape, add bars to fill the size",
+        "crop": "Fill the size, crop the edges",
+        "stretch": "Stretch to the size exactly",
+    },
+)
+METHODS = Labels(
+    "scaler.methods",
+    {
+        "auto": "Automatic (best for the direction)",
+        "gpu": "GPU - libplacebo EWA Lanczos sharp",
+        "lanczos": "Lanczos (sharp)",
+        "bicubic": "Bicubic (soft)",
+        "area": "Area (smooth downscale)",
+        "neighbor": "Nearest (pixel art)",
+    },
+)
+# the upscaling shaders, named by what they are (their names stay as they are)
+METHODS.english.update(
+    {
+        key: t_or("scaler.upscale_with", "Upscale") + ": " + spec[0]
+        for key, spec in upscale.SHADERS.items()
+    }
+)
 
 
 class ResolutionScalerTab(BaseTab):
@@ -89,11 +104,11 @@ class ResolutionScalerTab(BaseTab):
         )
         opt.pack(fill="x", padx=px(20), pady=px(6))
 
-        self.size_var = tk.StringVar(value=SIZES[3][0])
+        self.size_var = tk.StringVar(value=list(SIZES)[3])
         sb = ttk.Combobox(
             opt,
             textvariable=self.size_var,
-            values=[s[0] for s in SIZES],
+            values=list(SIZES),
             state="readonly",
             width=24,
         )
@@ -179,7 +194,7 @@ class ResolutionScalerTab(BaseTab):
 
     def _box(self, info: ff.MediaInfo) -> tuple[float, float]:
         label = self.size_var.get()
-        _l, a, b = next((s for s in SIZES if s[0] == label), SIZES[3])
+        a, b = SIZES.get(label) or SIZES[list(SIZES)[3]]
         sw, sh = common.even_size(info)
         if a == 0:
             return (
@@ -292,11 +307,14 @@ class ResolutionScalerTab(BaseTab):
 # ── Framerate Interpolator ───────────────────────────────────────────────────
 
 RATES = ["23.976", "24", "25", "29.97", "30", "48", "50", "59.94", "60", "90", "120", "144"]
-FPS_METHODS = {
-    "motion": "Smooth motion (motion interpolation - slowest, best)",
-    "blend": "Blend frames (fast, slight ghosting)",
-    "dup": "Drop / repeat frames (fastest, no smoothing)",
-}
+FPS_METHODS = Labels(
+    "scaler.fps_methods",
+    {
+        "motion": "Smooth motion (motion interpolation - slowest, best)",
+        "blend": "Blend frames (fast, slight ghosting)",
+        "dup": "Drop / repeat frames (fastest, no smoothing)",
+    },
+)
 
 
 class FPSInterpolatorTab(BaseTab):

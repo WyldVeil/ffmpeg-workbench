@@ -165,7 +165,7 @@ def test_downsizer_hits_target(ui, media, outdir, speed):
     ui.pump(0.4)
     from tabs.transcoder.downsizer import TARGETS
 
-    tab.target_var.set(TARGETS[-1][0])  # custom
+    tab.target_var.set(list(TARGETS)[-1])  # custom
     tab._target_mb.set("0.5")
     tab.speed_var.set(speed)
     out = str(outdir / f"small_{speed}.mp4")

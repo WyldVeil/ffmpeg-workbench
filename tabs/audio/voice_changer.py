@@ -13,13 +13,16 @@ import tkinter as tk
 from tkinter import ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import voice as vc
 from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import FileRow, save_section, scroll_body
+
+#: how vc.PRESETS is shown (in the current language)
+PRESET_LABELS = Labels("voice_changer.presets", {k: v[0] for k, v in vc.PRESETS.items()})
 
 
 class VoiceChangerTab(BaseTab):
@@ -42,11 +45,11 @@ class VoiceChangerTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text=t("voice_changer.effect"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.preset_var = tk.StringVar(value=vc.PRESETS["chipmunk"][0])
+        self.preset_var = tk.StringVar(value=PRESET_LABELS["chipmunk"])
         ttk.Combobox(
             opt,
             textvariable=self.preset_var,
-            values=[v[0] for v in vc.PRESETS.values()],
+            values=list(PRESET_LABELS.values()),
             state="readonly",
             width=32,
         ).grid(row=0, column=0, sticky="w")
@@ -94,7 +97,7 @@ class VoiceChangerTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
 
     def chain(self, info: ff.MediaInfo | None) -> str:
-        key = next((k for k, v in vc.PRESETS.items() if v[0] == self.preset_var.get()), "chipmunk")
+        key = PRESET_LABELS.code_of(self.preset_var.get(), "chipmunk")
         sr = info.require_audio().sample_rate if info is not None and info.audio else 48000
         return vc.voice_filter(
             key, float(self.semi_var.get()), sr, self.formant_var.get(), vc.rubberband_available()

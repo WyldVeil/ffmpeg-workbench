@@ -22,7 +22,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops import contact_sheet as cs
 from core.ops import frame_extractor as fe
 from core.ops.frame_extractor import quality_args
@@ -33,13 +33,19 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
 from tabs.kit.time_fields import MomentPicker, RangePicker
 from tabs.widgets import FileRow, FolderRow, FramePreview, scroll_body
 
-FORMATS = {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"}
-MODES = {
-    "single": "This frame",
-    "interval": "Every N seconds",
-    "scenes": "Scene starts",
-    "sheet": "Contact sheet",
-}
+FORMATS = Labels(
+    "frame_extractor.formats",
+    {"png": "PNG (lossless)", "jpg": "JPEG", "webp": "WebP", "tiff": "TIFF (print)"},
+)
+MODES = Labels(
+    "frame_extractor.modes",
+    {
+        "single": "This frame",
+        "interval": "Every N seconds",
+        "scenes": "Scene starts",
+        "sheet": "Contact sheet",
+    },
+)
 
 
 class FrameExtractorTab(BaseTab):
@@ -132,7 +138,11 @@ class FrameExtractorTab(BaseTab):
         tk.Label(p, text=t("frame_extractor.every_s")).pack(side="left", padx=px(8, 2))
         tk.Entry(p, textvariable=self.every_var, width=6).pack(side="left")
         tk.Label(p, text=t("frame_extractor.from")).pack(side="left", padx=px(8, 2))
-        self.part = RangePicker(p, end_hint="(empty = end)", here=lambda: float(self.pos_var.get()))
+        self.part = RangePicker(
+            p,
+            end_hint=t_or("hint.empty_end", "(empty = end)"),
+            here=lambda: float(self.pos_var.get()),
+        )
         self.part.pack(side="left")
 
         p = self.panels["scenes"] = tk.Frame(opts)

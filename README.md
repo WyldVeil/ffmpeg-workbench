@@ -2,7 +2,7 @@
 
 [![Found it useful? Buy me a coffee](https://img.shields.io/badge/Found_it_useful%3F-Buy_me_a_coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/wyldveil)
 
-**83 video and audio tools in one free app.** Cut, join, convert, compress,
+**84 video and audio tools in one free app.** Cut, join, convert, compress,
 subtitle, upscale, fix the sound, clean up old footage and get videos ready for
 social media.
 
@@ -21,8 +21,8 @@ stick...) and run it. No administrator password needed.
 
 | System | Download | Run |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.1_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
-| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.3.1-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.2_Windows_Portable.zip` | Unzip it, then double-click **Start FFmpeg Workbench** in the folder. |
+| **Linux** (any distribution from 2018 on, 64-bit) | `ffmpeg-workbench-1.3.2-linux-x86_64-portable.tar.gz` | Extract it, then run `./ffmpeg-workbench` in the folder. `./add-to-menu.sh` adds it to your applications menu. |
 
 Everything is included: FFmpeg, the downloader, offline speech recognition, the
 upscalers and the app's own Python. Nothing else needs to be set up. The portable
@@ -34,11 +34,11 @@ between computers.
 
 | System | Download | Install |
 |---|---|---|
-| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.1_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
-| **Ubuntu** | `ffmpeg-workbench_1.3.1_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.1_ubuntu_amd64.deb` |
-| **Debian** | `ffmpeg-workbench_1.3.1_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.1_debian_amd64.deb` |
-| **Fedora** | `ffmpeg-workbench-1.3.1-fedora.tar.gz` | Extract it, then run `./install.sh` |
-| **Arch** | `ffmpeg-workbench-1.3.1-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
+| **Windows 10 / 11** (64-bit) | `FFmpeg-Workbench_1.3.2_Windows_Setup.exe` | Run it. An earlier version is upgraded in place. |
+| **Ubuntu** | `ffmpeg-workbench_1.3.2_ubuntu_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.2_ubuntu_amd64.deb` |
+| **Debian** | `ffmpeg-workbench_1.3.2_debian_amd64.deb` | `sudo apt install ./ffmpeg-workbench_1.3.2_debian_amd64.deb` |
+| **Fedora** | `ffmpeg-workbench-1.3.2-fedora.tar.gz` | Extract it, then run `./install.sh` |
+| **Arch** | `ffmpeg-workbench-1.3.2-arch.tar.gz` | Extract it, then run `makepkg -si` (or `./install.sh`) |
 
 </details>
 
@@ -146,7 +146,7 @@ Every tool has a screenshot in [Every tool, up close](#every-tool-up-close).
 | 📱 **Social & format** | Shortifier (Shorts / TikTok / Reels) · Auto-Cropper · GIF Maker · WebM Maker · Watermarks · Auto-Subtitles · Hard-Subber · Animated Titles · Intro/Outro Maker · Slideshow Maker · Frame Extractor · Contact Sheet · Snapshot · Thumbnail Maker · Chapter Markers · Video Collage · Video Downloader |
 | 🔊 **Audio** | Loudness Normalizer · Voice Isolation · Silence Remover · Audio Mixer · Music Ducker · Audio Replacer · Audio Sync Shifter · The Muter · Audio Dynamics · Voice Changer · TTS Voice-Over · Waveform Editor · Laugh Track Remover · Karaoke Generator · Audio Converter · Audio Extractor · MIDIfier |
 | ⚙ **Transcoder** | Universal Downsizer · Codec Cruncher · HDR to SDR · Tracks & Remux · Compare & Quality · Format Converter · Resolution Scaler (with FSR/NIS/AI upscaling) · Framerate Interpolator · Proxy Generator · Encode Queue · Preset Manager |
-| 🎨 **Colour & visuals** | Basic Color Corrector · LUT Applicator · Colour Match · Video Scopes · Special Effects · Speed Ramper · Deshaker · Green Screen Keyer · Denoise · Sharpen · Deinterlace · Picture-in-Picture · Privacy Blur · Animated Zoom · Transition Studio · Media Generator |
+| 🎨 **Colour & visuals** | Basic Color Corrector · LUT Applicator · Colour Match · Video Scopes · Special Effects · Speed Ramper · Deshaker · Green Screen Keyer · Denoise · Sharpen · Deinterlace · Picture-in-Picture · Privacy Blur · Text Blurrer · Animated Zoom · Transition Studio · Media Generator |
 | 🛠 **System** | Media Inspector · Metadata Cleaner · Screen Recorder · Batch Processor · All-in-One Builder |
 
 ![Home: every tool at a glance](screenshots/home.png)
@@ -630,6 +630,14 @@ Put one video in a corner of another.
 Blur or pixelate faces, number plates, names or screens.
 
 ![Privacy Blur](screenshots/77_privacy_blur.png)
+
+#### Text Blurrer
+
+Finds the text laid over a video - names, handles, captions, phone numbers,
+logos - and blurs the ones you click. Each find is outlined while it's on
+screen; the preview shows the result straight away.
+
+![Text Blurrer](screenshots/77b_text_blurrer.png)
 
 #### Animated Zoom
 

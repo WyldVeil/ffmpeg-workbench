@@ -15,7 +15,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import proxy as px_ops
 from core.outputs import free_name
 from core.scaling import px
@@ -41,6 +41,13 @@ VIDEO_EXTS = (
     ".webm",
     ".m4v",
 )
+
+
+#: how px_ops.PRESETS is shown (in the current language)
+PRESET_LABELS = Labels("proxy.presets", {k: v[0] for k, v in px_ops.PRESETS.items()})
+
+#: how px_ops.SIZES is shown (in the current language)
+SIZE_LABELS = Labels("proxy.sizes", {k: v[0] for k, v in px_ops.SIZES.items()})
 
 
 class ProxyGenTab(BaseTab):
@@ -79,22 +86,22 @@ class ProxyGenTab(BaseTab):
         r0 = tk.Frame(opt)
         r0.pack(fill="x", pady=px(3))
         tk.Label(r0, text=t("proxy.preset_label"), font=(UI_FONT, 10, "bold")).pack(side="left")
-        self.preset_var = tk.StringVar(value=px_ops.PRESETS["prores"][0])
+        self.preset_var = tk.StringVar(value=PRESET_LABELS["prores"])
         ttk.Combobox(
             r0,
             textvariable=self.preset_var,
-            values=[v[0] for v in px_ops.PRESETS.values()],
+            values=list(PRESET_LABELS.values()),
             state="readonly",
             width=50,
         ).pack(side="left", padx=px(8))
         r1 = tk.Frame(opt)
         r1.pack(fill="x", pady=px(3))
         tk.Label(r1, text=t("hard_subber.size_label")).pack(side="left")
-        self.size_var = tk.StringVar(value=px_ops.SIZES["half"][0])
+        self.size_var = tk.StringVar(value=SIZE_LABELS["half"])
         ttk.Combobox(
             r1,
             textvariable=self.size_var,
-            values=[v[0] for v in px_ops.SIZES.values()],
+            values=list(SIZE_LABELS.values()),
             state="readonly",
             width=12,
         ).pack(side="left", padx=px(8))
@@ -187,10 +194,8 @@ class ProxyGenTab(BaseTab):
         if not self.file_paths:
             messagebox.showwarning(t("common.warning"), t("common.no_input"), parent=self)
             return
-        preset = next(
-            (k for k, v in px_ops.PRESETS.items() if v[0] == self.preset_var.get()), "prores"
-        )
-        size_key = next((k for k, v in px_ops.SIZES.items() if v[0] == self.size_var.get()), "half")
+        preset = PRESET_LABELS.code_of(self.preset_var.get(), "prores")
+        size_key = SIZE_LABELS.code_of(self.size_var.get(), "half")
         ext = px_ops.PRESETS[preset][1]
         sources = {os.path.normcase(os.path.abspath(p)) for p in self.file_paths}
         jobs: list[tuple[str, str]] = []

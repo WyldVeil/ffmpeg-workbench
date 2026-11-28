@@ -14,7 +14,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.image_watermark import POSITIONS, Logo, logo_graph
 from core.ops.shared import RenderJob, image_input_args
 from core.scaling import px
@@ -23,6 +23,9 @@ from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.kit.tktyped import on_write
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
+
+#: how POSITIONS is shown (in the current language)
+POSITION_LABELS = Labels("image_watermark.positions", {k: v[0] for k, v in POSITIONS.items()})
 
 
 class ImageWatermarkTab(BaseTab):
@@ -61,11 +64,11 @@ class ImageWatermarkTab(BaseTab):
         """Where the logo goes, its size, opacity and margin, and when it shows."""
         opt = tk.LabelFrame(body, text=t("image_watermark.placement"), padx=px(12), pady=px(6))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.place_var = tk.StringVar(value=POSITIONS["br"][0])
+        self.place_var = tk.StringVar(value=POSITION_LABELS["br"])
         pb = ttk.Combobox(
             opt,
             textvariable=self.place_var,
-            values=[v[0] for v in POSITIONS.values()],
+            values=list(POSITION_LABELS.values()),
             state="readonly",
             width=20,
         )
@@ -143,7 +146,7 @@ class ImageWatermarkTab(BaseTab):
 
     def graph(self, info: ff.MediaInfo, logo_input: str = "[1:v]") -> str:
         w, h = common.even_size(info)
-        place = next((k for k, v in POSITIONS.items() if v[0] == self.place_var.get()), "br")
+        place = POSITION_LABELS.code_of(self.place_var.get(), "br")
         window = None
         if self.window_var.get():
             a, b = self.window.span(info.duration)

@@ -13,7 +13,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import mute
 from core.ops.shared import audio_filter_cmd, strip_audio_cmd
 from core.scaling import px
@@ -23,12 +23,15 @@ from tabs.kit.time_fields import RangePicker
 from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, FramePreview, save_section, scroll_body
 
-MODES = {
-    "silence": "Silence the chosen moments",
-    "bleep": "Bleep the chosen moments (1 kHz tone)",
-    "silent_track": "Replace all sound with silence (keeps a silent track)",
-    "remove": "Remove the audio track completely",
-}
+MODES = Labels(
+    "muter.modes",
+    {
+        "silence": "Silence the chosen moments",
+        "bleep": "Bleep the chosen moments (1 kHz tone)",
+        "silent_track": "Replace all sound with silence (keeps a silent track)",
+        "remove": "Remove the audio track completely",
+    },
+)
 
 
 class MuterTab(BaseTab):

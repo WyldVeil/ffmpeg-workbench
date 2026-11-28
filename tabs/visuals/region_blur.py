@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops.region_blur import KINDS, Region, blur_graph
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -25,15 +25,26 @@ from tabs.kit.time_fields import RangePicker
 from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
-PRESETS = {  # name: (x, y, w, h) as fractions of the frame
-    "Face (centre)": (0.38, 0.18, 0.24, 0.40),
-    "Number plate (lower centre)": (0.40, 0.70, 0.20, 0.08),
-    "Bottom strip (names, captions)": (0.0, 0.82, 1.0, 0.18),
-    "Top-left corner": (0.0, 0.0, 0.25, 0.18),
-    "Top-right corner": (0.75, 0.0, 0.25, 0.18),
-    "Whole frame": (0.0, 0.0, 1.0, 1.0),
-}
+PRESETS = Choices(
+    "region_blur.presets",
+    {  # name: (x, y, w, h) as fractions of the frame
+        "Face (centre)": (0.38, 0.18, 0.24, 0.40),
+        "Number plate (lower centre)": (0.40, 0.70, 0.20, 0.08),
+        "Bottom strip (names, captions)": (0.0, 0.82, 1.0, 0.18),
+        "Top-left corner": (0.0, 0.0, 0.25, 0.18),
+        "Top-right corner": (0.75, 0.0, 0.25, 0.18),
+        "Whole frame": (0.0, 0.0, 1.0, 1.0),
+    },
+)
 PW, PH = 480, 270
+
+
+#: how to hide a region, shown in the current language
+KIND_LABELS = Labels("region_blur.kinds", KINDS)
+
+
+def _add_preset_hint() -> str:
+    return t_or("region_blur.add_a_preset_region", "Add a preset region…")
 
 
 @dataclass
@@ -125,7 +136,7 @@ class RegionBlurTab(BaseTab):
         self.listbox.bind("<<ListboxSelect>>", lambda _e: self._select())
         pr = tk.Frame(right)
         pr.pack(fill="x", pady=px(2))
-        self.preset_var = tk.StringVar(value="Add a preset region…")
+        self.preset_var = tk.StringVar(value=_add_preset_hint())
         pb = ttk.Combobox(
             pr, textvariable=self.preset_var, values=list(PRESETS), state="readonly", width=28
         )
@@ -136,9 +147,13 @@ class RegionBlurTab(BaseTab):
         )
         ed = tk.LabelFrame(right, text=t("region_blur.selected_region"), padx=px(8), pady=px(4))
         ed.pack(fill="x", pady=px(4))
-        self.kind_var = tk.StringVar(value=KINDS["blur"])
+        self.kind_var = tk.StringVar(value=KIND_LABELS["blur"])
         ttk.Combobox(
-            ed, textvariable=self.kind_var, values=list(KINDS.values()), state="readonly", width=16
+            ed,
+            textvariable=self.kind_var,
+            values=list(KIND_LABELS.values()),
+            state="readonly",
+            width=16,
         ).grid(row=0, column=0, sticky="w")
         self.strength_var = tk.DoubleVar(value=0.6)
         tk.Scale(
@@ -158,7 +173,9 @@ class RegionBlurTab(BaseTab):
         tf.grid(row=1, column=0, columnspan=2, sticky="w")
         tk.Label(tf, text=t("muter.from")).pack(side="left")
         self.window = RangePicker(
-            tf, end_hint="(empty = to the end)", here=lambda: float(self.pos_var.get())
+            tf,
+            end_hint=t_or("hint.empty_to_the_end", "(empty = to the end)"),
+            here=lambda: float(self.pos_var.get()),
         )
         self.window.pack(side="left")
         tk.Button(
@@ -337,7 +354,7 @@ class RegionBlurTab(BaseTab):
         return sel[0] if sel else None
 
     def _add(self, region: Region) -> None:
-        region.kind = next((k for k, v in KINDS.items() if v == self.kind_var.get()), "blur")
+        region.kind = KIND_LABELS.code_of(self.kind_var.get(), "blur")
         region.strength = float(self.strength_var.get())
         self.regions.append(region)
         self._relist(len(self.regions) - 1)
@@ -346,7 +363,7 @@ class RegionBlurTab(BaseTab):
         frac = PRESETS.get(self.preset_var.get())
         if frac:
             self._add(Region(*frac))
-        self.preset_var.set("Add a preset region…")
+        self.preset_var.set(_add_preset_hint())
 
     def _remove(self) -> None:
         i = self._selected()
@@ -368,7 +385,7 @@ class RegionBlurTab(BaseTab):
         if i is None:
             return
         r = self.regions[i]
-        self.kind_var.set(KINDS[r.kind])
+        self.kind_var.set(KIND_LABELS[r.kind])
         self.strength_var.set(r.strength)
         self.window.set(r.start, r.end)
         self._draw_regions()
@@ -394,7 +411,7 @@ class RegionBlurTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         r = self.regions[i]
-        r.kind = next((k for k, v in KINDS.items() if v == self.kind_var.get()), "blur")
+        r.kind = KIND_LABELS.code_of(self.kind_var.get(), "blur")
         r.strength, r.start, r.end = float(self.strength_var.get()), start, end
         self._relist(i)
 

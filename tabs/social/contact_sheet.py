@@ -32,7 +32,7 @@ from tkinter import messagebox
 from core import ass, proc, tasks
 from core import ffmpeg as ff
 from core.errors import Cancelled, CommandError
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import contact_sheet as cs
 from core.paths import temp_dir
 from core.scaling import px
@@ -43,25 +43,34 @@ from tabs.kit.widgets import ChoiceBox, ColourButton
 from tabs.widgets import FileRow, FramePreview, SaveRow, output_box, scroll_body
 
 GRIDS = ((3, 3), (4, 4), (4, 5), (5, 6), (6, 8), (8, 10))
-SAMPLING = {cs.Sampling.EVEN: "Evenly through the video", cs.Sampling.SCENES: "At shot changes"}
-CORNERS = {
-    cs.Corner.BOTTOM_RIGHT: "Bottom right",
-    cs.Corner.BOTTOM_LEFT: "Bottom left",
-    cs.Corner.TOP_RIGHT: "Top right",
-    cs.Corner.TOP_LEFT: "Top left",
-    cs.Corner.OFF: "Off",
-}
-DETAILS = {
-    cs.Detail.NAME: "File name",
-    cs.Detail.SIZE: "File size",
-    cs.Detail.DURATION: "Duration",
-    cs.Detail.RESOLUTION: "Resolution",
-    cs.Detail.FPS: "Frame rate",
-    cs.Detail.BITRATE: "Bit rate",
-    cs.Detail.VIDEO: "Video codec",
-    cs.Detail.AUDIO: "Audio",
-    cs.Detail.CONTAINER: "Container",
-}
+SAMPLING = Labels(
+    "contact_sheet.sampling",
+    {cs.Sampling.EVEN: "Evenly through the video", cs.Sampling.SCENES: "At shot changes"},
+)
+CORNERS = Labels(
+    "contact_sheet.corners",
+    {
+        cs.Corner.BOTTOM_RIGHT: "Bottom right",
+        cs.Corner.BOTTOM_LEFT: "Bottom left",
+        cs.Corner.TOP_RIGHT: "Top right",
+        cs.Corner.TOP_LEFT: "Top left",
+        cs.Corner.OFF: "Off",
+    },
+)
+DETAILS = Labels(
+    "contact_sheet.details",
+    {
+        cs.Detail.NAME: "File name",
+        cs.Detail.SIZE: "File size",
+        cs.Detail.DURATION: "Duration",
+        cs.Detail.RESOLUTION: "Resolution",
+        cs.Detail.FPS: "Frame rate",
+        cs.Detail.BITRATE: "Bit rate",
+        cs.Detail.VIDEO: "Video codec",
+        cs.Detail.AUDIO: "Audio",
+        cs.Detail.CONTAINER: "Container",
+    },
+)
 
 
 class Picture(StrEnum):
@@ -70,11 +79,14 @@ class Picture(StrEnum):
     WEBP = "webp"
 
 
-PICTURES = {
-    Picture.PNG: "PNG (sharpest)",
-    Picture.JPG: "JPEG (smaller)",
-    Picture.WEBP: "WebP (smallest)",
-}
+PICTURES = Labels(
+    "contact_sheet.pictures",
+    {
+        Picture.PNG: "PNG (sharpest)",
+        Picture.JPG: "JPEG (smaller)",
+        Picture.WEBP: "WebP (smallest)",
+    },
+)
 
 
 class Sensitivity(StrEnum):
@@ -83,11 +95,14 @@ class Sensitivity(StrEnum):
     MORE = "more"
 
 
-SENSITIVITY = {
-    Sensitivity.FEWER: "Clear cuts only",
-    Sensitivity.NORMAL: "Normal",
-    Sensitivity.MORE: "Subtle cuts too",
-}
+SENSITIVITY = Labels(
+    "contact_sheet.sensitivity",
+    {
+        Sensitivity.FEWER: "Clear cuts only",
+        Sensitivity.NORMAL: "Normal",
+        Sensitivity.MORE: "Subtle cuts too",
+    },
+)
 THRESHOLDS = {Sensitivity.FEWER: 0.45, Sensitivity.NORMAL: 0.3, Sensitivity.MORE: 0.18}
 PREVIEW_W, PREVIEW_H = 880, 520
 

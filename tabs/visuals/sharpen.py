@@ -15,7 +15,7 @@ import tkinter as tk
 from functools import partial
 from tkinter import ttk
 
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops.shared import RenderJob
 from core.ops.sharpen import sharpen_chain
 from core.scaling import px
@@ -23,12 +23,17 @@ from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-METHODS = {
-    "cas": "Smart sharpen (CAS) - recommended",
-    "unsharp": "Unsharp mask (classic)",
-    "clarity": "Clarity (local contrast)",
-}
-PRESETS = {"Subtle": 0.25, "Light": 0.45, "Medium": 0.65, "Strong": 0.85}
+METHODS = Labels(
+    "sharpen.methods",
+    {
+        "cas": "Smart sharpen (CAS) - recommended",
+        "unsharp": "Unsharp mask (classic)",
+        "clarity": "Clarity (local contrast)",
+    },
+)
+PRESETS = Choices(
+    "sharpen.presets", {"Subtle": 0.25, "Light": 0.45, "Medium": 0.65, "Strong": 0.85}
+)
 
 
 class SharpenTab(BaseTab):

@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from collections.abc import Mapping
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops.downsizer import Goal, Plan, encode_to_size, plan
 from core.ops.shared import Steps
 from core.scaling import px
@@ -37,26 +38,37 @@ from tabs.widgets import FileRow, save_section, scroll_body
 if TYPE_CHECKING:
     from core.queue_manager import TaskContext
 
-TARGETS = [
-    ("8 MB", 8),
-    ("10 MB - Discord", 10),
-    ("18 MB - safe for email", 18),
-    ("25 MB", 25),
-    ("50 MB - Discord Nitro Basic", 50),
-    ("100 MB", 100),
-    ("500 MB - Discord Nitro", 500),
-    ("Custom size", 0),
-]
-CODECS = {
-    "h264": "H.264 - plays everywhere (recommended)",
-    "hevc": "HEVC (H.265) - smaller, newer devices",
-    "av1": "AV1 - smallest, newest devices",
-}
-AUDIO_MODES = {
-    "auto": "Re-encode to fit (AAC)",
-    "copy": "Keep the original audio",
-    "none": "Remove the audio",
-}
+TARGETS = Choices(
+    "downsizer.targets",
+    dict(
+        [
+            ("8 MB", 8),
+            ("10 MB - Discord", 10),
+            ("18 MB - safe for email", 18),
+            ("25 MB", 25),
+            ("50 MB - Discord Nitro Basic", 50),
+            ("100 MB", 100),
+            ("500 MB - Discord Nitro", 500),
+            ("Custom size", 0),
+        ]
+    ),
+)
+CODECS = Labels(
+    "downsizer.codecs",
+    {
+        "h264": "H.264 - plays everywhere (recommended)",
+        "hevc": "HEVC (H.265) - smaller, newer devices",
+        "av1": "AV1 - smallest, newest devices",
+    },
+)
+AUDIO_MODES = Labels(
+    "downsizer.audio_modes",
+    {
+        "auto": "Re-encode to fit (AAC)",
+        "copy": "Keep the original audio",
+        "none": "Remove the audio",
+    },
+)
 
 
 class UniversalDownsizerTab(BaseTab):
@@ -88,11 +100,11 @@ class UniversalDownsizerTab(BaseTab):
         opt = tk.LabelFrame(body, text=t("downsizer.target"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
 
-        self.target_var = tk.StringVar(value=TARGETS[1][0])
+        self.target_var = tk.StringVar(value=list(TARGETS)[1])
         tb = ttk.Combobox(
             opt,
             textvariable=self.target_var,
-            values=[x[0] for x in TARGETS],
+            values=list(TARGETS),
             state="readonly",
             width=28,
         )
@@ -166,7 +178,10 @@ class UniversalDownsizerTab(BaseTab):
         self.trim = RangePicker(
             opt,
             start="",
-            end_hint="(optional - leave empty for the whole video)",
+            end_hint=t_or(
+                "hint.optional_leave_empty_for_the_whole_video",
+                "(optional - leave empty for the whole video)",
+            ),
             source=lambda: self.src_row.path,
         )
         self.form_row(opt, 5, t("downsizer.trim"), self.trim, label_width=14)
@@ -193,11 +208,11 @@ class UniversalDownsizerTab(BaseTab):
         self.console = self.make_console_block(body, height=7, padx=0, pady=0)
 
     # ── State ─────────────────────────────────────────────────────────
-    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
+    def _key(self, table: Mapping[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
     def _target_bytes(self) -> int:
-        mb = dict(TARGETS).get(self.target_var.get(), 0)
+        mb = TARGETS.get(self.target_var.get(), 0)
         if not mb:
             mb = common.number(self._target_mb.get(), t("downsizer.size_limit_2"), 0.1, 100000)
         return int(mb * 1_000_000)  # decimal MB: also fits limits counted in MiB
@@ -261,7 +276,7 @@ class UniversalDownsizerTab(BaseTab):
 
     def _changed(self) -> None:
         self.custom_entry.config(
-            state="normal" if dict(TARGETS).get(self.target_var.get(), 0) == 0 else "disabled"
+            state="normal" if TARGETS.get(self.target_var.get(), 0) == 0 else "disabled"
         )
         if self._job is not None:
             self.after_cancel(self._job)

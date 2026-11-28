@@ -36,7 +36,7 @@ from typing import Any, cast
 
 from core import ffmpeg as ff
 from core import tasks
-from core.i18n import t
+from core.i18n import Choices, t, t_or
 from core.ops import all_in_one as aio
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
@@ -48,41 +48,50 @@ from tabs.widgets import scroll_body
 # ── Constants reused from other tabs ─────────────────────────────────────────
 
 #: size presets: what the drop-down shows -> (width, height); None = type your own
-_RES_PRESETS: dict[str, tuple[int, int] | None] = {
-    "7680x4320 (8K)": (7680, 4320),
-    "3840x2160 (4K UHD)": (3840, 2160),
-    "2560x1440 (QHD/2K)": (2560, 1440),
-    "1920x1080 (Full HD)": (1920, 1080),
-    "1280x720 (HD)": (1280, 720),
-    "854x480 (SD)": (854, 480),
-    "640x360 (360p)": (640, 360),
-    "Custom…": None,
-}
-_SCALE_ALGO = {
-    "Lanczos (best downscale)": "lanczos",
-    "Lanczos4 (best upscale)": "lanczos",  # Changed from lanczos4 for compatibility
-    "Bicubic": "bicubic",
-    "Bilinear (fastest)": "bilinear",
-    "Nearest (pixel art)": "neighbor",
-}
+_RES_PRESETS: Choices[tuple[int, int] | None] = Choices(
+    "all_in_one.res_presets",
+    {
+        "7680x4320 (8K)": (7680, 4320),
+        "3840x2160 (4K UHD)": (3840, 2160),
+        "2560x1440 (QHD/2K)": (2560, 1440),
+        "1920x1080 (Full HD)": (1920, 1080),
+        "1280x720 (HD)": (1280, 720),
+        "854x480 (SD)": (854, 480),
+        "640x360 (360p)": (640, 360),
+        "Custom…": None,
+    },
+)
+_SCALE_ALGO = Choices(
+    "all_in_one.scale_algo",
+    {
+        "Lanczos (best downscale)": "lanczos",
+        "Lanczos4 (best upscale)": "lanczos",  # Changed from lanczos4 for compatibility
+        "Bicubic": "bicubic",
+        "Bilinear (fastest)": "bilinear",
+        "Nearest (pixel art)": "neighbor",
+    },
+)
 
 # Updated to a dictionary to translate friendly UI names to FFmpeg identifiers
-_VCODECS = {
-    "H.264 (CPU)": "libx264",
-    "H.265 / HEVC (CPU)": "libx265",
-    "H.264 (Nvidia HW)": "h264_nvenc",
-    "H.265 / HEVC (Nvidia HW)": "hevc_nvenc",
-    "H.264 (AMD HW)": "h264_amf",
-    "H.265 / HEVC (AMD HW)": "hevc_amf",
-    "H.264 (Intel HW)": "h264_qsv",
-    "H.265 / HEVC (Intel HW)": "hevc_qsv",
-    "H.264 (best GPU available)": "auto_h264",
-    "H.265 / HEVC (best GPU available)": "auto_hevc",
-    "AV1 (CPU, smallest files)": "libsvtav1",
-    "VP9 (CPU)": "libvpx-vp9",
-    "ProRes (CPU)": "prores_ks",
-    "Copy (No re-encode)": "copy",
-}
+_VCODECS = Choices(
+    "all_in_one.vcodecs",
+    {
+        "H.264 (CPU)": "libx264",
+        "H.265 / HEVC (CPU)": "libx265",
+        "H.264 (Nvidia HW)": "h264_nvenc",
+        "H.265 / HEVC (Nvidia HW)": "hevc_nvenc",
+        "H.264 (AMD HW)": "h264_amf",
+        "H.265 / HEVC (AMD HW)": "hevc_amf",
+        "H.264 (Intel HW)": "h264_qsv",
+        "H.265 / HEVC (Intel HW)": "hevc_qsv",
+        "H.264 (best GPU available)": "auto_h264",
+        "H.265 / HEVC (best GPU available)": "auto_hevc",
+        "AV1 (CPU, smallest files)": "libsvtav1",
+        "VP9 (CPU)": "libvpx-vp9",
+        "ProRes (CPU)": "prores_ks",
+        "Copy (No re-encode)": "copy",
+    },
+)
 
 _ACODECS = ["aac", "libmp3lame", "libopus", "libvorbis", "copy", "none"]
 _PRESETS = [
@@ -99,15 +108,18 @@ _PRESETS = [
 _ABITRATES = ["96k", "128k", "192k", "256k", "320k"]
 _FPS_VALS = ["23.976", "24", "25", "29.97", "30", "48", "50", "59.94", "60", "120"]
 
-_TEXT_POSITIONS = {  # (x, y) drawtext expressions; margins scale with the frame
-    "Bottom Centre": ("(w-text_w)/2", "h-text_h-h*0.04"),
-    "Top Centre": ("(w-text_w)/2", "h*0.04"),
-    "Bottom Left": ("w*0.03", "h-text_h-h*0.04"),
-    "Bottom Right": ("w-text_w-w*0.03", "h-text_h-h*0.04"),
-    "Centre": ("(w-text_w)/2", "(h-text_h)/2"),
-    "Top Left": ("w*0.03", "h*0.04"),
-    "Top Right": ("w-text_w-w*0.03", "h*0.04"),
-}
+_TEXT_POSITIONS = Choices(
+    "all_in_one.text_positions",
+    {  # (x, y) drawtext expressions; margins scale with the frame
+        "Bottom Centre": ("(w-text_w)/2", "h-text_h-h*0.04"),
+        "Top Centre": ("(w-text_w)/2", "h*0.04"),
+        "Bottom Left": ("w*0.03", "h-text_h-h*0.04"),
+        "Bottom Right": ("w-text_w-w*0.03", "h-text_h-h*0.04"),
+        "Centre": ("(w-text_w)/2", "(h-text_h)/2"),
+        "Top Left": ("w*0.03", "h*0.04"),
+        "Top Right": ("w-text_w-w*0.03", "h*0.04"),
+    },
+)
 
 
 def _num(var: tk.StringVar, default: float) -> float:
@@ -403,7 +415,9 @@ class AllInOneTab(BaseTab):
         trim = RangePicker(
             r,
             start="0.0",
-            end_hint="(blank = to the end of the video)",
+            end_hint=t_or(
+                "hint.blank_to_the_end_of_the_video", "(blank = to the end of the video)"
+            ),
             source=self._source,
             on_change=self._rebuild_cmd,
         )
@@ -417,7 +431,7 @@ class AllInOneTab(BaseTab):
         self._sec_scale.pack(fill="x", pady=px(1))
         b = self._sec_scale.body
 
-        self._scale_preset = tk.StringVar(value="1920x1080 (Full HD)")
+        self._scale_preset = tk.StringVar(value=_RES_PRESETS.label("1920x1080 (Full HD)"))
         self._scale_w = tk.StringVar(value="1920")
         self._scale_h = tk.StringVar(value="1080")
         self._scale_algo = tk.StringVar(value=next(iter(_SCALE_ALGO.keys())))
@@ -736,7 +750,7 @@ class AllInOneTab(BaseTab):
         self._text_val = tk.StringVar(value="@YourChannel")
         self._text_size = tk.StringVar(value="42")
         self._text_color = tk.StringVar(value="white")
-        self._text_pos = tk.StringVar(value="Bottom Right")
+        self._text_pos = tk.StringVar(value=_TEXT_POSITIONS.label("Bottom Right"))
         for v in (self._text_val, self._text_size, self._text_color, self._text_pos):
             on_write(v, lambda: self._rebuild_cmd())
 
@@ -757,7 +771,10 @@ class AllInOneTab(BaseTab):
         )
         _lbl(r2, t("all_in_one.show_from")).pack(side="left")
         shown = RangePicker(
-            r2, end_hint="(blank = to the end)", source=self._source, on_change=self._rebuild_cmd
+            r2,
+            end_hint=t_or("hint.blank_to_the_end", "(blank = to the end)"),
+            source=self._source,
+            on_change=self._rebuild_cmd,
         )
         shown.pack(side="left", padx=px(4))
         self._text_shown = shown
@@ -828,7 +845,7 @@ class AllInOneTab(BaseTab):
         self._sec_encode.set_enabled(True)
         b = self._sec_encode.body
 
-        self._vcodec = tk.StringVar(value="H.264 (CPU)")
+        self._vcodec = tk.StringVar(value=_VCODECS.label("H.264 (CPU)"))
         self._crf = tk.StringVar(value="18")
         self._preset = tk.StringVar(value="fast")
         self._acodec = tk.StringVar(value="aac")

@@ -38,7 +38,7 @@ from core import beats as beats_core
 from core import encoders as enc
 from core import ffmpeg as ff
 from core.hardware import launch_preview
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops import slideshow as ss
 from core.ops import transitions as tr
 from core.paths import temp_dir
@@ -52,52 +52,70 @@ from tabs.kit.widgets import ColourButton
 from tabs.widgets import output_section, scroll_body
 
 RANDOM = "random"
-SAME = "(as the slideshow)"  # a slide's choice that follows the slideshow's
-MOTIONS = {
-    "zoom_in": "Zoom in",
-    "zoom_out": "Zoom out",
-    "pan_right": "Pan right",
-    "pan_left": "Pan left",
-    "pan_up": "Pan up",
-    "pan_down": "Pan down",
-    RANDOM: "Random (varies per slide)",
-    "static": "None (still)",
-}
-FITS = {
-    "fill": "Fill the frame (crop edges)",
-    "blur": "Fit with blurred background",
-    "bars": "Fit with plain bars",
-}
-RESOLUTIONS = {
-    "1920×1080 (YouTube)": (1920, 1080),
-    "3840×2160 (4K)": (3840, 2160),
-    "1280×720 (HD)": (1280, 720),
-    "1080×1920 (Reels / Shorts)": (1080, 1920),
-    "1080×1350 (Instagram portrait)": (1080, 1350),
-    "1080×1080 (square)": (1080, 1080),
-}
-CAPTION_POS = {"bottom": "Bottom", "top": "Top", "lower_third": "Lower third (left)"}
-KIND_NAMES = {
-    ss.Kind.PHOTO: "Photo",
-    ss.Kind.ANIMATION: "GIF",
-    ss.Kind.VIDEO: "Video",
-    ss.Kind.CARD: "Card",
-}
-#: the transition drop-downs: what they show -> the transition
-TRANSITIONS = {
-    "Random (an everyday one per slide)": RANDOM,
-    "None (cut)": ss.CUT,
-    **{
-        f"{group}: {label}": name
-        for group, names in tr.GROUPS.items()
-        for name, label in names.items()
+
+
+def _same() -> str:
+    """A slide's choice that follows the slideshow's."""
+    return t_or("slideshow.as_the_slideshow", "(as the slideshow)")
+
+
+MOTIONS = Labels(
+    "slideshow.motions",
+    {
+        "zoom_in": "Zoom in",
+        "zoom_out": "Zoom out",
+        "pan_right": "Pan right",
+        "pan_left": "Pan left",
+        "pan_up": "Pan up",
+        "pan_down": "Pan down",
+        RANDOM: "Random (varies per slide)",
+        "static": "None (still)",
     },
-}
-TRANSITION_NAMES = {name: label for label, name in TRANSITIONS.items()}
-#: what the drop-downs show -> the setting
-MOTION_KEYS = {label: key for key, label in MOTIONS.items()}
-FIT_KEYS = {label: key for key, label in FITS.items()}
-CAPTION_KEYS = {label: key for key, label in CAPTION_POS.items()}
+)
+FITS = Labels(
+    "slideshow.fits",
+    {
+        "fill": "Fill the frame (crop edges)",
+        "blur": "Fit with blurred background",
+        "bars": "Fit with plain bars",
+    },
+)
+RESOLUTIONS = Choices(
+    "slideshow.resolutions",
+    {
+        "1920×1080 (YouTube)": (1920, 1080),
+        "3840×2160 (4K)": (3840, 2160),
+        "1280×720 (HD)": (1280, 720),
+        "1080×1920 (Reels / Shorts)": (1080, 1920),
+        "1080×1350 (Instagram portrait)": (1080, 1350),
+        "1080×1080 (square)": (1080, 1080),
+    },
+)
+CAPTION_POS = Labels(
+    "slideshow.caption_pos", {"bottom": "Bottom", "top": "Top", "lower_third": "Lower third (left)"}
+)
+KIND_NAMES = Labels(
+    "slideshow.kind_names",
+    {
+        ss.Kind.PHOTO: "Photo",
+        ss.Kind.ANIMATION: "GIF",
+        ss.Kind.VIDEO: "Video",
+        ss.Kind.CARD: "Card",
+    },
+)
+#: the transitions the drop-downs offer, by name, as they're shown
+TRANSITIONS = Labels(
+    "slideshow.transitions",
+    {
+        RANDOM: "Random (an everyday one per slide)",
+        ss.CUT: "None (cut)",
+        **{
+            name: f"{group}: {label}"
+            for group, names in tr.GROUPS.items()
+            for name, label in names.items()
+        },
+    },
+)
 
 
 @dataclass
@@ -218,11 +236,11 @@ class SlideshowMakerTab(BaseTab):
         secs.pack(side="left")
         add_tooltip(secs, t("slideshow.empty_as_the_slideshow_videos_the_length"))
         tk.Label(row, text=t("slideshow.transition_after")).pack(side="left", padx=px(12, 4))
-        self.slide_trans_var = self._traced(tk.StringVar(value=SAME))
+        self.slide_trans_var = self._traced(tk.StringVar(value=_same()))
         ttk.Combobox(
             row,
             textvariable=self.slide_trans_var,
-            values=[SAME, *TRANSITIONS],
+            values=[_same(), *TRANSITIONS.values()],
             state="readonly",
             width=34,
         ).pack(side="left")
@@ -237,18 +255,21 @@ class SlideshowMakerTab(BaseTab):
         tk.Label(self.motion_row, text=t("slideshow.motion"), width=12, anchor="w").pack(
             side="left"
         )
-        self.slide_motion_var = self._traced(tk.StringVar(value=SAME))
+        self.slide_motion_var = self._traced(tk.StringVar(value=_same()))
         ttk.Combobox(
             self.motion_row,
             textvariable=self.slide_motion_var,
-            values=[SAME, *MOTIONS.values()],
+            values=[_same(), *MOTIONS.values()],
             state="readonly",
             width=26,
         ).pack(side="left")
         self.video_row = tk.Frame(self.editor)
         tk.Label(self.video_row, text=t("slideshow.part"), width=12, anchor="w").pack(side="left")
         self.part = RangePicker(
-            self.video_row, start="0", end_hint="(empty = to the end)", on_change=self._edited
+            self.video_row,
+            start="0",
+            end_hint=t_or("hint.empty_to_the_end", "(empty = to the end)"),
+            on_change=self._edited,
         )
         self.part.pack(side="left")
         self.sound_var = self._traced(tk.BooleanVar(value=True))
@@ -294,13 +315,13 @@ class SlideshowMakerTab(BaseTab):
             label_width=16,
             pady=2,
         )
-        self.trans_var = tk.StringVar(value=TRANSITION_NAMES["fade"])
+        self.trans_var = tk.StringVar(value=TRANSITIONS["fade"])
         self.motion_var = tk.StringVar(value=MOTIONS[RANDOM])
         self.form_row(
             opt,
             1,
             t("slideshow.transition"),
-            self._combo(opt, self.trans_var, TRANSITIONS, 34),
+            self._combo(opt, self.trans_var, TRANSITIONS.values(), 34),
             tk.Label(opt, text=t("slideshow.motion")),
             self._combo(opt, self.motion_var, MOTIONS.values(), 24),
             label_width=16,
@@ -445,9 +466,7 @@ class SlideshowMakerTab(BaseTab):
         self.tree.delete(*self.tree.get_children())
         for i, s in enumerate(self.slides):
             trans = (
-                ""
-                if i == len(self.slides) - 1
-                else TRANSITION_NAMES.get(s.transition or "", "default")
+                "" if i == len(self.slides) - 1 else TRANSITIONS.get(s.transition or "", "default")
             )
             values = (i + 1, s.name, KIND_NAMES[s.kind], self._time_text(s), trans, s.caption)
             self.tree.insert("", "end", iid=str(i), values=values)
@@ -563,8 +582,8 @@ class SlideshowMakerTab(BaseTab):
     def _fill_editor(self, s: Slide | None) -> None:
         self.cap_var.set(s.caption if s else "")
         self.slide_secs_var.set(f"{s.seconds:g}" if s and s.seconds is not None else "")
-        self.slide_trans_var.set(TRANSITION_NAMES.get(s.transition or "", SAME) if s else SAME)
-        self.slide_motion_var.set(MOTIONS.get(s.motion or "", SAME) if s else SAME)
+        self.slide_trans_var.set(TRANSITIONS.get(s.transition or "", _same()) if s else _same())
+        self.slide_motion_var.set(MOTIONS.get(s.motion or "", _same()) if s else _same())
         self.part.set(s.start if s else 0.0, s.end if s else None)
         self.sound_var.set(s.sound if s else True)
         card = s.card if s else None
@@ -581,8 +600,8 @@ class SlideshowMakerTab(BaseTab):
         s.caption = self.cap_var.get()
         text = self.slide_secs_var.get().strip()
         s.seconds = float(text) if _is_number(text) else None
-        s.transition = TRANSITIONS.get(self.slide_trans_var.get())
-        s.motion = MOTION_KEYS.get(self.slide_motion_var.get())
+        s.transition = TRANSITIONS.code_of(self.slide_trans_var.get()) or None
+        s.motion = MOTIONS.code_of(self.slide_motion_var.get()) or None
         s.sound = self.sound_var.get()
         with contextlib.suppress(ValueError):  # a bad part is explained when rendering
             s.start, s.end = self.part.span()
@@ -594,9 +613,7 @@ class SlideshowMakerTab(BaseTab):
 
     def _refresh_row(self, i: int) -> None:
         s = self.slides[i]
-        trans = (
-            "" if i == len(self.slides) - 1 else TRANSITION_NAMES.get(s.transition or "", "default")
-        )
+        trans = "" if i == len(self.slides) - 1 else TRANSITIONS.get(s.transition or "", "default")
         self.tree.item(
             str(i), values=(i + 1, s.name, KIND_NAMES[s.kind], self._time_text(s), trans, s.caption)
         )
@@ -660,7 +677,7 @@ class SlideshowMakerTab(BaseTab):
 
     def _look(self) -> ss.Look:
         w, h = RESOLUTIONS.get(self.res_var.get(), (1920, 1080))
-        fit = FIT_KEYS.get(self.fit_var.get(), "blur")
+        fit = FITS.code_of(self.fit_var.get(), "blur")
         return ss.Look(
             w, h, self.fps_var.get() or "30", fit, float(self.zoom_var.get()), self.bars_btn.colour
         )
@@ -684,7 +701,7 @@ class SlideshowMakerTab(BaseTab):
         return out
 
     def _joins(self, rng: random.Random) -> list[ss.Join]:
-        default = TRANSITIONS.get(self.trans_var.get(), "fade")
+        default = TRANSITIONS.code_of(self.trans_var.get(), "fade")
         secs = common.number(self.trans_dur_var.get(), t("slideshow.transition_section"), 0.1, 10)
         joins: list[ss.Join] = []
         for s in self.slides[:-1]:
@@ -724,7 +741,7 @@ class SlideshowMakerTab(BaseTab):
         else:
             seconds = [default if n is None else n for n in lengths]
         ss.check_joins(seconds, joins)
-        default_motion = MOTION_KEYS.get(self.motion_var.get(), RANDOM)
+        default_motion = MOTIONS.code_of(self.motion_var.get(), RANDOM)
         moves = [m for m in MOTIONS if m not in (RANDOM, "static")]
         slides = [
             ss.Slide(
@@ -782,7 +799,7 @@ class SlideshowMakerTab(BaseTab):
         )
         caption_style = (
             self.cap_font.get(),
-            CAPTION_KEYS.get(self.cap_pos.get(), "bottom"),
+            CAPTION_POS.code_of(self.cap_pos.get(), "bottom"),
         )
         job = _SlideshowJob(
             slides=slides,

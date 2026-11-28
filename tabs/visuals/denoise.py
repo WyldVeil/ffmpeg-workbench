@@ -18,7 +18,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops.denoise import denoise_chain
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -26,13 +26,18 @@ from tabs import common
 from tabs.base_tab import CLR, BaseTab
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-METHODS = {
-    "fast": "Fast - spatial + temporal (hqdn3d)",
-    "nlm": "Best quality - non-local means",
-    "temporal": "Temporal - static / tripod shots (atadenoise)",
-    "grain": "Film grain - frequency domain",
-}
-PRESETS = {"Light": 2.5, "Medium": 5.0, "Strong": 7.5, "Very strong": 10.0}
+METHODS = Labels(
+    "denoise.methods",
+    {
+        "fast": "Fast - spatial + temporal (hqdn3d)",
+        "nlm": "Best quality - non-local means",
+        "temporal": "Temporal - static / tripod shots (atadenoise)",
+        "grain": "Film grain - frequency domain",
+    },
+)
+PRESETS = Choices(
+    "denoise.presets", {"Light": 2.5, "Medium": 5.0, "Strong": 7.5, "Very strong": 10.0}
+)
 
 
 class DenoiseTab(BaseTab):

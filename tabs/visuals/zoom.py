@@ -19,7 +19,7 @@ from typing import Any, ClassVar
 
 from core import ffmpeg as ff
 from core import filters as fl
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import zoom as zm
 from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
@@ -29,20 +29,26 @@ from tabs.kit.time_fields import MomentPicker
 from tabs.kit.tktyped import on_write
 from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
-MODES = {
-    "punch": "Punch-in (zoom in at a moment, then back out)",
-    "kenburns": "Ken Burns (slow move over the clip)",
-    "keyframes": "Keyframe pan (from one framing to another)",
-    "pulse": "Zoom pulse (quick bump)",
-}
-KB = {
-    "in": "Zoom in",
-    "out": "Zoom out",
-    "lr": "Pan left → right",
-    "rl": "Pan right → left",
-    "tb": "Pan top → bottom",
-    "bt": "Pan bottom → top",
-}
+MODES = Labels(
+    "zoom.modes",
+    {
+        "punch": "Punch-in (zoom in at a moment, then back out)",
+        "kenburns": "Ken Burns (slow move over the clip)",
+        "keyframes": "Keyframe pan (from one framing to another)",
+        "pulse": "Zoom pulse (quick bump)",
+    },
+)
+KB = Labels(
+    "zoom.kb",
+    {
+        "in": "Zoom in",
+        "out": "Zoom out",
+        "lr": "Pan left → right",
+        "rl": "Pan right → left",
+        "tb": "Pan top → bottom",
+        "bt": "Pan bottom → top",
+    },
+)
 EASES = {"smooth": "Smooth", "snappy": "Snappy", "linear": "Linear"}
 
 

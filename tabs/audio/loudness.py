@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from core import ffmpeg as ff
 from core import loudness as ln
 from core import tasks
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.shared import audio_filter_cmd
 from core.scaling import px
 from tabs import common
@@ -27,6 +27,10 @@ from tabs.widgets import FileRow, save_section, scroll_body
 
 if TYPE_CHECKING:
     from core.queue_manager import TaskContext
+
+
+#: how ln.TARGETS is shown (in the current language)
+TARGET_LABELS = Labels("loudness.targets", {k: v[0] for k, v in ln.TARGETS.items()})
 
 
 class LoudnessNormTab(BaseTab):
@@ -48,11 +52,11 @@ class LoudnessNormTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text=t("downsizer.target"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.preset_var = tk.StringVar(value=ln.TARGETS["youtube"][0])
+        self.preset_var = tk.StringVar(value=TARGET_LABELS["youtube"])
         pb = ttk.Combobox(
             opt,
             textvariable=self.preset_var,
-            values=[v[0] for v in ln.TARGETS.values()],
+            values=list(TARGET_LABELS.values()),
             state="readonly",
             width=56,
         )
@@ -102,7 +106,7 @@ class LoudnessNormTab(BaseTab):
         self.console = self.make_console_block(body, height=6)
 
     def _preset(self) -> None:
-        key = next((k for k, v in ln.TARGETS.items() if v[0] == self.preset_var.get()), "youtube")
+        key = TARGET_LABELS.code_of(self.preset_var.get(), "youtube")
         _l, i, tp, lra = ln.TARGETS[key]
         self.i_var.set(f"{i:g}")
         self.tp_var.set(f"{tp:g}")

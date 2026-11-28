@@ -24,7 +24,7 @@ from core import ffmpeg as ff
 from core import proc as _proc
 from core import tasks
 from core import tts as tts_core
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops import voiceover as vo
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
@@ -38,8 +38,18 @@ logger = logging.getLogger("crossfader.audio.tts")
 
 EDGE_TTS_OK = tts_core.edge_available()
 SYSTEM_TTS = tts_core.system_engine_label()  # "" when the OS has no voice engine
-ENGINE_EDGE = "Online neural voices (best quality)"
-ENGINE_SYSTEM = f"Offline - {SYSTEM_TTS}" if SYSTEM_TTS else ""
+
+
+def _engine_edge() -> str:
+    return t_or("tts.engine_online", "Online neural voices (best quality)")
+
+
+def _engine_system() -> str:
+    """The offline engine's name, or "" when there is none."""
+    return (
+        t_or("tts.engine_offline", "Offline - {name}").format(name=SYSTEM_TTS) if SYSTEM_TTS else ""
+    )
+
 
 # ── Voice catalogue ───────────────────────────────────────────────────────
 VOICES = [
@@ -101,28 +111,34 @@ VOICE_IDS = {v[0]: v[1] for v in VOICES}
 VOICE_DESCS = {v[0]: v[2] for v in VOICES}
 
 # ── Style presets ─────────────────────────────────────────────────────────
-STYLE_PRESETS = {
-    "Normal": {"rate": "+0%", "pitch": "+0Hz", "volume": "+0%"},
-    "Podcast  (warm)": {"rate": "-5%", "pitch": "-2Hz", "volume": "+5%"},
-    "Narrator (slow)": {"rate": "-15%", "pitch": "-4Hz", "volume": "+0%"},
-    "Fast-read": {"rate": "+25%", "pitch": "+0Hz", "volume": "+0%"},
-    "Dramatic": {"rate": "-10%", "pitch": "-8Hz", "volume": "+10%"},
-    "Energetic  (ads)": {"rate": "+15%", "pitch": "+4Hz", "volume": "+10%"},
-    "Whisper": {"rate": "-20%", "pitch": "-10Hz", "volume": "-20%"},
-    "Audiobook": {"rate": "-8%", "pitch": "-2Hz", "volume": "+0%"},
-}
+STYLE_PRESETS = Choices(
+    "tts.style_presets",
+    {
+        "Normal": {"rate": "+0%", "pitch": "+0Hz", "volume": "+0%"},
+        "Podcast  (warm)": {"rate": "-5%", "pitch": "-2Hz", "volume": "+5%"},
+        "Narrator (slow)": {"rate": "-15%", "pitch": "-4Hz", "volume": "+0%"},
+        "Fast-read": {"rate": "+25%", "pitch": "+0Hz", "volume": "+0%"},
+        "Dramatic": {"rate": "-10%", "pitch": "-8Hz", "volume": "+10%"},
+        "Energetic  (ads)": {"rate": "+15%", "pitch": "+4Hz", "volume": "+10%"},
+        "Whisper": {"rate": "-20%", "pitch": "-10Hz", "volume": "-20%"},
+        "Audiobook": {"rate": "-8%", "pitch": "-2Hz", "volume": "+0%"},
+    },
+)
 
 # Average reading speed for duration estimate
 WORDS_PER_MINUTE_BASE = 150
 
 
-SPEECH_FORMATS = {
-    vo.SpeechFormat.MP3_320: "MP3  320k",
-    vo.SpeechFormat.MP3_192: "MP3  192k",
-    vo.SpeechFormat.WAV: "WAV  (lossless)",
-    vo.SpeechFormat.AAC: "AAC  256k",
-    vo.SpeechFormat.FLAC: "FLAC  (lossless)",
-}
+SPEECH_FORMATS = Labels(
+    "tts.speech_formats",
+    {
+        vo.SpeechFormat.MP3_320: "MP3  320k",
+        vo.SpeechFormat.MP3_192: "MP3  192k",
+        vo.SpeechFormat.WAV: "WAV  (lossless)",
+        vo.SpeechFormat.AAC: "AAC  256k",
+        vo.SpeechFormat.FLAC: "FLAC  (lossless)",
+    },
+)
 
 
 class TTSVoiceOverTab(BaseTab):
@@ -159,7 +175,7 @@ class TTSVoiceOverTab(BaseTab):
 
     # ── Engine banner ─────────────────────────────────────────────────────
     def _build_engine_banner(self) -> None:
-        engines = [e for e in (ENGINE_EDGE if EDGE_TTS_OK else "", ENGINE_SYSTEM) if e]
+        engines = [e for e in (_engine_edge() if EDGE_TTS_OK else "", _engine_system()) if e]
         ok = bool(engines)
         banner = tk.Frame(self, bg="#1A2A1A" if ok else "#2A1A1A", pady=px(4))
         banner.pack(fill="x")
@@ -188,7 +204,7 @@ class TTSVoiceOverTab(BaseTab):
         self.after(50, self._engine_changed)
 
     def _engine(self) -> str:
-        return "edge" if self._engine_var.get() == ENGINE_EDGE else "system"
+        return "edge" if self._engine_var.get() == _engine_edge() else "system"
 
     def _engine_changed(self) -> None:
         if not hasattr(self, "_engine_note"):
@@ -282,7 +298,7 @@ class TTSVoiceOverTab(BaseTab):
         tk.Label(
             bottom, text=t("common.preset"), font=(UI_FONT, 10, "bold"), width=8, anchor="e"
         ).pack(side="left")
-        self.preset_var = tk.StringVar(value="Normal")
+        self.preset_var = tk.StringVar(value=STYLE_PRESETS.label("Normal"))
         preset_cb = ttk.Combobox(
             bottom,
             textvariable=self.preset_var,
@@ -476,7 +492,9 @@ class TTSVoiceOverTab(BaseTab):
         vfmt_row.pack(fill="x", pady=px(2))
         tk.Label(vfmt_row, text=t("tts.video_output"), width=16, anchor="e").pack(side="left")
         video_outs = {
-            vo.VideoOut.COPY: "Copy video stream  (fast, no re-encode)",
+            vo.VideoOut.COPY: t_or(
+                "tts.copy_video_stream", "Copy video stream  (fast, no re-encode)"
+            ),
             vo.VideoOut.CRF18: t("tts.re_encode_h_264_crf_18_high_quality"),
             vo.VideoOut.CRF23: t("tts.re_encode_h_264_crf_23_balanced"),
         }

@@ -33,7 +33,7 @@ from core import ffmpeg as ff
 from core import filters as fl
 from core import tasks
 from core.encoders import VideoEncode
-from core.i18n import t
+from core.i18n import Choices, Labels, t, t_or
 from core.ops import effects as fx
 from core.ops.effects import first_visible_time
 from core.ops.shared import RenderJob
@@ -156,13 +156,21 @@ def _hint(parent: tk.Misc, text: str) -> None:
 
 
 #: Ken Burns pan (what the drop-down shows -> where the pan starts)
-_KB_PANS = {
-    "Left → Right": "left",
-    "Right → Left": "right",
-    "Top → Bottom": "top",
-    "Bottom → Top": "bottom",
-    "Centre zoom only": "centre",
-}
+_KB_PANS = Choices(
+    "effects.kb_pans",
+    {
+        "Left → Right": "left",
+        "Right → Left": "right",
+        "Top → Bottom": "top",
+        "Bottom → Top": "bottom",
+        "Centre zoom only": "centre",
+    },
+)
+
+
+SPLIT_AXES = Labels(
+    "effects.split_axes", {"vertical": "Vertical (curtain)", "horizontal": "Horizontal (book)"}
+)
 
 
 class SpecialEffectsTab(BaseTab):
@@ -563,7 +571,7 @@ class SpecialEffectsTab(BaseTab):
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
         self._spo_dur = tk.StringVar(value="1.0")
-        self._spo_dir = tk.StringVar(value="Vertical (curtain)")
+        self._spo_dir = tk.StringVar(value=SPLIT_AXES["vertical"])
         self._spo_crf = tk.StringVar(value="18")
 
         _spin(opts, t("effects.open_duration_s"), self._spo_dur, 0.2, 4, 0.1).pack(
@@ -573,7 +581,7 @@ class SpecialEffectsTab(BaseTab):
             opts,
             t("effects.split_axis"),
             self._spo_dir,
-            ["Vertical (curtain)", "Horizontal (book)"],
+            list(SPLIT_AXES.values()),
             width=22,
         ).pack(anchor="w", pady=px(3))
         _spin(opts, "CRF:", self._spo_crf, 12, 30, 1).pack(anchor="w", pady=px(3))
@@ -595,7 +603,7 @@ class SpecialEffectsTab(BaseTab):
             messagebox.showwarning(t("common.warning"), str(exc), parent=self)
             return
         w, h, fps, _dur = fx.geometry(info)
-        trans = "vertopen" if "Vertical" in self._spo_dir.get() else "horzopen"
+        trans = "vertopen" if SPLIT_AXES.code_of(self._spo_dir.get()) == "vertical" else "horzopen"
         graph = fx.splitopen_graph(d, fps, h, trans, w)
         self._fx_run(
             RenderJob(src=src, out=out, info=info, name="Special Effects", graph=graph),
@@ -918,8 +926,10 @@ class SpecialEffectsTab(BaseTab):
         opts = _lf(inner, t("effects.banner_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
-        self._lt_title = tk.StringVar(value="John Smith")
-        self._lt_subtitle = tk.StringVar(value="Content Creator")
+        self._lt_title = tk.StringVar(value=t_or("effects.sample.john_smith", "John Smith"))
+        self._lt_subtitle = tk.StringVar(
+            value=t_or("effects.sample.content_creator", "Content Creator")
+        )
         self._lt_color = tk.StringVar(value="#1565C0")
         self._lt_start = tk.StringVar(value="2.0")
         self._lt_hold = tk.StringVar(value="4.0")
@@ -1022,7 +1032,9 @@ class SpecialEffectsTab(BaseTab):
         opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
-        self._sub_text = tk.StringVar(value="👍 Like & Subscribe! 🔔")
+        self._sub_text = tk.StringVar(
+            value=t_or("effects.sample.like_subscribe", "👍 Like & Subscribe! 🔔")
+        )
         self._sub_size = tk.StringVar(value="52")
         self._sub_pos = tk.StringVar(value="Bottom Centre")
         self._sub_start = tk.StringVar(value="5.0")
@@ -1908,8 +1920,12 @@ class SpecialEffectsTab(BaseTab):
         opts = _lf(inner, t("effects.caption_options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
 
-        self._mc_top = tk.StringVar(value="WHEN YOU REALISE")
-        self._mc_bot = tk.StringVar(value="IT WAS THAT EASY")
+        self._mc_top = tk.StringVar(
+            value=t_or("effects.sample.when_you_realise", "WHEN YOU REALISE")
+        )
+        self._mc_bot = tk.StringVar(
+            value=t_or("effects.sample.it_was_that_easy", "IT WAS THAT EASY")
+        )
         self._mc_size = tk.StringVar(value="72")
         self._mc_start = tk.StringVar(value="0")
         self._mc_hold = tk.StringVar(value="whole video")
@@ -2032,7 +2048,7 @@ class SpecialEffectsTab(BaseTab):
 
         opts = _lf(inner, t("section.options"))
         opts.pack(fill="x", padx=px(18), pady=px(8))
-        self._cb_ratio = tk.StringVar(value="2.39:1")
+        self._cb_ratio = tk.StringVar(value="2.39:1 (Scope)")
         self._cb_anim = tk.BooleanVar(value=True)
         self._cb_adur = tk.StringVar(value="1.0")
         self._cb_crf = tk.StringVar(value="18")

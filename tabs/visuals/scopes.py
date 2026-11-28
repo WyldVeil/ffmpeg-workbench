@@ -15,7 +15,7 @@ from tkinter import ttk
 
 from core import ffmpeg as ff
 from core import tasks
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import scopes as sc
 from core.ops.shared import RenderJob
 from core.proc import ProcResult
@@ -24,12 +24,15 @@ from tabs import common, framestep
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, FramePreview, SaveRow, scroll_body
 
-LAYOUTS = {
-    "side": "Scope to the right of the picture",
-    "below": "Scope below the picture",
-    "grid": "Picture + all four scopes (2×2 grid)",
-    "only": "Scope only",
-}
+LAYOUTS = Labels(
+    "scopes.layouts",
+    {
+        "side": "Scope to the right of the picture",
+        "below": "Scope below the picture",
+        "grid": "Picture + all four scopes (2×2 grid)",
+        "only": "Scope only",
+    },
+)
 
 
 class VideoScopesTab(BaseTab):

@@ -20,7 +20,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.converter import FORMATS, ConvertBatch
 from core.outputs import free_name
 from core.scaling import px
@@ -31,6 +31,10 @@ from tabs.kit.tktyped import linked_scrollbar, selected_rows
 from tabs.widgets import FolderRow
 
 logger = logging.getLogger("crossfader.transcoder.converter")
+
+
+#: how FORMATS is shown (in the current language)
+FORMAT_LABELS = Labels("converter.formats", {k: v[0] for k, v in FORMATS.items()})
 
 
 class FormatConverterTab(BaseTab):
@@ -70,11 +74,11 @@ class FormatConverterTab(BaseTab):
         tk.Label(r0, text=t("converter.lbl_output_format"), font=(UI_FONT, 10, "bold")).pack(
             side="left"
         )
-        self.fmt_var = tk.StringVar(value=FORMATS["mp4"][0])
+        self.fmt_var = tk.StringVar(value=FORMAT_LABELS["mp4"])
         ttk.Combobox(
             r0,
             textvariable=self.fmt_var,
-            values=[v[0] for v in FORMATS.values()],
+            values=list(FORMAT_LABELS.values()),
             state="readonly",
             width=30,
         ).pack(side="left", padx=px(8))
@@ -116,7 +120,7 @@ class FormatConverterTab(BaseTab):
         self.listbox.delete(0, tk.END)
 
     def _fmt(self) -> str:
-        return next((k for k, v in FORMATS.items() if v[0] == self.fmt_var.get()), "mp4")
+        return FORMAT_LABELS.code_of(self.fmt_var.get(), "mp4")
 
     def _render(self) -> None:
         if not self.file_paths:

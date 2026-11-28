@@ -155,7 +155,7 @@ def test_lut_render(ui, media, outdir, tmp_path, which):
                     str(path),
                 ]
             )
-        tab.look_var.set(lut._CUSTOM)
+        tab.look_var.set(lut._custom())
         tab.lut_row.set(str(path))
     out = str(outdir / f"lut_{which}.mp4")
     tab.out_row.set(out)

@@ -27,7 +27,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks
-from core.i18n import t
+from core.i18n import Choices, t
 from core.ops import audio_export as ae
 from core.queue_manager import Hooks
 from core.scaling import px
@@ -42,16 +42,19 @@ logger = logging.getLogger("crossfader.audio.exporter")
 
 # ── Format definitions ───────────────────────────────────────────────────────
 #  key: (extension, codec_args, supports_bitrate, supports_vbr, supports_bit_depth)
-CHANNEL_LAYOUTS = [
-    ("Auto (keep original)", ""),
-    ("Mono", "1"),
-    ("Stereo", "2"),
-    ("2.1 (3ch)", "3"),
-    ("4.0 Quad", "4"),
-    ("5.0 Surround", "5"),
-    ("5.1 Surround", "6"),
-    ("7.1 Surround", "8"),
-]
+CHANNEL_LAYOUTS = Choices(
+    "exporter.channels",
+    {
+        "Auto (keep original)": "",
+        "Mono": "1",
+        "Stereo": "2",
+        "2.1 (3ch)": "3",
+        "4.0 Quad": "4",
+        "5.0 Surround": "5",
+        "5.1 Surround": "6",
+        "7.1 Surround": "8",
+    },
+)
 
 
 class SizeUnit(StrEnum):
@@ -130,7 +133,11 @@ class AudioExporterTab(BaseTab):
             fg=CLR["fg"],
         ).pack(side="left")
         self.fmt_box = ChoiceBox(
-            row, ae.FORMATS, ae.AudioFormat.MP3, width=16, on_change=self._on_format_change
+            row,
+            {f: ae.FORMAT_LABELS[f.value] for f in ae.FORMATS},
+            ae.AudioFormat.MP3,
+            width=16,
+            on_change=self._on_format_change,
         )
         self.fmt_box.pack(side="left", padx=px(8))
 
@@ -315,11 +322,11 @@ class AudioExporterTab(BaseTab):
         tk.Label(
             r0, text=t("exporter.channels"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left", padx=px(20, 0))
-        self.ch_var = tk.StringVar(value="Auto (keep original)")
+        self.ch_var = tk.StringVar(value=CHANNEL_LAYOUTS.label("Auto (keep original)"))
         self._ch_cb = ttk.Combobox(
             r0,
             textvariable=self.ch_var,
-            values=[c[0] for c in CHANNEL_LAYOUTS],
+            values=list(CHANNEL_LAYOUTS),
             state="readonly",
             width=20,
         )
@@ -455,7 +462,9 @@ class AudioExporterTab(BaseTab):
         tk.Label(
             r2, text=t("exporter.normalize"), font=(UI_FONT, 9, "bold"), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left")
-        self.norm_box = ChoiceBox(r2, ae.NORMALISE, ae.Normalise.NONE, width=22)
+        self.norm_box = ChoiceBox(
+            r2, {n: ae.NORMALISE_LABELS[n.value] for n in ae.NORMALISE}, ae.Normalise.NONE, width=22
+        )
         self.norm_box.pack(side="left", padx=px(8))
 
         self._norm_opts = tk.Frame(sec, bg=CLR["bg"])
@@ -893,9 +902,7 @@ class AudioExporterTab(BaseTab):
             strip_art=self.strip_art_var.get(),
             tags={k: v.get().strip() for k, v in self.meta_vars.items() if v.get().strip()},
             sample_rate=SAMPLE_RATES.get(self.sr_var.get(), ""),
-            channels=next(
-                (val for label, val in CHANNEL_LAYOUTS if label == self.ch_var.get()), ""
-            ),
+            channels=CHANNEL_LAYOUTS.get(self.ch_var.get()) or "",
             size_bytes=size_bytes,
             vbr=vbr,
             bitrate=bitrate,

@@ -48,7 +48,7 @@ from core import APP_VERSION, MAINTAINER  # noqa: E402
 PKG = "ffmpeg-workbench"
 APP_ID = _APP_ID
 OUT = os.path.join(ROOT, "dist", "release")
-SUMMARY = "Video and audio editing suite - 83 tools, all on your computer"
+SUMMARY = "Video and audio editing suite - 84 tools, all on your computer"
 DESCRIPTION = (
     "A free video and audio toolkit: cut, join, convert, compress, subtitle (offline speech\n"
     "recognition), upscale, colour-grade, stabilise, clean up sound, download, record the\n"

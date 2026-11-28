@@ -13,7 +13,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops.shared import RenderJob
 from core.ops.shortifier import ANCHORS, PLATFORMS, reframe_graph
 from core.scaling import px
@@ -23,22 +23,30 @@ from tabs.kit.tktyped import on_write
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-BACKGROUNDS = {
-    "crop": "Fill the frame (crop the edges)",
-    "blur": "Fit + blurred background",
-    "mirror": "Fit + mirrored background",
-    "black": "Fit + black bars",
-    "white": "Fit + white bars",
-    "colour": "Fit + colour of your choice",
-}
+BACKGROUNDS = Labels(
+    "shortifier.backgrounds",
+    {
+        "crop": "Fill the frame (crop the edges)",
+        "blur": "Fit + blurred background",
+        "mirror": "Fit + mirrored background",
+        "black": "Fit + black bars",
+        "white": "Fit + white bars",
+        "colour": "Fit + colour of your choice",
+    },
+)
 
 
 def platform_label(key: str) -> str:
     name, w, h, limit = PLATFORMS[key]
     if key == "custom":
-        return name
-    lim = f", max {limit // 60}:{limit % 60:02d}" if limit else ""
+        return t_or("shortifier.custom_size", "Custom size")
+    longest = f"{limit // 60}:{limit % 60:02d}"
+    lim = ", " + t_or("shortifier.max_length", "max {time}").format(time=longest) if limit else ""
     return f"{name}  ({w}×{h}{lim})"
+
+
+#: how ANCHORS is shown (in the current language)
+ANCHOR_LABELS = Labels("shortifier.anchors", {k: v[0] for k, v in ANCHORS.items()})
 
 
 class ShortifierTab(BaseTab):
@@ -107,11 +115,11 @@ class ShortifierTab(BaseTab):
         self.form_row(
             opt, 1, t("side_by_side.layout_label"), bb, self.colour_btn, label_width=12, pady=2
         )
-        self.anchor_var = tk.StringVar(value="Centre")
+        self.anchor_var = tk.StringVar(value=ANCHOR_LABELS["center"])
         ab = ttk.Combobox(
             opt,
             textvariable=self.anchor_var,
-            values=[v[0] for v in ANCHORS.values()],
+            values=list(ANCHOR_LABELS.values()),
             state="readonly",
             width=12,
         )
@@ -177,7 +185,7 @@ class ShortifierTab(BaseTab):
     def graph(self) -> str:
         tw, th = self.size()
         mode = next((k for k, v in BACKGROUNDS.items() if v == self.bg_var.get()), "blur")
-        anchor = next((k for k, v in ANCHORS.items() if v[0] == self.anchor_var.get()), "center")
+        anchor = ANCHOR_LABELS.code_of(self.anchor_var.get(), "center")
         return reframe_graph(tw, th, mode, anchor, self.colour_btn.rgb)
 
     def _colour_chosen(self, _colour: str) -> None:

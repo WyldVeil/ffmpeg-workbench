@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import t, t_or
 from core.ops import reverse as rv
 from core.scaling import px
 from tabs import common
@@ -75,7 +75,9 @@ class ReverserTab(BaseTab):
         self.range_f = tk.Frame(mode_lf)
         tk.Label(self.range_f, text=t("reverser.section_from")).pack(side="left")
         self.section = RangePicker(
-            self.range_f, end_hint="(empty = end)", source=lambda: self.src_row.path
+            self.range_f,
+            end_hint=t_or("hint.empty_end", "(empty = end)"),
+            source=lambda: self.src_row.path,
         )
         self.section.pack(side="left", padx=px(4))
         tk.Label(self.range_f, text=t("reverser.repeats")).pack(side="left")

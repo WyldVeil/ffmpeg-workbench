@@ -16,6 +16,8 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from core.i18n import Labels
+
 BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
 
 
@@ -100,6 +102,10 @@ LANGUAGES = [
     ("hu", "Hungarian"),
     ("he", "Hebrew"),
 ]
+
+#: how the languages and models are shown (in the current language)
+LANGUAGE_LABELS = Labels("whisper.languages", dict(LANGUAGES))
+MODEL_LABELS = Labels("whisper.models", {key: m.label for key, m in MODELS.items()})
 
 _PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)%")
 

@@ -13,13 +13,16 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import extractor as xo
 from core.scaling import px
 from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.widgets import FileRow, save_section, scroll_body
+
+#: how xo.FORMATS is shown (in the current language)
+FORMAT_LABELS = Labels("extractor.formats", {k: v[0] for k, v in xo.FORMATS.items()})
 
 
 class AudioExtractorTab(BaseTab):
@@ -47,11 +50,11 @@ class AudioExtractorTab(BaseTab):
         self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
         opt = tk.LabelFrame(body, text=t("extractor.extract"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(4))
-        self.fmt_var = tk.StringVar(value=xo.FORMATS["copy"][0])
+        self.fmt_var = tk.StringVar(value=FORMAT_LABELS["copy"])
         fb = ttk.Combobox(
             opt,
             textvariable=self.fmt_var,
-            values=[v[0] for v in xo.FORMATS.values()],
+            values=list(FORMAT_LABELS.values()),
             state="readonly",
             width=34,
         )
@@ -76,7 +79,7 @@ class AudioExtractorTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
 
     def _key(self) -> str:
-        return next((k for k, v in xo.FORMATS.items() if v[0] == self.fmt_var.get()), "copy")
+        return FORMAT_LABELS.code_of(self.fmt_var.get(), "copy")
 
     def _stream(self) -> int:
         values = list(self.track_box.cget("values"))

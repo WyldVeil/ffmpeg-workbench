@@ -139,7 +139,7 @@ class FileOpener:
             if isinstance(widget, tk.BaseWidget):
                 widgets.append(widget)
             else:
-                widgets += [w for w in widget.winfo_children() if isinstance(w, tk.BaseWidget)]
+                widgets += widget.winfo_children()
         registered = 0
         for widget in dict.fromkeys(widgets):  # once each, in order
             try:

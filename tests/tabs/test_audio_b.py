@@ -227,7 +227,7 @@ def test_tts_offline_standalone(ui, outdir):
 
     ui.reset()
     tab = ui.open("TTS Voice-Over")
-    tab._engine_var.set(tts_tab.ENGINE_SYSTEM)
+    tab._engine_var.set(tts_tab._engine_system())
     tab.text_box.delete("1.0", "end")
     tab.text_box.insert("1.0", "Testing the offline voice. One, two, three.")
     tab.mode_var.set("standalone")

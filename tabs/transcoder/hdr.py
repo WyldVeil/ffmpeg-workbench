@@ -23,7 +23,7 @@ from tkinter import messagebox, ttk
 
 from core import capabilities, hdr, tasks
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.hdr_args import subtitle_args
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -31,11 +31,14 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-ASSUME = {
-    "": "From the file",
-    "pq": "Treat as HDR10 / PQ (tags were lost)",
-    "hlg": "Treat as HLG (tags were lost)",
-}
+ASSUME = Labels(
+    "hdr.assume",
+    {
+        "": "From the file",
+        "pq": "Treat as HDR10 / PQ (tags were lost)",
+        "hlg": "Treat as HLG (tags were lost)",
+    },
+)
 
 
 _NO_GPU = "(no Vulkan graphics driver found - GPU mode unavailable)"
@@ -46,6 +49,10 @@ def _inspect(path: str) -> tuple[ff.MediaInfo | None, hdr.HdrInfo]:
     info = ff.try_probe(path)
     found = hdr.inspect(info, path) if info is not None and info.has_video else hdr.HdrInfo()
     return info, found
+
+
+#: how hdr.CURVES is shown (in the current language)
+CURVE_LABELS = Labels("hdr.curves", {k: v[0] for k, v in hdr.CURVES.items()})
 
 
 class HdrToSdrTab(BaseTab):
@@ -118,11 +125,11 @@ class HdrToSdrTab(BaseTab):
             capabilities.on_ready("vulkan", self._gpu_known)
         elif not known:
             self.gpu_note.config(text=_NO_GPU)
-        self.curve_var = tk.StringVar(value=hdr.CURVES["bt2390"][0])
+        self.curve_var = tk.StringVar(value=CURVE_LABELS["bt2390"])
         cb = ttk.Combobox(
             opt,
             textvariable=self.curve_var,
-            values=[v[0] for v in hdr.CURVES.values()],
+            values=list(CURVE_LABELS.values()),
             state="readonly",
             width=38,
         )
@@ -184,10 +191,10 @@ class HdrToSdrTab(BaseTab):
         return True
 
     def _curve(self) -> str:
-        return next((k for k, v in hdr.CURVES.items() if v[0] == self.curve_var.get()), "bt2390")
+        return CURVE_LABELS.code_of(self.curve_var.get(), "bt2390")
 
     def _assume(self) -> str:
-        return next((k for k, v in ASSUME.items() if v == self.assume_var.get()), "")
+        return ASSUME.code_of(self.assume_var.get(), "")
 
     def _gpu(self) -> bool:
         return self.gpu_ok and self.engine_var.get() == "gpu"
@@ -292,7 +299,7 @@ class HdrToSdrTab(BaseTab):
                 "hdr.value_sdr_value2_curves",
                 value=self._hdr.label() if self._hdr.is_hdr else "Assumed HDR",
                 value2="GPU" if self._gpu() else "CPU",
-                curves=hdr.CURVES[self._curve()][0],
+                curves=CURVE_LABELS[self._curve()],
             ),
         )
         common.render(

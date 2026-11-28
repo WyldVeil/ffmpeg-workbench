@@ -22,7 +22,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import green_key as gk
 from core.ops.shared import RenderJob, frame_rate
 from core.scaling import px
@@ -31,17 +31,23 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-METHODS = {
-    "chroma": "Chroma key (green / blue screens)",
-    "color": "Colour key (any colour)",
-    "luma_white": "Luma key - remove white",
-    "luma_black": "Luma key - remove black",
-}
-BACKGROUNDS = {
-    "file": "Video or image file",
-    "color": "Solid colour",
-    "alpha": "Transparent (keep alpha channel)",
-}
+METHODS = Labels(
+    "green_key.methods",
+    {
+        "chroma": "Chroma key (green / blue screens)",
+        "color": "Colour key (any colour)",
+        "luma_white": "Luma key - remove white",
+        "luma_black": "Luma key - remove black",
+    },
+)
+BACKGROUNDS = Labels(
+    "green_key.backgrounds",
+    {
+        "file": "Video or image file",
+        "color": "Solid colour",
+        "alpha": "Transparent (keep alpha channel)",
+    },
+)
 
 
 class GreenKeyerTab(BaseTab):

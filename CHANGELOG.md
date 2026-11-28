@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.3.2
+
+### New
+
+- **Text Blurrer.** Finds the text laid over a video - names, handles,
+  captions, phone numbers, logos - with the times each is on screen, and blurs,
+  pixelates or blacks out the ones you click. It needs no download: overlaid
+  text keeps its edges still while the picture behind it moves, even when it's
+  half see-through. A chosen box can be resized, and you can draw your own.
+  Also on the command line as `blur-text` (`--find` lists what's there).
+
+### Fixed
+
+- **Drag and drop works.** Dropping files on the window never worked in the
+  release packages (the drag-and-drop library was there but never loaded, and
+  registering the window threw). Now a file dropped on any tool loads there,
+  and seven more tools take one (The Splicer, Contact Sheet, Intro/Outro Maker,
+  Audio Mixer, TTS Voice-Over, Special Effects, Encode Queue).
+- **HDR video stays right in every tool.** Re-encoding a phone's HDR video with
+  most tools wrote an 8-bit file still labelled HDR (banding, wrong colours on
+  many players). Now HEVC, AV1 and VP9 outputs keep the HDR in 10-bit, with its
+  brightness information, and other outputs are converted to normal video
+  properly.
+- In other languages, Special Effects' split-open always went horizontal; the
+  cinema-bars and downloader audio-quality defaults weren't among their own
+  choices.
+
+### Changed
+
+- **Boxes on the picture are easier to drag.** Manual Crop has a handle in the
+  middle of each edge as well as the corners; an edge can be grabbed anywhere
+  along it and moves only that edge; the cursor shows what a drag will do.
+  Privacy Blur's boxes can now be moved and resized on the picture too.
+- **Every drop-down is translated.** About 120 sets of choices, hints and
+  sample texts across 70 tools were still in English; they're now in all 32
+  languages, and a test builds every tool in a made-up language to keep it so.
+
 ## 1.3.1
 
 ### Changed

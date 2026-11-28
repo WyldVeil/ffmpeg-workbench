@@ -39,7 +39,7 @@ from core import proc as _proc
 from core import tasks
 from core import ytdlp as ytdlp_core
 from core.errors import ToolError
-from core.i18n import t
+from core.i18n import t, t_or
 from core.ops import youtube as yto
 from core.queue_manager import Hooks
 from core.scaling import px
@@ -554,7 +554,7 @@ class YouTubeDownloaderTab(BaseTab):
             q_row, text=t("common.quality"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left")
         self._format_cb = ttk.Combobox(q_row, state="readonly", width=58, font=(UI_FONT, 9))
-        self._format_cb["values"] = ["(fetch video info first)"]
+        self._format_cb["values"] = [t_or("youtube.fetch_info_first", "(fetch video info first)")]
         self._format_cb.current(0)
         self._format_cb.pack(side="left", padx=px(8))
         self._format_cb.bind("<<ComboboxSelected>>", self._on_format_selected)
@@ -740,7 +740,7 @@ class YouTubeDownloaderTab(BaseTab):
         tk.Label(
             r2, text=t("youtube.audio_quality"), font=(UI_FONT, 9), bg=CLR["bg"], fg=CLR["fg"]
         ).pack(side="left")
-        self._audio_quality_var = tk.StringVar(value="0")
+        self._audio_quality_var = tk.StringVar(value=t("youtube.0_best"))
         ttk.Combobox(
             r2,
             textvariable=self._audio_quality_var,

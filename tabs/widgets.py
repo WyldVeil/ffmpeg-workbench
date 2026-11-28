@@ -35,7 +35,7 @@ from tkinter import ttk
 
 from core import encoders, tasks
 from core import ffmpeg as ff
-from core.i18n import t, t_or
+from core.i18n import Labels, t, t_or
 from core.scaling import px
 from core.skins import MONO_FONT, UI_FONT
 from tabs import framestep
@@ -477,29 +477,32 @@ def scroll_body(
 #  EncoderPanel
 # ─────────────────────────────────────────────────────────────────────────────
 
-_CODEC_LABELS = [
-    ("h264", "H.264 / AVC (most compatible)"),
-    ("hevc", "H.265 / HEVC (smaller files)"),
-    ("av1", "AV1 (smallest, slower)"),
-    ("vp9", "VP9 (WebM)"),
-    ("prores", "ProRes 422 (editing)"),
-    ("dnxhr", "DNxHR (editing)"),
-    ("ffv1", "FFV1 (lossless archive)"),
-]
-_QUALITY_LABELS = [
-    ("very_high", "Very High"),
-    ("high", "High"),
-    ("good", "Good"),
-    ("low", "Low"),
-    ("lowest", "Lowest"),
-]
-_SPEED_LABELS = [
-    ("fastest", "Fastest"),
-    ("fast", "Fast"),
-    ("balanced", "Balanced"),
-    ("slow", "Slow (smaller)"),
-    ("slowest", "Slowest (smallest)"),
-]
+_CODEC_LABELS = Labels(
+    "encoder.codec",
+    {
+        "h264": "H.264 / AVC (most compatible)",
+        "hevc": "H.265 / HEVC (smaller files)",
+        "av1": "AV1 (smallest, slower)",
+        "vp9": "VP9 (WebM)",
+        "prores": "ProRes 422 (editing)",
+        "dnxhr": "DNxHR (editing)",
+        "ffv1": "FFV1 (lossless archive)",
+    },
+)
+_QUALITY_LABELS = Labels(
+    "encoder.quality_level",
+    {"very_high": "Very High", "high": "High", "good": "Good", "low": "Low", "lowest": "Lowest"},
+)
+_SPEED_LABELS = Labels(
+    "encoder.speed_level",
+    {
+        "fastest": "Fastest",
+        "fast": "Fast",
+        "balanced": "Balanced",
+        "slow": "Slow (smaller)",
+        "slowest": "Slowest (smallest)",
+    },
+)
 
 
 class EncoderPanel(tk.Frame):
@@ -519,22 +522,24 @@ class EncoderPanel(tk.Frame):
         clr = _clr()
         super().__init__(parent, bg=clr["bg"])
         self._on_change = on_change
-        self._codecs = [c for c in _CODEC_LABELS if c[0] in codecs]
+        self._codecs = [(c, label) for c, label in _CODEC_LABELS.items() if c in codecs]
         self._codec_var = tk.StringVar(
             value=dict(self._codecs).get(default_codec, self._codecs[0][1])
         )
         self._quality_var = tk.StringVar(
-            value=dict(_QUALITY_LABELS)[encoders.quality_key(default_quality)]
+            value=_QUALITY_LABELS[encoders.quality_key(default_quality)]
         )
-        self._speed_var = tk.StringVar(value=dict(_SPEED_LABELS).get(default_speed, "Balanced"))
+        self._speed_var = tk.StringVar(
+            value=_SPEED_LABELS.get(default_speed) or _SPEED_LABELS["balanced"]
+        )
         self._hw_var = tk.StringVar(value=t_or("encoder.hw_auto", "Auto (use GPU if available)"))
         self._ten_bit = tk.BooleanVar(value=False)
 
         codec = [v for _, v in self._codecs]
         self._choice(0, 0, t_or("encoder.codec", "Codec"), self._codec_var, codec, 30)
-        quality = [v for _, v in _QUALITY_LABELS]
+        quality = list(_QUALITY_LABELS.values())
         self._choice(0, 2, t_or("encoder.quality", "Quality"), self._quality_var, quality, 11)
-        speed = [v for _, v in _SPEED_LABELS]
+        speed = list(_SPEED_LABELS.values())
         self._choice(1, 0, t_or("encoder.speed", "Speed"), self._speed_var, speed, 30)
         self._hw_box = self._choice(1, 2, t_or("encoder.hardware", "Encoder"), self._hw_var, [], 26)
         if show_ten_bit:
@@ -596,11 +601,11 @@ class EncoderPanel(tk.Frame):
 
     @property
     def quality(self) -> str:
-        return self._key(self._quality_var, _QUALITY_LABELS, "high")
+        return self._key(self._quality_var, list(_QUALITY_LABELS.items()), "high")
 
     @property
     def speed(self) -> str:
-        return self._key(self._speed_var, _SPEED_LABELS, "balanced")
+        return self._key(self._speed_var, list(_SPEED_LABELS.items()), "balanced")
 
     @property
     def hw(self) -> str:

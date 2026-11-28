@@ -13,10 +13,11 @@ from __future__ import annotations
 import os
 import shutil
 import tkinter as tk
+from collections.abc import Mapping
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.shared import frame_rate
 from core.ops.side_by_side import Arrangement, Clip, build_graph, labels_script, sbs_cmd
 from core.scaling import px
@@ -24,12 +25,15 @@ from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.widgets import FileRow, output_section, scroll_body
 
-LAYOUTS = {
-    "side": "Side by side",
-    "stack": "Stacked (top / bottom)",
-    "grid": "2×2 grid",
-    "wipe": "Before / after wipe",
-}
+LAYOUTS = Labels(
+    "side_by_side.layouts",
+    {
+        "side": "Side by side",
+        "stack": "Stacked (top / bottom)",
+        "grid": "2×2 grid",
+        "wipe": "Before / after wipe",
+    },
+)
 SIZES = {
     "1920×1080": (1920, 1080),
     "3840×2160": (3840, 2160),
@@ -37,17 +41,23 @@ SIZES = {
     "1080×1920 (vertical)": (1080, 1920),
     "1080×1080": (1080, 1080),
 }
-AUDIO = {
-    "0": "Audio from clip 1",
-    "1": "Audio from clip 2",
-    "mix": "Mix all clips",
-    "none": "No audio",
-}
-LENGTH = {
-    "shortest": "Stop when the shortest clip ends",
-    "loop": "Run to the longest - loop shorter clips",
-    "hold": "Run to the longest - hold shorter clips' last frame",
-}
+AUDIO = Labels(
+    "side_by_side.audio",
+    {
+        "0": "Audio from clip 1",
+        "1": "Audio from clip 2",
+        "mix": "Mix all clips",
+        "none": "No audio",
+    },
+)
+LENGTH = Labels(
+    "side_by_side.length",
+    {
+        "shortest": "Stop when the shortest clip ends",
+        "loop": "Run to the longest - loop shorter clips",
+        "hold": "Run to the longest - hold shorter clips' last frame",
+    },
+)
 
 
 class SideBySideTab(BaseTab):
@@ -207,7 +217,7 @@ class SideBySideTab(BaseTab):
         self.btn_render.pack(pady=px(8))
         self.console = self.make_console_block(body, height=5)
 
-    def _key(self, table: dict[str, str], var: tk.StringVar, default: str) -> str:
+    def _key(self, table: Mapping[str, str], var: tk.StringVar, default: str) -> str:
         return next((k for k, v in table.items() if v == var.get()), default)
 
     def _clips(self, layout: str) -> list[Clip] | None:

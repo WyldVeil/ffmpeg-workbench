@@ -124,6 +124,7 @@ PAGES: Final[Mapping[ToolId, LazyTab]] = {
     ToolId.SHARPEN: _lazy("tabs.visuals.sharpen", "SharpenTab"),
     ToolId.PICTURE_IN_PICTURE: _lazy("tabs.visuals.pip", "PIPTab"),
     ToolId.PRIVACY_BLUR: _lazy("tabs.visuals.region_blur", "RegionBlurTab"),
+    ToolId.TEXT_BLURRER: _lazy("tabs.visuals.text_blur", "TextBlurTab"),
     ToolId.ANIMATED_ZOOM: _lazy("tabs.visuals.zoom", "AnimatedZoomTab"),
     ToolId.TRANSITION_STUDIO: _lazy("tabs.visuals.transitions", "TransitionStudioTab"),
     ToolId.MEDIA_INSPECTOR: _lazy("tabs.system.media_inspector", "MediaInspectorTab"),

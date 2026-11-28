@@ -21,7 +21,7 @@ from tkinter import messagebox, ttk
 from core import ass
 from core import ffmpeg as ff
 from core import filters as fl
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops.shared import RenderJob
 from core.ops.subtitles import POSITIONS, force_style, to_utf8_copy
 from core.scaling import px
@@ -33,7 +33,14 @@ from tabs.widgets import FileRow, FramePreview, output_section, scroll_body
 
 logger = logging.getLogger("crossfader.social.hard_subber")
 
-_EXTERNAL = "External subtitle file"
+
+def _external() -> str:
+    """The choice that means "the subtitle file chosen below", not a track in the video."""
+    return t_or("hard_subber.external_file", "External subtitle file")
+
+
+#: how POSITIONS is shown (in the current language)
+POSITION_LABELS = Labels("hard_subber.positions", {k: v[0] for k, v in POSITIONS.items()})
 
 
 class HardSubberTab(BaseTab):
@@ -75,9 +82,9 @@ class HardSubberTab(BaseTab):
         tk.Label(
             srow, text=t("hard_subber.subtitles"), width=16, anchor="w", font=(UI_FONT, 10, "bold")
         ).pack(side="left")
-        self.track_var = tk.StringVar(value=_EXTERNAL)
+        self.track_var = tk.StringVar(value=_external())
         self.track_box = ttk.Combobox(
-            srow, textvariable=self.track_var, values=[_EXTERNAL], state="readonly", width=40
+            srow, textvariable=self.track_var, values=[_external()], state="readonly", width=40
         )
         self.track_box.pack(side="left", padx=px(6))
         self.track_box.bind("<<ComboboxSelected>>", lambda _e: self._schedule())
@@ -165,11 +172,11 @@ class HardSubberTab(BaseTab):
             r1, text=t("hard_subber.background_box"), variable=self.box_var, command=self._schedule
         ).pack(side="left", padx=px(8))
         tk.Label(r1, text=t("hard_subber.position_label")).pack(side="left")
-        self.position_var = tk.StringVar(value=POSITIONS["bottom"][0])
+        self.position_var = tk.StringVar(value=POSITION_LABELS["bottom"])
         pb = ttk.Combobox(
             r1,
             textvariable=self.position_var,
-            values=[v[0] for v in POSITIONS.values()],
+            values=list(POSITION_LABELS.values()),
             state="readonly",
             width=14,
         )
@@ -215,7 +222,7 @@ class HardSubberTab(BaseTab):
         self._info = ff.try_probe(path)
         info = self._info
         self._tracks = []
-        values = [_EXTERNAL]
+        values = [_external()]
         if info is not None:
             subs = [s for s in info.streams if s.type == "subtitle"]
             for i, s in enumerate(subs):
@@ -230,7 +237,7 @@ class HardSubberTab(BaseTab):
                 self._tracks.append((label, i, s.codec))
                 values.append(label)
         self.track_box.config(values=values)
-        self.track_var.set(values[1] if len(values) > 1 and not self.sub_row.path else _EXTERNAL)
+        self.track_var.set(values[1] if len(values) > 1 and not self.sub_row.path else _external())
         dur = info.duration if info else 0.0
         self.slider.configure(to=max(dur, 0.01))
         self.pos_var.set(min(dur * 0.2, 30.0))
@@ -240,11 +247,11 @@ class HardSubberTab(BaseTab):
         self._schedule()
 
     def _subs_changed(self) -> None:
-        self.track_var.set(_EXTERNAL)
+        self.track_var.set(_external())
         self._schedule()
 
     def _style(self) -> str:
-        key = next((k for k, v in POSITIONS.items() if v[0] == self.position_var.get()), "bottom")
+        key = POSITION_LABELS.code_of(self.position_var.get(), "bottom")
         return force_style(
             font=self.font_var.get() or "Open Sans",
             size=int(self.size_var.get()),

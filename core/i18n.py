@@ -17,6 +17,9 @@ import json
 import locale as _locale
 import logging
 import os
+import re
+from collections.abc import Iterator, Mapping
+from typing import Any, Generic, TypeVar
 
 logger = logging.getLogger("crossfader.i18n")
 
@@ -313,3 +316,80 @@ def t_or(key: str, fallback: str) -> str:
     """``t(key)``, or *fallback* (English) while the key has no translation yet."""
     text = t(key)
     return fallback if text == key else text
+
+
+#: every Labels / Choices made so far (scripts/harvest_strings.py lists their English);
+#: each has .prefix and .english ({code: English})
+ALL_LABELS: list[Any] = []
+V = TypeVar("V")
+K = TypeVar("K", bound=str)  # a code: plain text, or a StrEnum member
+
+
+class Labels(Mapping[K, str], Generic[K]):
+    """On-screen names for a set of choices: ``code -> label``, each label read
+    in the current language when it's used (key ``prefix.code``; the English
+    written here is the fallback, and what ``scripts/harvest_strings.py`` puts
+    in en_US.json).  Works like the dict it replaces - ``.values()`` fill a
+    drop-down, and :meth:`code_of` turns the shown label back into its code,
+    so nothing compares English text."""
+
+    def __init__(self, prefix: str, english: Mapping[K, str]) -> None:
+        self.prefix = prefix
+        self.english: dict[K, str] = dict(english)
+        ALL_LABELS.append(self)  # for scripts/harvest_strings.py and the tests
+
+    def __getitem__(self, code: K) -> str:
+        return t_or(f"{self.prefix}.{code}", self.english[code])
+
+    def __iter__(self) -> Iterator[K]:
+        return iter(self.english)
+
+    def __len__(self) -> int:
+        return len(self.english)
+
+    def code_of(self, label: str, default: str = "") -> str:
+        """The code shown as *label* (in this language, or in English)."""
+        for code in self.english:
+            if self[code] == label or self.english[code] == label:
+                return str(code)
+        return default
+
+
+class Choices(Mapping[str, V], Generic[V]):
+    """A table keyed by on-screen label (``"Bottom right": data``), the labels
+    read in the current language: iterating gives the translated labels (to
+    fill a drop-down), and a lookup takes the translated label - or the
+    English one, for code and old settings that still use it.  Keys are
+    ``prefix.<english as a slug>``."""
+
+    def __init__(self, prefix: str, by_english: Mapping[str, V]) -> None:
+        self.prefix = prefix
+        self._data = dict(by_english)
+        self.english: dict[str, str] = {}  # code -> English, for the harvest
+        self._code: dict[str, str] = {}  # English -> code
+        for text in self._data:
+            base = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")[:40] or "item"
+            code, n = base, 2
+            while code in self.english:
+                code, n = f"{base}_{n}", n + 1
+            self.english[code] = text
+            self._code[text] = code
+        ALL_LABELS.append(self)
+
+    def label(self, english: str) -> str:
+        """How the entry written as *english* shows now."""
+        return t_or(f"{self.prefix}.{self._code[english]}", english)
+
+    def __iter__(self) -> Iterator[str]:
+        return (self.label(e) for e in self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __getitem__(self, label: str) -> V:
+        if label in self._data:
+            return self._data[label]
+        for text, value in self._data.items():
+            if self.label(text) == label:
+                return value
+        raise KeyError(label)

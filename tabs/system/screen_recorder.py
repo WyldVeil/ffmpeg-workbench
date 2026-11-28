@@ -25,7 +25,7 @@ from typing import ClassVar
 
 from core import tasks
 from core.encoders import VideoEncode
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.recorder import Recording, Region
 from core.scaling import px
 from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab
@@ -68,6 +68,10 @@ RECORD_CODECS = {
     RecordCodec.AMF_H264: ("h264_amf (AMD GPU)", "h264", "amf"),
     RecordCodec.SVTAV1: ("libsvtav1 (AV1 - Next Gen)", "av1", "off"),
 }
+
+
+#: the codec choices, shown in the current language
+CODEC_LABELS = Labels("screen_recorder.codecs", {c: spec[0] for c, spec in RECORD_CODECS.items()})
 
 
 class AreaSelector(tk.Toplevel):
@@ -482,7 +486,7 @@ class ScreenRecorderTab(BaseTab):
         vid_f.pack(fill="x", pady=px(0, 6))
 
         self.vcodec = ChoiceBox(
-            vid_f, {c: spec[0] for c, spec in RECORD_CODECS.items()}, RecordCodec.AUTO, width=32
+            vid_f, {c: CODEC_LABELS[c] for c in RECORD_CODECS}, RecordCodec.AUTO, width=32
         )
 
         self.form_row(
@@ -535,8 +539,10 @@ class ScreenRecorderTab(BaseTab):
         self.chroma = ChoiceBox(
             vid_f,
             {
-                Chroma.STANDARD: "yuv420p (Standard)",
-                Chroma.FULL: "yuv444p (Full Color, large file)",
+                Chroma.STANDARD: t_or("screen_recorder.chroma_standard", "yuv420p (Standard)"),
+                Chroma.FULL: t_or(
+                    "screen_recorder.chroma_full", "yuv444p (Full Color, large file)"
+                ),
             },
             Chroma.STANDARD,
             width=32,

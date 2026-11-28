@@ -21,7 +21,7 @@ from functools import partial
 from tkinter import messagebox, ttk
 
 from core import tasks
-from core.i18n import t
+from core.i18n import Choices, t
 from core.ops import karaoke as ko
 from core.queue_manager import Hooks
 from core.scaling import px
@@ -31,50 +31,38 @@ from tabs.widgets import SaveRow
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-MODELS = {  # label: core.whisper model key (whisper.cpp, downloaded once on first use)
-    "Tiny - fastest, rough (32 MB)": "tiny",
-    "Base - fast (60 MB)": "base",
-    "Small - good balance (190 MB)": "small",
-    "Large v3 Turbo - most accurate (574 MB)": "turbo",
-}
+MODELS = Choices(
+    "karaoke.models",
+    {  # label: core.whisper model key (whisper.cpp, downloaded once on first use)
+        "Tiny - fastest, rough (32 MB)": "tiny",
+        "Base - fast (60 MB)": "base",
+        "Small - good balance (190 MB)": "small",
+        "Large v3 Turbo - most accurate (574 MB)": "turbo",
+    },
+)
 
-LANGUAGES = [
-    "auto-detect",
-    "English",
-    "Spanish",
-    "French",
-    "German",
-    "Italian",
-    "Portuguese",
-    "Dutch",
-    "Russian",
-    "Chinese",
-    "Japanese",
-    "Korean",
-    "Arabic",
-    "Hindi",
-    "Turkish",
-    "Polish",
-]
 
-LANG_CODES = {
-    "auto-detect": None,
-    "English": "en",
-    "Spanish": "es",
-    "French": "fr",
-    "German": "de",
-    "Italian": "it",
-    "Portuguese": "pt",
-    "Dutch": "nl",
-    "Russian": "ru",
-    "Chinese": "zh",
-    "Japanese": "ja",
-    "Korean": "ko",
-    "Arabic": "ar",
-    "Hindi": "hi",
-    "Turkish": "tr",
-    "Polish": "pl",
-}
+LANG_CODES = Choices(
+    "karaoke.lang_codes",
+    {
+        "auto-detect": None,
+        "English": "en",
+        "Spanish": "es",
+        "French": "fr",
+        "German": "de",
+        "Italian": "it",
+        "Portuguese": "pt",
+        "Dutch": "nl",
+        "Russian": "ru",
+        "Chinese": "zh",
+        "Japanese": "ja",
+        "Korean": "ko",
+        "Arabic": "ar",
+        "Hindi": "hi",
+        "Turkish": "tr",
+        "Polish": "pl",
+    },
+)
 
 # ASS colours are &HAABBGGRR  (AA=alpha 00=opaque, then BGR, then R last)
 
@@ -170,9 +158,9 @@ class KaraokeTab(BaseTab):
             ra, textvariable=self._model_var, values=list(MODELS.keys()), state="readonly", width=34
         ).pack(side="left", padx=px(8))
         tk.Label(ra, text=t("karaoke.language")).pack(side="left")
-        self._lang_var = tk.StringVar(value="auto-detect")
+        self._lang_var = tk.StringVar(value=LANG_CODES.label("auto-detect"))
         ttk.Combobox(
-            ra, textvariable=self._lang_var, values=LANGUAGES, state="readonly", width=14
+            ra, textvariable=self._lang_var, values=list(LANG_CODES), state="readonly", width=14
         ).pack(side="left", padx=px(8))
 
     def _darkness_row(self, sf: tk.LabelFrame) -> None:
@@ -303,7 +291,7 @@ class KaraokeTab(BaseTab):
             self._whisper_lbl.config(
                 text=t(
                     "karaoke.the_label_model_downloads_once_on_first",
-                    label=whisper.MODELS[key].label,
+                    label=whisper.MODEL_LABELS[key],
                 ),
                 fg=CLR["fgdim"],
             )
@@ -316,7 +304,7 @@ class KaraokeTab(BaseTab):
         from core import whisper
 
         key = MODELS.get(self._model_var.get(), "base")
-        self._log(f"Downloading {whisper.MODELS[key].label}…")
+        self._log(f"Downloading {whisper.MODEL_LABELS[key]}…")
         tasks.submit(
             partial(whisper.download_model, key),
             on_done=self._model_ready,

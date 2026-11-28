@@ -600,7 +600,18 @@ def prepare_ffmpeg_cmd(cmd: Sequence[str]) -> list[str]:
     if "-progress" not in rest:
         target = "pipe:2" if _output_is_stdout(cmd) else "pipe:1"
         extra += ["-progress", target, "-nostats", "-stats_period", "0.5"]
-    return head + extra + rest
+    from core import hdr_keep  # HDR sources: kept in 10-bit, or converted to SDR properly
+
+    return head + extra + hdr_keep.adapt(rest, _hdr_transfer)
+
+
+def _hdr_transfer(path: str) -> str | None:
+    """The HDR transfer of *path*'s video ("smpte2084" / "arib-std-b67"), or None."""
+    if not os.path.isfile(path):
+        return None
+    info = try_probe(path)
+    video = info.video if info is not None else None
+    return video.color_transfer if video is not None and video.is_hdr else None
 
 
 _INPUT_OPTS_WITH_VALUE = {

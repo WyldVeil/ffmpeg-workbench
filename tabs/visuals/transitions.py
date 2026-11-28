@@ -19,7 +19,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import tasks
 from core.hardware import launch_preview
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops import crossfader as xf
 from core.scaling import px
 from tabs import common
@@ -27,65 +27,71 @@ from tabs.base_tab import BaseTab
 from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, output_section, scroll_body
 
-FAMILIES = {
-    "Dissolves": [
-        ("fade", "Fade"),
-        ("dissolve", "Dissolve"),
-        ("fadeblack", "Through black"),
-        ("fadewhite", "Through white"),
-        ("fadegrays", "Through grey"),
-        ("fadefast", "Fast fade"),
-        ("fadeslow", "Slow fade"),
-    ],
-    "Wipes": [
-        ("wipeleft", "Wipe left"),
-        ("wiperight", "Wipe right"),
-        ("wipeup", "Wipe up"),
-        ("wipedown", "Wipe down"),
-        ("wipetl", "Wipe to top-left"),
-        ("wipetr", "Wipe to top-right"),
-        ("wipebl", "Wipe to bottom-left"),
-        ("wipebr", "Wipe to bottom-right"),
-        ("radial", "Clock wipe"),
-    ],
-    "Slides & pushes": [
-        ("slideleft", "Slide left"),
-        ("slideright", "Slide right"),
-        ("slideup", "Slide up"),
-        ("slidedown", "Slide down"),
-        ("coverleft", "Cover left"),
-        ("coverright", "Cover right"),
-        ("revealleft", "Reveal left"),
-        ("revealright", "Reveal right"),
-    ],
-    "Shapes": [
-        ("circleopen", "Circle open"),
-        ("circleclose", "Circle close"),
-        ("circlecrop", "Circle crop"),
-        ("rectcrop", "Rectangle crop"),
-        ("vertopen", "Doors open (vertical)"),
-        ("horzopen", "Doors open (horizontal)"),
-        ("diagtl", "Diagonal"),
-    ],
-    "Stylised": [
-        ("smoothleft", "Smooth left"),
-        ("smoothright", "Smooth right"),
-        ("pixelize", "Pixelate"),
-        ("hblur", "Blur"),
-        ("zoomin", "Zoom in"),
-        ("distance", "Distance"),
-        ("squeezeh", "Squeeze"),
-        ("hlslice", "Slices"),
-        ("hlwind", "Wind"),
-    ],
-}
-CURVES = {
-    "tri": "Linear",
-    "qsin": "Smooth (quarter sine)",
-    "hsin": "Smooth (half sine)",
-    "exp": "Exponential",
-    "log": "Logarithmic",
-}
+FAMILIES = Choices(
+    "transitions.families",
+    {
+        "Dissolves": [
+            ("fade", "Fade"),
+            ("dissolve", "Dissolve"),
+            ("fadeblack", "Through black"),
+            ("fadewhite", "Through white"),
+            ("fadegrays", "Through grey"),
+            ("fadefast", "Fast fade"),
+            ("fadeslow", "Slow fade"),
+        ],
+        "Wipes": [
+            ("wipeleft", "Wipe left"),
+            ("wiperight", "Wipe right"),
+            ("wipeup", "Wipe up"),
+            ("wipedown", "Wipe down"),
+            ("wipetl", "Wipe to top-left"),
+            ("wipetr", "Wipe to top-right"),
+            ("wipebl", "Wipe to bottom-left"),
+            ("wipebr", "Wipe to bottom-right"),
+            ("radial", "Clock wipe"),
+        ],
+        "Slides & pushes": [
+            ("slideleft", "Slide left"),
+            ("slideright", "Slide right"),
+            ("slideup", "Slide up"),
+            ("slidedown", "Slide down"),
+            ("coverleft", "Cover left"),
+            ("coverright", "Cover right"),
+            ("revealleft", "Reveal left"),
+            ("revealright", "Reveal right"),
+        ],
+        "Shapes": [
+            ("circleopen", "Circle open"),
+            ("circleclose", "Circle close"),
+            ("circlecrop", "Circle crop"),
+            ("rectcrop", "Rectangle crop"),
+            ("vertopen", "Doors open (vertical)"),
+            ("horzopen", "Doors open (horizontal)"),
+            ("diagtl", "Diagonal"),
+        ],
+        "Stylised": [
+            ("smoothleft", "Smooth left"),
+            ("smoothright", "Smooth right"),
+            ("pixelize", "Pixelate"),
+            ("hblur", "Blur"),
+            ("zoomin", "Zoom in"),
+            ("distance", "Distance"),
+            ("squeezeh", "Squeeze"),
+            ("hlslice", "Slices"),
+            ("hlwind", "Wind"),
+        ],
+    },
+)
+CURVES = Labels(
+    "transitions.curves",
+    {
+        "tri": "Linear",
+        "qsin": "Smooth (quarter sine)",
+        "hsin": "Smooth (half sine)",
+        "exp": "Exponential",
+        "log": "Logarithmic",
+    },
+)
 
 
 class TransitionStudioTab(BaseTab):
@@ -126,7 +132,7 @@ class TransitionStudioTab(BaseTab):
         opt.pack(fill="x", padx=px(20), pady=px(6))
         top = tk.Frame(opt)
         top.pack(fill="x")
-        self.family_var = tk.StringVar(value="Dissolves")
+        self.family_var = tk.StringVar(value=FAMILIES.label("Dissolves"))
         fb = ttk.Combobox(
             top, textvariable=self.family_var, values=list(FAMILIES), state="readonly", width=16
         )

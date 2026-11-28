@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from core import ffmpeg as ff
 from core import i18n
 from core import quality as q
-from core.i18n import t
+from core.i18n import Labels, t
 from core.scaling import px
 from core.timecode import Timecode
 from tabs import common, framestep
@@ -31,7 +31,10 @@ from tabs.widgets import FileRow, FramePreview, scroll_body
 if TYPE_CHECKING:
     from core.queue_manager import TaskContext
 
-SPEEDS = {1: "Every frame (most exact)", 2: "Every 2nd frame", 5: "Every 5th frame (fastest)"}
+SPEEDS = Labels(
+    "compare.speeds",
+    {"1": "Every frame (most exact)", "2": "Every 2nd frame", "5": "Every 5th frame (fastest)"},
+)
 
 
 def _fmt(seconds: float) -> str:
@@ -40,6 +43,10 @@ def _fmt(seconds: float) -> str:
 
 def _size(n: int) -> str:
     return f"{n / 1e6:.1f} MB" if n >= 1e6 else f"{n / 1e3:.0f} KB"
+
+
+#: the VMAF models, named for the screen they suit
+MODEL_LABELS = Labels("compare.models", {k: v[0] for k, v in q.MODELS.items()})
 
 
 class ABView(tk.Frame):
@@ -151,16 +158,16 @@ class CompareQualityTab(BaseTab):
         r2 = tk.Frame(opt)
         r2.pack(fill="x", pady=px(6, 0))
         tk.Label(r2, text=t("compare.viewing")).pack(side="left")
-        self.model_var = tk.StringVar(value=q.MODELS["hd"][0])
+        self.model_var = tk.StringVar(value=MODEL_LABELS["hd"])
         ttk.Combobox(
             r2,
             textvariable=self.model_var,
-            values=[v[0] for v in q.MODELS.values()],
+            values=list(MODEL_LABELS.values()),
             state="readonly",
             width=32,
         ).pack(side="left", padx=px(4, 16))
         tk.Label(r2, text=t("common.speed")).pack(side="left")
-        self.speed_var = tk.StringVar(value=SPEEDS[1])
+        self.speed_var = tk.StringVar(value=SPEEDS["1"])
         ttk.Combobox(
             r2,
             textvariable=self.speed_var,
@@ -283,7 +290,7 @@ class CompareQualityTab(BaseTab):
 
     # ── Measure ───────────────────────────────────────────────────────
     def _model(self) -> str:
-        return next((k for k, v in q.MODELS.items() if v[0] == self.model_var.get()), "hd")
+        return MODEL_LABELS.code_of(self.model_var.get(), "hd")
 
     def _run(self) -> None:
         ref, dist = self.ref_row.path, self.dist_row.path
@@ -316,7 +323,7 @@ class CompareQualityTab(BaseTab):
                     skip_ref=skip_ref,
                     skip_dist=skip_dist,
                     seconds=seconds,
-                    subsample=next((k for k, v in SPEEDS.items() if v == self.speed_var.get()), 1),
+                    subsample=int(SPEEDS.code_of(self.speed_var.get(), "1")),
                 ),
             )
         except ValueError as exc:

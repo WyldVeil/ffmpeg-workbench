@@ -20,7 +20,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import capabilities
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.ops.shared import audio_filter_cmd
 from core.ops.voice_isolation import denoise_filter, models_dir
 from core.scaling import px
@@ -28,14 +28,21 @@ from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.widgets import FileRow, save_section, scroll_body
 
-MODELS = {  # file: label (signal / noise the model was trained for)
-    "sh.rnnn": "Speech, recorded in a room - best for talking",
-    "bd.rnnn": "Voice incl. laughter, recording noise",
-    "lq.rnnn": "Voice, general background noise",
-    "cb.rnnn": "Any sound, recording noise",
-    "mp.rnnn": "Any sound, general background noise",
-}
-_CUSTOM = "Custom model (.rnnn file)…"
+MODELS = Labels(
+    "voice_isolation.models",
+    {  # file: label (signal / noise the model was trained for)
+        "sh.rnnn": "Speech, recorded in a room - best for talking",
+        "bd.rnnn": "Voice incl. laughter, recording noise",
+        "lq.rnnn": "Voice, general background noise",
+        "cb.rnnn": "Any sound, recording noise",
+        "mp.rnnn": "Any sound, general background noise",
+    },
+)
+
+
+def _custom() -> str:
+    """The choice that means "a model file of your own"."""
+    return t_or("voice_isolation.custom_model", "Custom model (.rnnn file)…")
 
 
 def anlmdn_works() -> bool:
@@ -101,7 +108,7 @@ class VoiceIsolationTab(BaseTab):
         mb = ttk.Combobox(
             mr,
             textvariable=self.model_var,
-            values=[*MODELS.values(), _CUSTOM],
+            values=[*MODELS.values(), _custom()],
             state="readonly",
             width=46,
         )
@@ -153,7 +160,7 @@ class VoiceIsolationTab(BaseTab):
         self.console = self.make_console_block(body, height=5)
 
     def _model_changed(self) -> None:
-        if self.model_var.get() == _CUSTOM:
+        if self.model_var.get() == _custom():
             self.custom_row.pack(fill="x", pady=px(2))
         else:
             self.custom_row.pack_forget()
@@ -162,12 +169,12 @@ class VoiceIsolationTab(BaseTab):
         method = self.method_var.get()
         model = ""
         if method == "neural":
-            if self.model_var.get() == _CUSTOM:
+            if self.model_var.get() == _custom():
                 model = self.custom_row.path
                 if not model or not os.path.isfile(model):
                     raise ValueError("Choose a custom .rnnn model file.")
             else:
-                name = next((k for k, v in MODELS.items() if v == self.model_var.get()), "sh.rnnn")
+                name = MODELS.code_of(self.model_var.get(), "sh.rnnn")
                 model = os.path.join(models_dir(), name)
                 if not os.path.isfile(model):
                     raise ValueError(f"The bundled model is missing: {model}")

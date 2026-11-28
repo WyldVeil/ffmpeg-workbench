@@ -99,7 +99,7 @@ class AudioDuckerTab(BaseTab):
         tk.Label(
             pf, text=t("common.preset"), font=(UI_FONT, 10, "bold"), width=lw, anchor="e"
         ).pack(side="left")
-        self._preset_var = tk.StringVar(value="Standard (YouTube)")
+        self._preset_var = tk.StringVar(value=t("ducker.standard_youtube"))
         preset_cb = ttk.Combobox(
             pf,
             textvariable=self._preset_var,

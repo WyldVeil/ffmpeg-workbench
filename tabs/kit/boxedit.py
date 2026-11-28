@@ -15,6 +15,7 @@ pixels - the caller decides); nothing knows about Tk except ``draw`` and
 
 from __future__ import annotations
 
+import contextlib
 import tkinter as tk
 
 Rect = tuple[float, float, float, float]  # x, y, width, height
@@ -80,38 +81,79 @@ def drag(
         top = min(max(0.0, top + dy), bottom - minimum)
     if "b" in kind:
         bottom = max(min(bh, bottom + dy), top + minimum)
-    nw, nh = right - left, bottom - top
     if not ratio:
-        return (left, top, nw, nh)
+        return (left, top, right - left, bottom - top)
+    return _keep_shape(kind, start, (left, top, right, bottom), bounds, ratio)
+
+
+def _keep_shape(
+    kind: str,
+    start: Rect,
+    edges: tuple[float, float, float, float],
+    bounds: tuple[float, float],
+    ratio: tuple[float, float],
+) -> Rect:
+    """*edges* (left, top, right, bottom) after a drag of part *kind*, made the
+    shape *ratio* again: an edge drag changes the other side about the middle,
+    a corner drag keeps the opposite corner where it was."""
+    if kind in ("t", "b"):
+        return _height_leads(kind, start, edges, bounds, ratio)
+    if kind in ("l", "r"):
+        x, y, w, h = _height_leads(
+            {"l": "t", "r": "b"}[kind],
+            (start[1], start[0], start[3], start[2]),
+            (edges[1], edges[0], edges[3], edges[2]),
+            (bounds[1], bounds[0]),
+            (ratio[1], ratio[0]),
+        )
+        return (y, x, h, w)  # the same, with across and down swapped
+    return _corner(kind, edges, bounds, ratio)
+
+
+def _height_leads(
+    kind: str,
+    start: Rect,
+    edges: tuple[float, float, float, float],
+    bounds: tuple[float, float],
+    ratio: tuple[float, float],
+) -> Rect:
+    """A top or bottom edge dragged: the width follows, about the middle."""
+    bw, _bh = bounds
+    x, _y, w, _h = start
+    _left, top, _right, bottom = edges
     rw, rh = ratio
-    if kind in ("t", "b"):  # height leads; width follows about the middle
-        nw = nh * rw / rh
-        if nw > bw:
-            nw, nh = bw, bw * rh / rw
-        cx = x + w / 2
-        left = min(max(0.0, cx - nw / 2), bw - nw)
-        if kind == "t":
-            top = bottom - nh
-    elif kind in ("l", "r"):  # width leads; height follows about the middle
-        nh = nw * rh / rw
-        if nh > bh:
-            nh, nw = bh, bh * rw / rh
-        cy = y + h / 2
-        top = min(max(0.0, cy - nh / 2), bh - nh)
-        if kind == "l":
-            left = right - nw
-    else:  # a corner: width leads, the opposite corner stays put
-        nh = nw * rh / rw
-        if "t" in kind:
-            top = bottom - nh
-            if top < 0:
-                top, nh = 0.0, bottom
-                nw = nh * rw / rh
-        elif top + nh > bh:
-            nh = bh - top
+    nh = bottom - top
+    nw = nh * rw / rh
+    if nw > bw:
+        nw, nh = bw, bw * rh / rw
+    left = min(max(0.0, x + w / 2 - nw / 2), bw - nw)
+    if kind == "t":
+        top = bottom - nh
+    return (left, top, nw, nh)
+
+
+def _corner(
+    kind: str,
+    edges: tuple[float, float, float, float],
+    bounds: tuple[float, float],
+    ratio: tuple[float, float],
+) -> Rect:
+    """A corner dragged: the width leads, the opposite corner stays put."""
+    _bw, bh = bounds
+    left, top, right, bottom = edges
+    rw, rh = ratio
+    nw = right - left
+    nh = nw * rh / rw
+    if "t" in kind:
+        top = bottom - nh
+        if top < 0:
+            top, nh = 0.0, bottom
             nw = nh * rw / rh
-        if "l" in kind:
-            left = right - nw
+    elif top + nh > bh:
+        nh = bh - top
+        nw = nh * rw / rh
+    if "l" in kind:
+        left = right - nw
     return (left, top, nw, nh)
 
 
@@ -147,7 +189,5 @@ def draw(
 
 def set_cursor(widget: tk.Misc, kind: str | None, default: str = "crosshair") -> None:
     """Show what a drag from here would do."""
-    try:
+    with contextlib.suppress(tk.TclError):  # a cursor this system doesn't have
         widget.configure(cursor=CURSORS.get(kind or "", default))  # pyright: ignore[reportCallIssue]
-    except tk.TclError:  # a cursor this system doesn't have
-        pass

@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import codec as co
 from core.scaling import px
 from tabs import common
@@ -23,6 +23,10 @@ from tabs.base_tab import CLR, BaseTab
 from tabs.widgets import EncoderPanel, FileRow, save_section, scroll_body
 
 CONTAINERS = ("auto", "mp4", "mkv", "mov", "webm")
+
+
+#: how co.AUDIO is shown (in the current language)
+AUDIO_LABELS = Labels("codec.audio", {k: v[0] for k, v in co.AUDIO.items()})
 
 
 class CodecCruncherTab(BaseTab):
@@ -70,11 +74,11 @@ class CodecCruncherTab(BaseTab):
 
         ac = tk.LabelFrame(body, text=t("section.audio_codec"), padx=px(12), pady=px(8))
         ac.pack(fill="x", padx=px(20), pady=px(5))
-        self.audio_var = tk.StringVar(value=co.AUDIO["aac256"][0])
+        self.audio_var = tk.StringVar(value=AUDIO_LABELS["aac256"])
         ttk.Combobox(
             ac,
             textvariable=self.audio_var,
-            values=[v[0] for v in co.AUDIO.values()],
+            values=list(AUDIO_LABELS.values()),
             state="readonly",
             width=24,
         ).pack(side="left")
@@ -153,7 +157,7 @@ class CodecCruncherTab(BaseTab):
         if not out:
             return
         self.out_row.set(out)
-        key = next((k for k, v in co.AUDIO.items() if v[0] == self.audio_var.get()), "aac256")
+        key = AUDIO_LABELS.code_of(self.audio_var.get(), "aac256")
         venc = None if self.copy_video.get() else self.encoder.video_encode(container)
         cmd, notes = co.crunch_cmd(
             src, out, info, venc, key, container, keep_all=self.keep_all.get()

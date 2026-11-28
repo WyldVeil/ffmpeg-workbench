@@ -16,20 +16,23 @@ from tkinter import messagebox, ttk
 
 from core import concat
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.scaling import px
 from tabs import common, framestep
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit.time_fields import RangePicker
 from tabs.widgets import EncoderPanel, FramePreview, SaveRow, scroll_body
 
-SIZES = {
-    "first": "Same as the first clip",
-    "largest": "Largest clip",
-    "1920x1080": "1920×1080",
-    "1280x720": "1280×720",
-    "1080x1920": "1080×1920 (vertical)",
-}
+SIZES = Labels(
+    "sequencer.sizes",
+    {
+        "first": "Same as the first clip",
+        "largest": "Largest clip",
+        "1920x1080": "1920×1080",
+        "1280x720": "1280×720",
+        "1080x1920": "1080×1920 (vertical)",
+    },
+)
 
 
 @dataclass

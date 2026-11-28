@@ -16,7 +16,7 @@ from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.gif_maker import Animation, make_animation
 from core.ops.shared import Steps
 from core.scaling import px
@@ -29,13 +29,16 @@ from tabs.widgets import FileRow, FramePreview, save_section, scroll_body
 if TYPE_CHECKING:
     from core.queue_manager import TaskContext
 
-DITHERS = {
-    "sierra2_4a": "Sierra (smooth, recommended)",
-    "floyd_steinberg": "Floyd-Steinberg (detailed)",
-    "bayer2": "Bayer pattern - fine",
-    "bayer4": "Bayer pattern - coarse (smaller files)",
-    "none": "None (posterised, smallest)",
-}
+DITHERS = Labels(
+    "gif_maker.dithers",
+    {
+        "sierra2_4a": "Sierra (smooth, recommended)",
+        "floyd_steinberg": "Floyd-Steinberg (detailed)",
+        "bayer2": "Bayer pattern - fine",
+        "bayer4": "Bayer pattern - coarse (smaller files)",
+        "none": "None (posterised, smallest)",
+    },
+)
 
 
 class AnimFormat(StrEnum):
@@ -43,7 +46,9 @@ class AnimFormat(StrEnum):
     WEBP = "webp"
 
 
-ANIM_FORMATS = {AnimFormat.GIF: "GIF", AnimFormat.WEBP: "Animated WebP"}
+ANIM_FORMATS = Labels(
+    "gif_maker.anim_formats", {AnimFormat.GIF: "GIF", AnimFormat.WEBP: "Animated WebP"}
+)
 
 
 class GIFMakerTab(BaseTab):

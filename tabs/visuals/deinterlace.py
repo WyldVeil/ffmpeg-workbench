@@ -20,7 +20,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops.deinterlace import deinterlace_chain
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -28,19 +28,28 @@ from tabs import common
 from tabs.base_tab import CLR, BaseTab
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-MODES = {
-    "smart": "Smart - only frames that are interlaced (recommended)",
-    "all": "Every frame",
-    "double": "Double frame rate (smoothest motion)",
-    "ivtc": "Undo telecine (film at 29.97 → 23.976)",
-}
-ENGINES = {
-    "bwdif": "BWDIF (best)",
-    "yadif": "YADIF (classic)",
-    "w3fdif": "W3FDIF (BBC)",
-    "estdif": "ESTDIF (edge-directed)",
-}
-ORDERS = {"auto": "From the file", "tff": "Top field first", "bff": "Bottom field first"}
+MODES = Labels(
+    "deinterlace.modes",
+    {
+        "smart": "Smart - only frames that are interlaced (recommended)",
+        "all": "Every frame",
+        "double": "Double frame rate (smoothest motion)",
+        "ivtc": "Undo telecine (film at 29.97 → 23.976)",
+    },
+)
+ENGINES = Labels(
+    "deinterlace.engines",
+    {
+        "bwdif": "BWDIF (best)",
+        "yadif": "YADIF (classic)",
+        "w3fdif": "W3FDIF (BBC)",
+        "estdif": "ESTDIF (edge-directed)",
+    },
+)
+ORDERS = Labels(
+    "deinterlace.orders",
+    {"auto": "From the file", "tff": "Top field first", "bff": "Bottom field first"},
+)
 
 
 class DeinterlaceTab(BaseTab):

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from core import ffmpeg as ff
+from core.i18n import Labels
 from core.queue_manager import TaskContext
 
 
@@ -183,6 +184,11 @@ NORMALISE = {
     Normalise.LOUDNESS: "EBU R128 (loudnorm)",
     Normalise.PEAK: "Peak normalize",
 }
+#: how the formats and normalisations are shown (in the current language)
+FORMAT_LABELS = Labels("audio_export.formats", {f.value: label for f, label in FORMATS.items()})
+NORMALISE_LABELS = Labels(
+    "audio_export.normalise", {n.value: label for n, label in NORMALISE.items()}
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

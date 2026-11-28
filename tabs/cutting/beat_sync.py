@@ -25,7 +25,7 @@ from tkinter import messagebox, ttk
 from core import ffmpeg as ff
 from core import tasks
 from core.beats import ENV_RATE, beat_grid, envelope, estimate_tempo, onset_peaks, onset_strength
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops import beat_montage as bm
 from core.ops.shared import frame_rate
 from core.scaling import px
@@ -34,17 +34,23 @@ from tabs.base_tab import CLR, MONO_FONT, BaseTab
 from tabs.kit.tktyped import selected_rows
 from tabs.widgets import FileRow, output_section, scroll_body
 
-ORDERS = {
-    "sequential": "In order, continuing through each clip",
-    "shuffle": "Shuffle clips and positions",
-}
-SIZES = {
-    "Same as the first clip": None,
-    "1920×1080": (1920, 1080),
-    "1080×1920 (vertical)": (1080, 1920),
-    "1280×720": (1280, 720),
-    "1080×1080 (square)": (1080, 1080),
-}
+ORDERS = Labels(
+    "beat_sync.orders",
+    {
+        "sequential": "In order, continuing through each clip",
+        "shuffle": "Shuffle clips and positions",
+    },
+)
+SIZES = Choices(
+    "beat_sync.sizes",
+    {
+        "Same as the first clip": None,
+        "1920×1080": (1920, 1080),
+        "1080×1920 (vertical)": (1080, 1920),
+        "1280×720": (1280, 720),
+        "1080×1080 (square)": (1080, 1080),
+    },
+)
 
 
 class BeatSyncCutterTab(BaseTab):

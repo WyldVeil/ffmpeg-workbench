@@ -21,7 +21,7 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import tasks, whisper
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import subtitles as subs_ops
 from core.queue_manager import Hooks, TaskContext
 from core.scaling import px
@@ -31,12 +31,15 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.contracts import TakesSubtitles
 from tabs.widgets import FileRow, SaveRow, output_box, scroll_body
 
-FORMATS = {
-    "srt": "SubRip (.srt) - works everywhere",
-    "vtt": "WebVTT (.vtt) - web players",
-    "both": "Both .srt and .vtt",
-    "txt": "Plain transcript (.txt)",
-}
+FORMATS = Labels(
+    "auto_subs.formats",
+    {
+        "srt": "SubRip (.srt) - works everywhere",
+        "vtt": "WebVTT (.vtt) - web players",
+        "both": "Both .srt and .vtt",
+        "txt": "Plain transcript (.txt)",
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,7 @@ class _Transcription:
             ctx.log(
                 t(
                     "auto_subs.downloading_the_label_model_one_time",
-                    label=whisper.MODELS[self.model].label,
+                    label=whisper.MODEL_LABELS[self.model],
                 )
             )
             whisper.download_model(self.model, lambda f: ctx.progress(0.25 * f), cancelled)
@@ -158,7 +161,7 @@ class AutoSubsTab(BaseTab):
         self.form_row(eng, 0, t("common.model"), self.model_box, self.dl_btn, label_width=18)
         self.model_lbl = tk.Label(eng, text="", fg=CLR["fgdim"], font=(UI_FONT, 8))
         self.model_lbl.grid(row=1, column=1, columnspan=3, sticky="w")
-        self.lang_var = tk.StringVar(value=whisper.LANGUAGES[0][1])
+        self.lang_var = tk.StringVar(value=whisper.LANGUAGE_LABELS["auto"])
         self.form_row(
             eng,
             2,
@@ -167,7 +170,7 @@ class AutoSubsTab(BaseTab):
                 eng,
                 textvariable=self.lang_var,
                 state="readonly",
-                values=[lbl for _k, lbl in whisper.LANGUAGES],
+                values=list(whisper.LANGUAGE_LABELS.values()),
                 width=24,
             ),
             label_width=18,
@@ -266,7 +269,9 @@ class AutoSubsTab(BaseTab):
     def _fill_models(self, keep: str | None = None) -> None:
         labels: list[str] = []
         for m in whisper.MODELS.values():
-            labels.append(m.label + ("   ✓" if whisper.is_installed(m.key) else ""))
+            labels.append(
+                whisper.MODEL_LABELS[m.key] + ("   ✓" if whisper.is_installed(m.key) else "")
+            )
         self.model_box.config(values=labels)
         key = keep or self.model_key() or whisper.DEFAULT_MODEL
         self.model_var.set(labels[list(whisper.MODELS).index(key)])
@@ -274,7 +279,7 @@ class AutoSubsTab(BaseTab):
 
     def model_key(self) -> str | None:
         label = self.model_var.get().replace("   ✓", "")
-        return next((k for k, m in whisper.MODELS.items() if m.label == label), None)
+        return whisper.MODEL_LABELS.code_of(label) or None
 
     def _model_status(self) -> None:
         key = self.model_key() or whisper.DEFAULT_MODEL
@@ -306,7 +311,7 @@ class AutoSubsTab(BaseTab):
             self._fill_models(key)
             self.log_tagged(
                 self.console,
-                t("auto_subs.model_ready_label", label=whisper.MODELS[key].label),
+                t("auto_subs.model_ready_label", label=whisper.MODEL_LABELS[key]),
                 "success",
             )
             if then is not None:
@@ -389,7 +394,7 @@ class AutoSubsTab(BaseTab):
         if outputs is None:
             return
         key = self.model_key() or whisper.DEFAULT_MODEL
-        lang = next((k for k, lbl in whisper.LANGUAGES if lbl == self.lang_var.get()), "auto")
+        lang = whisper.LANGUAGE_LABELS.code_of(self.lang_var.get(), "auto")
         tracks = list(self.track_box.cget("values"))
         stream = tracks.index(self.track_var.get()) if self.track_var.get() in tracks else 0
         opts = _Options(
@@ -414,7 +419,7 @@ class AutoSubsTab(BaseTab):
             self.console,
             t(
                 "auto_subs.transcribing_with_label_value",
-                label=whisper.MODELS[key].label,
+                label=whisper.MODEL_LABELS[key],
                 value="auto language" if lang == "auto" else lang,
             ),
         )

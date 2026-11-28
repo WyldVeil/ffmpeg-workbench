@@ -12,7 +12,7 @@ import tkinter as tk
 from functools import partial
 from tkinter import ttk
 
-from core.i18n import t
+from core.i18n import Choices, t
 from core.ops import color_correct as cc
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -26,6 +26,10 @@ GROUPS = [
     ("Colour", ("temperature", "tint", "saturation", "vibrance", "hue")),
     ("Detail", ("sharpen",)),
 ]
+
+
+#: the looks, shown in the current language
+LOOKS = Choices("color_correct.looks", cc.LOOKS)
 
 
 class ColorCorrectorTab(BaseTab):
@@ -64,9 +68,9 @@ class ColorCorrectorTab(BaseTab):
             fg=CLR["fg"],
             font=(UI_FONT, 10, "bold"),
         ).pack(side="left")
-        self.look_var = tk.StringVar(value="Neutral (reset)")
+        self.look_var = tk.StringVar(value=LOOKS.label("Neutral (reset)"))
         box = ttk.Combobox(
-            looks, textvariable=self.look_var, values=list(cc.LOOKS), state="readonly", width=22
+            looks, textvariable=self.look_var, values=list(LOOKS), state="readonly", width=22
         )
         box.pack(side="left", padx=px(8))
         box.bind("<<ComboboxSelected>>", lambda _e: self._apply_look(self.look_var.get()))
@@ -75,7 +79,7 @@ class ColorCorrectorTab(BaseTab):
             text=t("color_correct.btn_reset_all"),
             relief="flat",
             cursor="hand2",
-            command=lambda: self._apply_look("Neutral (reset)"),
+            command=lambda: self._apply_look(LOOKS.label("Neutral (reset)")),
         ).pack(side="left", padx=px(6))
 
         grid = tk.Frame(body, bg=CLR["bg"])
@@ -148,7 +152,7 @@ class ColorCorrectorTab(BaseTab):
 
     def _apply_look(self, name: str) -> None:
         merged = dict(cc.DEFAULTS)
-        merged.update(cc.LOOKS.get(name, {}))
+        merged.update(LOOKS.get(name) or {})
         for key, var in self.vars.items():
             var.set(merged[key])
         self._schedule_preview()

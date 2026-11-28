@@ -1812,6 +1812,91 @@ def op_blur_region(ctx: Ctx) -> Result:
     return result(out)
 
 
+def _blur_text_options(p: argparse.ArgumentParser) -> None:
+    _in(p, 1)
+    p.add_argument(
+        "--find",
+        action="store_true",
+        help="only list the text found (numbered), don't make a video",
+    )
+    p.add_argument(
+        "--pick",
+        help="numbers from --find to blur, e.g. 1,3 (default: every sure find)",
+    )
+    p.add_argument(
+        "--include-uncertain",
+        action="store_true",
+        help="also list (and by default blur) the less certain finds",
+    )
+    p.add_argument("--type", default="blur", choices=["blur", "pixelate", "box"])
+    p.add_argument("--strength", type=float, default=0.7, help="0.2-1 (default 0.7)")
+    p.add_argument(
+        "--margin", type=float, default=0.3, help="extra room around the text, share of its height"
+    )
+    _video_opts(p)
+
+
+@operation(
+    "blur-text",
+    "Find the text laid over a video (names, handles, captions, logos) and blur it",
+    "Visuals",
+    options=_blur_text_options,
+)
+def op_blur_text(ctx: Ctx) -> Result:
+    from core.ops import text_find as tf
+    from core.ops.region_blur import Region, blur_graph
+
+    src = ctx.args.inputs[0]
+    info = probe(src, video=True)
+    W, H = info.require_video().display_size
+    dur = max(info.duration, 0.1)
+    found = [
+        f
+        for f in tf.find(tf.sample(src, W, H, dur), W, H, dur)
+        if f.sure or ctx.args.include_uncertain
+    ]
+    listed = [
+        {
+            "number": n,
+            "what": "text" if f.textlike else "logo",
+            "sure": f.sure,
+            "start": round(f.start, 2),
+            "end": None if f.end is None else round(f.end, 2),
+            "box_percent": [round(v * 100, 1) for v in (f.x, f.y, f.w, f.h)],
+        }
+        for n, f in enumerate(found, 1)
+    ]
+    if ctx.args.find:
+        return {"ok": True, "found": listed}
+    if ctx.args.pick:
+        try:
+            numbers = {int(v) for v in ctx.args.pick.split(",") if v.strip()}
+        except ValueError:
+            raise CliError("--pick takes numbers from --find, like 1,3") from None
+        if not numbers <= set(range(1, len(found) + 1)):
+            raise CliError(f"--pick: there are {len(found)} finds (run with --find to see them)")
+        chosen = [f for n, f in enumerate(found, 1) if n in numbers]
+    else:
+        chosen = found
+    if not chosen:
+        raise CliError("no text found that stays on screen - use blur-region for a box of your own")
+    regions: list[Region] = []
+    for f in chosen:
+        b = f.padded(ctx.args.margin)
+        strength = min(1.0, max(0.2, ctx.args.strength))
+        regions.append(Region(b.x, b.y, b.w, b.h, ctx.args.type, strength, b.start, b.end))
+    out = output_path(ctx, [src], "blurred")
+    ctx.render_graph(
+        [src],
+        info,
+        out,
+        blur_graph(regions, W // 2 * 2, H // 2 * 2)
+        + (";[0:a:0]anull[a]" if info.has_audio else ""),
+        has_audio=info.has_audio,
+    )
+    return result(out, blurred=[d for d, f in zip(listed, found, strict=True) if f in chosen])
+
+
 def _chain_op(
     name: str,
     summary: str,

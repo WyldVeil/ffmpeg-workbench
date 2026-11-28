@@ -42,7 +42,9 @@ def test_drag_and_drop_set_up_puts_libs_on_the_path_first(ui, monkeypatch):
 
 
 def test_main_puts_libs_on_the_path_before_the_window():
-    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py"), encoding="utf-8") as fh:
+    with open(
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py"), encoding="utf-8"
+    ) as fh:
         src = fh.read()
     assert "ensure_libs_on_path()" in src
     assert src.index("ensure_libs_on_path()") < src.index("from shell.app import App")

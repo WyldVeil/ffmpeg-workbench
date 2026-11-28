@@ -13,7 +13,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core.i18n import t
+from core.i18n import Choices, t, t_or
 from core.ops.lut import BUILTIN, INTERPOLATIONS, build_chain, builtin_lut_path
 from core.ops.shared import RenderJob
 from core.scaling import px
@@ -21,7 +21,14 @@ from tabs import common
 from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.widgets import CompareView, FileRow, output_section, scroll_body
 
-_CUSTOM = "Use a LUT file…"
+
+def _custom() -> str:
+    """The choice that means "the LUT file chosen below"."""
+    return t_or("lut.use_a_file", "Use a LUT file…")
+
+
+#: the built-in looks, shown in the current language (their English name finds them)
+LOOKS = Choices("lut.looks", {name: name for name in BUILTIN})
 
 
 # ── Filter construction ──────────────────────────────────────────────────────
@@ -54,13 +61,13 @@ class LUTApplicatorTab(BaseTab):
         tk.Label(
             look_row, text=t("lut.look"), width=16, anchor="w", font=(UI_FONT, 10, "bold")
         ).pack(side="left")
-        self.look_var = tk.StringVar(value=_CUSTOM)
+        self.look_var = tk.StringVar(value=_custom())
         box = ttk.Combobox(
             look_row,
             textvariable=self.look_var,
             state="readonly",
             width=30,
-            values=[_CUSTOM, *BUILTIN],
+            values=[_custom(), *LOOKS],
         )
         box.pack(side="left", padx=px(6))
         box.bind("<<ComboboxSelected>>", lambda _e: self._look_changed())
@@ -127,8 +134,8 @@ class LUTApplicatorTab(BaseTab):
     # ── Behaviour ────────────────────────────────────────────────────────────
 
     def lut_path(self) -> str:
-        look = self.look_var.get()
-        if look in BUILTIN:
+        look = LOOKS.get(self.look_var.get())
+        if look is not None:
             return builtin_lut_path(look)
         return self.lut_row.path
 
@@ -139,7 +146,7 @@ class LUTApplicatorTab(BaseTab):
         return build_chain(path, intensity=self.intensity_var.get(), interp=self.interp_var.get())
 
     def _look_changed(self) -> None:
-        builtin = self.look_var.get() in BUILTIN
+        builtin = LOOKS.get(self.look_var.get()) is not None
         self.lut_row.entry.config(state="disabled" if builtin else "normal")
         self._schedule()
 

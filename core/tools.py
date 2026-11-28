@@ -112,6 +112,7 @@ class ToolId(StrEnum):
     SHARPEN = "sharpen"
     PICTURE_IN_PICTURE = "pip"
     PRIVACY_BLUR = "region_blur"
+    TEXT_BLURRER = "text_blur"
     ANIMATED_ZOOM = "zoom"
     TRANSITION_STUDIO = "transitions"
     MEDIA_INSPECTOR = "media_inspector"
@@ -753,6 +754,14 @@ SPECS: Final[tuple[ToolSpec, ...]] = (
         "🙈",
         "Blur or pixelate faces, number plates, names or screens.",
         "blur pixelate hide face plate license number privacy censor",
+    ),
+    _t(
+        ToolId.TEXT_BLURRER,
+        "Text Blurrer",
+        Category.VISUALS,
+        "🔤",
+        "Finds names, handles and captions on a video; blur the ones you pick.",
+        "text blur hide name handle username caption phone number watermark logo censor redact",
     ),
     _t(
         ToolId.ANIMATED_ZOOM,

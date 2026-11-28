@@ -14,7 +14,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core.i18n import t
+from core.i18n import Choices, Labels, t
 from core.ops.media_gen import AUDIO_EXTS, Generate, generate_cmd
 from core.scaling import px
 from tabs import common
@@ -22,40 +22,49 @@ from tabs.base_tab import CLR, UI_FONT, BaseTab
 from tabs.kit.widgets import ColourButton
 from tabs.widgets import save_section, scroll_body
 
-PATTERNS = {
-    "smpte_hd": "SMPTE HD colour bars",
-    "smpte": "SMPTE colour bars",
-    "ebu": "EBU colour bars (75%)",
-    "testsrc": "Moving test pattern",
-    "countdown": "Countdown leader (with 2-pop)",
-    "color": "Solid colour",
-    "black": "Black",
-    "static": "TV static",
-    "gradient": "Animated gradient",
-    "mandelbrot": "Mandelbrot zoom",
-    "life": "Game of Life",
-    "none": "No video (audio file only)",
-}
-AUDIO = {
-    "tone18": "1 kHz tone at −18 dBFS (EBU line-up)",
-    "tone20": "1 kHz tone at −20 dBFS (SMPTE line-up)",
-    "tone": "Sine tone at a chosen frequency",
-    "pop": "2-pop beep (for countdown leaders)",
-    "pink": "Pink noise",
-    "white": "White noise",
-    "silence": "Silence",
-    "none": "No audio",
-}
-SIZES = {
-    "3840×2160 (4K UHD)": (3840, 2160),
-    "2560×1440 (QHD)": (2560, 1440),
-    "1920×1080 (Full HD)": (1920, 1080),
-    "1280×720 (HD)": (1280, 720),
-    "1080×1920 (vertical 9:16)": (1080, 1920),
-    "1080×1080 (square)": (1080, 1080),
-    "720×576 (PAL SD)": (720, 576),
-    "720×480 (NTSC SD)": (720, 480),
-}
+PATTERNS = Labels(
+    "media_gen.patterns",
+    {
+        "smpte_hd": "SMPTE HD colour bars",
+        "smpte": "SMPTE colour bars",
+        "ebu": "EBU colour bars (75%)",
+        "testsrc": "Moving test pattern",
+        "countdown": "Countdown leader (with 2-pop)",
+        "color": "Solid colour",
+        "black": "Black",
+        "static": "TV static",
+        "gradient": "Animated gradient",
+        "mandelbrot": "Mandelbrot zoom",
+        "life": "Game of Life",
+        "none": "No video (audio file only)",
+    },
+)
+AUDIO = Labels(
+    "media_gen.audio",
+    {
+        "tone18": "1 kHz tone at −18 dBFS (EBU line-up)",
+        "tone20": "1 kHz tone at −20 dBFS (SMPTE line-up)",
+        "tone": "Sine tone at a chosen frequency",
+        "pop": "2-pop beep (for countdown leaders)",
+        "pink": "Pink noise",
+        "white": "White noise",
+        "silence": "Silence",
+        "none": "No audio",
+    },
+)
+SIZES = Choices(
+    "media_gen.sizes",
+    {
+        "3840×2160 (4K UHD)": (3840, 2160),
+        "2560×1440 (QHD)": (2560, 1440),
+        "1920×1080 (Full HD)": (1920, 1080),
+        "1280×720 (HD)": (1280, 720),
+        "1080×1920 (vertical 9:16)": (1080, 1920),
+        "1080×1080 (square)": (1080, 1080),
+        "720×576 (PAL SD)": (720, 576),
+        "720×480 (NTSC SD)": (720, 480),
+    },
+)
 RATES = {
     "23.976": "24000/1001",
     "24": "24",
@@ -103,7 +112,7 @@ class MediaGeneratorTab(BaseTab):
         self.form_row(f, 0, t("mgen.visual_pattern"), pb, label_width=16)
         self.colour_btn = ColourButton(f, "#202020", text=t("green_key.colour"), width=10)
         self.colour_btn.grid(row=0, column=2, sticky="w", padx=px(8))
-        self.size_var = tk.StringVar(value="1920×1080 (Full HD)")
+        self.size_var = tk.StringVar(value=SIZES.label("1920×1080 (Full HD)"))
         self.form_row(
             f,
             1,

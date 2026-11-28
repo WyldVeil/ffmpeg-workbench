@@ -20,7 +20,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import reframe as rf
 from core.ops.shared import RenderJob, frame_rate, keep_audio_args
 from core.scaling import px
@@ -35,12 +35,19 @@ RATIOS = {
     "16:9": ("16:9 - widescreen", (16, 9), (1920, 1080)),
     "4:3": ("4:3 - classic", (4, 3), (1440, 1080)),
 }
-MODES = {
-    "follow": "Follow the action (responsive)",
-    "smooth": "Smooth drift (calm, centred)",
-    "centre": "Fixed centre (no tracking)",
-    "fit": "Fit whole picture with blurred background",
-}
+MODES = Labels(
+    "smart_reframe.modes",
+    {
+        "follow": "Follow the action (responsive)",
+        "smooth": "Smooth drift (calm, centred)",
+        "centre": "Fixed centre (no tracking)",
+        "fit": "Fit whole picture with blurred background",
+    },
+)
+
+
+#: how RATIOS is shown (in the current language)
+RATIO_LABELS = Labels("smart_reframe.ratios", {k: v[0] for k, v in RATIOS.items()})
 
 
 class SmartReframeTab(BaseTab):
@@ -67,7 +74,7 @@ class SmartReframeTab(BaseTab):
 
         opt = tk.LabelFrame(body, text=t("smart_reframe.reframe"), padx=px(12), pady=px(8))
         opt.pack(fill="x", padx=px(20), pady=px(6))
-        self.ratio_var = tk.StringVar(value=RATIOS["9:16"][0])
+        self.ratio_var = tk.StringVar(value=RATIO_LABELS["9:16"])
         self.mode_var = tk.StringVar(value=MODES["follow"])
         r0 = tk.Frame(opt)
         r0.pack(fill="x", pady=px(2))
@@ -75,7 +82,7 @@ class SmartReframeTab(BaseTab):
         rb = ttk.Combobox(
             r0,
             textvariable=self.ratio_var,
-            values=[v[0] for v in RATIOS.values()],
+            values=list(RATIO_LABELS.values()),
             state="readonly",
             width=30,
         )
@@ -112,7 +119,7 @@ class SmartReframeTab(BaseTab):
         self.console = self.make_console_block(body, height=6)
 
     def _ratio_key(self) -> str:
-        return next((k for k, v in RATIOS.items() if v[0] == self.ratio_var.get()), "9:16")
+        return RATIO_LABELS.code_of(self.ratio_var.get(), "9:16")
 
     def _ratio_changed(self) -> None:
         ow, oh = RATIOS[self._ratio_key()][2]

@@ -223,7 +223,7 @@ GOALS = (
         "🔒",
         "Privacy",
         "Remove location and names, blur faces, bleep words",
-        ("Metadata Cleaner", "Privacy Blur", "The Muter", "Voice Changer"),
+        ("Metadata Cleaner", "Privacy Blur", "Text Blurrer", "The Muter", "Voice Changer"),
     ),
     Goal(
         "get",

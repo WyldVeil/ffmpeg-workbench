@@ -1,7 +1,7 @@
 # AGENTS.md: FFmpeg Workbench
 
 This is a guide for AI assistants and scripts. **FFmpeg Workbench** is a
-desktop video and audio editing suite with 83 tools. It ships its own FFmpeg 9,
+desktop video and audio editing suite with 84 tools. It ships its own FFmpeg 9,
 yt-dlp, whisper.cpp (offline speech-to-text) and Deno.
 
 Everything below runs from a terminal **without opening the window**. If a
@@ -95,6 +95,7 @@ On Windows the `ffw` part is the `ffw-cli.bat` in the install folder, and the
 | `logo` | Put a logo or watermark image on a video | `--logo FILE`, `--position tl\|tc\|tr\|ml\|c\|mr\|bl\|bc\|br`, `--size 15` (% of the width), `--opacity` | Image Watermark |
 | `collage` | Any number of clips on one screen, laid out automatically | `--size 1920x1080`, `--fill`, `--gap`, `--length longest\|shortest\|SECONDS`, `--no-loop`, `--end hold\|background\|reflow`, `--audio first\|mix\|none` | Video Collage |
 | `blur-region` | Blur, pixelate or black out part of the frame | `--region X,Y,W,H` (percentages, repeatable), `--type blur\|pixelate\|box`, `--from/--to` | Privacy Blur |
+| `blur-text` | Find the text laid over a video (names, handles, captions, logos) and blur it | `--find` (list it, numbered), `--pick 1,3`, `--include-uncertain`, `--type blur\|pixelate\|box`, `--margin` | Text Blurrer |
 | `denoise` | Reduce video noise or grain | `--method fast\|nlm\|temporal\|grain`, `--strength 1-10` | Denoise |
 | `sharpen` | Sharpen | `--method cas\|unsharp\|clarity`, `--amount 0-1` | Sharpen |
 | `deinterlace` | Remove comb lines from old or broadcast video | `--mode smart\|all\|double\|ivtc` | Deinterlace |
@@ -131,7 +132,7 @@ files you created. Never delete the person's own files.
 
 ## 5. Things the command line doesn't cover
 
-- The app has 83 tools. If a request needs one that isn't listed above, tell
+- The app has 84 tools. If a request needs one that isn't listed above, tell
   the person which tool to open from the sidebar. Some examples: Beat Sync
   Cutter, Smart Reframe, Green Screen Keyer, Colour Match, Speed Ramper (with
   speed curves), Deshaker, Animated Titles, Slideshow Maker, Karaoke Generator,

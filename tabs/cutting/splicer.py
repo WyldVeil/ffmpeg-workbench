@@ -99,7 +99,7 @@ class SplicerTab(BaseTab):
             tl_frame, on_change=self._on_timeline_change, height=90, show_handles=True
         )
         self._timeline.pack(fill="x")
-        self._tl_pos_var = tk.StringVar(value="Playhead: -")
+        self._tl_pos_var = tk.StringVar(value=t_or("splicer.sample.playhead", "Playhead: -"))
         tk.Label(
             tl_frame, textvariable=self._tl_pos_var, font=(MONO_FONT, 9), fg=CLR["fgdim"]
         ).pack(anchor="w", pady=px(4, 0))

@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import audio_replace as ar
 from core.ops.shared import strip_audio_cmd
 from core.scaling import px
@@ -22,11 +22,14 @@ from tabs import common
 from tabs.base_tab import BaseTab
 from tabs.widgets import FileRow, save_section, scroll_body
 
-MODES = {
-    "replace": "Replace the soundtrack",
-    "mix": "Mix with the original sound",
-    "strip": "Remove all sound",
-}
+MODES = Labels(
+    "replacer.modes",
+    {
+        "replace": "Replace the soundtrack",
+        "mix": "Mix with the original sound",
+        "strip": "Remove all sound",
+    },
+)
 
 
 class AudioReplacerTab(BaseTab):

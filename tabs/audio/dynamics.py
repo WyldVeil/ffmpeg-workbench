@@ -22,7 +22,7 @@ from functools import partial
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from core.i18n import t
+from core.i18n import t, t_or
 from core.ops import dynamics as dyn
 from core.ops.dynamics import VoicePreset
 from core.ops.shared import audio_filter_cmd
@@ -56,7 +56,7 @@ VOICE_PRESETS: dict[str, VoicePreset | None] = {
         eq=((80, -2), (300, -3), (2500, 3), (5000, 1), (10000, 0)),
         limit_thresh=-1,
     ),
-    "YouTube voiceover: punchy": VoicePreset(
+    t_or("dynamics.preset.youtube_voiceover_punchy", "YouTube voiceover: punchy"): VoicePreset(
         gate_thresh=-45,
         gate_ratio=6,
         comp_thresh=-15,
@@ -66,7 +66,7 @@ VOICE_PRESETS: dict[str, VoicePreset | None] = {
         eq=((80, 2), (300, -4), (2500, 4), (5000, 2), (10000, 1)),
         limit_thresh=-0.5,
     ),
-    "Music mastering: balanced": VoicePreset(
+    t_or("dynamics.preset.music_mastering_balanced", "Music mastering: balanced"): VoicePreset(
         gate_thresh=-60,
         gate_ratio=2,
         comp_thresh=-12,
@@ -76,7 +76,7 @@ VOICE_PRESETS: dict[str, VoicePreset | None] = {
         eq=((80, 0), (300, -1), (2500, 0), (5000, 1), (10000, 2)),
         limit_thresh=-0.1,
     ),
-    "De-harsh: reduce harshness": VoicePreset(
+    t_or("dynamics.preset.de_harsh_reduce_harshness", "De-harsh: reduce harshness"): VoicePreset(
         gate_thresh=-50,
         gate_ratio=2,
         comp_thresh=-20,

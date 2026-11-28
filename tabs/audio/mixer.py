@@ -23,7 +23,7 @@ from functools import partial
 from tkinter import messagebox, ttk
 from typing import Any
 
-from core.i18n import t
+from core.i18n import Labels, t
 from core.ops import mixer as mx
 from core.ops.shared import AUDIO_ONLY_EXTS
 from core.scaling import px
@@ -55,13 +55,16 @@ class MixOutput(StrEnum):
     FLAC = "flac"
 
 
-MIX_OUTPUTS = {
-    MixOutput.AAC_256: "AAC 256k  (keep video)",
-    MixOutput.AAC_320: "AAC 320k  (keep video)",
-    MixOutput.MP3: "MP3 320k  (audio only)",
-    MixOutput.WAV: "WAV  (audio only)",
-    MixOutput.FLAC: "FLAC  (audio only)",
-}
+MIX_OUTPUTS = Labels(
+    "mixer.mix_outputs",
+    {
+        MixOutput.AAC_256: "AAC 256k  (keep video)",
+        MixOutput.AAC_320: "AAC 320k  (keep video)",
+        MixOutput.MP3: "MP3 320k  (audio only)",
+        MixOutput.WAV: "WAV  (audio only)",
+        MixOutput.FLAC: "FLAC  (audio only)",
+    },
+)
 #: the outputs without the video -> their file extension
 AUDIO_ONLY = {MixOutput.MP3: ".mp3", MixOutput.WAV: ".wav", MixOutput.FLAC: ".flac"}
 

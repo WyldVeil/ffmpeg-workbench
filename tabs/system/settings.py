@@ -13,18 +13,21 @@ import tkinter as tk
 from tkinter import ttk
 
 from core import settings
-from core.i18n import t
+from core.i18n import Labels, t
 from core.scaling import px
 from core.settings import StartPage, load_settings, update
 from tabs.base_tab import CLR, UI_FONT, BaseTab, make_header
 from tabs.kit.widgets import ChoiceBox
 from tabs.widgets import FolderRow
 
-START_CHOICES: dict[StartPage, str] = {
-    StartPage.START: "Start - What do you want to do?",
-    StartPage.HOME: "Home - all tools",
-    StartPage.LAST: "The last tool I used",
-}
+START_CHOICES = Labels(
+    "settings.start_choices",
+    {
+        StartPage.START: "Start - What do you want to do?",
+        StartPage.HOME: "Home - all tools",
+        StartPage.LAST: "The last tool I used",
+    },
+)
 
 
 class SettingsTab(BaseTab):

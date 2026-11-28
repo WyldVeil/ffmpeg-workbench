@@ -17,29 +17,39 @@ from tkinter import messagebox, ttk
 
 from core import ffmpeg as ff
 from core import remux
-from core.i18n import t
+from core.i18n import Labels, t, t_or
 from core.scaling import px
 from tabs.base_tab import CLR, BaseTab
 from tabs.kit import dialogs
 from tabs.widgets import FileRow, SaveRow, output_box, scroll_body
 
-CONTAINERS = {
-    "mkv": "MKV - holds everything",
-    "mp4": "MP4 - plays everywhere",
-    "mov": "MOV - Apple / editing",
-    "webm": "WebM - web",
-}
-LANG_CHOICES = [f"{name} ({code})" if code else name for code, name in remux.LANGUAGES]
+CONTAINERS = Labels(
+    "tracks.containers",
+    {
+        "mkv": "MKV - holds everything",
+        "mp4": "MP4 - plays everywhere",
+        "mov": "MOV - Apple / editing",
+        "webm": "WebM - web",
+    },
+)
+
+
+def _not_set() -> str:
+    return t_or("tracks.not_set", "(not set)")
+
+
+def lang_choices() -> list[str]:
+    return [f"{name} ({code})" if code else _not_set() for code, name in remux.LANGUAGES]
 
 
 def lang_label(code: str) -> str:
     name = remux.LANGUAGE_NAMES.get(code)
-    return f"{name} ({code})" if name and code else (code or remux.LANGUAGE_NAMES[""])
+    return f"{name} ({code})" if name and code else (code or _not_set())
 
 
 def lang_code(text: str) -> str:
     text = text.strip()
-    if not text or text == remux.LANGUAGE_NAMES[""]:
+    if not text or text in (remux.LANGUAGE_NAMES[""], _not_set()):
         return ""
     if text.endswith(")") and "(" in text:
         return text[text.rindex("(") + 1 : -1].strip()
@@ -110,7 +120,7 @@ class TracksRemuxTab(BaseTab):
         ed.pack(fill="x", pady=px(8, 0))
         tk.Label(ed, text=t("common.language")).pack(side="left")
         self.lang_var = tk.StringVar()
-        lc = ttk.Combobox(ed, textvariable=self.lang_var, values=LANG_CHOICES, width=20)
+        lc = ttk.Combobox(ed, textvariable=self.lang_var, values=lang_choices(), width=20)
         lc.pack(side="left", padx=px(4, 12))
         lc.bind("<<ComboboxSelected>>", lambda _e: self._apply_edit())
         lc.bind("<FocusOut>", lambda _e: self._apply_edit())
@@ -267,7 +277,7 @@ class TracksRemuxTab(BaseTab):
         self._apply_edit()  # an edit not yet saved belongs to the previous track
         tr = self.plan.tracks[i]
         self._editing = True
-        self.lang_var.set(lang_label(tr.language) if tr.language else remux.LANGUAGE_NAMES[""])
+        self.lang_var.set(lang_label(tr.language) if tr.language else _not_set())
         self.title_var.set(tr.title)
         self.default_var.set(tr.default)
         self.forced_var.set(tr.forced)
