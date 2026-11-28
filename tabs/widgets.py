@@ -368,6 +368,11 @@ class FileRow(tk.Frame):
                 self.after_cancel(self._job)
         self._job = self.after(350, self._fire)
 
+    def flush(self) -> None:
+        """Tell *on_change* now, if it is still waiting for typing to pause."""
+        if self._job is not None:
+            self._fire()
+
     def _fire(self) -> None:
         if self._job is not None:
             with contextlib.suppress(tk.TclError):
@@ -396,6 +401,11 @@ class SaveRow(FileRow):
     ) -> None:
         self._ext, self._suggest = ext, suggest
         super().__init__(parent, label, var, kind=kind)
+
+    @property
+    def ext(self) -> str:
+        """The extension a name gets when it has none."""
+        return self._ext() if callable(self._ext) else self._ext
 
     def _button_text(self) -> str:
         return t_or("common.save_as", "Save as…")

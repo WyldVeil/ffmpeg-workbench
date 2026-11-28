@@ -77,3 +77,59 @@ def blur_graph(
         cur = f"[d{j}]"
     parts.append(f"{cur}null{out}")
     return ";".join(parts)
+
+
+@dataclass(frozen=True)
+class Cover:
+    """Something of the person's own laid over every hidden box: an *image*
+    (a logo) or a line of *text*, at most *fill* of the box, at *opacity*."""
+
+    image: str = ""
+    text: str = ""
+    fill: float = 0.85
+    opacity: float = 1.0
+
+    @property
+    def wanted(self) -> bool:
+        return bool(self.image or self.text.strip())
+
+
+def cover_graph(
+    regions: Sequence[Region], width: int, height: int, cover: Cover, src: str, out: str
+) -> str:
+    """filter_complex laying *cover* centred over each region while it shows
+    (after :func:`blur_graph`, so it sits on top of the blur)."""
+    from core import filters as fl
+
+    if not regions or not cover.wanted:
+        return f"{src}null{out}"
+    parts: list[str] = []
+    cur = src
+    fill = min(max(cover.fill, 0.2), 1.0)
+    if cover.image:
+        fade = f"colorchannelmixer=aa={cover.opacity:.2f}," if cover.opacity < 1 else ""
+        labels = "".join(f"[k{i}]" for i in range(len(regions)))
+        parts.append(
+            f"{fl.preview_movie(cover.image)}format=rgba,{fade}split={len(regions)}{labels}"
+        )
+    for i, r in enumerate(regions):
+        x, y, w, h = r.pixels(width, height)
+        if cover.image:
+            bw, bh = max(2, int(w * fill)), max(2, int(h * fill))
+            parts.append(f"[k{i}]scale={bw}:{bh}:force_original_aspect_ratio=decrease[s{i}]")
+            parts.append(
+                f"{cur}[s{i}]overlay=x={x}+({w}-overlay_w)/2:y={y}+({h}-overlay_h)/2"
+                f":shortest=1:enable='{r.enable()}'[w{i}]"
+            )
+        else:
+            text = cover.text.strip()
+            size = max(8, int(min(h * 0.7, w / (0.6 * max(1, len(text)))) * fill))
+            draw = fl.DrawText(
+                text=text, font="sans", fontsize=size, x=f"{x}+({w}-text_w)/2",
+                y=f"{y}+({h}-text_h)/2", alpha=f"{cover.opacity:.2f}", enable=r.enable(),
+                shadowx=max(1, size // 16), shadowy=max(1, size // 16),
+            )  # fmt: skip
+            parts.append(f"{cur}{draw.filter()}[w{i}]")
+        cur = f"[w{i}]"
+    parts.append(f"{cur}null{out}")
+    return ";".join(parts)

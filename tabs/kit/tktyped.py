@@ -12,7 +12,7 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
-from typing import Literal
+from typing import Literal, cast
 
 
 def linked_scrollbar(
@@ -92,3 +92,9 @@ def overlay(window: tk.Toplevel, alpha: float) -> None:
 def row_text(listbox: tk.Listbox, index: int) -> str:
     """The text of row *index* of *listbox*."""
     return str(listbox.get(index))  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType] - stub gap
+
+
+def raw_value(widget: tk.Misc, var: tk.Variable) -> object:
+    """*var*'s value as Tcl holds it (no conversion, so an empty number box
+    reads "" instead of raising)."""
+    return cast("object", widget.getvar(str(var)))  # pyright: ignore[reportUnknownMemberType] - stub gap

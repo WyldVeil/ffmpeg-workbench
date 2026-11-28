@@ -1,1285 +1,876 @@
 """
-tab_allinone.py  ─  All-in-One Pipeline Builder
+tabs/all_in_one.py - the All-in-One Builder: line up any tools, in any order,
+as many times as wanted, and render the lot in one go.
 
-Select a video, enable any combination of processing steps, and the
-tab assembles a single optimised FFmpeg command that does everything
-in one pass - no intermediate files, no quality loss from multiple
-re-encodes.
+"+ Add a step" lists every tool that works on one video (tabs/builder/catalog.py)
+and the builder's own "Quick adjustments".  Adding one opens that tool, whole,
+in a window over the builder (tabs/builder/step_mode.py): set it up as usual,
+then "Save and return".  A step's ⚙ opens it again; ↑ ↓ move it, ⧉ copies it
+and ✕ removes it.  A step after the first works on the video as the steps
+before it leave it - its window shows exactly that.
 
-The generated command is shown in a live-updating editable box at the
-bottom. You can tweak it by hand before rendering.
-
-Sections (all optional, all combinable):
-  ✂  Trim            - start/end timestamps
-  📐  Scale           - resolution + algorithm
-  🎬  Frame Rate      - target FPS
-  🔄  Rotate & Flip   - transpose / hflip / vflip
-  ⚡  Speed           - constant speed multiplier with audio pitch
-  🎨  Color & Image   - eq, hue, lift/gain
-  🌫  Denoise         - hqdn3d or nlmeans
-  🔪  Sharpen         - unsharp mask
-  🔊  Audio           - volume, normalise, fade in/out
-  💬  Text Overlay    - burned-in watermark / caption
-  🌅  Fade            - video and audio fade in/out
-  ⚙   Encode          - codec, CRF, preset, audio bitrate
+Rendering joins the steps into as few FFmpeg runs as it can (core/ops/chain.py)
+and says how many above the Render button; files passed between runs are
+lossless, so the picture is compressed once.  A step list can be saved as a
+recipe and used again, on this video or another.
 """
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
+import json
+import logging
 import os
-import shlex
+import shutil
+import threading
 import tkinter as tk
+import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import partial
-from tkinter import messagebox, ttk
-from typing import Any, cast
+from tkinter import messagebox
+from typing import Any
 
+from core import encoders, paths, tasks
 from core import ffmpeg as ff
-from core import tasks
-from core.i18n import Choices, t, t_or
-from core.ops import all_in_one as aio
+from core.i18n import t
+from core.ops import chain, chain_run
 from core.scaling import px
-from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
+from tabs.base_tab import CLR, UI_FONT, BaseTab, add_tooltip
+from tabs.builder import catalog
+from tabs.builder.step_mode import Captured, StepHost
 from tabs.kit import dialogs
-from tabs.kit.time_fields import RangePicker
-from tabs.kit.tktyped import linked_scrollbar, on_write
-from tabs.widgets import scroll_body
+from tabs.widgets import FileRow, output_section, scroll_body
 
-# ── Constants reused from other tabs ─────────────────────────────────────────
+logger = logging.getLogger("crossfader.builder")
 
-#: size presets: what the drop-down shows -> (width, height); None = type your own
-_RES_PRESETS: Choices[tuple[int, int] | None] = Choices(
-    "all_in_one.res_presets",
-    {
-        "7680x4320 (8K)": (7680, 4320),
-        "3840x2160 (4K UHD)": (3840, 2160),
-        "2560x1440 (QHD/2K)": (2560, 1440),
-        "1920x1080 (Full HD)": (1920, 1080),
-        "1280x720 (HD)": (1280, 720),
-        "854x480 (SD)": (854, 480),
-        "640x360 (360p)": (640, 360),
-        "Custom…": None,
-    },
-)
-_SCALE_ALGO = Choices(
-    "all_in_one.scale_algo",
-    {
-        "Lanczos (best downscale)": "lanczos",
-        "Lanczos4 (best upscale)": "lanczos",  # Changed from lanczos4 for compatibility
-        "Bicubic": "bicubic",
-        "Bilinear (fastest)": "bilinear",
-        "Nearest (pixel art)": "neighbor",
-    },
-)
-
-# Updated to a dictionary to translate friendly UI names to FFmpeg identifiers
-_VCODECS = Choices(
-    "all_in_one.vcodecs",
-    {
-        "H.264 (CPU)": "libx264",
-        "H.265 / HEVC (CPU)": "libx265",
-        "H.264 (Nvidia HW)": "h264_nvenc",
-        "H.265 / HEVC (Nvidia HW)": "hevc_nvenc",
-        "H.264 (AMD HW)": "h264_amf",
-        "H.265 / HEVC (AMD HW)": "hevc_amf",
-        "H.264 (Intel HW)": "h264_qsv",
-        "H.265 / HEVC (Intel HW)": "hevc_qsv",
-        "H.264 (best GPU available)": "auto_h264",
-        "H.265 / HEVC (best GPU available)": "auto_hevc",
-        "AV1 (CPU, smallest files)": "libsvtav1",
-        "VP9 (CPU)": "libvpx-vp9",
-        "ProRes (CPU)": "prores_ks",
-        "Copy (No re-encode)": "copy",
-    },
-)
-
-_ACODECS = ["aac", "libmp3lame", "libopus", "libvorbis", "copy", "none"]
-_PRESETS = [
-    "ultrafast",
-    "superfast",
-    "veryfast",
-    "faster",
-    "fast",
-    "medium",
-    "slow",
-    "slower",
-    "veryslow",
-]
-_ABITRATES = ["96k", "128k", "192k", "256k", "320k"]
-_FPS_VALS = ["23.976", "24", "25", "29.97", "30", "48", "50", "59.94", "60", "120"]
-
-_TEXT_POSITIONS = Choices(
-    "all_in_one.text_positions",
-    {  # (x, y) drawtext expressions; margins scale with the frame
-        "Bottom Centre": ("(w-text_w)/2", "h-text_h-h*0.04"),
-        "Top Centre": ("(w-text_w)/2", "h*0.04"),
-        "Bottom Left": ("w*0.03", "h-text_h-h*0.04"),
-        "Bottom Right": ("w-text_w-w*0.03", "h-text_h-h*0.04"),
-        "Centre": ("(w-text_w)/2", "(h-text_h)/2"),
-        "Top Left": ("w*0.03", "h*0.04"),
-        "Top Right": ("w-text_w-w*0.03", "h*0.04"),
-    },
-)
+RECIPE_VERSION = 1
+PREVIEW_ENCODE = chain.Encode(tuple(chain.PREVIEW))
+#: Filters too ordinary to describe a step by.
+_PLAIN = frozenset({"null", "anull", "setsar", "format", "setpts", "asetpts", "split", "asplit"})
 
 
-def _num(var: tk.StringVar, default: float) -> float:
-    try:
-        return float(var.get())
-    except ValueError:
-        return default
+@dataclass(eq=False)
+class Step:
+    """One step of the list."""
 
+    kind: str
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
+    host: StepHost | None = None
+    cmds: list[list[str]] | None = None  # the tool's commands, as a template
+    run: Any = None  # or its Python job
+    out_ext: str = ".mp4"
+    in_path: str = ""  # the file it was set up on
+    out_path: str = ""  # where its Python job writes
+    state: dict[str, Any] = field(default_factory=dict[str, Any])
+    sig: str = ""  # the steps before it when it was set up
+    check: bool = False  # an earlier step changed since
+    stale: bool = False  # set up on another video (or loaded): capture again before rendering
+    problem: str = ""
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Small UI helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _lbl(parent: tk.Misc, text: str, bold: bool = False, dim: bool = False) -> tk.Label:
-    fg = CLR["fgdim"] if dim else CLR["fg"]
-    font = (UI_FONT, 9, "bold") if bold else (UI_FONT, 9)
-    return tk.Label(parent, text=text, bg=CLR["bg"], fg=fg, font=font)
-
-
-def _entry(parent: tk.Misc, var: tk.StringVar, width: int = 10) -> tk.Entry:
-    return tk.Entry(
-        parent,
-        textvariable=var,
-        width=width,
-        bg=CLR["panel"],
-        fg=CLR["fg"],
-        insertbackground=CLR["fg"],
-        relief="flat",
-        bd=px(4),
-    )
-
-
-def _combo(
-    parent: tk.Misc, var: tk.StringVar, values: list[str], width: int = 18, state: str = "readonly"
-) -> ttk.Combobox:
-    cb = ttk.Combobox(parent, textvariable=var, values=values, state=state, width=width)
-    return cb
-
-
-def _spin(
-    parent: tk.Misc, var: tk.StringVar, from_: float, to: float, inc: float = 0.5, width: int = 7
-) -> tk.Spinbox:
-    return tk.Spinbox(
-        parent,
-        from_=from_,
-        to=to,
-        increment=inc,
-        textvariable=var,
-        width=width,
-        bg=CLR["panel"],
-        fg=CLR["fg"],
-        buttonbackground=CLR["panel"],
-        insertbackground=CLR["fg"],
-        relief="flat",
-    )
-
-
-def _line(parent: tk.Misc, pady: int = 3) -> tk.Frame:
-    """A strip for controls laid out like a sentence ("Width [ ] Height [ ]")."""
-    f = tk.Frame(parent, bg=CLR["bg"])
-    f.pack(fill="x", pady=px(pady))
-    return f
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Section container
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class _Section(tk.Frame):
-    """
-    A collapsible section with a checkbox header.
-    When the checkbox is off all interior widgets are disabled (greyed out).
-    Calls *on_toggle* whenever the enabled state changes.
-    """
-
-    def __init__(
-        self, parent: tk.Misc, title: str, on_toggle: Callable[[], object], **kw: Any
-    ) -> None:
-        super().__init__(parent, bg=CLR["bg"], **kw)
-        self.enabled = tk.BooleanVar(value=False)
-        self._cb = on_toggle
-
-        # ── Header row ────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=CLR["panel"])
-        hdr.pack(fill="x")
-        tk.Checkbutton(
-            hdr,
-            text=title,
-            variable=self.enabled,
-            font=(UI_FONT, 10, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            selectcolor=CLR.get("sb_active", "#333333"),
-            activebackground=CLR["panel"],
-            command=self._toggled,
-        ).pack(side="left", padx=px(10), pady=px(6))
-
-        # ── Body ──────────────────────────────────────────────────────────
-        self.body = tk.Frame(self, bg=CLR["bg"], padx=px(16), pady=px(6))
-        self.body.pack(fill="x")
-        self._set_body_state("disabled")
-
-    def get(self) -> bool:
-        return self.enabled.get()
-
-    def _toggled(self) -> None:
-        self._set_body_state("normal" if self.enabled.get() else "disabled")
-        self._cb()
-
-    def set_enabled(self, on: bool) -> None:
-        """Tick (or untick) the section without notifying anyone."""
-        self.enabled.set(on)
-        self._set_body_state("normal" if on else "disabled")
-
-    def _set_body_state(self, state: str) -> None:
-        fg = CLR["fg"] if state == "normal" else CLR["fgdim"]
-        self._walk(self.body, state, fg)
-
-    def _walk(self, widget: tk.Misc, state: str, fg: str) -> None:
-        cls = widget.winfo_class()
-        try:
-            if cls in ("Entry", "Spinbox", "Button", "Checkbutton", "Radiobutton"):
-                widget["state"] = state
-            if cls in ("Label",):
-                widget["fg"] = fg
-            if cls == "TCombobox":
-                widget["state"] = "readonly" if state == "normal" else "disabled"
-        except tk.TclError:
-            pass
-        for child in widget.winfo_children():
-            self._walk(child, state, fg)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main tab
-# ─────────────────────────────────────────────────────────────────────────────
+    @property
+    def ready(self) -> bool:
+        return (self.cmds is not None or self.run is not None) and not self.stale
 
 
 class AllInOneTab(BaseTab):
-    """Pipeline builder - combine any processing steps into one FFmpeg pass."""
+    accepted_kinds = ("video",)
 
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
-        self._probed_path: str | None = None
-        self._duration = 0.0  # loaded video duration - needed for fade-out math
-        self._last_cmd: list[str] = []  # most recently built command list
+        self.steps: list[Step] = []
+        self.workdir = paths.temp_dir("builder_")
+        self._previews: dict[str, str] = {}  # signature of the steps before -> preview video
+        self._info: ff.MediaInfo | None = None
+        self._busy = False  # a step window is open, or a preview is being made
         self._build_ui()
+        self._refresh()
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  Top-level layout
-    # ─────────────────────────────────────────────────────────────────────
-
+    # ── Building ──────────────────────────────────────────────────────
     def _build_ui(self) -> None:
-        # ── Fixed header ──────────────────────────────────────────────────
-        make_header(self, t("tab.all_in_one"), t("all_in_one.subtitle"), icon="🎛")
-
-        # ── Source / output (always visible, above scroll) ─────────────────
-        io_frame = tk.Frame(self, bg=CLR["bg"], padx=px(12), pady=px(8))
-        io_frame.pack(fill="x")
-        self._build_io(io_frame)
-
-        # ── Scrollable section area ────────────────────────────────────────
-        self._scroll_inner = scroll_body(self)
-
-        self._build_sections(self._scroll_inner)
-
-        # ── Fixed bottom: command display + render ─────────────────────────
-        self._build_bottom()
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Source / Output
-    # ─────────────────────────────────────────────────────────────────────
-
-    def _build_io(self, parent: tk.Misc) -> None:
-        self._src_var = tk.StringVar()
-        self._out_var = tk.StringVar()
-
-        r1 = _line(parent, pady=2)
-        _lbl(r1, t("common.source_video"), bold=True).pack(side="left")
-        _entry(r1, self._src_var, width=62).pack(side="left", padx=px(8))
-        tk.Button(
-            r1, text=t("btn.browse"), command=self._browse_src, bg=CLR["panel"], fg=CLR["fg"]
-        ).pack(side="left")
-        self._dur_lbl = tk.Label(r1, text="", bg=CLR["bg"], fg=CLR["accent"], font=(MONO_FONT, 9))
-        self._dur_lbl.pack(side="left", padx=px(10))
-
-        self._src_job: str | None = None
-        on_write(self._src_var, lambda: self._src_typed())
-
-        r2 = _line(parent, pady=2)
-        _lbl(r2, t("common.output_file"), bold=True).pack(side="left")
-        _entry(r2, self._out_var, width=62).pack(side="left", padx=px(8))
-        tk.Button(
-            r2, text=t("common.save_as"), command=self._browse_out, bg=CLR["panel"], fg=CLR["fg"]
-        ).pack(side="left")
-
-    def _browse_src(self) -> None:
-        p = dialogs.askopenfilename(
-            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"), ("All", "*.*")]
+        self.make_header(self, t("tab.all_in_one"), t("builder.subtitle"), icon="🎛")
+        body = scroll_body(self)
+        self.src_row = FileRow(
+            body, t("common.source_video"), kind="video", on_change=self._source_changed
         )
-        if not p:
+        self.src_row.pack(fill="x", padx=px(20), pady=px(10, 4))
+        box = tk.LabelFrame(body, text=f"  {t('builder.steps')}  ", padx=px(12), pady=px(8))
+        box.pack(fill="x", padx=px(20), pady=px(6))
+        self.rows = tk.Frame(box)
+        self.rows.pack(fill="x")
+        self.empty = tk.Label(
+            box, text=t("builder.empty"), fg=CLR["fgdim"], justify="left", anchor="w"
+        )
+        controls = tk.Frame(box)
+        controls.pack(fill="x", pady=px(8, 0))
+        self.add_btn = tk.Menubutton(
+            controls, text="＋ " + t("builder.add_step"), font=(UI_FONT, 10, "bold"), bg=CLR["accent"],
+            fg="white", activebackground=CLR["accent"], activeforeground="white", relief="flat",
+            padx=px(12), pady=px(4), cursor="hand2",
+        )  # fmt: skip
+        self.add_btn.pack(side="left")
+        self.add_btn.configure(menu=self._add_menu(self.add_btn))
+        for text, cmd in (
+            (t("builder.open_recipe"), self._open_recipe),
+            (t("builder.save_recipe"), self._save_recipe),
+        ):
+            tk.Button(controls, text=text, relief="flat", cursor="hand2", command=cmd).pack(
+                side="right", padx=px(4, 0)
+            )
+        self.plan_lbl = tk.Label(body, text="", anchor="w", justify="left", font=(UI_FONT, 9))
+        self.plan_lbl.pack(fill="x", padx=px(22), pady=px(2))
+        self.plan_lbl.bind(
+            "<Configure>", lambda e: self.plan_lbl.config(wraplength=max(200, e.width - 10))
+        )
+        self.encoder, self.out_row = output_section(
+            body, t("common.output_file"), ("h264", "hevc", "av1", "vp9", "prores"),
+            ext=self._out_ext, suggest=self._suggest,
+        )  # fmt: skip
+        self.format_note = tk.Label(
+            self.out_row.master, text="", fg=CLR["fgdim"], anchor="w", justify="left"
+        )
+        self.btn_render = self.make_render_btn(body, t("builder.render"), self._render, width=22)
+        self.btn_render.pack(pady=px(8))
+        show = tk.Frame(body)
+        show.pack(fill="x", padx=px(20))
+        self.cmd_btn = tk.Button(
+            show, text=t("builder.show_commands"), relief="flat", command=self._toggle_commands
+        )
+        self.cmd_btn.pack(side="left")
+        self.cmd_box = tk.Frame(body)  # shown on request
+        self.cmd_text = self.make_console_block(self.cmd_box, height=8, padx=0)
+        self.cmd_text.config(wrap="word")
+        self.console = self.make_console_block(body, height=5)
+
+    def _add_menu(self, parent: tk.Misc) -> tk.Menu:
+        menu = tk.Menu(parent, tearoff=False)
+        menu.add_command(
+            label=f"{catalog.icon(catalog.QUICK)}  {catalog.name(catalog.QUICK)}",
+            command=partial(self._add, catalog.QUICK),
+        )
+        menu.add_separator()
+        for heading, kinds in catalog.menu():
+            sub = tk.Menu(menu, tearoff=False)
+            for kind in kinds:
+                sub.add_command(
+                    label=f"{catalog.icon(kind)}  {catalog.name(kind)}",
+                    command=partial(self._add, kind),
+                )
+            menu.add_cascade(label=heading, menu=sub)
+        return menu
+
+    # ── The source ────────────────────────────────────────────────────
+    def load_file(self, path: str) -> bool:
+        if dialogs.kind_of(path) != "video":
+            return False
+        self.src_row.set(path)
+        self._source_changed(path)
+        return True
+
+    @property
+    def src(self) -> str:
+        return self.src_row.path
+
+    def _source_changed(self, path: str) -> None:
+        self._info = ff.try_probe(path) if path else None
+        if self.steps:
+            for s in self.steps:
+                s.stale = True
+                if catalog.one_video(s.kind):
+                    s.problem = t("builder.set_up_again")
+            self.log(self.console, t("builder.new_video"))
+        self.out_row.set(self._suggest())
+        self._refresh()
+
+    def _suggest(self) -> str:
+        return self.suggest_output(self.src, "edited", self._out_ext()) if self.src else ""
+
+    def _out_ext(self) -> str:
+        last = self.steps[-1] if self.steps else None
+        if last is not None and self._decides(last):
+            return last.out_ext
+        return (
+            ".mov"
+            if self.encoder.codec == "prores"
+            else (".webm" if self.encoder.codec == "vp9" else ".mp4")
+        )
+
+    @staticmethod
+    def _decides(step: Step) -> bool:
+        return catalog.own_format(step.kind) or step.out_ext.lower() not in chain.VIDEO_EXTS
+
+    # ── Signatures: what a step's input is made of ────────────────────
+    def _sig(self, index: int) -> str:
+        h = hashlib.sha1(self.src.encode())
+        for s in self.steps[:index]:
+            h.update(
+                json.dumps(s.cmds).encode()
+                if s.cmds is not None
+                else f"{s.kind}:{s.uid}:{s.state}".encode()
+            )
+        return h.hexdigest()[:12]
+
+    def _flag_later(self) -> None:
+        """Steps whose input changed since they were set up: positions and times
+        may need a look (and a Python job must be captured again)."""
+        for i, s in enumerate(self.steps):
+            if s.sig and s.sig != self._sig(i):
+                if catalog.placed(s.kind):
+                    s.check = True
+                if s.run is not None:
+                    s.stale = True
+
+    # ── Adding and editing ────────────────────────────────────────────
+    def _add(self, kind: str) -> None:
+        if not self._can_edit():
             return
-        self._src_var.set(p)
-        base = os.path.splitext(p)[0]
-        if not self._out_var.get():
-            self._out_var.set(base + "_pipeline.mp4")
-        # Load duration in background
-        tasks.submit(partial(self._load_duration, p))
-        self._rebuild_cmd()
+        step = Step(kind)
+        self._open_step(step, len(self.steps), new=True)
 
-    def _src_typed(self) -> None:
-        """Typed / pasted / dropped paths are probed too (debounced)."""
-        if self._src_job is not None:
-            self.after_cancel(self._src_job)
+    def _can_edit(self) -> bool:
+        if self._busy:
+            return False
+        if not self.src or not os.path.isfile(self.src):
+            messagebox.showinfo(t("tab.all_in_one"), t("builder.choose_video_first"), parent=self)
+            return False
+        return True
 
-        def go() -> None:
-            self._src_job = None
-            p = self._src_var.get().strip()
-            if p and os.path.isfile(p) and p != self._probed_path:
-                self._probed_path = p
-                if not self._out_var.get():
-                    self._out_var.set(self.suggest_output(p, "pipeline"))
-                tasks.submit(partial(self._load_duration, p))
+    def _settings(self, step: Step) -> None:
+        if self._can_edit():
+            self._open_step(step, self.steps.index(step), new=False)
 
-        self._src_job = self.after(400, go)
+    def _open_step(self, step: Step, index: int, *, new: bool) -> None:
+        """Show *step*'s tool, on the video as the steps before it leave it."""
+        self._busy = True
 
-    def _load_duration(self, path: str) -> None:
-        from core import ffmpeg as _ff
+        def show(path: str) -> None:
+            host = step.host
+            if host is None:
+                host = step.host = StepHost(self, step.kind, self.workdir, step.uid)
+            if host.input != path:
+                host.load(
+                    path,
+                    lambda: (step.state and host.restore(step.state), self._show(step, index, new)),
+                )
+            else:
+                self._show(step, index, new)
 
-        info = _ff.try_probe(path)
-        dur = info.duration if info else 0.0
-        self._duration = dur
-        self._sample_rate = (
-            info.require_audio().sample_rate if info is not None and info.audio else 0
-        )
-        self.after(0, lambda: self._dur_lbl.config(text=f"{dur:.2f}s" if dur else ""))
-        self.after(0, self._rebuild_cmd)
+        self._input_for(index, step, show, lambda: setattr(self, "_busy", False))
 
-    def _browse_out(self) -> None:
-        p = dialogs.asksaveasfilename(
-            defaultextension=".mp4",
-            filetypes=[("MP4", "*.mp4"), ("MKV", "*.mkv"), ("MOV", "*.mov"), ("All", "*.*")],
-        )
-        if p:
-            self._out_var.set(p)
-            self._rebuild_cmd()
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Sections
-    # ─────────────────────────────────────────────────────────────────────
-
-    def _build_sections(self, parent: tk.Misc) -> None:
-        """Build all optional processing sections inside the scrollable area."""
-
-        def sep() -> None:
-            tk.Frame(parent, bg=CLR["panel"], height=px(2)).pack(fill="x", pady=px(2))
-
-        self._build_trim(parent)
-        sep()
-        self._build_scale(parent)
-        sep()
-        self._build_fps(parent)
-        sep()
-        self._build_rotate(parent)
-        sep()
-        self._build_speed(parent)
-        sep()
-        self._build_color(parent)
-        sep()
-        self._build_denoise(parent)
-        sep()
-        self._build_sharpen(parent)
-        sep()
-        self._build_audio(parent)
-        sep()
-        self._build_text(parent)
-        sep()
-        self._build_fade(parent)
-        sep()
-        self._build_encode(parent)
-
-    # ── ✂ Trim ────────────────────────────────────────────────────────────
-
-    def _build_trim(self, parent: tk.Misc) -> None:
-        self._sec_trim = _Section(parent, t("all_in_one.trim"), self._rebuild_cmd)
-        self._sec_trim.pack(fill="x", pady=px(1))
-        b = self._sec_trim.body
-
-        r = _line(b)
-        _lbl(r, t("frame_extractor.from")).pack(side="left")
-        trim = RangePicker(
-            r,
-            start="0.0",
-            end_hint=t_or(
-                "hint.blank_to_the_end_of_the_video", "(blank = to the end of the video)"
-            ),
-            source=self._source,
-            on_change=self._rebuild_cmd,
-        )
-        trim.pack(side="left", padx=px(6))
-        self._trim_range = trim
-
-    # ── 📐 Scale ──────────────────────────────────────────────────────────
-
-    def _build_scale(self, parent: tk.Misc) -> None:
-        self._sec_scale = _Section(parent, t("all_in_one.scale_resolution"), self._rebuild_cmd)
-        self._sec_scale.pack(fill="x", pady=px(1))
-        b = self._sec_scale.body
-
-        self._scale_preset = tk.StringVar(value=_RES_PRESETS.label("1920x1080 (Full HD)"))
-        self._scale_w = tk.StringVar(value="1920")
-        self._scale_h = tk.StringVar(value="1080")
-        self._scale_algo = tk.StringVar(value=next(iter(_SCALE_ALGO.keys())))
-        self._scale_pad = tk.BooleanVar(value=False)
-
-        for v in (self._scale_preset, self._scale_w, self._scale_h, self._scale_algo):
-            on_write(v, lambda: self._rebuild_cmd())
-        on_write(self._scale_pad, lambda: self._rebuild_cmd())
-
-        r1 = _line(b)
-        _lbl(r1, t("common.preset")).pack(side="left")
-        cb = _combo(r1, self._scale_preset, list(_RES_PRESETS), width=24)
-        cb.pack(side="left", padx=px(6))
-        cb.bind("<<ComboboxSelected>>", self._on_res_preset)
-        _lbl(r1, "  W:").pack(side="left")
-        self._scale_w_entry = _entry(r1, self._scale_w, 6)
-        self._scale_w_entry.pack(side="left", padx=px(3))
-        _lbl(r1, "H:").pack(side="left")
-        self._scale_h_entry = _entry(r1, self._scale_h, 6)
-        self._scale_h_entry.pack(side="left", padx=px(3))
-        _lbl(r1, t("all_in_one.1_auto_aspect"), dim=True).pack(side="left", padx=px(6))
-
-        r2 = _line(b)
-        _lbl(r2, t("loudness.algorithm_label")).pack(side="left")
-        _combo(r2, self._scale_algo, list(_SCALE_ALGO.keys()), width=26).pack(
-            side="left", padx=px(6)
-        )
-        tk.Checkbutton(
-            r2,
-            text=t("all_in_one.pad_to_exact_size_adds_black_bars"),
-            variable=self._scale_pad,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left", padx=px(10))
-
-    def _on_res_preset(self, *_: object) -> None:
-        size = _RES_PRESETS.get(self._scale_preset.get())
-        if size is not None:
-            self._scale_w.set(str(size[0]))
-            self._scale_h.set(str(size[1]))
-        self._rebuild_cmd()
-
-    # ── 🎬 Frame Rate ─────────────────────────────────────────────────────
-
-    def _build_fps(self, parent: tk.Misc) -> None:
-        self._sec_fps = _Section(parent, t("all_in_one.frame_rate"), self._rebuild_cmd)
-        self._sec_fps.pack(fill="x", pady=px(1))
-        b = self._sec_fps.body
-
-        self._fps_val = tk.StringVar(value="30")
-        on_write(self._fps_val, lambda: self._rebuild_cmd())
-
-        r = _line(b)
-        _lbl(r, t("fps.target_fps_label")).pack(side="left")
-        cb = _combo(r, self._fps_val, _FPS_VALS, width=8, state="normal")
-        cb.pack(side="left", padx=px(6))
-        _lbl(r, t("all_in_one.or_type_any_value"), dim=True).pack(side="left", padx=px(4))
-
-    # ── 🔄 Rotate & Flip ─────────────────────────────────────────────────
-
-    def _build_rotate(self, parent: tk.Misc) -> None:
-        self._sec_rotate = _Section(parent, t("all_in_one.rotate_flip"), self._rebuild_cmd)
-        self._sec_rotate.pack(fill="x", pady=px(1))
-        b = self._sec_rotate.body
-
-        self._rotate_val = tk.StringVar(value="0")
-        self._flip_h = tk.BooleanVar(value=False)
-        self._flip_v = tk.BooleanVar(value=False)
-
-        for v in (self._rotate_val, self._flip_h, self._flip_v):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r = _line(b)
-        _lbl(r, t("all_in_one.rotation")).pack(side="left")
-        for val, label in [("0", "None"), ("90", "90° CW"), ("180", "180°"), ("270", "90° CCW")]:
-            tk.Radiobutton(
-                r,
-                text=label,
-                variable=self._rotate_val,
-                value=val,
-                bg=CLR["bg"],
-                fg=CLR["fg"],
-                selectcolor=CLR["panel"],
-                activebackground=CLR["bg"],
-                command=self._rebuild_cmd,
-            ).pack(side="left", padx=px(8))
-
-        r2 = _line(b)
-        tk.Checkbutton(
-            r2,
-            text=t("all_in_one.flip_horizontal_mirror"),
-            variable=self._flip_h,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left", padx=px(4))
-        tk.Checkbutton(
-            r2,
-            text=t("all_in_one.flip_vertical"),
-            variable=self._flip_v,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left", padx=px(20))
-
-    # ── ⚡ Speed ──────────────────────────────────────────────────────────
-
-    def _build_speed(self, parent: tk.Misc) -> None:
-        self._sec_speed = _Section(parent, t("all_in_one.speed"), self._rebuild_cmd)
-        self._sec_speed.pack(fill="x", pady=px(1))
-        b = self._sec_speed.body
-
-        self._speed_val = tk.StringVar(value="2.0")
-        self._speed_pitch = tk.BooleanVar(value=True)
-        for v in (self._speed_val, self._speed_pitch):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r = _line(b)
-        _lbl(r, t("speed_ramp.speed_multiplier_label")).pack(side="left")
-        _spin(r, self._speed_val, 0.05, 16, 0.25, width=6).pack(side="left", padx=px(6))
-        _lbl(r, t("all_in_one.0_5_half_speed_2_0_double"), dim=True).pack(side="left", padx=px(6))
-
-        r2 = _line(b)
-        tk.Checkbutton(
-            r2,
-            text=t("all_in_one.preserve_audio_pitch_atempo"),
-            variable=self._speed_pitch,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left", padx=px(4))
-        _lbl(r2, t("all_in_one.when_off_audio_speeds_up_slows_down"), dim=True).pack(
-            side="left", padx=px(6)
+    def _show(self, step: Step, index: int, new: bool) -> None:
+        host = step.host
+        assert host is not None
+        title = t("builder.step_title", n=index + 1, tool=catalog.name(step.kind))
+        banner = t("builder.banner_first") if index == 0 else t("builder.banner_later", n=index)
+        host.show(
+            title,
+            f"{catalog.icon(step.kind)}  {title}\n{banner}",
+            on_save=partial(self._save_step, step, index, new),
+            on_close=partial(self._close_step, step, new),
         )
 
-    # ── 🎨 Color & Image ──────────────────────────────────────────────────
+    def _save_step(self, step: Step, index: int, new: bool) -> None:
+        host = step.host
+        assert host is not None
+        host.busy(True)
 
-    def _slider_moved(self, var: tk.StringVar, value: str) -> None:
-        var.set(f"{float(value):.2f}")
-        self._rebuild_cmd()
+        def captured(found: Captured | None, said: str) -> None:
+            host.busy(False)
+            if found is None:
+                if not said:
+                    messagebox.showwarning(
+                        t("tab.all_in_one"), t("builder.nothing_to_do"), parent=host.win
+                    )
+                return
+            self._take(step, index, found)
+            host.hide()
+            if new:
+                self.steps.insert(index, step)
+            self._busy = False
+            self._flag_later()
+            self._refresh()
 
-    def _build_color(self, parent: tk.Misc) -> None:
-        self._sec_color = _Section(parent, t("all_in_one.color_image"), self._rebuild_cmd)
-        self._sec_color.pack(fill="x", pady=px(1))
-        b = self._sec_color.body
+        host.capture(captured)
 
-        def _sv(default: str) -> tk.StringVar:
-            v = tk.StringVar(value=str(default))
-            on_write(v, lambda: self._rebuild_cmd())
-            return v
+    def _take(self, step: Step, index: int, found: Captured) -> None:
+        host = step.host
+        assert host is not None
+        step.in_path = host.input
+        step.out_path = found.output
+        step.out_ext = os.path.splitext(found.output)[1].lower() or ".mp4"
+        if found.cmds is not None:
+            step.cmds, step.run = chain.templated(found.cmds, host.input, found.output), None
+        else:
+            step.cmds, step.run = None, found.run
+        step.state = host.snapshot()
+        step.sig = self._sig(index)
+        step.check = step.stale = False
+        step.problem = ""
 
-        self._bri = _sv("0.00")
-        self._con = _sv("1.00")
-        self._sat = _sv("1.00")
-        self._gam = _sv("1.00")
-        self._hue = _sv("0")
+    def _close_step(self, step: Step, new: bool) -> None:
+        host = step.host
+        if host is not None:
+            if new:
+                host.destroy()
+                step.host = None
+            else:
+                host.hide()
+        self._busy = False
 
-        sliders = [
-            ("Brightness:", self._bri, -1.0, 1.0, 0.05),
-            ("Contrast:", self._con, 0.1, 3.0, 0.05),
-            ("Saturation:", self._sat, 0.0, 3.0, 0.05),
-            ("Gamma:", self._gam, 0.1, 5.0, 0.05),
-            ("Hue shift°:", self._hue, -180, 180, 5.0),
+    # ── The video a step works on ─────────────────────────────────────
+    def _input_for(
+        self, index: int, step: Step, then: Callable[[str], object], failed: Callable[[], object]
+    ) -> None:
+        """The file step *index* reads: the video itself for the first step, else
+        a preview made of the steps before it (kept, and linked as the step's own
+        input so its Python job can be pointed at the real thing later)."""
+        if index == 0:
+            then(self.src)
+            return
+        sig = self._sig(index)
+        before = self.steps[:index]
+        ext = before[-1].out_ext if self._decides(before[-1]) else ".mkv"
+        mine = os.path.join(self.workdir, f"{step.uid}-in{ext}")
+
+        def link(preview: str) -> None:
+            with contextlib.suppress(OSError):
+                os.remove(mine)
+            try:
+                os.link(preview, mine)
+            except OSError:
+                shutil.copyfile(preview, mine)
+            then(mine)
+
+        have = self._previews.get(sig)
+        if have and os.path.exists(have):
+            link(have)
+            return
+        out = os.path.join(self.workdir, f"preview-{sig}{ext}")
+        self._make_preview(
+            before, out, index, lambda: (self._previews.__setitem__(sig, out), link(out)), failed
+        )
+
+    def _make_preview(
+        self,
+        before: list[Step],
+        out: str,
+        index: int,
+        done: Callable[[], object],
+        failed: Callable[[], object],
+    ) -> None:
+        stale = [i for i, s in enumerate(before) if not s.ready]
+        if stale:
+            self._recapture(
+                stale, lambda: self._make_preview(before, out, index, done, failed), failed
+            )
+            return
+        win = _Progress(self, t("builder.preparing", n=index + 1))
+        src, has_audio = self.src, bool(self._info and self._info.has_audio)
+        duration = self._info.duration if self._info else None
+
+        def plan(alone: set[int]) -> list[chain.Pass]:
+            return self._plan(before, src, out, PREVIEW_ENCODE, has_audio, alone)
+
+        def work() -> int:
+            ctx = chain_run.LocalContext(win.fraction, win.cancelled)
+            try:
+                return chain_run.execute(
+                    plan, ctx, src=src, final=PREVIEW_ENCODE, duration=duration
+                )
+            finally:
+                ctx.cleanup()
+
+        def finished(rc: int) -> None:
+            win.close()
+            if rc == 0 and os.path.exists(out):
+                done()
+            else:
+                failed()
+
+        def broke(exc: BaseException) -> None:
+            win.close()
+            if not isinstance(exc, ff.CancelledError):
+                messagebox.showerror(
+                    t("tab.all_in_one"),
+                    t("builder.preview_failed", error=str(exc)[-600:]),
+                    parent=self,
+                )
+            failed()
+
+        tasks.submit(work, on_done=finished, on_error=broke, name="builder preview")
+
+    def _plan(
+        self,
+        steps: list[Step],
+        src: str,
+        out: str,
+        encode: chain.Encode,
+        has_audio: bool,
+        alone: set[int],
+    ) -> list[chain.Pass]:
+        plan_steps = [
+            chain.Step(
+                catalog.name(s.kind),
+                s.cmds,
+                run=s.run,
+                out_ext=s.out_ext,
+                in_path=s.in_path,
+                out_path=s.out_path,
+                alone=i in alone,
+                own_format=catalog.own_format(s.kind),
+            )
+            for i, s in enumerate(steps)
         ]
-        for label, var, lo, hi, inc in sliders:
-            r = _line(b, pady=2)
-            _lbl(r, label, bold=True).pack(side="left")
-            sc = tk.Scale(
-                r,
-                variable=cast("tk.DoubleVar", var),  # Tk keeps the number as text either way
-                from_=lo,
-                to=hi,
-                resolution=inc,
-                orient="horizontal",
-                length=px(280),
-                bg=CLR["bg"],
-                fg=CLR["fg"],
-                highlightthickness=0,
-                command=partial(self._slider_moved, var),
-            )
-            sc.pack(side="left", padx=px(6))
-            _lbl(r, "", dim=True).pack(side="left")  # spacer
-
-        r5 = _line(b, pady=2)
-        tk.Button(
-            r5,
-            text=t("all_in_one.reset_all_to_defaults"),
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            command=self._reset_color,
-        ).pack(side="left")
-
-    def _reset_color(self) -> None:
-        self._bri.set("0.00")
-        self._con.set("1.00")
-        self._sat.set("1.00")
-        self._gam.set("1.00")
-        self._hue.set("0")
-        self._rebuild_cmd()
-
-    # ── 🌫 Denoise ────────────────────────────────────────────────────────
-
-    def _build_denoise(self, parent: tk.Misc) -> None:
-        self._sec_denoise = _Section(parent, t("all_in_one.denoise"), self._rebuild_cmd)
-        self._sec_denoise.pack(fill="x", pady=px(1))
-        b = self._sec_denoise.body
-
-        self._denoise_algo = tk.StringVar(value="hqdn3d")
-        self._denoise_str = tk.StringVar(value="Medium")
-        for v in (self._denoise_algo, self._denoise_str):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r = _line(b)
-        _lbl(r, t("loudness.algorithm_label")).pack(side="left")
-        for val, lbl in [("hqdn3d", "HQDN3D (fast)"), ("nlmeans", "NLMeans (quality)")]:
-            tk.Radiobutton(
-                r,
-                text=lbl,
-                variable=self._denoise_algo,
-                value=val,
-                bg=CLR["bg"],
-                fg=CLR["fg"],
-                selectcolor=CLR["panel"],
-                activebackground=CLR["bg"],
-                command=self._rebuild_cmd,
-            ).pack(side="left", padx=px(10))
-
-        r2 = _line(b)
-        _lbl(r2, t("sharpen.strength_label")).pack(side="left")
-        _combo(r2, self._denoise_str, ["Light", "Medium", "Strong", "Aggressive"], width=12).pack(
-            side="left", padx=px(6)
+        alpha = bool(
+            self._info
+            and self._info.video
+            and "a" in (self._info.video.pix_fmt or "").replace("yuv", "")
+        )
+        return chain.plan(
+            plan_steps,
+            src,
+            out,
+            final=encode,
+            has_audio=has_audio,
+            workdir=self.workdir,
+            alpha=alpha,
         )
 
-    # ── 🔪 Sharpen ────────────────────────────────────────────────────────
-
-    def _build_sharpen(self, parent: tk.Misc) -> None:
-        self._sec_sharpen = _Section(parent, t("all_in_one.sharpen"), self._rebuild_cmd)
-        self._sec_sharpen.pack(fill="x", pady=px(1))
-        b = self._sec_sharpen.body
-
-        self._sharp_lx = tk.StringVar(value="5")
-        self._sharp_la = tk.StringVar(value="1.0")
-        for v in (self._sharp_lx, self._sharp_la):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r = _line(b)
-        _lbl(r, t("all_in_one.kernel_size_odd")).pack(side="left")
-        _combo(r, self._sharp_lx, ["3", "5", "7"], width=4).pack(side="left", padx=px(6))
-        _lbl(r, t("all_in_one.amount_luma")).pack(side="left")
-        _spin(r, self._sharp_la, 0.1, 5.0, 0.1, width=5).pack(side="left", padx=px(6))
-        _lbl(r, t("all_in_one.0_5_subtle_1_0_standard_2"), dim=True).pack(side="left", padx=px(6))
-
-    # ── 🔊 Audio ──────────────────────────────────────────────────────────
-
-    def _build_audio(self, parent: tk.Misc) -> None:
-        self._sec_audio = _Section(parent, t("all_in_one.audio_processing"), self._rebuild_cmd)
-        self._sec_audio.pack(fill="x", pady=px(1))
-        b = self._sec_audio.body
-
-        self._vol_en = tk.BooleanVar(value=False)
-        self._vol_val = tk.StringVar(value="1.5")
-        self._norm_en = tk.BooleanVar(value=False)
-        self._norm_lufs = tk.StringVar(value="-23")
-
-        for v in (self._vol_en, self._vol_val, self._norm_en, self._norm_lufs):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r1 = _line(b)
-        tk.Checkbutton(
-            r1,
-            text=t("all_in_one.adjust_volume"),
-            variable=self._vol_en,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left")
-        _spin(r1, self._vol_val, 0.05, 10, 0.05, width=5).pack(side="left", padx=px(6))
-        _lbl(r1, t("all_in_one.1_0_no_change_2_0_double"), dim=True).pack(side="left", padx=px(4))
-
-        r2 = _line(b)
-        tk.Checkbutton(
-            r2,
-            text=t("all_in_one.loudness_normalise_to"),
-            variable=self._norm_en,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left")
-        _combo(
-            r2, self._norm_lufs, ["-14", "-16", "-18", "-23", "-24"], width=5, state="normal"
-        ).pack(side="left", padx=px(4))
-        _lbl(r2, t("all_in_one.lufs_youtube_14_broadcast_23"), dim=True).pack(
-            side="left", padx=px(4)
-        )
-
-    # ── 💬 Text Overlay ───────────────────────────────────────────────────
-
-    def _build_text(self, parent: tk.Misc) -> None:
-        self._sec_text = _Section(parent, t("all_in_one.text_watermark_overlay"), self._rebuild_cmd)
-        self._sec_text.pack(fill="x", pady=px(1))
-        b = self._sec_text.body
-
-        self._text_val = tk.StringVar(value="@YourChannel")
-        self._text_size = tk.StringVar(value="42")
-        self._text_color = tk.StringVar(value="white")
-        self._text_pos = tk.StringVar(value=_TEXT_POSITIONS.label("Bottom Right"))
-        for v in (self._text_val, self._text_size, self._text_color, self._text_pos):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r1 = _line(b)
-        _lbl(r1, t("intro_maker.text_label")).pack(side="left")
-        _entry(r1, self._text_val, 34).pack(side="left", padx=px(6))
-        _lbl(r1, t("slideshow.size")).pack(side="left")
-        _spin(r1, self._text_size, 8, 200, 2, width=5).pack(side="left", padx=px(4))
-        _lbl(r1, t("all_in_one.colour")).pack(side="left")
-        _combo(
-            r1, self._text_color, ["white", "yellow", "red", "cyan", "black", "orange"], width=8
-        ).pack(side="left", padx=px(4))
-
-        r2 = _line(b)
-        _lbl(r2, t("side_by_side.label_position_label")).pack(side="left")
-        _combo(r2, self._text_pos, list(_TEXT_POSITIONS.keys()), width=14).pack(
-            side="left", padx=px(6)
-        )
-        _lbl(r2, t("all_in_one.show_from")).pack(side="left")
-        shown = RangePicker(
-            r2,
-            end_hint=t_or("hint.blank_to_the_end", "(blank = to the end)"),
-            source=self._source,
-            on_change=self._rebuild_cmd,
-        )
-        shown.pack(side="left", padx=px(4))
-        self._text_shown = shown
-
-    # ── 🌅 Fade In / Out ─────────────────────────────────────────────────
-
-    def _build_fade(self, parent: tk.Misc) -> None:
-        self._sec_fade = _Section(parent, t("all_in_one.fade_in_fade_out"), self._rebuild_cmd)
-        self._sec_fade.pack(fill="x", pady=px(1))
-        b = self._sec_fade.body
-
-        self._fi_en = tk.BooleanVar(value=False)
-        self._fi_dur = tk.StringVar(value="1.5")
-        self._fo_en = tk.BooleanVar(value=False)
-        self._fo_dur = tk.StringVar(value="2.0")
-        self._fade_audio = tk.BooleanVar(value=True)
-
-        for v in (self._fi_en, self._fi_dur, self._fo_en, self._fo_dur, self._fade_audio):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r1 = _line(b)
-        tk.Checkbutton(
-            r1,
-            text=t("all_in_one.fade_in_duration_s"),
-            variable=self._fi_en,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left")
-        _spin(r1, self._fi_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
-
-        r2 = _line(b)
-        tk.Checkbutton(
-            r2,
-            text=t("all_in_one.fade_out_duration_s"),
-            variable=self._fo_en,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left")
-        _spin(r2, self._fo_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
-        _lbl(r2, t("all_in_one.requires_source_duration_to_be_loaded"), dim=True).pack(
-            side="left", padx=px(6)
-        )
-
-        r3 = _line(b)
-        tk.Checkbutton(
-            r3,
-            text=t("all_in_one.also_fade_audio_in_out"),
-            variable=self._fade_audio,
-            bg=CLR["bg"],
-            fg=CLR["fg"],
-            selectcolor=CLR["panel"],
-            activebackground=CLR["bg"],
-            command=self._rebuild_cmd,
-        ).pack(side="left")
-
-    # ── ⚙ Encode Settings ─────────────────────────────────────────────────
-
-    def _build_encode(self, parent: tk.Misc) -> None:
-        self._sec_encode = _Section(parent, t("all_in_one.encode_settings"), self._rebuild_cmd)
-        self._sec_encode.pack(fill="x", pady=px(1))
-        # Default ON - you almost always want to set these
-        self._sec_encode.set_enabled(True)
-        b = self._sec_encode.body
-
-        self._vcodec = tk.StringVar(value=_VCODECS.label("H.264 (CPU)"))
-        self._crf = tk.StringVar(value="18")
-        self._preset = tk.StringVar(value="fast")
-        self._acodec = tk.StringVar(value="aac")
-        self._abitrate = tk.StringVar(value="192k")
-
-        for v in (self._vcodec, self._crf, self._preset, self._acodec, self._abitrate):
-            on_write(v, lambda: self._rebuild_cmd())
-
-        r1 = _line(b)
-        _lbl(r1, t("encode_queue.video_codec")).pack(side="left")
-        _combo(r1, self._vcodec, list(_VCODECS.keys()), width=24).pack(side="left", padx=px(6))
-        _lbl(r1, t("all_in_one.quality_crf_cq")).pack(side="left")
-        _combo(r1, self._crf, [str(x) for x in range(12, 32)], width=4).pack(
-            side="left", padx=px(4)
-        )
-        _lbl(r1, t("rotate_flip.preset")).pack(side="left")
-        _combo(r1, self._preset, _PRESETS, width=10).pack(side="left", padx=px(4))
-
-        r2 = _line(b)
-        _lbl(r2, t("all_in_one.audio_codec")).pack(side="left")
-        _combo(r2, self._acodec, _ACODECS, width=12).pack(side="left", padx=px(6))
-        _lbl(r2, t("webm_maker.bitrate")).pack(side="left")
-        _combo(r2, self._abitrate, _ABITRATES, width=7).pack(side="left", padx=px(4))
-        _lbl(r2, t("all_in_one.ignored_when_codec_copy_none"), dim=True).pack(
-            side="left", padx=px(6)
-        )
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Fixed bottom bar: command display + render
-    # ─────────────────────────────────────────────────────────────────────
-
-    def _build_bottom(self) -> None:
-        bottom = tk.Frame(self, bg=CLR["panel"])
-        bottom.pack(side="bottom", fill="x")
-        self._build_command_view(bottom)
-        self._build_actions(bottom)
-        self._rebuild_cmd()  # the first command
-
-    def _build_command_view(self, bottom: tk.Frame) -> None:
-        """The FFmpeg command: its heading, Copy and Reset, and the editable text."""
-        # ── Command label + copy button ────────────────────────────────────
-        cmd_hdr = tk.Frame(bottom, bg=CLR["panel"])
-        cmd_hdr.pack(fill="x", padx=px(12), pady=px(8, 2))
-        tk.Label(
-            cmd_hdr,
-            text=t("all_in_one.generated_ffmpeg_command_editable_your_changes_a"),
-            font=(UI_FONT, 9, "bold"),
-            bg=CLR["panel"],
-            fg=CLR["accent"],
-        ).pack(side="left")
-        tk.Button(
-            cmd_hdr,
-            text=t("all_in_one.copy_to_clipboard"),
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            command=self._copy_cmd,
-        ).pack(side="right", padx=px(4))
-        tk.Button(
-            cmd_hdr,
-            text=t("all_in_one.reset_command"),
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            command=self._reset_cmd,
-        ).pack(side="right", padx=px(4))
-        self._edit_lbl = tk.Label(
-            cmd_hdr, text="", bg=CLR["panel"], fg=CLR["orange"], font=(UI_FONT, 8)
-        )
-        self._edit_lbl.pack(side="right", padx=px(8))
-
-        # ── Command text widget (editable) ────────────────────────────────
-        cmd_frame = tk.Frame(bottom, bg=CLR["panel"])
-        cmd_frame.pack(fill="x", padx=px(12), pady=px(0, 4))
-        self._cmd_text = tk.Text(
-            cmd_frame,
-            height=5,
-            bg="#0A0A0A",
-            fg="#00FF88",
-            font=(MONO_FONT, 9),
-            wrap="none",
-            insertbackground="#00FF88",
-            relief="flat",
-            bd=px(4),
-        )
-        cmd_sb_x = linked_scrollbar(cmd_frame, self._cmd_text, "horizontal")
-        cmd_sb_y = linked_scrollbar(cmd_frame, self._cmd_text)
-        cmd_sb_y.pack(side="right", fill="y")
-        self._cmd_text.pack(side="left", fill="x", expand=True)
-        self._cmd_text.bind("<<Modified>>", self._on_cmd_modified)
-        cmd_sb_x.pack(side="bottom", fill="x")
-
-    def _build_actions(self, bottom: tk.Frame) -> None:
-        """Render, Stop and the other buttons, and the log."""
-        # ── Action buttons ────────────────────────────────────────────────
-        btn_row = tk.Frame(bottom, bg=CLR["panel"])
-        btn_row.pack(fill="x", padx=px(12), pady=px(4, 10))
-
-        self.btn_render = self.make_render_btn(
-            btn_row, t("all_in_one.render"), self._render, width=20
-        )
-        self.btn_render.pack(side="left", padx=px(8))
-
-        self._btn_stop = tk.Button(
-            btn_row,
-            text=t("downsizer.stop_button"),
-            font=(UI_FONT, 12, "bold"),
-            bg="#D32F2F",
-            fg="white",
-            height=2,
-            width=10,
-            cursor="hand2",
-            state="disabled",
-            command=self._stop_render,
-        )
-        self._btn_stop.pack(side="left", padx=px(4))
-
-        tk.Button(
-            btn_row,
-            text=t("all_in_one.save_command_as_bat"),
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            height=2,
-            command=self._save_bat,
-        ).pack(side="left", padx=px(4))
-
-        tk.Button(
-            btn_row,
-            text=t("all_in_one.save_command_as_sh"),
-            bg=CLR["panel"],
-            fg=CLR["fg"],
-            height=2,
-            command=self._save_sh,
-        ).pack(side="left", padx=px(4))
-
-        # Console
-        self.console = self.make_console_block(
-            bottom, height=5, bg=CLR["panel"], fill="x", expand=False, padx=px(12), pady=px(0, 8)
-        )
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Command builder  ← the heart of the tab
-    # ─────────────────────────────────────────────────────────────────────
-
-    def _source(self) -> str:
-        return self._src_var.get().strip()
-
-    def _rebuild_cmd(self, *_: object) -> None:
-        """Show the FFmpeg command for every enabled section (core/ops/all_in_one.py)."""
-        if not hasattr(self, "_cmd_text"):
+    # ── Capturing again (new video, recipes, moved Python steps) ──────
+    def _recapture(
+        self, indices: list[int], done: Callable[[], object], failed: Callable[[], object]
+    ) -> None:
+        """Set steps *indices* up again, quietly, from their saved settings, in order."""
+        if not indices:
+            done()
             return
-        if getattr(self, "_cmd_dirty", False):
-            self._edit_lbl.config(text=t("all_in_one.edited_by_hand_press_reset_command_to"))
-            return
-        src = self._src_var.get().strip()
-        out = self._out_var.get().strip()
-        if not src or not out:
-            self._last_cmd = []
-            self._set_cmd_text(
-                "# Select a source video and output file above\n# to generate the FFmpeg command."
-            )
-            return
-        notes: list[str] = []
-        built = aio.build(self._recipe(src, out, notes))
-        notes += built.notes
-        self._last_cmd = built.argv
-        self._expected_len = built.length or None
-        self._set_cmd_text(ff.format_cmd_lines(built.argv))
-        self._edit_lbl.config(text=("⚠ " + "; ".join(notes)) if notes else "")
-
-    # ── reading the sections (each None while switched off) ─────────────────
-
-    def _recipe(self, src: str, out: str, notes: list[str]) -> aio.Recipe:
-        start, end = self._trim(notes)
-        rotate = self._sec_rotate.get()
-        audio = self._sec_audio.get()
-        return aio.Recipe(
-            src=src,
-            out=out,
-            duration=float(getattr(self, "_duration", 0.0) or 0.0),
-            sample_rate=int(getattr(self, "_sample_rate", 0) or 48000),
-            start=start,
-            end=end,
-            speed=self._speed(notes),
-            keep_pitch=self._speed_pitch.get(),
-            rotate=self._rotate_val.get() if rotate else "0",
-            flip_h=rotate and self._flip_h.get(),
-            flip_v=rotate and self._flip_v.get(),
-            scale=self._scale(),
-            fps=self._fps_val.get() if self._sec_fps.get() else None,
-            colour=self._colour(),
-            denoise=(self._denoise_algo.get(), self._denoise_str.get())
-            if self._sec_denoise.get()
-            else None,
-            sharpen=self._sharpen(),
-            caption=self._caption(notes),
-            fades=self._fades(),
-            volume=_num(self._vol_val, 1.0) if audio and self._vol_en.get() else None,
-            loudness=self._norm_lufs.get() if audio and self._norm_en.get() else None,
-            encode=self._encode(),
-        )
-
-    def _trim(self, notes: list[str]) -> tuple[float, float | None]:
-        if not self._sec_trim.get():
-            return 0.0, None
-        start, end = 0.0, None
-        try:
-            start = max(0.0, self._trim_range.start.seconds(0.0) or 0.0)
-        except ValueError:
-            notes.append("trim start is not a time")
-        try:
-            end = self._trim_range.end.seconds()
-        except ValueError:
-            notes.append("trim end is not a time")
-        if end is not None and end <= start:
-            notes.append("trim end must be after the start")
-            end = None
-        return start, end
-
-    def _speed(self, notes: list[str]) -> float:
-        if not self._sec_speed.get():
-            return 1.0
-        try:
-            return max(0.05, min(float(self._speed_val.get()), 64.0))
-        except ValueError:
-            notes.append("speed is not a number")
-            return 1.0
-
-    def _scale(self) -> aio.Scale | None:
-        if not self._sec_scale.get():
-            return None
-        return aio.Scale(
-            self._scale_w.get() or "1920",
-            self._scale_h.get() or "1080",
-            _SCALE_ALGO.get(self._scale_algo.get(), "lanczos"),
-            self._scale_pad.get(),
-        )
-
-    def _colour(self) -> aio.Colour | None:
-        if not self._sec_color.get():
-            return None
-        try:
-            return aio.Colour(
-                *(float(v.get()) for v in (self._bri, self._con, self._sat, self._gam, self._hue))
-            )
-        except ValueError:
-            return aio.Colour()
-
-    def _sharpen(self) -> tuple[int, float] | None:
-        if not self._sec_sharpen.get():
-            return None
-        try:
-            return int(self._sharp_lx.get()) | 1, float(self._sharp_la.get())
-        except ValueError:
-            return 5, 1.0
-
-    def _caption(self, notes: list[str]) -> aio.Caption | None:
-        if not self._sec_text.get() or not self._text_val.get().strip():
-            return None
-        if getattr(self, "_aio_tmp", None) is None:
-            from core.paths import temp_dir
-
-            self._aio_tmp = temp_dir("allinone_")
-        textfile = os.path.join(self._aio_tmp, "caption.txt")
-        with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(self._text_val.get())
-        enable = None
-        try:
-            st = self._text_shown.start.seconds(0.0) or 0.0
-            until = self._text_shown.end.seconds()
-            if until is not None:
-                enable = f"between(t,{st:.3f},{until:.3f})"
-            elif st > 0:
-                enable = f"gte(t,{st:.3f})"
-        except ValueError:
-            notes.append("text times are not valid times")
-        return aio.Caption(
-            textfile,
-            _TEXT_POSITIONS.get(self._text_pos.get(), _TEXT_POSITIONS["Bottom Right"]),
-            (self._text_size.get() or "42").strip(),
-            self._text_color.get() or "white",
-            enable,
-        )
-
-    def _fades(self) -> aio.Fades | None:
-        if not self._sec_fade.get():
-            return None
-        return aio.Fades(
-            _num(self._fi_dur, 1.5) if self._fi_en.get() else None,
-            _num(self._fo_dur, 2.0) if self._fo_en.get() else None,
-            self._fade_audio.get(),
-        )
-
-    def _encode(self) -> aio.Encode:
-        return aio.Encode(
-            self._sec_encode.get(),
-            _VCODECS.get(self._vcodec.get(), "libx264"),
-            self._acodec.get(),
-            self._crf.get(),
-            self._preset.get(),
-            self._abitrate.get(),
-        )
-
-    # ─────────────────────────────────────────────────────────────────────
-    #  Command display helpers
-    # ─────────────────────────────────────────────────────────────────────
-
-    def _set_cmd_text(self, text: str) -> None:
-        self._setting_text = True
-        self._cmd_text.config(state="normal")
-        self._cmd_text.delete("1.0", "end")
-        self._cmd_text.insert("1.0", text)
-        self._cmd_text.edit_modified(False)
-        self._setting_text = False
-
-    def _on_cmd_modified(self, _event: tk.Event[tk.Misc] | None = None) -> None:
-        if self._cmd_text.edit_modified() and not getattr(self, "_setting_text", False):
-            self._cmd_dirty = True
-            self._edit_lbl.config(text=t("all_in_one.edited_by_hand_your_edits_are_used"))
-        self._cmd_text.edit_modified(False)
-
-    def _reset_cmd(self) -> None:
-        self._cmd_dirty = False
-        self._rebuild_cmd()
-
-    def _get_cmd_from_text(self) -> list[str]:
-        """The exact argv list, or the user's edited text parsed back."""
-        if not getattr(self, "_cmd_dirty", False):
-            return list(getattr(self, "_last_cmd", []) or [])
-        import re
-
-        raw = self._cmd_text.get("1.0", "end").strip()
-        raw = re.sub(r"\\\r?\n", " ", raw)  # only line continuations
-        try:
-            return shlex.split(raw)
-        except ValueError as exc:
-            messagebox.showerror(
-                t("msg.command_parse_error_title"),
-                t("msg.command_parse_error", cmd=str(exc)),
+        i, rest = indices[0], indices[1:]
+        step = self.steps[i]
+        if step.problem:
+            messagebox.showwarning(
+                t("tab.all_in_one"), t("builder.step_problem", n=i + 1, tool=catalog.name(step.kind), problem=step.problem),
                 parent=self,
-            )
-            return []
+            )  # fmt: skip
+            failed()
+            return
+        self.log(self.console, t("builder.updating", n=i + 1, tool=catalog.name(step.kind)))
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  Actions
-    # ─────────────────────────────────────────────────────────────────────
+        def captured(found: Captured | None, said: str) -> None:
+            if found is None:
+                step.problem = said or t("builder.nothing_to_do")
+                self._refresh()
+                self._recapture([i], done, failed)  # says what went wrong
+                return
+            self._take(step, i, found)
+            self._refresh()
+            self._recapture(rest, done, failed)
+
+        def loaded() -> None:
+            host = step.host
+            assert host is not None
+            if step.state:
+                host.restore(step.state)
+            host.capture(captured, quiet=True)
+
+        def got(path: str) -> None:
+            if step.host is None:
+                step.host = StepHost(self, step.kind, self.workdir, step.uid)
+            step.host.load(path, loaded)
+
+        self._input_for(i, step, got, failed)
+
+    # ── The list ──────────────────────────────────────────────────────
+    def _move(self, step: Step, by: int) -> None:
+        i = self.steps.index(step)
+        j = i + by
+        if self._busy or not 0 <= j < len(self.steps):
+            return
+        self.steps[i], self.steps[j] = self.steps[j], self.steps[i]
+        self._flag_later()
+        self._refresh()
+
+    def _copy(self, step: Step) -> None:
+        if self._busy:
+            return
+        i = self.steps.index(step)
+        twin = Step(step.kind, cmds=[list(c) for c in step.cmds] if step.cmds else None, out_ext=step.out_ext,
+                    state=json.loads(json.dumps(step.state)), stale=step.run is not None or step.stale)  # fmt: skip
+        self.steps.insert(i + 1, twin)
+        self._flag_later()
+        if catalog.placed(step.kind):
+            twin.check = True
+        self._refresh()
+
+    def _remove(self, step: Step) -> None:
+        if self._busy:
+            return
+        if step.host is not None:
+            step.host.destroy()
+        self.steps.remove(step)
+        self._flag_later()
+        self._refresh()
+
+    def _summary(self, step: Step) -> str:
+        if step.problem:
+            return step.problem
+        if step.stale:
+            return t("builder.will_update")
+        if step.run is not None:
+            return t("builder.own_job")
+        shown = [n for n in chain.filter_names(step.cmds or []) if n not in _PLAIN]
+        return (
+            ", ".join(shown[:6]) + (" …" if len(shown) > 6 else "")
+            if shown
+            else t("builder.no_filters")
+        )
+
+    def _refresh(self) -> None:
+        for child in self.rows.winfo_children():
+            child.destroy()
+        if self.steps:
+            self.empty.pack_forget()
+        else:
+            self.empty.pack(fill="x", before=self.rows.master.winfo_children()[-1])
+        for i, step in enumerate(self.steps):
+            self._step_row(i, step)
+        self._update_output()
+        self._update_plan()
+
+    def _step_row(self, i: int, step: Step) -> None:
+        row = tk.Frame(self.rows, pady=px(2))
+        row.pack(fill="x")
+        tk.Label(row, text=f"{i + 1}", width=3, font=(UI_FONT, 11, "bold"), fg=CLR["accent"]).pack(
+            side="left"
+        )
+        tk.Label(row, text=f"{catalog.icon(step.kind)}  {catalog.name(step.kind)}", font=(UI_FONT, 10, "bold"),
+                 anchor="w").pack(side="left")  # fmt: skip
+        colour = CLR["red"] if step.problem else CLR["fgdim"]
+        tk.Label(row, text=self._summary(step), fg=colour, font=(UI_FONT, 9), anchor="w").pack(
+            side="left", padx=px(10)
+        )
+        buttons = (
+            ("✕", partial(self._remove, step), t("builder.tip_remove")),
+            ("⧉", partial(self._copy, step), t("builder.tip_copy")),
+            ("↓", partial(self._move, step, 1), t("builder.tip_down")),
+            ("↑", partial(self._move, step, -1), t("builder.tip_up")),
+        )
+        for text, cmd, tip in buttons:
+            b = tk.Button(row, text=text, width=2, relief="flat", cursor="hand2", command=cmd)
+            b.pack(side="right", padx=px(1))
+            add_tooltip(b, tip)
+        tk.Button(row, text="⚙ " + t("builder.settings"), relief="flat", cursor="hand2",
+                  command=partial(self._settings, step)).pack(side="right", padx=px(6))  # fmt: skip
+        if step.check and not step.problem:
+            badge = tk.Label(
+                row, text="⚠ " + t("builder.check"), fg=CLR["orange"], font=(UI_FONT, 9, "bold")
+            )
+            badge.pack(side="right", padx=px(6))
+            add_tooltip(badge, t("builder.check_tip"))
+
+    def _update_output(self) -> None:
+        last = self.steps[-1] if self.steps else None
+        if last is not None and self._decides(last):
+            self.encoder.pack_forget()
+            self.format_note.config(
+                text=t("builder.format_by_last", tool=catalog.name(last.kind), ext=last.out_ext)
+            )
+            self.format_note.pack(anchor="w", before=self.out_row)
+        else:
+            self.format_note.pack_forget()
+            if not self.encoder.winfo_manager():
+                self.encoder.pack(anchor="w", before=self.out_row)
+        path = self.out_row.path
+        if (
+            path
+            and os.path.splitext(path)[1].lower() != self._out_ext()
+            and path.startswith(os.path.splitext(self._suggest())[0])
+        ):
+            self.out_row.set(self._suggest())
+
+    def _final_encode(self, out: str) -> chain.Encode:
+        container = os.path.splitext(out)[1].lower().lstrip(".") or "mp4"
+        venc = self.encoder.video_encode(container)
+        has_audio = bool(self._info and self._info.has_audio)
+        audio = encoders.default_audio(container) if has_audio else []
+        return chain.Encode((*venc.args, *audio), tuple(venc.pre_input), venc.filter_suffix)
+
+    def _passes(self, out: str) -> list[chain.Pass] | None:
+        if (
+            not self.steps
+            or not self.src
+            or any(s.cmds is None and s.run is None for s in self.steps)
+        ):
+            return None
+        has_audio = bool(self._info and self._info.has_audio)
+        try:
+            return self._plan(self.steps, self.src, out, self._final_encode(out), has_audio, set())
+        except Exception:
+            logger.exception("planning failed")
+            return None
+
+    def _update_plan(self) -> None:
+        n = len(self.steps)
+        if not n:
+            self.plan_lbl.config(text="", fg=CLR["fgdim"])
+            self._show_commands([])
+            return
+        out = (
+            self.out_row.path
+            or self._suggest()
+            or os.path.join(self.workdir, "out" + self._out_ext())
+        )
+        passes = self._passes(out)
+        if passes is None:
+            self.plan_lbl.config(text=t("builder.plan_pending"), fg=CLR["fgdim"])
+            self._show_commands([])
+            return
+        if len(passes) == 1:
+            text = t("builder.plan_one", n=n) if n > 1 else t("builder.plan_single")
+        else:
+            alone = [catalog.name(self.steps[p.steps[0]].kind) for p in passes if p.note]
+            text = t(
+                "builder.plan_more", runs=len(passes), steps=", ".join(dict.fromkeys(alone)) or "-"
+            )
+        self.plan_lbl.config(text="✔ " + text, fg=CLR["green"])
+        self._show_commands(passes)
+
+    # ── Commands ──────────────────────────────────────────────────────
+    def _toggle_commands(self) -> None:
+        if self.cmd_box.winfo_manager():
+            self.cmd_box.pack_forget()
+            self.cmd_btn.config(text=t("builder.show_commands"))
+        else:
+            self.cmd_box.pack(fill="x", padx=px(20), pady=px(4), after=self.cmd_btn.master)
+            self.cmd_btn.config(text=t("builder.hide_commands"))
+        self._update_plan()
+
+    def _show_commands(self, passes: list[chain.Pass]) -> None:
+        if not self.cmd_box.winfo_manager():
+            return
+        lines: list[str] = []
+        for p in passes:
+            names = ", ".join(f"{k + 1}. {catalog.name(self.steps[k].kind)}" for k in p.steps)
+            lines.append(f"# {names}")
+            if p.run is not None:
+                lines.append("#   " + t("builder.own_job"))
+            lines += [ff.format_cmd(c) for c in p.cmds]
+            lines.append("")
+        self.cmd_text.config(state="normal")
+        self.cmd_text.delete("1.0", "end")
+        self.cmd_text.insert("1.0", "\n".join(lines))
+        self.cmd_text.config(state="disabled")
+
+    # ── Rendering ─────────────────────────────────────────────────────
+    def render(self) -> None:
+        if not self._busy:
+            super().render()
 
     def _render(self) -> None:
-        cmd = self._get_cmd_from_text()
-        if not cmd:
+        if self._busy:
             return
+        if not self.src or self._info is None:
+            messagebox.showwarning(
+                t("common.warning"), t("builder.choose_video_first"), parent=self
+            )
+            return
+        if not self.steps:
+            messagebox.showwarning(t("common.warning"), t("builder.no_steps"), parent=self)
+            return
+        bad = next((i for i, s in enumerate(self.steps) if s.problem), None)
+        if bad is not None:
+            s = self.steps[bad]
+            messagebox.showwarning(
+                t("common.warning"), t("builder.step_problem", n=bad + 1, tool=catalog.name(s.kind), problem=s.problem),
+                parent=self,
+            )  # fmt: skip
+            return
+        if any(s.check for s in self.steps) and not messagebox.askyesno(
+            t("tab.all_in_one"), t("builder.render_with_checks"), parent=self
+        ):
+            return
+        stale = [i for i, s in enumerate(self.steps) if not s.ready or self._moved_python(i, s)]
+        self._busy = True
+        self._recapture(stale, self._queue, lambda: setattr(self, "_busy", False))
 
-        # Basic sanity checks
-        src = self._src_var.get().strip()
-        out = self._out_var.get().strip()
-        if not src or not os.path.exists(src):
-            messagebox.showwarning(t("common.warning"), t("all_in_one.source_file_not_found"))
-            return
+    def _moved_python(self, i: int, s: Step) -> bool:
+        """A Python job reads the file it was set up on: the video for a first
+        step, its own linked input for the others - moved, it must be set up again."""
+        if s.run is None:
+            return False
+        first = os.path.abspath(s.in_path) == os.path.abspath(self.src)
+        return first != (i == 0)
+
+    def _queue(self) -> None:
+        self._busy = False
+        out = self.out_row.path or self._suggest()
+        out = self.confirm_output(out, [self.src], default_ext=self._out_ext())
         if not out:
-            messagebox.showwarning(t("common.warning"), t("all_in_one.set_an_output_file_path"))
             return
+        self.out_row.set(out)
+        steps, src = list(self.steps), self.src
+        has_audio = bool(self._info and self._info.has_audio)
+        final = self._final_encode(out)
+        duration = self._info.duration if self._info else None
 
-        self.log(self.console, t("log.all_in_one.running_pipeline"))
-        self.log(self.console, "  " + " ".join(shlex.quote(c) for c in cmd[:6]) + " …")
+        def plan(alone: set[int]) -> list[chain.Pass]:
+            return self._plan(steps, src, out, final, has_audio, alone)
 
-        # Turn on the STOP button
-        self._btn_stop.config(state="normal")
+        def work(_progress: object, _cancelled: object, ctx: Any) -> int:
+            return chain_run.execute(plan, ctx, src=src, final=final, duration=duration)
 
-        # A little wrapper to re-disable the STOP button when FFmpeg finishes
-        def _on_done_wrapper(rc: int) -> None:
-            self._btn_stop.config(state="disabled")
-            self.show_result(rc, out)
+        from tabs import common
 
-        final = cmd[-1]
-        checked = self.confirm_output(
-            final, [src], default_ext=os.path.splitext(final)[1] or ".mp4"
-        )
-        if not checked:
-            self._btn_stop.config(state="disabled")
-            return
-        cmd[-1] = checked
-        self.run_ffmpeg(
-            cmd,
-            self.console,
-            on_done=_on_done_wrapper,
+        self.log(self.console, t("builder.rendering", n=len(steps)))
+        common.queue_job(
+            self,
+            common.Job("All-in-One Builder", out, work, duration, (src,)),
             btn=self.btn_render,
-            duration=getattr(self, "_expected_len", None),
-            output=checked,
-            inputs=[src],
-            name="All-in-One",
+            console=self.console,
         )
 
-    def _stop_render(self) -> None:
-        """Cancel this tab's queued/running jobs (kills only their own FFmpeg)."""
-        self.cancel_render()
-
-        self.log(self.console, t("log.all_in_one.render_forcibly_stopped_by_user"))
-        self._btn_stop.config(state="disabled")
-        self.btn_render.config(state="normal", text=t("all_in_one.render"))
-
-    def _copy_cmd(self) -> None:
-        raw = self._cmd_text.get("1.0", "end").strip()
-        self.clipboard_clear()
-        self.clipboard_append(raw)
-        self.log(self.console, t("log.all_in_one.command_copied_to_clipboard"))
-
-    def _save_bat(self) -> None:
-        argv = self._get_cmd_from_text()
-        if not argv:
+    # ── Recipes ───────────────────────────────────────────────────────
+    def _save_recipe(self) -> None:
+        if not self.steps:
+            messagebox.showinfo(t("tab.all_in_one"), t("builder.no_steps"), parent=self)
             return
-        p = dialogs.ask_save("render.bat", kind="any", defaultextension=".bat", parent=self)
-        if not p:
+        base = os.path.splitext(os.path.basename(self.src))[0] if self.src else "recipe"
+        path = dialogs.ask_save(
+            f"{base} recipe.json", kind="recipe", defaultextension=".json", parent=self
+        )
+        if not path:
             return
-        from core import proc as _proc
-
+        data = recipe_data(self.steps, self.src, self.encoder.codec)
         try:
-            with open(p, "w", encoding="utf-8", newline="\r\n") as f:
-                f.write("@echo off\nchcp 65001 >nul\n")
-                f.write(_proc.list2cmdline(argv).replace("%", "%%") + "\n")
-                f.write("pause\n")
-            self.log(self.console, t("all_in_one.saved_p", p=p))
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=1, ensure_ascii=False)
         except OSError as exc:
             messagebox.showerror(t("common.error"), str(exc), parent=self)
-
-    def _save_sh(self) -> None:
-        argv = self._get_cmd_from_text()
-        if not argv:
             return
-        p = dialogs.ask_save("render.sh", kind="any", defaultextension=".sh", parent=self)
-        if not p:
+        self.log(self.console, t("builder.recipe_saved", path=path))
+
+    def _open_recipe(self) -> None:
+        if self._busy:
+            return
+        path = dialogs.ask_open("recipe", parent=self)
+        if not path:
             return
         try:
-            with open(p, "w", encoding="utf-8", newline="\n") as f:
-                f.write("#!/usr/bin/env bash\nset -euo pipefail\n")
-                f.write(shlex.join(argv) + "\n")
-            os.chmod(p, 0o755)
-            self.log(self.console, t("all_in_one.saved_p", p=p))
-        except OSError as exc:
-            messagebox.showerror(t("common.error"), str(exc), parent=self)
+            with open(path, encoding="utf-8") as fh:
+                steps = steps_from_recipe(json.load(fh), self.src)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            messagebox.showerror(
+                t("common.error"), t("builder.recipe_bad", error=str(exc)), parent=self
+            )
+            return
+        if self.steps and not messagebox.askyesno(
+            t("tab.all_in_one"), t("builder.replace_steps"), parent=self
+        ):
+            return
+        for s in self.steps:
+            if s.host is not None:
+                s.host.destroy()
+        self.steps = steps
+        self._refresh()
+        self.log(self.console, t("builder.recipe_opened", n=len(steps)))
+
+    def on_app_closing(self) -> None:
+        for s in self.steps:
+            if s.host is not None:
+                s.host.destroy()
+        shutil.rmtree(self.workdir, ignore_errors=True)
+
+
+def recipe_data(steps: list[Step], src: str, codec: str) -> dict[str, Any]:
+    """A step list as a recipe file's contents."""
+    return {
+        "recipe": "ffmpeg-workbench all-in-one",
+        "version": RECIPE_VERSION,
+        "video": os.path.basename(src),
+        "video_id": _video_id(src),
+        "codec": codec,
+        "steps": [
+            {
+                "kind": s.kind,
+                "state": s.state,
+                "cmds": s.cmds,
+                "out_ext": s.out_ext,
+                "python": s.run is not None,
+            }
+            for s in steps
+        ],
+    }
+
+
+def steps_from_recipe(data: dict[str, Any], src: str) -> list[Step]:
+    """The steps of a recipe; set up again from their settings before rendering
+    unless the recipe was made on this very video (and they are FFmpeg commands)."""
+    if data.get("version") != RECIPE_VERSION or not isinstance(data.get("steps"), list):
+        raise ValueError("not a recipe")
+    same = bool(src) and data.get("video_id") == _video_id(src)
+    out: list[Step] = []
+    for item in data["steps"]:
+        kind = str(item["kind"])
+        if not catalog.known(kind):
+            raise ValueError(f"unknown step {kind!r}")
+        cmds = item.get("cmds")
+        step = Step(kind, cmds=[[str(a) for a in c] for c in cmds] if cmds else None,
+                    out_ext=str(item.get("out_ext") or ".mp4"), state=dict(item.get("state") or {}))  # fmt: skip
+        step.stale = not same or bool(item.get("python")) or step.cmds is None
+        if not same and catalog.one_video(kind):
+            step.problem = t("builder.set_up_again")
+        out.append(step)
+    return out
+
+
+def _video_id(path: str) -> str:
+    """The same video, wherever it is: its name, size and length."""
+    if not path or not os.path.isfile(path):
+        return ""
+    info = ff.try_probe(path)
+    return f"{os.path.basename(path)}|{os.path.getsize(path)}|{info.duration if info else 0:.2f}"
+
+
+class _Progress:
+    """A small window while a step's video is made: a bar, and Cancel."""
+
+    def __init__(self, owner: tk.Misc, text: str) -> None:
+        self._stop = threading.Event()
+        self.win = tk.Toplevel(owner)
+        self.win.title(t("tab.all_in_one"))
+        self.win.transient(owner.winfo_toplevel())  # pyright: ignore[reportArgumentType]
+        self.win.resizable(False, False)
+        tk.Label(self.win, text=text, padx=px(16), pady=px(10), font=(UI_FONT, 10)).pack()
+        self.bar = tk.Canvas(
+            self.win, width=px(320), height=px(12), highlightthickness=0, bg=CLR["panel"]
+        )
+        self.bar.pack(padx=px(16))
+        tk.Button(self.win, text=t("btn.cancel"), command=self._stop.set, relief="flat").pack(
+            pady=px(10)
+        )
+        self.win.protocol("WM_DELETE_WINDOW", self._stop.set)
+        self.win.after(30, self._grab)
+
+    def _grab(self) -> None:
+        with contextlib.suppress(tk.TclError):
+            self.win.grab_set()
+
+    def fraction(self, f: float) -> None:
+        from core import ui
+
+        ui.call_soon(self._draw, f)
+
+    def _draw(self, f: float) -> None:
+        with contextlib.suppress(tk.TclError):
+            self.bar.delete("all")
+            self.bar.create_rectangle(
+                0, 0, px(320) * max(0.0, min(f, 1.0)), px(12), fill=CLR["accent"], outline=""
+            )
+
+    def cancelled(self) -> bool:
+        return self._stop.is_set()
+
+    def close(self) -> None:
+        with contextlib.suppress(tk.TclError):
+            self.win.grab_release()
+            self.win.destroy()

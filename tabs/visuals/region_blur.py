@@ -9,9 +9,11 @@ any resolution; any number of regions of any kind can be combined.
 
 from __future__ import annotations
 
+import dataclasses
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core import ffmpeg as ff
 from core.i18n import Choices, Labels, t, t_or
@@ -416,6 +418,15 @@ class RegionBlurTab(BaseTab):
         self._relist(i)
 
     # ── Render ────────────────────────────────────────────────────────
+    # ── As a builder step (tabs/builder/step_mode.py) ─────────────────
+    def step_state(self) -> dict[str, object]:
+        return {"regions": [dataclasses.asdict(r) for r in self.regions]}
+
+    def set_step_state(self, state: dict[str, Any]) -> None:
+        self.regions[:] = [Region(**r) for r in state.get("regions", [])]
+        self._relist()
+        self._refresh_preview()
+
     def _render(self) -> None:
         src = self.src_row.path
         info = common.check_source(self, src)

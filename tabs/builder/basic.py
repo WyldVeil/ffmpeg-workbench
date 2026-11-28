@@ -1,0 +1,965 @@
+"""
+tabs/builder/basic.py - "Quick adjustments": the All-in-One Builder's own step.
+
+The everyday changes in one place, each switched on when wanted: trim, size,
+frame rate, rotate and flip, speed, colour, denoise, sharpen, sound (volume,
+loudness), a caption and fades.  It is the old fixed builder page, now one
+step among the tools (core/ops/all_in_one.py builds its command).
+"""
+
+from __future__ import annotations
+
+import os
+import tkinter as tk
+from collections.abc import Callable
+from functools import partial
+from tkinter import messagebox, ttk
+from typing import Any, cast
+
+from core import tasks
+from core.i18n import Choices, t, t_or
+from core.ops import all_in_one as aio
+from core.scaling import px
+from tabs.base_tab import CLR, MONO_FONT, UI_FONT, BaseTab, make_header
+from tabs.kit import dialogs
+from tabs.kit.time_fields import RangePicker
+from tabs.kit.tktyped import on_write
+from tabs.widgets import scroll_body
+
+# ── Constants reused from other tabs ─────────────────────────────────────────
+
+#: size presets: what the drop-down shows -> (width, height); None = type your own
+_RES_PRESETS: Choices[tuple[int, int] | None] = Choices(
+    "all_in_one.res_presets",
+    {
+        "7680x4320 (8K)": (7680, 4320),
+        "3840x2160 (4K UHD)": (3840, 2160),
+        "2560x1440 (QHD/2K)": (2560, 1440),
+        "1920x1080 (Full HD)": (1920, 1080),
+        "1280x720 (HD)": (1280, 720),
+        "854x480 (SD)": (854, 480),
+        "640x360 (360p)": (640, 360),
+        "Custom…": None,
+    },
+)
+_SCALE_ALGO = Choices(
+    "all_in_one.scale_algo",
+    {
+        "Lanczos (best downscale)": "lanczos",
+        "Lanczos4 (best upscale)": "lanczos",  # Changed from lanczos4 for compatibility
+        "Bicubic": "bicubic",
+        "Bilinear (fastest)": "bilinear",
+        "Nearest (pixel art)": "neighbor",
+    },
+)
+
+_FPS_VALS = ["23.976", "24", "25", "29.97", "30", "48", "50", "59.94", "60", "120"]
+
+_TEXT_POSITIONS = Choices(
+    "all_in_one.text_positions",
+    {  # (x, y) drawtext expressions; margins scale with the frame
+        "Bottom Centre": ("(w-text_w)/2", "h-text_h-h*0.04"),
+        "Top Centre": ("(w-text_w)/2", "h*0.04"),
+        "Bottom Left": ("w*0.03", "h-text_h-h*0.04"),
+        "Bottom Right": ("w-text_w-w*0.03", "h-text_h-h*0.04"),
+        "Centre": ("(w-text_w)/2", "(h-text_h)/2"),
+        "Top Left": ("w*0.03", "h*0.04"),
+        "Top Right": ("w-text_w-w*0.03", "h*0.04"),
+    },
+)
+
+
+def _num(var: tk.StringVar, default: float) -> float:
+    try:
+        return float(var.get())
+    except ValueError:
+        return default
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Small UI helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _lbl(parent: tk.Misc, text: str, bold: bool = False, dim: bool = False) -> tk.Label:
+    fg = CLR["fgdim"] if dim else CLR["fg"]
+    font = (UI_FONT, 9, "bold") if bold else (UI_FONT, 9)
+    return tk.Label(parent, text=text, bg=CLR["bg"], fg=fg, font=font)
+
+
+def _entry(parent: tk.Misc, var: tk.StringVar, width: int = 10) -> tk.Entry:
+    return tk.Entry(
+        parent,
+        textvariable=var,
+        width=width,
+        bg=CLR["panel"],
+        fg=CLR["fg"],
+        insertbackground=CLR["fg"],
+        relief="flat",
+        bd=px(4),
+    )
+
+
+def _combo(
+    parent: tk.Misc, var: tk.StringVar, values: list[str], width: int = 18, state: str = "readonly"
+) -> ttk.Combobox:
+    cb = ttk.Combobox(parent, textvariable=var, values=values, state=state, width=width)
+    return cb
+
+
+def _spin(
+    parent: tk.Misc, var: tk.StringVar, from_: float, to: float, inc: float = 0.5, width: int = 7
+) -> tk.Spinbox:
+    return tk.Spinbox(
+        parent,
+        from_=from_,
+        to=to,
+        increment=inc,
+        textvariable=var,
+        width=width,
+        bg=CLR["panel"],
+        fg=CLR["fg"],
+        buttonbackground=CLR["panel"],
+        insertbackground=CLR["fg"],
+        relief="flat",
+    )
+
+
+def _line(parent: tk.Misc, pady: int = 3) -> tk.Frame:
+    """A strip for controls laid out like a sentence ("Width [ ] Height [ ]")."""
+    f = tk.Frame(parent, bg=CLR["bg"])
+    f.pack(fill="x", pady=px(pady))
+    return f
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Section container
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class _Section(tk.Frame):
+    """
+    A collapsible section with a checkbox header.
+    When the checkbox is off all interior widgets are disabled (greyed out).
+    Calls *on_toggle* whenever the enabled state changes.
+    """
+
+    def __init__(
+        self, parent: tk.Misc, title: str, on_toggle: Callable[[], object], **kw: Any
+    ) -> None:
+        super().__init__(parent, bg=CLR["bg"], **kw)
+        self.enabled = tk.BooleanVar(value=False)
+        self._cb = on_toggle
+
+        # ── Header row ────────────────────────────────────────────────────
+        hdr = tk.Frame(self, bg=CLR["panel"])
+        hdr.pack(fill="x")
+        tk.Checkbutton(
+            hdr,
+            text=title,
+            variable=self.enabled,
+            font=(UI_FONT, 10, "bold"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            selectcolor=CLR.get("sb_active", "#333333"),
+            activebackground=CLR["panel"],
+            command=self._toggled,
+        ).pack(side="left", padx=px(10), pady=px(6))
+
+        # ── Body ──────────────────────────────────────────────────────────
+        self.body = tk.Frame(self, bg=CLR["bg"], padx=px(16), pady=px(6))
+        self.body.pack(fill="x")
+        self._set_body_state("disabled")
+
+    def get(self) -> bool:
+        return self.enabled.get()
+
+    def _toggled(self) -> None:
+        self._set_body_state("normal" if self.enabled.get() else "disabled")
+        self._cb()
+
+    def set_enabled(self, on: bool) -> None:
+        """Tick (or untick) the section without notifying anyone."""
+        self.enabled.set(on)
+        self._set_body_state("normal" if on else "disabled")
+
+    def _set_body_state(self, state: str) -> None:
+        fg = CLR["fg"] if state == "normal" else CLR["fgdim"]
+        self._walk(self.body, state, fg)
+
+    def _walk(self, widget: tk.Misc, state: str, fg: str) -> None:
+        cls = widget.winfo_class()
+        try:
+            if cls in ("Entry", "Spinbox", "Button", "Checkbutton", "Radiobutton"):
+                widget["state"] = state
+            if cls in ("Label",):
+                widget["fg"] = fg
+            if cls == "TCombobox":
+                widget["state"] = "readonly" if state == "normal" else "disabled"
+        except tk.TclError:
+            pass
+        for child in widget.winfo_children():
+            self._walk(child, state, fg)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Main tab
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class QuickAdjustTab(BaseTab):
+    """The everyday changes as one step of the All-in-One Builder."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self._probed_path: str | None = None
+        self._duration = 0.0  # loaded video duration - needed for fade-out math
+        self._last_cmd: list[str] = []  # most recently built command list
+        self._build_ui()
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Top-level layout
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _build_ui(self) -> None:
+        # ── Fixed header ──────────────────────────────────────────────────
+        make_header(self, t("builder.quick"), t("builder.quick_sub"), icon="🎛")
+
+        # ── Source / output (always visible, above scroll) ─────────────────
+        io_frame = tk.Frame(self, bg=CLR["bg"], padx=px(12), pady=px(8))
+        io_frame.pack(fill="x")
+        self._build_io(io_frame)
+
+        # ── Scrollable section area ────────────────────────────────────────
+        self._scroll_inner = scroll_body(self)
+
+        self._build_sections(self._scroll_inner)
+
+        # ── Fixed bottom: command display + render ─────────────────────────
+        self._build_bottom()
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Source / Output
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _build_io(self, parent: tk.Misc) -> None:
+        self._src_var = tk.StringVar()
+        self._out_var = tk.StringVar()
+
+        r1 = _line(parent, pady=2)
+        _lbl(r1, t("common.source_video"), bold=True).pack(side="left")
+        _entry(r1, self._src_var, width=62).pack(side="left", padx=px(8))
+        tk.Button(
+            r1, text=t("btn.browse"), command=self._browse_src, bg=CLR["panel"], fg=CLR["fg"]
+        ).pack(side="left")
+        self._dur_lbl = tk.Label(r1, text="", bg=CLR["bg"], fg=CLR["accent"], font=(MONO_FONT, 9))
+        self._dur_lbl.pack(side="left", padx=px(10))
+
+        self._src_job: str | None = None
+        on_write(self._src_var, lambda: self._src_typed())
+
+    def load_file(self, path: str) -> bool:
+        """A video to adjust: its output is suggested and its length read at once."""
+        self._probed_path = path
+        self._src_var.set(path)
+        self._out_var.set(self.suggest_output(path, "quick"))
+        tasks.submit(partial(self._load_duration, path))
+        return True
+
+    def _browse_src(self) -> None:
+        p = dialogs.askopenfilename(
+            filetypes=[("Video", "*.mp4 *.mov *.mkv *.avi *.webm *.flv *.m4v"), ("All", "*.*")]
+        )
+        if not p:
+            return
+        self._src_var.set(p)
+        base = os.path.splitext(p)[0]
+        if not self._out_var.get():
+            self._out_var.set(base + "_pipeline.mp4")
+        # Load duration in background
+        tasks.submit(partial(self._load_duration, p))
+        self._rebuild_cmd()
+
+    def _src_typed(self) -> None:
+        """Typed / pasted / dropped paths are probed too (debounced)."""
+        if self._src_job is not None:
+            self.after_cancel(self._src_job)
+
+        def go() -> None:
+            self._src_job = None
+            p = self._src_var.get().strip()
+            if p and os.path.isfile(p) and p != self._probed_path:
+                self._probed_path = p
+                if not self._out_var.get():
+                    self._out_var.set(self.suggest_output(p, "pipeline"))
+                tasks.submit(partial(self._load_duration, p))
+
+        self._src_job = self.after(400, go)
+
+    def _load_duration(self, path: str) -> None:
+        from core import ffmpeg as _ff
+
+        info = _ff.try_probe(path)
+        dur = info.duration if info else 0.0
+        self._duration = dur
+        self._sample_rate = (
+            info.require_audio().sample_rate if info is not None and info.audio else 0
+        )
+        self.after(0, lambda: self._dur_lbl.config(text=f"{dur:.2f}s" if dur else ""))
+        self.after(0, self._rebuild_cmd)
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Sections
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _build_sections(self, parent: tk.Misc) -> None:
+        """Build all optional processing sections inside the scrollable area."""
+
+        def sep() -> None:
+            tk.Frame(parent, bg=CLR["panel"], height=px(2)).pack(fill="x", pady=px(2))
+
+        self._build_trim(parent)
+        sep()
+        self._build_scale(parent)
+        sep()
+        self._build_fps(parent)
+        sep()
+        self._build_rotate(parent)
+        sep()
+        self._build_speed(parent)
+        sep()
+        self._build_color(parent)
+        sep()
+        self._build_denoise(parent)
+        sep()
+        self._build_sharpen(parent)
+        sep()
+        self._build_audio(parent)
+        sep()
+        self._build_text(parent)
+        sep()
+        self._build_fade(parent)
+
+    # ── ✂ Trim ────────────────────────────────────────────────────────────
+
+    def _build_trim(self, parent: tk.Misc) -> None:
+        self._sec_trim = _Section(parent, t("all_in_one.trim"), self._rebuild_cmd)
+        self._sec_trim.pack(fill="x", pady=px(1))
+        b = self._sec_trim.body
+
+        r = _line(b)
+        _lbl(r, t("frame_extractor.from")).pack(side="left")
+        trim = RangePicker(
+            r,
+            start="0.0",
+            end_hint=t_or(
+                "hint.blank_to_the_end_of_the_video", "(blank = to the end of the video)"
+            ),
+            source=self._source,
+            on_change=self._rebuild_cmd,
+        )
+        trim.pack(side="left", padx=px(6))
+        self._trim_range = trim
+
+    # ── 📐 Scale ──────────────────────────────────────────────────────────
+
+    def _build_scale(self, parent: tk.Misc) -> None:
+        self._sec_scale = _Section(parent, t("all_in_one.scale_resolution"), self._rebuild_cmd)
+        self._sec_scale.pack(fill="x", pady=px(1))
+        b = self._sec_scale.body
+
+        self._scale_preset = tk.StringVar(value=_RES_PRESETS.label("1920x1080 (Full HD)"))
+        self._scale_w = tk.StringVar(value="1920")
+        self._scale_h = tk.StringVar(value="1080")
+        self._scale_algo = tk.StringVar(value=next(iter(_SCALE_ALGO.keys())))
+        self._scale_pad = tk.BooleanVar(value=False)
+
+        for v in (self._scale_preset, self._scale_w, self._scale_h, self._scale_algo):
+            on_write(v, lambda: self._rebuild_cmd())
+        on_write(self._scale_pad, lambda: self._rebuild_cmd())
+
+        r1 = _line(b)
+        _lbl(r1, t("common.preset")).pack(side="left")
+        cb = _combo(r1, self._scale_preset, list(_RES_PRESETS), width=24)
+        cb.pack(side="left", padx=px(6))
+        cb.bind("<<ComboboxSelected>>", self._on_res_preset)
+        _lbl(r1, "  W:").pack(side="left")
+        self._scale_w_entry = _entry(r1, self._scale_w, 6)
+        self._scale_w_entry.pack(side="left", padx=px(3))
+        _lbl(r1, "H:").pack(side="left")
+        self._scale_h_entry = _entry(r1, self._scale_h, 6)
+        self._scale_h_entry.pack(side="left", padx=px(3))
+        _lbl(r1, t("all_in_one.1_auto_aspect"), dim=True).pack(side="left", padx=px(6))
+
+        r2 = _line(b)
+        _lbl(r2, t("loudness.algorithm_label")).pack(side="left")
+        _combo(r2, self._scale_algo, list(_SCALE_ALGO.keys()), width=26).pack(
+            side="left", padx=px(6)
+        )
+        tk.Checkbutton(
+            r2,
+            text=t("all_in_one.pad_to_exact_size_adds_black_bars"),
+            variable=self._scale_pad,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left", padx=px(10))
+
+    def _on_res_preset(self, *_: object) -> None:
+        size = _RES_PRESETS.get(self._scale_preset.get())
+        if size is not None:
+            self._scale_w.set(str(size[0]))
+            self._scale_h.set(str(size[1]))
+        self._rebuild_cmd()
+
+    # ── 🎬 Frame Rate ─────────────────────────────────────────────────────
+
+    def _build_fps(self, parent: tk.Misc) -> None:
+        self._sec_fps = _Section(parent, t("all_in_one.frame_rate"), self._rebuild_cmd)
+        self._sec_fps.pack(fill="x", pady=px(1))
+        b = self._sec_fps.body
+
+        self._fps_val = tk.StringVar(value="30")
+        on_write(self._fps_val, lambda: self._rebuild_cmd())
+
+        r = _line(b)
+        _lbl(r, t("fps.target_fps_label")).pack(side="left")
+        cb = _combo(r, self._fps_val, _FPS_VALS, width=8, state="normal")
+        cb.pack(side="left", padx=px(6))
+        _lbl(r, t("all_in_one.or_type_any_value"), dim=True).pack(side="left", padx=px(4))
+
+    # ── 🔄 Rotate & Flip ─────────────────────────────────────────────────
+
+    def _build_rotate(self, parent: tk.Misc) -> None:
+        self._sec_rotate = _Section(parent, t("all_in_one.rotate_flip"), self._rebuild_cmd)
+        self._sec_rotate.pack(fill="x", pady=px(1))
+        b = self._sec_rotate.body
+
+        self._rotate_val = tk.StringVar(value="0")
+        self._flip_h = tk.BooleanVar(value=False)
+        self._flip_v = tk.BooleanVar(value=False)
+
+        for v in (self._rotate_val, self._flip_h, self._flip_v):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r = _line(b)
+        _lbl(r, t("all_in_one.rotation")).pack(side="left")
+        for val, label in [("0", "None"), ("90", "90° CW"), ("180", "180°"), ("270", "90° CCW")]:
+            tk.Radiobutton(
+                r,
+                text=label,
+                variable=self._rotate_val,
+                value=val,
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                selectcolor=CLR["panel"],
+                activebackground=CLR["bg"],
+                command=self._rebuild_cmd,
+            ).pack(side="left", padx=px(8))
+
+        r2 = _line(b)
+        tk.Checkbutton(
+            r2,
+            text=t("all_in_one.flip_horizontal_mirror"),
+            variable=self._flip_h,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left", padx=px(4))
+        tk.Checkbutton(
+            r2,
+            text=t("all_in_one.flip_vertical"),
+            variable=self._flip_v,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left", padx=px(20))
+
+    # ── ⚡ Speed ──────────────────────────────────────────────────────────
+
+    def _build_speed(self, parent: tk.Misc) -> None:
+        self._sec_speed = _Section(parent, t("all_in_one.speed"), self._rebuild_cmd)
+        self._sec_speed.pack(fill="x", pady=px(1))
+        b = self._sec_speed.body
+
+        self._speed_val = tk.StringVar(value="2.0")
+        self._speed_pitch = tk.BooleanVar(value=True)
+        for v in (self._speed_val, self._speed_pitch):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r = _line(b)
+        _lbl(r, t("speed_ramp.speed_multiplier_label")).pack(side="left")
+        _spin(r, self._speed_val, 0.05, 16, 0.25, width=6).pack(side="left", padx=px(6))
+        _lbl(r, t("all_in_one.0_5_half_speed_2_0_double"), dim=True).pack(side="left", padx=px(6))
+
+        r2 = _line(b)
+        tk.Checkbutton(
+            r2,
+            text=t("all_in_one.preserve_audio_pitch_atempo"),
+            variable=self._speed_pitch,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left", padx=px(4))
+        _lbl(r2, t("all_in_one.when_off_audio_speeds_up_slows_down"), dim=True).pack(
+            side="left", padx=px(6)
+        )
+
+    # ── 🎨 Color & Image ──────────────────────────────────────────────────
+
+    def _slider_moved(self, var: tk.StringVar, value: str) -> None:
+        var.set(f"{float(value):.2f}")
+        self._rebuild_cmd()
+
+    def _build_color(self, parent: tk.Misc) -> None:
+        self._sec_color = _Section(parent, t("all_in_one.color_image"), self._rebuild_cmd)
+        self._sec_color.pack(fill="x", pady=px(1))
+        b = self._sec_color.body
+
+        def _sv(default: str) -> tk.StringVar:
+            v = tk.StringVar(value=str(default))
+            on_write(v, lambda: self._rebuild_cmd())
+            return v
+
+        self._bri = _sv("0.00")
+        self._con = _sv("1.00")
+        self._sat = _sv("1.00")
+        self._gam = _sv("1.00")
+        self._hue = _sv("0")
+
+        sliders = [
+            ("Brightness:", self._bri, -1.0, 1.0, 0.05),
+            ("Contrast:", self._con, 0.1, 3.0, 0.05),
+            ("Saturation:", self._sat, 0.0, 3.0, 0.05),
+            ("Gamma:", self._gam, 0.1, 5.0, 0.05),
+            ("Hue shift°:", self._hue, -180, 180, 5.0),
+        ]
+        for label, var, lo, hi, inc in sliders:
+            r = _line(b, pady=2)
+            _lbl(r, label, bold=True).pack(side="left")
+            sc = tk.Scale(
+                r,
+                variable=cast("tk.DoubleVar", var),  # Tk keeps the number as text either way
+                from_=lo,
+                to=hi,
+                resolution=inc,
+                orient="horizontal",
+                length=px(280),
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                highlightthickness=0,
+                command=partial(self._slider_moved, var),
+            )
+            sc.pack(side="left", padx=px(6))
+            _lbl(r, "", dim=True).pack(side="left")  # spacer
+
+        r5 = _line(b, pady=2)
+        tk.Button(
+            r5,
+            text=t("all_in_one.reset_all_to_defaults"),
+            bg=CLR["panel"],
+            fg=CLR["fg"],
+            command=self._reset_color,
+        ).pack(side="left")
+
+    def _reset_color(self) -> None:
+        self._bri.set("0.00")
+        self._con.set("1.00")
+        self._sat.set("1.00")
+        self._gam.set("1.00")
+        self._hue.set("0")
+        self._rebuild_cmd()
+
+    # ── 🌫 Denoise ────────────────────────────────────────────────────────
+
+    def _build_denoise(self, parent: tk.Misc) -> None:
+        self._sec_denoise = _Section(parent, t("all_in_one.denoise"), self._rebuild_cmd)
+        self._sec_denoise.pack(fill="x", pady=px(1))
+        b = self._sec_denoise.body
+
+        self._denoise_algo = tk.StringVar(value="hqdn3d")
+        self._denoise_str = tk.StringVar(value="Medium")
+        for v in (self._denoise_algo, self._denoise_str):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r = _line(b)
+        _lbl(r, t("loudness.algorithm_label")).pack(side="left")
+        for val, lbl in [("hqdn3d", "HQDN3D (fast)"), ("nlmeans", "NLMeans (quality)")]:
+            tk.Radiobutton(
+                r,
+                text=lbl,
+                variable=self._denoise_algo,
+                value=val,
+                bg=CLR["bg"],
+                fg=CLR["fg"],
+                selectcolor=CLR["panel"],
+                activebackground=CLR["bg"],
+                command=self._rebuild_cmd,
+            ).pack(side="left", padx=px(10))
+
+        r2 = _line(b)
+        _lbl(r2, t("sharpen.strength_label")).pack(side="left")
+        _combo(r2, self._denoise_str, ["Light", "Medium", "Strong", "Aggressive"], width=12).pack(
+            side="left", padx=px(6)
+        )
+
+    # ── 🔪 Sharpen ────────────────────────────────────────────────────────
+
+    def _build_sharpen(self, parent: tk.Misc) -> None:
+        self._sec_sharpen = _Section(parent, t("all_in_one.sharpen"), self._rebuild_cmd)
+        self._sec_sharpen.pack(fill="x", pady=px(1))
+        b = self._sec_sharpen.body
+
+        self._sharp_lx = tk.StringVar(value="5")
+        self._sharp_la = tk.StringVar(value="1.0")
+        for v in (self._sharp_lx, self._sharp_la):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r = _line(b)
+        _lbl(r, t("all_in_one.kernel_size_odd")).pack(side="left")
+        _combo(r, self._sharp_lx, ["3", "5", "7"], width=4).pack(side="left", padx=px(6))
+        _lbl(r, t("all_in_one.amount_luma")).pack(side="left")
+        _spin(r, self._sharp_la, 0.1, 5.0, 0.1, width=5).pack(side="left", padx=px(6))
+        _lbl(r, t("all_in_one.0_5_subtle_1_0_standard_2"), dim=True).pack(side="left", padx=px(6))
+
+    # ── 🔊 Audio ──────────────────────────────────────────────────────────
+
+    def _build_audio(self, parent: tk.Misc) -> None:
+        self._sec_audio = _Section(parent, t("all_in_one.audio_processing"), self._rebuild_cmd)
+        self._sec_audio.pack(fill="x", pady=px(1))
+        b = self._sec_audio.body
+
+        self._vol_en = tk.BooleanVar(value=False)
+        self._vol_val = tk.StringVar(value="1.5")
+        self._norm_en = tk.BooleanVar(value=False)
+        self._norm_lufs = tk.StringVar(value="-23")
+
+        for v in (self._vol_en, self._vol_val, self._norm_en, self._norm_lufs):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r1 = _line(b)
+        tk.Checkbutton(
+            r1,
+            text=t("all_in_one.adjust_volume"),
+            variable=self._vol_en,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left")
+        _spin(r1, self._vol_val, 0.05, 10, 0.05, width=5).pack(side="left", padx=px(6))
+        _lbl(r1, t("all_in_one.1_0_no_change_2_0_double"), dim=True).pack(side="left", padx=px(4))
+
+        r2 = _line(b)
+        tk.Checkbutton(
+            r2,
+            text=t("all_in_one.loudness_normalise_to"),
+            variable=self._norm_en,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left")
+        _combo(
+            r2, self._norm_lufs, ["-14", "-16", "-18", "-23", "-24"], width=5, state="normal"
+        ).pack(side="left", padx=px(4))
+        _lbl(r2, t("all_in_one.lufs_youtube_14_broadcast_23"), dim=True).pack(
+            side="left", padx=px(4)
+        )
+
+    # ── 💬 Text Overlay ───────────────────────────────────────────────────
+
+    def _build_text(self, parent: tk.Misc) -> None:
+        self._sec_text = _Section(parent, t("all_in_one.text_watermark_overlay"), self._rebuild_cmd)
+        self._sec_text.pack(fill="x", pady=px(1))
+        b = self._sec_text.body
+
+        self._text_val = tk.StringVar(value="@YourChannel")
+        self._text_size = tk.StringVar(value="42")
+        self._text_color = tk.StringVar(value="white")
+        self._text_pos = tk.StringVar(value=_TEXT_POSITIONS.label("Bottom Right"))
+        for v in (self._text_val, self._text_size, self._text_color, self._text_pos):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r1 = _line(b)
+        _lbl(r1, t("intro_maker.text_label")).pack(side="left")
+        _entry(r1, self._text_val, 34).pack(side="left", padx=px(6))
+        _lbl(r1, t("slideshow.size")).pack(side="left")
+        _spin(r1, self._text_size, 8, 200, 2, width=5).pack(side="left", padx=px(4))
+        _lbl(r1, t("all_in_one.colour")).pack(side="left")
+        _combo(
+            r1, self._text_color, ["white", "yellow", "red", "cyan", "black", "orange"], width=8
+        ).pack(side="left", padx=px(4))
+
+        r2 = _line(b)
+        _lbl(r2, t("side_by_side.label_position_label")).pack(side="left")
+        _combo(r2, self._text_pos, list(_TEXT_POSITIONS.keys()), width=14).pack(
+            side="left", padx=px(6)
+        )
+        _lbl(r2, t("all_in_one.show_from")).pack(side="left")
+        shown = RangePicker(
+            r2,
+            end_hint=t_or("hint.blank_to_the_end", "(blank = to the end)"),
+            source=self._source,
+            on_change=self._rebuild_cmd,
+        )
+        shown.pack(side="left", padx=px(4))
+        self._text_shown = shown
+
+    # ── 🌅 Fade In / Out ─────────────────────────────────────────────────
+
+    def _build_fade(self, parent: tk.Misc) -> None:
+        self._sec_fade = _Section(parent, t("all_in_one.fade_in_fade_out"), self._rebuild_cmd)
+        self._sec_fade.pack(fill="x", pady=px(1))
+        b = self._sec_fade.body
+
+        self._fi_en = tk.BooleanVar(value=False)
+        self._fi_dur = tk.StringVar(value="1.5")
+        self._fo_en = tk.BooleanVar(value=False)
+        self._fo_dur = tk.StringVar(value="2.0")
+        self._fade_audio = tk.BooleanVar(value=True)
+
+        for v in (self._fi_en, self._fi_dur, self._fo_en, self._fo_dur, self._fade_audio):
+            on_write(v, lambda: self._rebuild_cmd())
+
+        r1 = _line(b)
+        tk.Checkbutton(
+            r1,
+            text=t("all_in_one.fade_in_duration_s"),
+            variable=self._fi_en,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left")
+        _spin(r1, self._fi_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
+
+        r2 = _line(b)
+        tk.Checkbutton(
+            r2,
+            text=t("all_in_one.fade_out_duration_s"),
+            variable=self._fo_en,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left")
+        _spin(r2, self._fo_dur, 0.2, 10, 0.5, width=5).pack(side="left", padx=px(6))
+        _lbl(r2, t("all_in_one.requires_source_duration_to_be_loaded"), dim=True).pack(
+            side="left", padx=px(6)
+        )
+
+        r3 = _line(b)
+        tk.Checkbutton(
+            r3,
+            text=t("all_in_one.also_fade_audio_in_out"),
+            variable=self._fade_audio,
+            bg=CLR["bg"],
+            fg=CLR["fg"],
+            selectcolor=CLR["panel"],
+            activebackground=CLR["bg"],
+            command=self._rebuild_cmd,
+        ).pack(side="left")
+
+    # ── ⚙ Encode Settings ─────────────────────────────────────────────────
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Fixed bottom bar: command display + render
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _build_bottom(self) -> None:
+        bottom = tk.Frame(self, bg=CLR["panel"])
+        bottom.pack(side="bottom", fill="x")
+        self.btn_render = self.make_render_btn(
+            bottom, t("all_in_one.render"), self._render, width=20
+        )
+        self.btn_render.pack(side="left", padx=px(12), pady=px(6))
+        self.console = self.make_console_block(
+            bottom, height=3, bg=CLR["panel"], fill="x", expand=False, padx=px(12), pady=px(0, 8)
+        )
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Command builder  ← the heart of the tab
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _source(self) -> str:
+        return self._src_var.get().strip()
+
+    def _rebuild_cmd(self, *_: object) -> None:
+        """Work out the command for every switched-on section (core/ops/all_in_one.py)."""
+        src = self._src_var.get().strip()
+        out = self._out_var.get().strip()
+        if not src or not out:
+            self._last_cmd = []
+            return
+        notes: list[str] = []
+        built = aio.build(self._recipe(src, out, notes))
+        self._notes = notes + built.notes
+        self._last_cmd = built.argv
+        self._expected_len = built.length or None
+
+    # ── reading the sections (each None while switched off) ─────────────────
+
+    def _recipe(self, src: str, out: str, notes: list[str]) -> aio.Recipe:
+        start, end = self._trim(notes)
+        rotate = self._sec_rotate.get()
+        audio = self._sec_audio.get()
+        return aio.Recipe(
+            src=src,
+            out=out,
+            duration=float(getattr(self, "_duration", 0.0) or 0.0),
+            sample_rate=int(getattr(self, "_sample_rate", 0) or 48000),
+            start=start,
+            end=end,
+            speed=self._speed(notes),
+            keep_pitch=self._speed_pitch.get(),
+            rotate=self._rotate_val.get() if rotate else "0",
+            flip_h=rotate and self._flip_h.get(),
+            flip_v=rotate and self._flip_v.get(),
+            scale=self._scale(),
+            fps=self._fps_val.get() if self._sec_fps.get() else None,
+            colour=self._colour(),
+            denoise=(self._denoise_algo.get(), self._denoise_str.get())
+            if self._sec_denoise.get()
+            else None,
+            sharpen=self._sharpen(),
+            caption=self._caption(notes),
+            fades=self._fades(),
+            volume=_num(self._vol_val, 1.0) if audio and self._vol_en.get() else None,
+            loudness=self._norm_lufs.get() if audio and self._norm_en.get() else None,
+            encode=self._encode(),
+        )
+
+    def _trim(self, notes: list[str]) -> tuple[float, float | None]:
+        if not self._sec_trim.get():
+            return 0.0, None
+        start, end = 0.0, None
+        try:
+            start = max(0.0, self._trim_range.start.seconds(0.0) or 0.0)
+        except ValueError:
+            notes.append("trim start is not a time")
+        try:
+            end = self._trim_range.end.seconds()
+        except ValueError:
+            notes.append("trim end is not a time")
+        if end is not None and end <= start:
+            notes.append("trim end must be after the start")
+            end = None
+        return start, end
+
+    def _speed(self, notes: list[str]) -> float:
+        if not self._sec_speed.get():
+            return 1.0
+        try:
+            return max(0.05, min(float(self._speed_val.get()), 64.0))
+        except ValueError:
+            notes.append("speed is not a number")
+            return 1.0
+
+    def _scale(self) -> aio.Scale | None:
+        if not self._sec_scale.get():
+            return None
+        return aio.Scale(
+            self._scale_w.get() or "1920",
+            self._scale_h.get() or "1080",
+            _SCALE_ALGO.get(self._scale_algo.get(), "lanczos"),
+            self._scale_pad.get(),
+        )
+
+    def _colour(self) -> aio.Colour | None:
+        if not self._sec_color.get():
+            return None
+        try:
+            return aio.Colour(
+                *(float(v.get()) for v in (self._bri, self._con, self._sat, self._gam, self._hue))
+            )
+        except ValueError:
+            return aio.Colour()
+
+    def _sharpen(self) -> tuple[int, float] | None:
+        if not self._sec_sharpen.get():
+            return None
+        try:
+            return int(self._sharp_lx.get()) | 1, float(self._sharp_la.get())
+        except ValueError:
+            return 5, 1.0
+
+    def _caption(self, notes: list[str]) -> aio.Caption | None:
+        if not self._sec_text.get() or not self._text_val.get().strip():
+            return None
+        if getattr(self, "_aio_tmp", None) is None:
+            from core.paths import temp_dir
+
+            self._aio_tmp = temp_dir("allinone_")
+        textfile = os.path.join(self._aio_tmp, "caption.txt")
+        with open(textfile, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(self._text_val.get())
+        enable = None
+        try:
+            st = self._text_shown.start.seconds(0.0) or 0.0
+            until = self._text_shown.end.seconds()
+            if until is not None:
+                enable = f"between(t,{st:.3f},{until:.3f})"
+            elif st > 0:
+                enable = f"gte(t,{st:.3f})"
+        except ValueError:
+            notes.append("text times are not valid times")
+        return aio.Caption(
+            textfile,
+            _TEXT_POSITIONS.get(self._text_pos.get(), _TEXT_POSITIONS["Bottom Right"]),
+            (self._text_size.get() or "42").strip(),
+            self._text_color.get() or "white",
+            enable,
+        )
+
+    def _fades(self) -> aio.Fades | None:
+        if not self._sec_fade.get():
+            return None
+        return aio.Fades(
+            _num(self._fi_dur, 1.5) if self._fi_en.get() else None,
+            _num(self._fo_dur, 2.0) if self._fo_en.get() else None,
+            self._fade_audio.get(),
+        )
+
+    def _encode(self) -> aio.Encode:
+        """Placeholder encoding: the builder encodes the result its own way."""
+        return aio.Encode(True, "libx264", "aac", "18", "fast", "192k")
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Actions
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _render(self) -> None:
+        self._rebuild_cmd()
+        cmd = list(self._last_cmd)
+        src = self._src_var.get().strip()
+        if not src or not os.path.exists(src):
+            messagebox.showwarning(t("common.warning"), t("all_in_one.source_file_not_found"))
+            return
+        if not cmd:
+            messagebox.showwarning(t("common.warning"), t("all_in_one.set_an_output_file_path"))
+            return
+        if getattr(self, "_notes", None):
+            self.log(self.console, "⚠ " + "; ".join(self._notes))
+        self.run_ffmpeg(
+            cmd,
+            self.console,
+            on_done=lambda rc: self.show_result(rc, cmd[-1]),
+            btn=self.btn_render,
+            duration=getattr(self, "_expected_len", None),
+            output=cmd[-1],
+            inputs=[src],
+            name="Quick adjustments",
+        )

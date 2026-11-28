@@ -38,6 +38,7 @@ Pool = Literal["background", "preview"]
 _SIZES: dict[Pool, int] = {"background": 8, "preview": 2}
 _pools: dict[Pool, ThreadPoolExecutor] = {}  # threads: created on first use, under _LOCK
 _LOCK = threading.Lock()
+_running = [0]  # jobs submitted and not finished (under _LOCK)
 Service = threading.Thread  # what start_service returns (join(), is_alive())
 
 
@@ -98,9 +99,29 @@ def submit(
 ) -> Future[T]:
     """Run ``fn()`` on a worker thread; deliver its result or error on the UI thread."""
     label = name or getattr(fn, "__name__", None) or repr(fn)
+    with _LOCK:
+        _running[0] += 1
     future = _pool(pool).submit(fn)
-    future.add_done_callback(lambda f: _deliver(f, label, on_done, on_error))
+    future.add_done_callback(lambda f: _finished(f, label, on_done, on_error))
     return future
+
+
+def _finished(
+    future: Future[T],
+    name: str,
+    on_done: Callable[[T], object] | None,
+    on_error: Callable[[BaseException], object] | None,
+) -> None:
+    with _LOCK:
+        _running[0] -= 1
+    _deliver(future, name, on_done, on_error)
+
+
+def busy() -> int:
+    """How many submitted jobs haven't finished (a page settling after a file
+    loads waits for this to reach 0)."""
+    with _LOCK:
+        return _running[0]
 
 
 def run_all(jobs: Sequence[Callable[[], T]], *, name: str) -> list[T]:

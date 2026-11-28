@@ -97,6 +97,7 @@ _KINDS = {
     "soundfont": ("SoundFonts", SOUNDFONT_EXTS),
     "font": ("Fonts", FONT_EXTS),
     "preset": ("Presets", PRESET_EXTS),
+    "recipe": ("Recipes", ("json",)),
     "text": ("Text files", ("txt",)),
     "any": ("All files", ()),
 }

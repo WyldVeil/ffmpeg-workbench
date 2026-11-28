@@ -36,8 +36,8 @@ from core import paths, proc, tasks, ui
 
 logger = logging.getLogger("crossfader.capabilities")
 
-Name = Literal["filters", "vulkan", "anlmdn"]
-NAMES: Final[tuple[Name, ...]] = ("filters", "vulkan", "anlmdn")
+Name = Literal["filters", "audio_filters", "vulkan", "anlmdn"]
+NAMES: Final[tuple[Name, ...]] = ("filters", "audio_filters", "vulkan", "anlmdn")
 _MAX_AGE: Final = 7 * 24 * 3600  # GPU drivers change without FFmpeg changing: re-check weekly
 _MISSING: Final = object()
 
@@ -62,6 +62,20 @@ def _learn_filters() -> list[str]:
         parts = line.split()
         if len(parts) >= 3 and len(parts[0]) <= 4 and "->" in parts[2]:
             names.add(parts[1])
+    return sorted(names)
+
+
+def _learn_audio_filters() -> list[str]:
+    """The filters whose output is sound ("A->A", "N->A"...): the All-in-One
+    Builder tells a tool's audio results from its pictures by them."""
+    out = proc.run([_ffmpeg(), "-hide_banner", "-filters"], timeout=20).stdout
+    names: set[str] = set()
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and len(parts[0]) <= 4 and "->" in parts[2]:
+            made = parts[2].split("->", 1)[1]
+            if made and set(made) <= {"A"}:
+                names.add(parts[1])
     return sorted(names)
 
 
@@ -120,6 +134,7 @@ def _learn_anlmdn() -> bool:
 _LEARN: Final[dict[Name, tuple[Callable[[], Any], Any]]] = {
     # name: (how to learn it, what to assume when the program can't be run)
     "filters": (_learn_filters, []),
+    "audio_filters": (_learn_audio_filters, []),
     "vulkan": (_learn_vulkan, False),
     "anlmdn": (_learn_anlmdn, False),
 }
@@ -127,7 +142,7 @@ _LEARN: Final[dict[Name, tuple[Callable[[], Any], Any]]] = {
 
 def _shape(name: Name, value: Any) -> Any:
     """In memory, the filter list is a frozenset (it is asked "is X in it?" a lot)."""
-    return frozenset(value) if name == "filters" else value
+    return frozenset(value) if name in ("filters", "audio_filters") else value
 
 
 # ── The disk cache ─────────────────────────────────────────────────────────────

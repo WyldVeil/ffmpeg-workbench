@@ -1,4 +1,4 @@
-"""All-in-One Builder: combined sections produce one correct command."""
+"""Quick adjustments (the All-in-One Builder's own step): combined sections make one correct command."""
 
 import pytest
 
@@ -24,11 +24,17 @@ def ui():
 @pytest.mark.gui
 @pytest.mark.ffmpeg
 def test_pipeline_trim_speed_text_fade(ui, media, outdir):
+    import tkinter as tk
+
+    from tabs.builder.basic import QuickAdjustTab
+
     ui.reset()
-    tab = ui.open("All-in-One Builder")
+    win = tk.Toplevel(ui.app)
+    tab = QuickAdjustTab(win)
+    tab.pack(fill="both", expand=True)
     out = str(outdir / "pipeline.mp4")
+    tab.load_file(media["hevc10"])
     tab._out_var.set(out)
-    tab._src_var.set(media["hevc10"])
     ui.wait_for(lambda: getattr(tab, "_duration", 0) > 0, 30)
     tab._sec_trim.enabled.set(True)
     tab._trim_range.set(1, 4)
@@ -41,10 +47,11 @@ def test_pipeline_trim_speed_text_fade(ui, media, outdir):
     tab._scale_w.set("854")
     tab._scale_h.set("-1")
     tab._rebuild_cmd()
-    cmd = tab._get_cmd_from_text()
+    cmd = tab._last_cmd
     assert "-to" in cmd and cmd.index("-to") < cmd.index("-i")
     tab._render()
     ui.wait_idle(240)
+    win.destroy()
     assert not ui.dialogs.errors(), ui.dialogs.errors()
     info = ff.probe(out, use_cache=False)
     assert info.duration == pytest.approx(3 / 1.5, abs=0.1)

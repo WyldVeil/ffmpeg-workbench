@@ -13,17 +13,19 @@ anything the finder missed.  Rendering reuses Privacy Blur's engine
 from __future__ import annotations
 
 import contextlib
+import os
 import tkinter as tk
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
 from tkinter import messagebox, ttk
+from typing import Any
 
 from core import ffmpeg as ff
 from core import tasks, ui
 from core.i18n import t
 from core.ops import text_find as tf
-from core.ops.region_blur import Region, blur_graph
+from core.ops.region_blur import Cover, Region, blur_graph, cover_graph
 from core.ops.shared import RenderJob
 from core.scaling import px
 from tabs import common, framestep
@@ -218,6 +220,91 @@ class TextBlurTab(BaseTab):
             box, text=t("text_blur.show_result"), variable=self.result_var,
             command=self._refresh_result,
         ).grid(row=1, column=0, columnspan=3, sticky="w")  # fmt: skip
+        self._build_cover(box)
+
+    def _build_cover(self, box: tk.LabelFrame) -> None:
+        """Optional: the person's own logo or text on top of what was hidden."""
+        self.cover_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            box, text=t("text_blur.cover"), variable=self.cover_var, command=self._cover_toggled,
+        ).grid(row=2, column=0, columnspan=3, sticky="w")  # fmt: skip
+        self.cover_box = tk.Frame(box)
+        self.cover_kind = tk.StringVar(value="image")
+        kinds = tk.Frame(self.cover_box)
+        kinds.pack(anchor="w")
+        for value, label in (
+            ("image", t("text_blur.cover_image")),
+            ("text", t("text_blur.cover_text")),
+        ):
+            tk.Radiobutton(
+                kinds,
+                text=label,
+                value=value,
+                variable=self.cover_kind,
+                command=self._cover_toggled,
+            ).pack(side="left", padx=px(0, 10))
+        self.cover_image = FileRow(
+            self.cover_box, t("text_blur.cover_file"), kind="image",
+            on_change=lambda _p: self._refresh_result(),
+        )  # fmt: skip
+        self.cover_text_var = tk.StringVar()
+        self.cover_text_row = tk.Frame(self.cover_box)
+        tk.Label(self.cover_text_row, text=t("text_blur.cover_words")).pack(side="left")
+        entry = tk.Entry(self.cover_text_row, textvariable=self.cover_text_var, width=30)
+        entry.pack(side="left", padx=px(6))
+        entry.bind("<KeyRelease>", lambda _e: self._cover_typed())
+        sizes = tk.Frame(self.cover_box)
+        sizes.pack(side="bottom", anchor="w")
+        self.cover_fill_var = tk.DoubleVar(value=0.85)
+        self.cover_alpha_var = tk.DoubleVar(value=1.0)
+        for var, lo, label in (
+            (self.cover_fill_var, 0.3, t("text_blur.cover_size")),
+            (self.cover_alpha_var, 0.2, t("text_blur.cover_opacity")),
+        ):
+            tk.Scale(
+                sizes, variable=var, from_=lo, to=1.0, resolution=0.05, orient="horizontal",
+                length=px(150), label=label, command=lambda _v: self._refresh_result(),
+            ).pack(side="left", padx=px(0, 10))  # fmt: skip
+        self._typed_job: str | None = None
+
+    def _cover_toggled(self) -> None:
+        if self.cover_var.get():
+            self.cover_box.grid(row=3, column=0, columnspan=3, sticky="we", padx=px(20, 0))
+            image = self.cover_kind.get() == "image"
+            (self.cover_text_row.pack_forget if image else self.cover_image.pack_forget)()
+            (self.cover_image if image else self.cover_text_row).pack(
+                fill="x", anchor="w", pady=px(2)
+            )
+        else:
+            self.cover_box.grid_remove()
+        self._refresh_result()
+
+    def _cover_typed(self) -> None:
+        if self._typed_job is not None:
+            with contextlib.suppress(tk.TclError):
+                self.after_cancel(self._typed_job)
+        self._typed_job = self.after(400, self._refresh_result)
+
+    def _cover(self) -> Cover:
+        """What goes on top of the hidden boxes (nothing unless asked for)."""
+        if not self.cover_var.get():
+            return Cover()
+        fill, alpha = float(self.cover_fill_var.get()), float(self.cover_alpha_var.get())
+        if self.cover_kind.get() == "image":
+            image = self.cover_image.path
+            return Cover(image=image if os.path.isfile(image) else "", fill=fill, opacity=alpha)
+        return Cover(text=self.cover_text_var.get(), fill=fill, opacity=alpha)
+
+    def _graph(self, regions: list[Region], src: str, out: str) -> str:
+        w, h = self._size()
+        cover = self._cover()
+        if not cover.wanted:
+            return blur_graph(regions, w, h, src, out)
+        return (
+            blur_graph(regions, w, h, src, "[hidden]")
+            + ";"
+            + cover_graph(regions, w, h, cover, "[hidden]", out)
+        )
 
     # ── Source and finding ────────────────────────────────────────────
     def load_file(self, path: str) -> bool:
@@ -375,8 +462,7 @@ class TextBlurTab(BaseTab):
     def _refresh_result(self) -> None:
         regions = self._regions()
         if self.result_var.get() and regions:
-            w, h = self._size()
-            self.preview.set_filter(blur_graph(regions, w, h, "[in]", ""), keep_time=True)
+            self.preview.set_filter(self._graph(regions, "[in]", ""), keep_time=True)
         else:
             self.preview.set_filter("", keep_time=True)
         self._draw()
@@ -542,6 +628,40 @@ class TextBlurTab(BaseTab):
         self._active = len(self.items) - 1
         self._changed()
 
+    # ── As a builder step (tabs/builder/step_mode.py) ─────────────────
+    def step_state(self) -> dict[str, object]:
+        keys = ("x", "y", "w", "h", "start", "end", "textlike", "sure", "by_hand")
+        return {
+            "items": [
+                {**{k: getattr(it, k) for k in keys}, "chosen": it.chosen.get()}
+                for it in self.items
+            ]
+        }
+
+    def set_step_state(self, state: dict[str, Any]) -> None:
+        self._search += 1  # a search still running would replace these
+        self.items = []
+        for d in state.get("items", []):
+            it = Item(
+                d["x"],
+                d["y"],
+                d["w"],
+                d["h"],
+                d["start"],
+                d["end"],
+                d["textlike"],
+                d["sure"],
+                d["by_hand"],
+            )
+            it.chosen.set(bool(d.get("chosen")))
+            self.items.append(it)
+        self._active = None
+        sure = sum(1 for it in self.items if it.sure and not it.by_hand)
+        self.status.config(
+            text=t("text_blur.found_n", n=sure, maybe=len(self.items) - sure), fg=CLR["fg"]
+        )
+        self._changed()
+
     # ── Render ────────────────────────────────────────────────────────
     def _render(self) -> None:
         src = self.src_row.path
@@ -552,14 +672,21 @@ class TextBlurTab(BaseTab):
         if not regions:
             messagebox.showwarning(t("common.warning"), t("text_blur.nothing_chosen"), parent=self)
             return
+        cover = self._cover()
+        if self.cover_var.get() and not cover.wanted:
+            messagebox.showwarning(t("common.warning"), t("text_blur.cover_missing"), parent=self)
+            return
         out = common.output_for(self, self.out_row, src, "blurred")
         if not out:
             return
-        w, h = common.even_size(info)
         common.render(
             self,
             RenderJob(
-                src=src, info=info, out=out, graph=blur_graph(regions, w, h), name="Text Blurrer"
+                src=src,
+                info=info,
+                out=out,
+                graph=self._graph(regions, "[0:v]", "[v]"),
+                name="Text Blurrer",
             ),
             encoder=self.encoder,
             console=self.console,
